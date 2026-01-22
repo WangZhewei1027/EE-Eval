@@ -62,16 +62,10 @@ node test-embedding.mjs
 # 相关文件：
 # batch-similarity-eval.mjs
 # lib\fsm-similarity.mjs
-node batch-similarity-eval.mjs {workspace}
-node batch-similarity-eval.mjs batch-1207
 node batch-similarity-eval.mjs aied
 # output: 各文件夹内 fsm-similarity-results.json
 
 # # =================================== 结果分析 ==========================================
-node analyze-fsm-differentiation.mjs {workspace}
-node analyze-correlation.mjs {workspace}
-node analyze-fsm-dimensions.mjs {workspace}
-
 node analyze-fsm-differentiation.mjs workspace\aied
 node analyze-correlation.mjs workspace\aied
 node analyze-fsm-dimensions.mjs workspace\aied
