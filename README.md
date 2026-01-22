@@ -5,6 +5,11 @@
 运行指令：
 
 ```bash
+# 启动
+node api.mjs
+
+
+
 # =================================== 生成 =========================================
 # 批量生成所有 html-fsm-playwright (注：playwright test统一用5-mini)：
 node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "{workspace}" -q "./question-list.json"
@@ -48,55 +53,41 @@ node analyze-pass-rate.mjs workspace/{workspace}
 
 
 # =================================== FSM Evaluation ==========================================
+
+# 在运行相似度测试前，可以运行这个测试embedding有没有work：
+node test-embedding.mjs
+
+
 # 运行相似度测试：
+# 相关文件：
+# batch-similarity-eval.mjs
+# lib\fsm-similarity.mjs
 node batch-similarity-eval.mjs {workspace}
 node batch-similarity-eval.mjs batch-1207
-node batch-similarity-eval.mjs batch-1210-subtest2
+node batch-similarity-eval.mjs aied
+# output: 各文件夹内 fsm-similarity-results.json
 
-# 统计FSM相似度:
-node analyze-model-similarity.mjs {workspace}
-node analyze-model-similarity.mjs batch-1207
-node analyze-model-similarity.mjs batch-1210-subtest2
-
-# 结果示例：
-工作空间: batch-1207
-数据路径: workspace\batch-1207\fsm-similarity-results.json
-
-📊 总体统计: 219 个文件, 219 个成功匹配
-✅ 成功分析的FSM数量: 219
-
-📈 模型性能分析:
-模型                   | 数量     | 平均相似度        | 结构       | 语义       | 同构       | 标准差
-─────────────────────────────────────────────────────────────────────────────────────
-gpt-5-mini           | 46     | 32.1        % | 67.5    % | 12.7    % | 0.0     % | 0.124
-deepseek-chat        | 47     | 30.4        % | 62.1    % | 13.9    % | 0.0     % | 0.084
-gpt-4o-mini          | 47     | 27.5        % | 52.1    % | 16.7    % | 0.0     % | 0.057
-gpt-3.5-turbo        | 46     | 26.3        % | 48.1    % | 17.7    % | 0.0     % | 0.188
-Qwen1.5-0.5B-Chat    | 33     | 23.6        % | 44.0    % | 14.9    % | 0.0     % | 0.051
-
-📊 可视化报告已生成: workspace\batch-1207\model-similarity-analysis.html
-🌐 在浏览器中打开查看详细图表和分析
-
-🎉 AI模型FSM相似度分析完成！
-🏆 模型排名（按平均相似度）:
-1. gpt-5-mini: 32.1% (46 个样本)
-2. deepseek-chat: 30.4% (47 个样本)
-3. gpt-4o-mini: 27.5% (47 个样本)
-4. gpt-3.5-turbo: 26.3% (46 个样本)
-5. Qwen1.5-0.5B-Chat: 23.6% (33 个样本)
-
-
-# # =================================== FSM 提取与分析 ==========================================
+# # =================================== 结果分析 ==========================================
 node analyze-fsm-differentiation.mjs {workspace}
 node analyze-correlation.mjs {workspace}
 node analyze-fsm-dimensions.mjs {workspace}
 
-node analyze-fsm-differentiation.mjs workspace\batch-1207
-node analyze-correlation.mjs workspace\batch-1207
-node analyze-fsm-dimensions.mjs workspace\batch-1207
+node analyze-fsm-differentiation.mjs workspace\aied
+node analyze-correlation.mjs workspace\aied
+node analyze-fsm-dimensions.mjs workspace\aied
 
 
 
+
+
+
+
+
+# 旧（不用看）
+# 统计FSM相似度:
+node analyze-model-similarity.mjs {workspace}
+node analyze-model-similarity.mjs batch-1207
+node analyze-model-similarity.mjs aied
 
 ```
 
@@ -591,25 +582,21 @@ capstone/
 ### 重要提示
 
 1. **并发控制**
-
    - 建议并发数：10-20（取决于 API 速率限制）
    - OpenAI API 通常限制：3-5 RPM（免费层）
    - 使用 `concurrencyLimit` 控制并发数
 
 2. **测试验证**
-
    - ⚠️ **必须先运行** `validate-tests.mjs` 再运行测试
    - 自动生成的测试可能有语法错误
    - 验证脚本会自动修复大部分错误
 
 3. **Playwright 配置**
-
    - `maxFailures: undefined` - 不限制失败数量
    - `fullyParallel: true` - 完全并行运行
    - 即使部分测试失败，也会继续运行其他测试
 
 4. **文件处理**
-
    - ⚠️ **不要在 VS Code 中直接打开或保存生成的 HTML 文件**
    - VS Code 的自动格式化可能破坏 HTML 结构
    - 建议使用浏览器查看，或使用可视化面板
@@ -755,12 +742,11 @@ timeout: 10000  // 10秒
 - [Playwright 文档](https://playwright.dev/)
 - [OpenAI API 文档](https://platform.openai.com/docs/)
 
-
 node compare-models.mjs \
-  workspace/baseline-html2test-gpt-3.5-turbo \
-  workspace/baseline-html2test-gpt-4o \
-  workspace/baseline-html2test-gpt-4o-mini \
-  workspace/baseline-html2test-gpt-5-mini \
-  workspace/baseline-html2test-deepseek-chat \
-  workspace/baseline-html2test-qwen1-5 \
-  workspace/baseline-html2test-llama
+ workspace/baseline-html2test-gpt-3.5-turbo \
+ workspace/baseline-html2test-gpt-4o \
+ workspace/baseline-html2test-gpt-4o-mini \
+ workspace/baseline-html2test-gpt-5-mini \
+ workspace/baseline-html2test-deepseek-chat \
+ workspace/baseline-html2test-qwen1-5 \
+ workspace/baseline-html2test-llama

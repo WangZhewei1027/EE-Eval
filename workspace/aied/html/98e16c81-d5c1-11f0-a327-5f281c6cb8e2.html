@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Weighted Graph Explorer — Interactive Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+  body { margin: 0; display: flex; height: 100vh; }
+  #left { width: 68%; border-right: 1px solid #ddd; position: relative; }
+  #canvas { width: 100%; height: 100%; display: block; background: linear-gradient(180deg,#fbfcfe,#f7f9fc); cursor: crosshair; }
+  #right { width: 32%; padding: 12px; box-sizing: border-box; overflow: auto; }
+  h2 { margin: 6px 0 12px; font-size: 18px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  button, select, input[type="number"], label { font-size: 13px; }
+  button { padding: 6px 8px; }
+  .mode-btn.active { background: #0366d6; color: white; border: none; }
+  .panel { border: 1px solid #e6e6e6; padding: 8px; margin-bottom: 10px; background: #fff; border-radius: 6px; }
+  small.hint { color: #666; display:block; margin-top:6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { border: 1px solid #eee; padding: 6px; text-align: center; }
+  #log { height: 120px; overflow: auto; background: #fafafa; border: 1px solid #eee; padding: 6px; font-size: 13px; }
+  .key { font-weight: 600; }
+  .muted { color: #666; }
+  footer { font-size: 12px; color:#666; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <div id="left">
+    <canvas id="canvas"></canvas>
+    <div style="position:absolute; left:8px; top:8px; background:rgba(255,255,255,0.9); padding:6px; border-radius:6px; border:1px solid #eee;">
+      <strong>Tools</strong><br/>
+      Click canvas to add node • Drag nodes to move
+    </div>
+  </div>
+  <div id="right">
+    <h2>Weighted Graph Explorer</h2>
+
+    <div class="panel">
+      <div class="controls">
+        <button id="btnAddEdge" class="mode-btn">Add Edge</button>
+        <button id="btnEditEdge" class="mode-btn">Edit/Delete Edge</button>
+        <button id="btnClear" title="Remove all nodes and edges">Clear</button>
+        <button id="btnResetHighlights" title="Clear algorithm highlights">Reset highlights</button>
+      </div>
+      <small class="hint">Add Edge: click first node then second node, enter weight. Edit/Delete Edge: click an edge to edit or remove it.</small>
+    </div>
+
+    <div class="panel">
+      <strong>Shortest Path (Dijkstra)</strong>
+      <div style="display:flex; gap:6px; margin-top:8px; margin-bottom:8px;">
+        <select id="selectStart"></select>
+        <select id="selectEnd"></select>
+        <button id="btnDijkstra">Compute</button>
+      </div>
+      <small class="hint">Select source and target nodes then hit Compute to highlight shortest path and distances.</small>
+    </div>
+
+    <div class="panel">
+      <strong>Minimum Spanning Tree (Kruskal)</strong>
+      <div style="margin-top:8px;">
+        <button id="btnMST">Compute MST</button>
+      </div>
+      <small class="hint">Computes a minimum spanning tree for the undirected graph. Highlights chosen edges.</small>
+    </div>
+
+    <div class="panel">
+      <strong>Graph Data</strong>
+      <div style="margin-top:8px;">
+        <div><span class="key">Nodes:</span> <span id="nodeCount">0</span></div>
+        <div><span class="key">Edges:</span> <span id="edgeCount">0</span></div>
+      </div>
+      <details style="margin-top:8px;">
+        <summary>Adjacency List</summary>
+        <pre id="adjList" style="white-space:pre-wrap; margin-top:8px;"></pre>
+      </details>
+      <details style="margin-top:8px;">
+        <summary>Adjacency Matrix</summary>
+        <div id="adjMatrix" style="margin-top:8px; overflow:auto;"></div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <strong>Console</strong>
+      <div id="log"></div>
+    </div>
+
+    <footer>
+      Tips: You can rename nodes by editing their label in the code (labels are auto A,B,C...). Weighted undirected edges are supported. Click edges to edit weight or delete them when in Edit mode.
+    </footer>
+  </div>
+
+<script>
+/*
+  Weighted Graph Explorer
+  - Click canvas to add nodes
+  - Drag nodes to reposition
+  - Add Edge mode: click node A then node B, enter weight
+  - Edit/Delete Edge mode: click an edge to edit its weight or delete it
+  - Dijkstra for shortest path between two nodes (highlights path in red)
+  - Kruskal to compute MST (highlights MST edges in green)
+  - Adjacency list and matrix shown on sidebar
+*/
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+
+// Data
+let nodes = []; // {id, label, x, y}
+let edges = []; // {id, a: nodeId, b: nodeId, weight, state}
+let nodeCounter = 0;
+let edgeCounter = 0;
+
+// UI state
+let addEdgeMode = false;
+let editEdgeMode = false;
+let addingEdgeFirstNode = null;
+let draggingNode = null;
+let dragOffset = {x:0,y:0};
+let hoveredNode = null;
+let hoveredEdge = null;
+
+const R = 18; // node radius
+
+// DOM
+const btnAddEdge = document.getElementById('btnAddEdge');
+const btnEditEdge = document.getElementById('btnEditEdge');
+const btnClear = document.getElementById('btnClear');
+const btnResetHighlights = document.getElementById('btnResetHighlights');
+const btnDijkstra = document.getElementById('btnDijkstra');
+const btnMST = document.getElementById('btnMST');
+const selectStart = document.getElementById('selectStart');
+const selectEnd = document.getElementById('selectEnd');
+const adjListEl = document.getElementById('adjList');
+const adjMatrixEl = document.getElementById('adjMatrix');
+const nodeCountEl = document.getElementById('nodeCount');
+const edgeCountEl = document.getElementById('edgeCount');
+const logEl = document.getElementById('log');
+
+function log(s) {
+  const line = document.createElement('div');
+  line.textContent = s;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function resetModes() {
+  addEdgeMode = false;
+  editEdgeMode = false;
+  addingEdgeFirstNode = null;
+  btnAddEdge.classList.remove('active');
+  btnEditEdge.classList.remove('active');
+}
+
+btnAddEdge.addEventListener('click', () => {
+  addEdgeMode = !addEdgeMode;
+  if (addEdgeMode) { editEdgeMode = false; btnAddEdge.classList.add('active'); btnEditEdge.classList.remove('active'); log('Add Edge mode ON. Click two nodes.'); }
+  else { btnAddEdge.classList.remove('active'); addingEdgeFirstNode = null; log('Add Edge mode OFF.'); }
+});
+
+btnEditEdge.addEventListener('click', () => {
+  editEdgeMode = !editEdgeMode;
+  if (editEdgeMode) { addEdgeMode = false; btnEditEdge.classList.add('active'); btnAddEdge.classList.remove('active'); log('Edit/Delete Edge mode ON. Click an edge to edit or remove.'); }
+  else { btnEditEdge.classList.remove('active'); log('Edit/Delete Edge mode OFF.'); }
+});
+
+btnClear.addEventListener('click', () => {
+  if (!confirm('Clear entire graph?')) return;
+  nodes = []; edges = []; nodeCounter = 0; edgeCounter = 0;
+  updateUI();
+  draw();
+  log('Graph cleared.');
+});
+
+btnResetHighlights.addEventListener('click', () => {
+  for (const e of edges) e.state = null;
+  draw();
+  log('Highlights cleared.');
+});
+
+btnDijkstra.addEventListener('click', () => {
+  const sId = selectStart.value;
+  const tId = selectEnd.value;
+  if (!sId || !tId) { alert('Select start and end nodes.'); return; }
+  if (sId === tId) { alert('Start and end are the same.'); return; }
+  for (const e of edges) e.state = null;
+  const res = dijkstra(sId, tId);
+  if (!res.path) {
+    log('No path found between ' + getNodeLabel(sId) + ' and ' + getNodeLabel(tId));
+    alert('No path found between selected nodes.');
+    draw();
+    return;
+  }
+  for (let i=0;i<res.pathEdges.length;i++) {
+    const eid = res.pathEdges[i];
+    const e = edges.find(x => x.id === eid);
+    if (e) e.state = 'path';
+  }
+  draw();
+  log(`Dijkstra: shortest distance ${res.distance} from ${getNodeLabel(sId)} to ${getNodeLabel(tId)}. Path: ${res.nodePath.map(getNodeLabel).join(' -> ')}`);
+});
+
+btnMST.addEventListener('click', () => {
+  for (const e of edges) e.state = null;
+  const {mstEdges, totalWeight} = kruskalMST();
+  if (mstEdges.length === 0) {
+    alert('MST could not be formed (graph might be disconnected or empty).');
+    return;
+  }
+  for (const eid of mstEdges) {
+    const e = edges.find(x => x.id === eid);
+    if (e) e.state = 'mst';
+  }
+  draw();
+  log(`Kruskal MST: total weight = ${totalWeight}. Edges: ${mstEdges.join(', ')}`);
+});
+
+// Canvas events
+function getMousePos(evt) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: (evt.clientX - rect.left) * (canvas.width / rect.width), y: (evt.clientY - rect.top) * (canvas.height / rect.height) };
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const pos = getMousePos(e);
+  const n = findNodeAt(pos.x, pos.y);
+  const edge = findEdgeAt(pos.x, pos.y);
+  if (addEdgeMode) {
+    if (n) {
+      if (!addingEdgeFirstNode) {
+        addingEdgeFirstNode = n.id;
+        log('Selected first node: ' + n.label + '. Now click second node.');
+      } else {
+        const a = addingEdgeFirstNode;
+        const b = n.id;
+        if (a === b) { alert('Cannot create self-loop in this demo.'); addingEdgeFirstNode = null; return; }
+        const existing = edges.find(e => (e.a===a && e.b===b) || (e.a===b && e.b===a));
+        if (existing) { alert('Edge already exists between these nodes.'); addingEdgeFirstNode = null; return; }
+        const w = prompt('Enter weight (positive number):', '1');
+        if (w === null) { addingEdgeFirstNode = null; return; }
+        const weight = parseFloat(w);
+        if (isNaN(weight) || weight <= 0) { alert('Weight must be a positive number.'); addingEdgeFirstNode = null; return; }
+        addEdge(a,b,weight);
+        addingEdgeFirstNode = null;
+        draw();
+      }
+    }
+    return;
+  }
+  if (editEdgeMode) {
+    if (edge) {
+      // open edit/delete dialog
+      const choice = prompt(`Edge ${edge.id} between ${getNodeLabel(edge.a)} - ${getNodeLabel(edge.b)}. Enter new weight to update, or leave blank then type "DEL" to delete. Current weight: ${edge.weight}`, String(edge.weight));
+      if (choice === null) return;
+      if (choice.toUpperCase() === 'DEL') {
+        if (confirm('Delete this edge?')) {
+          edges = edges.filter(e => e.id !== edge.id);
+          updateUI();
+          draw();
+          log(`Edge ${edge.id} deleted.`);
+        }
+      } else {
+        const w = parseFloat(choice);
+        if (isNaN(w) || w <= 0) { alert('Invalid weight.'); return; }
+        edge.weight = w;
+        updateUI();
+        draw();
+        log(`Edge ${edge.id} weight set to ${w}.`);
+      }
+    }
+    return;
+  }
+
+  if (n) {
+    // start dragging
+    draggingNode = n;
+    const posn = posCanvasToClient(n);
+    dragOffset.x = pos.x - n.x;
+    dragOffset.y = pos.y - n.y;
+    canvas.style.cursor = 'grabbing';
+  } else if (edge) {
+    // maybe select edge? show info
+    log(`Edge clicked: ${edge.id} (${getNodeLabel(edge.a)} - ${getNodeLabel(edge.b)}), weight=${edge.weight}`);
+  } else {
+    // click empty space -> add node
+    const newId = addNode(pos.x, pos.y);
+    draw();
+    log('Added node ' + getNodeLabel(newId));
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const pos = getMousePos(e);
+  hoveredNode = findNodeAt(pos.x, pos.y);
+  hoveredEdge = findEdgeAt(pos.x, pos.y);
+
+  if (draggingNode) {
+    draggingNode.x = pos.x - dragOffset.x;
+    draggingNode.y = pos.y - dragOffset.y;
+    draw();
+  } else {
+    draw();
+  }
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  draggingNode = null;
+  canvas.style.cursor = 'crosshair';
+});
+
+// Utilities
+function addNode(x,y) {
+  const id = 'n' + (++nodeCounter);
+  const label = String.fromCharCode(64 + nodeCounter) || ('N'+nodeCounter); // A, B, C...
+  nodes.push({ id, label, x, y });
+  updateUI();
+  return id;
+}
+
+function addEdge(a,b,weight) {
+  const id = 'e' + (++edgeCounter);
+  edges.push({ id, a, b, weight: +weight, state: null });
+  updateUI();
+  log(`Edge ${id} added between ${getNodeLabel(a)} - ${getNodeLabel(b)} (w=${weight})`);
+}
+
+function getNodeLabel(id) {
+  const n = nodes.find(x => x.id === id);
+  return n ? n.label : id;
+}
+
+function findNodeAt(x,y) {
+  for (let i=nodes.length-1;i>=0;i--) {
+    const n = nodes[i];
+    const dx = n.x - x, dy = n.y - y;
+    if (dx*dx + dy*dy <= R*R) return n;
+  }
+  return null;
+}
+
+function findEdgeAt(x,y) {
+  // find edge whose segment is within threshold distance
+  const threshold = 8;
+  for (let i=0;i<edges.length;i++) {
+    const e = edges[i];
+    const na = nodes.find(n => n.id === e.a);
+    const nb = nodes.find(n => n.id === e.b);
+    if (!na || !nb) continue;
+    const d = pointToSegmentDistance({x,y}, na, nb);
+    if (d <= threshold) return e;
+  }
+  return null;
+}
+
+function pointToSegmentDistance(p, a, b) {
+  // p, a, b have x,y
+  const vx = b.x - a.x, vy = b.y - a.y;
+  const wx = p.x - a.x, wy = p.y - a.y;
+  const c = vx*wx + vy*wy;
+  if (c <= 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  const len2 = vx*vx + vy*vy;
+  if (c >= len2) return Math.hypot(p.x - b.x, p.y - b.y);
+  const t = c / len2;
+  const projx = a.x + t*vx, projy = a.y + t*vy;
+  return Math.hypot(p.x - projx, p.y - projy);
+}
+
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Edges
+  for (const e of edges) {
+    const a = nodes.find(n => n.id === e.a);
+    const b = nodes.find(n => n.id === e.b);
+    if (!a || !b) continue;
+    // line style
+    let color = '#444';
+    let width = 2;
+    if (e.state === 'path') { color = '#d9534f'; width = 4; }
+    else if (e.state === 'mst') { color = '#2ca02c'; width = 3.5; }
+    // distance from hover highlight
+    if (hoveredEdge && hoveredEdge.id === e.id) { color = '#1f78b4'; width += 2; }
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    // weight label near midpoint offset a bit
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    // offset perpendicular for readability
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx,dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const ox = nx * 12, oy = ny * 12;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(mx-14+ox, my-11+oy, 28, 22, 6) 
+                  : roundRect(ctx, mx-14+ox, my-11+oy, 28,22,6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#222';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(e.weight, mx+ox, my+oy);
+  }
+
+  // Nodes
+  for (const n of nodes) {
+    // circle
+    ctx.beginPath();
+    ctx.fillStyle = '#f1f5f9';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = (hoveredNode && hoveredNode.id === n.id) ? 3 : 1.8;
+    ctx.arc(n.x, n.y, R, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    // label
+    ctx.fillStyle = '#111';
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x, n.y);
+  }
+
+  // if adding edge and first selected node, draw temporary line to mouse
+  if (addEdgeMode && addingEdgeFirstNode) {
+    const n = nodes.find(x => x.id === addingEdgeFirstNode);
+    if (n && lastMousePos) {
+      ctx.beginPath();
+      ctx.setLineDash([6,6]);
+      ctx.strokeStyle = '#0366d6';
+      ctx.lineWidth = 2;
+      ctx.moveTo(n.x, n.y);
+      ctx.lineTo(lastMousePos.x, lastMousePos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  // fallback for older browsers to draw rounded rect
+  const min = Math.min(w,h)/2;
+  r = Math.min(r, min);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// track mouse for drawing temporary edge
+let lastMousePos = null;
+canvas.addEventListener('mousemove', (e) => {
+  lastMousePos = getMousePos(e);
+});
+canvas.addEventListener('mouseleave', () => { lastMousePos = null; hoveredNode=null; hoveredEdge=null; draw(); });
+
+// helper: convert node position to client (not used here but kept)
+function posCanvasToClient(node) {
+  return { x: node.x, y: node.y };
+}
+
+// Update sidebar and selects
+function updateUI() {
+  nodeCountEl.textContent = nodes.length;
+  edgeCountEl.textContent = edges.length;
+  // selects
+  selectStart.innerHTML = '';
+  selectEnd.innerHTML = '';
+  for (const n of nodes) {
+    const o1 = document.createElement('option'); o1.value = n.id; o1.textContent = n.label;
+    const o2 = document.createElement('option'); o2.value = n.id; o2.textContent = n.label;
+    selectStart.appendChild(o1); selectEnd.appendChild(o2);
+  }
+  // adjacency list
+  const map = {};
+  for (const n of nodes) map[n.id] = [];
+  for (const e of edges) {
+    if (map[e.a]) map[e.a].push({to:e.b,w:e.weight,id:e.id});
+    if (map[e.b]) map[e.b].push({to:e.a,w:e.weight,id:e.id});
+  }
+  let alText = '';
+  for (const n of nodes) {
+    alText += n.label + ' (' + n.id + '): ';
+    alText += map[n.id].map(x => `${getNodeLabel(x.to)}(${x.w})`).join(', ');
+    alText += '\n';
+  }
+  adjListEl.textContent = alText.trim();
+
+  // adjacency matrix
+  if (nodes.length === 0) { adjMatrixEl.innerHTML = '<em class="muted">No nodes</em>'; return; }
+  const header = [''].concat(nodes.map(n => n.label));
+  let html = '<table><thead><tr>' + header.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  for (let i=0;i<nodes.length;i++) {
+    const row = nodes[i];
+    html += `<tr><th>${row.label}</th>`;
+    for (let j=0;j<nodes.length;j++) {
+      if (i === j) html += `<td>0</td>`;
+      else {
+        const e = edges.find(ed => (ed.a===row.id && ed.b===nodes[j].id) || (ed.b===row.id && ed.a===nodes[j].id));
+        html += `<td>${e ? e.weight : '∞'}</td>`;
+      }
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  adjMatrixEl.innerHTML = html;
+}
+
+// Algorithms
+function dijkstra(startId, targetId) {
+  // build adjacency
+  const adj = {};
+  for (const n of nodes) adj[n.id] = [];
+  for (const e of edges) {
+    if (!adj[e.a] || !adj[e.b]) continue;
+    adj[e.a].push({to:e.b,w:e.weight,id:e.id});
+    adj[e.b].push({to:e.a,w:e.weight,id:e.id});
+  }
+  // distances
+  const dist = {}; const prev = {}; const prevEdge = {};
+  for (const n of nodes) { dist[n.id]=Infinity; prev[n.id]=null; prevEdge[n.id]=null; }
+  dist[startId] = 0;
+  // simple priority queue via array (ok for small demo)
+  const Q = nodes.map(n=>n.id);
+  while (Q.length>0) {
+    Q.sort((a,b) => dist[a]-dist[b]);
+    const u = Q.shift();
+    if (dist[u] === Infinity) break;
+    if (u === targetId) break;
+    for (const nb of adj[u]) {
+      const alt = dist[u] + nb.w;
+      if (alt < dist[nb.to]) {
+        dist[nb.to] = alt;
+        prev[nb.to] = u;
+        prevEdge[nb.to] = nb.id;
+      }
+    }
+  }
+  if (dist[targetId] === Infinity) return { distance: Infinity, path: null };
+  // reconstruct
+  const path = [];
+  const pathEdges = [];
+  let cur = targetId;
+  while (cur !== null) {
+    path.push(cur);
+    if (prevEdge[cur]) pathEdges.push(prevEdge[cur]);
+    cur = prev[cur];
+  }
+  path.reverse();
+  pathEdges.reverse();
+  return { distance: dist[targetId], nodePath: path, pathEdges };
+}
+
+function kruskalMST() {
+  // edges sorted by weight
+  const sorted = edges.slice().sort((a,b) => a.weight - b.weight);
+  // union-find
+  const parent = {};
+  for (const n of nodes) parent[n.id] = n.id;
+  function find(x){ return parent[x]===x ? x : (parent[x]=find(parent[x])); }
+  function union(a,b){ const ra = find(a), rb = find(b); if (ra===rb) return false; parent[rb]=ra; return true; }
+
+  const mstEdges = [];
+  let total = 0;
+  for (const e of sorted) {
+    if (union(e.a, e.b)) {
+      mstEdges.push(e.id);
+      total += e.weight;
+    }
+  }
+  // check connectivity: after unions, all nodes should have same root
+  const roots = new Set(nodes.map(n => find(n.id)));
+  if (roots.size !== 1) {
+    return { mstEdges: [], totalWeight: null };
+  }
+  return { mstEdges, totalWeight: total };
+}
+
+// initialize
+(function initDemo() {
+  // set canvas size to parent size
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  resizeCanvas();
+  // add some sample nodes and edges
+  const padding = 80;
+  const w = canvas.width, h = canvas.height;
+  const samplePositions = [
+    {x: w*0.2, y: h*0.25},
+    {x: w*0.5, y: h*0.18},
+    {x: w*0.8, y: h*0.25},
+    {x: w*0.3, y: h*0.6},
+    {x: w*0.6, y: h*0.6}
+  ];
+  for (const p of samplePositions) addNode(p.x, p.y);
+  // Add edges sample
+  addEdge(nodes[0].id, nodes[1].id, 4);
+  addEdge(nodes[1].id, nodes[2].id, 3);
+  addEdge(nodes[0].id, nodes[3].id, 2.5);
+  addEdge(nodes[3].id, nodes[4].id, 5);
+  addEdge(nodes[1].id, nodes[4].id, 4.2);
+  addEdge(nodes[2].id, nodes[4].id, 6);
+  updateUI();
+  draw();
+  log('Demo graph created. Try dragging nodes, adding edges, running Dijkstra or Kruskal.');
+})();
+
+// polyfill for round rect detection if exists in some contexts
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){ roundRect(this,x,y,w,h,r); this.fill(); };
+}
+
+// Make sure initial resize is correct
+setTimeout(resizeCanvas, 50);
+
+</script>
+</body>
+</html>

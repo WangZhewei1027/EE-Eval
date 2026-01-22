@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Depth-First Search (DFS) Visualizer</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 0; display: flex; height: 100vh; }
+  #left { width: 720px; padding: 12px; box-sizing: border-box; border-right: 1px solid #ddd; display: flex; flex-direction: column; gap: 10px; }
+  #canvasWrap { flex: 1; display: flex; align-items: center; justify-content: center; }
+  canvas { background: #f8f8f8; box-shadow: 0 2px 6px rgba(0,0,0,0.08); cursor: pointer; }
+  #controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { padding: 6px 10px; border-radius: 6px; border: 1px solid #bbb; background: white; cursor: pointer; }
+  button:active { transform: translateY(1px); }
+  select, input[type="range"], input[type="number"] { padding: 6px; border-radius: 6px; border: 1px solid #bbb; }
+  label { font-size: 13px; color: #333; }
+  #right { width: 360px; padding: 12px; box-sizing: border-box; overflow: auto; }
+  h2 { margin: 6px 0; font-size: 16px; }
+  .info { font-size: 13px; color: #333; margin-bottom: 8px; }
+  .legend { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .legendItem { display:flex; align-items:center; gap:6px; font-size:13px; }
+  .swatch { width:18px; height:18px; border-radius:4px; border:1px solid #aaa; }
+  #stackView { font-family: monospace; font-size: 13px; background: #f7f7ff; padding:8px; border-radius:6px; border:1px solid #e2e2ff; max-height: 260px; overflow:auto; }
+  #stats { font-size: 13px; color: #333; margin-top:6px; }
+  small { color:#666; }
+  footer { margin-top:8px; font-size:12px; color:#666; }
+  .controlsCol { display:flex; gap:8px; align-items:center; }
+  .muted { color:#555; font-size:13px; }
+</style>
+</head>
+<body>
+  <div id="left">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h1 style="font-size:18px;margin:0">DFS Visualizer</h1>
+      <div class="muted">Depth-First Search (stack / recursion)</div>
+    </div>
+
+    <div id="canvasWrap">
+      <canvas id="grid" width="640" height="480"></canvas>
+    </div>
+
+    <div id="controls">
+      <div class="controlsCol">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="toggle">Toggle Wall</option>
+          <option value="start">Set Start</option>
+          <option value="goal">Set Goal</option>
+        </select>
+      </div>
+
+      <div class="controlsCol">
+        <label for="algo">Algorithm</label>
+        <select id="algo">
+          <option value="iter">Iterative (stack)</option>
+          <option value="rec">Recursive</option>
+        </select>
+      </div>
+
+      <button id="runBtn">Run</button>
+      <button id="stepBtn">Step</button>
+      <button id="pauseBtn" disabled>Pause</button>
+      <button id="resetBtn">Reset</button>
+
+      <div class="controlsCol">
+        <label for="speed">Speed</label>
+        <input id="speed" type="range" min="10" max="1000" value="120">
+      </div>
+
+      <div class="controlsCol">
+        <label for="rows">Rows</label>
+        <input id="rows" type="number" min="6" max="60" value="12" style="width:64px">
+        <label for="cols">Cols</label>
+        <input id="cols" type="number" min="6" max="80" value="16" style="width:64px">
+        <button id="resizeBtn">Resize</button>
+      </div>
+
+      <button id="randomBtn">Random Walls</button>
+      <button id="clearWallsBtn">Clear Walls</button>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <div class="legend">
+        <div class="legendItem"><div class="swatch" style="background:#8ad2ff"></div>Visited</div>
+        <div class="legendItem"><div class="swatch" style="background:#ffb86b"></div>Current</div>
+        <div class="legendItem"><div class="swatch" style="background:#ffe58a"></div>Path</div>
+        <div class="legendItem"><div class="swatch" style="background:#6ce36c"></div>Start</div>
+        <div class="legendItem"><div class="swatch" style="background:#ff6b6b"></div>Goal</div>
+        <div class="legendItem"><div class="swatch" style="background:#333"></div>Wall</div>
+      </div>
+      <div class="muted">Click canvas to edit. Use "Step" to run one operation at a time.</div>
+    </div>
+    <footer><small>This demo shows both iterative (explicit stack) and recursive DFS exploring a grid. The algorithm backtracks until it finds the goal or exhausts reachable cells.</small></footer>
+  </div>
+
+  <div id="right">
+    <h2>Stack / Call View</h2>
+    <div id="stackView">(stack / recursion frames will appear here during execution)</div>
+
+    <h2>Statistics</h2>
+    <div id="stats">
+      <div>Visited: <span id="visitedCount">0</span></div>
+      <div>Path length: <span id="pathLen">0</span></div>
+      <div>Status: <span id="status">Idle</span></div>
+    </div>
+
+    <h2>Notes</h2>
+    <div class="info">
+      - DFS explores as deep as possible along a branch before backtracking.<br>
+      - Iterative uses an explicit stack; recursive uses the call stack.<br>
+      - Grid neighbors are 4-directional (up/down/left/right).<br>
+      - Walls block movement.
+    </div>
+  </div>
+
+<script>
+// DFS Visualizer - Single File
+(function(){
+  const canvas = document.getElementById('grid');
+  const ctx = canvas.getContext('2d');
+  const rowsInput = document.getElementById('rows');
+  const colsInput = document.getElementById('cols');
+  const resizeBtn = document.getElementById('resizeBtn');
+  const modeSelect = document.getElementById('mode');
+  const algoSelect = document.getElementById('algo');
+  const runBtn = document.getElementById('runBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const speedSlider = document.getElementById('speed');
+  const randomBtn = document.getElementById('randomBtn');
+  const clearWallsBtn = document.getElementById('clearWallsBtn');
+  const stackView = document.getElementById('stackView');
+  const visitedCountEl = document.getElementById('visitedCount');
+  const pathLenEl = document.getElementById('pathLen');
+  const statusEl = document.getElementById('status');
+
+  let rows = parseInt(rowsInput.value,10);
+  let cols = parseInt(colsInput.value,10);
+  let cellSize = 40;
+  const margin = 8;
+
+  function resizeCanvas(){
+    // compute cellSize to fit canvas area
+    const maxW = 640 - margin*2;
+    const maxH = 480 - margin*2;
+    cellSize = Math.min(Math.floor(maxW/cols), Math.floor(maxH/rows));
+    canvas.width = cols*cellSize + margin*2;
+    canvas.height = rows*cellSize + margin*2;
+    draw();
+  }
+
+  rowsInput.addEventListener('change', ()=> rows = Math.max(6, Math.min(60, parseInt(rowsInput.value)||12)), false);
+  colsInput.addEventListener('change', ()=> cols = Math.max(6, Math.min(80, parseInt(colsInput.value)||16)), false);
+  resizeBtn.addEventListener('click', ()=> { initGrid(); resizeCanvas(); });
+
+  // Grid state
+  let grid = [];
+  let start = {r: Math.floor(rows/2), c: Math.floor(cols/4)};
+  let goal = {r: Math.floor(rows/2), c: Math.floor(cols*3/4)};
+  let visited = new Set();
+  let parent = new Map();
+  let running = false;
+  let paused = false;
+  let iterator = null;
+  let highlightCell = null; // current cell in visualization
+  let found = false;
+  let visitedOrder = new Map(); let orderCounter = 0;
+
+  function idx(r,c){ return r + ',' + c; }
+  function inBounds(r,c){ return r>=0 && r<rows && c>=0 && c<cols; }
+
+  function initGrid(random=false){
+    grid = new Array(rows);
+    for(let r=0;r<rows;r++){
+      grid[r] = new Array(cols).fill(0);
+    }
+    // place some random walls if requested
+    if(random){
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+          if(Math.random() < 0.28 && !(r===start.r && c===start.c) && !(r===goal.r && c===goal.c)){
+            grid[r][c] = 1;
+          }
+        }
+      }
+    }
+    visited.clear();
+    parent.clear();
+    visitedOrder.clear();
+    orderCounter = 0;
+    highlightCell = null;
+    found = false;
+    running = false;
+    paused = false;
+    iterator = null;
+    updateStats();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // draw cells
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const x = margin + c*cellSize;
+        const y = margin + r*cellSize;
+        // base
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(x, y, cellSize-1, cellSize-1);
+        if(grid[r][c] === 1){
+          ctx.fillStyle = "#333";
+          ctx.fillRect(x, y, cellSize-1, cellSize-1);
+        }
+        // visited
+        if(visited.has(idx(r,c))){
+          ctx.fillStyle = "#8ad2ff";
+          ctx.fillRect(x+1, y+1, cellSize-3, cellSize-3);
+        }
+      }
+    }
+
+    // draw path if found or when parent map exists
+    if(parent.size > 0 && (found || running === false)){
+      let curIdx = idx(goal.r, goal.c);
+      if(parent.has(curIdx) || visited.has(curIdx)){
+        // backtrack from goal to start
+        ctx.fillStyle = "#ffe58a";
+        let steps = 0;
+        while(parent.has(curIdx)){
+          const [r,c] = curIdx.split(',').map(Number);
+          const x = margin + c*cellSize;
+          const y = margin + r*cellSize;
+          ctx.fillRect(x+2, y+2, cellSize-5, cellSize-5);
+          curIdx = parent.get(curIdx);
+          steps++;
+          if(curIdx === idx(start.r,start.c)){ // draw start cell path color too
+            const [sr,sc] = curIdx.split(',').map(Number);
+            const xs = margin + sc*cellSize;
+            const ys = margin + sr*cellSize;
+            ctx.fillRect(xs+2, ys+2, cellSize-5, cellSize-5);
+            break;
+          }
+        }
+        pathLenEl.textContent = steps;
+      } else {
+        pathLenEl.textContent = 0;
+      }
+    } else {
+      pathLenEl.textContent = 0;
+    }
+
+    // draw current highlight
+    if(highlightCell){
+      const [r,c] = highlightCell;
+      const x = margin + c*cellSize;
+      const y = margin + r*cellSize;
+      ctx.fillStyle = "#ffb86b";
+      ctx.fillRect(x+1, y+1, cellSize-3, cellSize-3);
+    }
+
+    // draw start & goal
+    const sx = margin + start.c*cellSize;
+    const sy = margin + start.r*cellSize;
+    ctx.fillStyle = "#6ce36c";
+    ctx.fillRect(sx+2, sy+2, cellSize-5, cellSize-5);
+    const gx = margin + goal.c*cellSize;
+    const gy = margin + goal.r*cellSize;
+    ctx.fillStyle = "#ff6b6b";
+    ctx.fillRect(gx+2, gy+2, cellSize-5, cellSize-5);
+
+    // optionally draw numbers for visited order
+    ctx.fillStyle = "#003";
+    ctx.font = Math.max(10, cellSize/3) + "px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for(let [key, ord] of visitedOrder.entries()){
+      const [r,c] = key.split(',').map(Number);
+      const x = margin + c*cellSize + cellSize/2 - 1;
+      const y = margin + r*cellSize + cellSize/2 - 1;
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillText(String(ord), x, y);
+    }
+  }
+
+  canvas.addEventListener('click', (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left - margin;
+    const y = e.clientY - rect.top - margin;
+    const c = Math.floor(x / cellSize);
+    const r = Math.floor(y / cellSize);
+    if(!inBounds(r,c)) return;
+    const mode = modeSelect.value;
+    if(mode === 'toggle'){
+      if(!(r===start.r && c===start.c) && !(r===goal.r && c===goal.c)){
+        grid[r][c] = grid[r][c] ? 0 : 1;
+      }
+    } else if(mode === 'start'){
+      if(!(r===goal.r && c===goal.c) && grid[r][c]===0){
+        start = {r,c};
+      }
+    } else if(mode === 'goal'){
+      if(!(r===start.r && c===start.c) && grid[r][c]===0){
+        goal = {r,c};
+      }
+    }
+    draw();
+  });
+
+  randomBtn.addEventListener('click', ()=>{
+    initGrid(true);
+    draw();
+  });
+
+  clearWallsBtn.addEventListener('click', ()=>{
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) grid[r][c]=0;
+    draw();
+  });
+
+  // Helpers for animation and stepping
+  function sleep(ms){
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function updateStats(){
+    visitedCountEl.textContent = visited.size;
+    statusEl.textContent = running ? (paused ? 'Paused' : 'Running') : (found ? 'Found' : 'Idle');
+  }
+
+  // DFS generator for iterative step execution
+  function* dfsIterGenerator(){
+    const startKey = idx(start.r,start.c);
+    const goalKey = idx(goal.r,goal.c);
+    const stack = [ startKey ];
+    const visitedLocal = new Set();
+    const parentLocal = new Map();
+    // push initial frame
+    yield {type:'stack', stack:[...stack]};
+    while(stack.length){
+      const cur = stack.pop();
+      yield {type:'stack', stack:[...stack], current:cur};
+      if(visitedLocal.has(cur)) continue;
+      visitedLocal.add(cur);
+      yield {type:'visit', node:cur};
+      if(cur === goalKey){
+        yield {type:'found', node:cur, parent:parentLocal};
+        return;
+      }
+      const [r,c] = cur.split(',').map(Number);
+      // neighbors in a fixed order (to make DFS deterministic)
+      const neighbors = [[r-1,c],[r,c+1],[r+1,c],[r,c-1]]; // up, right, down, left
+      for(let nb of neighbors){
+        const [nr,nc] = nb;
+        if(!inBounds(nr,nc)) continue;
+        if(grid[nr][nc] === 1) continue;
+        const nbKey = idx(nr,nc);
+        if(visitedLocal.has(nbKey)) continue;
+        if(!stack.includes(nbKey)){ // avoid pushing duplicates in stack
+          parentLocal.set(nbKey, cur);
+          stack.push(nbKey);
+          yield {type:'push', node:nbKey, stack:[...stack]};
+        }
+      }
+    }
+    yield {type:'exhausted'};
+  }
+
+  // Recursive DFS with async pauses to show animation
+  async function dfsRecursive(r,c, visitedLocal, parentLocal){
+    const key = idx(r,c);
+    if(paused) { await waitWhilePaused(); }
+    // mark current
+    highlightCell = [r,c];
+    visitedLocal.add(key);
+    visited.add(key);
+    visitedOrder.set(key, ++orderCounter);
+    updateStats();
+    draw();
+    await sleep(speed());
+    if(key === idx(goal.r,goal.c)){
+      parent = new Map(parentLocal);
+      found = true;
+      highlightCell = null;
+      updateStats();
+      draw();
+      return true;
+    }
+    // neighbors: up,right,down,left
+    const dir = [[-1,0],[0,1],[1,0],[0,-1]];
+    for(let d of dir){
+      const nr = r + d[0], nc = c + d[1];
+      if(!inBounds(nr,nc)) continue;
+      if(grid[nr][nc] === 1) continue;
+      const nkey = idx(nr,nc);
+      if(visitedLocal.has(nkey)) continue;
+      parentLocal.set(nkey, key);
+      // show stack/call view
+      updateStackViewRecursive(parentLocal, nkey);
+      if(paused) { await waitWhilePaused(); }
+      const res = await dfsRecursive(nr,nc, visitedLocal, parentLocal);
+      if(res) return true;
+    }
+
+    // backtracking visualization step
+    highlightCell = [r,c];
+    draw();
+    await sleep(speed()/2);
+    return false;
+  }
+
+  function updateStackViewRecursive(parentLocal, nextKey){
+    // reconstruct call stack approximation: follow parentLocal from nextKey back to start
+    let arr = [];
+    let cur = nextKey;
+    while(cur && parentLocal.has(cur)){
+      arr.push(cur);
+      cur = parentLocal.get(cur);
+      if(arr.length > rows*cols) break;
+    }
+    if(cur) arr.push(cur);
+    stackView.innerText = arr.reverse().join(' -> ');
+  }
+
+  function speed(){
+    // return ms delay
+    return Math.max(5, 1000 - parseInt(speedSlider.value));
+  }
+
+  // wait until unpaused
+  function waitWhilePaused(){
+    return new Promise(resolve=>{
+      const i = setInterval(()=>{
+        if(!paused) {
+          clearInterval(i);
+          resolve();
+        }
+      }, 50);
+    });
+  }
+
+  // control execution
+  runBtn.addEventListener('click', async ()=>{
+    if(running){ return; }
+    // prepare
+    visited.clear();
+    parent.clear();
+    visitedOrder.clear(); orderCounter = 0;
+    highlightCell = null;
+    found = false;
+    running = true;
+    paused = false;
+    iterator = null;
+    stackView.innerText = "(stack view will update)";
+    updateStats();
+    draw();
+
+    const algo = algoSelect.value;
+    if(algo === 'iter'){
+      // iterative generator-driven execution with animation
+      iterator = dfsIterGenerator();
+      runBtn.disabled = true;
+      pauseBtn.disabled = false;
+      stepBtn.disabled = true;
+      while(true){
+        if(paused){
+          await waitWhilePaused();
+        }
+        const {value, done} = iterator.next();
+        if(done) break;
+        const ev = value;
+        if(ev.type === 'stack'){
+          // update stack view
+          stackView.innerText = ev.stack.join(' -> ');
+          highlightCell = ev.current ? ev.current.split(',').map(Number) : null;
+          draw();
+          await sleep(speed()/2);
+        } else if(ev.type === 'current'){
+          // not used, but kept
+        } else if(ev.type === 'visit'){
+          visited.add(ev.node);
+          visitedOrder.set(ev.node, ++orderCounter);
+          visitedCountEl.textContent = visited.size;
+          highlightCell = ev.node.split(',').map(Number);
+          draw();
+          await sleep(speed());
+        } else if(ev.type === 'push'){
+          // show push in stack view
+          stackView.innerText = ev.stack.join(' -> ');
+          draw();
+          await sleep(speed()/3);
+        } else if(ev.type === 'found'){
+          parent = new Map(ev.parent);
+          parent.set(ev.node, parent.get(ev.node) || parent.get(ev.node)); // no-op to ensure presence
+          found = true;
+          visited.add(ev.node);
+          visitedOrder.set(ev.node, ++orderCounter);
+          highlightCell = ev.node.split(',').map(Number);
+          draw();
+          break;
+        } else if(ev.type === 'exhausted'){
+          // done, no path
+          break;
+        }
+        updateStats();
+      }
+      running = false;
+      runBtn.disabled = false;
+      pauseBtn.disabled = true;
+      stepBtn.disabled = false;
+      updateStats();
+      draw();
+      // if found, build parent map already provided; ensure pathLen updated
+      if(found){
+        // already set parent
+        // ensure pathLen shown via draw/backtracking
+        draw();
+      } else {
+        stackView.innerText = "(exhausted - no path found)";
+      }
+    } else {
+      // recursive DFS
+      pauseBtn.disabled = false;
+      runBtn.disabled = true;
+      stepBtn.disabled = true;
+      const visitedLocal = new Set();
+      const parentLocal = new Map();
+      // start
+      updateStackViewRecursive(parentLocal, idx(start.r,start.c));
+      const res = await dfsRecursive(start.r, start.c, visitedLocal, parentLocal);
+      if(res){
+        parent = new Map(parentLocal);
+        found = true;
+        stackView.innerText = "(found) " + Array.from(parent.keys()).slice(0,20).join(', ');
+      } else {
+        stackView.innerText = "(exhausted - no path found)";
+      }
+      running = false;
+      paused = false;
+      runBtn.disabled = false;
+      pauseBtn.disabled = true;
+      stepBtn.disabled = false;
+      highlightCell = null;
+      updateStats();
+      draw();
+    }
+  });
+
+  pauseBtn.addEventListener('click', ()=>{
+    if(!running) return;
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    updateStats();
+  });
+
+  // Step mode: perform one operation at a time (only works for iterative generator)
+  stepBtn.addEventListener('click', async ()=>{
+    if(running && iterator){ // if running iterative, advance single step
+      // Not used; disabled while running
+      return;
+    }
+    if(!iterator){
+      // initialize iterative generator for stepping only
+      visited.clear();
+      parent.clear();
+      visitedOrder.clear(); orderCounter = 0;
+      highlightCell = null;
+      found = false;
+      iterator = dfsIterGenerator();
+      stackView.innerText = "(initialized step mode)";
+      running = false;
+    }
+    const res = iterator.next();
+    if(res.done){
+      stackView.innerText = "(done)";
+      iterator = null;
+      return;
+    }
+    const ev = res.value;
+    if(ev.type === 'stack'){
+      stackView.innerText = ev.stack.join(' -> ');
+      highlightCell = ev.current ? ev.current.split(',').map(Number) : null;
+      draw();
+    } else if(ev.type === 'visit'){
+      visited.add(ev.node);
+      visitedOrder.set(ev.node, ++orderCounter);
+      highlightCell = ev.node.split(',').map(Number);
+      draw();
+      updateStats();
+    } else if(ev.type === 'push'){
+      stackView.innerText = ev.stack.join(' -> ');
+      draw();
+    } else if(ev.type === 'found'){
+      parent = new Map(ev.parent);
+      found = true;
+      visited.add(ev.node);
+      visitedOrder.set(ev.node, ++orderCounter);
+      highlightCell = ev.node.split(',').map(Number);
+      draw();
+      stackView.innerText = "(found goal)";
+      iterator = null;
+    } else if(ev.type === 'exhausted'){
+      stackView.innerText = "(exhausted - no path)";
+      iterator = null;
+    }
+    updateStats();
+  });
+
+  // Reset states but keep walls & size
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    visited.clear();
+    parent.clear();
+    visitedOrder.clear(); orderCounter = 0;
+    highlightCell = null;
+    found = false;
+    running = false;
+    paused = false;
+    iterator = null;
+    stackView.innerText = "(stack / recursion frames will appear here during execution)";
+    updateStats();
+    draw();
+  });
+
+  // Initialize
+  function randomStartGoal(){
+    start = {r: Math.floor(rows/2), c: Math.max(0,Math.floor(cols/4))};
+    goal = {r: Math.floor(rows/2), c: Math.min(cols-1,Math.floor(cols*3/4))};
+  }
+
+  initGrid(false);
+  randomStartGoal();
+  resizeCanvas();
+
+  // handle window resize for nicer display
+  window.addEventListener('resize', ()=> {
+    // nothing needed; fixed canvas size here
+  });
+
+  // add keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === ' '){
+      e.preventDefault();
+      if(running) {
+        paused = !paused;
+        pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+      } else {
+        runBtn.click();
+      }
+    }
+    if(e.key === 's'){
+      stepBtn.click();
+    }
+  });
+
+  // initial draw
+  draw();
+
+})();
+</script>
+</body>
+</html>

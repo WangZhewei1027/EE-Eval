@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Floyd-Warshall Algorithm Visualization</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #fefefe;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    #graphInput {
+      width: 100%;
+      height: 120px;
+      font-family: monospace;
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+    label {
+      font-weight: bold;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1rem;
+      cursor: pointer;
+      border-radius: 5px;
+      margin: 5px 0;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    table {
+      border-collapse: collapse;
+      margin-top: 15px;
+      width: 100%;
+      max-width: 600px;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 8px;
+      text-align: center;
+      min-width: 40px;
+    }
+    th {
+      background-color: #007bff;
+      color: white;
+      font-weight: bold;
+    }
+    #steps {
+      margin-top: 20px;
+      font-size: 0.9rem;
+      max-height: 320px;
+      overflow-y: auto;
+      background-color: #f7f7f7;
+      border: 1px solid #ddd;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+    #canvasContainer {
+      text-align: center;
+      margin-top: 20px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+    }
+    #info {
+      max-width: 700px;
+      margin: 0 auto 20px auto;
+      font-size: 0.95rem;
+      line-height: 1.4;
+      color: #555;
+    }
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>Floyd-Warshall Algorithm Visualization</h1>
+  <div id="info">
+    <p>
+      Enter the weighted adjacency matrix of a directed graph below.
+      Use <code>INF</code> or <code>Infinity</code> for no direct edge.
+      The matrix should be square, with rows separated by new lines,
+      and values separated by spaces or commas.
+    </p>
+    <p>
+      Example for 4 nodes (0-indexed):
+    </p>
+    <pre>0 3 INF 7
+8 0 2 INF
+5 INF 0 1
+2 INF INF 0
+    </pre>
+  </div>
+  <label for="graphInput">Adjacency Matrix:</label><br />
+  <textarea id="graphInput" aria-label="Adjacency Matrix Input" spellcheck="false">0 3 INF 7
+8 0 2 INF
+5 INF 0 1
+2 INF INF 0</textarea>
+  <br />
+  <button id="startBtn">Start Floyd-Warshall</button>
+  <button id="stepBtn" disabled>Next Step</button>
+  <button id="resetBtn" disabled>Reset</button>
+
+  <div id="canvasContainer">
+    <canvas id="graphCanvas" width="600" height="400" aria-label="Graph visualization"></canvas>
+  </div>
+
+  <div id="matrixContainer">
+    <h2>Distance Matrix (D)</h2>
+    <div id="distanceMatrix"></div>
+  </div>
+  
+  <div id="steps">
+    <strong>Algorithm Steps:</strong>
+    <div id="log"></div>
+  </div>
+
+<script>
+(() => {
+  const INF = Infinity;
+
+  // Elements references
+  const graphInput = document.getElementById('graphInput');
+  const startBtn = document.getElementById('startBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const distanceMatrixDiv = document.getElementById('distanceMatrix');
+  const logDiv = document.getElementById('log');
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // State variables
+  let graph = null;       // adjacency matrix with numbers/INF
+  let dist = null;        // distance matrix
+  let next = null;        // next matrix for path reconstruction (optional)
+  let n = 0;              // number of vertices
+  let k = 0, i = 0, j = 0; // loop indices for steps
+  let running = false;
+  let stepped = false;
+  let nodesPositions = [];
+
+  // Parse user input into matrix
+  function parseInput(inputText) {
+    const lines = inputText.trim().split('\n');
+    const matrix = [];
+    for (const line of lines) {
+      // Split by space or comma, filter empty strings
+      const vals = line.trim().split(/[\s,]+/).filter(v => v.length > 0);
+      matrix.push(vals.map(v => {
+        const val = v.trim().toUpperCase();
+        if (val === 'INF' || val === 'INFINITY') return INF;
+        const num = Number(v);
+        if (isNaN(num)) throw new Error(`Invalid number: ${v}`);
+        return num;
+      }));
+    }
+    // Check square matrix
+    const size = matrix.length;
+    for (const row of matrix) {
+      if (row.length !== size) throw new Error('Matrix must be square');
+    }
+    return matrix;
+  }
+
+  // Create a deep copy matrix
+  function copyMatrix(matrix) {
+    return matrix.map(row => row.slice());
+  }
+
+  // Initialize adjacency and distance matrices
+  function initialize(graphMatrix) {
+    n = graphMatrix.length;
+    graph = graphMatrix;
+    dist = copyMatrix(graph);
+    // Initialize next matrix for path reconstruction:
+    next = [];
+    for(let u=0; u<n; u++){
+      next[u] = [];
+      for(let v=0; v<n; v++){
+        if(u !== v && dist[u][v] !== INF){
+          next[u][v] = v;
+        } else {
+          next[u][v] = null;
+        }
+      }
+    }
+    k = 0;
+    i = 0;
+    j = 0;
+    running = true;
+    stepped = false;
+    logDiv.textContent = '';
+  }
+
+  // Render distance matrix as table
+  function renderDistanceMatrix(distMatrix, highlight=null) {
+    // highlight: {k,i,j} - highlight current k,i,j indices if provided
+    const table = document.createElement('table');
+    const headerRow = document.createElement('tr');
+    const emptyTh = document.createElement('th');
+    emptyTh.textContent = '';
+    headerRow.appendChild(emptyTh);
+    for(let col=0; col<n; col++){
+      const th = document.createElement('th');
+      th.textContent = col;
+      headerRow.appendChild(th);
+    }
+    table.appendChild(headerRow);
+
+    for(let row=0; row<n; row++){
+      const tr = document.createElement('tr');
+      const rowHeader = document.createElement('th');
+      rowHeader.textContent = row;
+      tr.appendChild(rowHeader);
+      for(let col=0; col<n; col++){
+        const td = document.createElement('td');
+        const val = distMatrix[row][col];
+        td.textContent = val === INF ? '∞' : val.toFixed(2).replace(/\.00$/, '');
+        if(highlight){
+          if(row === highlight.i && col === highlight.j) {
+            td.style.backgroundColor = '#ffd54f'; // yellow highlight for current element
+            td.style.fontWeight = 'bold';
+          } else if(row === highlight.k || col === highlight.k){
+            td.style.backgroundColor = '#e1f5fe'; // light blue for k-th row/col
+          }
+        }
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    distanceMatrixDiv.innerHTML = '';
+    distanceMatrixDiv.appendChild(table);
+  }
+
+  // Log messages with automatic scroll
+  function log(message) {
+    logDiv.textContent += message + '\n';
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  // Floyd-Warshall step
+  function floydWarshallStep() {
+    if(!running) return false;
+
+    if(k >= n){
+      running = false;
+      log('Algorithm completed.');
+      stepBtn.disabled = true;
+      resetBtn.disabled = false;
+      return false; // algo ended
+    }
+
+    // Explain what is being processed
+    if(j >= n){
+      j = 0;
+      i++;
+    }
+    if(i >= n){
+      i = 0;
+      k++;
+      if(k >= n){
+        running = false;
+        log('Algorithm completed.');
+        stepBtn.disabled = true;
+        resetBtn.disabled = false;
+        renderDistanceMatrix(dist);
+        drawGraph(nodesPositions, graph, dist, k-1, -1, -1);
+        return false;
+      }
+      log(`\n==> Considering intermediate vertex k = ${k}`);
+    }
+    // Before update, save old value
+    const oldDist = dist[i][j];
+    const proposedDist = dist[i][k] + dist[k][j];
+    if(proposedDist < dist[i][j]){
+      log(`Update dist[${i}][${j}]: ${oldDist === INF ? '∞' : oldDist} > dist[${i}][${k}] + dist[${k}][${j}] = ${(dist[i][k] === INF ? '∞' : dist[i][k])} + ${(dist[k][j] === INF ? '∞' : dist[k][j])} = ${proposedDist.toFixed(2)}`);
+      dist[i][j] = proposedDist;
+      next[i][j] = next[i][k];
+    } else {
+      if(oldDist !== proposedDist && proposedDist !== INF)
+        log(`No update for dist[${i}][${j}]: current = ${oldDist === INF ? '∞' : oldDist}, proposed = ${proposedDist.toFixed(2)}`);
+    }
+
+    renderDistanceMatrix(dist, {k,k,i,j});
+    drawGraph(nodesPositions, graph, dist, k, i, j);
+
+    j++;
+    return true;
+  }
+
+  // Reconstruct path from u to v using next matrix
+  function reconstructPath(u, v) {
+    if(next[u][v] === null) return [];
+    const path = [u];
+    while(u !== v) {
+      u = next[u][v];
+      if(u === null) return [];
+      path.push(u);
+    }
+    return path;
+  }
+
+  // Draw graph using canvas
+  // Show nodes in circle + edges + highlight of relevant edges
+  // k: intermediate vertex index
+  // i,j: current indices to highlight edge i->j or path segments
+  function drawGraph(positions, graph, distMatrix, k, i, j) {
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const radius = 18;
+    const arrowSize = 8;
+
+    // Helper to draw arrow between points
+    function drawArrow(fromX, fromY, toX, toY, color = 'black', width=1, dashed=false){
+      const angle = Math.atan2(toY - fromY, toX - fromX);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = width;
+      if(dashed){
+        ctx.setLineDash([5, 5]);
+      } else {
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      // shorten arrow length by radius*1.1 to not overlap node circle
+      const len = Math.hypot(toX-fromX, toY-fromY);
+      const newToX = fromX + (len - radius*1.1) * Math.cos(angle);
+      const newToY = fromY + (len - radius*1.1) * Math.sin(angle);
+      ctx.lineTo(newToX, newToY);
+      ctx.stroke();
+
+      // Arrowhead
+      ctx.beginPath();
+      ctx.moveTo(newToX, newToY);
+      ctx.lineTo(newToX - arrowSize * Math.cos(angle - Math.PI / 6), newToY - arrowSize * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(newToX - arrowSize * Math.cos(angle + Math.PI / 6), newToY - arrowSize * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+      ctx.setLineDash([]);
+    }
+
+    // Draw edges
+    for(let u=0; u<n; u++) {
+      for(let v=0; v<n; v++) {
+        if(graph[u][v] !== INF && u !== v) {
+          // Decide style for edge
+          let color = '#bbb';
+          let width = 1;
+          let dashed = false;
+
+          // Highlight current i->j edge in yellow
+          if (u === i && v === j) {
+            color = '#fbc02d'; // amber yellow
+            width = 3;
+          }
+          // Highlight edges used in shortest path involving node k?
+          if(k >= 0 && (u === k || v === k)) {
+            if(color === '#fbc02d') color = '#ff6f00'; // stronger orange if both
+            else color = '#ff9800'; // orange
+            width = Math.max(width, 2);
+          }
+
+          drawArrow(positions[u].x, positions[u].y, positions[v].x, positions[v].y, color, width, dashed);
+
+          // Draw weight near the middle of the edge
+          const mx = (positions[u].x + positions[v].x) / 2;
+          const my = (positions[u].y + positions[v].y) / 2;
+          ctx.font = '12px Arial';
+          ctx.fillStyle = '#222';
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 3;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'center';
+
+          // Shadow for text
+          ctx.strokeText(graph[u][v] === INF ? '∞' : graph[u][v].toFixed(2).replace(/\.00$/,''), mx, my);
+          ctx.fillText(graph[u][v] === INF ? '∞' : graph[u][v].toFixed(2).replace(/\.00$/,''), mx, my);
+        }
+      }
+    }
+
+    // Draw nodes
+    for(let u=0; u<n; u++) {
+      const pos = positions[u];
+      ctx.beginPath();
+      // Highlight node k in blue
+      if(k === u){
+        ctx.fillStyle = '#2196f3';
+      } else {
+        ctx.fillStyle = '#90caf9';
+      }
+      ctx.strokeStyle = '#1565c0';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(0,0,0,0.2)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
+      ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.stroke();
+      // Write node label
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(u, pos.x, pos.y);
+    }
+
+  }
+
+  // Calculate node positions in circle
+  function calculateNodePositions(numNodes) {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = Math.min(canvas.width, canvas.height) / 2 - 50;
+    const positions = [];
+    for(let idx=0; idx < numNodes; idx++){
+      const angle = (2 * Math.PI * idx) / numNodes - Math.PI/2; // start top
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      positions.push({x,y});
+    }
+    return positions;
+  }
+
+  // Event handlers
+  startBtn.addEventListener('click', () => {
+    try {
+      const input = graphInput.value;
+      const matrix = parseInput(input);
+      initialize(matrix);
+      nodesPositions = calculateNodePositions(n);
+      renderDistanceMatrix(dist);
+      drawGraph(nodesPositions, graph, dist, -1, -1, -1);
+      log(`Algorithm started with ${n} vertices.`);
+      startBtn.disabled = true;
+      stepBtn.disabled = false;
+      resetBtn.disabled = false;
+    } catch(e) {
+      alert('Error parsing matrix: ' + e.message);
+    }
+  });
+
+  stepBtn.addEventListener('click', () => {
+    if(running) {
+      let continued = floydWarshallStep();
+      if(!continued){
+        stepBtn.disabled = true;
+      }
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    distanceMatrixDiv.innerHTML = '';
+    logDiv.textContent = '';
+    startBtn.disabled = false;
+    stepBtn.disabled = true;
+    resetBtn.disabled = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Adjacency Matrix Interactive Demo</title>
+<style>
+  html,body {height:100%; margin:0; font-family: Arial, sans-serif; background:#f7f9fb; color:#111;}
+  .container {display:flex; height:100vh; gap:12px; padding:12px; box-sizing:border-box;}
+  .left, .right {background:#fff; border:1px solid #e1e6ea; border-radius:8px; padding:12px; box-sizing:border-box;}
+  .left {flex:1; display:flex; flex-direction:column; min-width:480px;}
+  .canvas-wrap {flex:1; border:1px dashed #d7dee6; border-radius:6px; background:linear-gradient(180deg,#fff,#fbfdff); position:relative; overflow:hidden;}
+  canvas {width:100%; height:100%;}
+  .toolbar {display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
+  button, input[type="checkbox"], label {font-size:13px;}
+  button {background:#1f77b4;color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer;}
+  button.secondary {background:#f0f4f7;color:#0b2533;border:1px solid #d6e1ea;}
+  button.danger {background:#e74c3c;}
+  .right {width:420px; display:flex; flex-direction:column; gap:8px;}
+  .panel {background:#fff; border-radius:6px; padding:8px; border:1px solid #eef3f6;}
+  table {border-collapse:collapse; width:100%; overflow:auto;}
+  td,th {border:1px solid #e2e8ee; padding:6px 8px; text-align:center; font-size:13px;}
+  th {background:#f3f7fb; font-weight:600;}
+  .instructions {font-size:13px; color:#445;}
+  .small {font-size:12px; color:#556; margin-top:6px;}
+  .node-label-input {width:60px;}
+  .matrix-scroll {max-height:320px; overflow:auto; border-radius:4px;}
+  .footer {font-size:12px; color:#556; text-align:center; margin-top:6px;}
+  .hint {font-size:12px; color:#666;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="left">
+    <div class="toolbar">
+      <button id="addNodeBtn">Add Node</button>
+      <button class="secondary" id="clearBtn">Clear Graph</button>
+      <button class="secondary" id="exportBtn">Export CSV</button>
+      <button class="secondary" id="importBtn">Import CSV</button>
+      <label style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+        <input type="checkbox" id="directedChk"> Directed
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="weightedChk"> Weighted
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="allowLoopsChk"> Allow loops
+      </label>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="graphCanvas"></canvas>
+      <div style="position:absolute;left:8px;bottom:8px;background:rgba(255,255,255,0.9);padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.04);font-size:12px;">
+        Click empty space to add node • Click node then node to toggle edge • Drag to move
+      </div>
+    </div>
+    <div class="footer">Nodes: <span id="nodeCount">0</span> — Edges: <span id="edgeCount">0</span></div>
+  </div>
+
+  <div class="right">
+    <div class="panel">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <strong>Adjacency Matrix</strong>
+        <span class="hint" style="margin-left:auto;">Unweighted: entries 0/1 — Weighted: numeric</span>
+      </div>
+      <div class="matrix-scroll" id="matrixScroll" style="margin-top:8px;">
+        <table id="matrixTable"><!-- filled by JS --></table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="copyBtn" class="secondary">Copy CSV</button>
+        <button id="downloadBtn" class="secondary">Download CSV</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Controls & Tips</strong>
+      <div class="small">
+        - Add nodes by button or click canvas. <br>
+        - Click a node then another to create or remove an edge. When weighted mode is on you'll be prompted for a weight.<br>
+        - Right-click a node to delete it.<br>
+        - Toggle Directed to switch between directed and undirected graphs. In undirected graphs edges are symmetric.<br>
+        - Import a CSV adjacency matrix (square). Rows/cols can have an optional header line with labels.
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Selected Node</strong>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <label>Label: <input id="selectedLabel" class="node-label-input" /></label>
+        <button id="renameBtn" class="secondary">Rename</button>
+        <button id="deleteNodeBtn" class="danger">Delete</button>
+      </div>
+      <div class="small" style="margin-top:8px;">Click a node on the canvas to select it. Selection persists until you click empty space.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Canvas and graph state
+  const canvas = document.getElementById('graphCanvas');
+  const wrap = document.getElementById('canvasWrap');
+  const ctx = canvas.getContext('2d');
+  let DPR = window.devicePixelRatio || 1;
+
+  function resizeCanvas(){
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * DPR);
+    canvas.height = Math.floor(rect.height * DPR);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    render();
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  let nodes = []; // {id,label,x,y}
+  let adj = [];   // adjacency matrix: numbers (0 means no edge)
+  let nextId = 0;
+  const NODE_RADIUS = 20;
+  const ARROW_SIZE = 10;
+
+  // UI Elements
+  const addNodeBtn = document.getElementById('addNodeBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const directedChk = document.getElementById('directedChk');
+  const weightedChk = document.getElementById('weightedChk');
+  const allowLoopsChk = document.getElementById('allowLoopsChk');
+  const matrixTable = document.getElementById('matrixTable');
+  const nodeCountSpan = document.getElementById('nodeCount');
+  const edgeCountSpan = document.getElementById('edgeCount');
+  const copyBtn = document.getElementById('copyBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const selectedLabelInput = document.getElementById('selectedLabel');
+  const renameBtn = document.getElementById('renameBtn');
+  const deleteNodeBtn = document.getElementById('deleteNodeBtn');
+
+  // Selection & interactions
+  let selectedNodeId = null;
+  let clickFromNode = null;
+  let dragging = null;
+  let dragOffset = {x:0,y:0};
+
+  // Helper functions
+  function addNode(x,y,label){
+    label = label || String.fromCharCode(65 + (nextId % 26)) + (Math.floor(nextId/26) || '');
+    const node = {id: nextId++, label, x, y};
+    nodes.push(node);
+    adj.forEach(row => row.push(0));
+    adj.push(Array(nodes.length).fill(0));
+    render();
+    updateUI();
+    return node;
+  }
+
+  function removeNodeById(id){
+    const idx = nodes.findIndex(n => n.id === id);
+    if(idx === -1) return;
+    nodes.splice(idx,1);
+    adj.splice(idx,1);
+    adj.forEach(row => row.splice(idx,1));
+    selectedNodeId = null;
+    clickFromNode = null;
+    render();
+    updateUI();
+  }
+
+  function toggleEdge(i,j){
+    if(i<0 || j<0 || i>=nodes.length || j>=nodes.length) return;
+    if(i===j && !allowLoopsChk.checked) return;
+    if(weightedChk.checked){
+      let current = adj[i][j];
+      let promptVal = prompt("Enter weight (leave empty to cancel). Current: " + (current || 0), current || "");
+      if(promptVal === null) return;
+      const w = parseFloat(promptVal);
+      if(isNaN(w)) { alert("Invalid number"); return; }
+      adj[i][j] = w;
+      if(!directedChk.checked) adj[j][i] = w;
+    } else {
+      if(adj[i][j]) {
+        adj[i][j] = 0;
+        if(!directedChk.checked) adj[j][i] = 0;
+      } else {
+        adj[i][j] = 1;
+        if(!directedChk.checked) adj[j][i] = 1;
+      }
+    }
+    render();
+    updateUI();
+  }
+
+  function setEdge(i,j,val){
+    adj[i][j] = val;
+    if(!directedChk.checked) adj[j][i] = val;
+  }
+
+  function nodeAtPos(px,py){
+    for(let i=nodes.length-1;i>=0;i--){
+      const n = nodes[i];
+      const dx = n.x - px;
+      const dy = n.y - py;
+      if(Math.hypot(dx,dy) <= NODE_RADIUS + 4) return n;
+    }
+    return null;
+  }
+
+  function countEdges(){
+    let c = 0;
+    for(let i=0;i<nodes.length;i++){
+      for(let j=0;j<nodes.length;j++){
+        if(adj[i][j] && adj[i][j] !== 0) c++;
+      }
+    }
+    if(!directedChk.checked) c = Math.floor(c/2);
+    return c;
+  }
+
+  // Drawing functions
+  function render(){
+    ctx.clearRect(0,0,canvas.width/DPR,canvas.height/DPR);
+    // edges
+    for(let i=0;i<nodes.length;i++){
+      for(let j=0;j<nodes.length;j++){
+        if(!adj[i] || !adj[i][j]) continue;
+        if(!directedChk.checked && j < i) continue; // draw undirected once
+        drawEdge(nodes[i], nodes[j], adj[i][j], directedChk.checked);
+      }
+    }
+    // nodes
+    for(const n of nodes) drawNode(n, n.id === selectedNodeId);
+  }
+
+  function drawNode(n, selected){
+    ctx.beginPath();
+    ctx.fillStyle = selected ? '#fffbdb' : '#ffffff';
+    ctx.strokeStyle = selected ? '#f1b24a' : '#3a5666';
+    ctx.lineWidth = selected ? 2.5 : 1.5;
+    ctx.fillRect(n.x-NODE_RADIUS-2, n.y-NODE_RADIUS-2, NODE_RADIUS*2+4, NODE_RADIUS*2+4); // subtle box for crispness
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, NODE_RADIUS, 0, Math.PI*2);
+    ctx.fillStyle = selected ? '#ffeaa6' : '#e9f2f7';
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#062a36';
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x, n.y);
+  }
+
+  function drawEdge(a,b,value,directed){
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const angle = Math.atan2(dy,dx);
+    const dist = Math.hypot(dx,dy);
+    const fromX = a.x + Math.cos(angle) * (NODE_RADIUS + 2);
+    const fromY = a.y + Math.sin(angle) * (NODE_RADIUS + 2);
+    const toX = b.x - Math.cos(angle) * (NODE_RADIUS + 2);
+    const toY = b.y - Math.sin(angle) * (NODE_RADIUS + 2);
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#2b6f8f';
+    ctx.lineWidth = 2;
+    ctx.moveTo(fromX, fromY);
+
+    if(a === b){
+      // self-loop: draw a small loop
+      const loopRadius = 24;
+      ctx.arc(a.x, a.y - NODE_RADIUS - loopRadius/2, loopRadius, 0.3, 2.6);
+      ctx.stroke();
+      // weight near loop
+      if(weightedChk.checked) {
+        ctx.fillStyle = '#124';
+        ctx.font = '12px Arial';
+        ctx.fillText(String(value), a.x + loopRadius, a.y - NODE_RADIUS - loopRadius/2);
+      } else {
+        // nothing
+      }
+      if(directed){
+        // arrowhead at end of loop (approx)
+        drawArrowHead(a.x + loopRadius * Math.cos(2.6), a.y - NODE_RADIUS - loopRadius/2 + loopRadius * Math.sin(2.6), angle + Math.PI/2);
+      }
+      return;
+    }
+
+    // For parallel edges (bidirectional in directed graphs) we offset slightly.
+    let offset = 0;
+    if(directed && adj[indexOfNode(b.id)][indexOfNode(a.id)]) {
+      // If opposite direction exists we offset perpendicular
+      offset = 10;
+      // Determine sign to make curves distinguishable
+      const sign = (indexOfNode(a.id) < indexOfNode(b.id)) ? 1 : -1;
+      offset *= sign;
+    }
+
+    if(offset === 0){
+      ctx.lineTo(toX, toY);
+      ctx.stroke();
+    } else {
+      // Quadratic curve with small perpendicular offset
+      const mx = (fromX + toX)/2;
+      const my = (fromY + toY)/2;
+      const perpAngle = angle + Math.PI/2;
+      const cx = mx + Math.cos(perpAngle) * offset;
+      const cy = my + Math.sin(perpAngle) * offset;
+      ctx.quadraticCurveTo(cx, cy, toX, toY);
+      ctx.stroke();
+    }
+
+    // arrowhead for directed
+    if(directed){
+      drawArrowHead(toX, toY, angle);
+    }
+
+    // draw weight or marker at midpoint
+    const midX = (fromX + toX)/2;
+    const midY = (fromY + toY)/2;
+    if(offset !== 0){
+      const mx = (fromX + toX)/2;
+      const my = (fromY + toY)/2;
+      const perpAngle = angle + Math.PI/2;
+      const cx = mx + Math.cos(perpAngle) * offset;
+      const cy = my + Math.sin(perpAngle) * offset;
+      ctx.fillStyle = '#06323f';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(weightedChk.checked ? String(value) : String(1), cx, cy - 6);
+    } else {
+      ctx.fillStyle = '#06323f';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(weightedChk.checked ? String(value) : String(1), midX, midY - 6);
+    }
+  }
+
+  function drawArrowHead(x,y,angle){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(-ARROW_SIZE, ARROW_SIZE/2);
+    ctx.lineTo(-ARROW_SIZE, -ARROW_SIZE/2);
+    ctx.closePath();
+    ctx.fillStyle = '#2b6f8f';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Indexing helpers
+  function indexOfNode(id){ return nodes.findIndex(n=>n.id===id); }
+
+  // UI updates
+  function updateUI(){
+    nodeCountSpan.textContent = nodes.length;
+    edgeCountSpan.textContent = countEdges();
+
+    // matrix table
+    while(matrixTable.firstChild) matrixTable.removeChild(matrixTable.firstChild);
+    const n = nodes.length;
+    const header = document.createElement('tr');
+    const corner = document.createElement('th'); corner.textContent = ''; header.appendChild(corner);
+    nodes.forEach(nd => {
+      const th = document.createElement('th'); th.textContent = nd.label; header.appendChild(th);
+    });
+    matrixTable.appendChild(header);
+
+    for(let i=0;i<n;i++){
+      const tr = document.createElement('tr');
+      const rowLabel = document.createElement('th'); rowLabel.textContent = nodes[i].label; tr.appendChild(rowLabel);
+      for(let j=0;j<n;j++){
+        const td = document.createElement('td');
+        td.textContent = adj[i] && adj[i][j] ? String(adj[i][j]) : '0';
+        td.style.cursor = 'pointer';
+        td.title = 'Click to toggle/edit';
+        (function(ii,jj,cell){
+          cell.addEventListener('click', e=>{
+            // toggle using the same behavior as clicking nodes
+            if(weightedChk.checked){
+              let cur = adj[ii][jj] || 0;
+              let v = prompt("Enter numeric weight (empty to cancel). Current: " + cur, cur === 0 ? "" : cur);
+              if(v === null) return;
+              const w = parseFloat(v);
+              if(isNaN(w)){ alert('Invalid number'); return; }
+              setEdge(ii,jj,w);
+            } else {
+              toggleEdge(ii,jj);
+            }
+            updateUI();
+            render();
+          });
+        })(i,j,td);
+        tr.appendChild(td);
+      }
+      matrixTable.appendChild(tr);
+    }
+
+    // selected info
+    const sel = nodes.find(n=>n.id===selectedNodeId);
+    selectedLabelInput.value = sel ? sel.label : '';
+    selectedLabelInput.disabled = !sel;
+    renameBtn.disabled = !sel;
+    deleteNodeBtn.disabled = !sel;
+  }
+
+  // Event handlers
+  wrap.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    const rect = wrap.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    const node = nodeAtPos(x,y);
+    if(e.button === 2){
+      // right click: delete node if on node
+      if(node){
+        if(confirm('Delete node "'+node.label+'"?')) removeNodeById(node.id);
+      }
+      return;
+    }
+
+    if(node){
+      // select node, begin drag
+      selectedNodeId = node.id;
+      clickFromNode = node;
+      dragging = node;
+      dragOffset.x = x - node.x;
+      dragOffset.y = y - node.y;
+    } else {
+      // clicking empty space: add node
+      selectedNodeId = null;
+      clickFromNode = null;
+      addNode(x, y);
+    }
+    updateUI();
+    render();
+  });
+
+  wrap.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const rect = wrap.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    dragging.x = x - dragOffset.x;
+    dragging.y = y - dragOffset.y;
+    render();
+  });
+
+  wrap.addEventListener('pointerup', e=>{
+    if(dragging){
+      dragging = null;
+      return;
+    }
+    const rect = wrap.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    const node = nodeAtPos(x,y);
+    if(clickFromNode && node){
+      // create or toggle edge from clickFromNode to node
+      const i = indexOfNode(clickFromNode.id);
+      const j = indexOfNode(node.id);
+      if(i === -1 || j === -1) { clickFromNode = null; return; }
+      if(i === j && !allowLoopsChk.checked){
+        // do nothing
+      } else {
+        toggleEdge(i,j);
+      }
+    }
+    clickFromNode = null;
+  });
+
+  // disable context menu on canvas to allow right-click deletion
+  wrap.addEventListener('contextmenu', e=>e.preventDefault());
+
+  // Buttons & toggles
+  addNodeBtn.addEventListener('click', ()=>{
+    const rect = wrap.getBoundingClientRect();
+    const x = rect.width/2;
+    const y = rect.height/2;
+    addNode(x,y);
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    if(!confirm('Clear entire graph?')) return;
+    nodes = []; adj = []; nextId = 0; selectedNodeId = null; clickFromNode = null;
+    render(); updateUI();
+  });
+
+  directedChk.addEventListener('change', ()=>{
+    // when switching to undirected, symmetrize
+    if(!directedChk.checked){
+      for(let i=0;i<nodes.length;i++){
+        for(let j=0;j<nodes.length;j++){
+          if(adj[i][j] && !adj[j][i]) adj[j][i] = adj[i][j];
+          if(adj[j][i] && !adj[i][j]) adj[i][j] = adj[j][i];
+        }
+      }
+    }
+    render(); updateUI();
+  });
+
+  weightedChk.addEventListener('change', ()=>{
+    // if turning off weights, make all nonzero entries 1
+    if(!weightedChk.checked){
+      for(let i=0;i<nodes.length;i++) for(let j=0;j<nodes.length;j++) adj[i][j] = adj[i][j] ? 1 : 0;
+    }
+    render(); updateUI();
+  });
+
+  allowLoopsChk.addEventListener('change', ()=>{ render(); updateUI(); });
+
+  // matrix copy / export / import
+  function adjacencyToCSV(includeLabels=true){
+    const n = nodes.length;
+    let rows = [];
+    if(includeLabels){
+      const header = [''].concat(nodes.map(n=>n.label)).join(',');
+      rows.push(header);
+    }
+    for(let i=0;i<n;i++){
+      const row = [nodes[i].label].concat(adj[i].map(v => v === 0 ? 0 : v)).join(',');
+      rows.push(row);
+    }
+    return rows.join('\n');
+  }
+
+  copyBtn.addEventListener('click', async ()=>{
+    const csv = adjacencyToCSV(true);
+    try{
+      await navigator.clipboard.writeText(csv);
+      alert('CSV copied to clipboard.');
+    }catch(e){
+      prompt('Copy this CSV:', csv);
+    }
+  });
+
+  downloadBtn.addEventListener('click', ()=>{
+    const csv = adjacencyToCSV(true);
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'adjacency_matrix.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  exportBtn.addEventListener('click', ()=>{
+    const csv = adjacencyToCSV(true);
+    alert('CSV export:\n\n' + csv.slice(0,800) + (csv.length>800 ? '\n\n...truncated' : ''));
+  });
+
+  importBtn.addEventListener('click', ()=>{
+    const text = prompt('Paste CSV adjacency matrix. Can include header row of labels (optional).');
+    if(!text) return;
+    try{
+      const rows = text.trim().split(/\r?\n/).map(r => r.trim()).filter(r=>r.length>0);
+      if(rows.length === 0) throw new Error('No data');
+      const parsed = rows.map(r => r.split(',').map(s => s.trim()));
+      let hasHeader = parsed[0].length === parsed.length+1 || parsed[0][0] === '';
+      // Determine header existence: if first row has non-numeric in first col or length mismatch
+      if(parsed[0].length === parsed.length + 1) hasHeader = true;
+      if(parsed[0][0] === '') hasHeader = true;
+      // Also check second row's first cell; if it's non-numeric, treat as label
+      if(!hasHeader){
+        // detect if first column of second row is non-numeric
+        if(parsed[1] && isNaN(parseFloat(parsed[1][0]))) hasHeader = true;
+      }
+      let labels = [];
+      let matrix = [];
+      if(hasHeader){
+        labels = parsed[0].slice(1);
+        for(let i=1;i<parsed.length;i++){
+          const row = parsed[i].slice(1).map(v => parseFloat(v || 0));
+          matrix.push(row);
+        }
+      } else {
+        // no header: expect square matrix
+        for(let i=0;i<parsed.length;i++){
+          const row = parsed[i].map(v=>parseFloat(v || 0));
+          matrix.push(row);
+        }
+        labels = matrix.map((_,i)=>String.fromCharCode(65 + (i%26)) + (Math.floor(i/26) || ''));
+      }
+      // Validate square
+      const n = matrix.length;
+      if(matrix.some(r => r.length !== n)) throw new Error('Matrix is not square');
+      // Build graph
+      nodes = [];
+      adj = [];
+      nextId = 0;
+      // place nodes in a circle
+      const rect = wrap.getBoundingClientRect();
+      const cx = rect.width/2, cy = rect.height/2;
+      const R = Math.min(rect.width, rect.height)/2 - 60;
+      for(let i=0;i<n;i++){
+        const ang = (i / n) * Math.PI * 2;
+        const x = cx + Math.cos(ang) * R;
+        const y = cy + Math.sin(ang) * R;
+        addNode(x,y, labels[i] || ('N'+i));
+      }
+      // set adjacency
+      for(let i=0;i<n;i++){
+        for(let j=0;j<n;j++){
+          adj[i][j] = matrix[i][j] || 0;
+        }
+      }
+      // If any entries are non-integer or not 0/1 enable weighted
+      const anyNonBinary = adj.some(row => row.some(v => v !== 0 && v !== 1));
+      weightedChk.checked = anyNonBinary;
+      directedChk.checked = true; // keep as directed unless symmetric
+      // if symmetric, set undirected
+      let symmetric = true;
+      for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(adj[i][j] !== adj[j][i]) symmetric = false;
+      if(symmetric) directedChk.checked = false;
+      render(); updateUI();
+    }catch(err){
+      alert('Failed to import CSV: ' + err.message);
+    }
+  });
+
+  // selection rename & delete
+  renameBtn.addEventListener('click', ()=>{
+    const sel = nodes.find(n=>n.id === selectedNodeId);
+    if(!sel) return;
+    const v = selectedLabelInput.value.trim();
+    if(!v) { alert('Label cannot be empty'); return; }
+    sel.label = v;
+    render(); updateUI();
+  });
+  deleteNodeBtn.addEventListener('click', ()=>{
+    if(!selectedNodeId) return;
+    if(confirm('Delete selected node?')) removeNodeById(selectedNodeId);
+  });
+
+  // click on table cell will also be handled above
+  // initial demo graph
+  (function seedDemo(){
+    const rect = wrap.getBoundingClientRect();
+    addNode(rect.width*0.25, rect.height*0.35, 'A');
+    addNode(rect.width*0.5, rect.height*0.2, 'B');
+    addNode(rect.width*0.75, rect.height*0.35, 'C');
+    addNode(rect.width*0.35, rect.height*0.7, 'D');
+    addNode(rect.width*0.65, rect.height*0.7, 'E');
+    // simple undirected edges
+    setEdge(0,1,1);
+    setEdge(1,2,1);
+    setEdge(0,3,1);
+    setEdge(3,4,1);
+    setEdge(4,2,1);
+    // one directed example
+    directedChk.checked = false;
+    render(); updateUI();
+  })();
+
+  // Keep canvas pixel-perfect
+  const resizeObserver = new ResizeObserver(resizeCanvas);
+  resizeObserver.observe(wrap);
+})();
+</script>
+</body>
+</html>

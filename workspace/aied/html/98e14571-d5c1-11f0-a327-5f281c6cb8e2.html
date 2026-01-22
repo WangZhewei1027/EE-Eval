@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Red-Black Tree Visualizer</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 0; padding: 0; display: flex; height: 100vh; }
+  #sidebar { width: 360px; padding: 16px; box-sizing: border-box; border-right: 1px solid #ddd; overflow: auto; background: #fafafa; }
+  #main { flex: 1; display: flex; flex-direction: column; }
+  h1 { font-size: 18px; margin: 4px 0 12px; }
+  p { margin: 8px 0; color: #333; font-size: 13px; }
+  label { font-size: 13px; display:block; margin-top:8px; }
+  input[type="number"] { width: 140px; padding:6px; font-size:14px;}
+  button { padding: 8px 10px; margin:6px 6px 6px 0; font-size:13px; }
+  .controls { margin-top:8px; }
+  #svgwrap { flex: 1; position: relative; }
+  svg { width: 100%; height: 100%; background: linear-gradient(#fff, #fbfbfb); }
+  .legend { font-size: 13px; margin-top:12px; background:#fff;padding:8px;border-radius:6px;border:1px solid #eee; }
+  .small { font-size:12px; color:#555; }
+  .code { font-family: monospace; background:#f7f7f7; padding:6px; border-radius:4px; display:inline-block; font-size:12px;}
+  #message { margin-top:8px; font-size:13px; min-height:20px; color:#333; }
+  .footer { padding:8px; font-size:12px; color:#666; border-top:1px solid #eee; background:#fafafa; }
+  .btn-primary { background:#007bff; color:white; border: none; border-radius:4px; }
+  .btn-danger { background:#dc3545; color:white; border:none; border-radius:4px; }
+  .btn-ghost { background:transparent; border:1px solid #ddd; border-radius:4px; color:#333;}
+  .status { font-size:12px; color:#444; margin-top:6px; }
+  .control-row { display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  input[type="range"] { width:140px; }
+</style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>Red-Black Tree Visualizer</h1>
+    <p class="small">
+      This interactive demo implements a Red-Black Tree (RBT). You can insert and delete integer keys,
+      step through the fix-up operations (rotations and recolorings), and play an animation of the algorithm.
+    </p>
+
+    <label>Key (integer)</label>
+    <div class="control-row">
+      <input type="number" id="keyInput" value="50">
+      <button id="insertBtn" class="btn-primary">Insert</button>
+      <button id="deleteBtn" class="btn-danger">Delete</button>
+    </div>
+
+    <div class="controls">
+      <button id="randBtn" class="btn-ghost">Insert Random</button>
+      <button id="bulkBtn" class="btn-ghost">Insert Sample</button>
+      <button id="clearBtn" class="btn-ghost">Clear</button>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label>Animation controls</label>
+      <div class="control-row">
+        <button id="stepBack">⟲ Prev</button>
+        <button id="playPause">▶ Play</button>
+        <button id="stepForward">Next ⟳</button>
+        <label style="margin-left:6px;">Speed</label>
+        <input id="speed" type="range" min="0.2" max="2.5" step="0.1" value="1">
+      </div>
+      <div id="message" class="small"></div>
+    </div>
+
+    <div class="legend">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div style="width:18px;height:18px;border-radius:50%;background:#d33;"></div><div>Red node</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:18px;height:18px;border-radius:50%;background:#111;border:2px solid #444;"></div><div>Black node</div>
+      </div>
+      <p class="small" style="margin-top:8px;">
+        Highlights during animation:
+        <ul style="margin:6px 0 0 18px;padding:0;">
+          <li>Yellow ring: node(s) currently considered</li>
+          <li>Blue ring: rotation target</li>
+        </ul>
+      </p>
+    </div>
+
+    <div style="margin-top:12px;">
+      <b>Notes</b>
+      <p class="small">
+        This demo uses the classic CLRS algorithms: insert with color fix-ups and rotations; deletion with transplant and fix-up.
+        Duplicate keys are not allowed. Use small trees to follow the steps.
+      </p>
+    </div>
+
+    <div class="footer">
+      Implementation: JavaScript (single-file). Visual layout computed by in-order spacing and depth.
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="svgwrap">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+<script>
+/*
+  Red-Black Tree visualizer (single-file).
+  - Supports insertion and deletion (CLRS algorithms)
+  - Records snapshots during fixup operations for step-by-step animation
+  - Visualizes with SVG: nodes, edges, colors, highlights
+*/
+
+(function(){
+  // --- Utility ---
+  function el(id){ return document.getElementById(id); }
+  function uidGen(){ let n=1; return ()=> n++; }
+  const genUid = uidGen();
+
+  // --- Colors ---
+  const RED = 'red';
+  const BLACK = 'black';
+
+  // --- Node constructor ---
+  function Node(key, color, nil){
+    this.key = key;
+    this.color = color || RED;
+    this.left = nil;
+    this.right = nil;
+    this.parent = nil;
+    this.uid = genUid();
+  }
+
+  // --- RBT Class ---
+  function RBTree(snapshotter){
+    // sentinel NIL node (shared)
+    this.NIL = { color: BLACK, left: null, right: null, parent: null, uid: 0, isNil: true };
+    this.root = this.NIL;
+    this.snapshotter = snapshotter; // function to call with message/highlights
+  }
+
+  RBTree.prototype.leftRotate = function(x){
+    const y = x.right;
+    // rotate
+    x.right = y.left;
+    if (y.left !== this.NIL) y.left.parent = x;
+    y.parent = x.parent;
+    if (x.parent === this.NIL) this.root = y;
+    else if (x === x.parent.left) x.parent.left = y;
+    else x.parent.right = y;
+    y.left = x;
+    x.parent = y;
+    // snapshot: rotation happened
+    this.snapshotter('Left rotation at node ' + x.key, { rotate: [x.uid, y.uid], highlight: [x.uid, y.uid], type: 'rotate' });
+  };
+
+  RBTree.prototype.rightRotate = function(y){
+    const x = y.left;
+    y.left = x.right;
+    if (x.right !== this.NIL) x.right.parent = y;
+    x.parent = y.parent;
+    if (y.parent === this.NIL) this.root = x;
+    else if (y === y.parent.right) y.parent.right = x;
+    else y.parent.left = x;
+    x.right = y;
+    y.parent = x;
+    this.snapshotter('Right rotation at node ' + y.key, { rotate: [y.uid, x.uid], highlight: [y.uid, x.uid], type: 'rotate' });
+  };
+
+  RBTree.prototype.insert = function(key){
+    // normal BST insert
+    let z = new Node(key, RED, this.NIL);
+    z.left = this.NIL; z.right = this.NIL;
+    let y = this.NIL;
+    let x = this.root;
+    while (x !== this.NIL){
+      y = x;
+      if (z.key < x.key) x = x.left;
+      else x = x.right;
+    }
+    z.parent = y;
+    if (y === this.NIL) this.root = z;
+    else if (z.key < y.key) y.left = z;
+    else y.right = z;
+
+    this.snapshotter('Inserted ' + key + ' as red node', { highlight: [z.uid] });
+    this.insertFixup(z);
+  };
+
+  RBTree.prototype.insertFixup = function(z){
+    while (z.parent.color === RED){
+      if (z.parent === z.parent.parent.left){
+        let y = z.parent.parent.right;
+        // Case 1: uncle is red
+        if (y.color === RED){
+          z.parent.color = BLACK;
+          y.color = BLACK;
+          z.parent.parent.color = RED;
+          this.snapshotter('Recolor: parent & uncle -> BLACK, grandparent -> RED', { highlight: [z.parent.uid, y.uid, z.parent.parent.uid] });
+          z = z.parent.parent;
+        } else {
+          // Case 2: z is right child
+          if (z === z.parent.right){
+            z = z.parent;
+            this.leftRotate(z);
+          }
+          // Case 3
+          z.parent.color = BLACK;
+          z.parent.parent.color = RED;
+          this.snapshotter('Prepare to right rotate (case 3)', { highlight: [z.parent.uid, z.parent.parent.uid] });
+          this.rightRotate(z.parent.parent);
+        }
+      } else {
+        // symmetric
+        let y = z.parent.parent.left;
+        if (y.color === RED){
+          z.parent.color = BLACK;
+          y.color = BLACK;
+          z.parent.parent.color = RED;
+          this.snapshotter('Recolor: parent & uncle -> BLACK, grandparent -> RED (mirror)', { highlight: [z.parent.uid, y.uid, z.parent.parent.uid] });
+          z = z.parent.parent;
+        } else {
+          if (z === z.parent.left){
+            z = z.parent;
+            this.rightRotate(z);
+          }
+          z.parent.color = BLACK;
+          z.parent.parent.color = RED;
+          this.snapshotter('Prepare to left rotate (case 3 mirror)', { highlight: [z.parent.uid, z.parent.parent.uid] });
+          this.leftRotate(z.parent.parent);
+        }
+      }
+    }
+    this.root.color = BLACK;
+    this.snapshotter('Root recolored BLACK', { highlight: [this.root.uid] });
+  };
+
+  RBTree.prototype.transplant = function(u, v){
+    if (u.parent === this.NIL) this.root = v;
+    else if (u === u.parent.left) u.parent.left = v;
+    else u.parent.right = v;
+    v.parent = u.parent;
+  };
+
+  RBTree.prototype.minimum = function(x){
+    while (x.left !== this.NIL) x = x.left;
+    return x;
+  };
+
+  RBTree.prototype.delete = function(key){
+    // find node
+    let z = this.root;
+    while (z !== this.NIL && z.key !== key){
+      z = (key < z.key) ? z.left : z.right;
+    }
+    if (z === this.NIL){
+      this.snapshotter('Key ' + key + ' not found', {});
+      return false;
+    }
+    this.snapshotter('Deleting node ' + key, { highlight: [z.uid] });
+
+    let y = z;
+    const yOriginalColor = y.color;
+    let x;
+    if (z.left === this.NIL){
+      x = z.right;
+      this.transplant(z, z.right);
+    } else if (z.right === this.NIL){
+      x = z.left;
+      this.transplant(z, z.left);
+    } else {
+      y = this.minimum(z.right);
+      const oldYuid = y.uid;
+      let ycolorBefore = y.color;
+      x = y.right;
+      if (y.parent === z){
+        x.parent = y;
+      } else {
+        this.transplant(y, y.right);
+        y.right = z.right;
+        y.right.parent = y;
+      }
+      this.transplant(z, y);
+      y.left = z.left;
+      y.left.parent = y;
+      y.color = z.color;
+      this.snapshotter('Replaced deleted node with successor ' + y.key, { highlight: [y.uid, z.uid] });
+      // Note: yOriginalColor was ycolorBefore
+      if (ycolorBefore === BLACK) {
+        this.deleteFixup(x);
+      }
+      return true;
+    }
+    if (yOriginalColor === BLACK){
+      this.deleteFixup(x);
+    }
+    return true;
+  };
+
+  RBTree.prototype.deleteFixup = function(x){
+    while (x !== this.root && x.color === BLACK){
+      if (x === x.parent.left){
+        let w = x.parent.right;
+        // Case 1
+        if (w.color === RED){
+          w.color = BLACK;
+          x.parent.color = RED;
+          this.snapshotter('Delete fixup: case 1, rotate left', { highlight: [w.uid, x.parent.uid], type: 'rotate' });
+          this.leftRotate(x.parent);
+          w = x.parent.right;
+        }
+        if (w.left.color === BLACK && w.right.color === BLACK){
+          w.color = RED;
+          this.snapshotter('Delete fixup: case 2, recolor sibling to RED', { highlight: [w.uid] });
+          x = x.parent;
+        } else {
+          if (w.right.color === BLACK){
+            w.left.color = BLACK;
+            w.color = RED;
+            this.snapshotter('Delete fixup: case 3, rotate right sibling', { highlight: [w.uid, w.left.uid], type: 'rotate' });
+            this.rightRotate(w);
+            w = x.parent.right;
+          }
+          w.color = x.parent.color;
+          x.parent.color = BLACK;
+          w.right.color = BLACK;
+          this.snapshotter('Delete fixup: case 4, rotate left parent', { highlight: [x.parent.uid, w.uid], type: 'rotate' });
+          this.leftRotate(x.parent);
+          x = this.root;
+        }
+      } else {
+        // mirror
+        let w = x.parent.left;
+        if (w.color === RED){
+          w.color = BLACK;
+          x.parent.color = RED;
+          this.snapshotter('Delete fixup (mirror): case 1, rotate right', { highlight: [w.uid, x.parent.uid], type: 'rotate' });
+          this.rightRotate(x.parent);
+          w = x.parent.left;
+        }
+        if (w.right.color === BLACK && w.left.color === BLACK){
+          w.color = RED;
+          this.snapshotter('Delete fixup (mirror): case 2, recolor sibling to RED', { highlight: [w.uid] });
+          x = x.parent;
+        } else {
+          if (w.left.color === BLACK){
+            w.right.color = BLACK;
+            w.color = RED;
+            this.snapshotter('Delete fixup (mirror): case 3, rotate left sibling', { highlight: [w.uid, w.right.uid], type: 'rotate' });
+            this.leftRotate(w);
+            w = x.parent.left;
+          }
+          w.color = x.parent.color;
+          x.parent.color = BLACK;
+          w.left.color = BLACK;
+          this.snapshotter('Delete fixup (mirror): case 4, rotate right parent', { highlight: [x.parent.uid, w.uid], type: 'rotate' });
+          this.rightRotate(x.parent);
+          x = this.root;
+        }
+      }
+    }
+    x.color = BLACK;
+    this.snapshotter('Finished delete fixup, recolor node BLACK', { highlight: [x.uid] });
+  };
+
+  // --- Snapshotting & Visualization data conversion ---
+  function makeSnapshotFunction(collectSnapshot){
+    return function(message, opts){
+      collectSnapshot(message || '', opts || {});
+    };
+  }
+
+  // Convert current tree to plain serializable object for snapshot
+  function serializeTree(root, NIL){
+    // We'll walk nodes and create shallow object copies with UIDs and key/color and relationships via uid references
+    const nodes = {};
+    function walk(n){
+      if (!n || n === NIL) return;
+      nodes[n.uid] = { uid: n.uid, key: n.key, color: n.color, left: (n.left===NIL?0:n.left.uid), right: (n.right===NIL?0:n.right.uid), parent: (n.parent===NIL?0:n.parent.uid) };
+      walk(n.left);
+      walk(n.right);
+    }
+    walk(root);
+    return { nodes: nodes, rootUid: root===NIL?0:root.uid };
+  }
+
+  // For rendering: compute x positions by in-order index and y by depth
+  function layoutFromSnapshot(snapshot){
+    const nodes = snapshot.nodes;
+    const rootUid = snapshot.rootUid;
+    const pos = {};
+    let xCounter = 0;
+    function inorder(u, depth){
+      if (!u || u===0) return;
+      const node = nodes[u];
+      if (!node) return;
+      inorder(node.left, depth+1);
+      xCounter++;
+      pos[u] = { xIndex: xCounter, depth: depth, key: node.key, color: node.color, uid: u, left: node.left, right: node.right, parent: node.parent };
+      inorder(node.right, depth+1);
+    }
+    inorder(rootUid, 0);
+    // compute pixel coordinates:
+    const spacingX = 60;
+    const spacingY = 80;
+    for (const k in pos){
+      pos[k].x = 40 + pos[k].xIndex * spacingX;
+      pos[k].y = 30 + pos[k].depth * spacingY;
+    }
+    return { positions: pos, rootUid: rootUid };
+  }
+
+  // --- Renderer ---
+  function Renderer(svgEl){
+    this.svg = svgEl;
+    this.width = 2000; this.height = 1000;
+    this.svg.setAttribute('viewBox', '0 0 ' + this.width + ' ' + this.height);
+  }
+
+  Renderer.prototype.clear = function(){
+    while (this.svg.firstChild) this.svg.removeChild(this.svg.firstChild);
+  };
+
+  Renderer.prototype.drawSnapshot = function(snapshot, opts){
+    opts = opts || {};
+    this.clear();
+    const layout = layoutFromSnapshot(snapshot);
+    const pos = layout.positions;
+    // Compute bounding box to adjust viewbox if needed
+    let minX=Infinity, maxX=0, maxY=0;
+    for (const k in pos){ const p=pos[k]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y>maxY)maxY=p.y; }
+    if (minX===Infinity){ // empty tree
+      // draw nothing, show message center
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', this.width/2); t.setAttribute('y', this.height/2);
+      t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','16'); t.setAttribute('fill','#666'); t.textContent='(empty tree)';
+      g.appendChild(t); this.svg.appendChild(g);
+      return;
+    }
+    const margin = 40;
+    const vbX = Math.max(0, minX - margin);
+    const vbY = 0;
+    const vbW = Math.min(this.width, (maxX + margin) - vbX);
+    const vbH = Math.min(this.height, (maxY + margin) - vbY + 120);
+    this.svg.setAttribute('viewBox', vbX + ' ' + vbY + ' ' + vbW + ' ' + vbH);
+
+    // draw edges
+    for (const k in pos){
+      const p = pos[k];
+      if (p.left && pos[p.left]){
+        drawLine(this.svg, p.x, p.y, pos[p.left].x, pos[p.left].y);
+      }
+      if (p.right && pos[p.right]){
+        drawLine(this.svg, p.x, p.y, pos[p.right].x, pos[p.right].y);
+      }
+    }
+
+    // Draw nodes (so they overlay edges)
+    for (const k in pos){
+      const p = pos[k];
+      const isRed = (p.color === RED);
+      drawNode(this.svg, p.x, p.y, p.key, isRed, opts, p.uid);
+    }
+
+    // highlights (rings)
+    if (opts && opts.highlights){
+      opts.highlights.forEach(h => {
+        const p = pos[h];
+        if (p) drawRing(this.svg, p.x, p.y, h === opts.rotate ? '#17a2b8' : '#f1c40f');
+      });
+    }
+    // message
+    if (opts && opts.message){
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', vbX + 10); t.setAttribute('y', vbH - 10);
+      t.setAttribute('font-size','13'); t.setAttribute('fill','#333');
+      t.textContent = opts.message;
+      this.svg.appendChild(t);
+    }
+  };
+
+  function drawLine(svg, x1,y1,x2,y2){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1+14);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2-18);
+    line.setAttribute('stroke', '#888'); line.setAttribute('stroke-width','1.5');
+    svg.appendChild(line);
+  }
+
+  function drawNode(svg,x,y,key,isRed, opts, uid){
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('transform','translate(0,0)');
+    // circle
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx', x); circle.setAttribute('cy', y);
+    circle.setAttribute('r', 18);
+    circle.setAttribute('fill', isRed ? '#d33' : '#111');
+    circle.setAttribute('stroke', isRed ? '#a00' : '#444');
+    circle.setAttribute('stroke-width', isRed ? '2' : '3');
+    g.appendChild(circle);
+    // text
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', x); t.setAttribute('y', y+5);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-size','12');
+    t.setAttribute('fill', isRed ? '#fff' : '#fff');
+    t.textContent = key;
+    g.appendChild(t);
+    // small uid (optional)
+    // append
+    svg.appendChild(g);
+  }
+
+  function drawRing(svg,x,y,color){
+    const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    ring.setAttribute('cx', x); ring.setAttribute('cy', y);
+    ring.setAttribute('r', 28);
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', color || '#f1c40f');
+    ring.setAttribute('stroke-width','4');
+    ring.setAttribute('stroke-opacity','0.9');
+    ring.setAttribute('stroke-linecap','round');
+    svg.appendChild(ring);
+  }
+
+  // --- Snapshot manager ---
+  function SnapshotManager(tree, renderer){
+    this.tree = tree;
+    this.renderer = renderer;
+    this.snapshots = []; // each: {treeSerialized, message, highlights:[], rotate?}
+    this.currentIndex = -1;
+  }
+
+  SnapshotManager.prototype.collect = function(message, opts){
+    const ser = serializeTree(this.tree.root, this.tree.NIL);
+    const highlights = (opts && opts.highlight) ? opts.highlight.slice() : [];
+    const rotate = (opts && opts.rotate) ? opts.rotate.slice() : null;
+    const snap = { tree: ser, message: message, highlights: highlights, rotate: (rotate?rotate[0]:null) || null, meta: opts.type||null };
+    this.snapshots.push(snap);
+    this.currentIndex = this.snapshots.length - 1;
+    this.renderCurrent();
+  };
+
+  SnapshotManager.prototype.reset = function(){
+    this.snapshots = [];
+    this.currentIndex = -1;
+    // initial empty snapshot
+    const ser = serializeTree(this.tree.root, this.tree.NIL);
+    this.snapshots.push({ tree: ser, message: 'Initial', highlights: [], rotate: null });
+    this.currentIndex = 0;
+    this.renderCurrent();
+  };
+
+  SnapshotManager.prototype.renderCurrent = function(){
+    if (this.currentIndex < 0 || this.currentIndex >= this.snapshots.length) return;
+    const snap = this.snapshots[this.currentIndex];
+    this.renderer.drawSnapshot(snap.tree, { message: snap.message, highlights: snap.highlights, rotate: snap.rotate });
+    updateMessage('Step ' + (this.currentIndex+1) + ' / ' + this.snapshots.length + ': ' + (snap.message||''));
+  };
+
+  SnapshotManager.prototype.step = function(delta){
+    if (this.snapshots.length===0) return;
+    this.currentIndex = Math.max(0, Math.min(this.snapshots.length-1, this.currentIndex + delta));
+    this.renderCurrent();
+  };
+
+  SnapshotManager.prototype.play = function(speed, onDone){
+    if (this.playTimer) { clearInterval(this.playTimer); this.playTimer = null; return; }
+    const interval = Math.max(200, 800 / speed);
+    this.playTimer = setInterval(() => {
+      if (this.currentIndex >= this.snapshots.length - 1){ clearInterval(this.playTimer); this.playTimer = null; if (onDone) onDone(); return; }
+      this.step(1);
+    }, interval);
+  };
+  SnapshotManager.prototype.stop = function(){ if (this.playTimer){ clearInterval(this.playTimer); this.playTimer=null; } };
+
+  // --- UI wiring ---
+  const svg = el('canvas');
+  const renderer = new Renderer(svg);
+  let snapshotManager, tree;
+
+  function init(){
+    snapshotManager = new SnapshotManager(null, renderer);
+    tree = new RBTree(makeSnapshotFunction((msg, opts)=> snapshotManager.collect(msg, opts)));
+    snapshotManager.tree = tree;
+    snapshotManager.reset();
+    attachHandlers();
+  }
+
+  function attachHandlers(){
+    el('insertBtn').addEventListener('click', ()=> {
+      const val = Number(el('keyInput').value);
+      if (!Number.isFinite(val)){ updateMessage('Enter a valid integer.'); return; }
+      // prevent duplicate
+      if (existsInTree(tree, val)){ updateMessage('Key ' + val + ' already exists.'); return; }
+      tree.insert(val);
+    });
+
+    el('deleteBtn').addEventListener('click', ()=> {
+      const val = Number(el('keyInput').value);
+      if (!Number.isFinite(val)){ updateMessage('Enter a valid integer.'); return; }
+      tree.delete(val);
+    });
+
+    el('randBtn').addEventListener('click', ()=> {
+      const val = Math.floor(Math.random()*90)+10;
+      if (existsInTree(tree, val)){ updateMessage('Random value existed, try again.'); return; }
+      el('keyInput').value = val;
+      tree.insert(val);
+    });
+
+    el('bulkBtn').addEventListener('click', ()=> {
+      const sample = [41, 38, 31, 12, 19, 8];
+      // clear then insert sample with small delay
+      tree = new RBTree(makeSnapshotFunction((msg, opts)=> snapshotManager.collect(msg, opts)));
+      snapshotManager.tree = tree;
+      snapshotManager.reset();
+      let idx = 0;
+      const insInterval = setInterval(()=>{
+        if (idx >= sample.length) { clearInterval(insInterval); return; }
+        const v = sample[idx++];
+        el('keyInput').value = v;
+        tree.insert(v);
+      }, 250);
+    });
+
+    el('clearBtn').addEventListener('click', ()=> {
+      tree = new RBTree(makeSnapshotFunction((msg, opts)=> snapshotManager.collect(msg, opts)));
+      snapshotManager.tree = tree;
+      snapshotManager.reset();
+    });
+
+    el('stepBack').addEventListener('click', ()=> { snapshotManager.step(-1); snapshotManager.stop(); el('playPause').textContent = '▶ Play'; });
+    el('stepForward').addEventListener('click', ()=> { snapshotManager.step(1); snapshotManager.stop(); el('playPause').textContent = '▶ Play'; });
+
+    let playing = false;
+    el('playPause').addEventListener('click', ()=> {
+      if (!playing){
+        playing = true;
+        el('playPause').textContent = '⏸ Pause';
+        snapshotManager.play(Number(el('speed').value), ()=> { playing=false; el('playPause').textContent='▶ Play'; });
+      } else {
+        playing = false;
+        el('playPause').textContent = '▶ Play';
+        snapshotManager.stop();
+      }
+    });
+
+    el('speed').addEventListener('input', ()=> {
+      // if playing, restart with new speed
+      // simplification: stop
+      snapshotManager.stop();
+      el('playPause').textContent = '▶ Play';
+    });
+  }
+
+  function existsInTree(tree, key){
+    let n = tree.root;
+    while (n !== tree.NIL){
+      if (n.key === key) return true;
+      n = key < n.key ? n.left : n.right;
+    }
+    return false;
+  }
+
+  function updateMessage(msg){
+    el('message').textContent = msg;
+  }
+
+  // initialize on load
+  init();
+
+  // initial sample hints
+  updateMessage('Ready. Try inserting 41, 38, 31, 12, 19, 8 (Sample).');
+
+})(); // end IIFE
+</script>
+</body>
+</html>

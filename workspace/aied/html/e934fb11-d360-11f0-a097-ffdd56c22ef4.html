@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>K-Nearest Neighbors (KNN) Interactive Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 16px; color: #111; }
+    h1 { font-size: 20px; margin: 0 0 8px 0; }
+    p.lead { margin: 4px 0 16px 0; color: #333; font-size: 14px; }
+    #container { display: flex; gap: 16px; }
+    #left { flex: 1 1 640px; }
+    #canvasWrap { background: #fff; border: 1px solid #ccc; display: inline-block; }
+    canvas { display: block; background: linear-gradient(180deg,#f8f9fb,#fcfdff); cursor: crosshair; }
+    #controls { width: 340px; flex: 0 0 340px; }
+    .panel { border: 1px solid #ddd; padding: 10px; margin-bottom: 12px; background: #fafafa; border-radius: 6px; }
+    label { display: block; margin: 6px 0 4px; font-weight: 600; font-size: 13px; }
+    input[type="range"] { width: 100%; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .btn { background:#1976d2; color:white; padding:6px 10px; border-radius:4px; border:none; cursor:pointer; }
+    .btn.ghost { background:#fff; color:#1976d2; border:1px solid #1976d2; }
+    .btn.small { padding:4px 8px; font-size:13px; }
+    .legend { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .legend-item { display:flex; gap:6px; align-items:center; font-size:13px; }
+    .swatch { width:14px; height:14px; border-radius:3px; border:1px solid #aaa; }
+    #info { font-size:13px; line-height:1.4; margin-top:8px; }
+    table { width:100%; border-collapse: collapse; font-size:13px; }
+    th, td { text-align:left; padding:4px; border-bottom:1px dashed #eee; }
+    .small-muted { font-size:12px; color:#666; }
+    .controls-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .modeToggle { display:flex; gap:4px; }
+    .modeToggle button { padding:6px 8px; border-radius:4px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+    .modeToggle button.active { border-color:#1976d2; background:#e8f0ff; color:#0b57b0; }
+    .hint { font-size:12px; color:#555; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <h1>K-Nearest Neighbors (KNN) — Interactive Demo</h1>
+  <p class="lead">Visualize how KNN classifies a point in 2D. Add training points, pick K and a distance metric, click to place a query point, and see which neighbors vote.</p>
+
+  <div id="container">
+    <div id="left">
+      <div id="canvasWrap" class="panel">
+        <canvas id="plot" width="720" height="480" title="Click to set or add points"></canvas>
+        <div style="padding:8px 6px;"><span class="small-muted">Click:</span>
+          <strong id="clickModeLabel">Place query</strong> — Hold Shift and click to add a training point of the selected class. Right-click to remove nearest training point.</div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div class="panel">
+        <label>K (neighbors): <span id="kVal">3</span></label>
+        <input id="kRange" type="range" min="1" max="25" value="3" />
+        <div class="controls-row" style="margin-top:8px;">
+          <label style="margin:0;">Distance metric</label>
+          <select id="metric">
+            <option value="euclidean">Euclidean</option>
+            <option value="manhattan">Manhattan (L1)</option>
+            <option value="chebyshev">Chebyshev (L∞)</option>
+          </select>
+        </div>
+
+        <label style="margin-top:8px;">Voting</label>
+        <div class="controls-row">
+          <label><input type="radio" name="weight" value="uniform" checked /> Uniform</label>
+          <label><input type="radio" name="weight" value="distance" /> Distance-weighted</label>
+        </div>
+
+        <div style="margin-top:8px;">
+          <label><input id="showBoundary" type="checkbox" checked /> Show decision boundary</label>
+        </div>
+
+        <div style="margin-top:8px;">  
+          <div class="controls-row">
+            <button id="genBlobs" class="btn small">Generate random blobs</button>
+            <button id="clearBtn" class="btn ghost small">Clear</button>
+          </div>
+          <div class="hint">Use Shift+Click to add training points of the selected class. Click normally to set the query point. Right-click to remove nearest training point.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Classes / Add training points</label>
+        <div class="legend" id="classLegend"></div>
+        <div style="margin-top:8px;">
+          <button id="addClassBtn" class="btn small">Add class</button>
+          <button id="resetClassesBtn" class="btn ghost small">Reset to 3 classes</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Prediction</label>
+        <div id="info"><em>No query point yet. Click on canvas to classify.</em></div>
+      </div>
+
+      <div class="panel">
+        <label>Quick actions</label>
+        <div class="row" style="gap:6px;">
+          <button id="shuffleBtn" class="btn small">Shuffle training points</button>
+          <button id="splitBtn" class="btn small ghost">Randomize placement</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Notes</label>
+        <ul style="margin:6px 0 0 18px; font-size:13px; color:#444;">
+          <li>KNN is a simple instance-based classifier — it assigns labels based on the labels of the nearest training points.</li>
+          <li>Distance-weighted voting gives more influence to closer neighbors.</li>
+          <li>Decision boundary shows which class the model would predict at each location.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Canvas and drawing setup
+  const canvas = document.getElementById('plot');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // UI elements
+  const kRange = document.getElementById('kRange');
+  const kVal = document.getElementById('kVal');
+  const metricSelect = document.getElementById('metric');
+  const weightRadios = document.getElementsByName('weight');
+  const showBoundaryCheckbox = document.getElementById('showBoundary');
+  const infoDiv = document.getElementById('info');
+  const genBlobsBtn = document.getElementById('genBlobs');
+  const clearBtn = document.getElementById('clearBtn');
+  const classLegend = document.getElementById('classLegend');
+  const addClassBtn = document.getElementById('addClassBtn');
+  const resetClassesBtn = document.getElementById('resetClassesBtn');
+  const clickModeLabel = document.getElementById('clickModeLabel');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const splitBtn = document.getElementById('splitBtn');
+
+  let classes = []; // array of class objects {id, color, name}
+  let points = []; // training points: {x:0..1, y:0..1, label: classId}
+  let query = null; // {x,y}
+  let selectedClassId = 0;
+  let showBoundary = true;
+
+  // Colors to use for classes
+  const baseColors = [
+    '#e53935','#1e88e5','#43a047','#ffb300','#8e24aa','#00acc1','#ff7043','#546e7a'
+  ];
+
+  // Utility helpers
+  function rand(min=0,max=1){ return Math.random()*(max-min)+min; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  // Coordinate mapping between normalized space (0..1) and canvas pixels
+  function toPx(p){ return {x: Math.round(p.x*W), y: Math.round((1-p.y)*H)}; } // invert y for display
+  function fromPx(px){ return {x: clamp(px.x / W, 0, 1), y: clamp(1 - (px.y / H), 0, 1)}; }
+
+  // Initialize some classes
+  function ensureDefaultClasses(){
+    classes = [];
+    for(let i=0;i<3;i++){
+      classes.push({ id: i, color: baseColors[i % baseColors.length], name: 'Class ' + (i+1) });
+    }
+    selectedClassId = 0;
+    renderClassLegend();
+  }
+
+  function addClass(){
+    const id = classes.length ? Math.max(...classes.map(c=>c.id)) + 1 : 0;
+    const color = baseColors[classes.length % baseColors.length] || randomColor();
+    classes.push({id, color, name: 'Class ' + (classes.length+1)});
+    selectedClassId = id;
+    renderClassLegend();
+  }
+
+  function resetToThreeClasses(){
+    ensureDefaultClasses();
+    points = [];
+    query = null;
+    redraw();
+  }
+
+  function randomColor(){
+    const h = Math.floor(Math.random()*360);
+    const s = 60 + Math.random()*20;
+    const l = 45 + Math.random()*10;
+    return `hsl(${h} ${s}% ${l}%)`;
+  }
+
+  function renderClassLegend(){
+    classLegend.innerHTML = '';
+    classes.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `
+        <div class="swatch" style="background:${c.color};"></div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <label style="cursor:pointer;"><input type="radio" name="selClass" value="${c.id}" ${c.id===selectedClassId ? 'checked' : ''}/> ${c.name}</label>
+          <button data-id="${c.id}" title="Add one point of this class" class="btn small ghost">Add point</button>
+        </div>
+      `;
+      classLegend.appendChild(item);
+      item.querySelector('input[type=radio]').addEventListener('change', () => {
+        selectedClassId = c.id;
+      });
+      item.querySelector('button').addEventListener('click', () => {
+        // add a random training point of this class near center
+        const p = { x: rand(0.1,0.9), y: rand(0.1,0.9), label: c.id };
+        points.push(p);
+        redraw();
+      });
+    });
+  }
+
+  // Distance metrics
+  function distance(a,b,metric='euclidean'){
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    if(metric === 'euclidean') return Math.sqrt(dx*dx + dy*dy);
+    if(metric === 'manhattan') return Math.abs(dx) + Math.abs(dy);
+    if(metric === 'chebyshev') return Math.max(Math.abs(dx), Math.abs(dy));
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  // KNN classifier: returns {predictedLabel, probs: map label=>prob, neighbors: array of neighbors}
+  function knnClassify(queryPoint, K, metric, weighting){
+    if(!queryPoint || points.length===0) return null;
+    const list = points.map(pt => {
+      return { point: pt, dist: distance(queryPoint, pt, metric) };
+    });
+    list.sort((a,b)=>a.dist-b.dist);
+    const neighbors = list.slice(0, Math.min(K, list.length));
+    // Voting
+    const counts = new Map();
+    let totalWeight = 0;
+    neighbors.forEach(n => {
+      const d = n.dist;
+      let w = 1;
+      if(weighting === 'distance'){
+        w = 1.0 / (d + 1e-9); // closer => larger weight
+      }
+      const lab = n.point.label;
+      counts.set(lab, (counts.get(lab) || 0) + w);
+      totalWeight += w;
+    });
+    // compute probs
+    const probs = {};
+    for(const c of classes){
+      const s = counts.get(c.id) || 0;
+      probs[c.id] = totalWeight ? s / totalWeight : 0;
+    }
+    // predicted label is argmax of probs
+    let best = null, bestVal = -Infinity;
+    for(const [lab,val] of Object.entries(probs)){
+      if(val > bestVal){ best = parseInt(lab); bestVal = val; }
+    }
+    return { predictedLabel: best, probs, neighbors };
+  }
+
+  // Drawing functions
+  function clearCanvas(){
+    ctx.clearRect(0,0,W,H);
+    // subtle grid
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
+
+  function drawBoundaryIfNeeded(){
+    if(!showBoundary) return;
+    // Render decision boundary via coarse grid sampling
+    const step = 8; // px step
+    const metric = metricSelect.value;
+    const weighting = getWeighting();
+    const K = Math.min(parseInt(kRange.value), Math.max(1, points.length));
+    if(points.length===0) return;
+    for(let px=0; px<W; px+=step){
+      for(let py=0; py<H; py+=step){
+        const q = fromPx({x:px,y:py});
+        const res = knnClassify(q, K, metric, weighting);
+        if(!res) continue;
+        const lab = res.predictedLabel;
+        const color = classes.find(c=>c.id===lab)?.color || '#000';
+        // convert color to rgba with low alpha
+        ctx.fillStyle = hexToRgba(color, 0.12);
+        ctx.fillRect(px, py, step, step);
+      }
+    }
+    // anti-aliased boundary overlay: draw faint strokes between cells with different classes
+    // (skip for speed)
+  }
+
+  // helper to turn hex or hsl into rgba with alpha
+  function hexToRgba(col, a){
+    // If starts with hsl or rgb, just use it with alpha if possible
+    if(col.startsWith('hsl') || col.startsWith('rgb')) {
+      return col.replace('hsl','hsla').replace('rgb','rgba').replace(')',`, ${a})`);
+    }
+    // hex -> rgba
+    const c = col.replace('#','');
+    const bigint = parseInt(c, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  function drawPointsAndQuery(highlightNeighbors = []){
+    // draw training points
+    points.forEach((pt, idx) => {
+      const px = toPx(pt);
+      const cls = classes.find(c=>c.id===pt.label);
+      const color = cls ? cls.color : '#000';
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 1;
+      // marker: square for training
+      const s = 8;
+      ctx.rect(px.x - s/2, px.y - s/2, s, s);
+      ctx.fill();
+      ctx.stroke();
+      // small inner dot for index
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.arc(px.x, px.y, 2, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // highlight neighbors with rings and numbers
+    highlightNeighbors.forEach((n, i) => {
+      const p = toPx(n.point);
+      ctx.beginPath();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4,3]);
+      ctx.arc(p.x, p.y, 14, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // draw neighbor index
+      ctx.fillStyle = '#111';
+      ctx.font = '12px sans-serif';
+      ctx.fillText((i+1).toString(), p.x - 6, p.y + 4);
+    });
+
+    // draw query point
+    if(query){
+      const qp = toPx(query);
+      ctx.beginPath();
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.arc(qp.x, qp.y, 10, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.fillStyle = '#111';
+      ctx.font = '12px sans-serif';
+      ctx.fillText('Q', qp.x - 4, qp.y + 5);
+    }
+  }
+
+  function redraw(){
+    clearCanvas();
+    drawBoundaryIfNeeded();
+    // draw axes labels or border
+    ctx.save();
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5,0.5,W-1, H-1);
+    ctx.restore();
+
+    // compute neighbors to highlight if query exists
+    const K = Math.min(parseInt(kRange.value), Math.max(1, points.length));
+    const metric = metricSelect.value;
+    const weighting = getWeighting();
+    let neighborsToShow = [];
+    if(query && points.length>0){
+      const res = knnClassify(query, K, metric, weighting);
+      if(res) neighborsToShow = res.neighbors;
+      // draw decision info box
+      displayPredictionInfo(res);
+    } else {
+      displayNoQueryInfo();
+    }
+
+    drawPointsAndQuery(neighborsToShow);
+  }
+
+  function displayNoQueryInfo(){
+    infoDiv.innerHTML = `<em>No query point yet. Click on canvas to classify.</em>
+      <div style="margin-top:8px;" class="small-muted">Training points: <strong>${points.length}</strong></div>`;
+  }
+
+  function displayPredictionInfo(res){
+    if(!res) {
+      displayNoQueryInfo();
+      return;
+    }
+    const pred = res.predictedLabel;
+    const cls = classes.find(c=>c.id===pred);
+    const metric = metricSelect.value;
+    let html = `<div style="margin-bottom:6px;">Predicted: <strong style="color:${cls?.color};">${cls?.name || pred}</strong></div>`;
+    // show probabilities
+    html += `<table><thead><tr><th>Class</th><th>Probability</th></tr></thead><tbody>`;
+    const sorted = Object.entries(res.probs).sort((a,b)=>b[1]-a[1]);
+    sorted.forEach(([lab,prob])=>{
+      const cc = classes.find(c=>c.id==lab);
+      html += `<tr><td><span style="display:inline-block;width:10px;height:10px;margin-right:6px;background:${cc?.color};border-radius:2px;"></span>${cc?.name}</td><td>${(prob*100).toFixed(1)}%</td></tr>`;
+    });
+    html += `</tbody></table>`;
+
+    // neighbor list
+    html += `<div style="margin-top:8px;"><strong>Neighbors (closest first):</strong><div class="small-muted">Distance measured with ${metric}, K=${kRange.value}</div>`;
+    html += `<ol style="margin:6px 0 0 18px;">`;
+    res.neighbors.forEach((n, i) => {
+      const c = classes.find(cc=>cc.id===n.point.label);
+      html += `<li style="margin:4px 0;"><span style="color:${c?.color};font-weight:600">${c?.name}</span> — dist ${(n.dist).toFixed(3)}</li>`;
+    });
+    html += `</ol></div>`;
+    infoDiv.innerHTML = html;
+  }
+
+  // event handlers
+  canvas.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const px = {x: ev.clientX - rect.left, y: ev.clientY - rect.top};
+    const norm = fromPx(px);
+    if(ev.shiftKey){
+      // add training point of selected class
+      points.push({x: norm.x, y: norm.y, label: selectedClassId});
+      redraw();
+    } else {
+      // set query point
+      query = norm;
+      redraw();
+    }
+  });
+
+  // right-click to remove nearest training point
+  canvas.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const px = {x: ev.clientX - rect.left, y: ev.clientY - rect.top};
+    const norm = fromPx(px);
+    if(points.length === 0) return;
+    // find nearest training point in normalized coords (Euclidean)
+    let bestIdx = -1, bestD = Infinity;
+    points.forEach((pt, idx) => {
+      const dx = pt.x - norm.x, dy = pt.y - norm.y;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if(d < bestD){ bestD = d; bestIdx = idx; }
+    });
+    if(bestIdx >= 0){
+      points.splice(bestIdx,1);
+      redraw();
+    }
+  });
+
+  // UI updates
+  kRange.addEventListener('input', () => {
+    kVal.textContent = kRange.value;
+    redraw();
+  });
+
+  metricSelect.addEventListener('change', redraw);
+  showBoundaryCheckbox.addEventListener('change', () => { showBoundary = showBoundaryCheckbox.checked; redraw(); });
+
+  genBlobsBtn.addEventListener('click', () => {
+    // Generate random blobs for each class
+    points = [];
+    const perClass = 40;
+    classes.forEach((c, idx) => {
+      // choose a mean within bounds
+      const mx = 0.12 + (idx/(classes.length||1))*0.76 + rand(-0.08,0.08);
+      const my = 0.12 + (0.2 + Math.sin(idx*2.3))*0.6 + rand(-0.08,0.08);
+      const spread = 0.06 + Math.random()*0.08;
+      for(let i=0;i<perClass;i++){
+        const x = clamp(mx + (rand()-0.5)*spread*2, 0.02, 0.98);
+        const y = clamp(my + (rand()-0.5)*spread*2, 0.02, 0.98);
+        points.push({x,y,label:c.id});
+      }
+    });
+    query = null;
+    redraw();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    points = [];
+    query = null;
+    redraw();
+  });
+
+  addClassBtn.addEventListener('click', () => {
+    addClass();
+  });
+
+  resetClassesBtn.addEventListener('click', () => {
+    resetToThreeClasses();
+  });
+
+  shuffleBtn.addEventListener('click', () => {
+    // jitter all training points a bit
+    points = points.map(p => ({x: clamp(p.x + (rand()-0.5)*0.08, 0,1), y: clamp(p.y + (rand()-0.5)*0.08,0,1), label: p.label}));
+    redraw();
+  });
+
+  splitBtn.addEventListener('click', () => {
+    // reposition training points randomly across canvas
+    points = points.map(p => ({x: rand(0.05,0.95), y: rand(0.05,0.95), label: p.label}));
+    redraw();
+  });
+
+  function getWeighting(){
+    for(const r of weightRadios) if(r.checked) return r.value;
+    return 'uniform';
+  }
+  // re-render when weight changes
+  weightRadios.forEach(r => r.addEventListener('change', redraw));
+
+  // Keyboard shortcuts display mode
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'q'){ // toggle query mode message
+      clickModeLabel.textContent = clickModeLabel.textContent === 'Place query' ? 'Place training points (Shift+Click)' : 'Place query';
+    }
+  });
+
+  // Initial setup
+  ensureDefaultClasses();
+  // seed some points for demo
+  function seedDemo(){
+    // make a few points per class
+    points = [];
+    for(let i=0;i<classes.length;i++){
+      const mx = 0.2 + i * (0.6 / Math.max(1, classes.length-1));
+      for(let j=0;j<18;j++){
+        const angle = Math.random() * Math.PI*2;
+        const r = 0.06 + Math.random()*0.06;
+        const x = clamp(mx + Math.cos(angle)*r + rand(-0.02,0.02), 0.02, 0.98);
+        const y = clamp(0.5 + Math.sin(angle)*r + rand(-0.03,0.03), 0.02, 0.98);
+        points.push({x,y,label: classes[i].id});
+      }
+    }
+    query = {x:0.5, y:0.5};
+    redraw();
+  }
+
+  seedDemo();
+
+  // expose a tiny help overlay on first use
+  setTimeout(() => {
+    // no-op; we already have instructions
+  }, 500);
+
+  // ensure the UI shows current K
+  kVal.textContent = kRange.value;
+
+  // Add responsive redraw for window resize (scale canvas if needed)
+  window.addEventListener('resize', () => {
+    // keep fixed size for simplicity; could implement scaling
+    redraw();
+  });
+
+})();
+</script>
+</body>
+</html>

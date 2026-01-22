@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Visualization (Directed/Undirected)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .controls {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.active {
+            background: #2196F3;
+        }
+        select, input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #graphCanvas {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-panel {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h2>Graph Visualization</h2>
+        <button id="addNodeBtn">Add Node</button>
+        <button id="addEdgeBtn">Add Edge</button>
+        <button id="clearBtn">Clear Graph</button>
+        <label>
+            Graph Type:
+            <select id="graphType">
+                <option value="undirected">Undirected</option>
+                <option value="directed">Directed</option>
+            </select>
+        </label>
+        <label>
+            Algorithm:
+            <select id="algorithm">
+                <option value="none">None</option>
+                <option value="bfs">BFS</option>
+                <option value="dfs">DFS</option>
+            </select>
+        </label>
+        <button id="runAlgorithm">Run Algorithm</button>
+    </div>
+
+    <canvas id="graphCanvas" width="800" height="500"></canvas>
+
+    <div class="info-panel">
+        <h3>Graph Information</h3>
+        <div id="graphInfo">Nodes: 0, Edges: 0</div>
+        <div id="algorithmOutput"></div>
+    </div>
+
+    <script>
+        class Graph {
+            constructor() {
+                this.nodes = new Map();
+                this.edges = [];
+                this.directed = false;
+            }
+
+            addNode(id, x, y) {
+                this.nodes.set(id, { id, x, y, visited: false });
+            }
+
+            addEdge(from, to, weight = 1) {
+                const edge = { from, to, weight, visited: false };
+                this.edges.push(edge);
+                
+                if (!this.directed) {
+                    this.edges.push({ to, from, weight, visited: false });
+                }
+            }
+
+            removeNode(id) {
+                this.nodes.delete(id);
+                this.edges = this.edges.filter(edge => edge.from !== id && edge.to !== id);
+            }
+
+            clear() {
+                this.nodes.clear();
+                this.edges = [];
+            }
+
+            bfs(startId) {
+                const visited = new Set();
+                const queue = [startId];
+                const result = [];
+                visited.add(startId);
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    result.push(current);
+
+                    const neighbors = this.edges
+                        .filter(edge => edge.from === current && !visited.has(edge.to))
+                        .map(edge => edge.to);
+
+                    neighbors.forEach(neighbor => {
+                        visited.add(neighbor);
+                        queue.push(neighbor);
+                    });
+                }
+                return result;
+            }
+
+            dfs(startId) {
+                const visited = new Set();
+                const result = [];
+
+                const dfsRecursive = (nodeId) => {
+                    visited.add(nodeId);
+                    result.push(nodeId);
+
+                    const neighbors = this.edges
+                        .filter(edge => edge.from === nodeId && !visited.has(edge.to))
+                        .map(edge => edge.to);
+
+                    neighbors.forEach(neighbor => dfsRecursive(neighbor));
+                };
+
+                dfsRecursive(startId);
+                return result;
+            }
+        }
+
+        class GraphVisualizer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.graph = new Graph();
+                this.selectedNode = null;
+                this.draggingNode = null;
+                this.nodeRadius = 20;
+                this.nextNodeId = 1;
+                
+                this.setupEventListeners();
+                this.draw();
+            }
+
+            setupEventListeners() {
+                this.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
+                this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+                this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+
+                document.getElementById('addNodeBtn').addEventListener('click', () => {
+                    this.addRandomNode();
+                });
+
+                document.getElementById('addEdgeBtn').addEventListener('click', () => {
+                    this.selectedNode = null;
+                });
+
+                document.getElementById('clearBtn').addEventListener('click', () => {
+                    this.graph.clear();
+                    this.nextNodeId = 1;
+                    this.selectedNode = null;
+                    this.draw();
+                    this.updateInfo();
+                });
+
+                document.getElementById('graphType').addEventListener('change', (e) => {
+                    this.graph.directed = e.target.value === 'directed';
+                    this.graph.edges = [];
+                    this.draw();
+                    this.updateInfo();
+                });
+
+                document.getElementById('runAlgorithm').addEventListener('click', () => {
+                    this.runSelectedAlgorithm();
+                });
+            }
+
+            handleCanvasClick(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const clickedNode = this.findNodeAt(x, y);
+                
+                if (clickedNode) {
+                    if (this.selectedNode && this.selectedNode !== clickedNode) {
+                        this.graph.addEdge(this.selectedNode, clickedNode);
+                        this.selectedNode = null;
+                    } else {
+                        this.selectedNode = clickedNode;
+                    }
+                } else {
+                    this.graph.addNode(this.nextNodeId++, x, y);
+                    this.selectedNode = null;
+                }
+                
+                this.draw();
+                this.updateInfo();
+            }
+
+            handleMouseDown(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const node = this.findNodeAt(x, y);
+                if (node) {
+                    this.draggingNode = node;
+                }
+            }
+
+            handleMouseMove(e) {
+                if (this.draggingNode) {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    const node = this.graph.nodes.get(this.draggingNode);
+                    node.x = x;
+                    node.y = y;
+                    this.draw();
+                }
+            }
+
+            handleMouseUp() {
+                this.draggingNode = null;
+            }
+
+            findNodeAt(x, y) {
+                for (const [id, node] of this.graph.nodes) {
+                    const distance = Math.sqrt((node.x - x) ** 2 + (node.y - y) ** 2);
+                    if (distance <= this.nodeRadius) {
+                        return id;
+                    }
+                }
+                return null;
+            }
+
+            addRandomNode() {
+                const x = 50 + Math.random() * (this.canvas.width - 100);
+                const y = 50 + Math.random() * (this.canvas.height - 100);
+                this.graph.addNode(this.nextNodeId++, x, y);
+                this.draw();
+                this.updateInfo();
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw edges
+                this.ctx.strokeStyle = '#666';
+                this.ctx.lineWidth = 2;
+                
+                this.graph.edges.forEach(edge => {
+                    const fromNode = this.graph.nodes.get(edge.from);
+                    const toNode = this.graph.nodes.get(edge.to);
+                    
+                    if (fromNode && toNode) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(fromNode.x, fromNode.y);
+                        
+                        if (this.graph.directed) {
+                            // Draw arrow for directed edges
+                            const angle = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
+                            const headLength = 10;
+                            const endX = toNode.x - this.nodeRadius * Math.cos(angle);
+                            const endY = toNode.y - this.nodeRadius * Math.sin(angle);
+                            
+                            this.ctx.lineTo(endX, endY);
+                            this.ctx.stroke();
+                            
+                            // Arrow head
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(endX, endY);
+                            this.ctx.lineTo(
+                                endX - headLength * Math.cos(angle - Math.PI / 6),
+                                endY - headLength * Math.sin(angle - Math.PI / 6)
+                            );
+                            this.ctx.moveTo(endX, endY);
+                            this.ctx.lineTo(
+                                endX - headLength * Math.cos(angle + Math.PI / 6),
+                                endY - headLength * Math.sin(angle + Math.PI / 6)
+                            );
+                            this.ctx.stroke();
+                        } else {
+                            this.ctx.lineTo(toNode.x, toNode.y);
+                            this.ctx.stroke();
+                        }
+                    }
+                });
+
+                // Draw nodes
+                this.ctx.fillStyle = '#2196F3';
+                this.ctx.strokeStyle = '#1976D2';
+                this.ctx.lineWidth = 2;
+                
+                for (const node of this.graph.nodes.values()) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(node.x, node.y, this.nodeRadius, 0, 2 * Math.PI);
+                    
+                    if (node.visited) {
+                        this.ctx.fillStyle = '#4CAF50';
+                    } else if (node.id === this.selectedNode) {
+                        this.ctx.fillStyle = '#FF9800';
+                    } else {
+                        this.ctx.fillStyle = '#2196F3';
+                    }
+                    
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                    
+                    // Draw node label
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.font = '14px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText(node.id, node.x, node.y);
+                }
+            }
+
+            updateInfo() {
+                const info = document.getElementById('graphInfo');
+                info.textContent = `Nodes: ${this.graph.nodes.size}, Edges: ${this.graph.edges.length} (${this.graph.directed ? 'Directed' : 'Undirected'})`;
+            }
+
+            runSelectedAlgorithm() {
+                const algorithm = document.getElementById('algorithm').value;
+                const output = document.getElementById('algorithmOutput');
+                
+                if (algorithm === 'none' || this.graph.nodes.size === 0) {
+                    output.textContent = 'Please select an algorithm and ensure graph has nodes';
+                    return;
+                }
+
+                // Reset visited states
+                for (const node of this.graph.nodes.values()) {
+                    node.visited = false;
+                }
+                for (const edge of this.graph.edges) {
+                    edge.visited = false;
+                }
+
+                let result;
+                const startNode = Array.from(this.graph.nodes.keys())[0];
+
+                if (algorithm === 'bfs') {
+                    result = this.graph.bfs(startNode);
+                    output.textContent = `BFS Order: ${result.join(' → ')}`;
+                } else if (algorithm === 'dfs') {
+                    result = this.graph.dfs(startNode);
+                    output.textContent = `DFS Order: ${result.join(' → ')}`;
+                }
+
+                // Visualize algorithm steps
+                this.visualizeAlgorithm(result);
+            }
+
+            async visualizeAlgorithm(nodeOrder) {
+                for (let i = 0; i < nodeOrder.length; i++) {
+                    const nodeId = nodeOrder[i];
+                    const node = this.graph.nodes.get(nodeId);
+                    node.visited = true;
+                    this.draw();
+                    
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                }
+            }
+        }
+
+        // Initialize the graph visualizer when page loads
+        window.addEventListener('load', () => {
+            new GraphVisualizer('graphCanvas');
+        });
+    </script>
+</body>
+</html>

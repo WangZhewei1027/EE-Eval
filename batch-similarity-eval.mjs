@@ -180,7 +180,7 @@ async function findIdealFsmFile(idealFsmDir, concept) {
     console.log(
       `     🔍 尝试匹配: ${normalizedConcept} -> [${uniqueNames
         .slice(0, 5)
-        .join(", ")}...]`
+        .join(", ")}...]`,
     );
 
     // 查找精确匹配的文件
@@ -222,7 +222,7 @@ async function findIdealFsmFile(idealFsmDir, concept) {
     console.log(
       `     ❌ 未找到匹配，可用文件: ${idealFsmFiles
         .slice(0, 10)
-        .join(", ")}...`
+        .join(", ")}...`,
     );
     throw new Error(`未找到匹配的ideal FSM文件`);
   } catch (error) {
@@ -420,26 +420,26 @@ FSM目录: ${fsmDir}
         const idealFsmContent = await fs.readFile(idealFsmPath, "utf-8");
         const idealFsmData = JSON.parse(idealFsmContent);
 
-        // 4. 进行相似度比较
-        console.log(`   ⚡ 计算相似度...`);
-        const similarityResult = compareFSMs(fsmData, idealFsmData);
+        // 4. 进行相似度比较 (使用 await 调用异步函数)
+        console.log(`   ⚡ 计算相似度 (使用 embedding)...`);
+        const similarityResult = await compareFSMs(fsmData, idealFsmData);
 
         stats.success++;
 
         const similarity = Math.round(
-          similarityResult.combined_similarity * 100
+          similarityResult.combined_similarity * 100,
         );
         console.log(
-          `✅ [${taskId}] ${fsmFile.fileName} - 相似度: ${similarity}%`
+          `✅ [${taskId}] ${fsmFile.fileName} - 相似度: ${similarity}%`,
         );
         console.log(
           `   📊 结构: ${Math.round(
-            similarityResult.structural_similarity.overall * 100
+            similarityResult.structural_similarity.overall * 100,
           )}% | 语义: ${Math.round(
-            similarityResult.semantic_similarity.overall * 100
+            similarityResult.semantic_similarity.overall * 100,
           )}% | 同构: ${Math.round(
-            similarityResult.isomorphism_similarity * 100
-          )}%`
+            similarityResult.isomorphism_similarity * 100,
+          )}%`,
         );
 
         // 5. 保存结果
@@ -469,12 +469,12 @@ FSM目录: ${fsmDir}
         if (isMatchError) {
           stats.unmatched++;
           console.warn(
-            `⚠️  [${taskId}] ${fsmFile.fileName} - ${error.message}`
+            `⚠️  [${taskId}] ${fsmFile.fileName} - ${error.message}`,
           );
         } else {
           stats.failed++;
           console.error(
-            `❌ [${taskId}] ${fsmFile.fileName} - 失败: ${error.message}`
+            `❌ [${taskId}] ${fsmFile.fileName} - 失败: ${error.message}`,
           );
         }
 
@@ -492,7 +492,7 @@ FSM目录: ${fsmDir}
         stats.completed++;
         const progress = ((stats.completed / stats.total) * 100).toFixed(1);
         console.log(
-          `📊 进度: ${stats.completed}/${stats.total} (${progress}%)\n`
+          `📊 进度: ${stats.completed}/${stats.total} (${progress}%)\n`,
         );
       }
     });
@@ -509,32 +509,32 @@ FSM目录: ${fsmDir}
 
   // 计算统计信息
   const successfulResults = results.filter(
-    (r) => r.success && r.similarityResult
+    (r) => r.success && r.similarityResult,
   );
   const avgSimilarity =
     successfulResults.length > 0
       ? successfulResults.reduce(
           (sum, r) => sum + r.similarityResult.combined_similarity,
-          0
+          0,
         ) / successfulResults.length
       : 0;
 
   const similarityDistribution = {
     excellent: successfulResults.filter(
-      (r) => r.similarityResult.combined_similarity >= 0.9
+      (r) => r.similarityResult.combined_similarity >= 0.9,
     ).length,
     good: successfulResults.filter(
       (r) =>
         r.similarityResult.combined_similarity >= 0.7 &&
-        r.similarityResult.combined_similarity < 0.9
+        r.similarityResult.combined_similarity < 0.9,
     ).length,
     fair: successfulResults.filter(
       (r) =>
         r.similarityResult.combined_similarity >= 0.5 &&
-        r.similarityResult.combined_similarity < 0.7
+        r.similarityResult.combined_similarity < 0.7,
     ).length,
     poor: successfulResults.filter(
-      (r) => r.similarityResult.combined_similarity < 0.5
+      (r) => r.similarityResult.combined_similarity < 0.5,
     ).length,
   };
 
@@ -555,7 +555,7 @@ FSM目录: ${fsmDir}
         .sort(
           (a, b) =>
             b.similarityResult.combined_similarity -
-            a.similarityResult.combined_similarity
+            a.similarityResult.combined_similarity,
         )
         .slice(0, 5)
         .map((r) => ({
@@ -568,7 +568,7 @@ FSM目录: ${fsmDir}
         .sort(
           (a, b) =>
             a.similarityResult.combined_similarity -
-            b.similarityResult.combined_similarity
+            b.similarityResult.combined_similarity,
         )
         .slice(0, 5)
         .map((r) => ({
@@ -594,7 +594,7 @@ FSM目录: ${fsmDir}
 📊 执行统计:
   • 总文件数: ${stats.total}
   • 成功匹配: ${stats.matched} (${((stats.matched / stats.total) * 100).toFixed(
-    1
+    1,
   )}%)
   • 评估成功: ${stats.success} ✅
   • 评估失败: ${stats.failed} ❌

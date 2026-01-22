@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>K-Means Clustering Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+  }
+  h1 {
+    text-align: center;
+    margin: 1rem 0 0.5rem 0;
+  }
+  #container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 auto;
+    max-width: 900px;
+    padding: 0 1rem 2rem;
+  }
+  #canvas-container {
+    position: relative;
+    border: 1px solid #333;
+    background: #fefefe;
+    margin-bottom: 1rem;
+  }
+  canvas {
+    display: block;
+    background: #fff;
+  }
+  #controls {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+  label {
+    white-space: nowrap;
+  }
+  input[type="number"] {
+    width: 60px;
+    padding: 0.2rem 0.3rem;
+    border-radius: 3px;
+    border: 1px solid #aaa;
+    text-align: center;
+  }
+  button {
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    border: none;
+    background-color: #005bbb;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  button:hover:not(:disabled) {
+    background-color: #003f7f;
+  }
+  button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  #instructions {
+    max-width: 600px;
+    font-size: 0.9rem;
+    color: #444;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+  #info {
+    font-size: 0.9rem;
+    color: #333;
+    margin-top: 0.3rem;
+    text-align: center;
+    min-height: 1.2em;
+  }
+  #legend {
+    margin-top: 0.5rem;
+    max-width: 600px;
+    text-align: center;
+  }
+  #legend span {
+    display: inline-block;
+    margin: 0 6px;
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+  <h1>K-Means Clustering Interactive Demo</h1>
+  <div id="container">
+    <div id="canvas-container">
+      <canvas id="canvas" width="700" height="500" aria-label="K-means clustering visualization"></canvas>
+    </div>
+    <div id="controls">
+      <label for="kInput">Number of Clusters (k):</label>
+      <input type="number" id="kInput" min="1" max="10" value="3" />
+      <label for="pointsInput">Number of Points:</label>
+      <input type="number" id="pointsInput" min="10" max="1000" value="150" step="10" />
+      <button id="generateBtn" title="Generate random points">Generate Points</button>
+      <button id="stepBtn" title="Perform one iteration of K-Means">Step</button>
+      <button id="runBtn" title="Run K-Means to completion">Run</button>
+      <button id="resetBtn" title="Reset clustering">Reset</button>
+      <button id="clearBtn" title="Clear all points and clusters">Clear</button>
+    </div>
+    <div id="instructions">
+      <strong>Instructions:</strong> Click on the canvas to add points manually.<br>
+      Set the number of clusters and points, then generate random points or add points manually.<br>
+      Use Step to see clustering iterations one by one, or Run to complete clustering automatically.<br>
+      Reset to start clustering again with current points.
+    </div>
+    <div id="info"></div>
+    <div id="legend"></div>
+  </div>
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const kInput = document.getElementById('kInput');
+  const pointsInput = document.getElementById('pointsInput');
+  const generateBtn = document.getElementById('generateBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const info = document.getElementById('info');
+  const legend = document.getElementById('legend');
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const POINT_RADIUS = 5;
+  const CENTER_RADIUS = 9;
+
+  // Colors for clusters (max 10 clusters)
+  const colors = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+    '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe'
+  ];
+
+  let points = []; // {x, y, cluster}
+  let centers = []; // {x, y}
+  let k = parseInt(kInput.value, 10);
+  let running = false;
+
+  // Distance squared between two points
+  function distSq(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx * dx + dy * dy;
+  }
+
+  // Initialize random points inside canvas
+  function generateRandomPoints(n) {
+    points = [];
+    for (let i = 0; i < n; i++) {
+      points.push({
+        x: Math.random() * (width - 2 * POINT_RADIUS) + POINT_RADIUS,
+        y: Math.random() * (height - 2 * POINT_RADIUS) + POINT_RADIUS,
+        cluster: null
+      });
+    }
+  }
+
+  // Initialize centers by randomly choosing k distinct points
+  function initializeCenters() {
+    centers = [];
+    if (points.length === 0) return;
+    const takenIndices = new Set();
+    while (centers.length < Math.min(k, points.length)) {
+      const idx = Math.floor(Math.random() * points.length);
+      if (!takenIndices.has(idx)) {
+        takenIndices.add(idx);
+        centers.push({x: points[idx].x, y: points[idx].y});
+      }
+    }
+  }
+
+  // Assign each point to the nearest center
+  function assignClusters() {
+    let changed = false;
+    points.forEach(pt => {
+      let minDist = Infinity;
+      let assigned = null;
+      centers.forEach((c, idx) => {
+        const d = distSq(pt, c);
+        if (d < minDist) {
+          minDist = d;
+          assigned = idx;
+        }
+      });
+      if (pt.cluster !== assigned) {
+        changed = true;
+        pt.cluster = assigned;
+      }
+    });
+    return changed;
+  }
+
+  // Update centers to be mean of assigned points
+  function updateCenters() {
+    const sums = new Array(k).fill(0).map(() => ({x: 0, y: 0, count: 0}));
+    points.forEach(pt => {
+      if (pt.cluster !== null && sums[pt.cluster]) {
+        sums[pt.cluster].x += pt.x;
+        sums[pt.cluster].y += pt.y;
+        sums[pt.cluster].count++;
+      }
+    });
+    let moved = false;
+    sums.forEach((sum, idx) => {
+      if (sum.count > 0) {
+        const newX = sum.x / sum.count;
+        const newY = sum.y / sum.count;
+        if (centers[idx].x !== newX || centers[idx].y !== newY) {
+          moved = true;
+          centers[idx].x = newX;
+          centers[idx].y = newY;
+        }
+      }
+    });
+    return moved;
+  }
+
+  // Perform one iteration: assign clusters, update centers
+  function kMeansStep() {
+    if (points.length === 0 || centers.length === 0) return false;
+    const changedAssign = assignClusters();
+    const changedCenters = updateCenters();
+    draw();
+    return changedAssign || changedCenters;
+  }
+
+  // Draw points and centers
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw points, colored by cluster
+    points.forEach(pt => {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, POINT_RADIUS, 0, 2 * Math.PI);
+      if (pt.cluster !== null) {
+        ctx.fillStyle = colors[pt.cluster % colors.length];
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#999';
+        ctx.fill();
+      }
+    });
+
+    // Draw centers prominently
+    centers.forEach((c, idx) => {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, CENTER_RADIUS, 0, 2 * Math.PI);
+      ctx.fillStyle = colors[idx % colors.length];
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Draw cluster index number
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(idx + 1, c.x, c.y);
+    });
+
+    // Draw legend
+    legend.innerHTML = centers.map((_, idx) => `
+      <span style="background-color:${colors[idx % colors.length]}" title="Cluster ${idx + 1}"></span>
+      Cluster ${idx + 1}
+    `).join(' &nbsp;&nbsp; ');
+  }
+
+  // Reset clustering but keep points
+  function resetClustering() {
+    if (points.length === 0) return;
+    if (k > points.length) {
+      alert("Number of clusters (k) must be less than or equal to number of points.");
+      return false;
+    }
+    initializeCenters();
+    points.forEach(pt => pt.cluster = null);
+    draw();
+    info.textContent = 'Clustering reset. Click Step or Run to perform iterations.';
+    return true;
+  }
+
+  // Run clustering until convergence or iteration limit
+  function runClustering() {
+    if (running) return;
+    if (!resetClustering()) return;
+    running = true;
+    stepBtn.disabled = true;
+    runBtn.disabled = true;
+    generateBtn.disabled = true;
+    clearBtn.disabled = true;
+    kInput.disabled = true;
+    pointsInput.disabled = true;
+    resetBtn.disabled = true;
+    info.textContent = 'Running clustering...';
+
+    let iterations = 0;
+    const maxIterations = 100;
+    function iter() {
+      const changed = kMeansStep();
+      iterations++;
+      if (!changed || iterations >= maxIterations) {
+        running = false;
+        stepBtn.disabled = false;
+        runBtn.disabled = false;
+        generateBtn.disabled = false;
+        clearBtn.disabled = false;
+        kInput.disabled = false;
+        pointsInput.disabled = false;
+        resetBtn.disabled = false;
+        info.textContent = `K-Means converged in ${iterations} iteration${iterations > 1 ? 's' : ''}.`;
+      } else {
+        window.requestAnimationFrame(iter);
+      }
+    }
+    window.requestAnimationFrame(iter);
+  }
+
+  // Add point by clicking canvas
+  function addPoint(e) {
+    if (running) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (x < POINT_RADIUS || x > width - POINT_RADIUS || y < POINT_RADIUS || y > height - POINT_RADIUS) return;
+    points.push({x, y, cluster: null});
+    if (points.length > 1000) {
+      points.shift(); // Keep max points manageable
+      info.textContent = 'Maximum points reached, oldest point removed.';
+    }
+    draw();
+    info.textContent = 'Point added. Click Reset or Step to start clustering.';
+  }
+
+  // Event listeners
+  generateBtn.addEventListener('click', () => {
+    const n = Math.min(Math.max(parseInt(pointsInput.value, 10) || 150, 10), 1000);
+    pointsInput.value = n;
+    points = [];
+    generateRandomPoints(n);
+    if (k > n) {
+      info.textContent = "Number of clusters (k) greater than number of points, adjusting k.";
+      k = n;
+      kInput.value = k;
+    }
+    initializeCenters();
+    points.forEach(pt => pt.cluster = null);
+    draw();
+    info.textContent = `${n} random points generated. Click Step or Run to cluster. You can also add points by clicking the canvas.`;
+  });
+
+  stepBtn.addEventListener('click', () => {
+    if (points.length === 0) {
+      info.textContent = 'No points available to cluster. Please generate or add points.';
+      return;
+    }
+    if (k > points.length) {
+      info.textContent = 'k cannot be greater than number of points.';
+      return;
+    }
+    if (centers.length === 0) {
+      initializeCenters();
+      points.forEach(pt => pt.cluster = null);
+    }
+    const changed = kMeansStep();
+    if (!changed) {
+      info.textContent = 'Clustering has converged.';
+    } else {
+      info.textContent = 'Performed one iteration of K-Means.';
+    }
+  });
+
+  runBtn.addEventListener('click', runClustering);
+
+  resetBtn.addEventListener('click', () => {
+    if (resetClustering()) {
+      info.textContent = 'Clustering reset. Click Step or Run to perform iterations.';
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (running) return;
+    points = [];
+    centers = [];
+    draw();
+    info.textContent = 'Cleared all points and clusters.';
+  });
+
+  kInput.addEventListener('change', () => {
+    let val = parseInt(kInput.value, 10);
+    if (isNaN(val) || val < 1) val = 1;
+    if (val > 10) val = 10;
+    if (val > points.length) val = points.length || 1;
+    kInput.value = val;
+    k = val;
+  });
+
+  pointsInput.addEventListener('change', () => {
+    let val = parseInt(pointsInput.value, 10);
+    if (isNaN(val) || val < 10) val = 10;
+    if (val > 1000) val = 1000;
+    pointsInput.value = val;
+  });
+
+  canvas.addEventListener('click', addPoint);
+
+  // Initial draw empty state
+  draw();
+  info.textContent = 'Set parameters and generate points or add points by clicking on the canvas.';
+
+})();
+</script>
+</body>
+</html>

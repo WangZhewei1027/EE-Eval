@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Topological Sort Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 1em;
+    background: #f9f9f9;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+    color: #004080;
+  }
+  #graphInput {
+    width: 100%;
+    height: 150px;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  #runBtn {
+    margin-top: 10px;
+    padding: 0.5em 1em;
+    font-size: 16px;
+  }
+  #errorMsg {
+    color: red;
+    margin-top: 10px;
+  }
+  #result {
+    margin-top: 20px;
+    font-size: 18px;
+  }
+  #graphViz {
+    margin-top: 20px;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  #svgCanvas {
+    border: 1px solid #ccc;
+    background: white;
+  }
+  .node {
+    cursor: default;
+  }
+  .node circle {
+    fill: #e1f5fe;
+    stroke: #0288d1;
+    stroke-width: 2px;
+  }
+  .node text {
+    font-weight: bold;
+    pointer-events: none;
+    user-select: none;
+  }
+  .edgePath path {
+    stroke: #888;
+    stroke-width: 1.5px;
+    fill: none;
+  }
+  .edgePath marker {
+    fill: #888;
+  }
+</style>
+</head>
+<body>
+<h1>Topological Sort Demonstration</h1>
+<p>Enter a directed acyclic graph (DAG) as edges (one per line) in the format <code>from -> to</code>.<br />
+Example:<br />
+<code>A -> C</code><br />
+<code>B -> C</code><br />
+<code>C -> D</code></p>
+<textarea id="graphInput" spellcheck="false" placeholder="Example input:
+A -> C
+B -> C
+C -> D
+D -> E
+"></textarea>
+<br />
+<button id="runBtn">Run Topological Sort</button>
+<div id="errorMsg"></div>
+<div id="result"></div>
+<div id="graphViz"></div>
+
+<script>
+// Simple graph visualization and topological sort implementation
+
+// Parse input edges
+function parseEdges(input) {
+  const lines = input.split('\n');
+  const edges = [];
+  for (let line of lines) {
+    line = line.trim();
+    if (line === '') continue;
+    // Expected format: "A -> B"
+    const match = line.match(/^(.+?)\s*->\s*(.+)$/);
+    if (!match) throw new Error(`Invalid line format: "${line}"`);
+    const from = match[1].trim();
+    const to = match[2].trim();
+    if (from === '' || to === '') throw new Error(`Empty node found in line: "${line}"`);
+    edges.push([from, to]);
+  }
+  return edges;
+}
+
+// Build adjacency list graph from edges
+function buildGraph(edges) {
+  const graph = new Map();
+  const nodesSet = new Set();
+  for (const [from, to] of edges) {
+    nodesSet.add(from);
+    nodesSet.add(to);
+    if (!graph.has(from)) graph.set(from, []);
+    graph.get(from).push(to);
+    // Ensure all nodes appear in graph keys (including leaf nodes)
+    if (!graph.has(to)) graph.set(to, []);
+  }
+  return graph;
+}
+
+// Perform topological sort using Kahn's algorithm
+// Returns an array of nodes in topological order or throws if cycle detected
+function topologicalSort(graph) {
+  // Calculate in-degree of each node
+  const inDegree = new Map();
+  for (const node of graph.keys()) {
+    inDegree.set(node, 0);
+  }
+  for (const [from, neighbors] of graph.entries()) {
+    for (const v of neighbors) {
+      inDegree.set(v, inDegree.get(v) + 1);
+    }
+  }
+  // Collect nodes with zero in-degree
+  const queue = [];
+  for (const [node, deg] of inDegree.entries()) {
+    if (deg === 0) queue.push(node);
+  }
+  const topoOrder = [];
+  while (queue.length > 0) {
+    const u = queue.shift();
+    topoOrder.push(u);
+    for (const v of graph.get(u)) {
+      inDegree.set(v, inDegree.get(v) - 1);
+      if (inDegree.get(v) === 0) {
+        queue.push(v);
+      }
+    }
+  }
+  if (topoOrder.length !== graph.size) {
+    throw new Error("Graph has at least one cycle; topological sort not possible.");
+  }
+  return topoOrder;
+}
+
+// Visualization of graph with manual positioning (simple layered layout)
+function visualizeGraph(graph, topoOrder) {
+  const width = 700;
+  const height = 400;
+
+  // Clear previous
+  const container = document.getElementById('graphViz');
+  container.innerHTML = '';
+
+  // Create SVG
+  const svgns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgns, "svg");
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("id", "svgCanvas");
+  container.appendChild(svg);
+
+  // Assign layers based on topoOrder: simple heuristic
+  // For each node, layer = max layer of predecessors + 1, roots = 0
+  const nodeLayers = new Map();
+  for (const node of topoOrder) {
+    let maxParentLayer = -1;
+    for (const [p, children] of graph.entries()) {
+      if (children.includes(node)) {
+        const parentLayer = nodeLayers.get(p);
+        if (parentLayer > maxParentLayer) maxParentLayer = parentLayer;
+      }
+    }
+    nodeLayers.set(node, maxParentLayer + 1);
+  }
+
+  // Group nodes by layer
+  const layers = [];
+  for (const [node, layer] of nodeLayers.entries()) {
+    if (!layers[layer]) layers[layer] = [];
+    layers[layer].push(node);
+  }
+
+  // Calculate node coordinates per layer
+  const nodeCoords = new Map();
+  const layerHeight = height / (layers.length + 1);
+  for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
+    const nodes = layers[layerIdx];
+    const spacing = width / (nodes.length + 1);
+    for (let i = 0; i < nodes.length; i++) {
+      const x = spacing * (i + 1);
+      const y = layerHeight * (layerIdx + 1);
+      nodeCoords.set(nodes[i], { x, y });
+    }
+  }
+
+  // Define arrow marker
+  const marker = document.createElementNS(svgns, 'marker');
+  marker.setAttribute('id', 'arrowhead');
+  marker.setAttribute('markerWidth', '10');
+  marker.setAttribute('markerHeight', '7');
+  marker.setAttribute('refX', '10');
+  marker.setAttribute('refY', '3.5');
+  marker.setAttribute('orient', 'auto');
+  marker.setAttribute('markerUnits', 'strokeWidth');
+  const markerPath = document.createElementNS(svgns, 'path');
+  markerPath.setAttribute('d', 'M0,0 L10,3.5 L0,7 Z');
+  markerPath.setAttribute('fill', '#555');
+  marker.appendChild(markerPath);
+  const defs = document.createElementNS(svgns, 'defs');
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Draw edges
+  for (const [from, neighbors] of graph.entries()) {
+    const start = nodeCoords.get(from);
+    for (const to of neighbors) {
+      const end = nodeCoords.get(to);
+      // Draw a straight line with arrow marker
+      const path = document.createElementNS(svgns, 'path');
+      const offset = 20;
+      // Calculate line coordinates shortened so arrow touches node circle edge
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.sqrt(dx*dx + dy*dy);
+      const ratioStart = offset/length;
+      const ratioEnd = (length - offset)/length;
+
+      const startX = start.x + dx * ratioStart;
+      const startY = start.y + dy * ratioStart;
+      const endX = start.x + dx * ratioEnd;
+      const endY = start.y + dy * ratioEnd;
+
+      const d = `M${startX},${startY} L${endX},${endY}`;
+      path.setAttribute('d', d);
+      path.setAttribute('stroke', '#555');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('marker-end', 'url(#arrowhead)');
+      svg.appendChild(path);
+    }
+  }
+
+  // Draw nodes
+  for (const [node, pos] of nodeCoords.entries()) {
+    const g = document.createElementNS(svgns, 'g');
+    g.setAttribute('class', 'node');
+    g.setAttribute('transform', `translate(${pos.x},${pos.y})`);
+
+    const circle = document.createElementNS(svgns, 'circle');
+    circle.setAttribute('r', 18);
+    circle.setAttribute('fill', '#e1f5fe');
+    circle.setAttribute('stroke', '#0288d1');
+    circle.setAttribute('stroke-width', '3');
+    g.appendChild(circle);
+
+    const text = document.createElementNS(svgns, 'text');
+    text.textContent = node;
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dy', '0.35em');
+    text.setAttribute('font-size', '14');
+    text.setAttribute('fill', '#004080');
+    g.appendChild(text);
+
+    svg.appendChild(g);
+  }
+}
+
+document.getElementById('runBtn').addEventListener('click', () => {
+  const input = document.getElementById('graphInput').value;
+  const errorMsg = document.getElementById('errorMsg');
+  const resultDiv = document.getElementById('result');
+  errorMsg.textContent = '';
+  resultDiv.textContent = '';
+  try {
+    const edges = parseEdges(input);
+    if(edges.length === 0) throw new Error('Input graph is empty.');
+    const graph = buildGraph(edges);
+    const topoOrder = topologicalSort(graph);
+    resultDiv.innerHTML = `<strong>Topological Order:</strong> ${topoOrder.join(' → ')}`;
+    visualizeGraph(graph, topoOrder);
+  } catch (e) {
+    errorMsg.textContent = e.message;
+    document.getElementById('graphViz').innerHTML = '';
+  }
+});
+</script>
+</body>
+</html>

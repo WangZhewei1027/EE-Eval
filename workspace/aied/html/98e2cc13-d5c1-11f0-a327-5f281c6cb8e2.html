@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Interactive Linear Regression Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root { --bg:#0f1724; --card:#0b1220; --muted:#9aa6b2; --accent:#34d399; --accent2:#60a5fa; color-scheme: dark; }
+    html,body { height:100%; margin:0; font-family: Inter, Arial, sans-serif; background: linear-gradient(180deg,#071022 0%, #071624 60%); color:#e6eef6; }
+    .app { display:flex; gap:18px; padding:18px; box-sizing:border-box; height:100%; }
+    .panel { background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); border-radius:10px; padding:12px; box-sizing:border-box; }
+    .left { flex:1; display:flex; flex-direction:column; gap:12px; min-width:420px; }
+    .canvas-wrap { background: #08121b; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+    canvas { width:100%; height:360px; background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); border-radius:6px; cursor:crosshair; box-shadow: 0 6px 18px rgba(0,0,0,0.45) inset; }
+    .hint { color:var(--muted); font-size:13px; }
+    .right { width:380px; display:flex; flex-direction:column; gap:12px; }
+    .controls { display:flex; flex-direction:column; gap:10px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    button, input[type="range"], select, input[type="number"], input[type="text"] {
+      border-radius:8px; padding:8px 10px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); color:#e6eef6; border:1px solid rgba(255,255,255,0.03);
+      font-size:13px;
+    }
+    button { cursor:pointer; }
+    .btn-primary { background:linear-gradient(90deg,var(--accent), var(--accent2)); border:0; color:#04202a; font-weight:600; }
+    .stat { background:rgba(255,255,255,0.02); padding:10px; border-radius:8px; font-size:14px; }
+    label { font-size:13px; color:var(--muted); }
+    small { color:var(--muted); font-size:12px; }
+    .cost-plot { height:120px; width:100%; background:#06131b; border-radius:8px; padding:8px; box-sizing:border-box; }
+    .footer { font-size:12px; color:var(--muted); }
+    .inline { display:inline-flex; gap:8px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="left panel">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2 style="margin:0 0 6px 0">Linear Regression — Interactive</h2>
+          <div class="hint">Click the plot to add data points. Use the controls to fit models, generate data & explore.</div>
+        </div>
+        <div class="stat" id="dataCount">Points: 0</div>
+      </div>
+
+      <div class="canvas-wrap panel">
+        <canvas id="scatter" width="800" height="360" title="Click to add points"></canvas>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="hint">Left-click to add. Shift+click to add many (jitter). Right-click to remove last.</div>
+          <div class="hint">Axes auto-scale</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="flex:1" class="panel">
+          <div style="font-weight:700">Model Parameters</div>
+          <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+            <div class="stat">slope (a): <span id="paramA">—</span></div>
+            <div class="stat">intercept (b): <span id="paramB">—</span></div>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <div class="stat">MSE: <span id="mse">—</span></div>
+            <div class="stat">R²: <span id="r2">—</span></div>
+          </div>
+        </div>
+
+        <div style="width:260px" class="panel">
+          <div style="font-weight:700">Prediction</div>
+          <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+            <input id="predX" type="number" step="any" placeholder="x value" style="flex:1">
+            <button id="predictBtn" class="btn-primary">Predict</button>
+          </div>
+          <div style="margin-top:8px" class="stat">ŷ: <span id="predY">—</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="font-weight:700; margin-bottom:6px;">Cost (MSE) over GD iterations</div>
+        <canvas id="costCanvas" width="800" height="120" class="cost-plot"></canvas>
+      </div>
+      <div class="footer">This demo shows Ordinary Least Squares (closed-form) and Gradient Descent. Try different learning rates and noise to see how GD behaves.</div>
+    </div>
+
+    <div class="right panel">
+      <div style="font-weight:800; font-size:15px">Controls</div>
+
+      <div class="controls">
+        <div style="display:flex; gap:8px;">
+          <button id="btnOLS" class="btn-primary" style="flex:1">Fit OLS (closed form)</button>
+          <button id="btnReset" title="Clear points">Clear</button>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button id="btnStartGD" class="btn-primary" style="flex:1">Start Gradient Descent</button>
+          <button id="btnStopGD">Stop GD</button>
+        </div>
+
+        <div class="panel">
+          <div style="font-weight:700; margin-bottom:6px;">Gradient Descent</div>
+          <div class="row">
+            <label>Learning rate (α)</label>
+            <input id="lr" type="number" step="any" value="0.01" style="width:100px">
+            <label>Iterations / second</label>
+            <input id="itersPerSec" type="number" step="1" value="60" style="width:80px">
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <label><input id="initZero" type="checkbox" checked> init a=b=0</label>
+            <label><input id="showResiduals" type="checkbox" checked> show residuals</label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div style="font-weight:700; margin-bottom:6px;">Generate Data</div>
+          <div class="row">
+            <label>points</label><input id="genN" type="number" value="40" style="width:80px">
+          </div>
+          <div class="row">
+            <label>slope (a)</label><input id="genA" type="number" step="any" value="1.5" style="width:100px">
+            <label>intercept (b)</label><input id="genB" type="number" step="any" value="0.5" style="width:100px">
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <label>noise σ</label><input id="genNoise" type="number" step="any" value="0.8" style="width:100px">
+            <button id="btnGen" style="flex:1">Generate</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div style="font-weight:700; margin-bottom:6px;">Edit Points</div>
+          <div class="row">
+            <button id="btnAddRand">Add Random</button>
+            <button id="btnRemove">Remove Last</button>
+          </div>
+          <small>Right-click canvas to remove last too.</small>
+        </div>
+
+        <div class="panel">
+          <div style="font-weight:700; margin-bottom:6px;">Tips</div>
+          <ul style="margin:6px 0 0 18px; color:var(--muted)">
+            <li>OLS computes exact best-fit line when x values vary.</li>
+            <li>GD approximates by iteratively minimizing MSE.</li>
+            <li>If GD diverges, reduce learning rate.</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+Interactive Linear Regression demo
+- Add points by clicking on canvas
+- Fit using OLS (closed-form) or Gradient Descent (animated)
+- See parameters, MSE and R², residuals, and cost plot
+*/
+
+// Data and model
+let points = []; // {x,y}
+let model = {a: NaN, b: NaN}; // y = a*x + b
+let showResiduals = true;
+
+// Canvas and drawing
+const scatter = document.getElementById('scatter');
+const ctx = scatter.getContext('2d');
+const costCanvas = document.getElementById('costCanvas');
+const costCtx = costCanvas.getContext('2d');
+
+const dataCount = document.getElementById('dataCount');
+const paramA = document.getElementById('paramA');
+const paramB = document.getElementById('paramB');
+const mseEl = document.getElementById('mse');
+const r2El = document.getElementById('r2');
+const predX = document.getElementById('predX');
+const predBtn = document.getElementById('predictBtn');
+const predY = document.getElementById('predY');
+
+const btnOLS = document.getElementById('btnOLS');
+const btnReset = document.getElementById('btnReset');
+const btnStartGD = document.getElementById('btnStartGD');
+const btnStopGD = document.getElementById('btnStopGD');
+const lrInput = document.getElementById('lr');
+const itersPerSec = document.getElementById('itersPerSec');
+const initZero = document.getElementById('initZero');
+const showResidualsCheckbox = document.getElementById('showResiduals');
+
+const btnGen = document.getElementById('btnGen');
+const genN = document.getElementById('genN');
+const genA = document.getElementById('genA');
+const genB = document.getElementById('genB');
+const genNoise = document.getElementById('genNoise');
+
+const btnAddRand = document.getElementById('btnAddRand');
+const btnRemove = document.getElementById('btnRemove');
+
+const canvasRect = () => scatter.getBoundingClientRect();
+
+// coordinate mapping
+function computeBounds() {
+  if (points.length === 0) return {xMin:-1,xMax:1,yMin:-1,yMax:1};
+  let xs = points.map(p=>p.x), ys = points.map(p=>p.y);
+  let xMin = Math.min(...xs), xMax = Math.max(...xs);
+  let yMin = Math.min(...ys), yMax = Math.max(...ys);
+  // pad
+  let xPad = (xMax - xMin) * 0.12 || 1;
+  let yPad = (yMax - yMin) * 0.12 || 1;
+  return {xMin: xMin - xPad, xMax: xMax + xPad, yMin: yMin - yPad, yMax: yMax + yPad};
+}
+function toCanvas(pt) {
+  const rect = canvasRect();
+  const bounds = computeBounds();
+  const w = rect.width, h = rect.height;
+  const x = (pt.x - bounds.xMin) / (bounds.xMax - bounds.xMin) * w;
+  // invert y
+  const y = h - (pt.y - bounds.yMin) / (bounds.yMax - bounds.yMin) * h;
+  return {x,y};
+}
+function fromCanvas(clientX, clientY) {
+  const rect = canvasRect();
+  const bounds = computeBounds();
+  const w = rect.width, h = rect.height;
+  const x = (clientX - rect.left) / w * (bounds.xMax - bounds.xMin) + bounds.xMin;
+  const y = (h - (clientY - rect.top) / h * (bounds.yMax - bounds.yMin)) * 1.0;
+  const yReal = (y / 1.0) + bounds.yMin - 0; // adjust no-op
+  return {x: x, y: yReal};
+}
+
+// draw everything
+function draw() {
+  const rect = canvasRect();
+  ctx.clearRect(0,0,rect.width, rect.height);
+
+  // background grid
+  ctx.fillStyle = '#061522';
+  ctx.fillRect(0,0,rect.width, rect.height);
+
+  // axes and grid lines
+  const b = computeBounds();
+  drawGrid(b);
+
+  // draw points
+  for (let p of points) {
+    const c = toCanvas(p);
+    ctx.beginPath();
+    ctx.fillStyle = '#7dd3fc';
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.arc(c.x, c.y, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // draw fitted line
+  if (!isNaN(model.a) && !isNaN(model.b)) {
+    drawLine(model.a, model.b);
+    // residuals
+    if (showResiduals) {
+      ctx.lineWidth = 1;
+      for (let p of points) {
+        const predicted = model.a * p.x + model.b;
+        const c1 = toCanvas(p);
+        const c2 = toCanvas({x: p.x, y: predicted});
+        ctx.beginPath();
+        ctx.moveTo(c1.x, c1.y);
+        ctx.lineTo(c2.x, c2.y);
+        ctx.strokeStyle = 'rgba(255,99,132,0.6)';
+        ctx.stroke();
+      }
+    }
+  }
+
+  // draw legend / info overlay
+  ctx.font = '12px Inter, Arial';
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillText('Click to add points. Right-click to remove last.', 10, 14);
+}
+
+function drawGrid(bounds) {
+  const rect = canvasRect();
+  const w = rect.width, h = rect.height;
+  // draw border
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  roundedRect(ctx, 0.5, 0.5, w-1, h-1, 6);
+  ctx.stroke();
+
+  // ticks
+  const nx = 6, ny = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.font = '11px Inter, Arial';
+  const format = v => (Math.abs(v) < 1e-6 ? '0' : (Math.round(v*100)/100).toFixed(2));
+  for (let i=0;i<=nx;i++) {
+    let t = i/nx;
+    let x = t*w;
+    ctx.beginPath();
+    ctx.moveTo(x,0);
+    ctx.lineTo(x,h);
+    ctx.stroke();
+    let val = bounds.xMin + t*(bounds.xMax - bounds.xMin);
+    ctx.fillText(format(val), x+4, h-6);
+  }
+  for (let j=0;j<=ny;j++) {
+    let t = j/ny;
+    let y = t*h;
+    ctx.beginPath();
+    ctx.moveTo(0,y);
+    ctx.lineTo(w,y);
+    ctx.stroke();
+    let val = bounds.yMax - t*(bounds.yMax - bounds.yMin);
+    ctx.fillText(format(val), 6, y-6);
+  }
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+}
+
+// draw line for y = a*x + b across canvas extents
+function drawLine(a,b) {
+  const rect = canvasRect();
+  const bounds = computeBounds();
+  const x1 = bounds.xMin;
+  const x2 = bounds.xMax;
+  const y1 = a*x1 + b;
+  const y2 = a*x2 + b;
+  const c1 = toCanvas({x:x1, y:y1});
+  const c2 = toCanvas({x:x2, y:y2});
+  // stroke
+  ctx.beginPath();
+  ctx.moveTo(c1.x, c1.y);
+  ctx.lineTo(c2.x, c2.y);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(99,102,241,0.95)';
+  ctx.stroke();
+  // shadow
+  ctx.beginPath();
+  ctx.moveTo(c1.x, c1.y);
+  ctx.lineTo(c2.x, c2.y);
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = 'rgba(99,102,241,0.06)';
+  ctx.stroke();
+}
+
+// statistics and evaluation
+function computeMSE(a,b) {
+  if (points.length===0) return NaN;
+  let s=0;
+  for (let p of points) {
+    const e = p.y - (a*p.x + b);
+    s += e*e;
+  }
+  return s / points.length;
+}
+function computeR2(a,b) {
+  if (points.length===0) return NaN;
+  let meanY = points.reduce((s,p)=>s+p.y,0)/points.length;
+  let ssRes = 0, ssTot=0;
+  for (let p of points) {
+    ssRes += (p.y - (a*p.x + b))**2;
+    ssTot += (p.y - meanY)**2;
+  }
+  return 1 - ssRes / (ssTot || 1e-9);
+}
+
+// Ordinary Least Squares (closed form)
+function fitOLS() {
+  if (points.length === 0) return;
+  const n = points.length;
+  const meanX = points.reduce((s,p)=>s+p.x,0)/n;
+  const meanY = points.reduce((s,p)=>s+p.y,0)/n;
+  let num=0, den=0;
+  for (let p of points) {
+    num += (p.x - meanX)*(p.y - meanY);
+    den += (p.x - meanX)*(p.x - meanX);
+  }
+  let a = den===0 ? 0 : num/den;
+  let b = meanY - a*meanX;
+  model.a = a; model.b = b;
+  updateStats();
+  draw();
+}
+
+// Gradient Descent
+let gdRunning = false;
+let gdState = {a:0,b:0,iter:0,history:[]};
+let lastTime = 0;
+
+function startGD() {
+  if (points.length === 0) return;
+  // init
+  gdState.iter = 0;
+  gdState.history = [];
+  gdState.a = initZero.checked ? 0 : (isNaN(model.a) ? 0 : model.a);
+  gdState.b = initZero.checked ? 0 : (isNaN(model.b) ? 0 : model.b);
+  gdRunning = true;
+  lastTime = performance.now();
+  requestAnimationFrame(gdStep);
+}
+function stopGD() {
+  gdRunning = false;
+}
+
+function gdStep(t) {
+  if (!gdRunning) return;
+  const stepsPerSec = Math.max(1, parseFloat(itersPerSec.value)||60);
+  const elapsed = t - lastTime;
+  const steps = Math.max(1, Math.floor(stepsPerSec * (elapsed/1000)));
+  lastTime = t;
+  const lr = parseFloat(lrInput.value) || 0.01;
+  const n = points.length;
+  for (let s=0;s<steps;s++) {
+    // compute gradients
+    let gradA = 0, gradB = 0;
+    for (let p of points) {
+      const pred = gdState.a * p.x + gdState.b;
+      const err = pred - p.y;
+      gradA += err * p.x;
+      gradB += err;
+    }
+    gradA = (2/n) * gradA;
+    gradB = (2/n) * gradB;
+    // update
+    gdState.a -= lr * gradA;
+    gdState.b -= lr * gradB;
+    gdState.iter++;
+    const mse = computeMSE(gdState.a, gdState.b);
+    gdState.history.push(mse);
+  }
+  model.a = gdState.a; model.b = gdState.b;
+  updateStats();
+  draw();
+  drawCostHistory(gdState.history);
+  // continue
+  requestAnimationFrame(gdStep);
+}
+
+// cost plot
+function drawCostHistory(history) {
+  const ctx2 = costCtx;
+  const w = costCanvas.width, h = costCanvas.height;
+  ctx2.clearRect(0,0,w,h);
+  ctx2.fillStyle = '#06131b';
+  ctx2.fillRect(0,0,w,h);
+  if (history.length === 0) {
+    ctx2.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx2.font = '12px Inter, Arial';
+    ctx2.fillText('No cost history (run GD).', 10, 18);
+    return;
+  }
+  const maxC = Math.max(...history);
+  const minC = Math.min(...history);
+  ctx2.beginPath();
+  ctx2.strokeStyle = 'rgba(96,165,250,0.95)';
+  ctx2.lineWidth = 2;
+  for (let i=0;i<history.length;i++) {
+    const x = i/(history.length-1||1) * (w-10) + 5;
+    const t = (history[i]-minC) / ((maxC-minC) || 1);
+    const y = h - (t * (h-20) + 10);
+    if (i===0) ctx2.moveTo(x,y); else ctx2.lineTo(x,y);
+  }
+  ctx2.stroke();
+
+  ctx2.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx2.font = '12px Inter, Arial';
+  ctx2.fillText('MSE: ' + history[history.length-1].toFixed(4), 10, 16);
+}
+
+// update UI stats
+function updateStats() {
+  dataCount.textContent = 'Points: ' + points.length;
+  paramA.textContent = isNaN(model.a) ? '—' : model.a.toFixed(4);
+  paramB.textContent = isNaN(model.b) ? '—' : model.b.toFixed(4);
+  const mse = (!isNaN(model.a) && !isNaN(model.b)) ? computeMSE(model.a, model.b) : NaN;
+  mseEl.textContent = isNaN(mse) ? '—' : mse.toFixed(4);
+  const r2 = (!isNaN(model.a) && !isNaN(model.b)) ? computeR2(model.a, model.b) : NaN;
+  r2El.textContent = isNaN(r2) ? '—' : r2.toFixed(4);
+}
+
+// interactions
+scatter.addEventListener('mousedown', (ev) => {
+  ev.preventDefault();
+  if (ev.button === 2 || ev.which === 3) { // right click: remove last
+    points.pop();
+    updateStats();
+    draw();
+    return;
+  }
+  const p = fromCanvas(ev.clientX, ev.clientY);
+  points.push(p);
+  // add shift-jitter to add many quickly
+  if (ev.shiftKey) {
+    for (let i=0;i<8;i++) {
+      points.push({x: p.x + (Math.random()-0.5)*(0.05*(computeBounds().xMax - computeBounds().xMin)), y: p.y + (Math.random()-0.5)*(0.05*(computeBounds().yMax - computeBounds().yMin))});
+    }
+  }
+  updateStats();
+  draw();
+});
+scatter.addEventListener('contextmenu', (ev)=> ev.preventDefault());
+
+// buttons
+btnReset.addEventListener('click', ()=> {
+  points = [];
+  model = {a: NaN, b: NaN};
+  gdRunning = false;
+  gdState = {a:0,b:0,iter:0,history:[]};
+  updateStats();
+  draw();
+  drawCostHistory([]);
+});
+btnOLS.addEventListener('click', ()=> {
+  fitOLS();
+});
+btnStartGD.addEventListener('click', ()=> {
+  startGD();
+});
+btnStopGD.addEventListener('click', ()=> {
+  stopGD();
+});
+showResidualsCheckbox.addEventListener('change', ()=> {
+  showResiduals = showResidualsCheckbox.checked;
+  draw();
+});
+
+// prediction
+predBtn.addEventListener('click', ()=> {
+  const x = parseFloat(predX.value);
+  if (isNaN(x) || isNaN(model.a) || isNaN(model.b)) {
+    predY.textContent = '—';
+    return;
+  }
+  const yhat = model.a * x + model.b;
+  predY.textContent = yhat.toFixed(4);
+  // show temporary point
+  const c = toCanvas({x,y:yhat});
+  // draw highlight on canvas overlay
+  draw();
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 7, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(34,197,94,0.95)';
+  ctx.fill();
+});
+
+// generation
+btnGen.addEventListener('click', ()=> {
+  const n = Math.max(1, parseInt(genN.value) || 40);
+  const a = parseFloat(genA.value) || 1;
+  const b = parseFloat(genB.value) || 0;
+  const sigma = Math.max(0, parseFloat(genNoise.value) || 0);
+  points = [];
+  for (let i=0;i<n;i++) {
+    const x = (Math.random()*2 - 1) * 6; // spread
+    const noise = gaussianRandom() * sigma;
+    const y = a*x + b + noise;
+    points.push({x,y});
+  }
+  model = {a: NaN, b: NaN};
+  updateStats();
+  draw();
+  drawCostHistory([]);
+});
+
+// add random / remove
+btnAddRand.addEventListener('click', ()=> {
+  const bounds = computeBounds();
+  const x = bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
+  const y = bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
+  points.push({x,y});
+  updateStats();
+  draw();
+});
+btnRemove.addEventListener('click', ()=> {
+  points.pop();
+  updateStats();
+  draw();
+});
+
+// utility: gaussian random (Box-Muller)
+function gaussianRandom() {
+  let u = 0, v = 0;
+  while(u === 0) u = Math.random();
+  while(v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// initialize demo with a small dataset
+(function initDemo(){
+  // generate default
+  const n = 18;
+  const a = 1.5, b = 0.5, sigma = 1.0;
+  points = [];
+  for (let i=0;i<n;i++){
+    const x = -6 + i*(12/(n-1));
+    points.push({x: x, y: a*x + b + gaussianRandom()*sigma});
+  }
+  model = {a: NaN, b: NaN};
+  updateStats();
+  draw();
+  drawCostHistory([]);
+})();
+
+// avoid blurry canvas on high DPI
+function fixHiDPICanvas(canvas, ctx) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = rect.height + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function refreshCanvasSize() {
+  fixHiDPICanvas(scatter, ctx);
+  fixHiDPICanvas(costCanvas, costCtx);
+  draw();
+  drawCostHistory(gdState.history || []);
+}
+window.addEventListener('resize', refreshCanvasSize);
+refreshCanvasSize();
+
+// animate small pulsing when GD is running (optional)
+setInterval(()=> {
+  if (gdRunning) {
+    // flash a small indicator in top-right
+    ctx.save();
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(99,102,241,0.14)';
+    ctx.arc(canvasRect().width - 18, 18, 8, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}, 500);
+
+</script>
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dijkstra's Algorithm Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 20px;
+    background: #f0f0f0;
+  }
+  h1 {
+    text-align: center;
+  }
+  #graphCanvas {
+    background: white;
+    border: 1px solid #ccc;
+    display: block;
+    margin: 10px auto 30px auto;
+  }
+  .controls {
+    max-width: 900px;
+    margin: 0 auto 30px auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+  }
+  label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.9rem;
+  }
+  input, select, button {
+    font-size: 1rem;
+    padding: 6px;
+    margin-top: 4px;
+  }
+  #log {
+    white-space: pre-wrap;
+    background: #222;
+    color: #eee;
+    padding: 15px;
+    max-width: 900px;
+    margin: 0 auto;
+    height: 250px;
+    overflow-y: auto;
+    border-radius: 6px;
+    font-family: monospace;
+    user-select: text;
+  }
+  footer {
+    max-width: 900px;
+    margin: 40px auto;
+    text-align: center;
+    color: #666;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<h1>Dijkstra's Algorithm Visualization</h1>
+
+<div class="controls">
+  <label>
+    Start Node:
+    <select id="startNode"></select>
+  </label>
+  <label>
+    End Node:
+    <select id="endNode"></select>
+  </label>
+  <button id="runBtn">Run Dijkstra</button>
+  <button id="resetBtn">Reset Graph</button>
+</div>
+
+<canvas id="graphCanvas" width="900" height="600" aria-label="Graph Visualization"></canvas>
+
+<div id="log" aria-live="polite" aria-atomic="true" role="log" tabindex="0">
+  Select start and end nodes and click "Run Dijkstra" to see the shortest path and the algorithm steps.
+</div>
+
+<script>
+(() => {
+  // Graph data structure:
+  // nodes: array of {id:string, x:number, y:number}
+  // edges: array of {from:string, to:string, weight:number}
+  // Undirected graph for this demo.
+  
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  const startSelect = document.getElementById('startNode');
+  const endSelect = document.getElementById('endNode');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const logEl = document.getElementById('log');
+  const RADIUS = 20;
+
+  // Example fixed graph:
+  const nodes = [
+    {id: 'A', x: 150, y: 100},
+    {id: 'B', x: 350, y: 80},
+    {id: 'C', x: 550, y: 150},
+    {id: 'D', x: 700, y: 300},
+    {id: 'E', x: 600, y: 450},
+    {id: 'F', x: 400, y: 400},
+    {id: 'G', x: 200, y: 350},
+  ];
+
+  const edges = [
+    {from: 'A', to: 'B', weight: 4},
+    {from: 'A', to: 'G', weight: 7},
+    {from: 'B', to: 'C', weight: 6},
+    {from: 'B', to: 'G', weight: 2},
+    {from: 'C', to: 'D', weight: 3},
+    {from: 'C', to: 'E', weight: 1},
+    {from: 'D', to: 'E', weight: 5},
+    {from: 'E', to: 'F', weight: 7},
+    {from: 'F', to: 'G', weight: 3},
+  ];
+
+  // Adjacency list for fast lookup
+  let adjacency = {};
+
+  // State:
+  let distances = {};
+  let previous = {};
+  let visited = new Set();
+  let path = [];
+  let running = false;
+
+  // Colors
+  const COLOR_NODE_DEFAULT = '#3498db';
+  const COLOR_NODE_VISITED = '#95a5a6';
+  const COLOR_NODE_CURRENT = '#e67e22';
+  const COLOR_NODE_PATH = '#27ae60';
+  const COLOR_EDGE_DEFAULT = '#bdc3c7';
+  const COLOR_EDGE_PATH = '#2ecc71';
+  const COLOR_EDGE_CONSIDER = '#e74c3c';
+
+  // Initialize adjacency list as undirected graph
+  function buildAdjacency() {
+    adjacency = {};
+    nodes.forEach(n => adjacency[n.id] = []);
+    edges.forEach(({from, to, weight}) => {
+      adjacency[from].push({node: to, weight});
+      adjacency[to].push({node: from, weight});
+    });
+  }
+
+  function fillSelectOptions() {
+    [startSelect, endSelect].forEach(select => {
+      select.innerHTML = '';
+      nodes.forEach(({id}) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id;
+        select.appendChild(opt);
+      });
+    });
+    // Default different nodes
+    endSelect.selectedIndex = nodes.length > 1 ? 1 : 0;
+  }
+
+  function log(msg) {
+    logEl.textContent += '\n' + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clearLog() {
+    logEl.textContent = '';
+  }
+
+  // Find node by id
+  function findNode(id) {
+    return nodes.find(n => n.id === id);
+  }
+
+  // Draw entire graph
+  // Highlight visited nodes, current node, path edges and nodes
+  function drawGraph(currentNode=null, considerEdges=[], finalPath=[]) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw edges first
+    edges.forEach(e => {
+      const fromNode = findNode(e.from);
+      const toNode = findNode(e.to);
+      // Check edge color
+      let color = COLOR_EDGE_DEFAULT;
+      const edgeKey1 = e.from + "-" + e.to;
+      const edgeKey2 = e.to + "-" + e.from;
+      // Highlight path edges
+      let onPath = false;
+      for(let i=0; i<finalPath.length - 1; i++){
+        if( (finalPath[i] === e.from && finalPath[i+1] === e.to) ||
+            (finalPath[i] === e.to && finalPath[i+1] === e.from)) {
+          onPath = true; break;
+        }
+      }
+      if(onPath) color = COLOR_EDGE_PATH;
+      else if(considerEdges.some(ed => (ed.from === e.from && ed.to === e.to) || (ed.from === e.to && ed.to === e.from))) color = COLOR_EDGE_CONSIDER;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = onPath ? 5 : (color === COLOR_EDGE_CONSIDER ? 3 : 1.5);
+      ctx.beginPath();
+      ctx.moveTo(fromNode.x, fromNode.y);
+      ctx.lineTo(toNode.x, toNode.y);
+      ctx.stroke();
+
+      // Draw edge weight midpoint
+      const midX = (fromNode.x + toNode.x) /2;
+      const midY = (fromNode.y + toNode.y) /2;
+      ctx.fillStyle = 'black';
+      ctx.font = '14px Arial';
+      ctx.fillText(e.weight, midX - 7, midY - 5);
+    });
+
+    // Draw nodes
+    nodes.forEach(n => {
+      // Determine fill color
+      let fillColor = COLOR_NODE_DEFAULT;
+      if(finalPath.includes(n.id)) fillColor = COLOR_NODE_PATH;
+      else if(n.id === currentNode) fillColor = COLOR_NODE_CURRENT;
+      else if(visited.has(n.id)) fillColor = COLOR_NODE_VISITED;
+
+      ctx.fillStyle = fillColor;
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, RADIUS, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Node label
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, n.x, n.y);
+
+      // Distance label below node
+      if(distances[n.id] !== undefined && distances[n.id] !== Infinity) {
+        ctx.fillStyle = '#000';
+        ctx.font = '12px Arial';
+        ctx.fillText(distances[n.id] === Infinity ? "∞" : distances[n.id], n.x, n.y + RADIUS + 15);
+      }
+    });
+  }
+
+  // Dijkstra algorithm with step-by-step animation
+  // Returns a Promise that resolves when done
+  function runDijkstra(start, end) {
+    return new Promise(resolve => {
+      distances = {};
+      previous = {};
+      visited = new Set();
+      path = [];
+      running = true;
+
+      // Init distances and previous
+      nodes.forEach(n => {
+        distances[n.id] = Infinity;
+        previous[n.id] = null;
+      });
+      distances[start] = 0;
+
+      let unvisited = new Set(nodes.map(n=>n.id));
+
+      clearLog();
+      log(`Starting Dijkstra's algorithm from node ${start} to node ${end}.\n`);
+
+      // Priority queue adaptation: just pick node with min dist in unvisited set
+      async function step() {
+        if(!running) return resolve();
+
+        // Select node u with smallest distance in unvisited
+        let u = null;
+        let minDist = Infinity;
+        for(let nodeId of unvisited) {
+          if(distances[nodeId] < minDist){
+            minDist = distances[nodeId];
+            u = nodeId;
+          }
+        }
+
+        if(u === null || minDist === Infinity){
+          log(`No more reachable nodes. Ending algorithm.`);
+          resolve();
+          return;
+        }
+
+        log(`Visiting node ${u} with current distance ${minDist}.`);
+
+        if(u === end) {
+          // Found shortest path to end
+          log(`Reached destination node ${end}.\n`);
+          // Reconstruct path
+          let p = [];
+          let cur = end;
+          while(cur) {
+            p.unshift(cur);
+            cur = previous[cur];
+          }
+          path = p;
+          drawGraph(u, [], path);
+          log(`Shortest path: ${path.join(' -> ')}`);
+          log(`Total path cost: ${distances[end]}`);
+          resolve();
+          return;
+        }
+
+        // Mark current node visited
+        visited.add(u);
+        unvisited.delete(u);
+
+        // For each neighbor v of u still unvisited
+        const considerEdges = [];
+        for(let edge of adjacency[u]) {
+          let v = edge.node;
+          if(!unvisited.has(v)) continue;
+          considerEdges.push({from: u, to: v});
+
+          const alt = distances[u] + edge.weight;
+          if(alt < distances[v]) {
+            log(`Updated distance of node ${v} from ${distances[v]} to ${alt} via ${u}.`);
+            distances[v] = alt;
+            previous[v] = u;
+          } else {
+            log(`Distance of node ${v} not updated; current distance: ${distances[v]}, alternative: ${alt}`);
+          }
+        }
+
+        drawGraph(u, considerEdges, path);
+
+        // Wait 1.2s before next step to visualize
+        setTimeout(step, 1200);
+      }
+
+      step();
+    });
+  }
+
+  // Reset all states and redraw graph
+  function reset() {
+    distances = {};
+    previous = {};
+    visited = new Set();
+    path = [];
+    running = false;
+    clearLog();
+    logEl.textContent = 'Select start and end nodes and click "Run Dijkstra" to see the shortest path and the algorithm steps.';
+    drawGraph();
+  }
+
+  // Handle user interaction
+  runBtn.addEventListener('click', async () => {
+    if(running) return;
+    clearLog();
+    running = true;
+    const start = startSelect.value;
+    const end = endSelect.value;
+    if(start === end) {
+      log(`Start and end nodes are the same. Distance is 0.`);
+      running = false;
+      drawGraph(null, [], [start]);
+      return;
+    }
+    drawGraph();
+    await runDijkstra(start, end);
+    running = false;
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if(running) return;
+    reset();
+  });
+
+  // Initialization
+  function init() {
+    buildAdjacency();
+    fillSelectOptions();
+    reset();
+  }
+
+  init();
+
+})();
+</script>
+
+<footer>
+  &copy; 2024 &mdash; Demo of Dijkstra's Algorithm (Undirected Weighted Graph)
+</footer>
+</body>
+</html>
