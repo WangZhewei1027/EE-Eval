@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overfitting Exploration</title>
+</head>
+<body>
+<h1>Overfitting Exploration Simulator</h1>
+
+<p>
+This interactive tool demonstrates how underfitting, appropriate fitting, and overfitting appear on simple regression problems.
+You can generate datasets, change noise levels, select model complexity, train models, and test generalization.
+Use the controls below to explore fitting behavior deeply.
+</p>
+
+<section>
+<h2>1. Data Generation</h2>
+<div>
+<label for="data-function">Select true underlying function:</label>
+<select id="data-function">
+<option value="sin">y = sin(2πx)</option>
+<option value="quad">y = 4x² - 2x + 1</option>
+<option value="linear">y = 3x + 1</option>
+<option value="piecewise">y = piecewise linear</option>
+</select>
+</div>
+
+<div>
+<label for="noise-level">Noise standard deviation (sigma): </label>
+<input type="number" id="noise-level" min="0" max="2" step="0.01" value="0.1"/>
+</div>
+
+<div>
+<label for="num-points">Number of data points: </label>
+<input type="number" id="num-points" min="5" max="100" step="1" value="20" />
+</div>
+
+<div>
+<button id="generate-data">Generate Data</button>
+<span id="data-status"></span>
+</div>
+</section>
+
+<hr/>
+
+<section>
+<h2>2. Model Selection</h2>
+
+<div>
+<label for="model-type">Select model type:</label>
+<select id="model-type">
+<option value="poly">Polynomial Regression</option>
+<option value="knn">k-Nearest Neighbors Regression</option>
+<option value="piecewise-linear">Piecewise Linear Regression</option>
+<option value="moving-average">Moving Average Regression</option>
+</select>
+</div>
+
+<div id="model-params">
+<!-- populated dynamically -->
+</div>
+
+<div>
+<button id="train-model" disabled>Train Model</button>
+<span id="train-status"></span>
+</div>
+
+</section>
+
+<hr/>
+
+<section>
+<h2>3. Evaluation & Visualization</h2>
+
+<div>
+<label for="eval-range-from">Evaluation range from:</label>
+<input type="number" id="eval-range-from" step="0.01" value="0" min="0" max="1"/>
+<label for="eval-range-to">to:</label>
+<input type="number" id="eval-range-to" step="0.01" value="1" min="0" max="1"/>
+</div>
+
+<div>
+<label for="eval-points">Number of points on evaluation grid:</label>
+<input type="number" id="eval-points" min="10" max="1000" step="10" value="200" />
+</div>
+
+<div>
+<button id="evaluate-model" disabled>Evaluate Model</button>
+<span id="eval-status"></span>
+</div>
+
+<div>
+<label><input type="checkbox" id="show-true-function" checked> Show True Function</label>
+<label><input type="checkbox" id="show-noisy-data" checked> Show Noisy Data Points</label>
+<label><input type="checkbox" id="show-predictions" checked> Show Model Predictions</label>
+</div>
+
+<div style="width: 640px; height: 400px; border: 1px solid black; margin-top: 10px;">
+<canvas id="plot" width="640" height="400" style="display: block;"></canvas>
+</div>
+</section>
+
+<hr/>
+
+<section>
+<h2>4. Advanced Controls</h2>
+<p>Manipulate training data manually and retrain.</p>
+<button id="add-point" disabled>Add Training Point</button>
+<button id="clear-data" disabled>Clear Training Data</button>
+
+<div>
+<label for="manual-x">X coordinate (0 to 1): </label><input type="number" id="manual-x" min="0" max="1" step="0.01" value="0.5" />
+<label for="manual-y">Y coordinate: </label><input type="number" id="manual-y" step="0.01" value="0" />
+</div>
+
+<p>Data points can be removed by clicking on them in the plot once enabled below.</p>
+<label><input type="checkbox" id="enable-point-removal"> Enable point removal by clicking points</label>
+
+</section>
+
+<hr/>
+
+<section>
+<h2>5. Metrics and Diagnostics</h2>
+
+<div>
+<button id="compute-train-error" disabled>Compute Training MSE</button>
+<span id="train-error"></span>
+</div>
+
+<div>
+<button id="compute-val-error" disabled>Compute Validation MSE</button>
+<span id="val-error"></span>
+</div>
+
+<div>
+<button id="split-data" disabled>Split Data into Training/Validation Sets</button>
+<label for="val-ratio">Validation Ratio</label>
+<input type="number" id="val-ratio" min="0" max="0.9" step="0.05" value="0.2" />
+</div>
+
+<div>
+<p>Tip: Experiment with model complexity and noise to observe overfitting and underfitting.</p>
+</div>
+
+</section>
+
+<script>
+// ***********************
+// UTILITIES
+// ***********************
+
+function linspace(start, end, num) {
+  const arr = [];
+  if (num === 1) return [start];
+  const step = (end - start) / (num -1);
+  for(let i=0; i<num; i++) {
+    arr.push(start + step*i);
+  }
+  return arr;
+}
+
+function mean(arr) {
+  if(arr.length === 0) return 0;
+  return arr.reduce((a,b)=>a+b,0)/arr.length;
+}
+
+function mse(yTrue, yPred) {
+  if(yTrue.length !== yPred.length) throw new Error("Arrays have different lengths");
+  let sum = 0;
+  for(let i=0; i<yTrue.length; i++) {
+    const diff = yTrue[i]-yPred[i];
+    sum+=diff*diff;
+  }
+  return sum/yTrue.length;
+}
+
+function randomChoice(arr) {
+  return arr[Math.floor(Math.random()*arr.length)];
+}
+
+function shuffleArray(array) {
+  for(let i=array.length -1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// ***********************
+// TRUE FUNCTIONS
+// ***********************
+
+function trueFunctionFactory(type) {
+  switch(type) {
+    case "sin":
+      // y = sin(2pi x), x in [0,1]
+      return (x) => Math.sin(2*Math.PI*x);
+    case "quad":
+      // y = 4x^2 - 2x + 1
+      return (x) => 4*x*x - 2*x + 1;
+    case "linear":
+      // y = 3x +1
+      return (x) => 3*x + 1;
+    case "piecewise":
+      // piecewise linear:
+      // [0,0.3]: y=2x
+      // (0.3,0.7]: y=1-x
+      // (0.7,1]: y=3x-2
+      return (x) => {
+        if(x<=0.3) return 2*x;
+        else if(x<=0.7) return 1 - x;
+        else return 3*x - 2;
+      };
+    default:
+      return (x) => 0;
+  }
+}
+
+
+// ***********************
+// DATA STORAGE & STATE
+// ***********************
+
+let dataset = {
+  X: [], // inputs in [0,1]
+  Y: [], // noisy outputs
+  YTrue: [], // noiseless outputs
+  split: {train: [], val: []}, // indices of training and validation samples
+};
+
+let noiseLevel = 0.1;
+let trueFunctionType = "sin";
+let trueFunction = trueFunctionFactory(trueFunctionType);
+let modelType = "poly";
+
+let modelParams = {}; // params adjusted dynamically by UI and read by functions
+let trainedModel = null;
+
+let evalPointsX = [];
+let evalPointsYTrue = [];
+let evalPointsYPred = [];
+
+let valSplitRatio = 0.2;
+
+let pointRemovalEnabled = false;
+
+// ***********************
+// DATA GENERATION
+// ***********************
+
+function generateData() {
+  noiseLevel = parseFloat(document.getElementById("noise-level").value);
+  let n = parseInt(document.getElementById("num-points").value);
+  if (n < 5) n = 5;
+  if (n > 100) n = 100;
+
+  trueFunctionType = document.getElementById("data-function").value;
+  trueFunction = trueFunctionFactory(trueFunctionType);
+
+  // Generate uniform points in [0,1]
+  let X = [];
+  let attempts = 0;
+  while(X.length < n && attempts < n*10) {
+    // generate random points in [0,1]
+    const x = Math.random();
+    X.push(x);
+    attempts++;
+  }
+  X.sort((a,b)=>a-b);
+  
+  // Compute noiseless and noisy Y
+  let YTrue = X.map(trueFunction);
+  let Y = YTrue.map(y => y + (noiseLevel>0 ? randNormal(0, noiseLevel) : 0));
+
+  dataset.X = X;
+  dataset.YTrue = YTrue;
+  dataset.Y = Y;
+
+  // Reset splits
+  dataset.split.train = [...Array(n).keys()];
+  dataset.split.val = [];
+
+  trainedModel = null;
+  evalPointsX = [];
+  evalPointsYTrue = [];
+  evalPointsYPred = [];
+
+  updateTrainingStatus("Data generated with " + n + " points.");
+  document.getElementById("train-model").disabled = false;
+  document.getElementById("evaluate-model").disabled = true;
+  document.getElementById("compute-train-error").disabled = true;
+  document.getElementById("compute-val-error").disabled = true;
+  document.getElementById("split-data").disabled = false;
+  document.getElementById("add-point").disabled = false;
+  document.getElementById("clear-data").disabled = false;
+  drawPlot();
+}
+
+// Normal random variable using Box-Muller transform
+function randNormal(mu=0, sigma=1){
+  let u1 = 0, u2=0;
+  // Convert [0,1) to (0,1)
+  while(u1 === 0) u1 = Math.random();
+  while(u2 === 0) u2 = Math.random();
+  let z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0*Math.PI*u2);
+  return z0 * sigma + mu;
+}
+
+
+// ***********************
+// MODEL PARAMETER UI
+// ***********************
+
+function updateModelParamsUI() {
+  const container = document.getElementById("model-params");
+  container.innerHTML = "";
+  modelType = document.getElementById("model-type").value;
+  modelParams = {};
+
+  if(modelType === "poly") {
+    // degree slider 0 to 20
+    const label = document.createElement("label");
+    label.textContent = "Degree (polynomial degree): ";
+    label.setAttribute("for","poly-degree");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.id = "poly-degree";
+    input.min = "0";
+    input.max = "20";
+    input.value = "3";
+    input.step = "1";
+    input.addEventListener("change", ()=>{
+      modelParams.degree = parseInt(input.value);
+      trainedModel = null;
+      updateTrainingStatus("");
+      document.getElementById("evaluate-model").disabled = true;
+    });
+    label.appendChild(input);
+    container.appendChild(label);
+    modelParams.degree = 3;
+  }
+  else if(modelType === "knn"){
+    // k slider 1 to dataset size or max 20
+    // max 20 to keep calc reasonable
+    const label = document.createElement("label");
+    label.textContent = "k (number of neighbors): ";
+    label.setAttribute("for","knn-k");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.id = "knn-k";
+    input.min = "1";
+    input.max = "20";
+    input.value = "3";
+    input.step = "1";
+    input.addEventListener("change", ()=>{
+      let val = parseInt(input.value);
+      if(val < 1) val = 1;
+      if(val > 20) val = 20;
+      input.value = val;
+      modelParams.k = val;
+      trainedModel = null;
+      updateTrainingStatus("");
+      document.getElementById("evaluate-model").disabled = true;
+    });
+    label.appendChild(input);
+    container.appendChild(label);
+    modelParams.k = 3;
+  }
+  else if(modelType === "piecewise-linear"){
+    // number of pieces (breakpoints between 1 to 10)
+    const label = document.createElement("label");
+    label.textContent = "Number of pieces: ";
+    label.setAttribute("for","pw-pieces");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.id = "pw-pieces";
+    input.min = "1";
+    input.max = "10";
+    input.value = "3";
+    input.step = "1";
+    input.addEventListener("change", ()=>{
+      let val = parseInt(input.value);
+      if(val < 1) val=1;
+      if(val >10) val=10;
+      input.value = val;
+      modelParams.pieces = val;
+      trainedModel = null;
+      updateTrainingStatus("");
+      document.getElementById("evaluate-model").disabled = true;
+    });
+    label.appendChild(input);
+    container.appendChild(label);
+    modelParams.pieces = 3;
+  }
+  else if(modelType === "moving-average"){
+    // Window size 1 to 20
+    const label = document.createElement("label");
+    label.textContent = "Window size: ";
+    label.setAttribute("for","ma-window");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.id = "ma-window";
+    input.min = "1";
+    input.max = "20";
+    input.value = "3";
+    input.step = "1";
+    input.addEventListener("change", ()=>{
+      let val = parseInt(input.value);
+      if(val<1) val=1;
+      if(val>20) val=20;
+      input.value = val;
+      modelParams.window = val;
+      trainedModel = null;
+      updateTrainingStatus("");
+      document.getElementById("evaluate-model").disabled = true;
+    });
+    label.appendChild(input);
+    container.appendChild(label);
+    modelParams.window = 3;
+  }
+  document.getElementById("train-model").disabled = false;
+  document.getElementById("evaluate-model").disabled = true;
+}
+
+document.getElementById("model-type").addEventListener("change", updateModelParamsUI);
+
+updateModelParamsUI();
+
+
+// ***********************
+// MODEL TRAINING
+// ***********************
+
+/**
+ * Trains the selected model on current training data subset.
+ * Stores the trained model in trainedModel variable.
+ * Supported models:
+ *  - Polynomial regression (least squares)
+ *  - k-NN regression (lazy, no training step needed but prepare sorted dataset)
+ *  - Piecewise linear regression (break domain into equal intervals, fit line on each segment)
+ *  - Moving average regression (simple smoothing, no training needed)
+ */
+
+function trainModel() {
+  if(dataset.X.length === 0) {
+    updateTrainingStatus("No data to train on.");
+    return;
+  }
+  
+  // Select training indices from split, or full dataset if none
+  const trainIdx = dataset.split.train.length > 0 ? dataset.split.train : [...Array(dataset.X.length).keys()];
+
+  if(trainIdx.length === 0) {
+    updateTrainingStatus("Training set is empty. Please split data or add points.");
+    return;
+  }
+
+  const Xtrain = trainIdx.map(i => dataset.X[i]);
+  const Ytrain = trainIdx.map(i => dataset.Y[i]);
+
+  modelType = document.getElementById("model-type").value;
+
+  if(modelType === "poly") {
+    // Polynomial regression
+    // Build Vandermonde matrix, solve least squares
+    const degree = modelParams.degree || 3;
+    // Design matrix
+    let A = [];
+    for(let i=0; i<Xtrain.length; i++){
+      let row = [];
+      for(let d=0; d<=degree; d++) {
+        row.push(Math.pow(Xtrain[i], d));
+      }
+      A.push(row);
+    }
+
+    // Least squares: solve (A^T A) w = A^T y
+    // Compute AtA (deg+1 x deg+1)
+    let AtA = [];
+    for(let j=0; j<=degree; j++){
+      AtA[j] = [];
+      for(let k=0; k<=degree; k++){
+        let s=0;
+        for(let i=0; i<Xtrain.length; i++) {
+          s+= A[i][j] * A[i][k];
+        }
+        AtA[j][k] = s;
+      }
+    }
+    // Compute A^T y (deg+1)
+    let Aty = [];
+    for(let j=0; j<=degree; j++) {
+      let s=0;
+      for(let i=0; i<Xtrain.length; i++) {
+        s += A[i][j]*Ytrain[i];
+      }
+      Aty[j] = s;
+    }
+
+    // Solve linear system AtA * w = Aty by Gaussian elimination (simple)
+    // Deep copy AtA
+    let M = JSON.parse(JSON.stringify(AtA));
+    let b = Aty.slice();
+
+    let n = degree+1;
+
+    // Forward elimination
+    for(let i=0; i<n; i++) {
+      // Partial pivot
+      let maxRow = i;
+      for(let r=i+1; r<n; r++) {
+        if(Math.abs(M[r][i]) > Math.abs(M[maxRow][i])) maxRow = r;
+      }
+      if(maxRow !== i) {
+        let tmp = M[i]; M[i]=M[maxRow]; M[maxRow]=tmp;
+        let tmpb = b[i]; b[i] = b[maxRow]; b[maxRow] = tmpb;
+      }
+      // Singular or near singular check
+      if(Math.abs(M[i][i]) < 1e-12) {
+        updateTrainingStatus("Polynomial regression failed: matrix singular.");
+        trainedModel = null;
+        document.getElementById("evaluate-model").disabled = true;
+        return;
+      }
+      // Eliminate below
+      for(let r=i+1; r<n; r++) {
+        let f = M[r][i]/M[i][i];
+        for(let c=i; c<n; c++) {
+          M[r][c] -= f*M[i][c];
+        }
+        b[r] -= f*b[i];
+      }
+    }
+    // Back substitution
+    let w = new Array(n).fill(0);
+    for(let i=n-1; i>=0; i--) {
+      let sum =0;
+      for(let j=i+1; j<n; j++) {
+        sum += M[i][j]*w[j];
+      }
+      w[i] = (b[i]-sum)/M[i][i];
+    }
+
+    trainedModel = {type:"poly", degree:degree, weights:w};
+
+  }
+  else if(modelType === "knn") {
+    // kNN regression: Store train data sorted according to X (for fast window selection)
+    const k = modelParams.k || 3;
+    // clamp k if needed
+    let kclamped = Math.min(k, Xtrain.length);
+    kclamped = Math.max(1,kclamped);
+
+    // Sort training data by X
+    let pairs = Xtrain.map((x,i) => ({x:x, y:Ytrain[i]}));
+    pairs.sort((a,b) => a.x - b.x);
+
+    trainedModel = {type:"knn", k:kclamped, data: pairs, N:pairs.length};
+  }
+  else if(modelType === "piecewise-linear") {
+    // Break domain [0,1] into equal segments: pieces equal intervals
+    let pieces = modelParams.pieces || 3;
+    pieces = Math.min(pieces, dataset.X.length);
+    pieces = Math.max(1, pieces);
+
+    // Sort training data by X
+    let pairs = [];
+    for(let i=0; i<Xtrain.length; i++) pairs.push({x:Xtrain[i], y:Ytrain[i]});
+    pairs.sort((a,b)=>a.x-b.x);
+
+    // Determine breakpoints: equal length intervals over [0,1]
+    let breaks = linspace(0,1,pieces+1);
+
+    // For each piece, find training points inside range and fit linear regression
+    let coeffs = []; // [{a,b}] linear function y = a*x + b, per piece
+
+    for(let i=0; i<pieces; i++) {
+      let xs_in_piece = pairs.filter(p => p.x >= breaks[i] && p.x <= breaks[i+1]).map(p=>p.x);
+      let ys_in_piece = pairs.filter(p => p.x >= breaks[i] && p.x <= breaks[i+1]).map(p=>p.y);
+
+      if(xs_in_piece.length == 0){
+        // no data in piece, fallback to average y=0
+        coeffs.push({a:0,b:0});
+        continue;
+      }
+      else if(xs_in_piece.length == 1){
+        // only one point: constant function = y of the point
+        coeffs.push({a:0,b:ys_in_piece[0]});
+        continue;
+      }
+
+      // Fit linear regression y = a x + b on points in this piece
+      let xs = xs_in_piece;
+      let ys = ys_in_piece;
+      const n = xs.length;
+      let meanX = mean(xs);
+      let meanY = mean(ys);
+      let denom=0; let numer=0;
+      for(let j=0; j<n; j++){
+        denom += (xs[j] - meanX)*(xs[j] - meanX);
+        numer += (xs[j] - meanX)*(ys[j] - meanY);
+      }
+      let a= denom ===0 ? 0 : numer/denom;
+      let b= meanY - a*meanX;
+      coeffs.push({a:a, b:b});
+    }
+
+    trainedModel = {type:"piecewise-linear", breaks: breaks, coeffs: coeffs};
+  }
+  else if(modelType === "moving-average") {
+    // Moving average smoothing on sorted training data Y (X sorted too)
+    let w = modelParams.window || 3;
+    w = Math.max(1,w);
+    w = Math.min(w, dataset.X.length);
+
+    // Sort training data by X
+    let pairs = [];
+    for(let i=0; i<Xtrain.length; i++) pairs.push({x:Xtrain[i], y:Ytrain[i]});
+    pairs.sort((a,b)=>a.x-b.x);
+
+    // Store data and window size
+    trainedModel = {type:"moving-average", data:pairs, window:w};
+  }
+  else {
+    updateTrainingStatus("Unknown model type.");
+    trainedModel = null;
+    document.getElementById("evaluate-model").disabled = true;
+    return;
+  }
+
+  updateTrainingStatus("Model trained: " + modelTypeDescription());
+  document.getElementById("evaluate-model").disabled = false;
+  document.getElementById("compute-train-error").disabled = false;
+
+}
+
+function modelTypeDescription() {
+  if(!trainedModel) return "(none)";
+  switch(trainedModel.type){
+    case "poly": return "Polynomial regression degree " + trainedModel.degree;
+    case "knn": return "k-NN regression k=" + trainedModel.k;
+    case "piecewise-linear": return "Piecewise linear regression with "+(trainedModel.coeffs.length) + " pieces";
+    case "moving-average": return "Moving average regression window size " + trainedModel.window;
+    default: return "unknown model";
+  }
+}
+
+document.getElementById("train-model").addEventListener("click", trainModel);
+
+
+// ***********************
+// MODEL PREDICTION
+// ***********************
+
+/**
+ * Predict function values for input array xs.
+ * Returns array of predicted ys.
+ * returns null if no model trained
+ */
+function predict(xs) {
+  if(!trainedModel) return null;
+
+  let ys = [];
+
+  switch(trainedModel.type) {
+    case "poly":
+      // Evaluate polynomial sum w_i x^i
+      let w = trainedModel.weights;
+      for(let i=0; i<xs.length; i++) {
+        let x = xs[i];
+        let y=0;
+        for(let d=0; d<=trainedModel.degree; d++) {
+          y += w[d]*Math.pow(x,d);
+        }
+        ys.push(y);
+      }
+      break;
+
+    case "knn":
+      // For each x: find k nearest training points by x coordinate, average their y
+      let data = trainedModel.data; // sorted by x
+      let k = trainedModel.k;
+
+      // Binary search helper for index
+      function findInsertionIndex(arr,x){
+        let left=0; let right=arr.length;
+        while(left<right){
+          let mid = Math.floor((left+right)/2);
+          if(arr[mid].x < x) left=mid+1;
+          else right=mid;
+        }
+        return left;
+      }
+
+      for(let i=0; i<xs.length; i++){
+        let x = xs[i];
+        if(data.length === 0) {
+          ys.push(0);
+          continue;
+        }
+        // Find closest idx to x
+        let idx = findInsertionIndex(data, x);
+        let candidates = [];
+
+        // Collect candidates to left and right so we can pick closest k
+        let leftIdx = idx-1;
+        let rightIdx = idx;
+        while(candidates.length < k){
+          let leftDist = (leftIdx >=0) ? Math.abs(x - data[leftIdx].x) : Number.MAX_SAFE_INTEGER;
+          let rightDist = (rightIdx < data.length) ? Math.abs(x - data[rightIdx].x) : Number.MAX_SAFE_INTEGER;
+
+          if(leftDist<=rightDist && leftIdx >=0) {
+            candidates.push(data[leftIdx]);
+            leftIdx--;
+          }
+          else if(rightIdx < data.length) {
+            candidates.push(data[rightIdx]);
+            rightIdx++;
+          }
+          else {
+            // no more points
+            break;
+          }
+        }
+
+        if(candidates.length===0) ys.push(0);
+        else {
+          let avg = candidates.reduce((acc,c)=>acc+c.y,0)/candidates.length;
+          ys.push(avg);
+        }
+      }
+      break;
+
+    case "piecewise-linear":
+      // For each x find which piece:
+      // y = a*x + b for piece containing x
+      let breaks = trainedModel.breaks;
+      let coeffs = trainedModel.coeffs;
+      for(let i=0; i<xs.length; i++){
+        let x = xs[i];
+        // Clamp x to [0,1]
+        if(x < 0) x=0;
+        if(x > 1) x=1;
+        // Find piece index
+        let pieceIdx = 0;
+        for(let j=0; j<breaks.length-1; j++){
+          if(x >= breaks[j] && x <= breaks[j+1]){
+            pieceIdx = j;
+            break;
+          }
+        }
+        let a = coeffs[pieceIdx].a;
+        let b = coeffs[pieceIdx].b;
+        ys.push(a*x + b);
+      }
+      break;
+
+    case "moving-average":
+      // Approximate predicted y by moving average smoothing of training data y, at x.
+      // We do weighted average of training points y with weights depending on closeness in x
+      // Simpler: find window-size nearest points and average their y.
+      let d = trainedModel.data;
+      let wsize = trainedModel.window;
+
+      // Binary search helper
+      function findIdx(x){
+        let left=0, right=d.length;
+        while(left<right){
+          let mid = Math.floor((left+right)/2);
+          if(d[mid].x < x) left=mid+1;
+          else right=mid;
+        }
+        return left;
+      }
+
+      for(let i=0; i<xs.length; i++) {
+        let x = xs[i];
+        if(d.length === 0) {
+          ys.push(0);
+          continue;
+        }
+        let idx = findIdx(x);
+
+        // Gather wsize nearest by distance in x
+        let leftIdx = idx-1;
+        let rightIdx = idx;
+        let candidates = [];
+
+        while(candidates.length < wsize){
+          let leftDist = (leftIdx >=0) ? Math.abs(x - d[leftIdx].x) : Number.MAX_SAFE_INTEGER;
+          let rightDist = (rightIdx < d.length) ? Math.abs(x - d[rightIdx].x) : Number.MAX_SAFE_INTEGER;
+
+          if(leftDist <= rightDist && leftIdx >=0) {
+            candidates.push(d[leftIdx]);
+            leftIdx--;
+          }
+          else if(rightIdx < d.length){
+            candidates.push(d[rightIdx]);
+            rightIdx++;
+          }
+          else break;
+        }
+        if(candidates.length ===0) {
+          ys.push(0);
+        }
+        else {
+          // Uniform average
+          let avg = candidates.reduce((acc,c)=>acc+c.y,0)/candidates.length;
+          ys.push(avg);
+        }
+      }
+      break;
+
+    default:
+      return null;
+  }
+
+
+  return ys;
+}
+
+
+// ***********************
+// EVALUATE MODEL ON GRID
+// ***********************
+
+function evaluateModel() {
+  if(!trainedModel) {
+    updateEvalStatus("No model trained.");
+    return;
+  }
+
+  let from = parseFloat(document.getElementById("eval-range-from").value);
+  let to = parseFloat(document.getElementById("eval-range-to").value);
+  if(from > to){
+    // swap
+    let tmp = from; from=to; to=tmp;
+  }
+  if(from < 0) from = 0;
+  if(to > 1) to = 1;
+
+  let pts = parseInt(document.getElementById("eval-points").value);
+  if(pts < 10) pts = 10;
+  if(pts > 1000) pts = 1000;
+
+  evalPointsX = linspace(from, to, pts);
+  evalPointsYTrue = evalPointsX.map(trueFunction);
+  evalPointsYPred = predict(evalPointsX) || [];
+
+  if(evalPointsYPred.length === 0){
+    updateEvalStatus("Model prediction failed.");
+    return;
+  }
+
+  updateEvalStatus("Model evaluated on grid.");
+  drawPlot();
+}
+
+// ***********************
+// PLOT DRAWING
+// ***********************
+
+const canvas = document.getElementById("plot");
+const ctx = canvas.getContext("2d");
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+const MARGIN = 40;
+
+function drawPlot() {
+  // Clear
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+  // Draw axes
+  ctx.beginPath();
+  ctx.moveTo(MARGIN, MARGIN);
+  ctx.lineTo(MARGIN, HEIGHT - MARGIN);
+  ctx.lineTo(WIDTH - MARGIN, HEIGHT - MARGIN);
+  ctx.stroke();
+
+  // Labels
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("x", WIDTH/2, HEIGHT - MARGIN/2);
+  ctx.fillText("y", MARGIN/2, HEIGHT/2);
+
+  // Determine y range
+  // from dataset + eval points
+  let ys = [];
+
+  if(document.getElementById("show-true-function").checked){
+    ys = ys.concat(evalPointsYTrue);
+  }
+  if(document.getElementById("show-predictions").checked){
+    ys = ys.concat(evalPointsYPred);
+  }
+  if(document.getElementById("show-noisy-data").checked){
+    ys = ys.concat(dataset.Y);
+  }
+  if(dataset.split.val.length > 0){
+    ys = ys.concat(dataset.split.val.map(i=>dataset.Y[i])); // val data shown by default as noisy
+  }
+  if(dataset.split.train.length > 0){
+    ys = ys.concat(dataset.split.train.map(i=>dataset.Y[i]));
+  }
+  if(ys.length === 0) ys = [0];
+
+  let yMin = Math.min(...ys);
+  let yMax = Math.max(...ys);
+
+  // Add padding
+  let yRange = yMax - yMin;
+  if(yRange === 0) yRange = 1;
+  yMin = yMin - 0.1*yRange;
+  yMax = yMax + 0.1*yRange;
+
+  // Helper to map x,y to canvas coords
+  function px(x) {
+    return MARGIN + (WIDTH - 2*MARGIN)* (x - 0)/(1 - 0);
+  }
+  function py(y) {
+    return HEIGHT - MARGIN - (HEIGHT - 2*MARGIN) * (y - yMin)/(yMax - yMin);
+  }
+
+  // Draw true function if checked
+  if(document.getElementById("show-true-function").checked && evalPointsX.length>1){
+    ctx.beginPath();
+    ctx.lineWidth = 1;
+    for(let i=0; i<evalPointsX.length; i++){
+      let cx = px(evalPointsX[i]);
+      let cy = py(evalPointsYTrue[i]);
+      if(i===0) ctx.moveTo(cx, cy);
+      else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+  }
+
+  // Draw model predictions if checked
+  if(document.getElementById("show-predictions").checked && evalPointsX.length>1){
+    ctx.beginPath();
+    ctx.lineWidth = 1;
+    for(let i=0; i<evalPointsX.length; i++){
+      let cx = px(evalPointsX[i]);
+      let cy = py(evalPointsYPred[i]);
+      if(i===0) ctx.moveTo(cx, cy);
+      else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+  }
+
+  // Draw noisy data points if checked
+  if(document.getElementById("show-noisy-data").checked){
+    // Show all points
+    for(let i=0; i<dataset.X.length; i++){
+      let x=dataset.X[i];
+      let y=dataset.Y[i];
+      let cx = px(x);
+      let cy = py(y);
+
+      // Draw circle for training or validation with different radius
+      let radius = 5;
+      if(dataset.split.train.includes(i)) radius = 5;
+      else if(dataset.split.val.includes(i)) radius = 7;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, 2*Math.PI);
+      if(dataset.split.val.includes(i)){
+        ctx.stroke();
+      } else {
+        ctx.fill();
+      }
+    }
+  }
+
+  // Highlight points hovered / for removal if enabled
+  if(pointRemovalEnabled) {
+    // Draw instructions text top-left
+    ctx.fillStyle = "black";
+    ctx.font = "12px monospace";
+    ctx.fillText("Click points to remove training data.", MARGIN, MARGIN/2);
+  }
+}
+
+// ***********************
+// EVENTS ON DATA GENERATION
+// ***********************
+
+document.getElementById("generate-data").addEventListener("click", generateData);
+
+
+// ***********************
+// EVENTS ON EVAL BUTTON
+// ***********************
+
+document.getElementById("evaluate-model").addEventListener("click", evaluateModel);
+
+// ***********************
+// TRAINING STATUS UPDATE
+// ***********************
+
+function updateTrainingStatus(msg) {
+  document.getElementById("train-status").textContent = msg;
+}
+
+function updateEvalStatus(msg) {
+  document.getElementById("eval-status").textContent = msg;
+}
+
+// ***********************
+// ADD POINT MANUALLY
+// ***********************
+
+document.getElementById("add-point").addEventListener("click", ()=>{
+  let x = parseFloat(document.getElementById("manual-x").value);
+  let y = parseFloat(document.getElementById("manual-y").value);
+
+  if(isNaN(x) || isNaN(y)) return;
+  if(x < 0) x = 0;
+  if(x > 1) x = 1;
+
+  dataset.X.push(x);
+  dataset.Y.push(y);
+  // Add true y as NaN - unknown for manual point - treat as noisy
+  dataset.YTrue.push(NaN);
+
+  // Add to training set
+  dataset.split.train.push(dataset.X.length - 1);
+
+  // Sort data arrays by X ascending
+  let zipped = dataset.X.map((v,i)=> ({x:v,y:dataset.Y[i], yTrue: dataset.YTrue[i]}));
+  zipped.sort((a,b)=> a.x - b.x);
+  dataset.X = zipped.map(p=>p.x);
+  dataset.Y = zipped.map(p=>p.y);
+  dataset.YTrue = zipped.map(p=>p.yTrue);
+
+  // Update splits indices for new dataset order
+  // The training set now is all points except those in val set already which is not changed
+  // We'll rebuild train and val respecting val set elements
+  let newTrain = [];
+  let newVal = [];
+  for(let i=0; i<dataset.X.length; i++){
+    let origIdx = dataset.split.train.concat(dataset.split.val).map(idx=>{
+      return {orig: idx, val: dataset.X[idx]};
+    });
+  }
+  // We can't really track old indices after sort easily. So simplest:
+  // Let validation set remain indices as references to pre-sort data - but that no longer matches.
+  // We'll clear validation set for safety to avoid bugs.
+  dataset.split.val = [];
+  dataset.split.train = [...Array(dataset.X.length).keys()];
+
+  trainedModel = null;
+  updateTrainingStatus("Added point (" + x.toFixed(3) + ", " + y.toFixed(3) + "); model invalidated.");
+  document.getElementById("train-model").disabled = false;
+  document.getElementById("evaluate-model").disabled = true;
+  document.getElementById("compute-train-error").disabled = true;
+  document.getElementById("compute-val-error").disabled = true;
+  drawPlot();
+});
+
+document.getElementById("clear-data").addEventListener("click", ()=>{
+  dataset.X = [];
+  dataset.Y = [];
+  dataset.YTrue = [];
+  dataset.split.train = [];
+  dataset.split.val = [];
+  trainedModel = null;
+  evalPointsX = [];
+  evalPointsYTrue = [];
+  evalPointsYPred = [];
+  updateTrainingStatus("Dataset cleared.");
+  document.getElementById("train-model").disabled = true;
+  document.getElementById("evaluate-model").disabled = true;
+  document.getElementById("compute-train-error").disabled = true;
+  document.getElementById("compute-val-error").disabled = true;
+  document.getElementById("split-data").disabled = true;
+  document.getElementById("add-point").disabled = true;
+  document.getElementById("clear-data").disabled = true;
+  drawPlot();
+});
+
+// ***********************
+// DATA SPLITTING
+// ***********************
+
+document.getElementById("split-data").addEventListener("click", ()=>{
+  let ratio = parseFloat(document.getElementById("val-ratio").value);
+  if(ratio < 0) ratio = 0;
+  if(ratio > 0.9) ratio = 0.9;
+  valSplitRatio = ratio;
+
+  const n = dataset.X.length;
+  let indices = [...Array(n).keys()];
+  indices = shuffleArray(indices);
+
+  const nVal = Math.floor(n*valSplitRatio);
+  dataset.split.val = indices.slice(0,nVal);
+  dataset.split.train = indices.slice(nVal);
+
+  trainedModel = null;
+  updateTrainingStatus("Data split into train ("+dataset.split.train.length+") and validation ("+dataset.split.val.length+")");
+  document.getElementById("train-model").disabled = dataset.split.train.length === 0;
+  document.getElementById("evaluate-model").disabled = true;
+  document.getElementById("compute-train-error").disabled = true;
+  document.getElementById("compute-val-error").disabled = true;
+  drawPlot();
+});
+
+
+// ***********************
+// ERROR COMPUTATION
+// ***********************
+
+document.getElementById("compute-train-error").addEventListener("click", () => {
+  if(!trainedModel) {
+    document.getElementById("train-error").textContent = "No trained model.";
+    return;
+  }
+  if(dataset.split.train.length===0){
+    document.getElementById("train-error").textContent = "Training set empty.";
+    return;
+  }
+  let Xtrain = dataset.split.train.map(i=>dataset.X[i]);
+  let Ytrain = dataset.split.train.map(i=>dataset.Y[i]);
+  let Ypred = predict(Xtrain);
+  if(!Ypred){
+    document.getElementById("train-error").textContent = "Model prediction failed.";
+    return;
+  }
+  let err = mse(Ytrain, Ypred);
+  document.getElementById("train-error").textContent = "Training MSE: " + err.toFixed(5);
+});
+
+document.getElementById("compute-val-error").addEventListener("click", () => {
+  if(!trainedModel) {
+    document.getElementById("val-error").textContent = "No trained model.";
+    return;
+  }
+  if(dataset.split.val.length===0){
+    document.getElementById("val-error").textContent = "Validation set empty or no split.";
+    return;
+  }
+  let Xval = dataset.split.val.map(i=>dataset.X[i]);
+  let Yval = dataset.split.val.map(i=>dataset.Y[i]);
+  let Ypred = predict(Xval);
+  if(!Ypred){
+    document.getElementById("val-error").textContent = "Model prediction failed.";
+    return;
+  }
+  let err = mse(Yval, Ypred);
+  document.getElementById("val-error").textContent = "Validation MSE: " + err.toFixed(5);
+});
+
+// Enable val error button only if val set exists and model trained
+document.getElementById("compute-val-error").disabled = true;
+
+function updateValErrorButton() {
+  let enabled = (dataset.split.val.length>0) && (trainedModel !== null);
+  document.getElementById("compute-val-error").disabled = !enabled;
+}
+["split-data", "train-model"].forEach(id=>{
+  document.getElementById(id).addEventListener("click", ()=> {
+    updateValErrorButton();
+  });
+});
+document.getElementById("compute-val-error").addEventListener("click", ()=>{});
+
+// ***********************
+// POINT REMOVAL
+// ***********************
+
+document.getElementById("enable-point-removal").addEventListener("change", function(){
+  pointRemovalEnabled = this.checked;
+  if(pointRemovalEnabled){
+    canvas.style.cursor = "crosshair";
+  } else {
+    canvas.style.cursor = "default";
+  }
+  drawPlot();
+});
+
+canvas.addEventListener("click", function(evt){
+  if(!pointRemovalEnabled) return;
+  if(dataset.X.length === 0) return;
+  // Map mouse click to data coordinates
+  const rect = canvas.getBoundingClientRect();
+  const mx = evt.clientX - rect.left;
+  const my = evt.clientY - rect.top;
+
+  // helper for coord mapping
+  // Need yMin, yMax used by drawPlot for conversion
+  let ys = [];
+
+  if(document.getElementById("show-true-function").checked){
+    ys = ys.concat(evalPointsYTrue);
+  }
+  if(document.getElementById("show-predictions").checked){
+    ys = ys.concat(evalPointsYPred);
+  }
+  if(document.getElementById("show-noisy-data").checked){
+    ys = ys.concat(dataset.Y);
+  }
+  if(dataset.split.val.length > 0){
+    ys = ys.concat(dataset.split.val.map(i=>dataset.Y[i]));
+  }
+  if(dataset.split.train.length > 0){
+    ys = ys.concat(dataset.split.train.map(i=>dataset.Y[i]));
+  }
+  if(ys.length === 0) ys = [0];
+
+  let yMin = Math.min(...ys);
+  let yMax = Math.max(...ys);
+  let yRange = yMax - yMin;
+  if(yRange === 0) yRange=1;
+  yMin = yMin - 0.1*yRange;
+  yMax = yMax + 0.1*yRange;
+
+  function px_inv(px) {
+    return (px - MARGIN)/(WIDTH - 2*MARGIN);
+  }
+  function py_inv(py) {
+    return yMax - (py - MARGIN) * (yMax - yMin) / (HEIGHT - 2*MARGIN);
+  }
+
+  let xClicked = (mx - MARGIN)/(WIDTH - 2*MARGIN);
+  let yClicked = yMax - (my - MARGIN)*(yMax - yMin)/(HEIGHT - 2*MARGIN);
+
+  // Find closest point within radius in pixels
+  let radiusPixels = 8;
+  let foundIdx = -1;
+  let minDist = 1e9;
+
+  for(let i=0; i<dataset.X.length; i++){
+    // Only allow removal of training points, not validation points (for safety)
+    if(!dataset.split.train.includes(i)) continue;
+
+    let cx = MARGIN + (WIDTH - 2*MARGIN)*dataset.X[i];
+    let cy = HEIGHT - MARGIN - (HEIGHT - 2*MARGIN)*(dataset.Y[i] - yMin)/(yMax - yMin);
+
+    let dist = Math.sqrt((cx - mx)*(cx - mx) + (cy - my)*(cy - my));
+    if(dist < radiusPixels && dist < minDist){
+      minDist = dist;
+      foundIdx = i;
+    }
+  }
+
+  if(foundIdx >= 0){
+    // Remove point foundIdx from dataset and update splits
+    dataset.X.splice(foundIdx, 1);
+    dataset.Y.splice(foundIdx, 1);
+    dataset.YTrue.splice(foundIdx,1);
+
+    // Remove from train
+    let trainSet = dataset.split.train.filter(i => i !== foundIdx);
+    // Decrement indices greater than foundIdx (due to removal)
+    trainSet = trainSet.map(i => i > foundIdx ? i -1 : i);
+
+    // Update val indices similarly
+    let valSet = dataset.split.val.filter(i => i !== foundIdx);
+    valSet = valSet.map(i => i > foundIdx ? i -1 : i);
+
+    dataset.split.train = trainSet;
+    dataset.split.val = valSet;
+
+    // Model now invalid
+    trainedModel = null;
+    updateTrainingStatus("Removed training point at index " + foundIdx + ", retrain model.");
+    document.getElementById("train-model").disabled = false;
+    document.getElementById("evaluate-model").disabled = true;
+    document.getElementById("compute-train-error").disabled = true;
+    document.getElementById("compute-val-error").disabled = true;
+    drawPlot();
+  }
+});
+
+// ***********************
+// INITIAL DRAW
+// ***********************
+
+drawPlot();
+
+</script>
+
+</body>
+</html>

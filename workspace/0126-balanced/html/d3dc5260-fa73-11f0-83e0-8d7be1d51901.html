@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Asymmetric Cryptography Demo (Web Crypto)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 18px; color: #111; }
+    h1 { font-size: 1.4rem; margin-bottom: 6px; }
+    p.lead { margin-top: 0; color: #444; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .panel { border: 1px solid #ddd; padding: 12px; border-radius: 8px; background: #fff; }
+    label { display:block; font-weight:600; margin-bottom:6px; }
+    textarea, input[type="text"] { width:100%; box-sizing:border-box; padding:8px; font-family: monospace; font-size:0.9rem; }
+    textarea { min-height:80px; resize:vertical; }
+    button { margin-top:8px; padding:8px 10px; border-radius:6px; background:#0066cc; color:white; border:0; cursor:pointer; }
+    button.secondary { background:#666; }
+    .small { font-size:0.85rem; color:#555; margin-top:6px; }
+    .output { font-family: monospace; background:#f7f7f7; padding:8px; border-radius:6px; overflow:auto; max-height:160px; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .nowrap { white-space:nowrap; }
+    footer { margin-top:18px; font-size:0.85rem; color:#666; }
+    .status { margin-top:8px; font-size:0.9rem; color:#007700; }
+    .error { color:#cc0000; }
+  </style>
+</head>
+<body>
+  <h1>Asymmetric Cryptography Demo</h1>
+  <p class="lead">
+    This page demonstrates public-key (asymmetric) cryptography using the Web Crypto API.
+    You can generate key pairs for "Alice" (signing) and "Bob" (encryption), export/import public keys,
+    encrypt a message with Bob's public key, and sign it with Alice's private key. Bob can then decrypt
+    and verify the signature.
+  </p>
+
+  <div class="grid">
+    <!-- Alice (Signer) -->
+    <div class="panel" id="alicePanel">
+      <label>Alice (Signer) — Signing Key Pair (RSASSA-PKCS1-v1_5, SHA-256)</label>
+      <div class="row">
+        <button id="aliceGen">Generate Alice's Signing Keys</button>
+        <button id="aliceExport" class="secondary">Export Alice's Public Key</button>
+      </div>
+      <div class="small">Note: For demo purposes keys are exportable. In a real application private keys should be non-exportable.</div>
+
+      <label style="margin-top:8px">Alice's Public Key (SPKI, Base64)</label>
+      <textarea id="alicePub" placeholder="Alice's exported public key will appear here"></textarea>
+
+      <label style="margin-top:8px">Alice's Private Key (PKCS8, Base64) — (do NOT share)</label>
+      <textarea id="alicePriv" placeholder="Alice's private key (exported)"></textarea>
+
+      <div id="aliceStatus" class="status"></div>
+    </div>
+
+    <!-- Bob (Receiver) -->
+    <div class="panel" id="bobPanel">
+      <label>Bob (Receiver) — Encryption Key Pair (RSA-OAEP, SHA-256)</label>
+      <div class="row">
+        <button id="bobGen">Generate Bob's Encryption Keys</button>
+        <button id="bobExport" class="secondary">Export Bob's Public Key</button>
+      </div>
+
+      <label style="margin-top:8px">Bob's Public Key (SPKI, Base64)</label>
+      <textarea id="bobPub" placeholder="Bob's exported public key will appear here"></textarea>
+
+      <label style="margin-top:8px">Bob's Private Key (PKCS8, Base64) — (do NOT share)</label>
+      <textarea id="bobPriv" placeholder="Bob's private key (exported)"></textarea>
+
+      <div id="bobStatus" class="status"></div>
+    </div>
+  </div>
+
+  <!-- Messaging area -->
+  <div class="panel" style="margin-top:12px;">
+    <label>Compose Message (Alice)</label>
+    <textarea id="message" placeholder="Type a message Alice will send to Bob...">Hello Bob — this is Alice! Confidential and signed.</textarea>
+
+    <div class="row" style="margin-top:10px;">
+      <button id="encryptBtn">Encrypt for Bob</button>
+      <button id="signBtn" class="secondary">Sign (Alice)</button>
+      <button id="encryptSignBtn">Encrypt & Sign</button>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label>Ciphertext (Base64)</label>
+      <textarea id="ciphertext" placeholder="Ciphertext will appear here"></textarea>
+
+      <label style="margin-top:8px">Signature (Base64)</label>
+      <textarea id="signature" placeholder="Signature will appear here"></textarea>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button id="decryptBtn">Bob: Decrypt</button>
+      <button id="verifyBtn" class="secondary">Bob: Verify Signature</button>
+      <button id="decryptVerifyBtn">Bob: Decrypt & Verify</button>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label>Decrypted Message</label>
+      <textarea id="decrypted" placeholder="Decrypted plaintext will appear here"></textarea>
+    </div>
+
+    <div id="msgStatus" class="status"></div>
+  </div>
+
+  <footer>
+    Quick notes:
+    - RSA-OAEP is used for encryption/decryption; RSASSA-PKCS1-v1_5 is used for signing/verifying.
+    - Public keys are exported as SPKI and encoded in Base64 to simulate exchanging keys.
+    - This page uses extractable keys for demonstration; in production, keep private keys non-extractable and protected.
+  </footer>
+
+  <script>
+    // Utilities: Base64 <-> ArrayBuffer and string conversions
+    function abToBase64(buf) {
+      return btoa(String.fromCharCode(...new Uint8Array(buf)));
+    }
+    function base64ToAb(b64) {
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+    function strToAb(str) {
+      return new TextEncoder().encode(str).buffer;
+    }
+    function abToStr(ab) {
+      return new TextDecoder().decode(ab);
+    }
+
+    // State: hold key objects in memory for Alice and Bob
+    const state = {
+      aliceSignKeyPair: null, // RSASSA-PKCS1-v1_5
+      bobEncKeyPair: null     // RSA-OAEP
+    };
+
+    // DOM
+    const aliceGenBtn = document.getElementById('aliceGen');
+    const aliceExportBtn = document.getElementById('aliceExport');
+    const alicePubTA = document.getElementById('alicePub');
+    const alicePrivTA = document.getElementById('alicePriv');
+    const aliceStatus = document.getElementById('aliceStatus');
+
+    const bobGenBtn = document.getElementById('bobGen');
+    const bobExportBtn = document.getElementById('bobExport');
+    const bobPubTA = document.getElementById('bobPub');
+    const bobPrivTA = document.getElementById('bobPriv');
+    const bobStatus = document.getElementById('bobStatus');
+
+    const messageTA = document.getElementById('message');
+    const encryptBtn = document.getElementById('encryptBtn');
+    const signBtn = document.getElementById('signBtn');
+    const encryptSignBtn = document.getElementById('encryptSignBtn');
+
+    const ciphertextTA = document.getElementById('ciphertext');
+    const signatureTA = document.getElementById('signature');
+
+    const decryptBtn = document.getElementById('decryptBtn');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const decryptVerifyBtn = document.getElementById('decryptVerifyBtn');
+
+    const decryptedTA = document.getElementById('decrypted');
+    const msgStatus = document.getElementById('msgStatus');
+
+    // Generate Alice's signing key pair (RSASSA-PKCS1-v1_5)
+    aliceGenBtn.addEventListener('click', async () => {
+      aliceStatus.textContent = 'Generating Alice signing keys...';
+      try {
+        const kp = await crypto.subtle.generateKey(
+          {
+            name: "RSASSA-PKCS1-v1_5",
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+            hash: 'SHA-256'
+          },
+          true, // extractable for demonstration only
+          ["sign", "verify"]
+        );
+        state.aliceSignKeyPair = kp;
+        aliceStatus.textContent = 'Alice signing key pair generated.';
+        // optionally export to display in UI
+        const pub = await exportPublicKeyBase64(kp.publicKey);
+        const priv = await exportPrivateKeyBase64(kp.privateKey);
+        alicePubTA.value = pub;
+        alicePrivTA.value = priv;
+      } catch (err) {
+        aliceStatus.textContent = '';
+        alert('Alice key generation failed: ' + err);
+      }
+    });
+
+    // Generate Bob's encryption key pair (RSA-OAEP)
+    bobGenBtn.addEventListener('click', async () => {
+      bobStatus.textContent = 'Generating Bob encryption keys...';
+      try {
+        const kp = await crypto.subtle.generateKey(
+          {
+            name: "RSA-OAEP",
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+            hash: 'SHA-256'
+          },
+          true, // extractable for demo only
+          ["encrypt", "decrypt"]
+        );
+        state.bobEncKeyPair = kp;
+        bobStatus.textContent = 'Bob encryption key pair generated.';
+        const pub = await exportPublicKeyBase64(kp.publicKey);
+        const priv = await exportPrivateKeyBase64(kp.privateKey);
+        bobPubTA.value = pub;
+        bobPrivTA.value = priv;
+      } catch (err) {
+        bobStatus.textContent = '';
+        alert('Bob key generation failed: ' + err);
+      }
+    });
+
+    // Export Alice's public key (if in memory)
+    aliceExportBtn.addEventListener('click', async () => {
+      if (!state.aliceSignKeyPair) {
+        aliceStatus.classList.add('error');
+        aliceStatus.textContent = 'No Alice key pair in memory. Generate first.';
+        return;
+      }
+      const pub = await exportPublicKeyBase64(state.aliceSignKeyPair.publicKey);
+      alicePubTA.value = pub;
+      aliceStatus.textContent = 'Alice public key exported.';
+    });
+
+    // Export Bob's public key
+    bobExportBtn.addEventListener('click', async () => {
+      if (!state.bobEncKeyPair) {
+        bobStatus.classList.add('error');
+        bobStatus.textContent = 'No Bob key pair in memory. Generate first.';
+        return;
+      }
+      const pub = await exportPublicKeyBase64(state.bobEncKeyPair.publicKey);
+      bobPubTA.value = pub;
+      bobStatus.textContent = 'Bob public key exported.';
+    });
+
+    // encrypt plaintext using Bob's public key (SPKI Base64 from bobPubTA)
+    encryptBtn.addEventListener('click', async () => {
+      clearMsgStatus();
+      try {
+        const bobPubB64 = bobPubTA.value.trim();
+        if (!bobPubB64) throw 'Paste Bob\'s public key into the "Bob\'s Public Key" box first.';
+        const bobPub = await importBobPublicKeyFromSPKI(bobPubB64);
+        const plaintext = messageTA.value;
+        const cipherBuf = await crypto.subtle.encrypt(
+          { name: "RSA-OAEP" },
+          bobPub,
+          strToAb(plaintext)
+        );
+        ciphertextTA.value = abToBase64(cipherBuf);
+        msgStatus.textContent = 'Message encrypted with Bob\'s public key.';
+      } catch (err) {
+        showError(err);
+      }
+    });
+
+    // sign plaintext using Alice's private key (state)
+    signBtn.addEventListener('click', async () => {
+      clearMsgStatus();
+      try {
+        if (!state.aliceSignKeyPair) throw 'Alice has no signing key pair in memory. Generate Alice keys first.';
+        const sig = await crypto.subtle.sign(
+          { name: "RSASSA-PKCS1-v1_5" },
+          state.aliceSignKeyPair.privateKey,
+          strToAb(messageTA.value)
+        );
+        signatureTA.value = abToBase64(sig);
+        msgStatus.textContent = 'Message signed with Alice\'s private key.';
+      } catch (err) {
+        showError(err);
+      }
+    });
+
+    // encrypt and then sign (encrypt first, then sign the plaintext)
+    encryptSignBtn.addEventListener('click', async () => {
+      clearMsgStatus();
+      try {
+        // ensure bob pub available
+        const bobPubB64 = bobPubTA.value.trim();
+        if (!bobPubB64) throw 'Paste Bob\'s public key into the "Bob\'s Public Key" box first.';
+        if (!state.aliceSignKeyPair) throw 'Alice has no signing key pair in memory. Generate Alice keys first.';
+
+        const bobPub = await importBobPublicKeyFromSPKI(bobPubB64);
+        const plaintext = messageTA.value;
+
+        // encrypt
+        const cipherBuf = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, bobPub, strToAb(plaintext));
+        ciphertextTA.value = abToBase64(cipherBuf);
+
+        // sign plaintext
+        const sigBuf = await crypto.subtle.sign({ name: "RSASSA-PKCS1-v1_5" }, state.aliceSignKeyPair.privateKey, strToAb(plaintext));
+        signatureTA.value = abToBase64(sigBuf);
+
+        msgStatus.textContent = 'Message encrypted (for Bob) and signed (by Alice).';
+      } catch (err) {
+        showError(err);
+      }
+    });
+
+    // Bob: decrypt using his private key (from bobPrivTA)
+    decryptBtn.addEventListener('click', async () => {
+      clearMsgStatus();
+      try {
+        const bobPrivB64 = bobPrivTA.value.trim();
+        if (!bobPrivB64) throw 'Paste Bob\'s private key into the "Bob\'s Private Key" box (for demo only).';
+        const priv = await importBobPrivateKeyFromPKCS8(bobPrivB64);
+        const cipherB64 = ciphertextTA.value.trim();
+        if (!cipherB64) throw 'No ciphertext present. Encrypt a message first or paste a ciphertext.';
+        const plainBuf = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, priv, base64ToAb(cipherB64));
+        const plain = abToStr(plainBuf);
+        decryptedTA.value = plain;
+        msgStatus.textContent = 'Bob decrypted the message.';
+      } catch (err) {
+        showError(err);
+      }
+    });
+
+    // Bob: verify signature using Alice's public key (from alicePubTA). Message to verify is in decryptedTA if available, otherwise uses messageTA.
+    verifyBtn.addEventListener('click', async () => {
+      clearMsgStatus();
+      try {
+        const alicePubB64 = alicePubTA.value.trim();
+        if (!alicePubB64) throw 'Paste Alice\'s public key into "Alice\'s Public Key" box.';
+        const alicePub = await importAlicePublicKeyFromSPKI(alicePubB64);
+        // message to verify: prefer decrypted text (if Bob previously decrypted), else the original message text (in demo both are available)
+        const msg = decryptedTA.value || messageTA.value;
+        if (!msg) throw 'No message available to verify.';
+        const sigB64 = signatureTA.value.trim();
+        if (!sigB64) throw 'No signature present. Sign the message first or paste a signature.';
+        const verified = await crypto.subtle.verify(
+          { name: "RSASSA-PKCS1-v1_5" },
+          alicePub,
+          base64ToAb(sigB64),
+          strToAb(msg)
+        );
+        msgStatus.textContent = verified ? 'Signature VERIFIED — it was signed by Alice.' : 'Signature NOT valid.';
+      } catch (err) {
+        showError(err);
+      }
+    });
+
+    // Bob: decrypt then verify in one step
+    decryptVerifyBtn.addEventListener('click', async () => {
+      clearMsgStatus();
+      try {
+        // decrypt
+        const bobPrivB64 = bobPrivTA.value.trim();
+        if (!bobPrivB64) throw 'Paste Bob\'s private key into the "Bob\'s Private Key" box.';
+        const priv = await importBobPrivateKeyFromPKCS8(bobPrivB64);
+        const cipherB64 = ciphertextTA.value.trim();
+        if (!cipherB64) throw 'No ciphertext present. Encrypt a message first or paste a ciphertext.';
+        const plainBuf = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, priv, base64ToAb(cipherB64));
+        const plain = abToStr(plainBuf);
+        decryptedTA.value = plain;
+
+        // verify
+        const alicePubB64 = alicePubTA.value.trim();
+        if (!alicePubB64) throw 'Paste Alice\'s public key into "Alice\'s Public Key" box.';
+        const alicePub = await importAlicePublicKeyFromSPKI(alicePubB64);
+        const sigB64 = signatureTA.value.trim();
+        if (!sigB64) throw 'No signature present.';
+        const verified = await crypto.subtle.verify(
+          { name: "RSASSA-PKCS1-v1_5" },
+          alicePub,
+          base64ToAb(sigB64),
+          strToAb(plain)
+        );
+        msgStatus.textContent = verified ? 'Decrypted and signature VERIFIED.' : 'Decrypted but signature NOT valid.';
+      } catch (err) {
+        showError(err);
+      }
+    });
+
+    // Helpers for export/import
+    async function exportPublicKeyBase64(publicKey) {
+      const spki = await crypto.subtle.exportKey('spki', publicKey);
+      return abToBase64(spki);
+    }
+    async function exportPrivateKeyBase64(privateKey) {
+      const pkcs8 = await crypto.subtle.exportKey('pkcs8', privateKey);
+      return abToBase64(pkcs8);
+    }
+
+    async function importBobPublicKeyFromSPKI(spkiB64) {
+      const ab = base64ToAb(spkiB64);
+      return await crypto.subtle.importKey(
+        'spki',
+        ab,
+        { name: "RSA-OAEP", hash: 'SHA-256' },
+        false,
+        ["encrypt"]
+      );
+    }
+    async function importBobPrivateKeyFromPKCS8(pkcs8B64) {
+      const ab = base64ToAb(pkcs8B64);
+      return await crypto.subtle.importKey(
+        'pkcs8',
+        ab,
+        { name: "RSA-OAEP", hash: 'SHA-256' },
+        false,
+        ["decrypt"]
+      );
+    }
+
+    async function importAlicePublicKeyFromSPKI(spkiB64) {
+      const ab = base64ToAb(spkiB64);
+      return await crypto.subtle.importKey(
+        'spki',
+        ab,
+        { name: "RSASSA-PKCS1-v1_5", hash: 'SHA-256' },
+        false,
+        ["verify"]
+      );
+    }
+
+    // Utility: show error message in msgStatus
+    function showError(err) {
+      console.error(err);
+      msgStatus.classList.add('error');
+      msgStatus.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+    }
+    function clearMsgStatus() {
+      msgStatus.classList.remove('error');
+      msgStatus.textContent = '';
+    }
+  </script>
+</body>
+</html>

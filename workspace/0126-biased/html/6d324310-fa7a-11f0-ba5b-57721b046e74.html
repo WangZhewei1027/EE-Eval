@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Interpreter</title>
+    <style>
+        body {
+            font-family: monospace;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        #codeInput {
+            width: 100%;
+            height: 100px;
+            font-family: monospace;
+        }
+        #output {
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 100px;
+            white-space: pre-wrap;
+        }
+        .control-panel {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        button {
+            margin: 5px;
+        }
+        .var-display {
+            margin-top: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Interpreter</h1>
+    <div class="control-panel">
+        <h3>Code Input</h3>
+        <textarea id="codeInput" placeholder="Enter your code here..."></textarea>
+        <div>
+            <button onclick="executeCode()">Execute</button>
+            <button onclick="clearCode()">Clear</button>
+            <button onclick="stepThrough()">Step Through</button>
+            <button onclick="showAST()">Show AST</button>
+            <button onclick="showSymbolTable()">Show Symbols</button>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <h3>Execution Controls</h3>
+        <div>
+            <label>Execution Speed: </label>
+            <input type="range" id="execSpeed" min="0" max="1000" value="100" onchange="updateSpeed()">
+            <span id="speedValue">100ms</span>
+        </div>
+        <div>
+            <label>Max Steps: </label>
+            <input type="number" id="maxSteps" value="100" min="1" max="1000">
+        </div>
+        <div>
+            <button onclick="pauseExecution()">Pause</button>
+            <button onclick="resumeExecution()">Resume</button>
+            <button onclick="resetInterpreter()">Reset</button>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <h3>Output</h3>
+        <div id="output"></div>
+    </div>
+
+    <div class="control-panel var-display">
+        <h3>Variable Inspector</h3>
+        <div>
+            <input type="text" id="varName" placeholder="Variable name">
+            <button onclick="inspectVariable()">Inspect</button>
+            <button onclick="watchVariable()">Watch</button>
+            <button onclick="unwatchVariable()">Unwatch</button>
+        </div>
+        <div id="variableValue"></div>
+        <table id="watchedVars">
+            <thead>
+                <tr>
+                    <th>Variable</th>
+                    <th>Value</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="control-panel">
+        <h3>Environment</h3>
+        <div>
+            <button onclick="showEnvironment()">Show Environment</button>
+            <button onclick="saveEnvironment()">Save Environment</button>
+            <button onclick="loadEnvironment()">Load Environment</button>
+        </div>
+        <div id="environmentInfo"></div>
+    </div>
+
+    <script>
+        // Interpreter state
+        let interpreterState = {
+            variables: {},
+            functions: {},
+            executionPaused: false,
+            executionSpeed: 100,
+            stepIndex: 0,
+            maxSteps: 100,
+            watchedVariables: [],
+            ast: null,
+            symbolTable: {},
+            executionStack: []
+        };
+
+        // DOM elements
+        const codeInput = document.getElementById('codeInput');
+        const output = document.getElementById('output');
+        const execSpeed = document.getElementById('execSpeed');
+        const speedValue = document.getElementById('speedValue');
+        const maxSteps = document.getElementById('maxSteps');
+        const varName = document.getElementById('varName');
+        const variableValue = document.getElementById('variableValue');
+        const watchedVarsTbody = document.querySelector('#watchedVars tbody');
+        const environmentInfo = document.getElementById('environmentInfo');
+
+        // Core interpreter functions
+        function executeCode() {
+            const code = codeInput.value;
+            if (!code.trim()) {
+                output.textContent = "No code to execute";
+                return;
+            }
+
+            try {
+                // Parse and build AST
+                interpreterState.ast = parseCode(code);
+                interpreterState.symbolTable = buildSymbolTable(interpreterState.ast);
+                
+                // Execute
+                const result = evaluate(interpreterState.ast);
+                output.textContent += `\n>> ${result}`;
+                updateWatchedVariables();
+            } catch (e) {
+                output.textContent += `\nError: ${e.message}`;
+            }
+        }
+
+        function parseCode(code) {
+            // Simplified parsing
+            const lines = code.split('\n').filter(line => line.trim());
+            const ast = {
+                type: 'Program',
+                body: []
+            };
+
+            for (const line of lines) {
+                if (line.includes('=')) {
+                    // Variable assignment
+                    const [varName, expr] = line.split('=').map(s => s.trim());
+                    ast.body.push({
+                        type: 'Assignment',
+                        varName,
+                        expression: parseExpression(expr)
+                    });
+                } else if (line.startsWith('function ')) {
+                    // Function definition
+                    const match = line.match(/function\s+(\w+)\((.*)\)\s*\{?/);
+                    if (match) {
+                        const funcName = match[1];
+                        const params = match[2].split(',').map(p => p.trim()).filter(p => p);
+                        ast.body.push({
+                            type: 'FunctionDeclaration',
+                            name: funcName,
+                            params,
+                            body: [] // Simplified
+                        });
+                    }
+                } else {
+                    // Expression
+                    ast.body.push({
+                        type: 'Expression',
+                        expression: parseExpression(line)
+                    });
+                }
+            }
+
+            return ast;
+        }
+
+        function parseExpression(expr) {
+            // Very simplified expression parser
+            if (expr.includes('+')) {
+                const [left, right] = expr.split('+').map(s => s.trim());
+                return {
+                    type: 'BinaryExpression',
+                    operator: '+',
+                    left: parseExpression(left),
+                    right: parseExpression(right)
+                };
+            } else if (expr.includes('*')) {
+                const [left, right] = expr.split('*').map(s => s.trim());
+                return {
+                    type: 'BinaryExpression',
+                    operator: '*',
+                    left: parseExpression(left),
+                    right: parseExpression(right)
+                };
+            } else if (!isNaN(expr)) {
+                return {
+                    type: 'Literal',
+                    value: Number(expr)
+                };
+            } else {
+                return {
+                    type: 'Identifier',
+                    name: expr
+                };
+            }
+        }
+
+        function buildSymbolTable(ast) {
+            const symbols = {};
+            for (const node of ast.body) {
+                if (node.type === 'Assignment') {
+                    symbols[node.varName] = { type: 'variable' };
+                } else if (node.type === 'FunctionDeclaration') {
+                    symbols[node.name] = { type: 'function', params: node.params };
+                }
+            }
+            return symbols;
+        }
+
+        function evaluate(node) {
+            if (node.type === 'Program') {
+                let result;
+                for (const stmt of node.body) {
+                    result = evaluate(stmt);
+                }
+                return result;
+            } else if (node.type === 'Assignment') {
+                const value = evaluate(node.expression);
+                interpreterState.variables[node.varName] = value;
+                return value;
+            } else if (node.type === 'Expression') {
+                return evaluate(node.expression);
+            } else if (node.type === 'BinaryExpression') {
+                const left = evaluate(node.left);
+                const right = evaluate(node.right);
+                switch (node.operator) {
+                    case '+': return left + right;
+                    case '*': return left * right;
+                    default: throw new Error(`Unknown operator: ${node.operator}`);
+                }
+            } else if (node.type === 'Literal') {
+                return node.value;
+            } else if (node.type === 'Identifier') {
+                if (interpreterState.variables.hasOwnProperty(node.name)) {
+                    return interpreterState.variables[node.name];
+                }
+                throw new Error(`Undefined variable: ${node.name}`);
+            }
+            return undefined;
+        }
+
+        // Interactive controls
+        function clearCode() {
+            codeInput.value = '';
+            output.textContent = '';
+        }
+
+        function stepThrough() {
+            if (!interpreterState.ast) {
+                const code = codeInput.value;
+                if (!code.trim()) {
+                    output.textContent = "No code to execute";
+                    return;
+                }
+                interpreterState.ast = parseCode(code);
+                interpreterState.symbolTable = buildSymbolTable(interpreterState.ast);
+                interpreterState.stepIndex = 0;
+            }
+
+            if (interpreterState.stepIndex < interpreterState.ast.body.length) {
+                const node = interpreterState.ast.body[interpreterState.stepIndex];
+                output.textContent += `\nStep ${interpreterState.stepIndex + 1}: Executing ${node.type}`;
+                if (node.type === 'Assignment') {
+                    output.textContent += ` ${node.varName}`;
+                }
+                const result = evaluate(node);
+                if (result !== undefined) {
+                    output.textContent += ` → ${result}`;
+                }
+                interpreterState.stepIndex++;
+                updateWatchedVariables();
+            } else {
+                output.textContent += "\nExecution complete";
+            }
+        }
+
+        function showAST() {
+            if (!interpreterState.ast) {
+                output.textContent = "No AST available. Execute code first.";
+                return;
+            }
+            output.textContent = "Abstract Syntax Tree:\n" + JSON.stringify(interpreterState.ast, null, 2);
+        }
+
+        function showSymbolTable() {
+            if (!interpreterState.symbolTable) {
+                output.textContent = "No symbol table available. Execute code first.";
+                return;
+            }
+            output.textContent = "Symbol Table:\n" + JSON.stringify(interpreterState.symbolTable, null, 2);
+        }
+
+        function updateSpeed() {
+            interpreterState.executionSpeed = parseInt(execSpeed.value);
+            speedValue.textContent = `${interpreterState.executionSpeed}ms`;
+        }
+
+        function pauseExecution() {
+            interpreterState.executionPaused = true;
+            output.textContent += "\nExecution paused";
+        }
+
+        function resumeExecution() {
+            interpreterState.executionPaused = false;
+            output.textContent += "\nResuming execution";
+            executeCode();
+        }
+
+        function resetInterpreter() {
+            interpreterState = {
+                variables: {},
+                functions: {},
+                executionPaused: false,
+                executionSpeed: 100,
+                stepIndex: 0,
+                maxSteps: 100,
+                watchedVariables: [],
+                ast: null,
+                symbolTable: {},
+                executionStack: []
+            };
+            output.textContent = "Interpreter reset";
+            updateWatchedVariables();
+        }
+
+        function inspectVariable() {
+            const name = varName.value.trim();
+            if (!name) return;
+            
+            if (interpreterState.variables.hasOwnProperty(name)) {
+                variableValue.textContent = `${name} = ${interpreterState.variables[name]}`;
+            } else {
+                variableValue.textContent = `Variable ${name} not found`;
+            }
+        }
+
+        function watchVariable() {
+            const name = varName.value.trim();
+            if (!name) return;
+            
+            if (!interpreterState.watchedVariables.includes(name)) {
+                interpreterState.watchedVariables.push(name);
+                updateWatchedVariables();
+            }
+        }
+
+        function unwatchVariable() {
+            const name = varName.value.trim();
+            if (!name) return;
+            
+            interpreterState.watchedVariables = interpreterState.watchedVariables.filter(v => v !== name);
+            updateWatchedVariables();
+        }
+
+        function updateWatchedVariables() {
+            watchedVarsTbody.innerHTML = '';
+            for (const name of interpreterState.watchedVariables) {
+                const row = document.createElement('tr');
+                const nameCell = document.createElement('td');
+                const valueCell = document.createElement('td');
+                const typeCell = document.createElement('td');
+                
+                nameCell.textContent = name;
+                
+                if (interpreterState.variables.hasOwnProperty(name)) {
+                    const value = interpreterState.variables[name];
+                    valueCell.textContent = value;
+                    typeCell.textContent = typeof value;
+                } else {
+                    valueCell.textContent = "undefined";
+                    typeCell.textContent = "undefined";
+                }
+                
+                row.appendChild(nameCell);
+                row.appendChild(valueCell);
+                row.appendChild(typeCell);
+                watchedVarsTbody.appendChild(row);
+            }
+        }
+
+        function showEnvironment() {
+            environmentInfo.innerHTML = `
+                <h4>Current Environment</h4>
+                <pre>Variables: ${JSON.stringify(interpreterState.variables, null, 2)}</pre>
+                <pre>Functions: ${JSON.stringify(interpreterState.functions, null, 2)}</pre>
+            `;
+        }
+
+        function saveEnvironment() {
+            localStorage.setItem('interpreterEnvironment', JSON.stringify({
+                variables: interpreterState.variables,
+                functions: interpreterState.functions
+            }));
+            output.textContent += "\nEnvironment saved";
+        }
+
+        function loadEnvironment() {
+            const saved = localStorage.getItem('interpreterEnvironment');
+            if (saved) {
+                const env = JSON.parse(saved);
+                interpreterState.variables = env.variables || {};
+                interpreterState.functions = env.functions || {};
+                output.textContent += "\nEnvironment loaded";
+                updateWatchedVariables();
+            } else {
+                output.textContent += "\nNo saved environment found";
+            }
+        }
+
+        // Initialize
+        output.textContent = "Interpreter ready. Enter code to begin.";
+    </script>
+</body>
+</html>

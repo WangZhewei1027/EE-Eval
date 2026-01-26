@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compiler Concept Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 2em;
+    background: #f0f0f0;
+  }
+  h1 {
+    color: #333;
+  }
+  textarea, pre, select, button {
+    font-family: monospace;
+    font-size: 1rem;
+  }
+  textarea {
+    width: 100%;
+    height: 120px;
+  }
+  pre {
+    white-space: pre-wrap;
+    background: #272822;
+    color: #f8f8f2;
+    padding: 1em;
+    border-radius: 5px;
+    min-height: 80px;
+  }
+  label {
+    font-weight: bold;
+  }
+  .section {
+    margin-bottom: 2em;
+  }
+  button {
+    padding: 0.5em 1em;
+    margin-top: 0.5em;
+    cursor: pointer;
+  }
+  .error {
+    color: #d44;
+    background: #fee;
+    padding: 0.5em;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<h1>Compiler Concept Demonstration</h1>
+
+<div class="section">
+  <label for="sourceCode">Source Code (simple arithmetic expressions):</label><br />
+  <textarea id="sourceCode" spellcheck="false">a = 3 + 5 * (2 - 1);
+b = a * 4 - 7;
+b + 10;</textarea>
+</div>
+
+<div class="section">
+  <button id="compileBtn">Compile</button>
+</div>
+
+<div class="section">
+  <label>Tokens (Lexical Analysis):</label>
+  <pre id="tokensOutput">(Press "Compile" to see tokens)</pre>
+</div>
+
+<div class="section">
+  <label>Parse Tree (Parsing):</label>
+  <pre id="parseOutput">(Press "Compile" to see parse tree)</pre>
+</div>
+
+<div class="section">
+  <label>Generated Intermediate Code (3-Address Code):</label>
+  <pre id="codeOutput">(Press "Compile" to see code)</pre>
+</div>
+
+<script>
+(() => {
+  /*
+    Simple compiler demonstration:
+    - Lexer: tokenize input (variables, numbers, operators, parentheses, semicolons)
+    - Parser: build an AST for assignment and expression statements
+    - Code Generator: output 3-address code (instructions)
+  */
+
+  // Token definitions
+  const TOKEN_TYPES = {
+    NUMBER: 'NUMBER',
+    IDENT: 'IDENT',
+    OP: 'OP',
+    PAREN: 'PAREN',
+    SEMICOLON: 'SEMICOLON',
+    ASSIGN: 'ASSIGN',
+    EOF: 'EOF',
+  };
+
+  function isAlpha(ch) {
+    return /^[A-Za-z_]$/.test(ch);
+  }
+  function isDigit(ch) {
+    return /^[0-9]$/.test(ch);
+  }
+  function isAlnum(ch) {
+    return isAlpha(ch) || isDigit(ch);
+  }
+
+  // Lexer
+  class Lexer {
+    constructor(input) {
+      this.input = input;
+      this.pos = 0;
+      this.currentChar = this.input[this.pos];
+    }
+
+    advance() {
+      this.pos++;
+      if (this.pos >= this.input.length) {
+        this.currentChar = null;
+      } else {
+        this.currentChar = this.input[this.pos];
+      }
+    }
+
+    skipWhitespace() {
+      while (this.currentChar && /\s/.test(this.currentChar)) {
+        this.advance();
+      }
+    }
+
+    number() {
+      let result = '';
+      while (this.currentChar && isDigit(this.currentChar)) {
+        result += this.currentChar;
+        this.advance();
+      }
+      return { type: TOKEN_TYPES.NUMBER, value: result };
+    }
+
+    ident() {
+      let result = '';
+      while (this.currentChar && isAlnum(this.currentChar)) {
+        result += this.currentChar;
+        this.advance();
+      }
+      return { type: TOKEN_TYPES.IDENT, value: result };
+    }
+
+    getNextToken() {
+      while (this.currentChar !== null) {
+        if (/\s/.test(this.currentChar)) {
+          this.skipWhitespace();
+          continue;
+        }
+
+        if (isAlpha(this.currentChar)) {
+          return this.ident();
+        }
+
+        if (isDigit(this.currentChar)) {
+          return this.number();
+        }
+
+        if (this.currentChar === '+') {
+          this.advance();
+          return { type: TOKEN_TYPES.OP, value: '+' };
+        }
+        if (this.currentChar === '-') {
+          this.advance();
+          return { type: TOKEN_TYPES.OP, value: '-' };
+        }
+        if (this.currentChar === '*') {
+          this.advance();
+          return { type: TOKEN_TYPES.OP, value: '*' };
+        }
+        if (this.currentChar === '/') {
+          this.advance();
+          return { type: TOKEN_TYPES.OP, value: '/' };
+        }
+        if (this.currentChar === '(') {
+          this.advance();
+          return { type: TOKEN_TYPES.PAREN, value: '(' };
+        }
+        if (this.currentChar === ')') {
+          this.advance();
+          return { type: TOKEN_TYPES.PAREN, value: ')' };
+        }
+        if (this.currentChar === '=') {
+          this.advance();
+          return { type: TOKEN_TYPES.ASSIGN, value: '=' };
+        }
+        if (this.currentChar === ';') {
+          this.advance();
+          return { type: TOKEN_TYPES.SEMICOLON, value: ';' };
+        }
+
+        throw new Error(`Lexer error: Unknown character '${this.currentChar}'`);
+      }
+
+      return { type: TOKEN_TYPES.EOF, value: null };
+    }
+  }
+
+  // Parser: recursive descent parser
+  // Grammar (simplified):
+  // program: statement*
+  // statement: assignment | expressionStatement
+  // assignment: IDENT = expression ;
+  // expressionStatement: expression ;
+  // expression: term ((+|-) term)*
+  // term: factor ((*|/) factor)*
+  // factor: NUMBER | IDENT | ( expression )
+
+  class Parser {
+    constructor(lexer) {
+      this.lexer = lexer;
+      this.currentToken = this.lexer.getNextToken();
+    }
+
+    eat(type) {
+      if (this.currentToken.type === type) {
+        this.currentToken = this.lexer.getNextToken();
+      } else {
+        throw new Error(`Parser error: expected token type ${type} but got ${this.currentToken.type}`);
+      }
+    }
+
+    parseProgram() {
+      const statements = [];
+      while (this.currentToken.type !== TOKEN_TYPES.EOF) {
+        statements.push(this.parseStatement());
+      }
+      return { type: 'Program', body: statements };
+    }
+
+    parseStatement() {
+      // lookahead for assignment: IDENT ASSIGN ...
+      if (this.currentToken.type === TOKEN_TYPES.IDENT) {
+        let lookahead = this.lexer.pos;
+        let lookToken = this.currentToken;
+        // peek next token
+        let nextToken = null;
+        if (lookahead < this.lexer.input.length) {
+          const savePos = this.lexer.pos;
+          const saveChar = this.lexer.currentChar;
+          const saveCurr = this.currentToken;
+          const tempLexer = new Lexer(this.lexer.input);
+          tempLexer.pos = this.lexer.pos;
+          tempLexer.currentChar = this.lexer.currentChar;
+          tempLexer.getNextToken();
+          nextToken = tempLexer.getNextToken();
+        }
+
+        if (nextToken && nextToken.type === TOKEN_TYPES.ASSIGN) {
+          return this.parseAssignment();
+        }
+      }
+      return this.parseExpressionStatement();
+    }
+
+    parseAssignment() {
+      const left = this.currentToken;
+      this.eat(TOKEN_TYPES.IDENT);
+      this.eat(TOKEN_TYPES.ASSIGN);
+      const right = this.parseExpression();
+      this.eat(TOKEN_TYPES.SEMICOLON);
+      return { type: 'Assignment', left: { type: 'Identifier', name: left.value }, right };
+    }
+
+    parseExpressionStatement() {
+      const expr = this.parseExpression();
+      this.eat(TOKEN_TYPES.SEMICOLON);
+      return { type: 'ExpressionStatement', expression: expr };
+    }
+
+    parseExpression() {
+      let node = this.parseTerm();
+      while (this.currentToken.type === TOKEN_TYPES.OP &&
+        (this.currentToken.value === '+' || this.currentToken.value === '-')) {
+        const token = this.currentToken;
+        this.eat(TOKEN_TYPES.OP);
+        const right = this.parseTerm();
+        node = { type: 'BinaryExpression', operator: token.value, left: node, right: right };
+      }
+      return node;
+    }
+
+    parseTerm() {
+      let node = this.parseFactor();
+      while (this.currentToken.type === TOKEN_TYPES.OP &&
+        (this.currentToken.value === '*' || this.currentToken.value === '/')) {
+        const token = this.currentToken;
+        this.eat(TOKEN_TYPES.OP);
+        const right = this.parseFactor();
+        node = { type: 'BinaryExpression', operator: token.value, left: node, right: right };
+      }
+      return node;
+    }
+
+    parseFactor() {
+      const token = this.currentToken;
+
+      if (token.type === TOKEN_TYPES.NUMBER) {
+        this.eat(TOKEN_TYPES.NUMBER);
+        return { type: 'Literal', value: Number(token.value) };
+      }
+      else if (token.type === TOKEN_TYPES.IDENT) {
+        this.eat(TOKEN_TYPES.IDENT);
+        return { type: 'Identifier', name: token.value };
+      }
+      else if (token.type === TOKEN_TYPES.PAREN && token.value === '(') {
+        this.eat(TOKEN_TYPES.PAREN);
+        const node = this.parseExpression();
+        if (this.currentToken.type === TOKEN_TYPES.PAREN && this.currentToken.value === ')') {
+          this.eat(TOKEN_TYPES.PAREN);
+        } else {
+          throw new Error("Parser error: expected ')'");
+        }
+        return node;
+      }
+
+      throw new Error(`Parser error: unexpected token type ${token.type} with value ${token.value}`);
+    }
+  }
+
+  // Code Generator - generate 3-address intermediate code from AST
+  // We'll generate instructions like:
+  // t1 = 3
+  // t2 = 5
+  // t3 = 2
+  // t4 = t3 - 1
+  // t5 = t2 * t4
+  // t6 = t1 + t5
+  // a = t6
+  // ...
+  // Uses a simple temp variable counter
+
+  class CodeGenerator {
+    constructor() {
+      this.tempCount = 0;
+      this.instructions = [];
+      this.variables = new Set();
+    }
+
+    newTemp() {
+      this.tempCount++;
+      return `t${this.tempCount}`;
+    }
+
+    generate(node) {
+      if (!node) return null;
+
+      switch (node.type) {
+        case 'Program': {
+          node.body.forEach(stmt => this.generate(stmt));
+          return;
+        }
+        case 'Assignment': {
+          const r = this.generate(node.right);
+          const leftName = node.left.name;
+          this.variables.add(leftName);
+          this.instructions.push(`${leftName} = ${r}`);
+          return leftName;
+        }
+        case 'ExpressionStatement': {
+          this.generate(node.expression);
+          return;
+        }
+        case 'BinaryExpression': {
+          const left = this.generate(node.left);
+          const right = this.generate(node.right);
+          const temp = this.newTemp();
+          this.instructions.push(`${temp} = ${left} ${node.operator} ${right}`);
+          return temp;
+        }
+        case 'Literal': {
+          const temp = this.newTemp();
+          this.instructions.push(`${temp} = ${node.value}`);
+          return temp;
+        }
+        case 'Identifier': {
+          this.variables.add(node.name);
+          return node.name;
+        }
+        default:
+          throw new Error(`CodeGen error: Unknown node type ${node.type}`);
+      }
+    }
+  }
+
+  // Utility to print tokens nicely
+  function formatTokens(tokens) {
+    return tokens.map(t => `${t.type}${t.value !== null ? `(${t.value})` : ''}`).join('\n');
+  }
+
+  // Utility to pretty-print AST
+  function prettyPrintAST(node, indent = '') {
+    if (!node) return '';
+    switch (node.type) {
+      case 'Program':
+        return node.body.map(stmt => prettyPrintAST(stmt, indent)).join('\n');
+      case 'Assignment':
+        return `${indent}Assignment:\n${indent}  Left: ${prettyPrintAST(node.left, indent + '    ')}\n${indent}  Right:\n${prettyPrintAST(node.right, indent + '    ')}`;
+      case 'ExpressionStatement':
+        return `${indent}ExpressionStatement:\n${prettyPrintAST(node.expression, indent + '  ')}`;
+      case 'BinaryExpression':
+        return `${indent}BinaryExpression (${node.operator}):\n${indent}  Left:\n${prettyPrintAST(node.left, indent + '    ')}\n${indent}  Right:\n${prettyPrintAST(node.right, indent + '    ')}`;
+      case 'Literal':
+        return `${indent}Literal (${node.value})`;
+      case 'Identifier':
+        return `${indent}Identifier (${node.name})`;
+      default:
+        return `${indent}Unknown node type (${node.type})`;
+    }
+  }
+
+  // Main interaction
+  const sourceInput = document.getElementById('sourceCode');
+  const compileBtn = document.getElementById('compileBtn');
+  const tokensOutput = document.getElementById('tokensOutput');
+  const parseOutput = document.getElementById('parseOutput');
+  const codeOutput = document.getElementById('codeOutput');
+
+  compileBtn.addEventListener('click', () => {
+    tokensOutput.textContent = '';
+    parseOutput.textContent = '';
+    codeOutput.textContent = '';
+
+    const source = sourceInput.value;
+
+    try {
+      // Lexical analysis - get all tokens
+      const lexer = new Lexer(source);
+      const tokens = [];
+      let token;
+      do {
+        token = lexer.getNextToken();
+        tokens.push(token);
+      } while (token.type !== TOKEN_TYPES.EOF);
+      tokensOutput.textContent = formatTokens(tokens);
+
+      // Parsing
+      const parser = new Parser(new Lexer(source));
+      const ast = parser.parseProgram();
+      parseOutput.textContent = prettyPrintAST(ast);
+
+      // Code generation
+      const codeGen = new CodeGenerator();
+      codeGen.generate(ast);
+      codeOutput.textContent = codeGen.instructions.join('\n');
+    } catch (err) {
+      tokensOutput.textContent = '';
+      parseOutput.textContent = '';
+      codeOutput.textContent = '';
+      const msg = err.message || 'Error during compilation';
+      tokensOutput.textContent = '';
+      parseOutput.textContent = '';
+      codeOutput.innerHTML = `<div class="error">${msg}</div>`;
+    }
+  });
+})();
+</script>
+</body>
+</html>

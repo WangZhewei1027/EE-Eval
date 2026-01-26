@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mutex (Mutual Exclusion) Demonstration</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 20px; color: #111; }
+    h1 { margin-top: 0; }
+    .controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+    label { font-size: 0.9rem; }
+    input[type="number"] { width:70px; padding:6px; }
+    button { padding:8px 12px; border-radius:6px; border:1px solid #ccc; background:#f7f7f7; cursor:pointer; }
+    button:hover { background:#eee; }
+    .panel { border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; background:#fafafa; }
+    .status { display:flex; gap:12px; align-items:center; margin-bottom:8px; }
+    .badge { padding:6px 10px; border-radius:999px; background:#222; color:#fff; font-weight:600; font-size:0.9rem; }
+    #log { height:280px; overflow:auto; background:#111; color:#0f0; padding:12px; border-radius:6px; font-family: monospace; font-size:12px; }
+    .task-list { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .task { padding:6px 8px; border-radius:6px; background:#fff; border:1px solid #ccc; font-size:12px; min-width:80px; text-align:center; }
+    .task.running { background: #fffae6; border-color:#ffd95a; }
+    .task.locked { background: #e6f7ff; border-color:#7fd2ff; }
+    .task.done { background:#e6ffe6; border-color:#7fdc7f; }
+    .muted { color:#666; font-size:0.9rem; }
+    footer { margin-top:18px; color:#666; font-size:0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Mutex (Mutual Exclusion) Demo</h1>
+
+  <div class="panel">
+    <div class="controls">
+      <label>Number of tasks: <input id="numTasks" type="number" value="10" min="1" /></label>
+      <label>Min critical (ms): <input id="minDelay" type="number" value="20" min="0" /></label>
+      <label>Max critical (ms): <input id="maxDelay" type="number" value="120" min="1" /></label>
+      <button id="startNoMutex">Start (No Mutex)</button>
+      <button id="startWithMutex">Start (With Mutex)</button>
+      <button id="clearLog">Clear / Reset</button>
+    </div>
+
+    <div class="status">
+      <div>Shared counter: <span id="counterBadge" class="badge">0</span></div>
+      <div>Mutex locked: <span id="lockedBadge" class="badge" style="background:#888;">false</span></div>
+      <div>Queue length: <span id="queueBadge" class="badge" style="background:#666;">0</span></div>
+      <div class="muted">(Tasks will read counter, sleep, then write back: shows lost updates when no mutex.)</div>
+    </div>
+
+    <div>
+      <strong>Task visualizer:</strong>
+      <div id="taskContainer" class="task-list"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <strong>Event log:</strong>
+    <pre id="log"></pre>
+  </div>
+
+  <footer>
+    This demo shows how a Mutex enforces exclusive access to a critical section so concurrent tasks don't corrupt shared state.
+  </footer>
+
+<script>
+/*
+  Mutex implementation (non-reentrant, FIFO fairness).
+  acquire() returns a Promise that resolves to a release() function.
+  release() must be called exactly once per acquire.
+*/
+class Mutex {
+  constructor() {
+    this._locked = false;
+    this._waiters = [];
+  }
+
+  // Acquire the lock. Returns Promise<releaseFn>
+  acquire() {
+    return new Promise(resolve => {
+      if (!this._locked) {
+        this._locked = true;
+        resolve(this._createReleaser());
+      } else {
+        this._waiters.push(resolve);
+      }
+    });
+  }
+
+  // Try to acquire immediately. Returns releaseFn or null.
+  tryAcquire() {
+    if (!this._locked) {
+      this._locked = true;
+      return this._createReleaser();
+    }
+    return null;
+  }
+
+  // Internal: create a release function that moves to next waiter when called.
+  _createReleaser() {
+    let released = false;
+    return () => {
+      if (released) return; // protect against double-release
+      released = true;
+      if (this._waiters.length > 0) {
+        const nextResolve = this._waiters.shift();
+        // nextResolve expects a release function
+        nextResolve(this._createReleaser());
+      } else {
+        this._locked = false;
+      }
+    };
+  }
+
+  // Convenience helper to run an async function with the lock held.
+  async runExclusive(fn) {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  isLocked() { return this._locked; }
+  queueLength() { return this._waiters.length; }
+}
+
+/* UI + Demo logic */
+
+const logEl = document.getElementById('log');
+const counterBadge = document.getElementById('counterBadge');
+const lockedBadge = document.getElementById('lockedBadge');
+const queueBadge = document.getElementById('queueBadge');
+const taskContainer = document.getElementById('taskContainer');
+const numTasksInput = document.getElementById('numTasks');
+const minDelayInput = document.getElementById('minDelay');
+const maxDelayInput = document.getElementById('maxDelay');
+const startNoMutexBtn = document.getElementById('startNoMutex');
+const startWithMutexBtn = document.getElementById('startWithMutex');
+const clearLogBtn = document.getElementById('clearLog');
+
+let sharedCounter = 0;
+let taskIdCounter = 0;
+const mutex = new Mutex();
+
+function now() {
+  return new Date().toLocaleTimeString();
+}
+function log(...args) {
+  const line = '[' + now() + '] ' + args.join(' ');
+  logEl.textContent += line + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function updateBadges() {
+  counterBadge.textContent = String(sharedCounter);
+  lockedBadge.textContent = String(mutex.isLocked());
+  lockedBadge.style.background = mutex.isLocked() ? '#b33' : '#888';
+  queueBadge.textContent = String(mutex.queueLength());
+  queueBadge.style.background = mutex.queueLength() ? '#d68' : '#666';
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function createTaskElement(id) {
+  const el = document.createElement('div');
+  el.className = 'task';
+  el.id = 'task-' + id;
+  el.textContent = 'Task ' + id + '\nidle';
+  return el;
+}
+
+function setTaskState(id, stateText, cssClass='') {
+  const el = document.getElementById('task-' + id);
+  if (!el) return;
+  el.textContent = 'Task ' + id + '\n' + stateText;
+  el.className = 'task ' + cssClass;
+}
+
+/*
+  The "critical section" simulate:
+   - read value
+   - await sleep(random)
+   - write value + 1
+  Without mutex this produces lost updates because multiple tasks can read the same value before writes.
+  With mutex the critical section is sequentialized.
+*/
+
+async function startTasks({count, useMutex}) {
+  const minDelay = Math.max(0, Number(minDelayInput.value) || 0);
+  const maxDelay = Math.max(minDelay, Number(maxDelayInput.value) || minDelay);
+  const startingCounter = sharedCounter;
+  const expectedFinal = startingCounter + count;
+  log(`Starting ${count} tasks ${useMutex ? 'with' : 'without'} mutex. Expected final=${expectedFinal}`);
+
+  const tasks = [];
+  for (let i=0; i<count; i++) {
+    const id = ++taskIdCounter;
+    const el = createTaskElement(id);
+    taskContainer.appendChild(el);
+    setTaskState(id, 'queued', '');
+
+    // Slightly stagger the task spawn so some tasks hit the queue
+    const spawnDelay = randInt(0, 40);
+    tasks.push((async () => {
+      await sleep(spawnDelay);
+      setTaskState(id, 'starting', 'running');
+
+      if (useMutex) {
+        log(`Task ${id} -> acquiring mutex`);
+        const release = await mutex.acquire();
+        updateBadges();
+        log(`Task ${id} -> acquired mutex`);
+        setTaskState(id, 'in critical', 'locked');
+
+        // critical section
+        const read = sharedCounter;
+        log(`Task ${id} read counter=${read}`);
+        await sleep(randInt(minDelay, maxDelay));
+        sharedCounter = read + 1;
+        log(`Task ${id} updated counter=${sharedCounter}`);
+
+        // release
+        release();
+        log(`Task ${id} -> released mutex`);
+        updateBadges();
+        setTaskState(id, 'done', 'done');
+      } else {
+        // No mutex: simulate critical section but nothing prevents interleaving.
+        setTaskState(id, 'in critical (no lock)', 'locked');
+        const read = sharedCounter;
+        log(`Task ${id} read counter=${read}`);
+        await sleep(randInt(minDelay, maxDelay));
+        sharedCounter = read + 1;
+        log(`Task ${id} updated counter=${sharedCounter}`);
+        setTaskState(id, 'done', 'done');
+        updateBadges();
+      }
+
+      return id;
+    })());
+  }
+
+  // Update badges while tasks are running
+  const monitor = setInterval(updateBadges, 50);
+  await Promise.all(tasks);
+  clearInterval(monitor);
+  updateBadges();
+  log(`All tasks finished. final counter=${sharedCounter} (expected ${expectedFinal}). Lost updates = ${expectedFinal - sharedCounter}`);
+}
+
+startNoMutexBtn.addEventListener('click', async () => {
+  const count = Math.max(1, Number(numTasksInput.value) || 1);
+  startNoMutexBtn.disabled = startWithMutexBtn.disabled = true;
+  try {
+    await startTasks({count, useMutex:false});
+  } finally {
+    startNoMutexBtn.disabled = startWithMutexBtn.disabled = false;
+  }
+});
+
+startWithMutexBtn.addEventListener('click', async () => {
+  const count = Math.max(1, Number(numTasksInput.value) || 1);
+  startNoMutexBtn.disabled = startWithMutexBtn.disabled = true;
+  try {
+    await startTasks({count, useMutex:true});
+  } finally {
+    startNoMutexBtn.disabled = startWithMutexBtn.disabled = false;
+  }
+});
+
+clearLogBtn.addEventListener('click', () => {
+  sharedCounter = 0;
+  logEl.textContent = '';
+  taskContainer.innerHTML = '';
+  updateBadges();
+  log('Reset counter and cleared tasks/log.');
+});
+
+// Initialize
+updateBadges();
+log('Mutex demo ready. Press "Start (No Mutex)" to observe race conditions, or "Start (With Mutex)" to enforce exclusive access.');
+
+/* Extra demonstration: show what happens if a task tries to re-enter the same mutex.
+   The implementation is non-reentrant: if a task that already holds the lock calls acquire() again,
+   it will deadlock (it will be queued behind itself). Uncomment below to see the effect.
+*/
+/*
+(async () => {
+  await sleep(2000);
+  log('Demonstrating reentrancy: acquiring mutex, then trying to acquire again (will block).');
+  const release = await mutex.acquire();
+  log('Acquired once. Now trying to acquire again (this will be queued and block).');
+  mutex.acquire().then(release2 => {
+    log('Acquired second time (unexpected).');
+    release2();
+  });
+  await sleep(1500);
+  log('Now releasing the first lock -> second acquisition will proceed (deadlock if same task was waiting).');
+  release();
+})();
+*/
+</script>
+</body>
+</html>

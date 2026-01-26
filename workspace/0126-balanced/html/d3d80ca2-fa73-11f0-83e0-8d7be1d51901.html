@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Branch and Bound Demo — 0/1 Knapsack</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  :root{
+    --bg:#f6f8fa;
+    --panel:#ffffff;
+    --muted:#667085;
+    --accent:#0b69ff;
+    --good:#1b9a59;
+    --bad:#e0423b;
+    --pruned:#db3f5b;
+    --node-size:52px;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  body{background:var(--bg);color:#0f1724;display:flex;flex-direction:column;align-items:stretch;}
+  header{padding:16px 20px;border-bottom:1px solid rgba(15,23,36,0.06);background:white;display:flex;align-items:center;gap:16px;}
+  header h1{font-size:18px;margin:0;}
+  main{display:flex;gap:16px;padding:16px;flex:1;overflow:hidden;}
+  .left,.right{background:var(--panel);border-radius:10px;padding:12px;box-shadow:0 1px 2px rgba(16,24,40,0.03);overflow:auto;}
+  .left{flex:2;min-width:520px;display:flex;flex-direction:column;gap:10px;}
+  .right{flex:1;min-width:320px;}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  button{padding:8px 10px;border-radius:8px;border:1px solid rgba(15,23,36,0.08);background:white;cursor:pointer;}
+  button.primary{background:var(--accent);color:white;border:none;}
+  button.warn{background:var(--pruned);color:white;border:none;}
+  input[type="number"]{width:72px;padding:6px;border-radius:8px;border:1px solid rgba(15,23,36,0.08);}
+  label{font-size:13px;color:var(--muted);}
+  .settings{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .items-list{display:flex;flex-direction:column;gap:6px;padding:6px;border-radius:8px;background:#fbfdff;border:1px solid rgba(11,105,255,0.06);}
+  .items-list .row{display:flex;gap:8px;align-items:center;}
+  .items-list .badge{font-weight:600;background:#eef6ff;padding:6px 8px;border-radius:8px;border:1px solid rgba(11,105,255,0.06);}
+  .panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .svg-wrap{flex:1;border-radius:10px;background:white;padding:8px;display:flex;flex-direction:column;}
+  .canvas{flex:1;border:1px dashed rgba(2,6,23,0.06);border-radius:8px;background:linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);overflow:auto;position:relative;}
+  svg{width:100%;height:620px;display:block;}
+  .legend{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;margin-top:6px;}
+  .legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:6px;}
+  .status-box{padding:8px;border-radius:8px;background:#fbfbff;border:1px solid rgba(2,6,23,0.04);font-size:13px;}
+  .log{height:180px;overflow:auto;border-radius:8px;padding:8px;background:#0f172422;font-family:monospace;color:#0b1221;}
+  .pq-list{max-height:200px;overflow:auto;}
+  .small{font-size:12px;color:var(--muted);}
+  .node-label{font-size:11px;pointer-events:none;}
+  .controls-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .slider{width:180px;}
+  .sol-items{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .pill{padding:6px 8px;border-radius:999px;background:#fff;border:1px solid rgba(11,105,255,0.06);font-weight:600;}
+  footer{padding:10px 16px;font-size:12px;color:var(--muted);text-align:center;}
+  /* Node tooltip */
+  .tooltip{position:absolute;padding:8px;background:white;border-radius:8px;border:1px solid rgba(2,6,23,0.08);font-size:13px;pointer-events:none;box-shadow:0 6px 18px rgba(2,6,23,0.08);display:none;z-index:1000;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Branch and Bound — 0/1 Knapsack (Interactive Demo)</h1>
+  <div class="small" style="margin-left:auto;">Concept: construct search tree, compute optimistic bound (fractional knapsack), use bound to prune branches.</div>
+</header>
+
+<main>
+  <div class="left">
+    <div class="panel-title">
+      <strong>Search Visualization</strong>
+      <div class="controls">
+        <div class="settings">
+          <label class="small">Items:
+            <input id="numItems" type="number" min="3" max="10" value="6" />
+          </label>
+          <label class="small">Capacity:
+            <input id="capacityInput" type="number" min="1" value="15" />
+          </label>
+          <button id="randomBtn">Randomize</button>
+        </div>
+        <button id="resetBtn">Reset</button>
+        <button id="stepBtn">Step</button>
+        <button id="playBtn" class="primary">Auto Play</button>
+        <button id="pauseBtn" style="display:none;">Pause</button>
+        <button id="runBtn" class="primary">Run to End</button>
+        <button id="solveBtn">Solve (fast)</button>
+      </div>
+    </div>
+
+    <div class="svg-wrap">
+      <div class="canvas" id="canvasWrap">
+        <svg id="svgCanvas" viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid meet"></svg>
+        <div id="tooltip" class="tooltip"></div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <div class="legend">
+          <div><span class="dot" style="background:#bfe1ff;"></span>Open (in PQ)</div>
+          <div><span class="dot" style="background:#57b894;"></span>Expanded</div>
+          <div><span class="dot" style="background:#ffb86b;"></span>Popped (processing)</div>
+          <div><span class="dot" style="background:#e06b78;"></span>Pruned</div>
+          <div><span class="dot" style="background:#ffd166;"></span>Best solution leaf</div>
+        </div>
+        <div class="small">Tip: hover nodes for details. Nodes show profit/weight/bound.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:10px;">
+      <div style="flex:1;">
+        <div class="panel-title"><strong>Priority Queue (Open Nodes)</strong><span class="small">Sorted by bound (desc)</span></div>
+        <div class="pq-list status-box" id="pqBox"></div>
+      </div>
+      <div style="width:280px;">
+        <div class="panel-title"><strong>Status</strong></div>
+        <div class="status-box">
+          <div><strong>Best Profit:</strong> <span id="bestProfit">0</span></div>
+          <div><strong>Best Solution:</strong></div>
+          <div class="sol-items" id="bestSol"></div>
+          <div style="margin-top:8px;"><strong>Current Node:</strong> <span id="currentNode">-</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="right">
+    <div class="panel-title"><strong>Problem & Bounds</strong>
+      <div class="small">Items sorted by value/weight ratio (used for bound)</div>
+    </div>
+
+    <div class="items-list" id="itemsList"></div>
+
+    <div style="margin-top:12px;">
+      <div class="panel-title"><strong>Logs</strong></div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="panel-title"><strong>Controls</strong></div>
+      <div class="controls-row">
+        <label class="small">Speed:
+          <input id="speed" class="slider" type="range" min="100" max="2000" value="600" />
+        </label>
+        <button id="explainBtn">Explain Step</button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  This interactive demo implements Branch and Bound for the 0/1 knapsack: nodes are states (level, profit, weight) and we compute an optimistic bound using the fractional knapsack. Nodes with bound <= current best are pruned.
+</footer>
+
+<script>
+(() => {
+  // Utility functions
+  function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+  function formatPath(path){
+    return path.map(x=> x===1 ? "1" : x===0 ? "0" : "-").join("");
+  }
+
+  // DOM elements
+  const svg = document.getElementById('svgCanvas');
+  const pqBox = document.getElementById('pqBox');
+  const itemsList = document.getElementById('itemsList');
+  const logDiv = document.getElementById('log');
+  const bestProfitSpan = document.getElementById('bestProfit');
+  const bestSolDiv = document.getElementById('bestSol');
+  const currentNodeSpan = document.getElementById('currentNode');
+  const tooltip = document.getElementById('tooltip');
+
+  const numItemsInput = document.getElementById('numItems');
+  const capacityInput = document.getElementById('capacityInput');
+  const randomBtn = document.getElementById('randomBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const playBtn = document.getElementById('playBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const runBtn = document.getElementById('runBtn');
+  const solveBtn = document.getElementById('solveBtn');
+  const speedSlider = document.getElementById('speed');
+  const explainBtn = document.getElementById('explainBtn');
+
+  // State
+  let items = [];
+  let n = 6;
+  let capacity = 15;
+  let nodeIdCounter = 0;
+  let nodes = []; // flat list for visualization
+  let pq = []; // priority queue (array sorted by bound desc)
+  let bestProfit = 0;
+  let bestNode = null;
+  let runningInterval = null;
+  let playMode = false;
+  let countsAtLevel = [];
+  let maxLevels = 0;
+  let viewBoxW = 1200, viewBoxH = 620;
+
+  // Colors for statuses
+  const colors = {
+    open: "#bfe1ff",
+    expanded: "#57b894",
+    popped: "#ffb86b",
+    pruned: "#e06b78",
+    best: "#ffd166",
+    defaultText: "#05204a"
+  };
+
+  function log(...args){
+    const t = new Date().toLocaleTimeString();
+    logDiv.innerHTML = `<div>[${t}] ${args.join(" ")}</div>` + logDiv.innerHTML;
+  }
+
+  // Create random items
+  function genItems(m, maxW=10, maxV=20){
+    const arr = [];
+    for(let i=0;i<m;i++){
+      const w = randInt(1, maxW);
+      const v = randInt(1, maxV);
+      arr.push({id:i+1, weight:w, value:v, ratio: v/w});
+    }
+    // Sort by ratio descending for bound computation and branching order
+    arr.sort((a,b)=> b.ratio - a.ratio || b.value - a.value);
+    return arr;
+  }
+
+  // Bound calculation using fractional knapsack on sorted remaining items
+  function boundFrom(node){
+    // node.level is index of next item to consider
+    if(node.weight > capacity) return 0;
+    let profitBound = node.profit;
+    let j = node.level;
+    let totWeight = node.weight;
+    while(j < n && totWeight < capacity){
+      const it = items[j];
+      if(totWeight + it.weight <= capacity){
+        totWeight += it.weight;
+        profitBound += it.value;
+      } else {
+        // fractional
+        const remain = capacity - totWeight;
+        profitBound += it.ratio * remain;
+        totWeight = capacity;
+        break;
+      }
+      j++;
+    }
+    return profitBound;
+  }
+
+  // Node factory
+  function createNode(parentId, level, profit, weight, path){
+    const id = ++nodeIdCounter;
+    const node = {
+      id, parentId, level, profit, weight, path: path.slice(), // copy
+      bound: 0, status: 'open', x:0, y:0
+    };
+    node.bound = boundFrom(node);
+    return node;
+  }
+
+  // Initialize a fresh problem
+  function initProblem(m, cap){
+    n = m;
+    capacity = cap;
+    items = genItems(n);
+    maxLevels = n + 1;
+    nodeIdCounter = 0;
+    nodes = [];
+    pq = [];
+    bestProfit = 0;
+    bestNode = null;
+    countsAtLevel = Array(maxLevels+2).fill(0);
+    // Root node: level 0, no profit, no weight, empty path (-1 undefined)
+    const root = createNode(null, 0, 0, 0, Array(n).fill(-1));
+    root.x = viewBoxW/2;
+    root.y = 40;
+    nodes.push(root);
+    pushPQ(root);
+    updateUI();
+    log(`Problem initialized with ${n} items, capacity ${capacity}.`);
+  }
+
+  // Priority queue functions (simple array)
+  function pushPQ(node){
+    // Only push if bound > bestProfit (otherwise prune immediately)
+    if(node.bound <= bestProfit){
+      node.status = 'pruned';
+      nodes.push(node); // still show it in visualization
+      log(`Node ${node.id} pruned at creation (bound <= bestProfit). bound=${node.bound.toFixed(2)}, best=${bestProfit}`);
+      return;
+    }
+    node.status = 'open';
+    pq.push(node);
+    // Keep PQ sorted by bound desc
+    pq.sort((a,b)=> b.bound - a.bound || b.profit - a.profit);
+  }
+  function popPQ(){
+    return pq.shift();
+  }
+
+  // Visualization: compute node positions based on counts at level when node created.
+  function layoutNode(node){
+    const levelIndex = node.level; // 0..n
+    const yBase = 40 + levelIndex * 80;
+    // increase count for that level and compute x spacing
+    const col = ++countsAtLevel[levelIndex];
+    const totalAtLevel = Math.max(8, Math.min(16, countsAtLevel[levelIndex])); // approximate
+    // spacing formula to spread nodes horizontally across viewBoxW
+    const spacing = Math.max(80, viewBoxW / (Math.max(6, col)+1));
+    const x = 80 + (col - 1) * spacing - (countsAtLevel[levelIndex] > 7 ? (countsAtLevel[levelIndex]-7)*10 : 0);
+    node.x = Math.max(40, Math.min(viewBoxW-40, x));
+    node.y = yBase;
+  }
+
+  // For newly created node, compute layout and add to nodes list
+  function addNodeToGraph(node){
+    layoutNode(node);
+    nodes.push(node);
+  }
+
+  // Drawing functions
+  function clearSvg(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+  }
+
+  function draw(){
+    clearSvg();
+    // Draw edges first
+    nodes.forEach(nod=>{
+      if(nod.parentId != null){
+        const parent = nodes.find(p=>p.id === nod.parentId);
+        if(parent){
+          const line = document.createElementNS("http://www.w3.org/2000/svg",'line');
+          line.setAttribute('x1', parent.x);
+          line.setAttribute('y1', parent.y + 20);
+          line.setAttribute('x2', nod.x);
+          line.setAttribute('y2', nod.y - 20);
+          line.setAttribute('stroke', 'rgba(15,23,36,0.06)');
+          line.setAttribute('stroke-width','2');
+          svg.appendChild(line);
+        }
+      }
+    });
+
+    // Draw nodes
+    nodes.forEach(node=>{
+      const g = document.createElementNS("http://www.w3.org/2000/svg",'g');
+      g.setAttribute('transform', `translate(${node.x},${node.y})`);
+      g.setAttribute('data-id', node.id);
+
+      // Circle background
+      const circle = document.createElementNS("http://www.w3.org/2000/svg",'rect');
+      circle.setAttribute('x', -26);
+      circle.setAttribute('y', -26);
+      circle.setAttribute('rx', 10);
+      circle.setAttribute('ry', 10);
+      circle.setAttribute('width', 52);
+      circle.setAttribute('height', 52);
+      circle.setAttribute('fill', () => {
+        if(node.status === 'open') return colors.open;
+        if(node.status === 'expanded') return colors.expanded;
+        if(node.status === 'popped') return colors.popped;
+        if(node.status === 'pruned') return colors.pruned;
+        if(node.status === 'best') return colors.best;
+        return '#fff';
+      }());
+      circle.setAttribute('stroke','rgba(2,6,23,0.06)');
+      circle.setAttribute('stroke-width','1');
+
+      // Text lines: profit/weight
+      const text1 = document.createElementNS("http://www.w3.org/2000/svg",'text');
+      text1.setAttribute('x', 0);
+      text1.setAttribute('y', -4);
+      text1.setAttribute('text-anchor','middle');
+      text1.setAttribute('class','node-label');
+      text1.setAttribute('fill', colors.defaultText);
+      text1.textContent = `p=${node.profit}, w=${node.weight}`;
+
+      const text2 = document.createElementNS("http://www.w3.org/2000/svg",'text');
+      text2.setAttribute('x', 0);
+      text2.setAttribute('y', 12);
+      text2.setAttribute('text-anchor','middle');
+      text2.setAttribute('class','node-label');
+      text2.setAttribute('fill', 'rgba(2,6,23,0.6)');
+      text2.textContent = `b=${node.bound.toFixed(1)}`;
+
+      g.appendChild(circle);
+      g.appendChild(text1);
+      g.appendChild(text2);
+
+      // Interactivity: pointer events for tooltip
+      g.addEventListener('mouseenter', (ev)=>{
+        showTooltipFor(node, ev);
+      });
+      g.addEventListener('mousemove', (ev)=>{
+        positionTooltip(ev);
+      });
+      g.addEventListener('mouseleave', ()=>{ hideTooltip(); });
+
+      svg.appendChild(g);
+    });
+
+    updatePQBox();
+  }
+
+  function showTooltipFor(node, ev){
+    const html = `
+      <div><strong>Node ${node.id}</strong> (level ${node.level})</div>
+      <div>Profit: ${node.profit}</div>
+      <div>Weight: ${node.weight}</div>
+      <div>Bound: ${node.bound.toFixed(2)}</div>
+      <div>Path: ${formatPath(node.path)}</div>
+      <div>Status: ${node.status}</div>
+    `;
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    positionTooltip(ev);
+  }
+  function positionTooltip(ev){
+    const rect = document.getElementById('canvasWrap').getBoundingClientRect();
+    tooltip.style.left = (ev.clientX - rect.left + 14) + 'px';
+    tooltip.style.top = (ev.clientY - rect.top + 10) + 'px';
+  }
+  function hideTooltip(){
+    tooltip.style.display = 'none';
+  }
+
+  function updatePQBox(){
+    pqBox.innerHTML = '';
+    pq.forEach(node=>{
+      const el = document.createElement('div');
+      el.style.padding = '6px';
+      el.style.borderBottom = '1px dashed rgba(2,6,23,0.04)';
+      el.innerHTML = `<strong>Node ${node.id}</strong> &nbsp; <span style="color:rgba(2,6,23,0.6)">l${node.level}</span>
+        <div class="small">p=${node.profit}, w=${node.weight}, b=${node.bound.toFixed(2)}, path=${formatPath(node.path)}</div>`;
+      pqBox.appendChild(el);
+    });
+    if(pq.length === 0){
+      pqBox.innerHTML = '<div class="small">Priority queue empty.</div>';
+    }
+  }
+
+  function updateItemsList(){
+    itemsList.innerHTML = '';
+    items.forEach((it, idx)=>{
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<div class="badge">#${it.id}</div>
+        <div style="flex:1">
+          <div><strong>v=${it.value}</strong> &nbsp; w=${it.weight} &nbsp; <span class="small">ratio=${it.ratio.toFixed(2)}</span></div>
+          <div class="small">order=${idx}</div>
+        </div>`;
+      itemsList.appendChild(row);
+    });
+  }
+
+  function updateBestUI(){
+    bestProfitSpan.textContent = bestProfit;
+    bestSolDiv.innerHTML = '';
+    if(bestNode){
+      const picks = bestNode.path.map((d,i) => d===1 ? `#${items[i].id}` : null).filter(Boolean);
+      if(picks.length===0) bestSolDiv.innerHTML = '<div class="small">none</div>';
+      else picks.forEach(p=>{
+        const pill = document.createElement('div');
+        pill.className = 'pill';
+        pill.textContent = p;
+        bestSolDiv.appendChild(pill);
+      });
+    } else {
+      bestSolDiv.innerHTML = '<div class="small">none</div>';
+    }
+  }
+
+  function updateUI(){
+    updateItemsList();
+    updateBestUI();
+    draw();
+    currentNodeSpan.textContent = pq.length ? `top Node ${pq[0].id} (bound ${pq[0].bound.toFixed(2)})` : '-';
+  }
+
+  // Branch and Bound step: one pop/expand/prune cycle
+  function step(){
+    if(pq.length === 0){
+      log('PQ empty — done.');
+      playMode = false;
+      stopAuto();
+      return;
+    }
+    // Pop node with highest bound
+    const node = popPQ();
+    node.status = 'popped';
+    log(`Popped Node ${node.id} (level ${node.level}) with bound=${node.bound.toFixed(2)}, profit=${node.profit}`);
+    // mark in nodes array
+    const existing = nodes.find(n=>n.id===node.id);
+    if(existing) existing.status = 'popped';
+
+    // If bound <= bestProfit -> prune
+    if(node.bound <= bestProfit){
+      node.status = 'pruned';
+      log(`Pruned Node ${node.id} because bound <= bestProfit (${node.bound.toFixed(2)} <= ${bestProfit})`);
+      updateUI();
+      return;
+    }
+
+    // If it's at last level (leaf) or considered all items => evaluate leaf
+    if(node.level === n){
+      // leaf node
+      if(node.weight <= capacity && node.profit > bestProfit){
+        bestProfit = node.profit;
+        bestNode = node;
+        node.status = 'best';
+        log(`New best solution found at Node ${node.id}: profit=${node.profit}`);
+      } else {
+        node.status = 'expanded';
+      }
+      updateUI();
+      return;
+    }
+
+    // Expand node: create include child and exclude child
+    // Include child: take item at index node.level
+    const item = items[node.level];
+    // Include
+    const incPath = node.path.slice();
+    incPath[node.level] = 1;
+    const includeChild = createNode(node.id, node.level+1, node.profit + item.value, node.weight + item.weight, incPath);
+    // Exclude
+    const excPath = node.path.slice();
+    excPath[node.level] = 0;
+    const excludeChild = createNode(node.id, node.level+1, node.profit, node.weight, excPath);
+
+    // Add to visualization and PQ if not pruned
+    addNodeToGraph(includeChild);
+    addNodeToGraph(excludeChild);
+
+    // Evaluate includeChild: if weight within capacity, check for bestProfit
+    if(includeChild.weight <= capacity){
+      if(includeChild.profit > bestProfit){
+        bestProfit = includeChild.profit;
+        bestNode = includeChild;
+        includeChild.status = 'best';
+        log(`Found better feasible solution by including item ${item.id} (Node ${includeChild.id}): profit=${includeChild.profit}`);
+      }
+    } else {
+      includeChild.status = 'pruned';
+      log(`Pruned include-child Node ${includeChild.id} (over capacity: w=${includeChild.weight})`);
+    }
+
+    // Add to PQ if bound > bestProfit and within something
+    if(includeChild.status !== 'pruned'){
+      if(includeChild.bound > bestProfit){
+        pushPQ(includeChild);
+        log(`Pushed include-child Node ${includeChild.id} (bound=${includeChild.bound.toFixed(2)})`);
+      } else {
+        includeChild.status = 'pruned';
+        log(`Pruned include-child Node ${includeChild.id} at creation (bound <= bestProfit)`);
+      }
+    }
+
+    // Exclude child
+    if(excludeChild.bound > bestProfit){
+      pushPQ(excludeChild);
+      log(`Pushed exclude-child Node ${excludeChild.id} (bound=${excludeChild.bound.toFixed(2)})`);
+    } else {
+      excludeChild.status = 'pruned';
+      addNodeToGraph(excludeChild);
+      log(`Pruned exclude-child Node ${excludeChild.id} at creation (bound <= bestProfit)`);
+    }
+
+    // Mark node expanded
+    const existingNode = nodes.find(n=>n.id===node.id);
+    if(existingNode) existingNode.status = 'expanded';
+    updateUI();
+  }
+
+  // Run until PQ empty (fast, no animation)
+  function solveFast(){
+    while(pq.length){
+      const node = popPQ();
+      if(node.bound <= bestProfit) continue;
+      if(node.level === n){
+        if(node.weight <= capacity && node.profit > bestProfit){
+          bestProfit = node.profit;
+          bestNode = node;
+        }
+        continue;
+      }
+      const item = items[node.level];
+      // include
+      const incPath = node.path.slice(); incPath[node.level]=1;
+      const includeChild = createNode(node.id, node.level+1, node.profit + item.value, node.weight + item.weight, incPath);
+      if(includeChild.weight <= capacity){
+        if(includeChild.profit > bestProfit){
+          bestProfit = includeChild.profit;
+          bestNode = includeChild;
+        }
+      }
+      if(includeChild.bound > bestProfit && includeChild.weight <= capacity){
+        pushPQ(includeChild);
+      }
+      // exclude
+      const excPath = node.path.slice(); excPath[node.level]=0;
+      const excludeChild = createNode(node.id, node.level+1, node.profit, node.weight, excPath);
+      if(excludeChild.bound > bestProfit){
+        pushPQ(excludeChild);
+      }
+      // To keep visualization small, store only some nodes
+      nodes.push(includeChild);
+      nodes.push(excludeChild);
+    }
+    // mark best node
+    if(bestNode) bestNode.status = 'best';
+    updateUI();
+    log('Solved (fast).');
+  }
+
+  // Auto-play controls
+  function startAuto(){
+    if(playMode) return;
+    playMode = true;
+    playBtn.style.display = 'none';
+    pauseBtn.style.display = 'inline-block';
+    const interval = Math.max(80, Number(speedSlider.value) || 600);
+    runningInterval = setInterval(()=>{
+      if(!playMode) return;
+      if(pq.length === 0){
+        stopAuto();
+        log('Auto-play finished (PQ empty).');
+        return;
+      }
+      step();
+    }, interval);
+  }
+  function stopAuto(){
+    playMode = false;
+    playBtn.style.display = 'inline-block';
+    pauseBtn.style.display = 'none';
+    if(runningInterval) { clearInterval(runningInterval); runningInterval = null; }
+  }
+
+  // Reset / Randomize handlers
+  function resetHandler(){
+    n = Number(numItemsInput.value) || 6;
+    capacity = Number(capacityInput.value) || 15;
+    initProblem(n, capacity);
+  }
+
+  function randomizeHandler(){
+    n = Number(numItemsInput.value) || 6;
+    // pick a capacity about 1/3 to 1/2 of total weight
+    const itemsTemp = genItems(n, 10, 20);
+    const sumW = itemsTemp.reduce((s,it)=>s+it.weight,0);
+    const cap = Math.max(3, Math.floor(sumW * (Math.random()*0.45 + 0.25)));
+    capacityInput.value = cap;
+    items = itemsTemp;
+    // re-init with these items exactly
+    maxLevels = n+1;
+    nodeIdCounter = 0;
+    nodes = [];
+    pq = [];
+    bestProfit = 0;
+    bestNode = null;
+    countsAtLevel = Array(maxLevels+2).fill(0);
+    // root
+    const root = createNode(null, 0, 0, 0, Array(n).fill(-1));
+    layoutNode(root);
+    nodes.push(root);
+    pushPQ(root);
+    updateUI();
+    log(`Randomized problem: ${n} items, cap ${cap}`);
+  }
+
+  // Explanations per step: show a short textual explanation for next step
+  function explainStep(){
+    if(pq.length === 0){
+      alert('Nothing left in PQ. Algorithm finished.');
+      return;
+    }
+    const top = pq[0];
+    const explanation = `We pick the node with highest bound (Node ${top.id}). This bound is optimistic (we allow fractional items) and equals ${top.bound.toFixed(2)}. 
+If the bound <= current best (${bestProfit}), we can safely prune every descendant of this node because even in the best (fractional) case they cannot beat the best known solution. Otherwise we expand this node into two children: include or exclude the next item (index ${top.level}, item id ${items[top.level].id}).`;
+    alert(explanation);
+  }
+
+  // Button bindings
+  randomBtn.addEventListener('click', ()=>{ randomizeHandler(); });
+  resetBtn.addEventListener('click', ()=>{ resetHandler(); });
+  stepBtn.addEventListener('click', ()=>{ step(); });
+  playBtn.addEventListener('click', ()=>{ startAuto(); });
+  pauseBtn.addEventListener('click', ()=>{ stopAuto(); });
+  runBtn.addEventListener('click', ()=>{ 
+    // run with small animation: step until done quickly
+    const runInterval = setInterval(()=>{
+      if(pq.length === 0) { clearInterval(runInterval); log('Run to end finished.'); return; }
+      step();
+    }, 10);
+  });
+  solveBtn.addEventListener('click', ()=>{ solveFast(); });
+  explainBtn.addEventListener('click', ()=>{ explainStep(); });
+
+  // Recompute speed
+  speedSlider.addEventListener('input', ()=>{
+    if(playMode){
+      stopAuto();
+      startAuto();
+    }
+  });
+
+  // Initialize default
+  function start(){
+    // initial items and capacity
+    n = Number(numItemsInput.value) || 6;
+    capacity = Number(capacityInput.value) || 15;
+    initProblem(n, capacity);
+  }
+
+  start();
+
+})();
+</script>
+</body>
+</html>

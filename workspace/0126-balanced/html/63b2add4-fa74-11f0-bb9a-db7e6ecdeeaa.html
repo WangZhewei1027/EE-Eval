@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Monitor Concept Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 1rem;
+    background: #f0f0f0;
+  }
+  h1 {
+    text-align: center;
+  }
+  #log {
+    background: #222;
+    color: #0f0;
+    font-family: monospace;
+    padding: 1rem;
+    height: 300px;
+    overflow-y: auto;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+  }
+  button {
+    margin: 0 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+</style>
+</head>
+<body>
+<h1>Monitor Concept Demonstration</h1>
+<p>This example simulates a <strong>Monitor</strong> — a high-level synchronization construct allowing threads (or async tasks) to have mutually exclusive access to shared data and use condition variables.</p>
+<p>We use a <code>Monitor</code> class that supports <code>enter()</code> (to lock), <code>leave()</code> (to unlock), and <code>wait()</code>/<code>notify()</code> methods for condition waiting/notifications.</p>
+<div id="log"></div>
+<button id="startBtn">Start Threads</button>
+<button id="notifyBtn" disabled>Notify One</button>
+<button id="notifyAllBtn" disabled>Notify All</button>
+
+<script>
+/**
+ * Monitor class simulating mutual exclusion and condition variable using async/await.
+ * 
+ * enter(): acquire the monitor's lock.
+ * leave(): release the lock.
+ * wait(): release the lock and wait for a notification, then reacquire.
+ * notify(): wake up one waiting task.
+ * notifyAll(): wake up all waiting tasks.
+ */
+class Monitor {
+  constructor() {
+    this._locked = false;
+    this._waitingQueue = [];
+    this._conditionQueue = [];
+  }
+
+  // Acquires the monitor lock, waiting if already locked.
+  async enter() {
+    if (!this._locked) {
+      this._locked = true;
+      return;
+    }
+    // Wait in line until lock is free
+    await new Promise(resolve => this._waitingQueue.push(resolve));
+    this._locked = true;
+  }
+
+  // Releases the monitor lock and wakes one from waiting queue if any
+  leave() {
+    this._locked = false;
+    if (this._waitingQueue.length > 0) {
+      const nextResolve = this._waitingQueue.shift();
+      nextResolve();
+    }
+  }
+
+  // Wait inside the monitor on a "condition variable".
+  // Releases the lock and returns a Promise that resolves when notified
+  async wait() {
+    this.leave();
+
+    await new Promise(resolve => this._conditionQueue.push(resolve));
+
+    // Whenever notified, reacquire lock before continuing
+    await this.enter();
+  }
+
+  // Wakes one waiter on the condition variable
+  notify() {
+    if (this._conditionQueue.length > 0) {
+      const toNotify = this._conditionQueue.shift();
+      toNotify();
+    }
+  }
+
+  // Wakes all waiters on the condition variable
+  notifyAll() {
+    while (this._conditionQueue.length > 0) {
+      const toNotify = this._conditionQueue.shift();
+      toNotify();
+    }
+  }
+}
+
+// Utility logging with timestamp
+function log(msg) {
+  const logDiv = document.getElementById('log');
+  const now = new Date().toLocaleTimeString();
+  logDiv.textContent += `[${now}] ${msg}\n`;
+  logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+// Demonstration: A shared resource and "worker threads" that must enter Monitor to access.
+// They wait when resource is not ready and get notified when it is.
+
+const monitor = new Monitor();
+
+let sharedResourceReady = false;
+
+async function worker(id) {
+  await monitor.enter();
+  log(`Worker #${id}: Entered monitor.`);
+
+  while (!sharedResourceReady) {
+    log(`Worker #${id}: Resource not ready, waiting...`);
+    await monitor.wait();
+    log(`Worker #${id}: Notified, rechecking resource.`);
+  }
+
+  log(`Worker #${id}: Resource ready! Processing...`);
+  // Simulate some work with resource
+  await new Promise(r => setTimeout(r, 1000));
+  log(`Worker #${id}: Done processing.`);
+  monitor.leave();
+}
+
+function resetDemo() {
+  sharedResourceReady = false;
+  document.getElementById('notifyBtn').disabled = false;
+  document.getElementById('notifyAllBtn').disabled = false;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('log').textContent = '';
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  resetDemo();
+  log('Starting workers...');
+  // Launch 3 workers asynchronously
+  for (let i = 1; i <= 3; i++) {
+    worker(i);
+  }
+  document.getElementById('startBtn').disabled = true;
+});
+
+document.getElementById('notifyBtn').addEventListener('click', async () => {
+  await monitor.enter();
+  sharedResourceReady = true;
+  log('Main: Shared resource set to ready. Notifying one worker.');
+  monitor.notify();
+  monitor.leave();
+});
+
+document.getElementById('notifyAllBtn').addEventListener('click', async () => {
+  await monitor.enter();
+  sharedResourceReady = true;
+  log('Main: Shared resource set to ready. Notifying ALL workers.');
+  monitor.notifyAll();
+  monitor.leave();
+});
+</script>
+</body>
+</html>

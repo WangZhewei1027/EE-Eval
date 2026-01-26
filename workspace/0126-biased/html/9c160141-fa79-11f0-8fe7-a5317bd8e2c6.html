@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Socket Programming Interactive Simulator</title>
+<style>
+/* Minimal styling only to ensure monospaced, legible layout. No colors, no animations. */
+body { font-family: monospace; margin: 12px; }
+.container { display: flex; gap: 12px; }
+.column { flex: 1; min-width: 260px; }
+.section { border: 1px solid #000; padding: 8px; margin-bottom: 8px; }
+.button-row > button { margin-right: 6px; margin-bottom: 6px; }
+.log { height: 360px; overflow: auto; white-space: pre-wrap; background: #fff; padding: 6px; }
+.small { font-size: 12px; }
+textarea { width: 100%; height: 80px; }
+select, input[type="text"], input[type="number"] { width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<h2>Socket Programming Interactive Simulator</h2>
+<p>Purpose: Explore TCP/UDP socket behavior, state transitions and packet flows. Interface is intentionally plain. Create hosts, sockets, craft packets, and control a simulated network (latency, loss, reorder). Many controls and workflows are provided.</p>
+
+<div class="container">
+  <div class="column">
+    <div class="section">
+      <h3>Create Hosts & Sockets</h3>
+      <div>
+        <label>New Host IP: <input id="newHostIp" type="text" value="10.0.0.1"></label>
+        <button id="btnCreateHost">Create Host</button>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Select Host:
+          <select id="selectHost"></select>
+        </label>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Socket Type:
+          <select id="socketType"><option>TCP</option><option>UDP</option></select>
+        </label>
+        <label>Local Port: <input id="localPort" type="number" min="1" max="65535" value="0"></label>
+        <button id="btnCreateSocket">Create Socket</button>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Available Sockets:
+          <select id="selectSocket"></select>
+        </label>
+      </div>
+      <div style="margin-top:8px;" class="button-row">
+        <button id="btnListen">Listen (TCP)</button>
+        <button id="btnConnect">Connect</button>
+        <button id="btnClose">Close</button>
+        <button id="btnAbort">Abort (RST)</button>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Remote (ip:port): <input id="remoteAddr" type="text" value="10.0.0.2:80"></label>
+        <div class="small">For UDP, "Connect" sets default peer but still sends datagrams.</div>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Send Payload (text):</label><br>
+        <input id="payloadText" type="text" value="Hello">
+        <label>Hex? <input id="payloadHex" type="checkbox"></label>
+        <button id="btnSend">Send</button>
+        <label>Bytes: <input id="sendBytes" type="number" value="0" min="0"></label>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Manual Packet Crafting (Inject)</h3>
+      <div>
+        <label>From (host.socket): <input id="injectFrom" type="text" placeholder="10.0.0.1:5001"></label><br>
+        <label>To (host.socket): <input id="injectTo" type="text" placeholder="10.0.0.2:80"></label><br>
+        <label>Flags: <input id="injectFlags" type="text" value="SYN"></label>
+        <label>Seq: <input id="injectSeq" type="number" value="0"></label>
+        <label>Ack: <input id="injectAck" type="number" value="0"></label><br>
+        <label>Payload: <input id="injectPayload" type="text"></label>
+        <button id="btnInject">Inject Packet</button>
+      </div>
+      <div style="margin-top:8px;">
+        <button id="btnAutoAccept">Toggle Auto-Accept on Servers</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Network Controls</h3>
+      <div>
+        <label>Latency (ms): <input id="latency" type="number" value="250"></label><br>
+        <label>Jitter (ms): <input id="jitter" type="number" value="50"></label><br>
+        <label>Loss (%): <input id="loss" type="number" value="5" min="0" max="100"></label><br>
+        <label>Reorder (%): <input id="reorder" type="number" value="0" min="0" max="100"></label><br>
+        <label>Bandwidth (bytes/ms): <input id="bandwidth" type="number" value="0" min="0"></label><br>
+        <button id="btnApplyNet">Apply Network Settings</button>
+        <div style="margin-top:8px;" class="button-row">
+          <button id="btnPause">Pause Delivery</button>
+          <button id="btnStep">Step One Packet</button>
+          <button id="btnFlush">Flush All Packets</button>
+          <button id="btnDropAll">Drop All In-flight</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Scripting / Sequencer</h3>
+      <div>
+        <textarea id="scriptArea">// Example script:
+CREATE_HOST 10.0.0.1
+CREATE_HOST 10.0.0.2
+CREATE_SOCKET 10.0.0.1 TCP 5001
+CREATE_SOCKET 10.0.0.2 TCP 80
+LISTEN 10.0.0.2:80
+CONNECT 10.0.0.1:5001 10.0.0.2:80
+SEND 10.0.0.1:5001 "GET /" 
+WAIT 500
+CLOSE 10.0.0.1:5001
+</textarea>
+        <div class="button-row">
+          <button id="btnRunScript">Run Script</button>
+          <button id="btnStepScript">Step Script</button>
+          <button id="btnStopScript">Stop Script</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="column">
+    <div class="section">
+      <h3>Event Log</h3>
+      <div>
+        <label>Filter: 
+          <select id="logFilter"><option>ALL</option><option>TCP</option><option>UDP</option><option>NET</option></select>
+        </label>
+        <label>Auto-scroll <input id="autoScroll" type="checkbox" checked></label>
+      </div>
+      <div id="log" class="log"></div>
+      <div style="margin-top:6px;">
+        <button id="btnClearLog">Clear Log</button>
+        <button id="btnExport">Export Log (JSON)</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Packet Queue Viewer</h3>
+      <div id="pq" class="log"></div>
+      <div style="margin-top:6px;">
+        <button id="btnShowQueue">Refresh Queue</button>
+        <button id="btnExportQueue">Export Queue</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="column">
+    <div class="section">
+      <h3>Selected Socket Inspector</h3>
+      <div id="inspector" class="log"></div>
+      <div style="margin-top:6px;">
+        <button id="btnRefreshInspector">Refresh</button>
+        <button id="btnToggleBlocking">Toggle Blocking</button>
+        <button id="btnSetBuffers">Set Buffers</button>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Recv Buffer Size: <input id="recvBuf" type="number" value="4096"></label><br>
+        <label>Send Buffer Size: <input id="sendBuf" type="number" value="4096"></label><br>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Connection Backlog & Pending</h3>
+      <div id="pending" class="log"></div>
+      <div style="margin-top:6px;">
+        <button id="btnAcceptPending">Accept Selected Pending</button>
+        <button id="btnRejectPending">Reject Selected Pending</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Utilities</h3>
+      <div class="button-row">
+        <button id="btnReset">Reset All</button>
+        <button id="btnDemo">Run Guided Demo</button>
+      </div>
+      <div style="margin-top:8px;">
+        <label>PCAP-like Download Name: <input id="pcapName" type="text" value="capture.json"></label>
+        <button id="btnDownloadCapture">Download Capture</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Interactive Socket Programming Simulator
+  - Models Hosts, Sockets (TCP/UDP), a Network with latency/loss/reorder.
+  - Provides many controls to create hosts, sockets, perform connect/listen/send/close.
+  - Manual packet injection and scripting supported.
+  - Emphasis on interactive richness and many state transitions.
+*/
+
+/* -------------------------
+   Core simulation classes
+   ------------------------- */
+
+(function(){
+
+// Utilities
+function now(){ return Date.now(); }
+function uid(prefix){ return prefix + Math.random().toString(36).slice(2,9); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function randomInt(max){ return Math.floor(Math.random()*max); }
+function randRange(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+function logText(t){ addLog('NET', t); }
+
+// Simple parse ip:port -> {ip, port}
+function parseAddr(s){
+  if(!s) return null;
+  s = s.trim();
+  let parts = s.split(':');
+  if(parts.length < 2) return null;
+  let port = parseInt(parts.pop(),10);
+  let ip = parts.join(':');
+  return {ip, port};
+}
+
+/* Packet representation:
+   {
+     id, from: {ip, port, sockId?}, to: {ip, port, sockId?},
+     proto: 'TCP'|'UDP',
+     segment: {...}, // for TCP: flags, seq, ack, wnd, payload
+     size, ts, deliverAt
+   }
+*/
+
+// Network
+const Network = {
+  hosts: {}, // ip -> Host
+  packets: [], // in-flight scheduled packets
+  settings: {
+    latency: 250,
+    jitter: 50,
+    loss: 5,
+    reorder: 0,
+    bandwidth: 0,
+    paused: false,
+    autoAccept: true
+  },
+  capture: [],
+  reset: function(){
+    this.hosts = {};
+    this.packets = [];
+    this.capture = [];
+    this.settings = {latency:250,jitter:50,loss:5,reorder:0,bandwidth:0,paused:false,autoAccept:true};
+  },
+  registerHost: function(host){
+    this.hosts[host.ip] = host;
+  },
+  sendPacket: function(packet){
+    packet.id = uid('p');
+    packet.ts = now();
+    // simulate loss
+    if(Math.random()*100 < this.settings.loss){
+      this.capture.push({event:'DROP', packet:clone(packet), t:now()});
+      addLog('NET', 'Packet DROPPED by network: ' + packet.id + ' proto=' + packet.proto + ' from ' + addrStr(packet.from) + ' -> ' + addrStr(packet.to) + ' flags=' + (packet.segment && packet.segment.flags));
+      return;
+    }
+    // compute delay
+    let base = this.settings.latency;
+    let jitter = this.settings.jitter;
+    let d = Math.max(0, base + (Math.random()*2-1)*jitter);
+    // reorder: some packets get sped up/slow down to reorder
+    if(Math.random()*100 < this.settings.reorder){
+      d = Math.max(0, d - randRange(1, Math.min(200,Math.floor(d))));
+      packet.reordered = true;
+    }
+    packet.deliverAt = now() + Math.floor(d);
+    if(this.settings.bandwidth > 0 && packet.size > 0){
+      // add transfer time
+      let xfer = Math.ceil(packet.size / this.settings.bandwidth);
+      packet.deliverAt += xfer;
+    }
+    this.packets.push(packet);
+    this.capture.push({event:'SEND', packet:clone(packet), t:now()});
+    addLog('NET', 'Packet scheduled: ' + packet.id + ' -> ' + addrStr(packet.to) + ' at ' + packet.deliverAt);
+    maybeProcessPackets();
+  },
+  // deliver next due packet
+  deliverDue: function(){
+    if(this.packets.length === 0) return null;
+    // find earliest deliverAt
+    let nowt = now();
+    // sort by deliverAt
+    this.packets.sort((a,b)=>a.deliverAt - b.deliverAt);
+    let p = this.packets[0];
+    if(p.deliverAt > nowt) {
+      return null;
+    }
+    this.packets.shift();
+    this.capture.push({event:'DELIVER', packet:clone(p), t:now()});
+    return p;
+  },
+  dropAll: function(){
+    let n = this.packets.length;
+    this.capture.push({event:'DROP_ALL', t:now(), count:n});
+    this.packets = [];
+    addLog('NET', 'Dropped all in-flight packets (' + n + ')');
+  },
+  flushAll: function(){
+    // immediately deliver all packets
+    while(this.packets.length){
+      let p = this.packets.shift();
+      deliverToHost(p);
+    }
+    addLog('NET', 'Flushed all in-flight packets');
+  }
+};
+
+// Host
+function Host(ip){
+  this.ip = ip;
+  this.sockets = {}; // id -> Socket
+  this.nextPort = 2000 + Math.floor(Math.random()*30000);
+  this.pending = []; // pending connection requests for listening sockets (for UI)
+}
+Host.prototype.allocPort = function(port){
+  if(port && port>0) return port;
+  while(true){
+    let p = this.nextPort++;
+    if(!this.findSocketByPort(p)) return p;
+  }
+};
+Host.prototype.addSocket = function(sock){
+  this.sockets[sock.id] = sock;
+};
+Host.prototype.removeSocket = function(id){
+  delete this.sockets[id];
+};
+Host.prototype.findSocketByPort = function(port){
+  for(let id in this.sockets){
+    let s = this.sockets[id];
+    if(s.localPort === port) return s;
+  }
+  return null;
+};
+
+// Socket base
+function Socket(host, proto, localPort){
+  this.id = uid('s');
+  this.host = host; // Host
+  this.proto = proto; // 'TCP' or 'UDP'
+  this.localPort = host.allocPort(localPort);
+  this.blocking = true;
+  this.sendBuffer = [];
+  this.recvBuffer = [];
+  this.sendBufSize = 4096;
+  this.recvBufSize = 4096;
+  // For TCP:
+  this.state = 'CLOSED';
+  this.peer = null; // {ip, port, sockId?}
+  this.seq = randomInt(1e6);
+  this.ack = 0;
+  this.rcv_nxt = 0;
+  this.snd_nxt = this.seq;
+  this.snd_una = this.seq;
+  this.recvWnd = 65535;
+  this.sendWnd = 65535;
+  this.listen = false;
+  this.backlog = []; // pending SYNs
+  this.autoAccept = Network.settings.autoAccept;
+}
+Socket.prototype.info = function(){
+  return {
+    id: this.id,
+    ip: this.host.ip,
+    port: this.localPort,
+    proto: this.proto,
+    state: this.state,
+    peer: this.peer,
+    seq: this.seq,
+    ack: this.ack
+  };
+};
+
+/* TCP handling (simplified but supports handshake and data/FIN/RST) */
+function createTCPSocket(host, localPort){
+  let s = new Socket(host,'TCP',localPort);
+  s.type = 'TCP';
+  host.addSocket(s);
+  addLog('TCP', 'Created TCP socket ' + s.id + ' on ' + host.ip + ':' + s.localPort);
+  return s;
+}
+
+function createUDPSocket(host, localPort){
+  let s = new Socket(host,'UDP',localPort);
+  s.type = 'UDP';
+  host.addSocket(s);
+  addLog('UDP', 'Created UDP socket ' + s.id + ' on ' + host.ip + ':' + s.localPort);
+  return s;
+}
+
+// deliver packet to host: find socket matching dest port, hand to socket
+function deliverToHost(packet){
+  let dest = packet.to;
+  let host = Network.hosts[dest.ip];
+  if(!host){
+    addLog('NET','No host found for ip ' + dest.ip + ' (packet ' + packet.id + ')');
+    Network.capture.push({event:'NO_HOST', packet:clone(packet), t:now()});
+    return;
+  }
+  let sock = host.findSocketByPort(dest.port);
+  if(!sock){
+    addLog('NET','No socket listening on ' + dest.ip + ':' + dest.port + ' -- returning RST for TCP if applicable');
+    if(packet.proto === 'TCP'){
+      // send RST back
+      let rst = {
+        from: {ip: dest.ip, port: dest.port},
+        to: {ip: packet.from.ip, port: packet.from.port},
+        proto: 'TCP',
+        segment: {flags:'RST', seq:0, ack: (packet.segment && packet.segment.seq)?(packet.segment.seq+1):0, wnd:0, payload:''},
+        size: 0
+      };
+      setTimeout(()=>Network.sendPacket(rst), 0);
+    }
+    return;
+  }
+  // dispatch based on protocol
+  if(packet.proto === 'UDP'){
+    sock.recvBuffer.push({from: packet.from, payload: packet.segment.payload, ts: now()});
+    Network.capture.push({event:'RECV_UDP', packet:clone(packet), t:now()});
+    addLog('UDP','UDP packet delivered to ' + dest.ip + ':' + dest.port + ' from ' + addrStr(packet.from) + ' payload=' + packet.segment.payload);
+    return;
+  } else if(packet.proto === 'TCP'){
+    handleTCPPacket(sock, packet);
+  }
+}
+
+// simplified stateful TCP packet handler
+function handleTCPPacket(sock, packet){
+  let seg = packet.segment;
+  addLog('TCP','TCP packet at ' + sock.host.ip + ':' + sock.localPort + ' state=' + sock.state + ' flags=' + seg.flags + ' seq=' + seg.seq + ' ack=' + seg.ack);
+  // RST handling
+  if(seg.flags && seg.flags.indexOf('RST') !== -1){
+    addLog('TCP','RST received -> socket will be aborted');
+    sock.state = 'CLOSED';
+    Network.capture.push({event:'TCP_RST', packet:clone(packet), t:now()});
+    return;
+  }
+
+  switch(sock.state){
+    case 'CLOSED':
+      // if SYN arrives at closed but bound (server not listen), send RST
+      if(seg.flags && seg.flags.indexOf('SYN') !== -1){
+        // send RST (handled by deliverToHost when no socket). If socket exists but closed, send RST back
+        let rst = {
+          from: {ip:sock.host.ip, port:sock.localPort},
+          to: {ip:packet.from.ip, port:packet.from.port},
+          proto: 'TCP',
+          segment: {flags:'RST', seq:0, ack: seg.seq + 1, wnd:0, payload:''},
+          size:0
+        };
+        Network.sendPacket(rst);
+      }
+      break;
+    case 'LISTEN':
+      // passive open: receive SYN -> create pending connection (SYN_RECEIVED), store in backlog
+      if(seg.flags && seg.flags.indexOf('SYN') !== -1){
+        let pending = {
+          client: packet.from,
+          clientSeq: seg.seq,
+          serverSeq: randomInt(1e6),
+          serverSockId: sock.id,
+          created: now()
+        };
+        // craft SYN+ACK
+        let synack = {
+          from: {ip: sock.host.ip, port: sock.localPort},
+          to: {ip: packet.from.ip, port: packet.from.port},
+          proto: 'TCP',
+          segment: {flags:'SYN,ACK', seq: pending.serverSeq, ack: seg.seq+1, wnd: sock.recvWnd, payload:''},
+          size:0
+        };
+        Network.sendPacket(synack);
+        sock.backlog.push(pending);
+        Network.capture.push({event:'PENDING', pending:clone(pending), t:now()});
+        addLog('TCP','SYN received on LISTEN; SYN+ACK sent; backlog size=' + sock.backlog.length);
+        // auto-accept?
+        if(sock.autoAccept){
+          // create a new socket that will be moved to ESTABLISHED after ACK
+          let child = new Socket(sock.host,'TCP');
+          child.localPort = sock.localPort; // local port same
+          child.peer = packet.from;
+          child.state = 'SYN_RECEIVED';
+          child.seq = pending.serverSeq;
+          child.snd_nxt = child.seq + 1;
+          child.rcv_nxt = seg.seq + 1;
+          sock.host.addSocket(child);
+          sock.backlog.push({child: child, client: packet.from, clientSeq: seg.seq, serverSeq: pending.serverSeq});
+          addLog('TCP','Auto-created child socket ' + child.id + ' in SYN_RECEIVED for pending connection');
+        }
+      }
+      break;
+    case 'SYN_SENT':
+      // active open waiting for SYN+ACK
+      if(seg.flags && seg.flags.indexOf('SYN') !== -1 && seg.flags.indexOf('ACK') !== -1){
+        // Received SYN+ACK: send ACK and move to ESTABLISHED
+        sock.ack = seg.seq + 1;
+        sock.rcv_nxt = sock.ack;
+        sock.snd_una = sock.seq + 1;
+        let ack = {
+          from: {ip: sock.host.ip, port: sock.localPort},
+          to: packet.from,
+          proto: 'TCP',
+          segment: {flags:'ACK', seq: sock.snd_nxt, ack: sock.ack, wnd: sock.recvWnd, payload:''},
+          size:0
+        };
+        Network.sendPacket(ack);
+        sock.state = 'ESTABLISHED';
+        addLog('TCP','Connection established (active open) on ' + sock.host.ip + ':' + sock.localPort + ' peer=' + addrStr(packet.from));
+        Network.capture.push({event:'TCP_ESTABLISHED', sockId: sock.id, t:now()});
+      }
+      break;
+    case 'SYN_RECEIVED':
+      // server side: after sending SYN+ACK, expecting ACK from client
+      if(seg.flags && seg.flags.indexOf('ACK') !== -1){
+        // if ack matches
+        sock.state = 'ESTABLISHED';
+        sock.ack = seg.ack;
+        sock.rcv_nxt = seg.seq;
+        addLog('TCP','Server socket ' + sock.id + ' moved to ESTABLISHED');
+        Network.capture.push({event:'TCP_ESTABLISHED', sockId: sock.id, t:now()});
+      }
+      break;
+    case 'ESTABLISHED':
+      // data or FIN
+      if(seg.payload && seg.payload.length > 0){
+        // push to recvBuffer
+        sock.recvBuffer.push({from: packet.from, payload: seg.payload, ts: now()});
+        // send ACK
+        let ackNum = seg.seq + seg.payload.length;
+        let ack = {
+          from: {ip: sock.host.ip, port: sock.localPort},
+          to: packet.from,
+          proto: 'TCP',
+          segment: {flags:'ACK', seq: sock.snd_nxt, ack: ackNum, wnd: sock.recvWnd, payload:''},
+          size:0
+        };
+        Network.sendPacket(ack);
+        addLog('TCP','ACK sent for received data; ack=' + ackNum);
+      }
+      if(seg.flags && seg.flags.indexOf('FIN') !== -1){
+        // move to CLOSE_WAIT, respond with ACK
+        sock.state = 'CLOSE_WAIT';
+        let ack = {
+          from: {ip: sock.host.ip, port: sock.localPort},
+          to: packet.from,
+          proto: 'TCP',
+          segment: {flags:'ACK', seq: sock.snd_nxt, ack: seg.seq+1, wnd: sock.recvWnd, payload:''},
+          size:0
+        };
+        Network.sendPacket(ack);
+        addLog('TCP','FIN received, moved to CLOSE_WAIT');
+      }
+      break;
+    case 'FIN_WAIT_1':
+      if(seg.flags && seg.flags.indexOf('ACK') !== -1){
+        sock.state = 'FIN_WAIT_2';
+        addLog('TCP','FIN_WAIT_1 -> FIN_WAIT_2');
+      }
+      if(seg.flags && seg.flags.indexOf('FIN') !== -1){
+        // simultaneous close: send ACK and move to TIME_WAIT
+        let ack = {
+          from: {ip: sock.host.ip, port: sock.localPort},
+          to: packet.from,
+          proto: 'TCP',
+          segment: {flags:'ACK', seq: sock.snd_nxt, ack: seg.seq+1, wnd: sock.recvWnd, payload:''},
+          size:0
+        };
+        Network.sendPacket(ack);
+        sock.state = 'CLOSING';
+        addLog('TCP','FIN received in FIN_WAIT_1 -> CLOSING');
+      }
+      break;
+    case 'FIN_WAIT_2':
+      if(seg.flags && seg.flags.indexOf('FIN') !== -1){
+        let ack = {
+          from: {ip: sock.host.ip, port: sock.localPort},
+          to: packet.from,
+          proto: 'TCP',
+          segment: {flags:'ACK', seq: sock.snd_nxt, ack: seg.seq+1, wnd: sock.recvWnd, payload:''},
+          size:0
+        };
+        Network.sendPacket(ack);
+        sock.state = 'TIME_WAIT';
+        addLog('TCP','FIN received in FIN_WAIT_2 -> TIME_WAIT');
+      }
+      break;
+    case 'CLOSE_WAIT':
+      // waiting for local close; if local close called, move to LAST_ACK and send FIN
+      // handled elsewhere when user triggers close
+      break;
+    default:
+      addLog('TCP','Unhandled state: ' + sock.state);
+  }
+}
+
+/* API functions for user actions */
+
+function addrStr(a){
+  if(!a) return '<nil>';
+  return (a.ip||'') + ':' + (a.port||'');
+}
+
+function addLog(kind, text){
+  let f = document.getElementById('logFilter').value;
+  let allowed = (f === 'ALL' || f === kind || (f === 'NET' && kind === 'NET'));
+  let entry = '[' + (new Date()).toLocaleTimeString() + '] ' + kind + ': ' + text;
+  Network.capture.push({event:'LOG', kind:kind, text:text, t:now()});
+  if(allowed){
+    let el = document.getElementById('log');
+    el.textContent += entry + '\n';
+    if(document.getElementById('autoScroll').checked){
+      el.scrollTop = el.scrollHeight;
+    }
+  }
+}
+
+/* -------------------------
+   UI integration
+   ------------------------- */
+
+function refreshHosts(){
+  let sel = document.getElementById('selectHost');
+  sel.innerHTML = '';
+  for(let ip in Network.hosts){
+    let opt = document.createElement('option');
+    opt.value = ip;
+    opt.text = ip;
+    sel.appendChild(opt);
+  }
+  // update sockets list too
+  refreshSockets();
+}
+
+function refreshSockets(){
+  let selH = document.getElementById('selectHost');
+  let hostIp = selH.value;
+  let sel = document.getElementById('selectSocket');
+  sel.innerHTML = '';
+  if(hostIp && Network.hosts[hostIp]){
+    let host = Network.hosts[hostIp];
+    for(let id in host.sockets){
+      let s = host.sockets[id];
+      let opt = document.createElement('option');
+      opt.value = s.id;
+      opt.text = s.id + ' ' + s.proto + ' ' + host.ip + ':' + s.localPort + ' state=' + s.state;
+      sel.appendChild(opt);
+    }
+  }
+  refreshInspector();
+  refreshPending();
+}
+
+function refreshInspector(){
+  let selSock = document.getElementById('selectSocket');
+  let sid = selSock.value;
+  let out = document.getElementById('inspector');
+  out.textContent = '';
+  if(!sid) return;
+  // find socket
+  let sock = null;
+  for(let ip in Network.hosts){
+    let h = Network.hosts[ip];
+    if(h.sockets[sid]) { sock = h.sockets[sid]; break; }
+  }
+  if(!sock) return;
+  let info = [];
+  info.push('Socket ID: ' + sock.id);
+  info.push('Host: ' + sock.host.ip);
+  info.push('Local Port: ' + sock.localPort);
+  info.push('Protocol: ' + sock.proto);
+  info.push('State: ' + sock.state);
+  info.push('Peer: ' + (sock.peer?addrStr(sock.peer):'<none>'));
+  info.push('Seq: ' + sock.seq + ' snd_nxt: ' + sock.snd_nxt + ' rcv_nxt: ' + sock.rcv_nxt);
+  info.push('SendBuf size: ' + sock.sendBufSize + ' entries: ' + sock.sendBuffer.length);
+  info.push('RecvBuf size: ' + sock.recvBufSize + ' entries: ' + sock.recvBuffer.length);
+  info.push('Blocking: ' + sock.blocking);
+  info.push('Listen/backlog: ' + sock.listen + ' / ' + sock.backlog.length);
+  out.textContent = info.join('\n') + '\n\n--- Last recv messages ---\n';
+  let recent = sock.recvBuffer.slice(-10);
+  for(let m of recent){
+    out.textContent += '[' + new Date(m.ts).toLocaleTimeString() + '] from ' + addrStr(m.from) + ' payload=' + m.payload + '\n';
+  }
+}
+
+function refreshPending(){
+  // list pending backlog entries
+  let out = document.getElementById('pending');
+  out.textContent = '';
+  for(let ip in Network.hosts){
+    let h = Network.hosts[ip];
+    for(let id in h.sockets){
+      let s = h.sockets[id];
+      if(s.backlog && s.backlog.length){
+        out.textContent += 'Listener ' + h.ip + ':' + s.localPort + ' backlog=' + s.backlog.length + '\n';
+        for(let i=0;i<s.backlog.length;i++){
+          let p = s.backlog[i];
+          out.textContent += '  ['+i+'] client=' + (p.client?addrStr(p.client):'n/a') + ' clientSeq=' + p.clientSeq + ' serverSeq=' + p.serverSeq + (p.child?(' child=' + p.child.id):'') + '\n';
+        }
+      }
+    }
+  }
+}
+
+// packet queue view
+function refreshQueue(){
+  let out = document.getElementById('pq');
+  out.textContent = '';
+  let arr = Network.packets.slice().sort((a,b)=>a.deliverAt - b.deliverAt);
+  if(arr.length===0) out.textContent = '(empty)';
+  for(let p of arr){
+    out.textContent += p.id + ' to ' + addrStr(p.to) + ' proto=' + p.proto + ' flags=' + (p.segment && p.segment.flags) + ' deliverAt=' + new Date(p.deliverAt).toLocaleTimeString() + '\n';
+  }
+}
+
+/* -------------------------
+   User action handlers
+   ------------------------- */
+
+document.getElementById('btnCreateHost').addEventListener('click', ()=>{
+  let ip = document.getElementById('newHostIp').value.trim();
+  if(!ip){ alert('Enter IP'); return; }
+  if(Network.hosts[ip]){ alert('Host already exists'); return; }
+  let h = new Host(ip);
+  Network.registerHost(h);
+  addLog('NET','Created host ' + ip);
+  refreshHosts();
+});
+
+document.getElementById('selectHost').addEventListener('change', refreshSockets);
+
+document.getElementById('btnCreateSocket').addEventListener('click', ()=>{
+  let hostIp = document.getElementById('selectHost').value;
+  if(!hostIp) { alert('Select host'); return; }
+  let host = Network.hosts[hostIp];
+  let type = document.getElementById('socketType').value;
+  let p = parseInt(document.getElementById('localPort').value,10) || 0;
+  let s;
+  if(type === 'TCP') s = createTCPSocket(host,p);
+  else s = createUDPSocket(host,p);
+  refreshSockets();
+});
+
+document.getElementById('btnListen').addEventListener('click', ()=>{
+  let sid = document.getElementById('selectSocket').value;
+  if(!sid){ alert('Select socket'); return; }
+  let sock = findSocketById(sid);
+  if(!sock || sock.proto !== 'TCP'){ alert('Need TCP socket'); return; }
+  sock.listen = true;
+  sock.state = 'LISTEN';
+  sock.backlog = sock.backlog || [];
+  addLog('TCP','Socket ' + sock.id + ' is now LISTEN on ' + sock.host.ip + ':' + sock.localPort);
+  refreshInspector();
+  refreshPending();
+});
+
+document.getElementById('btnConnect').addEventListener('click', ()=>{
+  let sid = document.getElementById('selectSocket').value;
+  if(!sid){ alert('Select socket'); return; }
+  let sock = findSocketById(sid);
+  if(!sock){ alert('Socket not found'); return; }
+  let remote = parseAddr(document.getElementById('remoteAddr').value);
+  if(!remote){ alert('Invalid remote'); return; }
+  // for UDP, set default peer
+  if(sock.proto === 'UDP'){
+    sock.peer = remote;
+    addLog('UDP','UDP socket ' + sock.id + ' "connected" to ' + addrStr(remote));
+    return;
+  }
+  // TCP active open
+  sock.peer = remote;
+  sock.state = 'SYN_SENT';
+  sock.snd_nxt = sock.seq + 1;
+  sock.snd_una = sock.seq;
+  // send SYN
+  let syn = {
+    from: {ip: sock.host.ip, port: sock.localPort},
+    to: {ip: remote.ip, port: remote.port},
+    proto: 'TCP',
+    segment: {flags:'SYN', seq: sock.seq, ack:0, wnd: sock.recvWnd, payload:''},
+    size: 0
+  };
+  Network.sendPacket(syn);
+  addLog('TCP','SYN sent for active open from ' + sock.host.ip + ':' + sock.localPort + ' -> ' + addrStr(remote));
+  refreshInspector();
+});
+
+document.getElementById('btnSend').addEventListener('click', ()=>{
+  let sid = document.getElementById('selectSocket').value;
+  if(!sid){ alert('Select socket'); return; }
+  let sock = findSocketById(sid);
+  if(!sock) return;
+  let payload = document.getElementById('payloadText').value || '';
+  let hex = document.getElementById('payloadHex').checked;
+  if(hex){
+    // convert hex string
+    payload = hexToText(payload);
+  }
+  let bytes = parseInt(document.getElementById('sendBytes').value,10) || 0;
+  if(bytes>0){
+    // create payload with that many 'x' chars if none provided
+    if(payload.length === 0) payload = 'x'.repeat(bytes);
+    else if(payload.length < bytes) payload = payload + 'x'.repeat(bytes - payload.length);
+    else payload = payload.slice(0,bytes);
+  }
+  if(sock.proto === 'UDP'){
+    // send UDP datagram
+    let to = sock.peer || parseAddr(document.getElementById('remoteAddr').value);
+    if(!to){ alert('No UDP peer specified or remoteAddr given'); return; }
+    let packet = {
+      from: {ip: sock.host.ip, port: sock.localPort},
+      to: {ip: to.ip, port: to.port},
+      proto: 'UDP',
+      segment: {payload: payload},
+      size: payload.length
+    };
+    Network.sendPacket(packet);
+    addLog('UDP','UDP datagram queued from ' + sock.host.ip + ':' + sock.localPort + ' -> ' + addrStr(to));
+  } else if(sock.proto === 'TCP'){
+    if(sock.state !== 'ESTABLISHED'){
+      addLog('TCP','Socket not ESTABLISHED; cannot send application data (state=' + sock.state + ')');
+      return;
+    }
+    // create TCP segment with PSH
+    let seg = {
+      flags: 'PSH',
+      seq: sock.snd_nxt,
+      ack: sock.rcv_nxt,
+      wnd: sock.recvWnd,
+      payload: payload
+    };
+    let packet = {
+      from: {ip: sock.host.ip, port: sock.localPort},
+      to: sock.peer,
+      proto: 'TCP',
+      segment: seg,
+      size: payload.length
+    };
+    Network.sendPacket(packet);
+    sock.snd_nxt += payload.length;
+    addLog('TCP','TCP data queued seq=' + seg.seq + ' len=' + payload.length);
+  }
+  refreshInspector();
+});
+
+document.getElementById('btnClose').addEventListener('click', ()=>{
+  let sid = document.getElementById('selectSocket').value;
+  if(!sid){ alert('Select socket'); return; }
+  let sock = findSocketById(sid);
+  if(!sock) return;
+  if(sock.proto === 'UDP'){
+    // close simply remove socket
+    sock.state = 'CLOSED';
+    sock.host.removeSocket(sock.id);
+    addLog('UDP','UDP socket closed and removed');
+    refreshSockets();
+    return;
+  }
+  // TCP close: initiate graceful close
+  if(sock.state === 'ESTABLISHED'){
+    // send FIN
+    let fin = {
+      from: {ip: sock.host.ip, port: sock.localPort},
+      to: sock.peer,
+      proto: 'TCP',
+      segment: {flags:'FIN', seq: sock.snd_nxt, ack: sock.rcv_nxt, wnd: sock.recvWnd, payload:''},
+      size:0
+    };
+    Network.sendPacket(fin);
+    sock.snd_nxt += 1;
+    sock.state = 'FIN_WAIT_1';
+    addLog('TCP','Sent FIN; moved to FIN_WAIT_1');
+    refreshInspector();
+  } else if(sock.state === 'CLOSE_WAIT'){
+    // send FIN and move to LAST_ACK
+    let fin = {
+      from: {ip: sock.host.ip, port: sock.localPort},
+      to: sock.peer,
+      proto: 'TCP',
+      segment: {flags:'FIN', seq: sock.snd_nxt, ack: sock.rcv_nxt, wnd: sock.recvWnd, payload:''},
+      size:0
+    };
+    Network.sendPacket(fin);
+    sock.snd_nxt += 1;
+    sock.state = 'LAST_ACK';
+    addLog('TCP','Sent FIN (LAST_ACK)');
+    refreshInspector();
+  } else {
+    addLog('TCP','Close called but socket in state ' + sock.state);
+  }
+});
+
+document.getElementById('btnAbort').addEventListener('click', ()=>{
+  let sid = document.getElementById('selectSocket').value;
+  if(!sid){ alert('Select socket'); return; }
+  let sock = findSocketById(sid);
+  if(!sock) return;
+  if(sock.proto === 'TCP' && sock.peer){
+    let rst = {
+      from: {ip: sock.host.ip, port: sock.localPort},
+      to: sock.peer,
+      proto: 'TCP',
+      segment: {flags:'RST', seq: 0, ack: 0, wnd: 0, payload:''},
+      size:0
+    };
+    Network.sendPacket(rst);
+    sock.state = 'CLOSED';
+    addLog('TCP','Sent RST and closed socket ' + sock.id);
+    sock.host.removeSocket(sock.id);
+    refreshSockets();
+  } else {
+    addLog('NET','Abort requires TCP socket with a peer');
+  }
+});
+
+document.getElementById('btnInject').addEventListener('click', ()=>{
+  let from = parseAddr(document.getElementById('injectFrom').value);
+  let to = parseAddr(document.getElementById('injectTo').value);
+  if(!from || !to){ alert('Invalid addresses'); return; }
+  let flags = document.getElementById('injectFlags').value || '';
+  let seq = parseInt(document.getElementById('injectSeq').value,10) || 0;
+  let ack = parseInt(document.getElementById('injectAck').value,10) || 0;
+  let payload = document.getElementById('injectPayload').value || '';
+  let packet = {
+    from: from,
+    to: to,
+    proto: 'TCP',
+    segment: {flags: flags, seq: seq, ack: ack, wnd: 0, payload: payload},
+    size: payload.length
+  };
+  Network.sendPacket(packet);
+  addLog('NET','Injected custom TCP packet flags=' + flags + ' from ' + addrStr(from) + ' to ' + addrStr(to));
+});
+
+document.getElementById('btnAutoAccept').addEventListener('click', ()=>{
+  Network.settings.autoAccept = !Network.settings.autoAccept;
+  addLog('NET','Auto-Accept toggled to ' + Network.settings.autoAccept);
+});
+
+document.getElementById('btnApplyNet').addEventListener('click', ()=>{
+  Network.settings.latency = parseInt(document.getElementById('latency').value,10) || 0;
+  Network.settings.jitter = parseInt(document.getElementById('jitter').value,10) || 0;
+  Network.settings.loss = parseFloat(document.getElementById('loss').value) || 0;
+  Network.settings.reorder = parseFloat(document.getElementById('reorder').value) || 0;
+  Network.settings.bandwidth = parseFloat(document.getElementById('bandwidth').value) || 0;
+  addLog('NET','Network settings applied: latency=' + Network.settings.latency + ' jitter=' + Network.settings.jitter + ' loss=' + Network.settings.loss + '% reorder=' + Network.settings.reorder + '% bandwidth=' + Network.settings.bandwidth);
+});
+
+document.getElementById('btnPause').addEventListener('click', ()=>{
+  Network.settings.paused = !Network.settings.paused;
+  addLog('NET','Delivery paused=' + Network.settings.paused);
+});
+
+document.getElementById('btnStep').addEventListener('click', ()=>{
+  stepDeliver();
+});
+
+document.getElementById('btnFlush').addEventListener('click', ()=>{
+  Network.flushAll();
+  refreshQueue();
+  refreshSockets();
+});
+
+document.getElementById('btnDropAll').addEventListener('click', ()=>{
+  Network.dropAll();
+  refreshQueue();
+});
+
+document.getElementById('btnShowQueue').addEventListener('click', refreshQueue);
+document.getElementById('btnExportQueue').addEventListener('click', ()=>{
+  let data = JSON.stringify(Network.packets, null, 2);
+  downloadText(data, 'queue.json');
+});
+
+document.getElementById('btnClearLog').addEventListener('click', ()=>{
+  document.getElementById('log').textContent = '';
+});
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  downloadText(JSON.stringify(Network.capture,null,2), 'log_capture.json');
+});
+
+document.getElementById('btnRefreshInspector').addEventListener('click', refreshInspector);
+document.getElementById('btnToggleBlocking').addEventListener('click', ()=>{
+  let s = findSelectedSocket();
+  if(!s) return;
+  s.blocking = !s.blocking;
+  addLog('NET','Toggled blocking on socket ' + s.id + ' -> ' + s.blocking);
+  refreshInspector();
+});
+document.getElementById('btnSetBuffers').addEventListener('click', ()=>{
+  let s = findSelectedSocket();
+  if(!s) return;
+  s.recvBufSize = parseInt(document.getElementById('recvBuf').value,10) || s.recvBufSize;
+  s.sendBufSize = parseInt(document.getElementById('sendBuf').value,10) || s.sendBufSize;
+  addLog('NET','Set buffers on ' + s.id);
+  refreshInspector();
+});
+
+document.getElementById('btnAcceptPending').addEventListener('click', ()=>{
+  // Accept first pending across all hosts matching current selection
+  for(let ip in Network.hosts){
+    let h = Network.hosts[ip];
+    for(let id in h.sockets){
+      let s = h.sockets[id];
+      if(s.backlog && s.backlog.length){
+        let p = s.backlog.shift();
+        // p may be either a plain entry or with child created
+        if(p.child){
+          p.child.state = 'ESTABLISHED';
+          p.child.peer = p.client;
+          addLog('TCP','Accepted existing child socket ' + p.child.id + ' -> ESTABLISHED');
+        } else {
+          let child = new Socket(h,'TCP');
+          child.localPort = s.localPort;
+          child.peer = p.client;
+          child.state = 'ESTABLISHED';
+          child.seq = p.serverSeq;
+          child.snd_nxt = child.seq + 1;
+          child.rcv_nxt = p.clientSeq + 1;
+          h.addSocket(child);
+          addLog('TCP','Accepted pending connection; created child socket ' + child.id);
+        }
+        refreshSockets();
+        return;
+      }
+    }
+  }
+  addLog('NET','No pending connections to accept');
+});
+
+document.getElementById('btnRejectPending').addEventListener('click', ()=>{
+  for(let ip in Network.hosts){
+    let h = Network.hosts[ip];
+    for(let id in h.sockets){
+      let s = h.sockets[id];
+      if(s.backlog && s.backlog.length){
+        let p = s.backlog.shift();
+        // send RST back to client
+        let rst = {
+          from: {ip: h.ip, port: s.localPort},
+          to: p.client,
+          proto: 'TCP',
+          segment: {flags:'RST', seq: 0, ack: 0, wnd:0, payload:''},
+          size:0
+        };
+        Network.sendPacket(rst);
+        addLog('TCP','Rejected pending connection from ' + addrStr(p.client));
+        refreshSockets();
+        return;
+      }
+    }
+  }
+  addLog('NET','No pending to reject');
+});
+
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  if(!confirm('Reset simulation?')) return;
+  Network.reset();
+  document.getElementById('log').textContent = '';
+  refreshHosts();
+  refreshQueue();
+  refreshInspector();
+  addLog('NET','Simulation reset');
+});
+
+document.getElementById('btnDownloadCapture').addEventListener('click', ()=>{
+  let name = document.getElementById('pcapName').value || 'capture.json';
+  downloadText(JSON.stringify(Network.capture,null,2), name);
+});
+
+document.getElementById('btnRunScript').addEventListener('click', ()=>{
+  runScript(false);
+});
+document.getElementById('btnStepScript').addEventListener('click', ()=>{
+  runScript(true);
+});
+document.getElementById('btnStopScript').addEventListener('click', ()=>{
+  stopScript();
+});
+
+document.getElementById('btnShowQueue').addEventListener('click', refreshQueue);
+
+document.getElementById('btnDemo').addEventListener('click', ()=>{
+  guidedDemo();
+});
+
+/* -------------------------
+   Helpers & engine loop
+   ------------------------- */
+
+function findSocketById(sid){
+  for(let ip in Network.hosts){
+    let h = Network.hosts[ip];
+    if(h.sockets[sid]) return h.sockets[sid];
+  }
+  return null;
+}
+function findSelectedSocket(){
+  let sel = document.getElementById('selectSocket').value;
+  if(!sel) return null;
+  return findSocketById(sel);
+}
+
+function stepDeliver(){
+  // deliver earliest due packet regardless of paused flag
+  let p = Network.deliverDue();
+  if(!p){
+    addLog('NET','No packet ready to deliver right now.');
+    return;
+  }
+  deliverToHost(p);
+  refreshQueue();
+  refreshSockets();
+}
+
+function maybeProcessPackets(){
+  if(Network.settings.paused) return;
+  // check for any due packets and deliver them asynchronously
+  setTimeout(function process(){
+    // deliver as many are due now
+    while(true){
+      let p = Network.deliverDue();
+      if(!p) break;
+      deliverToHost(p);
+    }
+    refreshQueue();
+    refreshSockets();
+    // schedule next check soon
+    setTimeout(process, 50);
+  }, 20);
+}
+
+// periodic background to deliver due packets if not paused
+setInterval(function(){
+  if(Network.settings.paused) return;
+  // deliver any that are due
+  while(true){
+    let p = Network.deliverDue();
+    if(!p) break;
+    deliverToHost(p);
+  }
+  refreshQueue();
+  refreshSockets();
+}, 200);
+
+/* -------------------------
+   Scripting
+   ------------------------- */
+
+let scriptRunning = false;
+let scriptLines = [];
+let scriptIndex = 0;
+let scriptStepMode = false;
+
+function runScript(stepMode){
+  if(scriptRunning){ addLog('NET','Script already running'); return; }
+  let src = document.getElementById('scriptArea').value;
+  scriptLines = src.split(/\r?\n/).map(s=>s.trim()).filter(s=>s && !s.startsWith('//'));
+  scriptIndex = 0;
+  scriptRunning = true;
+  scriptStepMode = !!stepMode;
+  addLog('NET','Starting script with ' + scriptLines.length + ' commands; stepMode=' + scriptStepMode);
+  if(scriptStepMode) {
+    runScriptStep();
+  } else {
+    runScriptLoop();
+  }
+}
+
+function runScriptLoop(){
+  if(!scriptRunning) return;
+  if(scriptIndex >= scriptLines.length){ scriptRunning=false; addLog('NET','Script finished'); return; }
+  let line = scriptLines[scriptIndex++];
+  execScriptLine(line, ()=>{
+    // small delay between commands to allow events
+    setTimeout(runScriptLoop, 150);
+  });
+}
+
+function runScriptStep(){
+  if(!scriptRunning) return;
+  if(scriptIndex >= scriptLines.length){ scriptRunning=false; addLog('NET','Script finished'); return; }
+  let line = scriptLines[scriptIndex++];
+  execScriptLine(line, function(){ addLog('NET','Script stepped one command'); });
+}
+
+function stopScript(){
+  scriptRunning = false;
+  addLog('NET','Script stopped');
+}
+
+function execScriptLine(line, cb){
+  addLog('NET','SCRIPT: ' + line);
+  let parts = line.split(/\s+/);
+  let cmd = parts[0].toUpperCase();
+  try{
+    switch(cmd){
+      case 'CREATE_HOST': {
+        let ip = parts[1];
+        if(!Network.hosts[ip]){
+          let h = new Host(ip); Network.registerHost(h);
+        }
+        refreshHosts();
+        break;
+      }
+      case 'CREATE_SOCKET': {
+        let hostIp = parts[1];
+        let type = parts[2];
+        let port = parseInt(parts[3],10) || 0;
+        let host = Network.hosts[hostIp];
+        if(!host) { addLog('NET','Script error: no host ' + hostIp); break; }
+        if(type === 'TCP') createTCPSocket(host,port); else createUDPSocket(host,port);
+        refreshSockets();
+        break;
+      }
+      case 'LISTEN': {
+        let a = parseAddr(parts[1]);
+        let host = Network.hosts[a.ip];
+        if(host){
+          let s = host.findSocketByPort(a.port);
+          if(s) { s.listen = true; s.state = 'LISTEN'; }
+        }
+        break;
+      }
+      case 'CONNECT': {
+        let from = parts[1]; let to = parts[2];
+        let fa = parseAddr(from); let ta = parseAddr(to);
+        if(!fa || !ta) break;
+        let host = Network.hosts[fa.ip];
+        if(host){
+          let s = host.findSocketByPort(fa.port);
+          if(s){
+            // set remote and send SYN
+            s.peer = ta;
+            s.state = 'SYN_SENT';
+            let syn = {from:{ip:s.host.ip,port:s.localPort}, to:{ip:ta.ip,port:ta.port}, proto:'TCP', segment:{flags:'SYN',seq:s.seq,ack:0,wnd:s.recvWnd,payload:''}, size:0};
+            Network.sendPacket(syn);
+          }
+        }
+        break;
+      }
+      case 'SEND': {
+        // SEND host:port "payload"
+        let src = parts[1];
+        let rest = line.substring(line.indexOf(parts[2])); // approximate
+        // extract quoted string
+        let match = line.match(/SEND\s+([^\s]+)\s+"([^"]+)"/);
+        let payload = match?match[2]:'';
+        let fa = parseAddr(src);
+        if(fa){
+          let s = Network.hosts[fa.ip].findSocketByPort(fa.port);
+          if(s){
+            // use existing 'send' logic
+            if(s.proto==='UDP'){
+              let to = s.peer;
+              if(!to) { addLog('NET','No UDP peer'); break; }
+              Network.sendPacket({from:{ip:s.host.ip,port:s.localPort}, to:to, proto:'UDP', segment:{payload:payload}, size:payload.length});
+            } else if(s.proto==='TCP'){
+              if(s.state !== 'ESTABLISHED'){ addLog('NET','TCP not ESTABLISHED'); break; }
+              let seg = {flags:'PSH', seq:s.snd_nxt, ack:s.rcv_nxt, wnd:s.recvWnd, payload:payload};
+              Network.sendPacket({from:{ip:s.host.ip,port:s.localPort}, to:s.peer, proto:'TCP', segment:seg, size:payload.length});
+              s.snd_nxt += payload.length;
+            }
+          }
+        }
+        break;
+      }
+      case 'WAIT': {
+        let ms = parseInt(parts[1],10) || 100;
+        setTimeout(cb, ms);
+        return;
+      }
+      case 'CLOSE': {
+        let a = parseAddr(parts[1]);
+        if(a){
+          let s = Network.hosts[a.ip].findSocketByPort(a.port);
+          if(s){
+            // graceful close
+            if(s.proto==='TCP' && s.state==='ESTABLISHED'){
+              let fin = {from:{ip:s.host.ip,port:s.localPort}, to:s.peer, proto:'TCP', segment:{flags:'FIN', seq:s.snd_nxt, ack:s.rcv_nxt, wnd:s.recvWnd, payload:''}, size:0};
+              Network.sendPacket(fin);
+              s.snd_nxt += 1; s.state='FIN_WAIT_1';
+            } else {
+              s.host.removeSocket(s.id);
+            }
+          }
+        }
+        break;
+      }
+      default:
+        addLog('NET','Unknown script command: ' + cmd);
+    }
+  }catch(e){ addLog('NET','Script exec error: ' + e.message); }
+  if(cb) setTimeout(cb, 120);
+}
+
+/* -------------------------
+   Download helper
+   ------------------------- */
+
+function downloadText(text, filename){
+  let blob = new Blob([text], {type:'application/json'});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* -------------------------
+   Misc utilities
+   ------------------------- */
+
+function hexToText(hex){
+  hex = hex.replace(/\s+/g,'');
+  if(hex.length%2===1) hex = '0' + hex;
+  let s = '';
+  for(let i=0;i<hex.length;i+=2){
+    let cc = parseInt(hex.substr(i,2),16);
+    if(isNaN(cc)) cc=63;
+    s += String.fromCharCode(cc);
+  }
+  return s;
+}
+
+/* -------------------------
+   Guided demo scenario
+   ------------------------- */
+
+function guidedDemo(){
+  // quick scenario that demonstrates handshake, data transfer, flow control and close
+  Network.reset();
+  Network.registerHost(new Host('10.0.0.1'));
+  Network.registerHost(new Host('10.0.0.2'));
+  let h1 = Network.hosts['10.0.0.1'];
+  let h2 = Network.hosts['10.0.0.2'];
+  let s1 = createTCPSocket(h1,5001);
+  let s2 = createTCPSocket(h2,80);
+  s2.listen = true; s2.state='LISTEN';
+  addLog('NET','Demo: created client ' + s1.id + ' and server ' + s2.id);
+  // connect client -> server
+  s1.peer = {ip:'10.0.0.2', port:80};
+  s1.state = 'SYN_SENT';
+  Network.sendPacket({from:{ip:'10.0.0.1',port:5001}, to:{ip:'10.0.0.2',port:80}, proto:'TCP', segment:{flags:'SYN', seq:s1.seq, ack:0, wnd:s1.recvWnd, payload:''}, size:0});
+  // after some time, send some data and then close
+  setTimeout(function(){
+    // send a small payload (simulate application)
+    if(s1.state === 'ESTABLISHED'){
+      let p = 'Hello, server!';
+      Network.sendPacket({from:{ip:'10.0.0.1',port:5001}, to:{ip:'10.0.0.2',port:80}, proto:'TCP', segment:{flags:'PSH', seq:s1.snd_nxt, ack:s1.rcv_nxt, wnd:s1.recvWnd, payload:p}, size:p.length});
+      s1.snd_nxt += p.length;
+    }
+    // schedule close
+    setTimeout(function(){
+      if(s1.state === 'ESTABLISHED'){
+        Network.sendPacket({from:{ip:'10.0.0.1',port:5001}, to:{ip:'10.0.0.2',port:80}, proto:'TCP', segment:{flags:'FIN', seq:s1.snd_nxt, ack:s1.rcv_nxt, wnd:s1.recvWnd, payload:''}, size:0});
+        s1.snd_nxt += 1; s1.state='FIN_WAIT_1';
+      }
+    }, 800);
+  }, 600);
+  refreshHosts();
+  addLog('NET','Demo started');
+}
+
+/* -------------------------
+   Initialization
+   ------------------------- */
+
+function init(){
+  Network.reset();
+  // create two default hosts
+  let h1 = new Host('10.0.0.1'); Network.registerHost(h1);
+  let h2 = new Host('10.0.0.2'); Network.registerHost(h2);
+  refreshHosts();
+  addLog('NET','Initialized with hosts 10.0.0.1 and 10.0.0.2');
+}
+
+init();
+
+/* End of simulator module */
+})();
+
+</script>
+</body>
+</html>

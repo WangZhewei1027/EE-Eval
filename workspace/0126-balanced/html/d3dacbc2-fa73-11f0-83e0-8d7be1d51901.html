@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tiny Compiler Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; color:#111; }
+    h1 { margin: 0 0 8px 0; font-size: 20px; }
+    p.desc { margin: 6px 0 18px 0; color:#444; max-width:70ch; }
+    .wrap { display:flex; gap:12px; align-items:flex-start; }
+    textarea, pre, .box { width: 100%; min-height: 160px; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid #ccc; background:#fff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; font-size:13px; }
+    textarea:focus, .box:focus { outline:2px solid #7aa7ff; border-color:#7aa7ff; }
+    .col { flex: 1 1 0; display:flex; flex-direction:column; gap:8px; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; }
+    button { padding:8px 12px; border-radius:8px; border:1px solid #bbb; background:#f6f8fb; cursor:pointer; }
+    button.primary { background:linear-gradient(#3d8bff,#2176ff); color:white; border-color:#1f67d6; }
+    button.danger { background:#ffe9e9; border-color:#ffbfbf; }
+    .small { padding:6px 8px; font-size:13px; }
+    .output { min-height:100px; white-space:pre-wrap; overflow:auto; }
+    .split { display:flex; gap:12px; }
+    .panel { flex:1; display:flex; flex-direction:column; gap:8px; }
+    label { font-weight:600; font-size:13px; color:#333; }
+    .tokens { font-size:13px; background:#fbfbff; border:1px dashed #d0d7ff; padding:8px; border-radius:6px; overflow:auto; max-height:220px; }
+    .err { color:#a00; font-weight:700; }
+    .ast-tree { font-family: ui-monospace, monospace; background:#f7fff7; border:1px dashed #bfeebb; padding:8px; border-radius:6px; overflow:auto; max-height:280px; }
+    footer { margin-top:18px; color:#666; font-size:13px; }
+    .row { display:flex; gap:8px; }
+    .sample-list { display:flex; gap:6px; flex-wrap:wrap; }
+    .chip { padding:6px 10px; border-radius:999px; border:1px solid #ddd; background:#fff; cursor:pointer; }
+    .chip:hover { background:#f1f5ff; border-color:#c7d7ff; }
+    code.inline { background:#f1f1f1; padding:2px 6px; border-radius:6px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <h1>Tiny Compiler — interactive demo</h1>
+  <p class="desc">
+    This page demonstrates the main compiler stages on a tiny language: lexical analysis (tokenize), parsing (AST), a simple optimizer (constant folding + propagation),
+    code generation to JavaScript, and execution. Type or paste a TinyLang program on the left and click the buttons to run each stage. The language supports:
+    variable declarations (let), arithmetic, and print(). Example: <code class="inline">let x = 2 + 3 * (4 - 1); print(x);</code>
+  </p>
+
+  <div class="wrap">
+    <div class="col" style="flex:0 0 48%;">
+      <label>Source (TinyLang)</label>
+      <textarea id="source" spellcheck="false"></textarea>
+
+      <div class="controls">
+        <button id="btnLex" class="small">Lex</button>
+        <button id="btnParse" class="small">Parse</button>
+        <button id="btnOptimize" class="small">Optimize</button>
+        <button id="btnGen" class="small">Generate JS</button>
+        <button id="btnRun" class="primary small">Execute</button>
+        <button id="btnAll" class="small">Run All →</button>
+        <button id="btnReset" class="small">Reset sample</button>
+      </div>
+
+      <div class="row" style="margin-top:8px; gap:10px;">
+        <div style="flex:1 1 0;">
+          <label>Output</label>
+          <pre id="output" class="box output"></pre>
+        </div>
+        <div style="width:220px;">
+          <label>Samples</label>
+          <div class="sample-list" id="samples">
+            <!-- chips inserted here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col" style="flex:0 0 52%;">
+      <div class="split">
+        <div class="panel" style="flex:1;">
+          <label>Tokens</label>
+          <div id="tokens" class="tokens"></div>
+        </div>
+
+        <div class="panel" style="flex:1;">
+          <label>AST (parsed)</label>
+          <pre id="ast" class="box ast-tree"></pre>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; margin-top:12px;">
+        <div style="flex:1;">
+          <label>Optimized AST</label>
+          <pre id="optAst" class="box ast-tree"></pre>
+        </div>
+        <div style="flex:1;">
+          <label>Generated JavaScript</label>
+          <pre id="js" class="box"></pre>
+        </div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>Errors / Messages</label>
+        <pre id="messages" class="box" style="min-height:60px;"></pre>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Notes: This is a toy compiler for education. Execution is via the JS Function constructor with a provided print function which captures output.
+  </footer>
+
+  <script>
+  // ===== TinyLang Compiler Demo =====
+  // Language:
+  // program := statement*
+  // statement := "let" identifier "=" expr ";" | "print" "(" expr ")" ";" | expr ";"
+  // expr := additive
+  // additive := multiplicative (("+"|"-") multiplicative)*
+  // multiplicative := primary (("*"|"/") primary)*
+  // primary := NUMBER | IDENT | "(" expr ")"
+  //
+  // We'll implement: Lexer -> Parser -> Optimizer (constant folding + simple propagation) -> CodeGen -> Run
+
+  // Utility: position info
+  function nicePos(pos) {
+    return 'line ' + pos.line + ', col ' + pos.col;
+  }
+
+  // ===== Lexer =====
+  function lex(input) {
+    const tokens = [];
+    let i = 0, line = 1, col = 1;
+    function cur() { return input[i]; }
+    function advance(n=1) {
+      for (let k=0;k<n;k++) {
+        if (input[i] === '\n') { line++; col=1; }
+        else col++;
+        i++;
+      }
+    }
+    function make(type, value, startPos) {
+      tokens.push({type, value, pos: startPos});
+    }
+
+    const isDigit = ch => ch >= '0' && ch <= '9';
+    const isAlpha = ch => (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_';
+    const isAlnum = ch => isAlpha(ch) || isDigit(ch);
+
+    while (i < input.length) {
+      const start = {line, col};
+      const ch = cur();
+      if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') { advance(); continue; }
+      // punctuation and operators
+      if ('()+-*/=;,'.includes(ch)) {
+        make(ch, ch, start);
+        advance();
+        continue;
+      }
+      // numbers (integers and floats)
+      if (isDigit(ch)) {
+        let num = '';
+        while (isDigit(cur())) { num += cur(); advance(); }
+        if (cur() === '.') {
+          num += '.';
+          advance();
+          while (isDigit(cur())) { num += cur(); advance(); }
+        }
+        make('NUMBER', num, start);
+        continue;
+      }
+      // identifiers / keywords
+      if (isAlpha(ch)) {
+        let id = '';
+        while (isAlnum(cur())) { id += cur(); advance(); }
+        if (id === 'let' || id === 'print') make(id.toUpperCase(), id, start);
+        else make('IDENT', id, start);
+        continue;
+      }
+      // unknown char
+      throw {type:'LexError', message: 'Unexpected character: ' + ch, pos:start};
+    }
+    make('EOF', null, {line, col});
+    return tokens;
+  }
+
+  // ===== Parser =====
+  function parse(tokens) {
+    let i = 0;
+    function peek() { return tokens[i]; }
+    function next() { return tokens[i++]; }
+
+    function expect(typeOrValue) {
+      const tk = peek();
+      if (!tk) throw {type:'ParseError', message: 'Unexpected EOF', pos: {line:0,col:0}};
+      if (typeof typeOrValue === 'string') {
+        if (tk.type === typeOrValue || tk.value === typeOrValue) return next();
+      } else {
+        throw new Error('expect needs string');
+      }
+      throw {type:'ParseError', message: `Expected ${typeOrValue}, got ${tk.type} (${tk.value})`, pos: tk.pos};
+    }
+
+    function parseProgram() {
+      const body = [];
+      while (peek().type !== 'EOF') {
+        body.push(parseStatement());
+      }
+      return {type:'Program', body};
+    }
+
+    function parseStatement() {
+      const tk = peek();
+      if (tk.type === 'LET') {
+        const startPos = tk.pos; next(); // consume let
+        const id = expect('IDENT');
+        expect('=');
+        const init = parseExpression();
+        expect(';');
+        return {type:'VariableDeclaration', id: {type:'Identifier', name:id.value, pos:id.pos}, init, pos:startPos};
+      } else if (tk.type === 'PRINT') {
+        next(); // consume print
+        expect('(');
+        const arg = parseExpression();
+        expect(')');
+        expect(';');
+        return {type:'PrintStatement', argument:arg, pos:tk.pos};
+      } else {
+        // expression statement
+        const expr = parseExpression();
+        expect(';');
+        return {type:'ExpressionStatement', expression: expr, pos: tk.pos};
+      }
+    }
+
+    function parseExpression() {
+      return parseAdditive();
+    }
+
+    function parseAdditive() {
+      let node = parseMultiplicative();
+      while (peek().value === '+' || peek().value === '-') {
+        const op = next().value;
+        const right = parseMultiplicative();
+        node = {type:'BinaryExpression', operator:op, left:node, right:right};
+      }
+      return node;
+    }
+
+    function parseMultiplicative() {
+      let node = parsePrimary();
+      while (peek().value === '*' || peek().value === '/') {
+        const op = next().value;
+        const right = parsePrimary();
+        node = {type:'BinaryExpression', operator:op, left:node, right:right};
+      }
+      return node;
+    }
+
+    function parsePrimary() {
+      const tk = peek();
+      if (tk.type === 'NUMBER') {
+        next();
+        return {type:'Literal', value: Number(tk.value), raw:tk.value, pos:tk.pos};
+      }
+      if (tk.type === 'IDENT') {
+        next();
+        return {type:'Identifier', name: tk.value, pos: tk.pos};
+      }
+      if (tk.value === '(') {
+        next();
+        const inner = parseExpression();
+        expect(')');
+        return inner;
+      }
+      throw {type:'ParseError', message: 'Unexpected token in expression: ' + tk.type + ' ' + tk.value, pos: tk.pos};
+    }
+
+    const ast = parseProgram();
+    return ast;
+  }
+
+  // ===== Optimizer: constant folding + simple propagation =====
+  function optimize(ast) {
+    // Environment mapping constant variable names to literal values
+    const env = Object.create(null);
+
+    function isLiteral(node) { return node && node.type === 'Literal'; }
+
+    function fold(node) {
+      if (!node || typeof node !== 'object') return node;
+      switch (node.type) {
+        case 'Program':
+          return {type:'Program', body: node.body.map(stmt => fold(stmt))};
+        case 'VariableDeclaration':
+          const foldedInit = fold(node.init);
+          // if init is literal, record it
+          if (isLiteral(foldedInit)) env[node.id.name] = foldedInit.value;
+          return {type:'VariableDeclaration', id: node.id, init: foldedInit};
+        case 'PrintStatement':
+          return {type:'PrintStatement', argument: fold(node.argument)};
+        case 'ExpressionStatement':
+          return {type:'ExpressionStatement', expression: fold(node.expression)};
+        case 'BinaryExpression':
+          const L = fold(node.left);
+          const R = fold(node.right);
+          if (isLiteral(L) && isLiteral(R)) {
+            let v;
+            switch (node.operator) {
+              case '+': v = L.value + R.value; break;
+              case '-': v = L.value - R.value; break;
+              case '*': v = L.value * R.value; break;
+              case '/': v = L.value / R.value; break;
+              default: return {type:'BinaryExpression', operator:node.operator, left:L, right:R};
+            }
+            return {type:'Literal', value: v, raw: String(v)};
+          } else {
+            return {type:'BinaryExpression', operator:node.operator, left:L, right:R};
+          }
+        case 'Identifier':
+          if (Object.prototype.hasOwnProperty.call(env, node.name)) {
+            return {type:'Literal', value: env[node.name], raw:String(env[node.name])};
+          }
+          return node;
+        case 'Literal':
+          return node;
+        default:
+          return node;
+      }
+    }
+
+    return fold(ast);
+  }
+
+  // ===== Code Generator to JavaScript =====
+  function generateJS(ast) {
+    // We'll produce JS managing prints via __print function.
+    function gen(node) {
+      switch (node.type) {
+        case 'Program':
+          return node.body.map(gen).join('\n');
+        case 'VariableDeclaration':
+          // Use let to mirror language
+          return `let ${node.id.name} = ${gen(node.init)};`;
+        case 'PrintStatement':
+          return `__print(${gen(node.argument)});`;
+        case 'ExpressionStatement':
+          return gen(node.expression) + ';';
+        case 'BinaryExpression':
+          return '(' + gen(node.left) + ' ' + node.operator + ' ' + gen(node.right) + ')';
+        case 'Identifier':
+          return node.name;
+        case 'Literal':
+          return typeof node.value === 'number' ? node.value.toString() : JSON.stringify(node.value);
+        default:
+          throw new Error('CodeGen: Unsupported node type ' + node.type);
+      }
+    }
+    return gen(ast);
+  }
+
+  // ===== Runner (safe-ish) =====
+  function runGenerated(jsCode) {
+    const out = [];
+    const print = (...args) => {
+      out.push(args.map(x => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' '));
+    };
+    // Wrap in IIFE to avoid leaking variables, provide __print
+    try {
+      const fn = new Function('__print', jsCode);
+      fn(print);
+      return {success:true, output: out.join('\n')};
+    } catch (e) {
+      return {success:false, error:e.toString()};
+    }
+  }
+
+  // ===== UI wiring =====
+  const sourceEl = document.getElementById('source');
+  const tokensEl = document.getElementById('tokens');
+  const astEl = document.getElementById('ast');
+  const optAstEl = document.getElementById('optAst');
+  const jsEl = document.getElementById('js');
+  const outputEl = document.getElementById('output');
+  const messagesEl = document.getElementById('messages');
+
+  const btnLex = document.getElementById('btnLex');
+  const btnParse = document.getElementById('btnParse');
+  const btnOptimize = document.getElementById('btnOptimize');
+  const btnGen = document.getElementById('btnGen');
+  const btnRun = document.getElementById('btnRun');
+  const btnAll = document.getElementById('btnAll');
+  const btnReset = document.getElementById('btnReset');
+
+  // Sample programs
+  const samplePrograms = [
+    {
+      name: 'Basic arithmetic',
+      code: `let x = 2 + 3 * (4 - 1);
+let y = x * 10;
+print(y + 5);
+print(x + y);`
+    },
+    {
+      name: 'Constant folding',
+      code: `let a = 2 + 3;
+let b = a * 4 + (6 - 2);
+print(b);
+print(a);`
+    },
+    {
+      name: 'Expressions only',
+      code: `print(1 + 2 * 3);
+print((10 - 1) / 3);`
+    },
+    {
+      name: 'Errors: parse',
+      code: `let x = 2 + ;
+print(x);`
+    }
+  ];
+
+  const samplesDiv = document.getElementById('samples');
+  samplePrograms.forEach(s => {
+    const b = document.createElement('div');
+    b.className = 'chip';
+    b.textContent = s.name;
+    b.title = s.code;
+    b.onclick = () => { sourceEl.value = s.code; clearAll(); };
+    samplesDiv.appendChild(b);
+  });
+
+  function clearAll() {
+    tokensEl.textContent = '';
+    astEl.textContent = '';
+    optAstEl.textContent = '';
+    jsEl.textContent = '';
+    outputEl.textContent = '';
+    messagesEl.textContent = '';
+  }
+
+  function showTokens(toks) {
+    tokensEl.textContent = toks.map(t => {
+      const v = t.type === 'NUMBER' || t.type === 'IDENT' ? t.value : (t.value === null ? 'EOF' : t.value);
+      return `${t.type.padEnd(8)}  ${String(v).padEnd(12)}  @ ${nicePos(t.pos)}`;
+    }).join('\n');
+  }
+
+  function showAST(ast, el) {
+    const json = JSON.stringify(ast, null, 2);
+    el.textContent = json;
+  }
+
+  // Button behavior
+  btnLex.onclick = () => {
+    clearMessages();
+    try {
+      const toks = lex(sourceEl.value);
+      showTokens(toks);
+      logMessage('Lexing succeeded. ' + (toks.length-1) + ' tokens (excluding EOF).');
+    } catch (e) {
+      tokensEl.textContent = '';
+      logError(e);
+    }
+  };
+
+  btnParse.onclick = () => {
+    clearMessages();
+    try {
+      const toks = lex(sourceEl.value);
+      showTokens(toks);
+      const ast = parse(toks);
+      showAST(ast, astEl);
+      logMessage('Parsing succeeded.');
+    } catch (e) {
+      astEl.textContent = '';
+      logError(e);
+    }
+  };
+
+  btnOptimize.onclick = () => {
+    clearMessages();
+    try {
+      const toks = lex(sourceEl.value);
+      const ast = parse(toks);
+      showAST(ast, astEl);
+      const opt = optimize(ast);
+      showAST(opt, optAstEl);
+      logMessage('Optimization applied (constant folding & propagation).');
+    } catch (e) {
+      optAstEl.textContent = '';
+      logError(e);
+    }
+  };
+
+  btnGen.onclick = () => {
+    clearMessages();
+    try {
+      const toks = lex(sourceEl.value);
+      const ast = parse(toks);
+      showAST(ast, astEl);
+      const opt = optimize(ast);
+      showAST(opt, optAstEl);
+      const js = generateJS(opt);
+      jsEl.textContent = js;
+      logMessage('Code generation completed.');
+    } catch (e) {
+      jsEl.textContent = '';
+      logError(e);
+    }
+  };
+
+  btnRun.onclick = () => {
+    clearMessages();
+    try {
+      const toks = lex(sourceEl.value);
+      const ast = parse(toks);
+      const opt = optimize(ast);
+      const js = generateJS(opt);
+      jsEl.textContent = js;
+      const result = runGenerated(js);
+      if (result.success) {
+        outputEl.textContent = result.output;
+        logMessage('Program executed successfully.');
+      } else {
+        outputEl.textContent = '';
+        logError({type:'RuntimeError', message: result.error});
+      }
+    } catch (e) {
+      logError(e);
+    }
+  };
+
+  btnAll.onclick = () => {
+    clearMessages();
+    try {
+      // lex
+      const toks = lex(sourceEl.value);
+      showTokens(toks);
+      logMessage('Lexing OK.');
+      // parse
+      const ast = parse(toks);
+      showAST(ast, astEl);
+      logMessage('Parsing OK.');
+      // optimize
+      const opt = optimize(ast);
+      showAST(opt, optAstEl);
+      logMessage('Optimization OK.');
+      // gen
+      const js = generateJS(opt);
+      jsEl.textContent = js;
+      logMessage('Code generation OK.');
+      // run
+      const result = runGenerated(js);
+      if (result.success) {
+        outputEl.textContent = result.output;
+        logMessage('Execution OK.');
+      } else {
+        outputEl.textContent = '';
+        logError({type:'RuntimeError', message: result.error});
+      }
+    } catch (e) {
+      logError(e);
+    }
+  };
+
+  btnReset.onclick = () => {
+    sourceEl.value = samplePrograms[0].code;
+    clearAll();
+  };
+
+  function logMessage(msg) {
+    messagesEl.textContent += '[Info] ' + msg + '\n';
+  }
+  function logError(e) {
+    const pos = e.pos ? (' @ ' + nicePos(e.pos)) : '';
+    messagesEl.textContent += '[Error] ' + (e.type || '') + ': ' + (e.message || String(e)) + pos + '\n';
+  }
+  function clearMessages() {
+    messagesEl.textContent = '';
+    outputEl.textContent = '';
+  }
+
+  // Initialize with sample
+  sourceEl.value = samplePrograms[0].code;
+  clearAll();
+
+  // Optional: auto-run lex on resize? Not necessary.
+  </script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Semaphore Concept Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2em;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+    }
+    #container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 1em;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    #semaphore-status {
+      font-size: 1.2em;
+      margin: 1em 0;
+      text-align: center;
+    }
+    #tasks {
+      display: flex;
+      justify-content: center;
+      gap: 1em;
+      margin-bottom: 2em;
+      flex-wrap: wrap;
+    }
+    .task {
+      width: 100px;
+      height: 100px;
+      border-radius: 12px;
+      background: #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #555;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.3s, color 0.3s;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      position: relative;
+    }
+    .task.queued {
+      background: #f5b342;
+      color: #fff;
+      cursor: wait;
+      box-shadow: 0 0 10px #f5b342;
+    }
+    .task.running {
+      background: #4caf50;
+      color: white;
+      cursor: default;
+      box-shadow: 0 0 12px #4caf50;
+    }
+    .task.done {
+      background: #2196f3;
+      color: white;
+      cursor: default;
+      box-shadow: 0 0 12px #2196f3;
+    }
+    button {
+      background-color: #2196f3;
+      border: none;
+      color: white;
+      padding: 10px 18px;
+      font-size: 1em;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 1em;
+      width: 100%;
+      max-width: 180px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      transition: background-color 0.3s;
+    }
+    button:disabled {
+      background-color: #bbb;
+      cursor: not-allowed;
+    }
+    footer {
+      text-align: center;
+      margin-top: 3em;
+      font-size: 0.9em;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>Semaphore Demonstration</h1>
+    <p>
+      This demo shows how a <strong>Semaphore</strong> controls access to a limited number of resources (permits).
+      Only a fixed number of "tasks" can run simultaneously; others wait in a queue until a permit is free.
+    </p>
+    <div id="semaphore-status">
+      Semaphore permits available: <span id="permits-count"></span>
+    </div>
+
+    <div id="tasks" aria-label="Tasks container" role="list">
+      <!-- Task boxes appear here -->
+    </div>
+
+    <button id="add-task-btn" aria-label="Add a new task to the queue">
+      Add New Task
+    </button>
+
+    <footer>
+      Click on a running task to release its permit and make room for queued tasks.
+    </footer>
+  </div>
+
+  <script>
+    // Simple Semaphore class in JS using async/await and Promises
+    class Semaphore {
+      constructor(maxPermits) {
+        this._maxPermits = maxPermits;
+        this._permits = maxPermits;
+        this._queue = [];
+      }
+
+      // Acquire a permit
+      acquire() {
+        return new Promise(resolve => {
+          if (this._permits > 0) {
+            this._permits--;
+            updatePermitsDisplay();
+            resolve();
+          } else {
+            // No permit available, enqueue the resolver
+            this._queue.push(resolve);
+          }
+        });
+      }
+
+      // Release a permit
+      release() {
+        this._permits++;
+        if (this._permits > this._maxPermits) {
+          this._permits = this._maxPermits; // Safety clamp
+        }
+        updatePermitsDisplay();
+
+        if (this._queue.length > 0) {
+          // Dequeue and resolve the first waiting acquire() Promise
+          const nextResolve = this._queue.shift();
+          this._permits--;
+          updatePermitsDisplay();
+          nextResolve();
+        }
+      }
+
+      // Get number of available permits
+      availablePermits() {
+        return this._permits;
+      }
+
+      // Get number of waiting tasks
+      waitingCount() {
+        return this._queue.length;
+      }
+    }
+
+    // UI logic
+
+    const MAX_PERMITS = 3;
+    const semaphore = new Semaphore(MAX_PERMITS);
+
+    const permitsCountEl = document.getElementById('permits-count');
+    const tasksContainer = document.getElementById('tasks');
+    const addTaskBtn = document.getElementById('add-task-btn');
+
+    let taskIdCounter = 0;
+    const tasks = new Map(); // Map taskId => Task object with state
+
+    function updatePermitsDisplay() {
+      permitsCountEl.textContent = semaphore.availablePermits() + ' / ' + MAX_PERMITS;
+    }
+
+    function createTaskElement(task) {
+      const div = document.createElement('div');
+      div.classList.add('task');
+      div.textContent = 'Task ' + task.id;
+      div.setAttribute('role', 'listitem');
+      div.setAttribute('tabindex', '0'); // Make focusable
+      updateTaskAppearance(div, task.state);
+
+      // On click for running tasks to release permit early
+      div.addEventListener('click', () => {
+        if (task.state === 'running') {
+          // User manually finishes the task
+          finishTask(task.id, true);
+        }
+      });
+
+      // Accessibility: allow Enter or Space to trigger click
+      div.addEventListener('keydown', e => {
+        if ((e.key === 'Enter' || e.key === ' ') && task.state === 'running') {
+          e.preventDefault();
+          finishTask(task.id, true);
+        }
+      });
+
+      return div;
+    }
+
+    function updateTaskAppearance(element, state) {
+      element.classList.remove('queued', 'running', 'done');
+      if (state === 'queued') {
+        element.classList.add('queued');
+        element.setAttribute('aria-label', element.textContent + ' queued, waiting for permit');
+      } else if (state === 'running') {
+        element.classList.add('running');
+        element.setAttribute('aria-label', element.textContent + ' running, click or press Enter/Space to finish');
+      } else if (state === 'done') {
+        element.classList.add('done');
+        element.setAttribute('aria-label', element.textContent + ' completed');
+      }
+    }
+
+    async function startTask(task) {
+      // Change state to queued first
+      task.state = 'queued';
+      updateTaskAppearance(task.element, 'queued');
+
+      // Acquire semaphore permit
+      await semaphore.acquire();
+
+      // Permit acquired: running state
+      task.state = 'running';
+      updateTaskAppearance(task.element, 'running');
+      updatePermitsDisplay();
+
+      // Simulate task work duration (5 to 10 seconds)
+      const workDuration = 5000 + Math.random() * 5000;
+
+      // Promise that resolves when task ends (either timeout or manual release)
+      task.runningTimeout = setTimeout(() => {
+        finishTask(task.id, false);
+      }, workDuration);
+    }
+
+    function finishTask(taskId, manual = false) {
+      const task = tasks.get(taskId);
+      if (!task || task.state !== 'running') {
+        return;
+      }
+
+      // Clear any running timeout if manual finish
+      if (manual && task.runningTimeout) {
+        clearTimeout(task.runningTimeout);
+      }
+
+      // Change state to done
+      task.state = 'done';
+      updateTaskAppearance(task.element, 'done');
+
+      // Release the semaphore permit
+      semaphore.release();
+
+      // After short delay, remove the task visually
+      setTimeout(() => {
+        tasksContainer.removeChild(task.element);
+        tasks.delete(taskId);
+      }, 3000);
+    }
+
+    addTaskBtn.addEventListener('click', () => {
+      addNewTask();
+    });
+
+    function addNewTask() {
+      taskIdCounter++;
+      const task = {
+        id: taskIdCounter,
+        state: 'initialized',
+        element: null,
+        runningTimeout: null,
+      };
+      const el = createTaskElement(task);
+      task.element = el;
+      tasksContainer.appendChild(el);
+      tasks.set(task.id, task);
+
+      // Start the process of acquiring permit and running the task
+      startTask(task);
+    }
+
+    // Initialize permit display
+    updatePermitsDisplay();
+
+    // Add initial tasks to illustrate the semaphore
+    for(let i=0; i<5; i++) {
+      addNewTask();
+    }
+  </script>
+</body>
+</html>

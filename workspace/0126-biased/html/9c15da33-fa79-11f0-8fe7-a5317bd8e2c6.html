@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Routing Interactive Sandbox</title>
+<style>
+  /* Extremely minimal visual design: basic layout only */
+  html,body { height:100%; margin:0; font-family: sans-serif; }
+  .app { display:flex; height:100%; }
+  .panel { padding:8px; box-sizing:border-box; }
+  .left { width:320px; border-right:1px solid #000; overflow:auto; }
+  .center { flex:1; position:relative; }
+  .right { width:360px; border-left:1px solid #000; overflow:auto; }
+  canvas { width:100%; height:100%; display:block; background:white; }
+  .controls { margin-bottom:8px; }
+  label { display:block; margin-top:6px; font-size:13px; }
+  input[type="text"], input[type="number"], select { width:100%; box-sizing:border-box; }
+  button { margin-top:6px; width:100%; }
+  .small { width:auto; display:inline-block; margin-right:6px; }
+  textarea { width:100%; height:80px; box-sizing:border-box; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:4px; border-bottom:1px dashed #000; }
+  .log { height:120px; overflow:auto; white-space:pre-wrap; font-size:12px; border:1px solid #000; padding:6px; }
+  .list { max-height:200px; overflow:auto; border:1px solid #000; padding:6px; }
+  input[type="range"] { width:100%; }
+  hr { border: none; border-top:1px solid #000; margin:8px 0; }
+  .inline { display:inline-block; vertical-align:middle; }
+  .muted { font-size:12px; color:#000; opacity:0.7; }
+  /* No colors beyond default, no animations */
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel left">
+    <h3>Graph Editing</h3>
+    <div class="controls">
+      <label>Mode:</label>
+      <select id="mode">
+        <option value="select">Select / Drag</option>
+        <option value="add-node">Add Node (click canvas)</option>
+        <option value="add-edge">Add Edge (click two nodes)</option>
+        <option value="delete">Delete (click node/edge)</option>
+        <option value="toggle-down">Toggle Down (node/edge offline)</option>
+        <option value="pin-route">Pin Manual Route (click nodes in order)</option>
+      </select>
+
+      <label>New Node Label (optional):</label>
+      <input type="text" id="newNodeLabel" placeholder="e.g. A, B, Router1">
+
+      <label>Default Weight for New Edges:</label>
+      <input type="number" id="defaultWeight" value="1" step="0.1">
+
+      <label class="muted">Edge options:</label>
+      <input type="checkbox" id="defaultDirected"> <label class="inline">Directed by default</label>
+
+      <label>Edge capacity (default):</label>
+      <input type="number" id="defaultCap" value="10" step="1">
+
+      <button id="clearGraph">Clear Graph</button>
+      <button id="randomGraph">Generate Random Graph</button>
+      <label>Random nodes:</label>
+      <input type="number" id="rgNodes" value="8" min="1" step="1">
+      <label>Random density (0-1):</label>
+      <input type="number" step="0.1" id="rgDensity" value="0.2" min="0" max="1">
+    </div>
+
+    <hr>
+
+    <h3>Selected Element</h3>
+    <div id="selectedInfo">
+      <div class="muted">Click a node or edge to see/edit properties.</div>
+    </div>
+
+    <hr>
+
+    <h3>Algorithms & Routing</h3>
+    <div class="controls">
+      <label>Algorithm:</label>
+      <select id="algorithm">
+        <option value="dijkstra">Dijkstra (cost-aware)</option>
+        <option value="astar">A* (heuristic)</option>
+        <option value="bfs">BFS (unweighted)</option>
+      </select>
+
+      <label>Heuristic (for A*):</label>
+      <select id="heuristic">
+        <option value="euclidean">Euclidean (node positions)</option>
+        <option value="zero">Zero (equivalent to Dijkstra)</option>
+      </select>
+
+      <label>Cost multiplier based on traffic (0..5):</label>
+      <input type="range" id="trafficMult" min="0" max="5" step="0.1" value="1">
+
+      <label>Source Node (id):</label>
+      <input type="text" id="sourceNode" placeholder="node id">
+
+      <label>Target Node (id):</label>
+      <input type="text" id="targetNode" placeholder="node id">
+
+      <label>Agent name (optional):</label>
+      <input type="text" id="agentName" placeholder="Agent1">
+
+      <button id="computePath">Compute Path (single)</button>
+      <button id="computeK">Compute K-Shortest</button>
+      <label>K value:</label>
+      <input type="number" id="kValue" value="3" min="1" step="1">
+
+      <hr>
+
+      <label>Playback / Step Controls:</label>
+      <div>
+        <button id="stepBtn">Step</button>
+        <button id="runBtn">Run</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="stopBtn">Stop</button>
+      </div>
+      <label>Play speed (ms per step):</label>
+      <input type="range" id="playSpeed" min="50" max="2000" step="50" value="300">
+    </div>
+
+    <hr>
+
+    <h3>Advanced Routing Tools</h3>
+    <div class="controls">
+      <button id="computeAllTables">Compute Routing Tables for All Nodes</button>
+      <button id="simulateTraffic">Simulate Traffic (apply loads randomly)</button>
+      <label>Traffic intensity (0-1):</label>
+      <input type="range" id="trafficIntensity" min="0" max="1" step="0.05" value="0.2">
+
+      <button id="injectFailureSeq">Record Failure Sequence</button>
+      <button id="playFailureSeq">Play Failure Sequence</button>
+
+      <button id="saveGraph">Export Graph JSON</button>
+      <button id="loadGraph">Import Graph JSON</button>
+      <textarea id="graphJson"></textarea>
+
+      <button id="undo">Undo</button>
+      <button id="redo">Redo</button>
+    </div>
+
+  </div>
+
+  <div class="panel center">
+    <div style="padding:6px;">
+      <strong>Canvas (click to interact)</strong>
+      <div class="muted">Left-click to create/select. Drag nodes. Use mode selector for edge creation, deletion, toggling.</div>
+    </div>
+    <div style="position:absolute;left:6px;top:46px;z-index:10;">
+      <div style="background:white;padding:4px;border:1px solid #000;">
+        <span class="muted">Mode:</span> <span id="modeLabel">select</span>
+      </div>
+    </div>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="panel right">
+    <h3>Routing Agents / Results</h3>
+    <div>
+      <button id="addAgent">Add Agent (multi-run)</button>
+      <div class="list" id="agentsList"></div>
+    </div>
+
+    <hr>
+
+    <h3>Paths & Comparisons</h3>
+    <div id="pathsList" class="list"></div>
+    <button id="clearPaths">Clear Displayed Paths</button>
+
+    <hr>
+
+    <h3>Event Log & History</h3>
+    <div class="log" id="eventLog"></div>
+    <button id="clearLog">Clear Log</button>
+  </div>
+</div>
+
+<script>
+/* Routing Interactive Sandbox
+   - Minimal visuals, rich interactivity
+   - Many controls including editing, algorithms, step/run, traffic, failures, save/load, undo/redo
+*/
+
+// Basic utilities
+function uid(prefix) { return prefix + '_' + Math.random().toString(36).slice(2,9); }
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+// Graph model
+let graph = { nodes: [], edges: [] };
+let selected = null;
+let mode = 'select';
+let defaultDirected = false;
+let defaultWeight = 1;
+let defaultCap = 10;
+let pendingEdge = null;
+let pinnedRoute = [];
+let history = [], future = [];
+let eventLog = [];
+let failureSequence = [];
+let isRecordingFailureSeq = false;
+let running = false;
+let runInterval = null;
+let playSpeed = 300;
+let currentAlgoState = null;
+let displayedPaths = []; // array of path objects for visualization
+let agents = []; // agents for multi-run
+
+// Canvas and drawing
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas(){
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// DOM refs
+const modeSelect = document.getElementById('mode');
+const modeLabel = document.getElementById('modeLabel');
+const newNodeLabel = document.getElementById('newNodeLabel');
+const defaultWeightInput = document.getElementById('defaultWeight');
+const defaultDirectedInput = document.getElementById('defaultDirected');
+const defaultCapInput = document.getElementById('defaultCap');
+const selectedInfo = document.getElementById('selectedInfo');
+const algorithmSelect = document.getElementById('algorithm');
+const heuristicSelect = document.getElementById('heuristic');
+const trafficMultInput = document.getElementById('trafficMult');
+const sourceNodeInput = document.getElementById('sourceNode');
+const targetNodeInput = document.getElementById('targetNode');
+const agentNameInput = document.getElementById('agentName');
+const computePathBtn = document.getElementById('computePath');
+const computeKBtn = document.getElementById('computeK');
+const kValueInput = document.getElementById('kValue');
+const stepBtn = document.getElementById('stepBtn');
+const runBtn = document.getElementById('runBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+const playSpeedInput = document.getElementById('playSpeed');
+const agentsListDiv = document.getElementById('agentsList');
+const pathsListDiv = document.getElementById('pathsList');
+const eventLogDiv = document.getElementById('eventLog');
+const clearLogBtn = document.getElementById('clearLog');
+const addAgentBtn = document.getElementById('addAgent');
+const computeAllTablesBtn = document.getElementById('computeAllTables');
+const simulateTrafficBtn = document.getElementById('simulateTraffic');
+const trafficIntensityInput = document.getElementById('trafficIntensity');
+const injectFailureSeqBtn = document.getElementById('injectFailureSeq');
+const playFailureSeqBtn = document.getElementById('playFailureSeq');
+const saveGraphBtn = document.getElementById('saveGraph');
+const loadGraphBtn = document.getElementById('loadGraph');
+const graphJsonArea = document.getElementById('graphJson');
+const undoBtn = document.getElementById('undo');
+const redoBtn = document.getElementById('redo');
+const clearGraphBtn = document.getElementById('clearGraph');
+const randomGraphBtn = document.getElementById('randomGraph');
+const rgNodesInput = document.getElementById('rgNodes');
+const rgDensityInput = document.getElementById('rgDensity');
+const clearPathsBtn = document.getElementById('clearPaths');
+
+// Initialize
+function pushHistory(action){
+  history.push(action);
+  if(history.length>200) history.shift();
+  future = [];
+}
+function logEvent(text){
+  const t = new Date().toISOString().slice(11,23) + ' - ' + text;
+  eventLog.push(t);
+  if(eventLog.length>400) eventLog.shift();
+  eventLogDiv.textContent = eventLog.join('\n');
+  eventLogDiv.scrollTop = eventLogDiv.scrollHeight;
+}
+function setMode(m){
+  mode = m;
+  modeLabel.textContent = m;
+  modeSelect.value = m;
+  pendingEdge = null;
+  pinnedRoute = [];
+  draw();
+}
+
+// Graph utilities
+function addNode(x,y,label){
+  const id = uid('n');
+  const node = { id:id, x:x, y:y, label: label || id, down:false };
+  graph.nodes.push(node);
+  pushHistory({type:'addNode',node});
+  logEvent('Added node ' + node.id);
+  draw();
+  return node;
+}
+function addEdge(a,b,weight,directed,capacity){
+  const id = uid('e');
+  const edge = { id:id, from:a.id, to:b.id, weight: Number(weight||defaultWeight), directed: !!directed, down:false, capacity: Number(capacity||defaultCap), load:0 };
+  graph.edges.push(edge);
+  pushHistory({type:'addEdge',edge});
+  logEvent('Added edge ' + edge.id + ' ' + edge.from + '->' + edge.to + ' w=' + edge.weight);
+  draw();
+  return edge;
+}
+function removeNode(n){
+  graph.nodes = graph.nodes.filter(x=>x.id !== n.id);
+  const removedEdges = graph.edges.filter(e=>e.from===n.id || e.to===n.id);
+  graph.edges = graph.edges.filter(e=>e.from!==n.id && e.to!==n.id);
+  pushHistory({type:'removeNode',node:n,edges:removedEdges});
+  logEvent('Removed node ' + n.id);
+  draw();
+}
+function removeEdge(e){
+  graph.edges = graph.edges.filter(x=>x.id !== e.id);
+  pushHistory({type:'removeEdge',edge:e});
+  logEvent('Removed edge ' + e.id);
+  draw();
+}
+function findNodeAt(x,y){
+  for(let i=graph.nodes.length-1;i>=0;i--){
+    const n=graph.nodes[i];
+    const r=12;
+    if(Math.abs(n.x-x)<=r && Math.abs(n.y-y)<=r) return n;
+  }
+  return null;
+}
+function findEdgeAt(x,y){
+  // simple hit approx: check distance to segment
+  function distToSeg(px,py,x1,y1,x2,y2){
+    const dx=x2-x1, dy=y2-y1;
+    if(dx===0 && dy===0) return Math.hypot(px-x1,py-y1);
+    const t = ((px-x1)*dx + (py-y1)*dy)/(dx*dx+dy*dy);
+    if(t<0) return Math.hypot(px-x1,py-y1);
+    if(t>1) return Math.hypot(px-x2,py-y2);
+    const nx = x1 + t*dx, ny = y1 + t*dy;
+    return Math.hypot(px-nx,py-ny);
+  }
+  for(let i=0;i<graph.edges.length;i++){
+    const e=graph.edges[i];
+    const a = graph.nodes.find(n=>n.id===e.from);
+    const b = graph.nodes.find(n=>n.id===e.to);
+    if(!a || !b) continue;
+    const d = distToSeg(x,y,a.x,a.y,b.x,b.y);
+    if(d<6) return e;
+  }
+  return null;
+}
+function getAdj(node, opts){
+  const res = [];
+  for(const e of graph.edges){
+    if(e.down) continue;
+    if(opts.exclude && opts.exclude.includes(e.id)) continue;
+    if(e.from===node.id){
+      const to = graph.nodes.find(n=>n.id===e.to);
+      if(to && !to.down) res.push({edge:e,to});
+    }
+    if(!e.directed && e.to===node.id){
+      const to = graph.nodes.find(n=>n.id===e.from);
+      if(to && !to.down) res.push({edge:e,to});
+    }
+  }
+  return res;
+}
+function edgeEffectiveCost(edge){
+  // cost = weight * (1 + (load/capacity) * trafficMult)
+  const mult = Number(trafficMultInput.value)||1;
+  const loadRatio = edge.capacity>0 ? (edge.load/edge.capacity) : 0;
+  return edge.weight * (1 + loadRatio * mult);
+}
+
+// Drawing
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // draw edges
+  for(const e of graph.edges){
+    const a = graph.nodes.find(n=>n.id===e.from);
+    const b = graph.nodes.find(n=>n.id===e.to);
+    if(!a || !b) continue;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineWidth = (displayedPaths.some(p=>p.edges && p.edges.includes(e.id)) ? 3 : 1);
+    ctx.strokeStyle = "#000";
+    ctx.setLineDash(e.down ? [6,6] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // arrowhead for directed
+    if(e.directed){
+      const angle = Math.atan2(b.y-a.y, b.x-a.x);
+      const ax = b.x - 10 * Math.cos(angle);
+      const ay = b.y - 10 * Math.sin(angle);
+      const left = {x: ax - 6*Math.cos(angle - Math.PI/6), y: ay - 6*Math.sin(angle - Math.PI/6)};
+      const right= {x: ax - 6*Math.cos(angle + Math.PI/6), y: ay - 6*Math.sin(angle + Math.PI/6)};
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(left.x, left.y);
+      ctx.lineTo(right.x,right.y);
+      ctx.closePath();
+      ctx.fillStyle = "#000";
+      ctx.fill();
+    }
+    // weight label at midpoint
+    const mx = (a.x + b.x)/2;
+    const my = (a.y + b.y)/2;
+    const w = Number(edgeEffectiveCost(e)).toFixed(2);
+    ctx.fillStyle = "#000";
+    ctx.font = "12px sans-serif";
+    ctx.fillText((e.weight || 0).toString() + " [" + w + "]", mx+4, my-4);
+    if(e.capacity !== undefined){
+      ctx.fillText("cap:"+e.capacity+" load:"+e.load, mx+4, my+10);
+    }
+  }
+  // draw nodes
+  for(const n of graph.nodes){
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, 12, 0, Math.PI*2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = (selected && selected.type==='node' && selected.id===n.id) ? 3 : 1;
+    ctx.stroke();
+    ctx.fillStyle = "#000";
+    ctx.font = "12px sans-serif";
+    ctx.fillText(n.label || n.id, n.x - 6, n.y + 4);
+    if(n.down){
+      ctx.fillText("X", n.x+8, n.y-8);
+    }
+  }
+  // draw pinned route nodes connection
+  if(pinnedRoute.length>1){
+    ctx.beginPath();
+    for(let i=0;i<pinnedRoute.length;i++){
+      const n = pinnedRoute[i];
+      if(i===0) ctx.moveTo(n.x,n.y); else ctx.lineTo(n.x,n.y);
+    }
+    ctx.strokeStyle = "#000";
+    ctx.setLineDash([4,4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // annotate agents' current positions (text)
+  let y = 6;
+  for(const ag of agents){
+    ctx.fillStyle = "#000";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("Agent "+ag.name+" state:"+ag.state, 6, canvas.height - (agents.length - agents.indexOf(ag))*16 - 6);
+  }
+}
+
+// Canvas events for interaction
+let dragging = null;
+let dragOffset = {x:0,y:0};
+canvas.addEventListener('mousedown', (ev)=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = ev.clientY - rect.top;
+  if(mode==='add-node'){
+    const label = newNodeLabel.value.trim() || undefined;
+    addNode(x,y,label);
+    return;
+  }
+  const node = findNodeAt(x,y);
+  const edge = findEdgeAt(x,y);
+  if(mode==='select'){
+    if(node){
+      selected = {type:'node', id:node.id};
+      dragNodeStart(node, x, y);
+      updateSelectedInfo();
+      draw();
+    } else if(edge){
+      selected = {type:'edge', id:edge.id};
+      updateSelectedInfo();
+      draw();
+    } else {
+      selected = null;
+      updateSelectedInfo();
+      draw();
+    }
+  } else if(mode==='add-edge'){
+    if(node){
+      if(!pendingEdge) {
+        pendingEdge = node;
+        logEvent('Picked first node for edge: ' + node.id);
+      } else {
+        if(pendingEdge.id === node.id){
+          logEvent('Cannot create self-edge skipped.');
+          pendingEdge = null;
+        } else {
+          const w = Number(defaultWeightInput.value) || 1;
+          const dir = defaultDirectedInput.checked;
+          addEdge(pendingEdge, node, w, dir, Number(defaultCapInput.value)||10);
+          pendingEdge = null;
+        }
+      }
+    }
+  } else if(mode==='delete'){
+    if(node){ removeNode(node); selected=null; updateSelectedInfo(); }
+    else if(edge){ removeEdge(edge); selected=null; updateSelectedInfo(); }
+  } else if(mode==='toggle-down'){
+    if(node){ node.down = !node.down; pushHistory({type:'toggleNode',id:node.id,down:node.down}); logEvent('Node '+node.id+' down='+node.down); if(isRecordingFailureSeq) failureSequence.push({type:'node',id:node.id,down:node.down}); draw(); }
+    else if(edge){ edge.down = !edge.down; pushHistory({type:'toggleEdge',id:edge.id,down:edge.down}); logEvent('Edge '+edge.id+' down='+edge.down); if(isRecordingFailureSeq) failureSequence.push({type:'edge',id:edge.id,down:edge.down}); draw(); }
+  } else if(mode==='pin-route'){
+    if(node){
+      pinnedRoute.push(node);
+      logEvent('Pinned node in manual route: ' + node.id);
+      if(pinnedRoute.length>1){
+        // show path in list
+        addDisplayedPath({name:'Pinned',nodes:pinnedRoute.map(n=>n.id),edges:[]});
+      }
+      draw();
+    }
+  }
+});
+function dragNodeStart(node,x,y){
+  dragging = node;
+  dragOffset.x = node.x - x;
+  dragOffset.y = node.y - y;
+}
+canvas.addEventListener('mousemove', (ev)=>{
+  if(dragging){
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    dragging.x = x + dragOffset.x;
+    dragging.y = y + dragOffset.y;
+    draw();
+  }
+});
+canvas.addEventListener('mouseup', (ev)=>{
+  if(dragging){
+    pushHistory({type:'moveNode',id:dragging.id,x:dragging.x,y:dragging.y});
+    logEvent('Moved node '+dragging.id);
+    dragging = null;
+  }
+});
+
+// Selected info panel
+function updateSelectedInfo(){
+  selectedInfo.innerHTML = '';
+  if(!selected){ selectedInfo.innerHTML = '<div class="muted">No selection</div>'; return; }
+  if(selected.type==='node'){
+    const n = graph.nodes.find(x=>x.id===selected.id);
+    if(!n) return;
+    const container = document.createElement('div');
+    container.innerHTML = '<div><strong>Node '+n.id+'</strong></div>';
+    const label = document.createElement('input'); label.type='text'; label.value=n.label;
+    label.addEventListener('change', ()=>{ pushHistory({type:'editNode',old:{...n},new:{...n,label:label.value}}); n.label = label.value; logEvent('Node label changed '+n.id); draw(); });
+    container.appendChild(document.createTextNode('Label:')); container.appendChild(label);
+    const down = document.createElement('button'); down.textContent = n.down? 'Bring Up' : 'Take Down';
+    down.addEventListener('click', ()=>{ n.down = !n.down; pushHistory({type:'toggleNode',id:n.id,down:n.down}); logEvent('Node '+n.id+' down='+n.down); draw(); });
+    container.appendChild(down);
+    const del = document.createElement('button'); del.textContent='Delete';
+    del.addEventListener('click', ()=>{ removeNode(n); selected=null; updateSelectedInfo(); });
+    container.appendChild(del);
+    selectedInfo.appendChild(container);
+  } else {
+    const e = graph.edges.find(x=>x.id===selected.id);
+    if(!e) return;
+    const container = document.createElement('div');
+    container.innerHTML = '<div><strong>Edge '+e.id+'</strong></div>';
+    const w = document.createElement('input'); w.type='number'; w.value=e.weight; w.step='0.1';
+    w.addEventListener('change', ()=>{ pushHistory({type:'editEdge',old:{...e},new:{...e,weight:Number(w.value)}}); e.weight = Number(w.value); logEvent('Edge weight changed '+e.id); draw(); });
+    container.appendChild(document.createTextNode('Weight:')); container.appendChild(w);
+    const cap = document.createElement('input'); cap.type='number'; cap.value=e.capacity; cap.step='1';
+    cap.addEventListener('change', ()=>{ pushHistory({type:'editEdge',old:{...e},new:{...e,capacity:Number(cap.value)}}); e.capacity = Number(cap.value); logEvent('Edge capacity changed '+e.id); draw(); });
+    container.appendChild(document.createTextNode('Capacity:')); container.appendChild(cap);
+    const dir = document.createElement('input'); dir.type='checkbox'; dir.checked = e.directed;
+    dir.addEventListener('change', ()=>{ pushHistory({type:'editEdge',old:{...e},new:{...e,directed:dir.checked}}); e.directed = dir.checked; logEvent('Edge directed toggled '+e.id); draw(); });
+    container.appendChild(document.createTextNode('Directed:')); container.appendChild(dir);
+    const down = document.createElement('button'); down.textContent = e.down? 'Enable' : 'Disable';
+    down.addEventListener('click', ()=>{ e.down = !e.down; pushHistory({type:'toggleEdge',id:e.id,down:e.down}); logEvent('Edge '+e.id+' down='+e.down); draw(); });
+    container.appendChild(down);
+    const del = document.createElement('button'); del.textContent = 'Delete';
+    del.addEventListener('click', ()=>{ removeEdge(e); selected=null; updateSelectedInfo(); });
+    container.appendChild(del);
+    selectedInfo.appendChild(container);
+  }
+}
+
+// Algorithms: Dijkstra, A*, BFS
+function computePathsSingle(sourceId, targetId, opts){
+  opts = opts || {};
+  const source = graph.nodes.find(n=>n.id===sourceId);
+  const target = graph.nodes.find(n=>n.id===targetId);
+  if(!source || !target) return {path:[],dist:Infinity,visited:[]};
+  const heuristic = (a,b)=>{
+    if(heuristicSelect.value==='euclidean') return dist(a,b);
+    return 0;
+  };
+  // Dijkstra/A* use priority queue
+  const pq = new MinHeap();
+  const distMap = {};
+  const prev = {};
+  const visited = [];
+  for(const n of graph.nodes) distMap[n.id] = Infinity;
+  distMap[source.id] = 0;
+  pq.push({id:source.id,pri:0});
+  while(!pq.empty()){
+    const cur = pq.pop();
+    const node = graph.nodes.find(n=>n.id===cur.id);
+    if(!node || node.down) continue;
+    if(distMap[node.id] !== cur.pri) continue;
+    visited.push(node.id);
+    if(node.id === target.id) break;
+    const adjs = getAdj(node, {exclude: opts.exclude || []});
+    for(const a of adjs){
+      const e = a.edge;
+      const to = a.to;
+      if(to.down) continue;
+      const c = edgeEffectiveCost(e);
+      const nd = distMap[node.id] + c;
+      if(nd < distMap[to.id]){
+        distMap[to.id] = nd;
+        prev[to.id] = {id:node.id,edge:e.id};
+        const heur = (algorithmSelect.value==='astar') ? heuristic(to,target) : 0;
+        pq.push({id:to.id,pri: nd + heur});
+      }
+    }
+  }
+  // build path
+  const path = [];
+  const edges = [];
+  let cur = target.id;
+  if(prev[cur]===undefined && cur!==source.id){
+    // unreachable
+    return {path:[],dist:Infinity,visited};
+  }
+  while(cur !== undefined && cur !== source.id){
+    path.unshift(cur);
+    const p = prev[cur];
+    if(!p) break;
+    edges.unshift(p.edge);
+    cur = p.id;
+  }
+  path.unshift(source.id);
+  return {path,edges,dist: distMap[target.id], visited};
+}
+
+// Simple BFS for unweighted
+function bfs(sourceId, targetId, opts){
+  const q = [sourceId];
+  const prev = {};
+  const visitedSet = new Set([sourceId]);
+  while(q.length){
+    const u = q.shift();
+    if(u===targetId) break;
+    const node = graph.nodes.find(n=>n.id===u);
+    if(!node || node.down) continue;
+    const adjs = getAdj(node, {exclude: opts.exclude || []});
+    for(const a of adjs){
+      const v = a.to.id;
+      if(visitedSet.has(v) || a.to.down) continue;
+      visitedSet.add(v);
+      prev[v] = {id:u,edge:a.edge.id};
+      q.push(v);
+    }
+  }
+  if(!visitedSet.has(targetId)) return {path:[],edges:[],dist:Infinity,visited:Array.from(visitedSet)};
+  const path = [];
+  const edges = [];
+  let cur = targetId;
+  while(cur !== undefined && cur !== sourceId){
+    path.unshift(cur);
+    edges.unshift(prev[cur].edge);
+    cur = prev[cur].id;
+  }
+  path.unshift(sourceId);
+  return {path,edges,dist:path.length-1,visited:Array.from(visitedSet)};
+}
+
+// K-shortest paths (Yen's algorithm simplified)
+function kShortest(sourceId, targetId, K){
+  const A = [];
+  const B = [];
+  const first = computePathsSingle(sourceId,targetId,{});
+  if(first.path.length===0) return [];
+  A.push(first);
+  for(let k=1;k<K;k++){
+    const prevA = A[k-1];
+    for(let i=0;i<prevA.path.length-1;i++){
+      const spurNode = prevA.path[i];
+      const rootPath = prevA.path.slice(0,i+1);
+      const rootEdges = prevA.edges.slice(0,i);
+      // remove edges that share the same rootPath with previous A
+      const removedEdges = [];
+      for(const p of A){
+        if(p.path.length > i && arrayEquals(rootPath, p.path.slice(0,i+1))){
+          // remove edge p.edges[i]
+          const eid = p.edges[i];
+          const eidx = graph.edges.findIndex(e=>e.id===eid);
+          if(eidx>=0){
+            removedEdges.push(graph.edges[eidx]);
+            graph.edges.splice(eidx,1);
+          }
+        }
+      }
+      const spurRes = computePathsSingle(spurNode, targetId, {});
+      // restore removed edges
+      for(const re of removedEdges) graph.edges.push(re);
+      if(spurRes.path.length===0) continue;
+      const totalPath = rootPath.slice(0,-1).concat(spurRes.path);
+      const totalEdges = rootEdges.concat(spurRes.edges);
+      const exists = B.some(b => arrayEquals(b.path, totalPath));
+      if(!exists) B.push({path: totalPath, edges: totalEdges, dist: spurRes.dist});
+    }
+    if(B.length===0) break;
+    B.sort((a,b)=>a.dist-b.dist);
+    A.push(B.shift());
+  }
+  return A;
+}
+function arrayEquals(a,b){ if(a.length!==b.length) return false; for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
+
+// Simple min-heap
+class MinHeap {
+  constructor(){ this.data = []; }
+  push(x){ this.data.push(x); this._siftUp(this.data.length-1); }
+  pop(){ if(this.data.length===0) return null; const r=this.data[0]; const last=this.data.pop(); if(this.data.length>0){ this.data[0]=last; this._siftDown(0); } return r;}
+  empty(){ return this.data.length===0; }
+  _siftUp(i){ while(i>0){ const p=Math.floor((i-1)/2); if(this.data[p].pri<=this.data[i].pri) break; [this.data[p],this.data[i]]=[this.data[i],this.data[p]]; i=p; } }
+  _siftDown(i){ while(true){ const l=2*i+1,r=2*i+2; let smallest=i; if(l<this.data.length && this.data[l].pri < this.data[smallest].pri) smallest=l; if(r<this.data.length && this.data[r].pri < this.data[smallest].pri) smallest=r; if(smallest===i) break; [this.data[i],this.data[smallest]]=[this.data[smallest],this.data[i]]; i=smallest; } }
+}
+
+// Displaying paths
+function addDisplayedPath(obj){
+  // obj: {name, nodes:[ids], edges:[ids], dist}
+  obj.id = uid('path');
+  displayedPaths.push(obj);
+  renderPathsList();
+  draw();
+}
+function renderPathsList(){
+  pathsListDiv.innerHTML = '';
+  for(const p of displayedPaths){
+    const div = document.createElement('div');
+    div.textContent = '['+p.id+'] ' + (p.name || '') + ' dist:'+ (p.dist||'') + ' path:'+ (p.nodes? p.nodes.join('->') : (p.edges? p.edges.join(',') : ''));
+    const btn = document.createElement('button'); btn.textContent='Remove';
+    btn.addEventListener('click', ()=>{ displayedPaths = displayedPaths.filter(x=>x.id!==p.id); renderPathsList(); draw(); });
+    div.appendChild(btn);
+    pathsListDiv.appendChild(div);
+  }
+}
+
+// Agents multi-run
+function addAgent(){
+  const src = sourceNodeInput.value.trim();
+  const tgt = targetNodeInput.value.trim();
+  if(!src || !tgt) { alert('Set source and target'); return; }
+  const name = agentNameInput.value.trim() || ('A'+(agents.length+1));
+  const ag = { id: uid('ag'), name, source:src, target:tgt, algorithm: algorithmSelect.value, state:'idle', path:[], stepIndex:0, speed: Number(playSpeedInput.value) || 300 };
+  agents.push(ag);
+  pushHistory({type:'addAgent',agent:ag});
+  logEvent('Added agent ' + ag.name + ' ' + src + '->' + tgt);
+  renderAgents();
+}
+function renderAgents(){
+  agentsListDiv.innerHTML = '';
+  for(const ag of agents){
+    const div = document.createElement('div');
+    div.innerHTML = '<strong>'+ag.name+'</strong> ('+ag.algorithm+') src:'+ag.source+' tgt:'+ag.target+' state:'+ag.state;
+    const run = document.createElement('button'); run.textContent='Compute & Run';
+    run.addEventListener('click', ()=>{ computeAgentPath(ag); startAgentRun(ag); });
+    const stop = document.createElement('button'); stop.textContent='Stop';
+    stop.addEventListener('click', ()=>{ ag.state='stopped'; logEvent('Agent '+ag.name+' stopped'); renderAgents(); draw(); });
+    const del = document.createElement('button'); del.textContent='Delete';
+    del.addEventListener('click', ()=>{ agents = agents.filter(x=>x.id!==ag.id); pushHistory({type:'removeAgent',id:ag.id}); renderAgents(); draw(); });
+    div.appendChild(run); div.appendChild(stop); div.appendChild(del);
+    agentsListDiv.appendChild(div);
+  }
+}
+function computeAgentPath(agent){
+  let res;
+  if(agent.algorithm==='bfs') res = bfs(agent.source, agent.target, {});
+  else res = computePathsSingle(agent.source, agent.target, {});
+  agent.path = res.path || [];
+  agent.edges = res.edges || [];
+  agent.stepIndex = 0;
+  agent.state = 'computed';
+  addDisplayedPath({name: agent.name, nodes: agent.path.slice(), edges: agent.edges.slice(), dist:res.dist});
+  logEvent('Agent '+agent.name+' computed path len='+agent.path.length+' dist='+res.dist);
+  renderAgents();
+}
+function startAgentRun(agent){
+  if(!agent.path || agent.path.length===0){ logEvent('Agent '+agent.name+' has no path'); return; }
+  agent.state = 'running';
+  renderAgents();
+  let i = agent.stepIndex;
+  const step = ()=>{
+    if(agent.state !== 'running') return;
+    if(i >= agent.edges.length){
+      agent.state = 'arrived';
+      logEvent('Agent '+agent.name+' arrived at target');
+      renderAgents();
+      return;
+    }
+    // increment load on edge
+    const eid = agent.edges[i];
+    const e = graph.edges.find(x=>x.id===eid);
+    if(e){
+      e.load = Math.min(e.capacity, e.load + 1);
+      logEvent('Agent '+agent.name+' traversed edge '+e.id+' load='+e.load);
+    }
+    i++;
+    agent.stepIndex = i;
+    renderAgents();
+    draw();
+    setTimeout(step, agent.speed);
+  };
+  setTimeout(step, agent.speed);
+}
+
+// Step / Run control (for algorithm animation)
+let stepQueue = [];
+function prepareStepRun(source, target){
+  // compute single algorithm step-by-step state
+  // For simplicity, recreate Dijkstra state generator
+  const S = {
+    source, target, closed: new Set(), open: new Map(), prev: {}, pq: new MinHeap(), visitedList: []
+  };
+  for(const n of graph.nodes) S.open.set(n.id, Infinity);
+  S.open.set(source, 0);
+  S.pq.push({id: source, pri: 0});
+  return S;
+}
+function stepOnce(){
+  if(!currentAlgoState) return;
+  const S = currentAlgoState;
+  while(!S.pq.empty()){
+    const cur = S.pq.pop();
+    const uid = cur.id;
+    if(S.closed.has(uid)) continue;
+    S.closed.add(uid);
+    S.visitedList.push(uid);
+    if(uid === S.target) break;
+    const node = graph.nodes.find(n=>n.id===uid);
+    if(!node) continue;
+    const adjs = getAdj(node, {});
+    for(const a of adjs){
+      const to = a.to.id;
+      if(S.closed.has(to)) continue;
+      const alt = S.open.get(uid) + edgeEffectiveCost(a.edge);
+      if(alt < (S.open.get(to) || Infinity)){
+        S.open.set(to, alt);
+        S.prev[to] = {id:uid,edge:a.edge.id};
+        S.pq.push({id:to,pri:alt});
+      }
+    }
+    break; // single step
+  }
+  // update visualization: show visited nodes as selected? We'll add a temporary displayed path for the current best path to target if exists
+  let path = [];
+  let edges = [];
+  if(S.prev[S.target]){
+    let cur = S.target;
+    while(cur && cur !== S.source){
+      path.unshift(cur);
+      edges.unshift(S.prev[cur].edge);
+      cur = S.prev[cur].id;
+    }
+    path.unshift(S.source);
+    addDisplayedPath({name:'StepPath',nodes:path,edges:edges,dist:S.open.get(S.target)});
+  }
+  if(S.pq.empty()){
+    currentAlgoState = null;
+    logEvent('Step run finished');
+  }
+}
+function runLoop(){
+  if(running) return;
+  running = true;
+  runInterval = setInterval(()=>{
+    if(!currentAlgoState){ clearInterval(runInterval); running=false; return; }
+    stepOnce();
+    draw();
+  }, playSpeed);
+}
+function pauseRun(){
+  if(runInterval) clearInterval(runInterval);
+  running = false;
+}
+function stopRun(){
+  currentAlgoState = null;
+  pauseRun();
+  logEvent('Run stopped');
+}
+
+// UI wiring
+modeSelect.addEventListener('change',(e)=>setMode(e.target.value));
+defaultWeightInput.addEventListener('change', ()=> defaultWeight = Number(defaultWeightInput.value));
+defaultDirectedInput.addEventListener('change', ()=> defaultDirected = defaultDirectedInput.checked);
+defaultCapInput.addEventListener('change', ()=> defaultCap = Number(defaultCapInput.value));
+
+computePathBtn.addEventListener('click', ()=>{
+  const s = sourceNodeInput.value.trim(); const t = targetNodeInput.value.trim();
+  if(!s || !t) { alert('Set source and target'); return; }
+  let res;
+  if(algorithmSelect.value==='bfs') res = bfs(s,t,{});
+  else res = computePathsSingle(s,t,{});
+  if(res.path.length===0) { logEvent('No path found'); alert('No path found'); return; }
+  addDisplayedPath({name:'Single '+(agentNameInput.value||'Query'), nodes: res.path, edges: res.edges, dist:res.dist});
+  logEvent('Computed path '+res.path.join('->')+' dist='+res.dist);
+});
+
+computeKBtn.addEventListener('click', ()=>{
+  const s = sourceNodeInput.value.trim(); const t = targetNodeInput.value.trim(); const K = Number(kValueInput.value)||3;
+  if(!s || !t){ alert('Set source and target'); return; }
+  const res = kShortest(s,t,K);
+  if(res.length===0){ alert('No paths found'); logEvent('K-shortest found none'); return; }
+  res.forEach((r,i)=> addDisplayedPath({name: 'K'+(i+1), nodes: r.path, edges: r.edges, dist:r.dist}));
+  logEvent('Computed K-shortest K='+K+' found='+res.length);
+});
+
+stepBtn.addEventListener('click', ()=>{
+  const s = sourceNodeInput.value.trim(); const t = targetNodeInput.value.trim();
+  if(!currentAlgoState){
+    if(!s || !t){ alert('Set source and target'); return; }
+    currentAlgoState = prepareStepRun(s,t);
+    logEvent('Prepared step run ' + s + '->' + t);
+  }
+  stepOnce();
+  draw();
+});
+runBtn.addEventListener('click', ()=>{
+  const s = sourceNodeInput.value.trim(); const t = targetNodeInput.value.trim();
+  if(!currentAlgoState){
+    if(!s || !t){ alert('Set source and target'); return; }
+    currentAlgoState = prepareStepRun(s,t);
+    logEvent('Prepared run ' + s + '->' + t);
+  }
+  playSpeed = Number(playSpeedInput.value)||300;
+  runLoop();
+});
+pauseBtn.addEventListener('click', ()=>{ pauseRun(); logEvent('Paused run'); });
+stopBtn.addEventListener('click', ()=>{ stopRun(); });
+
+playSpeedInput.addEventListener('change', ()=> playSpeed = Number(playSpeedInput.value));
+addAgentBtn.addEventListener('click', ()=>{ addAgent(); renderAgents(); });
+
+computeAllTablesBtn.addEventListener('click', ()=>{
+  // compute routing table for each node using Dijkstra
+  const tables = {};
+  for(const n of graph.nodes){
+    const tab = {};
+    for(const m of graph.nodes){
+      if(n.id===m.id) continue;
+      const res = computePathsSingle(n.id, m.id, {});
+      if(res.path.length>0) tab[m.id] = {nextHop: res.path[1] || m.id, dist: res.dist, path: res.path};
+    }
+    tables[n.id]=tab;
+  }
+  // present summary
+  graphJsonArea.value = JSON.stringify(tables, null, 2);
+  logEvent('Computed routing tables for all nodes (output to JSON area)');
+});
+
+simulateTrafficBtn.addEventListener('click', ()=>{
+  const intensity = Number(trafficIntensityInput.value)||0.2;
+  for(const e of graph.edges){
+    e.load = Math.round(Math.random()*intensity*e.capacity);
+  }
+  logEvent('Simulated traffic intensity '+intensity);
+  draw();
+});
+
+injectFailureSeqBtn.addEventListener('click', ()=>{
+  isRecordingFailureSeq = !isRecordingFailureSeq;
+  injectFailureSeqBtn.textContent = isRecordingFailureSeq ? 'Stop Recording Failures' : 'Record Failure Sequence';
+  if(!isRecordingFailureSeq) logEvent('Stopped recording failures; sequence length '+failureSequence.length);
+  else { failureSequence = []; logEvent('Started recording failure sequence'); }
+});
+
+playFailureSeqBtn.addEventListener('click', ()=>{
+  if(failureSequence.length===0){ alert('No recorded sequence'); return; }
+  // play back sequence stepwise
+  let i=0;
+  const playStep = ()=>{
+    if(i>=failureSequence.length) { logEvent('Finished playing failure sequence'); return; }
+    const ev = failureSequence[i++];
+    if(ev.type==='node'){
+      const n = graph.nodes.find(x=>x.id===ev.id);
+      if(n){ n.down = ev.down; }
+    } else {
+      const e = graph.edges.find(x=>x.id===ev.id);
+      if(e){ e.down = ev.down; }
+    }
+    draw();
+    logEvent('Playback set '+ev.type+' '+ev.id+' down='+ev.down);
+    setTimeout(playStep, 400);
+  };
+  playStep();
+});
+
+saveGraphBtn.addEventListener('click', ()=>{
+  graphJsonArea.value = JSON.stringify(graph, null, 2);
+  logEvent('Exported graph to JSON area');
+});
+loadGraphBtn.addEventListener('click', ()=>{
+  try{
+    const obj = JSON.parse(graphJsonArea.value);
+    if(!obj.nodes || !obj.edges) throw 'invalid';
+    graph = obj;
+    pushHistory({type:'loadGraph',graph:JSON.parse(graphJsonArea.value)});
+    logEvent('Loaded graph from JSON area');
+    draw();
+  }catch(err){ alert('Invalid JSON'); }
+});
+
+undoBtn.addEventListener('click', ()=>{
+  const act = history.pop();
+  if(!act) return;
+  future.push(act);
+  // very simple undo behaviors
+  if(act.type==='addNode') graph.nodes = graph.nodes.filter(n=>n.id!==act.node.id);
+  else if(act.type==='addEdge') graph.edges = graph.edges.filter(e=>e.id!==act.edge.id);
+  else if(act.type==='removeNode') { graph.nodes.push(act.node); graph.edges.push(...act.edges); }
+  else if(act.type==='removeEdge') graph.edges.push(act.edge);
+  else if(act.type==='moveNode'){ const n = graph.nodes.find(x=>x.id===act.id); if(n){ n.x = n.x; n.y = n.y; } }
+  logEvent('Undo: '+(act.type||'action'));
+  draw();
+});
+redoBtn.addEventListener('click', ()=>{
+  const act = future.pop();
+  if(!act) return;
+  history.push(act);
+  // simple redo
+  if(act.type==='addNode') graph.nodes.push(act.node);
+  else if(act.type==='addEdge') graph.edges.push(act.edge);
+  logEvent('Redo: '+act.type);
+  draw();
+});
+
+clearLogBtn.addEventListener('click', ()=>{ eventLog = []; eventLogDiv.textContent=''; });
+
+clearGraphBtn.addEventListener('click', ()=>{
+  if(!confirm('Clear entire graph?')) return;
+  pushHistory({type:'clearGraph',graph:JSON.parse(JSON.stringify(graph))});
+  graph = {nodes:[], edges:[]};
+  selected = null;
+  logEvent('Cleared graph');
+  draw();
+});
+
+randomGraphBtn.addEventListener('click', ()=>{
+  const n = Number(rgNodesInput.value)||8;
+  const dens = Number(rgDensityInput.value)||0.2;
+  graph = {nodes:[], edges:[]};
+  for(let i=0;i<n;i++){
+    addNode(40 + Math.random()*(canvas.width-80), 40 + Math.random()*(canvas.height-80), 'N'+(i+1));
+  }
+  // connect with probability
+  for(let i=0;i<graph.nodes.length;i++){
+    for(let j=i+1;j<graph.nodes.length;j++){
+      if(Math.random()<dens){
+        addEdge(graph.nodes[i], graph.nodes[j], Math.round((Math.random()*5+0.5)*10)/10, Math.random()<0.3, Math.round(Math.random()*20+5));
+      }
+    }
+  }
+  logEvent('Generated random graph nodes='+n+' density='+dens);
+  draw();
+});
+
+clearPathsBtn.addEventListener('click', ()=>{ displayedPaths = []; renderPathsList(); draw(); });
+
+// Utilities for logging/display
+function addToEventLogLine(text){ eventLogDiv.textContent += '\n' + text; }
+
+// Helper to create some default graph for demonstration at load
+(function seedDemo(){
+  // create few nodes
+  addNode(100,80,'A'); addNode(240,60,'B'); addNode(380,80,'C');
+  addNode(100,200,'D'); addNode(240,220,'E'); addNode(380,200,'F');
+  // connect
+  addEdge(graph.nodes[0], graph.nodes[1], 3, false, 10);
+  addEdge(graph.nodes[1], graph.nodes[2], 2, false, 10);
+  addEdge(graph.nodes[0], graph.nodes[3], 2, false, 8);
+  addEdge(graph.nodes[3], graph.nodes[4], 1, false, 8);
+  addEdge(graph.nodes[4], graph.nodes[5], 4, false, 8);
+  addEdge(graph.nodes[2], graph.nodes[5], 1, false, 6);
+  addEdge(graph.nodes[1], graph.nodes[4], 2.5, true, 5);
+  logEvent('Demo graph created');
+})();
+
+// Misc utilities
+function getNodeById(id){ return graph.nodes.find(n=>n.id===id); }
+
+// Keep canvas interactive even when content changes
+setInterval(()=>draw(), 1000);
+
+// Minimal helper to display selection text
+updateSelectedInfo();
+renderAgents();
+renderPathsList();
+
+</script>
+</body>
+</html>

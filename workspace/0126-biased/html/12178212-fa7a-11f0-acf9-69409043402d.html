@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>K-Nearest Neighbors Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    padding: 10px;
+    user-select: none;
+  }
+  #canvas {
+    border: 1px solid black;
+    cursor: crosshair;
+  }
+  label, div {
+    margin-top: 8px;
+    margin-bottom: 4px;
+    display: block;
+  }
+  button, input[type=number], select {
+    font-family: monospace, monospace;
+  }
+  #pointsList {
+    height: 100px;
+    overflow-y: scroll;
+    border: 1px solid black;
+    padding: 4px;
+  }
+  #log {
+    height: 150px;
+    overflow-y: auto;
+    border: 1px solid black;
+    white-space: pre-wrap;
+    font-size: 12px;
+    padding: 4px;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<h1>K-Nearest Neighbors Interactive Demo</h1>
+
+<div>
+  <label>Mode (how to add points):
+    <select id="modeSelect" title="Select adding mode">
+      <option value="classA">Add Class A Point</option>
+      <option value="classB">Add Class B Point</option>
+      <option value="classC">Add Class C Point</option>
+      <option value="query">Add Query Point</option>
+      <option value="remove">Remove Points (click to remove nearest point)</option>
+      <option value="move">Move Points (drag)</option>
+      <option value="none">No Add/Remove/Move (View Only)</option>
+    </select>
+  </label>
+</div>
+
+<div>
+<label for="kInput">Number of neighbors K:
+  <input type="number" id="kInput" value="3" min="1" max="20" style="width: 40px" title="Choose k neighbors"/>
+</label>
+<button id="classifyButton" title="Classify query points based on current points and k">Classify Query</button>
+<button id="clearQueriesButton" title="Remove all query points">Clear Query Points</button>
+<button id="clearAllButton" title="Remove all points">Clear All Points</button>
+<button id="resetButton" title="Reset everything including logs">Reset All</button>
+</div>
+
+<div>
+<label for="distanceMetric">Distance Metric:
+  <select id="distanceMetric" title="Choose distance metric">
+    <option value="euclidean">Euclidean</option>
+    <option value="manhattan">Manhattan</option>
+    <option value="chebyshev">Chebyshev</option>
+  </select>
+</label>
+</div>
+
+<div>
+<label for="weighting">Weighting Scheme:
+  <select id="weighting" title="Choose weighting scheme">
+    <option value="uniform">Uniform (majority vote)</option>
+    <option value="distance">Distance weighted</option>
+  </select>
+</label>
+</div>
+
+<div>
+  <label>Distance threshold (for weighting scheme):
+    <input type="number" id="thresholdInput" value="" min="0" step="0.1" style="width: 60px" 
+    placeholder="unlimited" title="Max distance to consider neighbors (empty = no limit)"/>
+  </label>
+</div>
+
+<canvas id="canvas" width="600" height="400" tabindex="0"
+  aria-label="Graph area to add and manipulate points for K-Nearest Neighbors"></canvas>
+
+<div>
+  <label>Points List (click point ID to remove):
+    <div id="pointsList" tabindex="0" aria-live="polite" aria-relevant="additions removals"></div>
+  </label>
+</div>
+
+<div>
+  <label>Logs and Details:</label>
+  <div id="log" tabindex="0" aria-live="polite" aria-relevant="additions"></div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const modeSelect = document.getElementById('modeSelect');
+  const kInput = document.getElementById('kInput');
+  const classifyButton = document.getElementById('classifyButton');
+  const clearQueriesButton = document.getElementById('clearQueriesButton');
+  const clearAllButton = document.getElementById('clearAllButton');
+  const resetButton = document.getElementById('resetButton');
+  const pointsListDiv = document.getElementById('pointsList');
+  const logDiv = document.getElementById('log');
+  const distanceMetricSel = document.getElementById('distanceMetric');
+  const weightingSel = document.getElementById('weighting');
+  const thresholdInput = document.getElementById('thresholdInput');
+
+  // Data structures
+  // Points: array of {id, x, y, classLabel, isQuery, classifiedLabel}
+  // id is unique integer
+  let points = [];
+  let nextPointId = 1;
+
+  // State for drag move mode
+  let dragInfo = null; // {point, offsetX, offsetY} or null
+
+  // Constants for different class labels and colors (colors are just for visualization on canvas)
+  const classColors = {
+    classA: 'black', // we won't use colors but distinguish by shape
+    classB: 'black',
+    classC: 'black',
+    query: 'black',
+  };
+
+  // Shape mapping:
+  // classA: circle
+  // classB: square
+  // classC: triangle
+  // query: diamond
+  // classifiedQuery: same shape as query, but with label drawn next to it
+
+  // Util functions:
+
+  function log(msg) {
+    const time = new Date().toLocaleTimeString();
+    logDiv.textContent += `[${time}] ${msg}\n`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  // Distance functions
+
+  function getDistance(p1, p2, metric) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    switch(metric) {
+      case 'euclidean': return Math.sqrt(dx*dx + dy*dy);
+      case 'manhattan': return Math.abs(dx) + Math.abs(dy);
+      case 'chebyshev': return Math.max(Math.abs(dx), Math.abs(dy));
+      default: return Math.sqrt(dx*dx + dy*dy);
+    }
+  }
+
+  // Draw functions
+
+  function clearCanvas() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+
+  function drawPoint(pt, highlight=false) {
+    const size = 6;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'black';
+    ctx.fillStyle = 'black';
+    const x = pt.x;
+    const y = pt.y;
+
+    // Choose shape by class
+    switch(pt.classLabel) {
+      case 'classA':
+        // circle
+        ctx.beginPath();
+        ctx.arc(x,y,size,0,Math.PI*2);
+        ctx.stroke();
+        if (highlight) {
+          ctx.beginPath();
+          ctx.arc(x,y,size-2,0,Math.PI*2);
+          ctx.fill();
+        }
+        break;
+      case 'classB':
+        // square
+        ctx.beginPath();
+        ctx.rect(x - size, y - size, size*2, size*2);
+        ctx.stroke();
+        if (highlight) {
+          ctx.fillRect(x - size +2, y - size +2, size*2 - 4, size*2 -4);
+        }
+        break;
+      case 'classC':
+        // triangle upward
+        ctx.beginPath();
+        ctx.moveTo(x, y - size);
+        ctx.lineTo(x - size, y + size);
+        ctx.lineTo(x + size, y + size);
+        ctx.closePath();
+        ctx.stroke();
+        if (highlight) {
+          ctx.beginPath();
+          ctx.moveTo(x, y - size +2);
+          ctx.lineTo(x - size +2, y + size -2);
+          ctx.lineTo(x + size -2, y + size -2);
+          ctx.closePath();
+          ctx.fill();
+        }
+        break;
+      case 'query':
+        // diamond rotated square
+        ctx.beginPath();
+        ctx.moveTo(x, y - size);
+        ctx.lineTo(x - size, y);
+        ctx.lineTo(x, y + size);
+        ctx.lineTo(x + size, y);
+        ctx.closePath();
+        ctx.stroke();
+        if (highlight) {
+          ctx.beginPath();
+          ctx.moveTo(x, y - size +2);
+          ctx.lineTo(x - size +2, y);
+          ctx.lineTo(x, y + size -2);
+          ctx.lineTo(x + size -2, y);
+          ctx.closePath();
+          ctx.fill();
+        }
+        break;
+      default:
+        // fallback circle
+        ctx.beginPath();
+        ctx.arc(x,y,size,0,Math.PI*2);
+        ctx.stroke();
+        break;
+    }
+
+    // For query points, if classifiedLabel exists, print label next to point
+    if (pt.isQuery && pt.classifiedLabel) {
+      ctx.font = '12px monospace';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pt.classifiedLabel, x + size + 4, y);
+    }
+  }
+
+  // Draw points and optionally highlight query points or nearest neighbors
+
+  function drawAllPoints(highlightIds=[]) {
+    clearCanvas();
+    // Draw all normal points first (non-query)
+    for (const pt of points) {
+      if (!pt.isQuery) {
+        drawPoint(pt, highlightIds.includes(pt.id));
+      }
+    }
+    // Then draw query points on top
+    for (const pt of points) {
+      if (pt.isQuery) {
+        drawPoint(pt, highlightIds.includes(pt.id));
+      }
+    }
+  }
+
+  // Find nearest neighbors for one query point
+
+  function findNeighbors(queryPt, k, metric, threshold=null) {
+    // Return array of {point, distance}
+    // Filter points to only non query points
+    const nonQueryPts = points.filter(p => !p.isQuery);
+    if (nonQueryPts.length === 0) {
+      return [];
+    }
+    let dists = nonQueryPts
+      .map(p => ({point: p, distance: getDistance(queryPt, p, metric)}))
+      .filter(d => (threshold === null || d.distance <= threshold));
+    dists.sort((a,b) => a.distance - b.distance);
+    return dists.slice(0,k);
+  }
+
+  // Classify one query point
+
+  function classifyPoint(queryPt, k, metric, weighting, threshold) {
+    // neighbors is list of {point, distance}
+    const neighbors = findNeighbors(queryPt, k, metric, threshold);
+
+    if (neighbors.length === 0) {
+      return null;
+    }
+
+    // Tally votes
+    const voteCounts = {}; // classLabel -> score
+    for (const neighbor of neighbors) {
+      const cls = neighbor.point.classLabel;
+      if (!(cls in voteCounts)) voteCounts[cls] = 0;
+      if (weighting === 'distance') {
+        // weight = 1 / (distance + epsilon), closer stronger
+        // but if distance=0, means identical point, assign large weight
+        const w = neighbor.distance === 0 ? 1e9 : 1 / neighbor.distance;
+        voteCounts[cls] += w;
+      } else {
+        // uniform vote
+        voteCounts[cls] += 1;
+      }
+    }
+    // Find max vote score(s)
+    let maxScore = -Infinity;
+    let winners = [];
+    for (const [cls,v] of Object.entries(voteCounts)) {
+      if (v > maxScore) {
+        maxScore = v;
+        winners = [cls];
+      } else if (v === maxScore) {
+        winners.push(cls);
+      }
+    }
+    if (winners.length === 1) {
+      return winners[0];
+    } else {
+      // Tie -> pick one alphabetically stable
+      winners.sort();
+      return winners[0];
+    }
+  }
+
+  // Update points list display
+
+  function updatePointsList() {
+    pointsListDiv.innerHTML = '';
+    if(points.length === 0) {
+      pointsListDiv.textContent = 'No points in dataset.';
+      return;
+    }
+    for (const pt of points) {
+      const span = document.createElement('span');
+      span.textContent = `[${pt.id}] `;
+      span.style.cursor = 'pointer';
+      span.title = `Remove this point (ID: ${pt.id}, class: ${pt.classLabel}${pt.isQuery ? ', query' : ''})`;
+      // Add color-coded label representation in text (no color but show shape)
+      let shapeDesc = "";
+      switch(pt.classLabel) {
+        case 'classA': shapeDesc = "Circle"; break;
+        case 'classB': shapeDesc = "Square"; break;
+        case 'classC': shapeDesc = "Triangle"; break;
+        case 'query': shapeDesc = "Diamond"; break;
+      }
+      span.textContent += `${shapeDesc} (${pt.isQuery ? 'Query' : pt.classLabel}) @ (${pt.x.toFixed(1)},${pt.y.toFixed(1)})`;
+      span.style.userSelect = "none";
+
+      // Remove on click
+      span.addEventListener('click', () => {
+        const confirmed = confirm(`Remove point ID ${pt.id}?`);
+        if(confirmed) {
+          points = points.filter(p => p.id !== pt.id);
+          log(`Point ID ${pt.id} removed.`);
+          classifyQueriesIfAny(false);
+          updatePointsList();
+          drawAllPoints();
+        }
+      });
+      pointsListDiv.appendChild(span);
+      pointsListDiv.appendChild(document.createElement('br'));
+    }
+  }
+
+  // Classify query points and update display
+
+  function classifyQueriesIfAny(reportLog=true) {
+    const k = parseInt(kInput.value);
+    if (isNaN(k) || k < 1) {
+      if (reportLog) log("Invalid k. Please enter a positive integer.");
+      return;
+    }
+
+    const thresholdVal = thresholdInput.value.trim();
+    let threshold = null;
+    if (thresholdVal !== "") {
+      const n = parseFloat(thresholdVal);
+      if (!isNaN(n) && n >= 0) {
+        threshold = n;
+      } else {
+        if (reportLog) log('Invalid threshold: Must be a number >= 0 or empty.');
+        return;
+      }
+    }
+    const metric = distanceMetricSel.value;
+    const weighting = weightingSel.value;
+
+    const queryPoints = points.filter(p => p.isQuery);
+    if(queryPoints.length === 0) {
+      if(reportLog) log('No query points to classify.');
+      return;
+    }
+    if(points.filter(p=>!p.isQuery).length === 0) {
+      if(reportLog) log('No base points in dataset. Add some class points first.');
+      return;
+    }
+    for (const qp of queryPoints) {
+      const assignedLabel = classifyPoint(qp, k, metric, weighting, threshold);
+      qp.classifiedLabel = assignedLabel ? assignedLabel : "Unclassified";
+      if(reportLog) {
+        const neighbors = findNeighbors(qp, k, metric, threshold);
+        log(`Query ID ${qp.id} classified as: ${qp.classifiedLabel}. Near neighbors: ${neighbors.map(n => n.point.id + "(" + n.point.classLabel + ") dist:" + n.distance.toFixed(1)).join(", ")}`);
+      }
+    }
+    drawAllPoints(queryPoints.map(p=>p.id));
+    updatePointsList();
+  }
+
+  // Handle canvas events
+
+  canvas.addEventListener('mousedown', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const mode = modeSelect.value;
+
+    if (mode === 'move') {
+      // Attempt to start dragging nearest point if close
+      const pt = findNearestPoint(mouseX, mouseY, 10);
+      if (pt) {
+        dragInfo = {
+          point: pt,
+          offsetX: pt.x - mouseX,
+          offsetY: pt.y - mouseY
+        };
+      }
+    } else if (mode === 'remove') {
+      // Remove nearest point if close
+      const pt = findNearestPoint(mouseX, mouseY, 10);
+      if (pt) {
+        const confirmed = confirm(`Remove point ID ${pt.id}?`);
+        if(confirmed) {
+          points = points.filter(p => p.id !== pt.id);
+          log(`Point ID ${pt.id} removed.`);
+          classifyQueriesIfAny(false);
+          updatePointsList();
+          drawAllPoints();
+        }
+      } else {
+        log('No point near click to remove.');
+      }
+    } else if (mode === 'none') {
+      // Do nothing
+      return;
+    } else {
+      // Add point of selected class or query at click position
+      const classLabel = mode;
+      if(!['classA','classB','classC','query'].includes(classLabel)) return;
+      // For query, clear classifiedLabel if added anew
+      const newPoint = {
+        id: nextPointId++,
+        x: mouseX,
+        y: mouseY,
+        classLabel,
+        isQuery: (classLabel === 'query'),
+        classifiedLabel: null
+      };
+      points.push(newPoint);
+      log(`Added ${classLabel}${newPoint.isQuery ? ' (query)' : ''} point ID ${newPoint.id} at (${mouseX.toFixed(1)},${mouseY.toFixed(1)}).`);
+      classifyQueriesIfAny(false);
+      updatePointsList();
+      drawAllPoints();
+    }
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if(!dragInfo) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const pt = dragInfo.point;
+    pt.x = mouseX + dragInfo.offsetX;
+    if(pt.x < 0) pt.x = 0;
+    if(pt.x > canvas.width) pt.x = canvas.width;
+    pt.y = mouseY + dragInfo.offsetY;
+    if(pt.y < 0) pt.y = 0;
+    if(pt.y > canvas.height) pt.y = canvas.height;
+    classifyQueriesIfAny(false);
+    updatePointsList();
+    drawAllPoints();
+  });
+
+  canvas.addEventListener('mouseup', e => {
+    if(dragInfo) {
+      log(`Moved point ID ${dragInfo.point.id} to (${dragInfo.point.x.toFixed(1)},${dragInfo.point.y.toFixed(1)}).`);
+    }
+    dragInfo = null;
+  });
+
+  canvas.addEventListener('mouseleave', e => {
+    dragInfo = null;
+  });
+
+  // Near point finder: returns point within maxDist or null
+
+  function findNearestPoint(x,y,maxDist) {
+    if(points.length===0) return null;
+    let nearest = null;
+    let nearestDist = maxDist+1;
+    for(const pt of points) {
+      const dist = Math.hypot(pt.x - x, pt.y - y);
+      if(dist<=maxDist && dist < nearestDist) {
+        nearest = pt;
+        nearestDist = dist;
+      }
+    }
+    return nearest;
+  }
+
+  // Button handlers
+
+  classifyButton.addEventListener('click', () => {
+    classifyQueriesIfAny(true);
+  });
+
+  clearQueriesButton.addEventListener('click', () => {
+    let removedCount = 0;
+    points = points.filter(p => {
+      if(p.isQuery) {
+        removedCount++;
+        return false;
+      }
+      return true;
+    });
+    log(`Removed ${removedCount} query point(s).`);
+    updatePointsList();
+    drawAllPoints();
+  });
+
+  clearAllButton.addEventListener('click', () => {
+    const conf = confirm('Remove ALL points from the dataset?');
+    if(conf) {
+      points = [];
+      log('All points removed.');
+      updatePointsList();
+      drawAllPoints();
+    }
+  });
+
+  resetButton.addEventListener('click', () => {
+    const conf = confirm('Reset everything including logs, points, and settings?');
+    if(conf) {
+      points = [];
+      nextPointId = 1;
+      logDiv.textContent = '';
+      modeSelect.value = 'classA';
+      kInput.value = '3';
+      distanceMetricSel.value = 'euclidean';
+      weightingSel.value = 'uniform';
+      thresholdInput.value = '';
+      updatePointsList();
+      drawAllPoints();
+      log('System reset.');
+    }
+  });
+
+  // Input change handlers to reclassify queries when relevant
+
+  kInput.addEventListener('input', () => {
+    classifyQueriesIfAny(false);
+  });
+
+  distanceMetricSel.addEventListener('change', () => {
+    classifyQueriesIfAny(false);
+  });
+
+  weightingSel.addEventListener('change', () => {
+    classifyQueriesIfAny(false);
+  });
+
+  thresholdInput.addEventListener('input', () => {
+    classifyQueriesIfAny(false);
+  });
+
+  // Initialization
+
+  function initExampleData() {
+    points = [
+      // Class A points (circles)
+      {id: nextPointId++, x: 100, y: 80, classLabel: 'classA', isQuery:false, classifiedLabel:null},
+      {id: nextPointId++, x: 130, y: 120, classLabel: 'classA', isQuery:false, classifiedLabel:null},
+      {id: nextPointId++, x: 90, y: 150, classLabel: 'classA', isQuery:false, classifiedLabel:null},
+
+      // Class B points (squares)
+      {id: nextPointId++, x: 300, y: 100, classLabel: 'classB', isQuery:false, classifiedLabel:null},
+      {id: nextPointId++, x: 320, y: 140, classLabel: 'classB', isQuery:false, classifiedLabel:null},
+      {id: nextPointId++, x: 270, y: 130, classLabel: 'classB', isQuery:false, classifiedLabel:null},
+
+      // Class C points (triangles)
+      {id: nextPointId++, x: 200, y: 300, classLabel: 'classC', isQuery:false, classifiedLabel:null},
+      {id: nextPointId++, x: 230, y: 350, classLabel: 'classC', isQuery:false, classifiedLabel:null},
+      {id: nextPointId++, x: 180, y: 360, classLabel: 'classC', isQuery:false, classifiedLabel:null},
+
+      // Query points (diamonds)
+      {id: nextPointId++, x: 150, y: 150, classLabel: 'query', isQuery:true, classifiedLabel: null},
+      {id: nextPointId++, x: 280, y: 125, classLabel: 'query', isQuery:true, classifiedLabel: null},
+      {id: nextPointId++, x: 210, y: 330, classLabel: 'query', isQuery:true, classifiedLabel: null},
+    ];
+  }
+
+  // Setup on load
+
+  function setup() {
+    initExampleData();
+    updatePointsList();
+    classifyQueriesIfAny(false);
+    drawAllPoints();
+    log('Initialized with example data.');
+  }
+
+  setup();
+
+})();
+</script>
+
+</body>
+</html>

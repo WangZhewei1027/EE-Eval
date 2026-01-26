@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Garbage Collection Demo (Mark-and-Sweep)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{ --bg:#0f1724; --panel:#0b1220; --muted:#9aa7b8; --accent:#6ee7b7; --accent2:#60a5fa; --danger:#fb7185; }
+    html,body{ height:100%; margin:0; font-family:Inter,Roboto,Segoe UI,Helvetica,Arial; background:linear-gradient(180deg,#071021 0%, #07131b 100%); color:#dbeafe; }
+    .app{ display:flex; gap:12px; padding:14px; box-sizing:border-box; height:100%; }
+    .side { width:320px; background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); border:1px solid rgba(255,255,255,0.03); padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(2,6,23,0.6); overflow:auto; }
+    .main { flex:1; display:flex; flex-direction:column; gap:12px; }
+    h2{ margin:6px 0 10px 0; font-size:16px; color:#e6eef8; }
+    .controls button, .controls select, .controls input { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04); color:var(--muted); padding:8px 10px; border-radius:6px; margin:6px 4px 6px 0; cursor:pointer; }
+    .controls button:hover{ border-color:rgba(255,255,255,0.08); color:#fff; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .status { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    .stat { background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02); min-width:60px; text-align:center; }
+    .stat .label{ font-size:11px; color:var(--muted); } .stat .value{ font-weight:700; font-size:14px; color:#e6fdf2; }
+    #viewport { background:linear-gradient(160deg,#061224 0%, #07111a 100%); border-radius:10px; border:1px solid rgba(255,255,255,0.03); flex:1; position:relative; overflow:hidden; }
+    svg{ width:100%; height:100%; display:block; }
+    .legend { font-size:12px; color:var(--muted); margin-top:8px; }
+    .log { background:rgba(255,255,255,0.01); border-radius:8px; padding:8px; font-family:monospace; font-size:12px; color:var(--muted); max-height:160px; overflow:auto; }
+    .small{ font-size:12px; color:var(--muted); }
+    .btn-danger{ background:linear-gradient(90deg,#b91c1c,#ef4444); color:white; border:none; }
+    .controls .select-obj { width:160px; }
+    .controls label{ font-size:12px; color:var(--muted); margin-right:6px; }
+    .node-label { pointer-events:none; font-size:11px; fill:#e6eef8; text-anchor:middle; dominant-baseline:middle; }
+    .edge { stroke:rgba(255,255,255,0.08); stroke-width:2; marker-end:url(#arrow); }
+    .node { stroke:rgba(255,255,255,0.06); stroke-width:1.5; cursor:pointer; }
+    .node.reachable { fill:linear-gradient(90deg,#65f6c8,#60a5fa); }
+    .node.reachable circle{ stroke:#6ee7b7; }
+    .node.garbage circle{ fill:rgba(255,255,255,0.02); stroke:#566;
+    }
+    .node.marking circle{ stroke:#ffd166; stroke-width:3; }
+    .root-pill { display:inline-block; padding:6px 8px; border-radius:999px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.03); color:var(--muted); margin-right:6px; font-size:12px; }
+    .example-btn{ background:linear-gradient(90deg,#0ea5e9,#6366f1); color:white; border:none; padding:8px 10px; border-radius:6px; margin:6px 4px 6px 0; cursor:pointer; }
+    .footer-note{ font-size:12px; color:var(--muted); margin-top:8px; }
+    a.inline{ color:var(--accent2); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="side">
+      <h2>Controls</h2>
+      <div class="controls">
+        <div class="row">
+          <label>Create object:</label>
+          <input id="objName" placeholder="name (optional)" />
+          <select id="objSize">
+            <option value="1">1 KB</option>
+            <option value="4" selected>4 KB</option>
+            <option value="16">16 KB</option>
+            <option value="64">64 KB</option>
+          </select>
+          <button id="allocBtn">Allocate</button>
+        </div>
+
+        <div class="row" style="margin-top:6px;">
+          <label>Make reference:</label>
+          <select id="fromSel" class="select-obj"></select>
+          <select id="toSel" class="select-obj"></select>
+          <button id="linkBtn">→ Add ref</button>
+          <button id="unlinkBtn">× Remove ref</button>
+        </div>
+
+        <div class="row" style="margin-top:6px;">
+          <label>Roots:</label>
+          <button id="rootGlobal" class="root-pill">Global</button>
+          <button id="rootDOM" class="root-pill">DOM</button>
+          <button id="rootStack" class="root-pill">Stack</button>
+        </div>
+
+        <div class="row" style="margin-top:6px;">
+          <button id="simulateBtn" style="background:linear-gradient(90deg,#22c55e,#06b6d4); color:white; border:none;">Simulate GC (Mark)</button>
+          <button id="sweepBtn" style="background:linear-gradient(90deg,#ef4444,#fb7185); color:white; border:none;">Sweep (free unreachable)</button>
+          <button id="resetBtn" class="btn-danger">Reset</button>
+        </div>
+
+        <h2 style="margin-top:12px;">Memory</h2>
+        <div class="status">
+          <div class="stat"><div class="label">Objects</div><div id="stat-objects" class="value">0</div></div>
+          <div class="stat"><div class="label">Total KB</div><div id="stat-total" class="value">0</div></div>
+          <div class="stat"><div class="label">Reachable KB</div><div id="stat-reachable" class="value">0</div></div>
+          <div class="stat"><div class="label">Garbage KB</div><div id="stat-garbage" class="value">0</div></div>
+        </div>
+
+        <h2>Examples</h2>
+        <div class="row">
+          <button id="ex-closure" class="example-btn">Closure capture (retain)</button>
+          <button id="ex-dom-leak" class="example-btn">DOM leak (detached)</button>
+          <button id="ex-timer" class="example-btn">Timer leak (setInterval)</button>
+        </div>
+
+        <h2>Log</h2>
+        <div id="log" class="log"></div>
+
+        <div class="footer-note">
+          This is a simulation of mark-and-sweep GC. Real JS engines use generational and incremental collectors and you can't reliably force GC from web pages. Use browser devtools to inspect memory.
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <div id="viewport">
+        <svg id="svg"></svg>
+      </div>
+
+      <div class="side" style="margin-top:12px; max-height:240px;">
+        <h2>How it works (brief)</h2>
+        <div class="small">
+          - Roots (Global, DOM, Stack) are starting points the collector uses. Any object reachable from roots is "live".<br/>
+          - Mark phase: traverse references from roots and mark reachable objects.<br/>
+          - Sweep phase: unmarked objects are considered garbage and can be reclaimed.<br/>
+          - Common causes of leaks: closures that keep references, timers/event listeners not cleared, global references or DOM nodes still referenced in JS.
+        </div>
+
+        <h2 style="margin-top:10px;">Interaction tips</h2>
+        <div class="small">
+          - Allocate objects, create references between them, then click "Simulate GC" to mark reachable objects. Unmarked ones appear dimmed.<br/>
+          - Click "Sweep" to free garbage (removes them from the heap).<br/>
+          - Use examples to quickly create typical leak scenarios.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Simple garbage collector simulation (Mark-and-Sweep).
+    (function(){
+      // Model
+      let nextId = 1;
+      const heap = new Map(); // id -> node
+      const roots = {
+        Global: new Set(), // persistent root
+        DOM: new Set(),
+        Stack: new Set()
+      };
+
+      // DOM
+      const svg = document.getElementById('svg');
+      const allocBtn = document.getElementById('allocBtn');
+      const objSize = document.getElementById('objSize');
+      const objName = document.getElementById('objName');
+      const fromSel = document.getElementById('fromSel');
+      const toSel = document.getElementById('toSel');
+      const linkBtn = document.getElementById('linkBtn');
+      const unlinkBtn = document.getElementById('unlinkBtn');
+      const simulateBtn = document.getElementById('simulateBtn');
+      const sweepBtn = document.getElementById('sweepBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const statObjects = document.getElementById('stat-objects');
+      const statTotal = document.getElementById('stat-total');
+      const statReach = document.getElementById('stat-reachable');
+      const statGarbage = document.getElementById('stat-garbage');
+      const logEl = document.getElementById('log');
+      const rootGlobal = document.getElementById('rootGlobal');
+      const rootDOM = document.getElementById('rootDOM');
+      const rootStack = document.getElementById('rootStack');
+      const exClosure = document.getElementById('ex-closure');
+      const exDomLeak = document.getElementById('ex-dom-leak');
+      const exTimer = document.getElementById('ex-timer');
+
+      // Visual layout
+      const WIDTH = 1200, HEIGHT = 560;
+      svg.setAttribute('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
+
+      // Arrow marker
+      svg.innerHTML = `
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.08)"></path>
+          </marker>
+        </defs>
+      `;
+
+      function log(msg){
+        const time = new Date().toLocaleTimeString();
+        logEl.innerHTML = '['+time+'] ' + msg + '\n' + logEl.innerHTML;
+      }
+
+      function createObject(name = '', sizeKB = 4, type='Object'){
+        const id = nextId++;
+        const node = {
+          id, name: name || `obj${id}`,
+          sizeKB: +sizeKB,
+          edges: new Set(), // references to other ids
+          x: 80 + Math.random()*(WIDTH-160),
+          y: 40 + Math.random()*(HEIGHT-80),
+          marked: false,
+          type
+        };
+        heap.set(id, node);
+        updateSelectors();
+        draw();
+        log(`Allocated ${node.name} (${node.sizeKB} KB)`);
+        return node;
+      }
+
+      function deleteObject(id){
+        if(!heap.has(id)) return;
+        // Remove all incoming references
+        for(const n of heap.values()){
+          if(n.edges.has(id)) n.edges.delete(id);
+        }
+        // Remove from roots
+        for(const r of Object.keys(roots)){ roots[r].delete(id); }
+        heap.delete(id);
+      }
+
+      function updateSelectors(){
+        const items = [...heap.values()];
+        function build(sel){
+          sel.innerHTML = '';
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.text = '-- none --';
+          sel.appendChild(placeholder);
+          for(const n of items){
+            const opt = document.createElement('option');
+            opt.value = n.id;
+            opt.text = `${n.name} (id:${n.id}, ${n.sizeKB}KB)`;
+            sel.appendChild(opt);
+          }
+        }
+        build(fromSel); build(toSel);
+        updateStats();
+      }
+
+      function updateStats(){
+        let total = 0, reachable = 0;
+        for(const n of heap.values()){
+          total += n.sizeKB;
+          if(n.marked) reachable += n.sizeKB;
+        }
+        const garbage = total - reachable;
+        statObjects.textContent = heap.size;
+        statTotal.textContent = total;
+        statReach.textContent = reachable;
+        statGarbage.textContent = garbage;
+      }
+
+      function addReference(fromId, toId){
+        const from = heap.get(+fromId);
+        const to = heap.get(+toId);
+        if(!from || !to) return;
+        from.edges.add(to.id);
+        draw();
+        log(`Reference added: ${from.name} → ${to.name}`);
+      }
+
+      function removeReference(fromId, toId){
+        const from = heap.get(+fromId);
+        const to = heap.get(+toId);
+        if(!from || !to) return;
+        from.edges.delete(to.id);
+        draw();
+        log(`Reference removed: ${from.name} -X→ ${to.name}`);
+      }
+
+      // Draw
+      function draw(){
+        // Clear except defs
+        const defs = svg.querySelector('defs');
+        svg.innerHTML = '';
+        svg.appendChild(defs);
+
+        // draw edges first
+        for(const n of heap.values()){
+          for(const toId of n.edges){
+            const to = heap.get(toId);
+            if(!to) continue;
+            const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+            line.setAttribute('x1', n.x);
+            line.setAttribute('y1', n.y);
+            line.setAttribute('x2', to.x);
+            line.setAttribute('y2', to.y);
+            line.setAttribute('class', 'edge');
+            svg.appendChild(line);
+          }
+        }
+
+        // draw nodes
+        for(const n of heap.values()){
+          const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+          g.setAttribute('transform', `translate(${n.x},${n.y})`);
+          g.setAttribute('data-id', n.id);
+          g.classList.add('node');
+          if(n.marked) g.classList.add('reachable');
+          else g.classList.add('garbage');
+
+          const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+          circle.setAttribute('r', 24);
+          circle.setAttribute('fill', n.marked ? 'url(#grad)' : 'rgba(255,255,255,0.02)');
+          circle.setAttribute('stroke', n.marked ? '#6ee7b7' : '#3b5366');
+          circle.setAttribute('stroke-width', n.marked ? '2.5' : '1.2');
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+          text.setAttribute('class','node-label');
+          text.textContent = `${n.name}\n${n.sizeKB}KB`;
+          // SVG text doesn't support newline easily, so do two lines
+          const t1 = document.createElementNS('http://www.w3.org/2000/svg','text');
+          t1.setAttribute('class','node-label');
+          t1.setAttribute('y', -6);
+          t1.textContent = `${n.name}`;
+          const t2 = document.createElementNS('http://www.w3.org/2000/svg','text');
+          t2.setAttribute('class','node-label');
+          t2.setAttribute('y', 10);
+          t2.setAttribute('font-size','10');
+          t2.textContent = `${n.sizeKB}KB`;
+
+          g.appendChild(circle);
+          g.appendChild(t1);
+          g.appendChild(t2);
+
+          // clickable to toggle root membership (Stack)
+          g.addEventListener('click', ()=> {
+            // toggle stack root membership for selected node
+            if(roots.Stack.has(n.id)){
+              roots.Stack.delete(n.id);
+              log(`Removed ${n.name} from Stack root`);
+            } else {
+              roots.Stack.add(n.id);
+              log(`Added ${n.name} to Stack root`);
+            }
+            // visual marker: small ring
+            draw();
+            drawRoots();
+          });
+
+          svg.appendChild(g);
+        }
+
+        drawRoots();
+        updateStats();
+      }
+
+      function drawRoots(){
+        // small labels for roots and arrows to objects they point to
+        // remove previous root labels
+        // draw root labels on top-left area
+        const rootAreaX = 12, rootAreaY = 12;
+        let idx = 0;
+        for(const key of Object.keys(roots)){
+          const set = roots[key];
+          const rx = rootAreaX + idx*120;
+          const ry = rootAreaY;
+          // root label
+          const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+          g.setAttribute('transform', `translate(${rx},${ry})`);
+          const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+          rect.setAttribute('width', 100); rect.setAttribute('height', 26);
+          rect.setAttribute('rx', 6); rect.setAttribute('ry', 6);
+          rect.setAttribute('fill','rgba(255,255,255,0.02)');
+          rect.setAttribute('stroke','rgba(255,255,255,0.03)');
+          const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+          label.setAttribute('x', 50);
+          label.setAttribute('y', 17);
+          label.setAttribute('text-anchor','middle');
+          label.setAttribute('fill','#9aa7b8');
+          label.setAttribute('font-size','12');
+          label.textContent = key;
+          g.appendChild(rect);
+          g.appendChild(label);
+          svg.appendChild(g);
+
+          // draw small arrows to objects
+          let j = 0;
+          for(const id of set){
+            const target = heap.get(id);
+            if(!target) continue;
+            const x1 = rx+50;
+            const y1 = ry+26;
+            const x2 = target.x;
+            const y2 = target.y - 24;
+            const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+            line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+            line.setAttribute('stroke','rgba(255,255,255,0.08)');
+            line.setAttribute('stroke-width','2');
+            line.setAttribute('marker-end','url(#arrow)');
+            svg.appendChild(line);
+            j++;
+          }
+
+          idx++;
+        }
+      }
+
+      // MARK phase (animated)
+      let marking = false;
+      async function simulateMark(){
+        // clear previous marks
+        for(const n of heap.values()) n.marked = false;
+        draw(); log('Starting mark phase...');
+        marking = true;
+
+        const queue = [];
+        for(const r of Object.keys(roots)){
+          for(const id of roots[r]) {
+            const node = heap.get(id);
+            if(node && !node.marked){
+              node.marked = true;
+              queue.push(node);
+            }
+          }
+        }
+
+        // animate marking BFS
+        while(queue.length && marking){
+          const cur = queue.shift();
+          // highlight node temporarily
+          highlightNode(cur.id, 'marking');
+          log(`Marked ${cur.name}`);
+          await sleep(300);
+          // traverse edges
+          for(const toId of cur.edges){
+            const to = heap.get(toId);
+            if(to && !to.marked){
+              to.marked = true;
+              queue.push(to);
+            }
+          }
+          draw(); // refresh to show reachable styling
+          await sleep(120);
+        }
+        marking = false;
+        log('Mark phase complete. Reachable objects are highlighted.');
+        updateStats();
+      }
+
+      function highlightNode(id, cls){
+        const g = svg.querySelector(`g[data-id='${id}']`);
+        if(!g) return;
+        g.classList.add(cls);
+        setTimeout(()=> g.classList.remove(cls), 800);
+      }
+
+      function sweep(){
+        const toDelete = [];
+        for(const [id,n] of heap.entries()){
+          if(!n.marked) toDelete.push(id);
+        }
+        if(toDelete.length === 0){
+          log('Sweep: nothing to free.');
+          return;
+        }
+        for(const id of toDelete){
+          const n = heap.get(id);
+          deleteObject(id);
+          log(`Freed ${n.name} (${n.sizeKB} KB)`);
+        }
+        draw();
+      }
+
+      function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+      // Event listeners
+      allocBtn.addEventListener('click', ()=>{
+        const n = createObject(objName.value.trim(), objSize.value);
+        objName.value = '';
+      });
+
+      linkBtn.addEventListener('click', ()=>{
+        const from = fromSel.value;
+        const to = toSel.value;
+        if(!from || !to){ alert('Select both from/to'); return; }
+        addReference(from,to);
+      });
+
+      unlinkBtn.addEventListener('click', ()=>{
+        const from = fromSel.value;
+        const to = toSel.value;
+        if(!from || !to){ alert('Select both from/to'); return; }
+        removeReference(from,to);
+      });
+
+      simulateBtn.addEventListener('click', ()=>{
+        simulateMark();
+      });
+
+      sweepBtn.addEventListener('click', ()=>{
+        sweep();
+      });
+
+      resetBtn.addEventListener('click', ()=>{
+        if(!confirm('Reset heap?')) return;
+        heap.clear();
+        nextId = 1;
+        roots.Global.clear(); roots.DOM.clear(); roots.Stack.clear();
+        log('Heap reset.');
+        updateSelectors();
+        draw();
+      });
+
+      rootGlobal.addEventListener('click', ()=>{
+        // toggles the Global root membership of the selected object in fromSel
+        const sel = fromSel.value;
+        if(!sel){ alert('Select an object (use the left dropdown)'); return; }
+        const id = +sel;
+        if(roots.Global.has(id)){ roots.Global.delete(id); log(`Removed ${heap.get(id).name} from Global root`); }
+        else { roots.Global.add(id); log(`Added ${heap.get(id).name} to Global root`); }
+        drawRoots(); draw();
+      });
+
+      rootDOM.addEventListener('click', ()=>{
+        const sel = fromSel.value;
+        if(!sel){ alert('Select an object (use the left dropdown)'); return; }
+        const id = +sel;
+        if(roots.DOM.has(id)){ roots.DOM.delete(id); log(`Removed ${heap.get(id).name} from DOM root`); }
+        else { roots.DOM.add(id); log(`Added ${heap.get(id).name} to DOM root`); }
+        drawRoots(); draw();
+      });
+
+      rootStack.addEventListener('click', ()=>{
+        const sel = fromSel.value;
+        if(!sel){ alert('Select an object (use the left dropdown)'); return; }
+        const id = +sel;
+        if(roots.Stack.has(id)){ roots.Stack.delete(id); log(`Removed ${heap.get(id).name} from Stack root`); }
+        else { roots.Stack.add(id); log(`Added ${heap.get(id).name} to Stack root`); }
+        drawRoots(); draw();
+      });
+
+      // Examples
+      exClosure.addEventListener('click', ()=>{
+        // Simulate: function (closure) captures a large variable object so it stays reachable even if function goes out of scope
+        const big = createObject('largeArray', 64, 'Array');
+        const fn = createObject('closureFn', 1, 'Function');
+        // fn -> big (closure captures)
+        fn.edges.add(big.id);
+        // place fn in Global root (e.g. assigned to window.someFn)
+        roots.Global.add(fn.id);
+        draw(); log('Created closureFn that captures largeArray and added to Global. Even after "stack" loses it, the closure retains largeArray.');
+      });
+
+      exDomLeak.addEventListener('click', ()=>{
+        // Simulate DOM node that gets removed from DOM root but JS still holds a reference (leak).
+        const domNode = createObject('divNode', 4, 'DOMNode');
+        roots.DOM.add(domNode.id); // mounted in DOM
+        // create a handler object that references domNode
+        const handler = createObject('handler', 1, 'Function');
+        handler.edges.add(domNode.id);
+        // remove domNode from DOM root (simulate detach)
+        roots.DOM.delete(domNode.id);
+        // but keep handler in Global, so domNode is still reachable via handler -> leak.
+        roots.Global.add(handler.id);
+        draw();
+        log('Simulated DOM leak: divNode detached from DOM but still referenced by handler (in Global).');
+      });
+
+      exTimer.addEventListener('click', ()=>{
+        // Simulate setInterval which keeps a reference to a callback and captured objects
+        const captured = createObject('capturedData', 32, 'Object');
+        const timerFn = createObject('intervalCb', 1, 'Function');
+        timerFn.edges.add(captured.id); // callback closes over capturedData
+        // Simulate setInterval stored internally in engine as root (we'll model by adding to Global)
+        roots.Global.add(timerFn.id);
+        draw();
+        log('Simulated timer leak: interval callback (in Global) holds capturedData.');
+      });
+
+      // initialize with some objects
+      (function seed(){
+        createObject('config', 4);
+        createObject('cache', 16);
+        createObject('temp', 4);
+        // put config in Global, cache in DOM (example)
+        roots.Global.add(1);
+        roots.DOM.add(2);
+        draw();
+        log('Initial objects created. Click objects in the diagram to toggle Stack root membership.');
+      })();
+
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suffix Tree Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        #container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        #inputContainer {
+            margin-bottom: 20px;
+        }
+        #inputText {
+            width: 100%;
+            padding: 8px;
+            font-size: 16px;
+        }
+        #buildButton {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #buildButton:hover {
+            background-color: #45a049;
+        }
+        #treeContainer {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+        .node {
+            fill: #f5f5f5;
+            stroke: #333;
+            stroke-width: 2;
+        }
+        .node text {
+            font-size: 14px;
+            fill: #333;
+        }
+        .link {
+            fill: none;
+            stroke: #999;
+            stroke-width: 2;
+        }
+        .suffix-link {
+            fill: none;
+            stroke: #ff7f0e;
+            stroke-opacity: 0.6;
+            stroke-dasharray: 5,5;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .explanation {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Suffix Tree Visualization</h1>
+        
+        <div class="explanation">
+            <h2>What is a Suffix Tree?</h2>
+            <p>A suffix tree is a compressed trie containing all the suffixes of a given text as keys and positions in the text as values. Suffix trees allow fast string operations like pattern searching, finding longest repeated substrings, and more.</p>
+            <p>This visualization shows Ukkonen's online algorithm for building a suffix tree in linear time.</p>
+        </div>
+        
+        <div class="controls">
+            <div id="inputContainer">
+                <label for="inputText">Enter a string (recommend short strings for visualization):</label><br>
+                <input type="text" id="inputText" value="banana" placeholder="Enter text to build suffix tree">
+            </div>
+            <button id="buildButton">Build Suffix Tree</button>
+        </div>
+        
+        <div id="treeContainer">
+            <svg id="treeSvg" width="800" height="400"></svg>
+        </div>
+        
+        <div id="infoContainer"></div>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const buildButton = document.getElementById('buildButton');
+            const inputText = document.getElementById('inputText');
+            const treeSvg = document.getElementById('treeSvg');
+            const infoContainer = document.getElementById('infoContainer');
+            
+            buildButton.addEventListener('click', function() {
+                const text = inputText.value;
+                if (!text || text.length === 0) {
+                    alert('Please enter some text');
+                    return;
+                }
+                
+                // Add termination character
+                const str = text + '$';
+                const tree = buildSuffixTree(str);
+                visualizeTree(tree, str);
+                
+                infoContainer.innerHTML = `
+                    <h3>Suffix Tree Information</h3>
+                    <p>Text: ${text} (termination character '$' added)</p>
+                    <p>Number of nodes: ${countNodes(tree.root)}</p>
+                    <p>Suffixes in the tree:</p>
+                    <ul>${getAllSuffixes(tree.root, str).map(s => `<li>${s}</li>`).join('')}</ul>
+                `;
+            });
+            
+            // Initialize with default example
+            buildButton.click();
+        });
+        
+        // Suffix Tree implementation
+        
+        class SuffixTreeNode {
+            constructor(id) {
+                this.id = id; // Unique identifier for the node
+                this.children = {};
+                this.suffixLink = null;
+                this.start = null;
+                this.end = null;
+                this.suffixIndex = -1;
+            }
+            
+            get length() {
+                if (this.end === Infinity) {
+                    return Infinity;
+                }
+                return this.end - this.start + 1;
+            }
+        }
+        
+        class SuffixTree {
+            constructor() {
+                this.root = new SuffixTreeNode(0);
+                this.root.suffixLink = this.root; // Root links to itself
+                this.size = 1; // Counter for node IDs
+                this.activeNode = this.root;
+                this.activeEdge = -1;
+                this.activeLength = 0;
+                this.remaining = 0;
+                this.leafEnd = Infinity;
+                this.lastNewNode = null;
+            }
+            
+            newNode() {
+                return new SuffixTreeNode(this.size++);
+            }
+        }
+        
+        function buildSuffixTree(str) {
+            const tree = new SuffixTree();
+            const n = str.length;
+            
+            for (let i = 0; i < n; i++) {
+                extendSuffixTree(tree, str, i);
+            }
+            
+            setSuffixIndices(tree.root, str, 0);
+            return tree;
+        }
+        
+        function extendSuffixTree(tree, str, pos) {
+            tree.leafEnd = pos;
+            tree.remaining++;
+            tree.lastNewNode = null;
+            
+            while (tree.remaining > 0) {
+                if (tree.activeLength === 0) {
+                    tree.activeEdge = pos;
+                }
+                
+                const activeChar = str[tree.activeEdge];
+                
+                if (!tree.activeNode.children[activeChar]) {
+                    // Rule 2: Create new leaf node
+                    const newNode = tree.newNode();
+                    newNode.start = pos;
+                    newNode.end = tree.leafEnd;
+                    tree.activeNode.children[activeChar] = newNode;
+                    
+                    if (tree.lastNewNode !== null) {
+                        tree.lastNewNode.suffixLink = tree.activeNode;
+                        tree.lastNewNode = null;
+                    }
+                } else {
+                    const nextNode = tree.activeNode.children[activeChar];
+                    const edgeLength = nextNode.length;
+                    
+                    if (tree.activeLength >= edgeLength) {
+                        // Skip ahead in the tree
+                        tree.activeEdge += edgeLength;
+                        tree.activeLength -= edgeLength;
+                        tree.activeNode = nextNode;
+                        continue;
+                    }
+                    
+                    // Rule 3: current character already in tree
+                    if (str[nextNode.start + tree.activeLength] === str[pos]) {
+                        if (tree.lastNewNode !== null && tree.activeNode !== tree.root) {
+                            tree.lastNewNode.suffixLink = tree.activeNode;
+                            tree.lastNewNode = null;
+                        }
+                        
+                        tree.activeLength++;
+                        break;
+                    }
+                    
+                    // Rule 2 when mismatch occurs in middle of edge
+                    const splitNode = tree.newNode();
+                    splitNode.start = nextNode.start;
+                    splitNode.end = nextNode.start + tree.activeLength - 1;
+                    
+                    // Update the existing node
+                    nextNode.start = nextNode.start + tree.activeLength;
+                    
+                    // Add the split node between active node and next node
+                    tree.activeNode.children[activeChar] = splitNode;
+                    splitNode.children[str[nextNode.start]] = nextNode;
+                    
+                    // Create new leaf node for the current character
+                    const newLeaf = tree.newNode();
+                    newLeaf.start = pos;
+                    newLeaf.end = tree.leafEnd;
+                    splitNode.children[str[pos]] = newLeaf;
+                    
+                    if (tree.lastNewNode !== null) {
+                        tree.lastNewNode.suffixLink = splitNode;
+                    }
+                    
+                    tree.lastNewNode = splitNode;
+                }
+                
+                tree.remaining--;
+                
+                if (tree.activeNode === tree.root && tree.activeLength > 0) {
+                    tree.activeLength--;
+                    tree.activeEdge = pos - tree.remaining + 1;
+                } else if (tree.activeNode !== tree.root) {
+                    tree.activeNode = tree.activeNode.suffixLink;
+                }
+            }
+        }
+        
+        function setSuffixIndices(node, str, labelHeight) {
+            if (!node) return;
+            
+            let isLeaf = true;
+            for (const child in node.children) {
+                isLeaf = false;
+                const childNode = node.children[child];
+                setSuffixIndices(childNode, str, labelHeight + childNode.length);
+            }
+            
+            if (isLeaf) {
+                node.suffixIndex = str.length - labelHeight;
+            }
+        }
+        
+        function countNodes(node) {
+            if (!node) return 0;
+            let count = 1;
+            for (const child in node.children) {
+                count += countNodes(node.children[child]);
+            }
+            return count;
+        }
+        
+        function getAllSuffixes(node, str, currentString = "") {
+            if (!node) return [];
+            
+            let suffixes = [];
+            if (node.suffixIndex !== -1) {
+                suffixes.push(currentString);
+                return suffixes;
+            }
+            
+            for (const child in node.children) {
+                const childNode = node.children[child];
+                const start = childNode.start;
+                const end = Math.min(childNode.end, str.length - 1);
+                const edgeString = str.substring(start, end + 1);
+                suffixes = suffixes.concat(getAllSuffixes(childNode, str, currentString + edgeString));
+            }
+            
+            return suffixes;
+        }
+        
+        // Visualization code
+        
+        function visualizeTree(tree, str) {
+            // Clear previous tree
+            d3.select("#treeSvg").selectAll("*").remove();
+            const svg = d3.select("#treeSvg");
+            const width = +svg.attr("width");
+            const height = +svg.attr("height");
+            
+            // Create a hierarchical layout
+            const rootNode = prepareHierarchicalData(tree.root, str);
+            const root = d3.hierarchy(rootNode);
+            
+            // Create a tree layout
+            const treeLayout = d3.tree().size([width - 100, height - 100]);
+            treeLayout(root);
+            
+            // Draw links
+            svg.selectAll(".link")
+                .data(root.links())
+                .enter().append("path")
+                .attr("class", "link")
+                .attr("d", d3.linkVertical()
+                    .x(d => d.x + 50)
+                    .y(d => d.y + 50));
+            
+            // Draw suffix links
+            svg.selectAll(".suffix-link")
+                .data(getSuffixLinks(root, str))
+                .enter().append("path")
+                .attr("class", "suffix-link")
+                .attr("d", d => {
+                    return d3.linkVertical()
+                        .x(d => d.x + 50)
+                        .y(d => d.y + 50)({
+                            source: [d.source.x, d.source.y],
+                            target: [d.target.x, d.target.y]
+                        });
+                });
+            
+            // Draw nodes
+            const nodes = svg.selectAll(".node")
+                .data(root.descendants())
+                .enter().append("g")
+                .attr("class", "node")
+                .attr("transform", d => `translate(${d.x + 50},${d.y + 50})`);
+            
+            nodes.append("circle")
+                .attr("r", 15)
+                .attr("class", "node");
+            
+            nodes.append("text")
+                .attr("dy", ".35em")
+                .attr("text-anchor", "middle")
+                .style("fill", "black")
+                .text(d => d.data.id);
+            
+            // Add edge labels
+            svg.selectAll(".edgelabel")
+                .data(root.links())
+                .enter().append("text")
+                .attr("class", "edgelabel")
+                .attr("x", d => (d.target.x + d.source.x) / 2 + 50)
+                .attr("y", d => (d.target.y + d.source.y) / 2 + 45)
+                .attr("text-anchor", "middle")
+                .text(d => d.target.data.edgeLabel);
+            
+            // Add tooltips
+            nodes.append("title")
+                .text(d => {
+                    let info = `Node ${d.data.id}`;
+                    if (d.data.suffixIndex !== -1) {
+                        info += `\nSuffix Index: ${d.data.suffixIndex}`;
+                    }
+                    if (d.data.suffixLink !== null) {
+                        info += `\nSuffix Link: Node ${d.data.suffixLink.id}`;
+                    }
+                    return info;
+                });
+        }
+        
+        function prepareHierarchicalData(node, str, parentId = null) {
+            const treeNode = {
+                id: node.id,
+                edgeLabel: "",
+                suffixIndex: node.suffixIndex,
+                children: [],
+                suffixLink: node.suffixLink
+            };
+            
+            if (parentId !== null) {
+                const start = node.start;
+                const end = Math.min(node.end, str.length - 1);
+                treeNode.edgeLabel = str.substring(start, end + 1);
+            }
+            
+            for (const key in node.children) {
+                const child = node.children[key];
+                treeNode.children.push(prepareHierarchicalData(child, str, node.id));
+            }
+            
+            return treeNode;
+        }
+        
+        function getSuffixLinks(hierarchicalRoot, str) {
+            const links = [];
+            const nodes = hierarchicalRoot.descendants();
+            
+            nodes.forEach(node => {
+                if (node.data.suffixLink && node.data.suffixLink !== node) {
+                    const target = nodes.find(n => n.data.id === node.data.suffixLink.id);
+                    if (target) {
+                        links.push({
+                            source: node,
+                            target: target
+                        });
+                    }
+                }
+            });
+            
+            return links;
+        }
+    </script>
+</body>
+</html>

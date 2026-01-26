@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Floyd-Warshall Algorithm Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    white-space: pre;
+  }
+  textarea, input, button, select {
+    font-family: monospace, monospace;
+    margin: 3px 0;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  td, th {
+    border: 1px solid black;
+    text-align: center;
+    padding: 2px 5px;
+    min-width: 30px;
+  }
+  input[type=number] {
+    width: 40px;
+  }
+</style>
+</head>
+<body>
+
+<h2>Floyd-Warshall Algorithm Interactive Demo</h2>
+
+<div>
+  <label for="vertexCountInput">Number of vertices (1 to 10): </label>
+  <input type="number" id="vertexCountInput" min="1" max="10" value="4" />
+  <button id="createGraphBtn">Create Graph Matrix</button>
+</div>
+
+<div id="graphInputSection" style="margin-top:10px;"></div>
+
+<div id="controls" style="margin-top:10px; display:none;">
+  <button id="stepForwardBtn">Step Forward</button>
+  <button id="stepBackwardBtn">Step Backward</button>
+  <button id="runToEndBtn">Run to End</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<div id="statusSection" style="margin-top:10px;">
+  <div><b>Current Step:</b> <span id="currentStep">-</span></div>
+  <div><b>Iteration Indices (k, i, j):</b> (<span id="indexK">-</span>, <span id="indexI">-</span>, <span id="indexJ">-</span>)</div>
+  <div><b>Explanation:</b> <span id="explanation">-</span></div>
+</div>
+
+<div id="matrixSection" style="margin-top:10px;"></div>
+
+<div style="margin-top:15px;">
+  <h3>Additional Controls</h3>
+  <label for="edgeAddFrom">Add/Modify Edge: from </label>
+  <input type="number" id="edgeAddFrom" min="0" max="9" value="0" style="width:40px"/>
+  <label for="edgeAddTo">to </label>
+  <input type="number" id="edgeAddTo" min="0" max="9" value="1" style="width:40px"/>
+  <label for="edgeAddWeight">weight </label>
+  <input type="number" id="edgeAddWeight" style="width:60px" />
+  <button id="addEdgeButton">Add / Update Edge</button>
+  <button id="removeEdgeButton">Remove Edge</button>
+</div>
+
+<div style="margin-top:10px;">
+  <button id="exportGraph">Export Graph (JSON)</button>
+  <button id="importGraph">Import Graph (from JSON)</button>
+  <br/>
+  <textarea id="graphJSONInput" rows="6" cols="40" placeholder='Paste JSON here for import'></textarea>
+</div>
+
+<div style="margin-top:10px;">
+  <button id="showPathsBtn">Show Shortest Paths Reconstruction</button>
+</div>
+
+<div id="pathsSection" style="margin-top:10px; white-space: pre-wrap;"></div>
+
+<script>
+(function() {
+  // Constants
+  const INF = Number.POSITIVE_INFINITY;
+  const MAX_VERTICES = 10;
+
+  // State
+  let vertexCount = 0;
+  let graphMatrix = []; // adjacency matrix: graphMatrix[i][j] = weight or INF if no edge
+  let distMatrix = []; // current dist matrix during FW
+  let nextMatrix = []; // matrix for path reconstruction
+  let steps = []; // each step: {k,i,j,updated:boolean, oldDist:number, oldNext:number|null}
+  let currentStepIndex = -1;
+
+  // Elements
+  const vertexCountInput = document.getElementById('vertexCountInput');
+  const createGraphBtn = document.getElementById('createGraphBtn');
+  const graphInputSection = document.getElementById('graphInputSection');
+  const controls = document.getElementById('controls');
+  const stepForwardBtn = document.getElementById('stepForwardBtn');
+  const stepBackwardBtn = document.getElementById('stepBackwardBtn');
+  const runToEndBtn = document.getElementById('runToEndBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const currentStepSpan = document.getElementById('currentStep');
+  const indexKSpan = document.getElementById('indexK');
+  const indexISpan = document.getElementById('indexI');
+  const indexJSpan = document.getElementById('indexJ');
+  const explanationSpan = document.getElementById('explanation');
+  const matrixSection = document.getElementById('matrixSection');
+  const edgeAddFrom = document.getElementById('edgeAddFrom');
+  const edgeAddTo = document.getElementById('edgeAddTo');
+  const edgeAddWeight = document.getElementById('edgeAddWeight');
+  const addEdgeButton = document.getElementById('addEdgeButton');
+  const removeEdgeButton = document.getElementById('removeEdgeButton');
+  const exportGraphBtn = document.getElementById('exportGraph');
+  const importGraphBtn = document.getElementById('importGraph');
+  const graphJSONInput = document.getElementById('graphJSONInput');
+  const showPathsBtn = document.getElementById('showPathsBtn');
+  const pathsSection = document.getElementById('pathsSection');
+
+  // Utility
+
+  function isValidVertex(v) {
+    return Number.isInteger(v) && v >= 0 && v < vertexCount;
+  }
+
+  function createEmptyMatrix(size, fillValue) {
+    const m = new Array(size);
+    for (let i = 0; i < size; i++) {
+      m[i] = new Array(size).fill(fillValue);
+    }
+    return m;
+  }
+
+  function deepCopyMatrix(m) {
+    return m.map(row => row.slice());
+  }
+
+  function weightToString(w) {
+    if (w === INF) return "∞";
+    return String(w);
+  }
+
+  // Build UI for graph input matrix (editable inputs)
+  function buildGraphInputMatrix() {
+    graphInputSection.innerHTML = '';
+    const table = document.createElement('table');
+    const headerRow = document.createElement('tr');
+    const emptyTH = document.createElement('th');
+    headerRow.appendChild(emptyTH);
+    for(let j = 0; j < vertexCount; j++) {
+      const th = document.createElement('th');
+      th.textContent = j;
+      headerRow.appendChild(th);
+    }
+    table.appendChild(headerRow);
+    for(let i = 0; i < vertexCount; i++) {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = i;
+      tr.appendChild(th);
+      for(let j = 0; j < vertexCount; j++) {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.size = 5;
+        input.dataset.i = i;
+        input.dataset.j = j;
+        if(i === j) {
+          input.value = "0";
+          input.readOnly = true;
+          input.style.backgroundColor = "#eee";
+        } else if(graphMatrix[i][j] === INF) {
+          input.value = "";
+          input.placeholder = "∞";
+        } else {
+          input.value = String(graphMatrix[i][j]);
+        }
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    graphInputSection.appendChild(table);
+    // Add validation: only numbers or empty for infinity allowed
+  }
+
+  // Read graph matrix from inputs
+  function readGraphMatrixFromInputs() {
+    const inputs = graphInputSection.querySelectorAll('input[type=text]');
+    let newMatrix = createEmptyMatrix(vertexCount, INF);
+    for(let input of inputs) {
+      const i = parseInt(input.dataset.i);
+      const j = parseInt(input.dataset.j);
+      if(i === j) {
+        newMatrix[i][j] = 0;
+        continue;
+      }
+      let val = input.value.trim();
+      if(val === "" || val.toLowerCase() === "inf" || val === "∞" ) {
+        newMatrix[i][j] = INF;
+      } else {
+        let parsed = Number(val);
+        if(isNaN(parsed)) {
+          alert(`Invalid input at edge (${i} -> ${j}): "${val}". Please input a number or leave empty for no edge.`);
+          return null;
+        } else {
+          newMatrix[i][j] = parsed;
+        }
+      }
+    }
+    return newMatrix;
+  }
+
+  // Display current distMatrix as table with path highlight
+  function buildMatrixDisplay() {
+    matrixSection.innerHTML = '';
+    if(vertexCount === 0) return;
+    const table = document.createElement('table');
+    const headerRow = document.createElement('tr');
+    headerRow.appendChild(document.createElement('th')); // empty corner
+    for(let j = 0; j < vertexCount; j++) {
+      const th = document.createElement('th');
+      th.textContent = j;
+      headerRow.appendChild(th);
+    }
+    table.appendChild(headerRow);
+
+    for(let i=0; i<vertexCount; i++) {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = i;
+      tr.appendChild(th);
+      for(let j=0; j<vertexCount; j++) {
+        const td = document.createElement('td');
+        let val = distMatrix[i][j];
+        if(val === INF) td.textContent = "∞";
+        else td.textContent = val;
+        // Highlight if this cell updated in current step
+        if(currentStepIndex >= 0) {
+          let step = steps[currentStepIndex];
+          if(step.updated && step.i === i && step.j === j) {
+            td.style.border = "2px solid";
+          }
+        }
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    matrixSection.appendChild(table);
+  }
+
+  // Build next matrix display - will be used for path reconstructions, optional
+  // -- omitted here, we show path reconstruction text separately
+
+  // Run Floyd-Warshall building steps
+  function buildSteps() {
+    steps = [];
+    distMatrix = createEmptyMatrix(vertexCount, INF);
+    nextMatrix = createEmptyMatrix(vertexCount, null);
+
+    // init dist and next matrix from graphMatrix
+    for(let i = 0; i<vertexCount; i++) {
+      for(let j = 0; j<vertexCount; j++) {
+        distMatrix[i][j] = graphMatrix[i][j];
+        if(graphMatrix[i][j] !== INF && i !== j) {
+          nextMatrix[i][j] = j;
+        }
+      }
+      distMatrix[i][i] = 0;
+      nextMatrix[i][i] = i;
+    }
+
+    // Copy matrices to restore each step or step update track
+    for(let k=0; k<vertexCount; k++) {
+      for(let i=0; i<vertexCount; i++) {
+        for(let j=0; j<vertexCount; j++) {
+          let updated = false;
+          let oldDist = distMatrix[i][j];
+          let oldNext = nextMatrix[i][j];
+          if(distMatrix[i][k] === INF || distMatrix[k][j] === INF) {
+            // no path through k
+            steps.push({k,i,j,updated:false,oldDist,oldNext});
+            continue;
+          }
+          if(distMatrix[i][k] + distMatrix[k][j] < distMatrix[i][j]) {
+            distMatrix[i][j] = distMatrix[i][k] + distMatrix[k][j];
+            nextMatrix[i][j] = nextMatrix[i][k];
+            updated = true;
+          }
+          steps.push({k,i,j,updated,oldDist,oldNext});
+        }
+      }
+    }
+  }
+
+  // Reset to initial state before steps
+  function resetStateBeforeSteps() {
+    distMatrix = createEmptyMatrix(vertexCount, INF);
+    for(let i = 0; i < vertexCount; i++) {
+      for(let j = 0; j < vertexCount; j++) {
+        distMatrix[i][j] = graphMatrix[i][j];
+      }
+    }
+  }
+
+  // Apply step N of FW
+  function applyStep(n) {
+    resetStateBeforeSteps();
+    // Reset next matrix
+    nextMatrix = createEmptyMatrix(vertexCount, null);
+    for(let i = 0; i < vertexCount; i++) {
+      for(let j = 0; j < vertexCount; j++) {
+        if(graphMatrix[i][j] !== INF && i !== j) {
+          nextMatrix[i][j] = j;
+        }
+        if(i === j) nextMatrix[i][j] = i;
+      }
+    }
+    for(let idx=0; idx <= n; idx++) {
+      const step = steps[idx];
+      const {k,i,j,updated} = step;
+      if(updated) {
+        distMatrix[i][j] = distMatrix[i][k] + distMatrix[k][j];
+        nextMatrix[i][j] = nextMatrix[i][k];
+      }
+    }
+  }
+
+  // Show current step info and matrix
+  function updateDisplay() {
+    if(currentStepIndex < 0) {
+      currentStepSpan.textContent = "Before start";
+      indexKSpan.textContent = "-";
+      indexISpan.textContent = "-";
+      indexJSpan.textContent = "-";
+      explanationSpan.textContent = "Click 'Step Forward' or 'Run to End' to start the algorithm.";
+      resetBtn.disabled = true;
+      stepBackwardBtn.disabled = true;
+      stepForwardBtn.disabled = false;
+      runToEndBtn.disabled = false;
+      buildMatrixDisplay();
+      return;
+    }
+    const step = steps[currentStepIndex];
+    currentStepSpan.textContent = currentStepIndex+1 + " / " + steps.length;
+    indexKSpan.textContent = step.k;
+    indexISpan.textContent = step.i;
+    indexJSpan.textContent = step.j;
+
+    if(step.updated) {
+      explanationSpan.textContent = `dist[${step.i}][${step.j}] updated. \
+New distance = dist[${step.i}][${step.k}] + dist[${step.k}][${step.j}] = ` +
+        `${distMatrix[step.i][step.j]}. Next vertex on path set to ${nextMatrix[step.i][step.j]}.`;
+    } else {
+      explanationSpan.textContent = `No update: dist[${step.i}][${step.j}] <= \
+dist[${step.i}][${step.k}] + dist[${step.k}][${step.j}]`;
+    }
+
+    resetBtn.disabled = false;
+    stepBackwardBtn.disabled = currentStepIndex <= 0;
+    stepForwardBtn.disabled = currentStepIndex >= steps.length - 1;
+    runToEndBtn.disabled = currentStepIndex >= steps.length - 1;
+
+    buildMatrixDisplay();
+    pathsSection.textContent = "";
+  }
+
+  // Event handlers
+  createGraphBtn.addEventListener('click', () => {
+    let val = Number(vertexCountInput.value);
+    if(!Number.isInteger(val) || val < 1 || val > MAX_VERTICES) {
+      alert(`Number of vertices must be an integer between 1 and ${MAX_VERTICES}`);
+      return;
+    }
+    vertexCount = val;
+    // Initialize graphMatrix with INF except diagonal 0
+    graphMatrix = createEmptyMatrix(vertexCount, INF);
+    for(let i=0; i<vertexCount; i++) {
+      graphMatrix[i][i] = 0;
+    }
+    buildGraphInputMatrix();
+    controls.style.display = "none";
+    matrixSection.innerHTML = "";
+    currentStepSpan.textContent = "-";
+    indexKSpan.textContent = "-";
+    indexISpan.textContent = "-";
+    indexJSpan.textContent = "-";
+    explanationSpan.textContent = "-";
+    steps = [];
+    currentStepIndex = -1;
+    pathsSection.textContent = "";
+  });
+
+  // After the user edits the matrix and wants to start algorithm
+  function tryStartAlgorithm() {
+    let newGraph = readGraphMatrixFromInputs();
+    if(newGraph === null) {
+      return;
+    }
+    graphMatrix = newGraph;
+    buildSteps();
+    currentStepIndex = -1;
+    controls.style.display = "inline-block";
+    applyStep(currentStepIndex);
+    updateDisplay();
+  }
+
+  // Adding/Updating an edge via controls
+  function addOrUpdateEdge() {
+    let from = Number(edgeAddFrom.value);
+    let to = Number(edgeAddTo.value);
+    let weight = edgeAddWeight.value.trim();
+    if(!isValidVertex(from) || !isValidVertex(to)) {
+      alert("Vertex indices must be between 0 and "+(vertexCount-1));
+      return;
+    }
+    if(from === to) {
+      alert("No self-loops allowed to edit manually (distance 0 fixed).");
+      return;
+    }
+    if(weight === "" || weight.toLowerCase() === "inf" || weight === "∞") {
+      alert("Weight invalid for add/update. Use Remove Edge to clear edge.");
+      return;
+    }
+    let w = Number(weight);
+    if(isNaN(w)) {
+      alert("Weight must be a valid number.");
+      return;
+    }
+    graphMatrix[from][to] = w;
+    buildGraphInputMatrix();
+    tryStartAlgorithm();
+  }
+
+  function removeEdge() {
+    let from = Number(edgeAddFrom.value);
+    let to = Number(edgeAddTo.value);
+    if(!isValidVertex(from) || !isValidVertex(to)) {
+      alert("Vertex indices must be between 0 and "+(vertexCount-1));
+      return;
+    }
+    if(from === to) {
+      alert("No self-loops allowed.");
+      return;
+    }
+    graphMatrix[from][to] = INF;
+    buildGraphInputMatrix();
+    tryStartAlgorithm();
+  }
+
+  stepForwardBtn.addEventListener('click', () => {
+    if(steps.length === 0) return;
+    if(currentStepIndex < steps.length - 1) {
+      currentStepIndex++;
+      applyStep(currentStepIndex);
+      updateDisplay();
+    }
+  });
+  stepBackwardBtn.addEventListener('click', () => {
+    if(steps.length === 0) return;
+    if(currentStepIndex > -1) {
+      currentStepIndex--;
+      if(currentStepIndex === -1) {
+        resetStateBeforeSteps();
+        nextMatrix = createEmptyMatrix(vertexCount,null);
+        for(let i=0;i<vertexCount;i++){
+          for(let j=0;j<vertexCount;j++){
+            if(graphMatrix[i][j] !== INF && i !== j) nextMatrix[i][j] = j;
+            if(i===j) nextMatrix[i][j] = i;
+          }
+        }
+      } else {
+        applyStep(currentStepIndex);
+      }
+      updateDisplay();
+    }
+  });
+  runToEndBtn.addEventListener('click', () => {
+    if(steps.length === 0) return;
+    currentStepIndex = steps.length - 1;
+    applyStep(currentStepIndex);
+    updateDisplay();
+  });
+  resetBtn.addEventListener('click', () => {
+    currentStepIndex = -1;
+    resetStateBeforeSteps();
+    nextMatrix = createEmptyMatrix(vertexCount,null);
+    for(let i=0;i<vertexCount;i++){
+      for(let j=0;j<vertexCount;j++){
+        if(graphMatrix[i][j] !== INF && i !== j) nextMatrix[i][j] = j;
+        if(i===j) nextMatrix[i][j] = i;
+      }
+    }
+    updateDisplay();
+  });
+
+  addEdgeButton.addEventListener('click', addOrUpdateEdge);
+  removeEdgeButton.addEventListener('click', removeEdge);
+
+  exportGraphBtn.addEventListener('click', () => {
+    if(vertexCount === 0) {
+      alert("No graph to export.");
+      return;
+    }
+    const exportData = {
+      vertexCount,
+      graphMatrix
+    };
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    graphJSONInput.value = jsonStr;
+    alert("Graph exported to text area below. You can copy it.");
+  });
+
+  importGraphBtn.addEventListener('click', () => {
+    let text = graphJSONInput.value.trim();
+    if(!text) {
+      alert("Please paste JSON graph data into the text area.");
+      return;
+    }
+    try {
+      const obj = JSON.parse(text);
+      if(!obj.vertexCount || !obj.graphMatrix) {
+        alert("JSON malformed or missing required fields.");
+        return;
+      }
+      if(!(Number.isInteger(obj.vertexCount) && obj.vertexCount >= 1 && obj.vertexCount<=MAX_VERTICES)) {
+        alert(`vertexCount must be integer between 1 and ${MAX_VERTICES}`);
+        return;
+      }
+      if(!Array.isArray(obj.graphMatrix) || obj.graphMatrix.length !== obj.vertexCount) {
+        alert("graphMatrix dimension mismatch.");
+        return;
+      }
+      for(let i=0; i<obj.vertexCount; i++) {
+        if(!Array.isArray(obj.graphMatrix[i]) || obj.graphMatrix[i].length !== obj.vertexCount) {
+          alert("graphMatrix is not a square matrix.");
+          return;
+        }
+        for(let j=0; j<obj.vertexCount; j++) {
+          let val = obj.graphMatrix[i][j];
+          if(val !== null && val !== undefined && val !== INF) {
+            if(typeof val !== "number") {
+              alert("graphMatrix entries must be numbers or null/INF.");
+              return;
+            }
+          }
+        }
+      }
+      // OK
+      vertexCount = obj.vertexCount;
+      graphMatrix = obj.graphMatrix.map(row => row.map(v => (v===null ? INF : v)));
+      vertexCountInput.value = vertexCount;
+      buildGraphInputMatrix();
+      controls.style.display = "inline-block";
+      buildSteps();
+      currentStepIndex = -1;
+      resetStateBeforeSteps();
+      updateDisplay();
+      alert("Graph imported successfully.");
+    } catch(e) {
+      alert("Invalid JSON format or parse error.");
+    }
+  });
+
+  showPathsBtn.addEventListener('click', () => {
+    if(currentStepIndex < steps.length - 1) {
+      alert("Please run the algorithm to the end to reconstruct paths.");
+      return;
+    }
+    // Build full nextMatrix state at end
+    let finalNext = createEmptyMatrix(vertexCount, null);
+    for(let i=0; i < vertexCount; i++) {
+      for(let j=0; j < vertexCount; j++) {
+        if(graphMatrix[i][j] !== INF && i !== j) finalNext[i][j] = j;
+        if(i === j) finalNext[i][j] = i;
+      }
+    }
+    for(let s = 0; s < steps.length; s++) {
+      let st = steps[s];
+      if(st.updated) {
+        finalNext[st.i][st.j] = finalNext[st.i][st.k];
+      }
+    }
+
+    // Build shortest path from i to j using finalNext
+    function reconstructPath(i, j) {
+      if(distMatrix[i][j] === INF) return null;
+      const path = [i];
+      while(i !== j) {
+        i = finalNext[i][j];
+        if(i === null) return null; // no path
+        path.push(i);
+      }
+      return path;
+    }
+
+    let result = "";
+    for(let start=0; start < vertexCount; start++) {
+      for(let end=0; end < vertexCount; end++) {
+        if(start === end) continue;
+        let p = reconstructPath(start, end);
+        if(p === null) {
+          result += `No path from ${start} to ${end}\n`;
+        } else {
+          result += `Path from ${start} to ${end} (dist=${distMatrix[start][end]}): ${p.join(" -> ")}\n`;
+        }
+      }
+    }
+    pathsSection.textContent = result;
+  });
+
+  // On initial load, disable controls
+  controls.style.display = "none";
+  matrixSection.innerHTML = "";
+  graphInputSection.innerHTML = "";
+  currentStepSpan.textContent = "-";
+  indexKSpan.textContent = "-";
+  indexISpan.textContent = "-";
+  indexJSpan.textContent = "-";
+  explanationSpan.textContent = "-";
+
+  // Add instructions below the title for basic usage
+  const instructions = document.createElement('pre');
+  instructions.textContent = String.raw`
+Instructions:
+
+1) Enter the number of vertices (max 10) and press "Create Graph Matrix".
+2) Edit the matrix inputs to set edge weights. Leave empty for no edge (∞). Diagonals fixed at 0.
+3) After editing, click 'Step Forward' or 'Run to End' to start Floyd-Warshall algorithm.
+4) Use "Step Forward", "Step Backward", "Run to End" buttons to navigate through each update step.
+5) You can reset to initial state with "Reset" button.
+6) Add or remove edges using the fields below the controls and graph matrix will update automatically.
+7) Export current graph as JSON, or import from JSON pasted in the text box for complex graphs.
+8) After algorithm has run to completion, click "Show Shortest Paths Reconstruction" to show all shortest paths.
+9) All vertex indexes are zero-based.
+
+You can explore how Floyd-Warshall updates shortest paths step-by-step with realtime data.
+
+`;
+  document.body.insertBefore(instructions, graphInputSection);
+
+})();
+</script>
+
+</body>
+</html>

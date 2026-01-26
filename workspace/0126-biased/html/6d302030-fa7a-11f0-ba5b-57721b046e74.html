@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Context Switching Simulator</title>
+    <style>
+        body {
+            font-family: Arial, margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        .task {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #eee;
+        }
+        button, select, input {
+            margin: 5px;
+        }
+        .hidden {
+            display: none;
+        }
+        .active {
+            background-color: #f0f0f0;
+        }
+        .stats {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            border: 1px solid #000;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Context Switching Simulator</h1>
+    <div class="stats">
+        <div>Switches: <span id="switchCount">0</span></div>
+        <div>Time Lost: <span id="timeLost">0</span>s</div>
+        <div>Current Context: <span id="currentContext">None</span></div>
+    </div>
+
+    <div class="container">
+        <h2>Task Manager</h2>
+        <div>
+            <input type="text" id="newTask" placeholder="New task name">
+            <button onclick="addTask()">Add Task</button>
+            <select id="taskPriority">
+                <option value="1">Low</option>
+                <option value="2" selected>Medium</option>
+                <option value="3">High</option>
+            </select>
+        </div>
+        <div id="taskList"></div>
+    </div>
+
+    <div class="container">
+        <h2>Context Controls</h2>
+        <div>
+            <label>Switch Cost (seconds): </label>
+            <input type="range" id="switchCost" min="1" max="30" value="5" oninput="updateSwitchCost()">
+            <span id="costValue">5</span>
+        </div>
+        <div>
+            <button onclick="simulateInterruption()">Simulate Interruption</button>
+            <button onclick="forceSwitch()">Force Context Switch</button>
+        </div>
+        <div>
+            <label>Interruption Frequency (seconds): </label>
+            <input type="range" id="interruptFreq" min="5" max="120" value="30" oninput="updateInterruptFreq()">
+            <span id="freqValue">30</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Work Simulation</h2>
+        <div>
+            <button onclick="startWork()">Start Working</button>
+            <button onclick="pauseWork()">Pause</button>
+            <button onclick="resetAll()">Reset All</button>
+        </div>
+        <div id="workLog"></div>
+    </div>
+
+    <div class="container">
+        <h2>Context Explorer</h2>
+        <div>
+            <button onclick="showContextDetails()">Show Current Context Details</button>
+            <button onclick="showAllTasks()">Show All Tasks</button>
+        </div>
+        <div id="contextDetails" class="hidden">
+            <h3>Context Details</h3>
+            <div id="detailsContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let tasks = [];
+        let currentTask = null;
+        let switchCount = 0;
+        let timeLost = 0;
+        let switchCost = 5;
+        let interruptInterval;
+        let interruptFreq = 30;
+        let workInterval;
+        let isWorking = false;
+        let contextStack = [];
+        let startTime = null;
+
+        // DOM elements
+        const taskListEl = document.getElementById('taskList');
+        const switchCountEl = document.getElementById('switchCount');
+        const timeLostEl = document.getElementById('timeLost');
+        const currentContextEl = document.getElementById('currentContext');
+        const workLogEl = document.getElementById('workLog');
+        const costValueEl = document.getElementById('costValue');
+        const freqValueEl = document.getElementById('freqValue');
+        const contextDetailsEl = document.getElementById('contextDetails');
+        const detailsContentEl = document.getElementById('detailsContent');
+
+        // Functions
+        function addTask() {
+            const name = document.getElementById('newTask').value;
+            const priority = parseInt(document.getElementById('taskPriority').value);
+            if (!name) return;
+            
+            const task = {
+                id: Date.now(),
+                name,
+                priority,
+                timeSpent: 0,
+                completed: false,
+                context: {
+                    memory: Math.random().toFixed(2),
+                    focus: Math.random().toFixed(2),
+                    state: 'New task state ' + Math.floor(Math.random() * 100)
+                }
+            };
+            
+            tasks.push(task);
+            renderTasks();
+            document.getElementById('newTask').value = '';
+        }
+
+        function renderTasks() {
+            taskListEl.innerHTML = '';
+            tasks.forEach(task => {
+                const taskEl = document.createElement('div');
+                taskEl.className = `task ${currentTask?.id === task.id ? 'active' : ''}`;
+                taskEl.innerHTML = `
+                    <h3>${task.name} (Priority: ${task.priority})</h3>
+                    <p>Time spent: ${task.timeSpent}s</p>
+                    <p>Status: ${task.completed ? 'Completed' : 'Pending'}</p>
+                    <button onclick="switchToTask(${task.id})">Switch to this task</button>
+                    <button onclick="completeTask(${task.id})">Complete</button>
+                    <button onclick="deleteTask(${task.id})">Delete</button>
+                `;
+                taskListEl.appendChild(taskEl);
+            });
+        }
+
+        function switchToTask(taskId) {
+            if (isWorking) {
+                logWorkEvent(`Interrupted while working on ${currentTask?.name || 'nothing'}`);
+                pauseWork();
+            }
+
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            if (currentTask) {
+                // Save current context
+                contextStack.push({
+                    task: currentTask,
+                    time: Date.now()
+                });
+                timeLost += switchCost;
+                switchCount++;
+                logWorkEvent(`Switched from ${currentTask.name} to ${task.name} (Cost: ${switchCost}s)`);
+            } else {
+                logWorkEvent(`Started working on ${task.name}`);
+            }
+
+            currentTask = task;
+            currentContextEl.textContent = task.name;
+            switchCountEl.textContent = switchCount;
+            timeLostEl.textContent = timeLost;
+            renderTasks();
+        }
+
+        function completeTask(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            task.completed = true;
+            if (currentTask?.id === taskId) {
+                currentTask = null;
+                currentContextEl.textContent = 'None';
+            }
+            renderTasks();
+            logWorkEvent(`Completed task: ${task.name}`);
+        }
+
+        function deleteTask(taskId) {
+            tasks = tasks.filter(t => t.id !== taskId);
+            if (currentTask?.id === taskId) {
+                currentTask = null;
+                currentContextEl.textContent = 'None';
+            }
+            renderTasks();
+        }
+
+        function updateSwitchCost() {
+            switchCost = parseInt(document.getElementById('switchCost').value);
+            costValueEl.textContent = switchCost;
+        }
+
+        function updateInterruptFreq() {
+            interruptFreq = parseInt(document.getElementById('interruptFreq').value);
+            freqValueEl.textContent = interruptFreq;
+            if (interruptInterval) {
+                clearInterval(interruptInterval);
+                startInterruptions();
+            }
+        }
+
+        function startInterruptions() {
+            interruptInterval = setInterval(() => {
+                if (isWorking && currentTask && Math.random() > 0.3) {
+                    simulateInterruption();
+                }
+            }, interruptFreq * 1000);
+        }
+
+        function simulateInterruption() {
+            if (!currentTask) return;
+            
+            const availableTasks = tasks.filter(t => !t.completed && t.id !== currentTask.id);
+            if (availableTasks.length === 0) return;
+            
+            const randomTask = availableTasks[Math.floor(Math.random() * availableTasks.length)];
+            switchToTask(randomTask.id);
+        }
+
+        function forceSwitch() {
+            if (!currentTask) return;
+            simulateInterruption();
+        }
+
+        function startWork() {
+            if (isWorking) return;
+            
+            if (!currentTask) {
+                const availableTasks = tasks.filter(t => !t.completed);
+                if (availableTasks.length === 0) return;
+                switchToTask(availableTasks[0].id);
+            }
+            
+            isWorking = true;
+            startTime = Date.now();
+            workInterval = setInterval(updateWork, 1000);
+            startInterruptions();
+            logWorkEvent('Started working session');
+        }
+
+        function pauseWork() {
+            if (!isWorking) return;
+            
+            clearInterval(workInterval);
+            clearInterval(interruptInterval);
+            isWorking = false;
+            
+            if (currentTask) {
+                const workTime = Math.floor((Date.now() - startTime) / 1000);
+                currentTask.timeSpent += workTime;
+                logWorkEvent(`Paused working on ${currentTask.name} after ${workTime}s`);
+            }
+            
+            renderTasks();
+        }
+
+        function updateWork() {
+            if (!currentTask) {
+                pauseWork();
+                return;
+            }
+            
+            const workTime = Math.floor((Date.now() - startTime) / 1000);
+            currentTask.timeSpent += 1;
+            logWorkEvent(`Working on ${currentTask.name} (${workTime}s)`);
+            renderTasks();
+        }
+
+        function logWorkEvent(message) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.textContent = `[${timeStr}] ${message}`;
+            workLogEl.prepend(entry);
+        }
+
+        function resetAll() {
+            pauseWork();
+            tasks = [];
+            currentTask = null;
+            switchCount = 0;
+            timeLost = 0;
+            contextStack = [];
+            switchCountEl.textContent = '0';
+            timeLostEl.textContent = '0';
+            currentContextEl.textContent = 'None';
+            workLogEl.innerHTML = '';
+            taskListEl.innerHTML = '';
+            contextDetailsEl.classList.add('hidden');
+        }
+
+        function showContextDetails() {
+            if (!currentTask) {
+                detailsContentEl.textContent = 'No active task';
+                contextDetailsEl.classList.remove('hidden');
+                return;
+            }
+            
+            detailsContentEl.innerHTML = `
+                <h4>${currentTask.name}</h4>
+                <p>Memory state: ${currentTask.context.memory}</p>
+                <p>Focus level: ${currentTask.context.focus}</p>
+                <p>Task state: ${currentTask.context.state}</p>
+                <p>Time spent: ${currentTask.timeSpent}s</p>
+                <h4>Context Stack</h4>
+                <ul>
+                    ${contextStack.map(ctx => 
+                        `<li>${ctx.task.name} (switched ${Math.floor((Date.now() - ctx.time)/1000)}s ago)</li>`
+                    ).join('') || '<li>Empty</li>'}
+                </ul>
+            `;
+            contextDetailsEl.classList.remove('hidden');
+        }
+
+        function showAllTasks() {
+            detailsContentEl.innerHTML = `
+                <h4>All Tasks</h4>
+                <table border="1">
+                    <tr>
+                        <th>Name</th>
+                        <th>Priority</th>
+                        <th>Time Spent</th>
+                        <th>Status</th>
+                        <th>Memory</th>
+                        <th>Focus</th>
+                    </tr>
+                    ${tasks.map(task => `
+                        <tr>
+                            <td>${task.name}</td>
+                            <td>${task.priority}</td>
+                            <td>${task.timeSpent}s</td>
+                            <td>${task.completed ? 'Completed' : 'Pending'}</td>
+                            <td>${task.context.memory}</td>
+                            <td>${task.context.focus}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            `;
+            contextDetailsEl.classList.remove('hidden');
+        }
+
+        // Initialize
+        updateSwitchCost();
+        updateInterruptFreq();
+    </script>
+</body>
+</html>

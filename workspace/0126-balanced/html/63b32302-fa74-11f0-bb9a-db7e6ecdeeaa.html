@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Query Optimization Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f0f2f5;
+  }
+  h1 {
+    color: #2c3e50;
+  }
+  .container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    max-width: 900px;
+    margin: auto;
+  }
+  textarea {
+    width: 100%;
+    height: 80px;
+    font-family: monospace;
+    font-size: 14px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+  }
+  button {
+    margin-top: 15px;
+    background-color: #2980b9;
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.25s ease;
+  }
+  button:hover {
+    background-color: #1c5980;
+  }
+  pre {
+    background: #272822;
+    color: #f8f8f2;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-size: 14px;
+  }
+  .explanation {
+    margin-top: 20px;
+    line-height: 1.5;
+  }
+  .performance {
+    margin-top: 20px;
+    font-weight: bold;
+  }
+  .highlight {
+    color: #c0392b;
+    font-weight: bold;
+  }
+  mark {
+    background: #fffb91;
+    border-radius: 3px;
+    padding: 0 3px;
+  }
+  table {
+    border-collapse: collapse;
+    margin-top: 10px;
+    width: 100%;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  th {
+    background-color: #34495e;
+    color: white;
+  }
+  .index-label {
+    background-color: #27ae60;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-weight: normal;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Query Optimization Demonstration</h1>
+  <p>
+    Enter a SQL query against the sample <code>employees</code> dataset below.
+    The demo will compare an unoptimized and an optimized query and show the difference
+    in execution steps (simulated) to demonstrate the concept of Query Optimization.
+  </p>
+  <label for="queryInput"><strong>Input SQL Query:</strong></label>
+  <textarea id="queryInput" spellcheck="false">SELECT * FROM employees WHERE department = 'Sales' AND salary > 60000;</textarea>
+  <button id="runBtn">Run and Compare</button>
+
+  <div id="output" style="margin-top:30px;"></div>
+</div>
+
+<script>
+// Sample data simulating an employee table
+const employees = [];
+const departments = ['Sales', 'Engineering', 'HR', 'Marketing', 'Finance'];
+
+function randomSalary() {
+  return Math.floor(Math.random() * 80000) + 30000; // 30k to 110k
+}
+// Populate employees with 1000 dummy records
+for(let i=1; i<=1000; i++) {
+  const dept = departments[Math.floor(Math.random()*departments.length)];
+  employees.push({
+    id: i,
+    name: 'Emp_' + i,
+    department: dept,
+    salary: randomSalary()
+  });
+}
+
+/**
+ * Parsing a very simple subset of SQL for demonstration:
+ * Only support SELECT * FROM employees WHERE conditions;
+ * Conditions only support AND between equality or greater-than conditions
+ *
+ * Returns an object with filters
+ */
+function parseQuery(sql) {
+  sql = sql.trim().replace(/\s+/g, ' ');
+  // Basic validation and parsing:
+  const regex = /^SELECT \* FROM employees(?: WHERE (.+))?;?$/i;
+  const match = sql.match(regex);
+  if (!match) return null;
+  const whereClause = match[1];
+  if (!whereClause) return null; // no WHERE means select all
+  // Split conditions by AND (case insensitive)
+  const conditions = whereClause.split(/ AND /i).map(cond => cond.trim());
+  const filters = [];
+  for (const cond of conditions) {
+    // Condition could be: column = 'value' or column > number
+    let mEq = cond.match(/^(\w+)\s*=\s*'(.+)'$/);
+    let mGt = cond.match(/^(\w+)\s*>\s*(\d+)$/);
+    if (mEq) {
+      filters.push({col:mEq[1], op:'=', val:mEq[2]});
+    } else if (mGt) {
+      filters.push({col:mGt[1], op:'>', val:Number(mGt[2])});
+    } else {
+      // Unsupported condition
+      return null;
+    }
+  }
+  return filters;
+}
+
+// Simulate query execution without optimization (full scan)
+function executeQueryUnoptimized(filters) {
+  // We'll measure steps as number of records checked
+  let steps = 0;
+  const results = [];
+  for (const row of employees) {
+    steps++;
+    let pass = true;
+    for (const f of filters) {
+      if (f.op === '=') {
+        if (row[f.col] !== f.val) {
+          pass = false; break;
+        }
+      } else if (f.op === '>') {
+        if (!(row[f.col] > f.val)) {
+          pass = false; break;
+        }
+      }
+    }
+    if (pass) results.push(row);
+  }
+  return {results, steps};
+}
+
+// Simulate query execution with optimization (use index for department)
+// We'll simulate having an index on department for '=' lookups
+const departmentIndex = {};
+function buildDepartmentIndex() {
+  for (const row of employees) {
+    if (!departmentIndex[row.department]) {
+      departmentIndex[row.department] = [];
+    }
+    departmentIndex[row.department].push(row);
+  }
+}
+buildDepartmentIndex();
+
+function executeQueryOptimized(filters) {
+  let steps = 0;
+  let filteredSet = employees;
+  let departmentFilter = null;
+  let otherFilters = [];
+
+  for (const f of filters) {
+    if (f.col === 'department' && f.op === '=') {
+      departmentFilter = f.val;
+    } else {
+      otherFilters.push(f);
+    }
+  }
+
+  // Use index on department if possible
+  if (departmentFilter != null && departmentIndex[departmentFilter]) {
+    filteredSet = departmentIndex[departmentFilter];
+  }
+  // Count steps as number of rows scanned in filteredSet
+  for (const row of filteredSet) {
+    steps++;
+    let pass = true;
+    for (const f of otherFilters) {
+      if (f.op === '=') {
+        if (row[f.col] !== f.val) {
+          pass = false; break;
+        }
+      } else if (f.op === '>') {
+        if (!(row[f.col] > f.val)) {
+          pass = false; break;
+        }
+      }
+    }
+    if (pass) {
+      // nothing to do, just count in steps and results count
+    }
+  }
+
+  // To get actual results for demonstration:
+  const results = filteredSet.filter(row => {
+    for (const f of otherFilters) {
+      if (f.op === '=' && row[f.col] !== f.val) return false;
+      if (f.op === '>' && !(row[f.col] > f.val)) return false;
+    }
+    return true;
+  })
+
+  return {results, steps};
+}
+
+function highlightSQL(sql) {
+  // Simple highlight for keywords and string literals
+  return sql.replace(/\b(SELECT|FROM|WHERE|AND)\b/gi, m => `<mark>${m.toUpperCase()}</mark>`)
+    .replace(/'[^']*'/g, m => `<span style="color:#d35400;">${m}</span>`);
+}
+
+document.getElementById('runBtn').addEventListener('click', () => {
+  const query = document.getElementById('queryInput').value.trim();
+  const output = document.getElementById('output');
+  output.innerHTML = '';
+
+  if (!query) {
+    output.innerHTML = '<p style="color:red;">Please enter a SQL query.</p>';
+    return;
+  }
+  const filters = parseQuery(query);
+  if (filters === null) {
+    output.innerHTML = '<p style="color:red;">Unsupported or invalid query. Please use format:<br><code>SELECT * FROM employees WHERE [conditions];</code><br>Conditions support AND of equality (column = \'value\') or greater than (column &gt; number).</p>';
+    return;
+  }
+
+  // Run unoptimized
+  const startUn = performance.now();
+  const unopt = executeQueryUnoptimized(filters);
+  const endUn = performance.now();
+
+  // Run optimized
+  const startOpt = performance.now();
+  const opt = executeQueryOptimized(filters);
+  const endOpt = performance.now();
+
+  // Output results
+  output.innerHTML = `
+    <h2>Query:</h2>
+    <pre>${highlightSQL(query)}</pre>
+
+    <h3>Explanation:</h3>
+    <p class="explanation">
+      <strong>Unoptimized query:</strong> Scans all <mark>${employees.length}</mark> rows to check conditions.<br/>
+      <strong>Optimized query:</strong> Uses an <span class="index-label">INDEX</span> on the <code>department</code> column to reduce the number of scanned rows.
+    </p>
+
+    <h3>Performance Simulation:</h3>
+    <table>
+      <thead><tr><th>Method</th><th>Rows Scanned (Steps)</th><th>Time Taken (ms)</th><th>Returned Rows</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Unoptimized (Full Table Scan)</td>
+          <td>${unopt.steps.toLocaleString()}</td>
+          <td>${(endUn - startUn).toFixed(3)}</td>
+          <td>${unopt.results.length}</td>
+        </tr>
+        <tr>
+          <td>Optimized (Using Index on <code>department</code>)</td>
+          <td>${opt.steps.toLocaleString()}</td>
+          <td>${(endOpt - startOpt).toFixed(3)}</td>
+          <td>${opt.results.length}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Details:</h3>
+    <p>
+      - The unoptimized query checks every employee record in the dataset.<br>
+      - The optimized query reduces scanned rows by directly using the index on <code>department</code> to fetch only relevant records.<br>
+      - This reduces CPU and I/O and results in faster queries, especially for large datasets.
+    </p>
+    <p><em>Note: This demo simulates query steps and does not execute real SQL.</em></p>
+  `;
+});
+</script>
+</body>
+</html>

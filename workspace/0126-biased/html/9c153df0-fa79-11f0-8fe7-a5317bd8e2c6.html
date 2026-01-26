@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Thread Simulator - Interactive</title>
+  <style>
+    /* Intentionally minimal styling - default browser styles only */
+  </style>
+</head>
+<body>
+  <h1>Thread Simulator</h1>
+
+  <div>
+    <strong>Create Thread</strong><br>
+    Name: <input id="newName" placeholder="thread1">
+    Priority: <input id="newPriority" type="number" value="5" style="width:60px">
+    Behavior (one instruction per line):
+    <br>
+    <textarea id="newBehavior" rows="6" cols="60">COMPUTE 3
+LOCK L1
+COMPUTE 2
+UNLOCK L1
+SEND C1 Hello
+EXIT</textarea>
+    <br>
+    Predefined:
+    <select id="preset">
+      <option value="">--choose preset--</option>
+      <option value="producer">Producer (send 5 messages)</option>
+      <option value="consumer">Consumer (receive 5 messages)</option>
+      <option value="priority_inversion">Priority Inversion (two threads)</option>
+      <option value="deadlock">Deadlock (two locks opposite order)</option>
+      <option value="join_example">Join example (parent waits child)</option>
+    </select>
+    <button id="createThread">Create Thread</button>
+    <button id="createClones">Create 5 Clones</button>
+    <button id="clearAll">Clear All</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Scheduler Controls</strong><br>
+    Mode:
+    <select id="schedulerMode">
+      <option value="round_robin">Round Robin</option>
+      <option value="priority">Priority</option>
+      <option value="manual">Manual (user pick)</option>
+    </select>
+    Quantum (ticks): <input id="quantum" type="number" value="2" style="width:60px">
+    Speed (ms per tick): <input id="tickMs" type="number" value="400" style="width:70px">
+    Preemption: <input id="preempt" type="checkbox" checked>
+    Random events: <input id="randomEvents" type="checkbox">
+    <button id="run">Run</button>
+    <button id="pause">Pause</button>
+    <button id="step">Step</button>
+    Run for N ticks: <input id="runTicks" type="number" value="20" style="width:70px">
+    <button id="runFor">Run N</button>
+    <button id="resetSim">Reset Simulation Clock</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Locks and Channels</strong><br>
+    Create Lock name: <input id="lockName" placeholder="L1" style="width:80px">
+    <button id="createLock">Create Lock</button>
+    <br>
+    Create Channel name: <input id="chanName" placeholder="C1" style="width:80px">
+    Buffer size: <input id="chanSize" type="number" value="1" style="width:50px">
+    <button id="createChan">Create Channel</button>
+    <button id="autoSetup">Auto Setup (producer/consumer C1)</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Threads</strong>
+    <div id="threads"></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Locks</strong>
+    <div id="locks"></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Channels</strong>
+    <div id="channels"></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Workflows & Scenarios</strong><br>
+    <button id="wfPriorityInversion">Setup Priority Inversion</button>
+    <button id="wfDeadlock">Setup Deadlock</button>
+    <button id="wfProducerConsumer">Setup Producer/Consumer</button>
+    <button id="wfJoin">Setup Join Example</button>
+    <button id="wfStarvation">Setup Starvation</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Execution & Debug</strong><br>
+    Breakpoint (threadId:pc) <input id="breakpoint" placeholder="t1:3" style="width:120px">
+    <button id="setBreakpoint">Set</button>
+    <button id="clearBreakpoints">Clear</button>
+    Step until breakpoint: <button id="runToBp">Run to BP</button>
+    Watch expression (threadId.var) <input id="watchExpr" placeholder="t1.x" style="width:120px">
+    <button id="addWatch">Add Watch</button>
+    <div id="watches"></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Log / Timeline</strong>
+    <div>
+      Time: <span id="simTime">0</span>
+      <input id="timelineScrub" type="range" min="0" max="0" value="0" style="width:300px">
+      <button id="replay">Replay</button>
+      <button id="clearLog">Clear Log</button>
+    </div>
+    <textarea id="log" rows="10" cols="120" readonly></textarea>
+  </div>
+
+  <script>
+    // Minimal default visual; functionality prioritized.
+    (function() {
+      // Data structures
+      let nextThreadId = 1;
+      const threads = {}; // id -> thread
+      const locks = {}; // name -> {owner:tid|null, waiters:[]}
+      const channels = {}; // name -> {buffer:[], size, waitersR:[], waitersW:[]}
+      let sim = {
+        time: 0,
+        running: false,
+        interval: null,
+        tickMs: 400,
+        schedulerMode: 'round_robin',
+        quantum: 2,
+        preempt: true,
+        randomEvents: false,
+        log: [],
+        timelineIndex: 0,
+        breakpoints: [], // {tid, pc}
+        watches: [] // {expr, last}
+      };
+
+      // Utility
+      function logEvent(msg) {
+        const t = sim.time;
+        const entry = {time: t, text: msg};
+        sim.log.push(entry);
+        document.getElementById('log').value += `[${t}] ${msg}\n`;
+        updateTimelineControls();
+      }
+
+      function updateTimelineControls() {
+        const r = document.getElementById('timelineScrub');
+        r.max = Math.max(0, sim.log.length - 1);
+        r.value = sim.log.length - 1;
+        document.getElementById('simTime').textContent = sim.time;
+      }
+
+      // Thread model
+      function createThread(name, priority, behaviorText) {
+        const id = 't' + nextThreadId++;
+        const lines = behaviorText.split('\n').map(l => l.trim()).filter(l => l.length);
+        const instr = lines.map(parseInstr);
+        const th = {
+          id, name: name || id, priority: Number(priority) || 5,
+          prog: instr, pc: 0, state: 'NEW', computeLeft:0, sleepLeft:0,
+          waitingFor: null, joinedBy: [], local: {}, quantumLeft: 0
+        };
+        threads[id] = th;
+        logEvent(`Created thread ${id} (${th.name})`);
+        renderAll();
+        return th;
+      }
+
+      function cloneThread(sourceId) {
+        const s = threads[sourceId];
+        if (!s) return;
+        return createThread(s.name + '_clone', s.priority, s.prog.map(instrToText).join('\n'));
+      }
+
+      function parseInstr(line) {
+        // Commands: COMPUTE n, SLEEP n, LOCK name, UNLOCK name, SEND chan val, RECEIVE chan var,
+        // YIELD, WAIT var op value (not used), SIGNAL cond, JOIN tid, EXIT
+        const parts = line.split(/\s+/);
+        const op = parts[0].toUpperCase();
+        const args = parts.slice(1);
+        return {raw: line, op, args};
+      }
+
+      function instrToText(instr) {
+        return instr.raw;
+      }
+
+      // Locks and channels
+      function createLock(name) {
+        if (!name) name = 'L' + (Object.keys(locks).length+1);
+        if (locks[name]) {
+          logEvent(`Lock ${name} already exists`);
+          return;
+        }
+        locks[name] = {owner: null, waiters: []};
+        logEvent(`Created lock ${name}`);
+        renderAll();
+      }
+
+      function createChannel(name, size) {
+        if (!name) name = 'C' + (Object.keys(channels).length+1);
+        if (channels[name]) {
+          logEvent(`Channel ${name} already exists`);
+          return;
+        }
+        channels[name] = {buffer: [], size: Math.max(0, Number(size)||0), waitersR: [], waitersW: []};
+        logEvent(`Created channel ${name} (size ${channels[name].size})`);
+        renderAll();
+      }
+
+      // Scheduling & execution
+      function pickNextThread() {
+        // Return thread id or null
+        const runnable = Object.values(threads).filter(t => t.state === 'RUNNABLE' || t.state === 'NEW');
+        if (runnable.length === 0) return null;
+
+        if (sim.schedulerMode === 'manual') {
+          // find any thread marked "manualRun" by UI
+          const manual = runnable.find(t => t.manualRun);
+          if (manual) return manual.id;
+          // else pick first
+          return runnable[0].id;
+        }
+        if (sim.schedulerMode === 'priority') {
+          runnable.sort((a,b) => b.priority - a.priority || a.id.localeCompare(b.id));
+          return runnable[0].id;
+        }
+        // round robin: maintain last chosen pointer (simple mod)
+        if (!sim._rrIndex) sim._rrIndex = 0;
+        // sort for deterministic order
+        runnable.sort((a,b) => a.id.localeCompare(b.id));
+        // find index
+        const idx = sim._rrIndex % runnable.length;
+        sim._rrIndex++;
+        return runnable[idx].id;
+      }
+
+      function stepOnce() {
+        sim.time++;
+        // decrement sleeping/compute on blocked threads
+        for (const t of Object.values(threads)) {
+          if (t.state === 'SLEEPING') {
+            t.sleepLeft--;
+            if (t.sleepLeft <= 0) {
+              t.state = 'RUNNABLE';
+              logEvent(`${t.id} woke from sleep`);
+            }
+          }
+          if (t.state === 'RUNNING') {
+            // nothing here; running thread handled below
+          }
+        }
+
+        // random events
+        if (sim.randomEvents && Math.random() < 0.1) {
+          const ids = Object.keys(threads);
+          if (ids.length) {
+            const tid = ids[Math.floor(Math.random()*ids.length)];
+            const t = threads[tid];
+            // random yield or sleep
+            if (Math.random() < 0.5) {
+              if (t.state === 'RUNNABLE') {
+                t.state = 'SLEEPING';
+                t.sleepLeft = 1 + Math.floor(Math.random()*3);
+                logEvent(`${t.id} randomly sleeping (${t.sleepLeft})`);
+              }
+            } else {
+              if (t.state === 'RUNNING') {
+                t.state = 'RUNNABLE';
+                logEvent(`${t.id} randomly yielded`);
+              }
+            }
+          }
+        }
+
+        // find currently running thread
+        let running = Object.values(threads).find(t => t.state === 'RUNNING');
+        if (running && sim.preempt) {
+          running.quantumLeft--;
+          if (running.quantumLeft <= 0) {
+            running.state = 'RUNNABLE';
+            logEvent(`${running.id} preempted (quantum)`);
+            running = null;
+          }
+        }
+
+        if (!running) {
+          const nextId = pickNextThread();
+          if (nextId) {
+            running = threads[nextId];
+            if (running.state === 'NEW') running.state = 'RUNNABLE';
+            running.state = 'RUNNING';
+            running.quantumLeft = sim.quantum;
+            logEvent(`${running.id} scheduled to RUN`);
+          }
+        }
+
+        if (running) {
+          executeInstruction(running);
+        }
+
+        // update watches and check breakpoints
+        for (const w of sim.watches) {
+          const val = evalWatch(w.expr);
+          if (val !== w.last) {
+            w.last = val;
+            logEvent(`Watch ${w.expr} => ${JSON.stringify(val)}`);
+          }
+        }
+        for (const bp of sim.breakpoints) {
+          const t = threads[bp.tid];
+          if (t && t.pc === bp.pc) {
+            logEvent(`Breakpoint hit ${bp.tid}@${bp.pc}`);
+            pauseSim();
+            // do not auto-clear bp
+          }
+        }
+
+        renderAll();
+        updateTimelineControls();
+      }
+
+      function executeInstruction(t) {
+        if (t.state !== 'RUNNING') return;
+        if (t.pc < 0 || t.pc >= t.prog.length) {
+          t.state = 'TERMINATED';
+          logEvent(`${t.id} reached end and terminated`);
+          notifyJoiners(t);
+          return;
+        }
+        const instr = t.prog[t.pc];
+        const op = instr.op;
+        const args = instr.args;
+        logEvent(`${t.id} executing ${instr.raw}`);
+        switch (op) {
+          case 'COMPUTE':
+            {
+              const n = Number(args[0]) || 1;
+              if (!t.computeLeft) t.computeLeft = n;
+              t.computeLeft--;
+              if (t.computeLeft <= 0) {
+                t.computeLeft = 0;
+                t.pc++;
+              } // else remain on this instruction
+            }
+            break;
+          case 'SLEEP':
+            {
+              const n = Number(args[0]) || 1;
+              t.sleepLeft = n;
+              t.state = 'SLEEPING';
+              t.pc++;
+            }
+            break;
+          case 'YIELD':
+            t.state = 'RUNNABLE';
+            t.pc++;
+            break;
+          case 'LOCK':
+            {
+              const name = args[0];
+              if (!locks[name]) createLock(name);
+              const L = locks[name];
+              if (!L.owner) {
+                L.owner = t.id;
+                logEvent(`${t.id} acquired lock ${name}`);
+                t.pc++;
+              } else {
+                // block
+                t.state = 'BLOCKED';
+                t.waitingFor = {type:'lock', name};
+                L.waiters.push(t.id);
+                logEvent(`${t.id} blocked waiting lock ${name}`);
+              }
+            }
+            break;
+          case 'UNLOCK':
+            {
+              const name = args[0];
+              const L = locks[name];
+              if (!L) { logEvent(`${t.id} unlock ${name} but lock missing`); t.pc++; break; }
+              if (L.owner !== t.id) {
+                logEvent(`${t.id} attempted to unlock ${name} but is not owner`);
+                t.pc++;
+                break;
+              }
+              L.owner = null;
+              t.pc++;
+              logEvent(`${t.id} unlocked ${name}`);
+              if (L.waiters.length) {
+                const nid = L.waiters.shift();
+                L.owner = nid;
+                const nt = threads[nid];
+                if (nt) {
+                  nt.state = 'RUNNABLE';
+                  nt.waitingFor = null;
+                  logEvent(`${nid} acquired ${name} (woken)`);
+                }
+              }
+            }
+            break;
+          case 'SEND':
+            {
+              const cname = args[0];
+              const val = args.slice(1).join(' ') || '';
+              if (!channels[cname]) createChannel(cname,1);
+              const C = channels[cname];
+              if (C.size === 0) {
+                // unbuffered: if receiver waiting, deliver; else block writer
+                if (C.waitersR.length) {
+                  const rid = C.waitersR.shift();
+                  const rthread = threads[rid];
+                  if (rthread) {
+                    rthread.local._recv = val;
+                    rthread.state = 'RUNNABLE';
+                    logEvent(`${t.id} sent unbuffered ${val} to ${rid}`);
+                  }
+                  t.pc++;
+                } else {
+                  // block writer
+                  t.state = 'BLOCKED';
+                  t.waitingFor = {type:'chan_send', name:cname, val};
+                  C.waitersW.push(t.id);
+                  logEvent(`${t.id} blocked sending to ${cname} (unbuffered)`);
+                }
+              } else {
+                // buffered
+                if (C.buffer.length < C.size) {
+                  C.buffer.push(val);
+                  t.pc++;
+                  logEvent(`${t.id} buffered ${val} to ${cname}`);
+                  // wake a receiver
+                  if (C.waitersR.length) {
+                    const rid = C.waitersR.shift();
+                    const rthread = threads[rid];
+                    if (rthread) {
+                      const msg = C.buffer.shift();
+                      rthread.local._recv = msg;
+                      rthread.state = 'RUNNABLE';
+                      logEvent(`${rid} received ${msg} from ${cname} (woken)`);
+                    }
+                  }
+                } else {
+                  // buffer full
+                  t.state = 'BLOCKED';
+                  t.waitingFor = {type:'chan_send', name:cname, val};
+                  C.waitersW.push(t.id);
+                  logEvent(`${t.id} blocked sending to ${cname} (buffer full)`);
+                }
+              }
+            }
+            break;
+          case 'RECEIVE':
+            {
+              const cname = args[0];
+              const varName = args[1] || '_';
+              if (!channels[cname]) createChannel(cname,1);
+              const C = channels[cname];
+              if (C.size === 0) {
+                // unbuffered: if sender waiting, receive; else block receiver
+                if (C.waitersW.length) {
+                  const wid = C.waitersW.shift();
+                  const wthread = threads[wid];
+                  const val = wthread.waitingFor && wthread.waitingFor.val ? wthread.waitingFor.val : null;
+                  if (wthread) {
+                    // wake writer
+                    wthread.state = 'RUNNABLE';
+                    wthread.waitingFor = null;
+                    logEvent(`${wid} unblocked sending to ${cname}`);
+                  }
+                  t.local[varName] = val;
+                  t.local._recv = val;
+                  t.pc++;
+                  logEvent(`${t.id} received unbuffered ${val} from ${wid}`);
+                } else {
+                  // block receiver
+                  t.state = 'BLOCKED';
+                  t.waitingFor = {type:'chan_recv', name:cname};
+                  C.waitersR.push(t.id);
+                  logEvent(`${t.id} blocked receiving from ${cname} (unbuffered)`);
+                }
+              } else {
+                // buffered
+                if (C.buffer.length) {
+                  const val = C.buffer.shift();
+                  t.local[varName] = val;
+                  t.local._recv = val;
+                  t.pc++;
+                  logEvent(`${t.id} received ${val} from ${cname}`);
+                  // wake any waiting senders
+                  if (C.waitersW.length) {
+                    const wid = C.waitersW.shift();
+                    const wthread = threads[wid];
+                    if (wthread && wthread.waitingFor) {
+                      C.buffer.push(wthread.waitingFor.val);
+                      wthread.waitingFor = null;
+                      wthread.state = 'RUNNABLE';
+                      logEvent(`${wid} resumed and buffered to ${cname}`);
+                    }
+                  }
+                } else {
+                  // buffer empty
+                  t.state = 'BLOCKED';
+                  t.waitingFor = {type:'chan_recv', name:cname};
+                  C.waitersR.push(t.id);
+                  logEvent(`${t.id} blocked receiving from ${cname} (buffer empty)`);
+                }
+              }
+            }
+            break;
+          case 'JOIN':
+            {
+              const targetId = args[0];
+              const target = threads[targetId];
+              if (!target || target.state === 'TERMINATED') {
+                logEvent(`${t.id} join ${targetId} immediate (target ended)`);
+                t.pc++;
+              } else {
+                t.state = 'BLOCKED';
+                t.waitingFor = {type:'join', tid: targetId};
+                if (target) target.joinedBy.push(t.id);
+                logEvent(`${t.id} blocked joining ${targetId}`);
+              }
+            }
+            break;
+          case 'EXIT':
+            t.state = 'TERMINATED';
+            logEvent(`${t.id} EXIT`);
+            notifyJoiners(t);
+            break;
+          default:
+            // unknown - skip
+            logEvent(`${t.id} unknown instruction ${instr.raw} - skipped`);
+            t.pc++;
+        }
+      }
+
+      function notifyJoiners(t) {
+        if (t.joinedBy && t.joinedBy.length) {
+          for (const jid of t.joinedBy) {
+            const jt = threads[jid];
+            if (jt && jt.state === 'BLOCKED' && jt.waitingFor && jt.waitingFor.type === 'join' && jt.waitingFor.tid === t.id) {
+              jt.state = 'RUNNABLE';
+              jt.waitingFor = null;
+              logEvent(`${jt.id} woken from join on ${t.id}`);
+            }
+          }
+          t.joinedBy = [];
+        }
+      }
+
+      // UI rendering
+      function renderAll() {
+        renderThreads();
+        renderLocks();
+        renderChannels();
+        renderWatches();
+      }
+
+      function renderThreads() {
+        const el = document.getElementById('threads');
+        el.innerHTML = '';
+        const keys = Object.keys(threads).sort();
+        if (!keys.length) { el.textContent = '(no threads)'; return; }
+        for (const id of keys) {
+          const t = threads[id];
+          const div = document.createElement('div');
+          div.style.marginBottom = '6px';
+          const header = document.createElement('span');
+          header.textContent = `${t.id} (${t.name}) [${t.state}] pc=${t.pc}/${t.prog.length} prio=${t.priority}`;
+          div.appendChild(header);
+          div.appendChild(document.createTextNode(' '));
+          const btnStart = document.createElement('button'); btnStart.textContent='Start/Make Runnable';
+          btnStart.onclick = () => { if (t.state==='NEW') t.state='RUNNABLE'; else t.state='RUNNABLE'; logEvent(`${t.id} set RUNNABLE`); renderAll(); };
+          div.appendChild(btnStart);
+          const btnRun = document.createElement('button'); btnRun.textContent='Run now';
+          btnRun.onclick = () => { for (const th of Object.values(threads)) th.manualRun=false; t.manualRun=true; sim.schedulerMode='manual'; document.getElementById('schedulerMode').value='manual'; logEvent(`${t.id} marked for manual run`); renderAll(); };
+          div.appendChild(btnRun);
+          const btnStep = document.createElement('button'); btnStep.textContent='Step';
+          btnStep.onclick = () => { // run a controlled step with this thread
+            for (const th of Object.values(threads)) th.manualRun=false;
+            t.manualRun=true; sim.schedulerMode='manual';
+            stepOnce();
+          };
+          div.appendChild(btnStep);
+          const btnPause = document.createElement('button'); btnPause.textContent='Pause';
+          btnPause.onclick = () => { if (t.state==='RUNNING') t.state='RUNNABLE'; logEvent(`${t.id} paused`); renderAll(); };
+          div.appendChild(btnPause);
+          const btnKill = document.createElement('button'); btnKill.textContent='Terminate';
+          btnKill.onclick = () => { t.state='TERMINATED'; logEvent(`${t.id} forced terminated`); notifyJoiners(t); renderAll(); };
+          div.appendChild(btnKill);
+          const btnEdit = document.createElement('button'); btnEdit.textContent='Edit';
+          btnEdit.onclick = () => { const newb = prompt('Edit behavior (one instruction per line)', t.prog.map(instrToText).join('\n')); if (newb!==null) { t.prog = newb.split('\n').map(parseInstr); t.pc=0; logEvent(`${t.id} program edited`); renderAll(); } };
+          div.appendChild(btnEdit);
+          const btnPC = document.createElement('button'); btnPC.textContent='Set PC';
+          btnPC.onclick = () => { const v = prompt('Set PC index', String(t.pc)); const n = Number(v); if (!isNaN(n)) { t.pc = Math.max(0, Math.min(t.prog.length, n)); logEvent(`${t.id} pc set to ${t.pc}`); renderAll(); } };
+          div.appendChild(btnPC);
+          const priInput = document.createElement('input'); priInput.type='number'; priInput.value=t.priority; priInput.style.width='60px';
+          priInput.onchange = () => { t.priority = Number(priInput.value); logEvent(`${t.id} priority set to ${t.priority}`); renderAll(); };
+          div.appendChild(priInput);
+          // show local variables preview
+          const local = document.createElement('span'); local.textContent = ' Locals: ' + JSON.stringify(t.local);
+          div.appendChild(local);
+          // show program snippet
+          const prog = document.createElement('pre');
+          prog.textContent = t.prog.map((p,i) => (i===t.pc ? '-> ' : '   ') + i + ': ' + p.raw).join('\n');
+          prog.style.margin = '4px 0';
+          div.appendChild(prog);
+
+          el.appendChild(div);
+        }
+      }
+
+      function renderLocks() {
+        const el = document.getElementById('locks');
+        el.innerHTML = '';
+        const names = Object.keys(locks).sort();
+        if (!names.length) { el.textContent='(no locks)'; return; }
+        for (const name of names) {
+          const L = locks[name];
+          const d = document.createElement('div');
+          d.textContent = `${name}: owner=${L.owner || '-'}, waiters=[${(L.waiters||[]).join(',')}] `;
+          const btn = document.createElement('button'); btn.textContent='Force release';
+          btn.onclick = () => { L.owner = null; logEvent(`Lock ${name} force-released`); // wake first waiter
+            if (L.waiters.length) {
+              const nid = L.waiters.shift();
+              L.owner = nid;
+              const nt = threads[nid];
+              if (nt) { nt.state = 'RUNNABLE'; nt.waitingFor = null; logEvent(`${nid} acquired ${name} (force wake)`); }
+            }
+            renderAll();
+          };
+          d.appendChild(btn);
+          el.appendChild(d);
+        }
+      }
+
+      function renderChannels() {
+        const el = document.getElementById('channels');
+        el.innerHTML = '';
+        const names = Object.keys(channels).sort();
+        if (!names.length) { el.textContent='(no channels)'; return; }
+        for (const name of names) {
+          const C = channels[name];
+          const d = document.createElement('div');
+          d.textContent = `${name}: buffer=[${C.buffer.join(',')}] size=${C.size} waitR=[${C.waitersR.join(',')}] waitW=[${C.waitersW.join(',')}] `;
+          const btn = document.createElement('button'); btn.textContent='Purge';
+          btn.onclick = () => { C.buffer = []; C.waitersR = []; C.waitersW = []; logEvent(`${name} purged`); renderAll(); };
+          d.appendChild(btn);
+          el.appendChild(d);
+        }
+      }
+
+      // Controls wiring
+      document.getElementById('createThread').onclick = () => {
+        const name = document.getElementById('newName').value || null;
+        const pr = document.getElementById('newPriority').value || 5;
+        const beh = document.getElementById('newBehavior').value;
+        createThread(name, pr, beh);
+      };
+      document.getElementById('createClones').onclick = () => {
+        // creates 5 clones of last created thread if exists
+        const ids = Object.keys(threads);
+        if (!ids.length) return;
+        const last = ids[ids.length-1];
+        for (let i=0;i<5;i++) cloneThread(last);
+      };
+      document.getElementById('clearAll').onclick = () => {
+        if (!confirm('Clear all threads, locks, channels, and logs?')) return;
+        for (const k of Object.keys(threads)) delete threads[k];
+        for (const k of Object.keys(locks)) delete locks[k];
+        for (const k of Object.keys(channels)) delete channels[k];
+        sim.log = [];
+        document.getElementById('log').value = '';
+        sim.time = 0;
+        renderAll();
+      };
+
+      document.getElementById('createLock').onclick = () => {
+        const n = document.getElementById('lockName').value || null;
+        createLock(n);
+      };
+      document.getElementById('createChan').onclick = () => {
+        const n = document.getElementById('chanName').value || null;
+        const s = document.getElementById('chanSize').value || 0;
+        createChannel(n, Number(s));
+      };
+
+      document.getElementById('autoSetup').onclick = () => {
+        createChannel('C1', 2);
+        const prod = createThread('producer', 5, 'COMPUTE 1\nSEND C1 msg1\nSEND C1 msg2\nSEND C1 msg3\nSEND C1 msg4\nSEND C1 msg5\nEXIT');
+        const cons = createThread('consumer', 5, 'RECEIVE C1 x\nRECEIVE C1 x\nRECEIVE C1 x\nRECEIVE C1 x\nRECEIVE C1 x\nEXIT');
+        renderAll();
+      };
+
+      document.getElementById('schedulerMode').onchange = function() {
+        sim.schedulerMode = this.value;
+        logEvent(`Scheduler mode set to ${this.value}`);
+      };
+      document.getElementById('quantum').onchange = function() { sim.quantum = Math.max(1, Number(this.value)||1); logEvent(`Quantum set to ${sim.quantum}`); };
+      document.getElementById('tickMs').onchange = function() { sim.tickMs = Math.max(10, Number(this.value)||10); logEvent(`Tick interval set to ${sim.tickMs}ms`); if (sim.running) restartSimInterval(); };
+      document.getElementById('preempt').onchange = function() { sim.preempt = this.checked; logEvent(`Preemption ${this.checked ? 'enabled' : 'disabled'}`); };
+      document.getElementById('randomEvents').onchange = function() { sim.randomEvents = this.checked; logEvent(`Random events ${this.checked ? 'on' : 'off'}`); };
+
+      document.getElementById('run').onclick = function() { startSim(); };
+      document.getElementById('pause').onclick = function() { pauseSim(); };
+      document.getElementById('step').onclick = function() { stepOnce(); };
+      document.getElementById('runFor').onclick = function() { const n=Number(document.getElementById('runTicks').value)||1; runForTicks(n); };
+      document.getElementById('resetSim').onclick = function() { sim.time = 0; document.getElementById('simTime').textContent = sim.time; logEvent('Simulation clock reset'); };
+
+      function startSim() {
+        if (sim.running) return;
+        sim.running = true;
+        restartSimInterval();
+        logEvent('Simulation started');
+      }
+      function pauseSim() {
+        if (!sim.running) return;
+        sim.running = false;
+        if (sim.interval) { clearInterval(sim.interval); sim.interval = null; }
+        logEvent('Simulation paused');
+      }
+      function restartSimInterval() {
+        if (sim.interval) clearInterval(sim.interval);
+        sim.interval = setInterval(() => {
+          stepOnce();
+        }, sim.tickMs || 200);
+      }
+
+      function runForTicks(n) {
+        let count=0;
+        startSim();
+        const stopAt = sim.time + n;
+        const check = setInterval(() => {
+          if (sim.time >= stopAt) {
+            pauseSim();
+            clearInterval(check);
+            logEvent(`Run for ${n} ticks completed`);
+          }
+        }, 50);
+      }
+
+      // Timeline controls
+      document.getElementById('clearLog').onclick = function() {
+        sim.log = [];
+        document.getElementById('log').value = '';
+        updateTimelineControls();
+      };
+      document.getElementById('timelineScrub').oninput = function() {
+        const idx = Number(this.value);
+        const area = document.getElementById('log');
+        if (sim.log.length === 0) { area.value = ''; return; }
+        area.value = sim.log.slice(0, idx+1).map(e => `[${e.time}] ${e.text}`).join('\n');
+        document.getElementById('simTime').textContent = sim.log[idx] ? sim.log[idx].time : sim.time;
+      };
+      document.getElementById('replay').onclick = function() {
+        if (sim.log.length === 0) return;
+        let i=0;
+        const area = document.getElementById('log');
+        area.value = '';
+        const rep = setInterval(() => {
+          if (i>=sim.log.length) { clearInterval(rep); return; }
+          area.value += `[${sim.log[i].time}] ${sim.log[i].text}\n`;
+          i++;
+        }, 50);
+      };
+
+      // Breakpoints and watches
+      document.getElementById('setBreakpoint').onclick = function() {
+        const v = document.getElementById('breakpoint').value.trim();
+        if (!v) return;
+        const parts = v.split(':');
+        const tid = parts[0]; const pc = Number(parts[1]);
+        if (!threads[tid]) { alert('No such thread'); return; }
+        if (isNaN(pc)) { alert('Invalid pc'); return; }
+        sim.breakpoints.push({tid, pc});
+        logEvent(`Breakpoint set ${tid}@${pc}`);
+      };
+      document.getElementById('clearBreakpoints').onclick = function() {
+        sim.breakpoints = [];
+        logEvent('Breakpoints cleared');
+      };
+      document.getElementById('runToBp').onclick = function() {
+        startSim();
+        // will pause when breakpoint is hit (logic in stepOnce)
+      };
+
+      document.getElementById('addWatch').onclick = function() {
+        const e = document.getElementById('watchExpr').value.trim();
+        if (!e) return;
+        sim.watches.push({expr:e, last: undefined});
+        logEvent(`Watch added: ${e}`);
+        renderWatches();
+      };
+      function renderWatches() {
+        const el = document.getElementById('watches');
+        el.innerHTML = '';
+        if (!sim.watches.length) { el.textContent='(no watches)'; return; }
+        for (const w of sim.watches) {
+          const d = document.createElement('div');
+          d.textContent = `${w.expr} -> ${JSON.stringify(w.last)}`;
+          const btn = document.createElement('button'); btn.textContent='Remove';
+          btn.onclick = () => { const i = sim.watches.indexOf(w); if (i>=0) sim.watches.splice(i,1); renderWatches(); };
+          d.appendChild(btn);
+          el.appendChild(d);
+        }
+      }
+      function evalWatch(expr) {
+        // expr format: tid.var e.g., t1.x or t2._recv or t1.local.key
+        try {
+          const parts = expr.split('.');
+          const tid = parts.shift();
+          const obj = threads[tid];
+          if (!obj) return undefined;
+          let cur = obj;
+          for (const p of parts) {
+            if (cur === undefined) return undefined;
+            cur = cur[p];
+          }
+          return cur;
+        } catch(e) { return undefined; }
+      }
+
+      // Workflows
+      document.getElementById('wfPriorityInversion').onclick = function() {
+        // setup simple priority inversion: low holds lock, high waits, medium preempts low
+        createLock('L1');
+        const low = createThread('low', 1, 'LOCK L1\nCOMPUTE 5\nUNLOCK L1\nEXIT');
+        const med = createThread('medium', 5, 'COMPUTE 4\nEXIT');
+        const high = createThread('high', 10, 'COMPUTE 1\nLOCK L1\nCOMPUTE 1\nUNLOCK L1\nEXIT');
+        sim.schedulerMode = 'priority';
+        document.getElementById('schedulerMode').value = 'priority';
+        logEvent('Priority inversion scenario setup');
+      };
+
+      document.getElementById('wfDeadlock').onclick = function() {
+        // two threads locking opposite order
+        createLock('A'); createLock('B');
+        createThread('tA', 5, 'LOCK A\nCOMPUTE 1\nLOCK B\nCOMPUTE 1\nUNLOCK B\nUNLOCK A\nEXIT');
+        createThread('tB', 5, 'LOCK B\nCOMPUTE 1\nLOCK A\nCOMPUTE 1\nUNLOCK A\nUNLOCK B\nEXIT');
+        logEvent('Deadlock scenario setup');
+      };
+
+      document.getElementById('wfProducerConsumer').onclick = function() {
+        createChannel('Q', 2);
+        createThread('producer', 5, 'COMPUTE 1\nSEND Q 1\nSEND Q 2\nSEND Q 3\nEXIT');
+        createThread('consumer', 5, 'RECEIVE Q x\nRECEIVE Q x\nRECEIVE Q x\nEXIT');
+        logEvent('Producer/Consumer scenario setup');
+      };
+
+      document.getElementById('wfJoin').onclick = function() {
+        const child = createThread('child', 5, 'COMPUTE 3\nEXIT');
+        createThread('parent', 5, `JOIN ${child.id}\nCOMPUTE 1\nEXIT`);
+        logEvent('Join scenario setup');
+      };
+
+      document.getElementById('wfStarvation').onclick = function() {
+        // many low-priority threads and one high-priority that never gets CPU if scheduling is naive
+        for (let i=0;i<6;i++) createThread('low'+i, 1, 'COMPUTE 10\nEXIT');
+        createThread('high', 10, 'COMPUTE 1\nEXIT');
+        sim.schedulerMode = 'round_robin';
+        document.getElementById('schedulerMode').value = 'round_robin';
+        logEvent('Starvation scenario setup');
+      };
+
+      // Presets in creation area
+      document.getElementById('preset').onchange = function() {
+        const v = this.value;
+        if (!v) return;
+        if (v === 'producer') {
+          document.getElementById('newBehavior').value = 'COMPUTE 1\nSEND C1 m1\nSEND C1 m2\nSEND C1 m3\nEXIT';
+        } else if (v === 'consumer') {
+          document.getElementById('newBehavior').value = 'RECEIVE C1 x\nRECEIVE C1 x\nRECEIVE C1 x\nEXIT';
+        } else if (v === 'priority_inversion') {
+          document.getElementById('newBehavior').value = 'LOCK L1\nCOMPUTE 5\nUNLOCK L1\nEXIT';
+        } else if (v === 'deadlock') {
+          document.getElementById('newBehavior').value = 'LOCK A\nCOMPUTE 1\nLOCK B\nCOMPUTE 1\nUNLOCK B\nUNLOCK A\nEXIT';
+        } else if (v === 'join_example') {
+          document.getElementById('newBehavior').value = 'JOIN tX\nCOMPUTE 1\nEXIT';
+        }
+      };
+
+      // initial sample
+      createLock('L1');
+      createChannel('C1',1);
+      createThread('main', 5, 'COMPUTE 2\nLOCK L1\nCOMPUTE 1\nUNLOCK L1\nSEND C1 ping\nRECEIVE C1 x\nEXIT');
+
+      // expose some globals for advanced interactive console use
+      window._simulator = {
+        threads, locks, channels, createThread, createLock, createChannel, stepOnce, startSim, pauseSim, sim, logEvent
+      };
+
+      renderAll();
+      updateTimelineControls();
+    })();
+  </script>
+</body>
+</html>

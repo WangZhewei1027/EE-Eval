@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>B+ Tree Visualization and Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1em;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 0.2em;
+    }
+    #container {
+      max-width: 900px;
+      margin: auto;
+    }
+    #controls {
+      margin: 1em 0;
+      display: flex;
+      gap: 1em;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    input[type=number] {
+      width: 80px;
+      padding: 0.3em 0.5em;
+      font-size: 1em;
+    }
+    button {
+      padding: 0.4em 1em;
+      font-size: 1em;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #007acc;
+      background-color: #007acc;
+      color: white;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #005a9e;
+    }
+    #message {
+      text-align: center;
+      min-height: 1.2em;
+      margin-bottom: 1em;
+      font-weight: bold;
+      color: #007acc;
+    }
+    #tree {
+      overflow-x: auto;
+      background-color: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 1em;
+      font-family: monospace;
+      white-space: pre;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    }
+    .legend {
+      margin-top: 1em;
+      font-size: 0.9em;
+      color: #555;
+      text-align: center;
+    }
+    footer {
+      margin-top: 3em;
+      text-align: center;
+      font-size: 0.8em;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>B+ Tree Demo & Visualization</h1>
+    <div class="legend">
+      <div><strong>Note:</strong> This demo uses a B+ Tree of order <span id="orderDisplay">3</span> (max 2 keys per node).</div>
+      <div>Internal nodes show keys; leaf nodes show keys and are linked (linked list shown by arrows).</div>
+    </div>
+    <div id="controls">
+      <input type="number" id="inputKey" placeholder="Key (int)" />
+      <button id="insertBtn">Insert</button>
+      <button id="searchBtn">Search</button>
+      <button id="resetBtn" title="Reset Tree">Reset</button>
+    </div>
+    <div id="message"></div>
+    <pre id="tree" aria-live="polite" aria-label="B+ Tree visualization"></pre>
+  </div>
+  <footer>By ChatGPT - B+ Tree Interactive Demo</footer>
+
+  <script>
+  /*
+   B+ Tree implementation and visualization.
+   Order defines max number of children in internal nodes: order = 3 means max 3 children and 2 keys.
+   Leaf nodes hold up to order - 1 keys.
+  */
+
+  class BPlusNode {
+    constructor(isLeaf = false) {
+      this.isLeaf = isLeaf;
+      this.keys = [];
+      this.children = []; // internal nodes: children nodes; leaves: values / references (we store keys only)
+      this.next = null;  // leaf pointer to next leaf (for linked list)
+    }
+  }
+
+  class BPlusTree {
+    constructor(order = 3) {
+      this.order = order;
+      this.root = new BPlusNode(true);
+    }
+
+    // Search for a key and return {found: bool, node, index}
+    search(key) {
+      let cur = this.root;
+      while (!cur.isLeaf) {
+        let i = 0;
+        while (i < cur.keys.length && key >= cur.keys[i]) i++;
+        cur = cur.children[i];
+      }
+      let idx = cur.keys.indexOf(key);
+      return { found: idx !== -1, node: cur, index: idx };
+    }
+
+    // Insert a key into the tree
+    insert(key) {
+      if (typeof key !== 'number' || !Number.isInteger(key)) {
+        throw new Error('Only integer keys are supported.');
+      }
+      // Avoid duplicates for this demo
+      const searchRes = this.search(key);
+      if(searchRes.found){
+        return false; // duplicate, no insert
+      }
+      const root = this.root;
+      const splitInfo = this._insertNonFull(root, key);
+      if (splitInfo) {
+        // root split - create new root
+        const newRoot = new BPlusNode(false);
+        newRoot.keys = [splitInfo.key];
+        newRoot.children = [root, splitInfo.rightNode];
+        this.root = newRoot;
+      }
+      return true;
+    }
+
+    _insertNonFull(node, key) {
+      if (node.isLeaf) {
+        // Insert the key in sorted order in leaf node
+        let pos = 0;
+        while (pos < node.keys.length && node.keys[pos] < key) pos++;
+        node.keys.splice(pos, 0, key);
+
+        // Check if overflow
+        if (node.keys.length >= this.order) {
+          // Split leaf node
+          const rightNode = new BPlusNode(true);
+          const mid = Math.floor(this.order / 2);
+          rightNode.keys = node.keys.splice(mid);
+          // Fix leaf linked list pointers
+          rightNode.next = node.next;
+          node.next = rightNode;
+
+          // Promote first key of right node
+          const promoteKey = rightNode.keys[0];
+          return { key: promoteKey, rightNode };
+        }
+        return null;
+      } else {
+        // internal node
+        // find index of child for insert
+        let pos = 0;
+        while (pos < node.keys.length && key >= node.keys[pos]) pos++;
+
+        // recurse
+        const splitInfo = this._insertNonFull(node.children[pos], key);
+
+        if (splitInfo) {
+          // insert promoted key in node
+          let insertPos = 0;
+          while (insertPos < node.keys.length && node.keys[insertPos] < splitInfo.key) insertPos++;
+          node.keys.splice(insertPos, 0, splitInfo.key);
+          node.children.splice(insertPos + 1, 0, splitInfo.rightNode);
+
+          // Check overflow
+          if (node.keys.length >= this.order) {
+            // split internal node
+            const rightNode = new BPlusNode(false);
+            const mid = Math.floor(this.order / 2);
+            const promoteKey = node.keys[mid];
+
+            // keys and children for right node
+            rightNode.keys = node.keys.splice(mid + 1);
+            rightNode.children = node.children.splice(mid + 1);
+
+            // Remove promoteKey from left node keys
+            node.keys.splice(mid, 1);
+
+            return { key: promoteKey, rightNode };
+          }
+        }
+        return null;
+      }
+    }
+
+    // For visualization: return levels of the tree
+    getLevels() {
+      if (!this.root) return [];
+      const levels = [];
+      let currentLevel = [this.root];
+      while (currentLevel.length > 0) {
+        levels.push(currentLevel);
+        const nextLevel = [];
+        for (const node of currentLevel) {
+          if (!node.isLeaf) {
+            for (const child of node.children) {
+              nextLevel.push(child);
+            }
+          }
+        }
+        if (nextLevel.length === 0) break;
+        currentLevel = nextLevel;
+      }
+      return levels;
+    }
+
+    // For visualization: returns all leaf nodes in linked list order
+    getLeaves() {
+      let leaves = [];
+      let node = this.root;
+      // First go to leftmost leaf
+      while (!node.isLeaf) node = node.children[0];
+      while (node) {
+        leaves.push(node);
+        node = node.next;
+      }
+      return leaves;
+    }
+
+  }
+
+  // Rendering logic - plain text visualization
+
+  function renderBPlusTree(tree) {
+    let output = '';
+    const levels = tree.getLevels();
+
+    // For each level, show nodes left to right
+    // Show keys in [ ] brackets for internal nodes
+    // Show leaf keys with arrows to next leaf
+    // We will print level by level, indenting for clarity
+    levels.forEach((level, lvlIndex) => {
+      let line = '';
+      line += `Level ${lvlIndex} (${level[0].isLeaf ? 'Leaves' : 'Internal'} nodes) : \n`;
+
+      // Each node in level
+      const nodeStrs = level.map((node, i) => {
+        if (node.isLeaf) {
+          return '[' + node.keys.join('|') + ']';
+        } else {
+          return '(' + node.keys.join(',') + ')';
+        }
+      });
+      line += nodeStrs.join('    ') + '\n\n';
+      output += line;
+    });
+
+    // Show leaf linkage:
+    const leaves = tree.getLeaves();
+    output += 'Leaf node linked list:\n';
+    output += leaves.map(leaf => '[' + leaf.keys.join('|') + ']').join(' -> ') + '\n';
+
+    return output;
+  }
+
+  // UI and interaction
+
+  const order = 3; // You can adjust order here for the demo
+  document.getElementById('orderDisplay').textContent = order;
+
+  const tree = new BPlusTree(order);
+
+  const inputKey = document.getElementById('inputKey');
+  const insertBtn = document.getElementById('insertBtn');
+  const searchBtn = document.getElementById('searchBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const treeOutput = document.getElementById('tree');
+  const message = document.getElementById('message');
+
+  function updateView(msg='') {
+    treeOutput.textContent = renderBPlusTree(tree);
+    message.textContent = msg;
+  }
+
+  insertBtn.addEventListener('click', () => {
+    const val = parseInt(inputKey.value);
+    if (isNaN(val)) {
+      message.textContent = 'Please enter a valid integer key.';
+      return;
+    }
+    const inserted = tree.insert(val);
+    if (!inserted) {
+      message.textContent = `Key ${val} already exists, duplicate insert ignored.`;
+    } else {
+      message.textContent = `Inserted key ${val}.`;
+    }
+    updateView(message.textContent);
+    inputKey.value = '';
+    inputKey.focus();
+  });
+
+  searchBtn.addEventListener('click', () => {
+    const val = parseInt(inputKey.value);
+    if (isNaN(val)) {
+      message.textContent = 'Please enter a valid integer key to search.';
+      return;
+    }
+    const result = tree.search(val);
+    if (result.found) {
+      message.textContent = `Key ${val} found in leaf node.`;
+    } else {
+      message.textContent = `Key ${val} NOT found in the tree.`;
+    }
+    updateView(message.textContent);
+    inputKey.value = '';
+    inputKey.focus();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    // Reset the tree
+    tree.root = new BPlusNode(true);
+    message.textContent = 'Tree has been reset.';
+    updateView();
+    inputKey.value = '';
+    inputKey.focus();
+  });
+
+  // Initial view
+  updateView('Empty B+ Tree ready.');
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Logistic Regression Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  label, button {
+    display: inline-block;
+    margin: 0.3em 0.6em 0.3em 0;
+  }
+  input[type="number"] {
+    width: 4em;
+  }
+  table {
+    border-collapse: collapse;
+    margin-top: 1em;
+  }
+  td, th {
+    border: 1px solid black;
+    padding: 0.25em 0.5em;
+    text-align: center;
+  }
+  textarea {
+    width: 100%;
+    height: 5em;
+    margin-top: 0.3em;
+  }
+  #plotarea {
+    margin-top: 1em;
+    width: 500px;
+    height: 300px;
+    border: 1px solid black;
+    position: relative;
+  }
+  #plotarea canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  #status {
+    margin-top: 1em;
+    min-height: 4em;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<h1>Interactive Logistic Regression Explorer</h1>
+
+<div>
+  <b>Step 1: Dataset Setup (Input your points)</b><br />
+  <label>X: <input type="number" step="any" id="inputX" value="0" /></label>
+  <label>Y: <input type="number" step="any" id="inputY" value="0" /></label>
+  <label>Class: 
+    <select id="inputClass">
+      <option value="0">0</option>
+      <option value="1" selected>1</option>
+    </select>
+  </label>
+  <button id="btnAddPoint">Add Point</button>
+  <button id="btnClearPoints">Clear Points</button>
+  <button id="btnRandomPoints">Add Random Points</button>
+</div>
+
+<div>
+  <b>Dataset Points (X, Y, Class):</b>
+  <table id="pointsTable" aria-label="Dataset points table">
+    <thead>
+      <tr><th>#</th><th>X</th><th>Y</th><th>Class</th><th>Remove</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<hr />
+
+<div>
+  <b>Step 2: Initialize Logistic Regression Model</b><br />
+  <label>Initial Weight w0 (bias): <input type="number" step="any" id="w0init" value="0" /></label>
+  <label>Initial Weight w1 (coef for X): <input type="number" step="any" id="w1init" value="0" /></label>
+  <label>Initial Weight w2 (coef for Y): <input type="number" step="any" id="w2init" value="0" /></label>
+  <button id="btnInitModel">Initialize Model</button>
+</div>
+
+<div>
+  <b>Current Weights:</b>
+  <textarea id="weightsDisplay" readonly></textarea>
+</div>
+
+<hr />
+
+<div>
+  <b>Step 3: Logistic Regression Training Controls</b><br />
+  <label>Learning Rate (α): <input type="number" step="any" id="learningRate" value="0.1" min="0.0001" max="1" /></label><br />
+  <label>Steps per Training Batch: <input type="number" step="1" id="trainSteps" value="10" min="1" max="1000" /></label><br />
+  <button id="btnTrainBatch">Train Batch</button>
+  <button id="btnTrainFull">Train Until Convergence</button>
+  <button id="btnResetTraining">Reset Training</button><br />
+  <label>
+    Convergence Threshold (weight changes <): <input type="number" step="any" id="convThreshold" value="0.0001" />
+  </label><br />
+  <label>
+    Max Training Iterations: <input type="number" step="1" id="maxIterations" value="10000" />
+  </label>
+</div>
+
+<div>
+  <b>Training Progress:</b>
+  <textarea id="trainingLog" readonly></textarea>
+</div>
+
+<hr />
+
+<div>
+  <b>Step 4: Model Exploration and Prediction</b><br />
+  <label>Input point to predict:</label>
+  <label>X: <input type="number" step="any" id="predictX" value="0" /></label>
+  <label>Y: <input type="number" step="any" id="predictY" value="0" /></label>
+  <button id="btnPredict">Predict Class & Probability</button><br />
+  <div id="predictionResult"></div>
+</div>
+
+<hr />
+
+<div>
+  <b>Step 5: Visualization (Scatter plot and decision boundary)</b><br />
+  <button id="btnDrawPlot">Draw Plot</button>
+  <button id="btnClearPlot">Clear Plot</button>
+  <div id="plotarea" aria-label="Plot area with dataset and decision boundary">
+    <canvas id="pointsCanvas" width="500" height="300"></canvas>
+    <canvas id="boundaryCanvas" width="500" height="300"></canvas>
+  </div>
+</div>
+
+<hr />
+
+<div>
+  <b>Bonus: Manual Weight Adjustment for Deep Exploration</b><br />
+  <label>Set w0: <input type="number" step="any" id="manualW0" value="0" /></label>
+  <label>Set w1: <input type="number" step="any" id="manualW1" value="0" /></label>
+  <label>Set w2: <input type="number" step="any" id="manualW2" value="0" /></label>
+  <button id="btnSetWeights">Set Weights Manually</button>
+</div>
+
+<hr />
+
+<div>
+  <b>Bonus: Export/Import Dataset and Model</b><br />
+  <button id="btnExport">Export Dataset & Model</button>
+  <button id="btnImport">Import Dataset & Model</button><br />
+  <textarea id="importExportArea" placeholder="Exported JSON will appear here or paste JSON here to import"></textarea>
+</div>
+
+<hr />
+
+<div id="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  // Dataset format: array of objects {x:number,y:number,class:0|1}
+  let dataset = [];
+
+  // Logistic Regression model weights:
+  // w0 = bias, w1 and w2 are coefficients for x and y
+  let weights = { w0: 0, w1: 0, w2: 0 };
+
+  // Training state:
+  let trainingLog = [];
+  let trainingIteration = 0;
+  let trainingInProgress = false;
+
+  // DOM elements:
+  const inputX = document.getElementById('inputX');
+  const inputY = document.getElementById('inputY');
+  const inputClass = document.getElementById('inputClass');
+  const btnAddPoint = document.getElementById('btnAddPoint');
+  const btnClearPoints = document.getElementById('btnClearPoints');
+  const btnRandomPoints = document.getElementById('btnRandomPoints');
+  const pointsTableBody = document.querySelector('#pointsTable tbody');
+  const w0initInput = document.getElementById('w0init');
+  const w1initInput = document.getElementById('w1init');
+  const w2initInput = document.getElementById('w2init');
+  const btnInitModel = document.getElementById('btnInitModel');
+  const weightsDisplay = document.getElementById('weightsDisplay');
+  const learningRateInput = document.getElementById('learningRate');
+  const trainStepsInput = document.getElementById('trainSteps');
+  const btnTrainBatch = document.getElementById('btnTrainBatch');
+  const btnTrainFull = document.getElementById('btnTrainFull');
+  const convThresholdInput = document.getElementById('convThreshold');
+  const maxIterationsInput = document.getElementById('maxIterations');
+  const trainingLogArea = document.getElementById('trainingLog');
+  const predictXInput = document.getElementById('predictX');
+  const predictYInput = document.getElementById('predictY');
+  const btnPredict = document.getElementById('btnPredict');
+  const predictionResultDiv = document.getElementById('predictionResult');
+  const btnDrawPlot = document.getElementById('btnDrawPlot');
+  const btnClearPlot = document.getElementById('btnClearPlot');
+  const plotArea = document.getElementById('plotarea');
+  const pointsCanvas = document.getElementById('pointsCanvas');
+  const boundaryCanvas = document.getElementById('boundaryCanvas');
+
+  const manualW0Input = document.getElementById('manualW0');
+  const manualW1Input = document.getElementById('manualW1');
+  const manualW2Input = document.getElementById('manualW2');
+  const btnSetWeights = document.getElementById('btnSetWeights');
+
+  const btnExport = document.getElementById('btnExport');
+  const btnImport = document.getElementById('btnImport');
+  const importExportArea = document.getElementById('importExportArea');
+
+  const statusDiv = document.getElementById('status');
+
+  // Utilities
+  function sigmoid(z) {
+    // Bound input for safety (not required, but protects against overflow)
+    if(z < -30) return 0;
+    if(z > 30) return 1;
+    return 1 / (1 + Math.exp(-z));
+  }
+
+  // Dataset Management:
+  function updatePointsTable() {
+    pointsTableBody.innerHTML = '';
+    dataset.forEach((pt,i) => {
+      const tr = document.createElement('tr');
+      const idxTd = document.createElement('td');
+      idxTd.textContent = i+1;
+      const xTd = document.createElement('td');
+      xTd.textContent = pt.x.toFixed(3);
+      const yTd = document.createElement('td');
+      yTd.textContent = pt.y.toFixed(3);
+      const cTd = document.createElement('td');
+      cTd.textContent = pt.class;
+      const remTd = document.createElement('td');
+      const remBtn = document.createElement('button');
+      remBtn.textContent = 'Remove';
+      remBtn.type = 'button';
+      remBtn.addEventListener('click', () => {
+        dataset.splice(i,1);
+        updatePointsTable();
+        updateStatus(`Removed point #${i+1}`);
+      });
+      remTd.appendChild(remBtn);
+      tr.appendChild(idxTd);
+      tr.appendChild(xTd);
+      tr.appendChild(yTd);
+      tr.appendChild(cTd);
+      tr.appendChild(remTd);
+      pointsTableBody.appendChild(tr);
+    });
+  }
+
+  btnAddPoint.addEventListener('click', () => {
+    const x = parseFloat(inputX.value);
+    const y = parseFloat(inputY.value);
+    const c = parseInt(inputClass.value);
+    if (Number.isNaN(x) || Number.isNaN(y) || (c !== 0 && c !==1)) {
+      updateStatus('Invalid input values for point.');
+      return;
+    }
+    dataset.push({x, y, class:c});
+    updatePointsTable();
+    updateStatus(`Added point (x:${x}, y:${y}, class:${c})`);
+  });
+
+  btnClearPoints.addEventListener('click', () => {
+    dataset = [];
+    updatePointsTable();
+    updateStatus('Cleared all dataset points.');
+  });
+
+  btnRandomPoints.addEventListener('click', () => {
+    const count = 20;
+    // Generate 10 points for class 0 near (-1,-1), 10 points for class 1 near (1,1)
+    for(let i=0; i<10; i++){
+      dataset.push({
+        x: -1 + (Math.random() * 0.5 - 0.25),
+        y: -1 + (Math.random() * 0.5 - 0.25),
+        class: 0
+      });
+    }
+    for(let i=0; i<10; i++){
+      dataset.push({
+        x: 1 + (Math.random() * 0.5 - 0.25),
+        y: 1 + (Math.random() * 0.5 - 0.25),
+        class: 1
+      });
+    }
+    updatePointsTable();
+    updateStatus('Added 20 random points (clustered around (-1,-1) and (1,1)).');
+  });
+
+  // Model Initialization
+  btnInitModel.addEventListener('click', () => {
+    let w0 = parseFloat(w0initInput.value);
+    let w1 = parseFloat(w1initInput.value);
+    let w2 = parseFloat(w2initInput.value);
+    if ([w0,w1,w2].some(v => Number.isNaN(v))) {
+      updateStatus('Invalid initial weights.');
+      return;
+    }
+    weights = { w0, w1, w2 };
+    updateWeightsDisplay();
+    trainingLog = [];
+    trainingIteration = 0;
+    trainingInProgress = false;
+    trainingLogArea.value = '';
+    updateStatus('Model initialized with given weights.');
+  });
+
+  function updateWeightsDisplay() {
+    weightsDisplay.value =
+      `w0 (bias): ${weights.w0.toFixed(6)}\n` +
+      `w1 (coef X): ${weights.w1.toFixed(6)}\n` +
+      `w2 (coef Y): ${weights.w2.toFixed(6)}`;
+    manualW0Input.value = weights.w0.toFixed(6);
+    manualW1Input.value = weights.w1.toFixed(6);
+    manualW2Input.value = weights.w2.toFixed(6);
+  }
+
+  // Logistic Regression helper functions
+  function predictProbability(x,y) {
+    return sigmoid(weights.w0 + weights.w1*x + weights.w2*y);
+  }
+
+  // Single gradient step:
+  // Uses all points as batch, updates weights by gradient ascent on log-likelihood
+  function trainBatch(steps, lr, convThreshold) {
+    if (dataset.length === 0) {
+      updateStatus('Dataset is empty. Add points before training.');
+      return false;
+    }
+    let converged = false;
+    for(let step=0; step<steps; step++) {
+      trainingIteration++;
+      // Calculate gradients:
+      let grad0 = 0, grad1=0, grad2=0;
+      for(const pt of dataset){
+        const p = predictProbability(pt.x, pt.y);
+        const error = pt.class - p; // Note: gradient ascent, so error = y - p
+        grad0 += error;
+        grad1 += error * pt.x;
+        grad2 += error * pt.y;
+      }
+      // Average gradients:
+      const n = dataset.length;
+      grad0 /= n; grad1 /= n; grad2 /= n;
+
+      // Previous weights for convergence check
+      const oldW0 = weights.w0;
+      const oldW1 = weights.w1;
+      const oldW2 = weights.w2;
+
+      // Update weights:
+      weights.w0 += lr * grad0;
+      weights.w1 += lr * grad1;
+      weights.w2 += lr * grad2;
+
+      // Log progress
+      const wchg = Math.max(
+        Math.abs(weights.w0 - oldW0),
+        Math.abs(weights.w1 - oldW1),
+        Math.abs(weights.w2 - oldW2)
+      );
+
+      trainingLog.push(`Iteration ${trainingIteration}: w0=${weights.w0.toFixed(6)}, w1=${weights.w1.toFixed(6)}, w2=${weights.w2.toFixed(6)}, max weight change=${wchg.toExponential(1)}`);
+
+      if (wchg < convThreshold) {
+        converged = true;
+        break;
+      }
+    }
+    updateWeightsDisplay();
+    trainingLogArea.value = trainingLog.join('\n');
+    trainingLogArea.scrollTop = trainingLogArea.scrollHeight;
+    if(converged) {
+      updateStatus(`Training converged after ${trainingIteration} iterations.`);
+      return true;
+    } else {
+      updateStatus(`Training completed ${steps} steps. Current iteration: ${trainingIteration}.`);
+      return false;
+    }
+  }
+
+  btnTrainBatch.addEventListener('click', () => {
+    const steps = parseInt(trainStepsInput.value);
+    const lr = parseFloat(learningRateInput.value);
+    const convThreshold = parseFloat(convThresholdInput.value);
+    if(steps < 1 || lr <= 0){
+      updateStatus('Invalid training parameters.');
+      return;
+    }
+    trainBatch(steps, lr, convThreshold);
+  });
+
+  btnTrainFull.addEventListener('click', () => {
+    if(dataset.length === 0){
+      updateStatus('Dataset empty. Add points before training.');
+      return;
+    }
+    trainingInProgress = true;
+    trainingLog = [];
+    trainingIteration = 0;
+    trainingLogArea.value = '';
+    const lr = parseFloat(learningRateInput.value);
+    const convThreshold = parseFloat(convThresholdInput.value);
+    const maxIt = parseInt(maxIterationsInput.value);
+
+    function trainStep() {
+      if(!trainingInProgress) return;
+      const converged = trainBatch(1, lr, convThreshold);
+      if(converged || trainingIteration >= maxIt){
+        trainingInProgress = false;
+        if(trainingIteration >= maxIt){
+          updateStatus(`Reached maximum iterations (${maxIt}). Training stopped.`);
+        }
+        return;
+      }
+      // No delay to allow user to interrupt or browser paint
+      setTimeout(trainStep, 0);
+    }
+    trainStep();
+  });
+
+  btnResetTraining.addEventListener('click', () => {
+    trainingLog = [];
+    trainingIteration = 0;
+    trainingInProgress = false;
+    trainingLogArea.value = '';
+    updateStatus('Training state reset.');
+  });
+
+  // Prediction interaction:
+  btnPredict.addEventListener('click', () => {
+    const x = parseFloat(predictXInput.value);
+    const y = parseFloat(predictYInput.value);
+    if(Number.isNaN(x) || Number.isNaN(y)){
+      predictionResultDiv.textContent = 'Invalid input coordinates.';
+      return;
+    }
+    const p = predictProbability(x,y);
+    const predictedClass = (p >= 0.5) ? 1 : 0;
+    predictionResultDiv.textContent = `Predicted probability for class 1: ${p.toFixed(5)}\nPredicted class: ${predictedClass}`;
+  });
+
+  // Visualization:
+  // We'll draw points as circles:
+  // class 0: circle outline
+  // class 1: filled circle
+  // Draw decision boundary line for w0 + w1*x + w2*y = 0 =>
+  // y = (-w0 - w1*x)/w2
+  function drawPlot() {
+    const w = pointsCanvas.width;
+    const h = pointsCanvas.height;
+
+    const ctxPoints = pointsCanvas.getContext('2d');
+    const ctxBoundary = boundaryCanvas.getContext('2d');
+
+    // Clear
+    ctxPoints.clearRect(0,0,w,h);
+    ctxBoundary.clearRect(0,0,w,h);
+
+    if(dataset.length === 0){
+      updateStatus('No data points to plot.');
+      return;
+    }
+
+    // Find data ranges with margin
+    let xs = dataset.map(pt => pt.x);
+    let ys = dataset.map(pt => pt.y);
+    let xmin = Math.min(...xs);
+    let xmax = Math.max(...xs);
+    let ymin = Math.min(...ys);
+    let ymax = Math.max(...ys);
+
+    // Update plot area coordinates to have margin
+    const marginX = (xmax - xmin) * 0.15 || 1;
+    const marginY = (ymax - ymin) * 0.15 || 1;
+    xmin -= marginX;
+    xmax += marginX;
+    ymin -= marginY;
+    ymax += marginY;
+
+    // Save coordinates for prediction mapping
+    plotArea._coords = { xmin, xmax, ymin, ymax };
+
+    // Coordinate transforms:
+    function xToCanvas(x){ return ((x - xmin) / (xmax - xmin)) * w; }
+    function yToCanvas(y){ return h - ((y - ymin) / (ymax - ymin)) * h; }
+    function canvasToX(cx){ return xmin + (cx / w) * (xmax - xmin); }
+    function canvasToY(cy){ return ymin + ((h - cy) / h) * (ymax - ymin); }
+
+    // Draw points
+    for(const pt of dataset){
+      const cx = xToCanvas(pt.x);
+      const cy = yToCanvas(pt.y);
+      ctxPoints.beginPath();
+      if(pt.class === 1){
+        ctxPoints.arc(cx, cy, 5, 0, 2*Math.PI);
+        ctxPoints.fill();
+      } else {
+        ctxPoints.arc(cx, cy, 5, 0, 2*Math.PI);
+        ctxPoints.stroke();
+      }
+    }
+
+    // Draw decision boundary:
+    if(weights.w2 === 0) {
+      // Vertical line x = -w0/w1
+      if(weights.w1 !== 0){
+        const xline = -weights.w0/weights.w1;
+        if(xline >= xmin && xline <= xmax){
+          const cx = xToCanvas(xline);
+          ctxBoundary.beginPath();
+          ctxBoundary.moveTo(cx, 0);
+          ctxBoundary.lineTo(cx, h);
+          ctxBoundary.stroke();
+        }
+      }
+    } else {
+      // y = (-w0 - w1*x) / w2
+      // Draw line from x=xmin to x=xmax
+      const y1 = (-weights.w0 - weights.w1 * xmin)/weights.w2;
+      const y2 = (-weights.w0 - weights.w1 * xmax)/weights.w2;
+
+      const cy1 = yToCanvas(y1);
+      const cy2 = yToCanvas(y2);
+
+      ctxBoundary.beginPath();
+      ctxBoundary.moveTo(0, cy1);
+      ctxBoundary.lineTo(w, cy2);
+      ctxBoundary.stroke();
+    }
+
+    // Axis and labels (very basic: draw border lines)
+    ctxPoints.strokeRect(0,0,w,h);
+
+    updateStatus('Plot drawn with current points and decision boundary.');
+  }
+
+  btnDrawPlot.addEventListener('click', drawPlot);
+  btnClearPlot.addEventListener('click', () => {
+    pointsCanvas.getContext('2d').clearRect(0,0,pointsCanvas.width, pointsCanvas.height);
+    boundaryCanvas.getContext('2d').clearRect(0,0,boundaryCanvas.width, boundaryCanvas.height);
+    updateStatus('Plot cleared.');
+  });
+
+  // Bonus: Manual weight adjustment:
+  btnSetWeights.addEventListener('click', () => {
+    let w0 = parseFloat(manualW0Input.value);
+    let w1 = parseFloat(manualW1Input.value);
+    let w2 = parseFloat(manualW2Input.value);
+    if ([w0, w1, w2].some(v => Number.isNaN(v))) {
+      updateStatus('Invalid manual weights input.');
+      return;
+    }
+    weights = { w0, w1, w2 };
+    updateWeightsDisplay();
+    updateStatus('Weights manually updated.');
+  });
+
+  // Export / Import:
+  btnExport.addEventListener('click', () => {
+    const exportData = {
+      dataset: dataset,
+      weights: weights
+    };
+    try {
+      importExportArea.value = JSON.stringify(exportData, null, 2);
+      updateStatus('Exported dataset and model to JSON.');
+    } catch(e) {
+      updateStatus('Failed to export data: ' + e.message);
+    }
+  });
+
+  btnImport.addEventListener('click', () => {
+    const jsonText = importExportArea.value.trim();
+    if(!jsonText){
+      updateStatus('Import area is empty.');
+      return;
+    }
+    try {
+      const importData = JSON.parse(jsonText);
+      if(!importData.dataset || !importData.weights){
+        updateStatus('Import JSON must have "dataset" and "weights" keys.');
+        return;
+      }
+      // Validate dataset:
+      if(!Array.isArray(importData.dataset)) {
+        updateStatus('Dataset must be an array.');
+        return;
+      }
+      for(const pt of importData.dataset){
+        if(typeof pt.x !== 'number' || typeof pt.y !== 'number' || (pt.class !== 0 && pt.class !==1)){
+          updateStatus('Dataset points must have numeric x, y and class 0 or 1.');
+          return;
+        }
+      }
+      dataset = importData.dataset;
+      weights = importData.weights;
+      updatePointsTable();
+      updateWeightsDisplay();
+      trainingLog = [];
+      trainingIteration = 0;
+      trainingInProgress = false;
+      trainingLogArea.value = '';
+      updateStatus('Imported dataset and model successfully.');
+    } catch(e){
+      updateStatus('Failed to parse import JSON: ' + e.message);
+    }
+  });
+
+  // Status update helper:
+  function updateStatus(msg) {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString();
+    statusDiv.textContent = `[${timestamp}] ${msg}`;
+  }
+
+  // Initial setup:
+  updatePointsTable();
+  updateWeightsDisplay();
+  updateStatus('Ready.');
+
+  // Extra: allow clicking plot to set predict input and show prediction live
+  pointsCanvas.addEventListener('click', e => {
+    if(!plotArea._coords) return;
+    const rect = pointsCanvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const { xmin, xmax, ymin, ymax } = plotArea._coords;
+    const xVal = xmin + (cx / pointsCanvas.width) * (xmax - xmin);
+    const yVal = ymin + ((pointsCanvas.height - cy) / pointsCanvas.height) * (ymax - ymin);
+    predictXInput.value = xVal.toFixed(3);
+    predictYInput.value = yVal.toFixed(3);
+    btnPredict.click();
+  });
+
+  // Extra: clicking training log area selections will show iteration number in status
+  trainingLogArea.addEventListener('select', () => {
+    const selection = trainingLogArea.value.substring(trainingLogArea.selectionStart, trainingLogArea.selectionEnd);
+    if(!selection) return;
+    const match = selection.match(/Iteration (\d+)/);
+    if(match){
+      updateStatus('Selected log for iteration #' + match[1]);
+    }
+  });
+
+}) ();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>K-Nearest Neighbors – Illustrated Concept</title>
+<style>
+  /* Reset and base */
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+  * {
+    box-sizing: border-box;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    color: #ffffff;
+    font-family: 'Montserrat', sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    min-height: 100vh;
+  }
+  h1 {
+    font-weight: 700;
+    font-size: 3.25rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.25em;
+    background: linear-gradient(90deg, #a1c4fd, #c2e9fb);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  h2 {
+    font-weight: 400;
+    font-size: 1.25rem;
+    margin-top: 0;
+    margin-bottom: 3rem;
+    color: #a1c4fddd;
+    font-style: italic;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+
+  /* Container for visualization */
+  #visualization {
+    position: relative;
+    width: 760px;
+    height: 580px;
+    border-radius: 32px;
+    background: radial-gradient(circle at top left, #1e2a38, #15202b 80%);
+    box-shadow:
+      inset 0 0 50px #4e91fc55,
+      0 12px 48px rgba(9,109,255,0.6);
+    overflow: visible;
+    user-select: none;
+  }
+
+  /* Canvas scaling for crisp graphics */
+  canvas {
+    display: block;
+    border-radius: 32px;
+    width: 760px;
+    height: 580px;
+    image-rendering: optimizeSpeed;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+
+  /* Controls */
+  #controls {
+    margin-top: 2.8rem;
+    display: flex;
+    gap: 1.6rem;
+  }
+  button {
+    background: linear-gradient(145deg, #2d99ff, #0580f2);
+    border: none;
+    border-radius: 12px;
+    padding: 0.9rem 2rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #f0f7ff;
+    font-family: 'Montserrat', sans-serif;
+    cursor: pointer;
+    transition:
+      background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.35s ease;
+    box-shadow:
+      0 4px 12px rgb(5 128 242 / 0.7);
+    user-select: none;
+  }
+  button:hover, button:focus {
+    background: linear-gradient(145deg, #4fa9ff, #3a99ff);
+    box-shadow:
+      0 6px 18px rgb(40 148 255 / 0.85);
+    transform: translateY(-2.5px);
+    outline: none;
+  }
+
+  /* Caption */
+  #caption {
+    margin-top: 3rem;
+    max-width: 760px;
+    font-size: 1.1rem;
+    line-height: 1.65;
+    color: #a1c4fddd;
+    text-align: center;
+    letter-spacing: 0.04em;
+    user-select: none;
+  }
+
+  /* Tooltip for nodes - subtle */
+  #tooltip {
+    position: absolute;
+    padding: 0.38rem 0.8rem;
+    background: rgba(255 255 255 / 0.12);
+    backdrop-filter: blur(8px);
+    border-radius: 0.6rem;
+    pointer-events: none;
+    opacity: 0;
+    color: #eff8ffee;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    transition: opacity 0.25s ease;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+  <h1>K-Nearest Neighbors</h1>
+  <h2>Visualizing Machine Learning's Nearest-Neighbor Method</h2>
+  <div id="visualization">
+    <canvas id="knnCanvas" width="760" height="580" aria-label="K-Nearest Neighbors visualization"></canvas>
+    <div id="tooltip" aria-hidden="true"></div>
+  </div>
+  <div id="controls" aria-label="K-Nearest Neighbors simulation controls">
+    <button id="toggleAnimation" aria-pressed="true" title="Play or pause the animation">Pause Animation</button>
+  </div>
+  <div id="caption">
+    Observe a new data point (white glow) being classified by its closest neighbors (colored points). The edges highlight the <em>k</em> = 5 nearest neighbors influencing the decision. The color of the new point’s glow animates gently as the nearest neighbors shift, illustrating how local data structure determines classification.
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('knnCanvas');
+  const ctx = canvas.getContext('2d');
+  const tooltip = document.getElementById('tooltip');
+  const toggleBtn = document.getElementById('toggleAnimation');
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Color palette - harmonious and subtle yet vivid
+  const classColors = {
+    A: 'hsl(215, 75%, 57%)',  // Blue
+    B: 'hsl(20, 85%, 55%)',   // Coral Red
+    C: 'hsl(120, 65%, 47%)'   // Green
+  };
+
+  // Stylish pastel tinted versions for points' glows
+  const pastelColors = {
+    A: 'hsl(215, 85%, 75%)',
+    B: 'hsl(20, 85%, 75%)',
+    C: 'hsl(120, 75%, 75%)'
+  };
+
+  // Configuration
+  const k = 5; // number of neighbors
+  const pointRadius = 10;
+  const newPointRadius = 14;
+  const edgeWidth = 2.8;
+
+  // Generate stylish scattered dataset with three classes
+  // The points are clustered nicely with slight shape variation
+  class DataPoint {
+    constructor(x, y, cls, id) {
+      this.x = x;
+      this.y = y;
+      this.cls = cls;
+      this.id = id;
+    }
+  }
+
+  let dataset = [];
+
+  function generateCluster(centerX, centerY, cls, count, shape = 'circle', angleOffset = 0) {
+    // Generates points roughly in circular/elliptical patterns with noise
+    const cluster = [];
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 40 + (Math.random() * 30);
+      let x = centerX + Math.cos(angle + angleOffset) * radius + (Math.random() * 12 - 6);
+      let y = centerY + Math.sin(angle + angleOffset) * radius + (Math.random() * 12 - 6);
+      cluster.push(new DataPoint(x, y, cls, `${cls}-${i}`));
+    }
+    return cluster;
+  }
+
+  dataset = [
+    ...generateCluster(220, 170, 'A', 15),
+    ...generateCluster(520, 200, 'B', 15, 'circle'),
+    ...generateCluster(380, 420, 'C', 15),
+  ];
+
+  // The new point moves slowly along an elegant parametric path
+  let animationTime = 0;
+  let animationPlaying = true;
+
+  // Calculate Euclidean distance squared for efficiency
+  function distanceSq(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    return dx * dx + dy * dy;
+  }
+
+  // Find k nearest neighbors
+  function findKNearestNeighbors(point, dataset, k) {
+    const distances = dataset.map(d => {
+      return {point: d, dist: distanceSq(point, d)};
+    });
+    distances.sort((a, b) => a.dist - b.dist);
+    return distances.slice(0, k).map(d => d.point);
+  }
+
+  // Determine majority class in neighbors, with tie-breaking by nearest
+  function majorityClass(neighbors) {
+    const counts = {};
+    neighbors.forEach(n => {
+      counts[n.cls] = (counts[n.cls] || 0) + 1;
+    });
+    // find max count
+    let maxCount = 0;
+    let winner = null;
+    for (const cls in counts) {
+      if (counts[cls] > maxCount) {
+        maxCount = counts[cls];
+        winner = cls;
+      }
+    }
+    // If tie, pick class of closest neighbor
+    const tieCount = Object.values(counts).filter(c => c === maxCount).length;
+    if (tieCount > 1) {
+      for (const n of neighbors) {
+        if (counts[n.cls] === maxCount) {
+          return n.cls;
+        }
+      }
+    }
+    return winner;
+  }
+
+  // Draw a subtle glow for a circle
+  function drawGlowCircle(cx, cy, radius, color, intensity = 0.3, blur = 30) {
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = blur;
+    ctx.globalAlpha = intensity;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Draw a point node
+  function drawPoint(p, radius, color, glowIntensity = 0.4) {
+    drawGlowCircle(p.x, p.y, radius + 10, color, glowIntensity * 0.7, 22);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, radius * 1.4, radius, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner white highlight ellipse for polish
+    let gradHighlight = ctx.createRadialGradient(p.x - radius * 0.4, p.y - radius * 0.3, radius * 0.2, p.x, p.y, radius * 1.1);
+    gradHighlight.addColorStop(0, 'rgba(255,255,255,0.65)');
+    gradHighlight.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradHighlight;
+    ctx.beginPath();
+    ctx.ellipse(p.x - radius * 0.4, p.y - radius * 0.3, radius * 0.85, radius * 0.6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outer ring - subtle border
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(255 255 255 / 0.24)';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, radius * 1.43, radius * 1.02, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Draw edges (lines) between new point and neighbors with subtle glow
+  function drawEdge(p1, p2, color) {
+    const grad = ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, 'rgba(255 255 255 / 0.2)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = edgeWidth;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+  }
+
+  // Draw new point with dynamic glow color (animated)
+  function drawNewPoint(p, baseColor, progress) {
+    // Animate glow pulsation and color saturation
+    const baseHsl = hslStringToObject(baseColor);
+    const glowColor = `hsl(${baseHsl.h}, ${Math.min(baseHsl.s + 25, 95)}%, ${baseHsl.l + 8}%)`;
+    const alpha = 0.3 + 0.3 * Math.sin(progress * Math.PI * 2);
+    drawGlowCircle(p.x, p.y, newPointRadius + 16, glowColor, alpha * 0.6, 38);
+    drawGlowCircle(p.x, p.y, newPointRadius + 7, glowColor, alpha * 0.45, 16);
+
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = `hsl(${baseHsl.h}, ${baseHsl.s}%, ${baseHsl.l + 4}%)`;
+
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, newPointRadius * 1.62, newPointRadius * 1.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner pearl white highlight
+    let pearlGrad = ctx.createRadialGradient(p.x - newPointRadius * 0.4, p.y - newPointRadius * 0.3, newPointRadius * 0.28, p.x, p.y, newPointRadius * 1.28);
+    pearlGrad.addColorStop(0, 'rgba(255 255 255 / 0.87)');
+    pearlGrad.addColorStop(1, 'rgba(255 255 255 / 0)');
+    ctx.fillStyle = pearlGrad;
+    ctx.beginPath();
+    ctx.ellipse(p.x - newPointRadius * 0.4, p.y - newPointRadius * 0.3, newPointRadius * 0.85, newPointRadius * 0.60, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+  }
+
+  // Utility: parse HSL string "hsl(h, s%, l%)" to object {h,s,l}
+  function hslStringToObject(hslString) {
+    const parts = hslString.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (parts) {
+      return {
+        h: +parts[1],
+        s: +parts[2],
+        l: +parts[3]
+      };
+    }
+    return {h: 0, s: 0, l: 0};
+  }
+
+  // Generate a smooth cyclic path for new point around center area
+  function newPointPosition(t) {
+    // Elegant Lissajous-like figure for fluid motion
+    const cx = width / 2;
+    const cy = height / 2 + 20;
+    const amplitudeX = 170;
+    const amplitudeY = 130;
+    const x = cx + amplitudeX * Math.sin(t * 1.6 + 0.7);
+    const y = cy + amplitudeY * Math.sin(t * 1.1);
+    return {x, y};
+  }
+
+  // Tooltip management
+  function showTooltip(x, y, text) {
+    tooltip.textContent = text;
+    tooltip.style.opacity = '1';
+    tooltip.style.left = `${x + 14}px`;
+    tooltip.style.top = `${y + 14}px`;
+  }
+  function hideTooltip() {
+    tooltip.style.opacity = '0';
+  }
+
+  // Main render function
+  function render(t) {
+    ctx.clearRect(0, 0, width, height);
+
+    // Calculate new point position (animated)
+    const pt = newPointPosition(t);
+
+    // Find k nearest neighbors
+    const neighbors = findKNearestNeighbors(pt, dataset, k);
+    const majorityCls = majorityClass(neighbors);
+    const glowBaseColor = pastelColors[majorityCls];
+
+    // Draw all dataset points behind
+    for (const dp of dataset) {
+      drawPoint(dp, pointRadius, classColors[dp.cls], 0.32);
+    }
+
+    // Draw edges from new point to neighbors with color coding by neighbor class
+    for (const n of neighbors) {
+      drawEdge(pt, n, classColors[n.cls]);
+    }
+
+    // Draw nearest neighbor points brighter with a ring
+    for (const n of neighbors) {
+      drawPoint(n, pointRadius + 2.6, classColors[n.cls], 0.8);
+    }
+
+    // Draw new data point with animated glow of majority class
+    drawNewPoint(pt, glowBaseColor, t);
+
+    // Outline new point with a subtle transparent ring to separate
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = 'rgba(255 255 255 / 0.18)';
+    ctx.beginPath();
+    ctx.ellipse(pt.x, pt.y, newPointRadius * 1.62, newPointRadius * 1.15, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Tiny sparkling accent on new point for elegance (flickering)
+    const sparkleAlpha = 0.25 + 0.18 * Math.sin(t * 24 + Math.PI);
+    ctx.fillStyle = `rgba(255 255 255, ${sparkleAlpha})`;
+    const sparkleX = pt.x + newPointRadius * 0.8 * Math.cos(t * 8);
+    const sparkleY = pt.y - newPointRadius * 0.6 * Math.sin(t * 8);
+    ctx.beginPath();
+    ctx.ellipse(sparkleX, sparkleY, 3.2, 5.8, t % (Math.PI * 2), 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw subtle gridlines and axis for style (behind points)
+    drawGrid();
+
+    // Accessibility: no text overlays on canvas; semantics conveyed in HTML
+  }
+
+  // Draw subtle grid lines in background
+  function drawGrid() {
+    const gridSpacing = 47;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255 255 255 / 0.07)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 14]);
+    for (let x = 0; x <= width; x += gridSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= height; y += gridSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Draw axis lines
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255 255 255 / 0.15)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(width / 2, 0);
+    ctx.lineTo(width / 2, height);
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Animation loop
+  let lastTimestamp = 0;
+  function animate(timestamp = 0) {
+    if (!lastTimestamp) lastTimestamp = timestamp;
+    const delta = (timestamp - lastTimestamp) / 1000;
+    if (animationPlaying) {
+      animationTime += delta * 0.7;
+      if (animationTime > 1000) animationTime -= 1000;
+    }
+    render(animationTime);
+    lastTimestamp = timestamp;
+    requestAnimationFrame(animate);
+  }
+
+  // Interactivity is very limited: toggle animation play/pause
+  toggleBtn.addEventListener('click', () => {
+    animationPlaying = !animationPlaying;
+    toggleBtn.textContent = animationPlaying ? 'Pause Animation' : 'Play Animation';
+    toggleBtn.setAttribute('aria-pressed', animationPlaying);
+  });
+
+  // No pointer interaction required - but add subtle tooltip on hover for neighbors
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    // Check if mouse is near any dataset point or neighbors
+    let hovered = null;
+    function dist(p) {
+      return Math.hypot(p.x - mx, p.y - my);
+    }
+
+    // Consider points within a radius
+    const radiusHover = 18;
+    // Check neighbors first, show class name
+    const pt = newPointPosition(animationTime);
+    const neighbors = findKNearestNeighbors(pt, dataset, k);
+    for (const n of neighbors) {
+      if (dist(n) < radiusHover) {
+        hovered = n;
+        break;
+      }
+    }
+    // Else check all points for tooltip
+    if (!hovered) {
+      for (const pnt of dataset) {
+        if (dist(pnt) < radiusHover) {
+          hovered = pnt;
+          break;
+        }
+      }
+    }
+
+    if (hovered) {
+      showTooltip(hovered.x, hovered.y, `Class ${hovered.cls}`);
+    } else {
+      hideTooltip();
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    hideTooltip();
+  });
+
+  // Initial call
+  requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>

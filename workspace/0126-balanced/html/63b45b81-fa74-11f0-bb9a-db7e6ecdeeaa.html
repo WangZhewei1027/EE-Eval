@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Random Forest Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  #canvas {
+    border: 1px solid #ccc;
+    margin-top: 20px;
+    display: block;
+  }
+  #controls {
+    margin-bottom: 10px;
+  }
+  input[type=number] {
+    width: 60px;
+  }
+  #description {
+    max-width: 800px;
+    margin-bottom: 20px;
+  }
+  #legend {
+    margin-top: 10px;
+  }
+  .tree-point {
+    stroke: black;
+    stroke-width: 1px;
+  }
+</style>
+</head>
+<body>
+<h1>Random Forest Concept Demonstration</h1>
+<div id="description">
+  <p>
+    This visualization demonstrates the concept of <strong>Random Forest</strong>, an ensemble learning method 
+    used for classification. A Random Forest builds multiple decision trees using random subsets of data 
+    and features, and combines their results to improve prediction accuracy and control overfitting.
+  </p>
+  <p>
+    You can generate a random dataset of points belonging to two classes, train multiple decision trees on random 
+    bootstrap samples with randomized feature splits, and see how each tree (colored decision regions) votes to classify 
+    points in the 2D feature space.
+  </p>
+</div>
+
+<div id="controls">
+  <label>Number of points per class: <input id="pointsPerClass" type="number" min="10" max="200" value="50" /></label>
+  <label>Number of trees: <input id="numTrees" type="number" min="1" max="25" value="5" /></label>
+  <label>Max tree depth: <input id="maxDepth" type="number" min="1" max="10" value="4" /></label>
+  <button id="generateBtn">Generate & Train</button>
+</div>
+
+<canvas id="canvas" width="600" height="600"></canvas>
+<div id="legend">
+  <strong>Legend:</strong>
+  <span style="background:#e06666;color:#fff;padding:2px 6px;border-radius:3px;">Class A</span> 
+  <span style="background:#6fa8dc;color:#fff;padding:2px 6px;border-radius:3px;margin-left:12px;">Class B</span>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Colors for classes
+  const classColors = {
+    A: '#e06666',
+    B: '#6fa8dc'
+  };
+
+  // Background colors for vote scoring weighted regions
+  const regionColors = {
+    A: 'rgba(224, 102, 102, 0.2)',
+    B: 'rgba(111, 168, 220, 0.2)'
+  };
+
+  // Generate synthetic 2D data with two classes
+  function generateData(pointsPerClass) {
+    const data = [];
+    // Class A centered near (150, 400)
+    for (let i = 0; i < pointsPerClass; i++) {
+      const x = 100 + 100 * Math.random();
+      const y = 350 + 100 * Math.random() + 20 * Math.sin(x / 20);
+      data.push({ x, y, label: 'A' });
+    }
+    // Class B centered near (400, 150)
+    for (let i = 0; i < pointsPerClass; i++) {
+      const x = 350 + 100 * Math.random();
+      const y = 100 + 100 * Math.random() + 20 * Math.cos(x / 20);
+      data.push({ x, y, label: 'B' });
+    }
+    return data;
+  }
+
+  // Utilities for splitting data
+
+  // Gini impurity for binary classes A/B
+  function giniImpurity(subset) {
+    if (subset.length === 0) return 0;
+    const countA = subset.filter(p => p.label === 'A').length;
+    const countB = subset.length - countA;
+    const pA = countA / subset.length;
+    const pB = countB / subset.length;
+    return 1 - (pA * pA + pB * pB);
+  }
+
+  // Find best split on a single feature for a set of points
+  // Features are x or y coordinate.
+  // Random Forest selects random subset of features — here 1 out of 2 features.
+  function findBestSplit(points, featureIndices) {
+    // featureIndices: array like [0] or [1], corresponding to x or y
+    let bestFeature = null;
+    let bestThreshold = null;
+    let bestImpurity = Infinity;
+    let bestLeft = null;
+    let bestRight = null;
+
+    for (const f of featureIndices) {
+      // Extract feature values and sort points by that
+      const sorted = points.slice().sort((a, b) => (f === 0 ? a.x - b.x : a.y - b.y));
+      const featureVals = sorted.map(p => (f === 0 ? p.x : p.y));
+
+      // Try splitting points between adjacent different feature values
+      for (let i = 1; i < sorted.length; i++) {
+        if (featureVals[i] === featureVals[i - 1]) continue;
+        const threshold = (featureVals[i] + featureVals[i - 1]) / 2;
+        const left = sorted.filter(p => (f === 0 ? p.x <= threshold : p.y <= threshold));
+        const right = sorted.filter(p => (f === 0 ? p.x > threshold : p.y > threshold));
+        // calculate weighted gini
+        const impurity = (left.length * giniImpurity(left) + right.length * giniImpurity(right)) / points.length;
+        if (impurity < bestImpurity) {
+          bestImpurity = impurity;
+          bestFeature = f;
+          bestThreshold = threshold;
+          bestLeft = left;
+          bestRight = right;
+        }
+      }
+    }
+    return {
+      feature: bestFeature,
+      threshold: bestThreshold,
+      left: bestLeft,
+      right: bestRight,
+      impurity: bestImpurity,
+    };
+  }
+
+  // Decision tree node
+  class TreeNode {
+    constructor(points, depth, maxDepth) {
+      this.points = points;
+      this.depth = depth;
+      this.maxDepth = maxDepth;
+      this.isLeaf = false;
+      this.left = null;
+      this.right = null;
+      this.feature = null;
+      this.threshold = null;
+      this.prediction = null;
+    }
+
+    // For random forest:
+    // Randomly select sqrt(total features) features to consider for splitting.
+    // Here total features = 2 (x, y), sqrt=1.4 ~1, so we'll just pick randomly 1 feature (x or y).
+    build() {
+      const countA = this.points.filter(p => p.label === 'A').length;
+      const countB = this.points.length - countA;
+
+      // If all points same class or max depth reached, make leaf node
+      if (countA === 0 || countB === 0 || this.depth >= this.maxDepth) {
+        this.isLeaf = true;
+        this.prediction = countA >= countB ? 'A' : 'B';
+        return;
+      }
+
+      // Randomly pick subset of features (1 feature, x or y)
+      const features = [0, 1];
+      const randomFeature = features[Math.floor(Math.random() * features.length)];
+      const split = findBestSplit(this.points, [randomFeature]);
+
+      // If no valid split found, leaf
+      if (!split || split.impurity === 0 || !split.left.length || !split.right.length) {
+        this.isLeaf = true;
+        this.prediction = countA >= countB ? 'A' : 'B';
+        return;
+      }
+
+      this.feature = split.feature;
+      this.threshold = split.threshold;
+
+      // Build child nodes recursively
+      this.left = new TreeNode(split.left, this.depth + 1, this.maxDepth);
+      this.right = new TreeNode(split.right, this.depth + 1, this.maxDepth);
+      this.isLeaf = false;
+
+      this.left.build();
+      this.right.build();
+    }
+
+    // Predict class label for a point {x,y}
+    predict(point) {
+      if (this.isLeaf) return this.prediction;
+      if (this.feature === 0) {
+        if (point.x <= this.threshold) return this.left.predict(point);
+        else return this.right.predict(point);
+      } else {
+        if (point.y <= this.threshold) return this.left.predict(point);
+        else return this.right.predict(point);
+      }
+    }
+  }
+
+  // Random Forest Classifier
+  class RandomForest {
+    constructor(numTrees, maxDepth) {
+      this.numTrees = numTrees;
+      this.maxDepth = maxDepth;
+      this.trees = [];
+    }
+
+    // Bootstrap sample with replacement from data
+    bootstrapSample(data) {
+      const n = data.length;
+      const sample = [];
+      for (let i = 0; i < n; i++) {
+        const idx = Math.floor(Math.random() * n);
+        sample.push(data[idx]);
+      }
+      return sample;
+    }
+
+    train(data) {
+      this.trees = [];
+      for (let t = 0; t < this.numTrees; t++) {
+        const sample = this.bootstrapSample(data);
+        const tree = new TreeNode(sample, 0, this.maxDepth);
+        tree.build();
+        this.trees.push(tree);
+      }
+    }
+
+    // Predict majority vote of all trees
+    predict(point) {
+      const votes = { A: 0, B: 0 };
+      for (const tree of this.trees) {
+        const p = tree.predict(point);
+        votes[p]++;
+      }
+      return votes.A >= votes.B ? 'A' : 'B';
+    }
+
+    // Get votes count for both classes (useful for coloring)
+    predictVotes(point) {
+      const votes = { A: 0, B: 0 };
+      for (const tree of this.trees) {
+        const p = tree.predict(point);
+        votes[p]++;
+      }
+      return votes;
+    }
+  }
+
+  // Draw the dataset points on canvas
+  function drawPoints(data) {
+    for (const p of data) {
+      ctx.beginPath();
+      ctx.fillStyle = classColors[p.label];
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 0.8;
+      ctx.ellipse(p.x, p.y, 5, 5, 0, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // Visualize decision boundaries by coloring pixels by Random Forest vote
+  // For performance, we sample every few pixels (pixelStep)
+  function drawDecisionBoundaries(rf, pixelStep = 8) {
+    const imgData = ctx.createImageData(width, height);
+    const data = imgData.data;
+
+    // Go through pixels on a grid and fill color depending on forest vote
+    for (let y = 0; y < height; y += pixelStep) {
+      for (let x = 0; x < width; x += pixelStep) {
+        const votes = rf.predictVotes({ x, y });
+        const totalVotes = rf.numTrees;
+
+        // Calculate weighted color between classes based on vote ratio
+        const ratioA = votes.A / totalVotes;
+        const ratioB = votes.B / totalVotes;
+
+        // Blend color with white background for subtlety
+        const r = Math.round(
+          (classColors.A.substring(1, 3) * 1 * ratioA) + 
+          (classColors.B.substring(1, 3) * 1 * ratioB) + 
+          255 * (1 - ratioA - ratioB)
+        );
+
+        // Calculate final blended color more precisely
+        // We'll blend the fixed class colors with white by ratio
+        const blendColor = (c, ratio) => {
+          const val = parseInt(c.substring(1, 3), 16);
+          return val * ratio + 255 * (1 - ratio);
+        };
+        const blendColorG = (c, ratio) => {
+          const val = parseInt(c.substring(3, 5), 16);
+          return val * ratio + 255 * (1 - ratio);
+        };
+        const blendColorB = (c, ratio) => {
+          const val = parseInt(c.substring(5, 7), 16);
+          return val * ratio + 255 * (1 - ratio);
+        };
+
+        const rF = blendColor(classColors.A, ratioA) + blendColor(classColors.B, ratioB);
+        const gF = blendColorG(classColors.A, ratioA) + blendColorG(classColors.B, ratioB);
+        const bF = blendColorB(classColors.A, ratioA) + blendColorB(classColors.B, ratioB);
+
+        let finalR = blendColor(classColors.A, ratioA) * ratioA + blendColor(classColors.B, ratioB) * ratioB + 255 * (1 - (ratioA + ratioB));
+        let finalG = blendColorG(classColors.A, ratioA) * ratioA + blendColorG(classColors.B, ratioB) * ratioB + 255 * (1 - (ratioA + ratioB));
+        let finalB = blendColorB(classColors.A, ratioA) * ratioA + blendColorB(classColors.B, ratioB) * ratioB + 255 * (1 - (ratioA + ratioB));
+
+        // To simplify, calculate weighted average:
+
+        const weightedColor = (colorA, colorB, wA, wB) => {
+          let rA = parseInt(colorA.substring(1, 3), 16);
+          let gA = parseInt(colorA.substring(3, 5), 16);
+          let bA = parseInt(colorA.substring(5, 7), 16);
+
+          let rB = parseInt(colorB.substring(1, 3), 16);
+          let gB = parseInt(colorB.substring(3, 5), 16);
+          let bB = parseInt(colorB.substring(5, 7), 16);
+
+          let r = Math.round(rA * wA + rB * wB + 255 * (1 - wA - wB));
+          let g = Math.round(gA * wA + gB * wB + 255 * (1 - wA - wB));
+          let b = Math.round(bA * wA + bB * wB + 255 * (1 - wA - wB));
+
+          return [r, g, b];
+        };
+
+        const [rC, gC, bC] = weightedColor(classColors.A, classColors.B, ratioA, ratioB);
+
+        // fill pixelStep x pixelStep pixels
+        for (let dy = 0; dy < pixelStep; dy++) {
+          for (let dx = 0; dx < pixelStep; dx++) {
+            const px = x + dx;
+            const py = y + dy;
+            if (px >= width || py >= height) continue;
+            const idx = (py * width + px) * 4;
+            data[idx] = rC; // R
+            data[idx + 1] = gC; // G
+            data[idx + 2] = bC; // B
+            data[idx + 3] = 255; // alpha
+          }
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // Clear canvas
+  function clearCanvas() {
+    ctx.clearRect(0, 0, width, height);
+  }
+
+  // Main interaction
+  const generateBtn = document.getElementById('generateBtn');
+  const pointsPerClassInput = document.getElementById('pointsPerClass');
+  const numTreesInput = document.getElementById('numTrees');
+  const maxDepthInput = document.getElementById('maxDepth');
+
+  let data = [];
+  let rf = null;
+
+  // Draw all: boundaries + points
+  function drawAll() {
+    clearCanvas();
+    // Draw background decision boundary
+    drawDecisionBoundaries(rf);
+    // Draw data points on top
+    drawPoints(data);
+  }
+
+  generateBtn.addEventListener('click', () => {
+    const pointsPerClass = Math.max(10, Math.min(200, +pointsPerClassInput.value));
+    const numTrees = Math.max(1, Math.min(25, +numTreesInput.value));
+    const maxDepth = Math.max(1, Math.min(10, +maxDepthInput.value));
+
+    data = generateData(pointsPerClass);
+    rf = new RandomForest(numTrees, maxDepth);
+    rf.train(data);
+    drawAll();
+  });
+
+  // Initial load
+  generateBtn.click();
+})();
+</script>
+</body>
+</html>

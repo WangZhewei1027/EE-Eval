@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Congestion Control Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f4f6f8;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+  }
+  #network {
+    margin: 20px auto;
+    width: 90%;
+    max-width: 900px;
+    border: 2px solid #666;
+    border-radius: 10px;
+    padding: 10px;
+    background: white;
+    min-height: 300px;
+    position: relative;
+    overflow: hidden;
+  }
+  .queue {
+    border: 2px solid #0077cc;
+    border-radius: 8px;
+    width: 300px;
+    height: 180px;
+    margin: 10px auto;
+    position: relative;
+    background: #e6f0fa;
+  }
+  .queue h3 {
+    margin: 5px;
+    text-align: center;
+    font-weight: 600;
+    color: #004a99;
+  }
+  .packet {
+    width: 25px;
+    height: 15px;
+    background-color: #0099ff;
+    border-radius: 3px;
+    margin: 2px;
+    display: inline-block;
+    position: relative;
+    box-shadow: 0 0 3px #007acc;
+  }
+  #stats {
+    max-width: 900px;
+    margin: 20px auto;
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    padding: 15px;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  #controls {
+    max-width: 900px;
+    margin: 0 auto 20px auto;
+    text-align: center;
+  }
+  #controls button {
+    padding: 10px 18px;
+    margin: 5px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background-color: #0077cc;
+    color: white;
+    transition: background-color 0.2s ease;
+  }
+  #controls button:hover:not(:disabled) {
+    background-color: #005fa3;
+  }
+  #controls button:disabled {
+    background-color: #888;
+    cursor: not-allowed;
+  }
+  #explanation {
+    max-width: 900px;
+    margin: 0 auto 30px auto;
+    background: #e3f2fd;
+    border-radius: 10px;
+    border: 1px solid #90caf9;
+    padding: 15px;
+    font-size: 14px;
+    color: #0d47a1;
+  }
+</style>
+</head>
+<body>
+
+<h1>Congestion Control Demonstration</h1>
+
+<div id="explanation">
+  <strong>What is Congestion Control?</strong><br />
+  Congestion control is a network mechanism to prevent excessive data from overwhelming network devices (routers, switches), avoiding packet loss and delays.
+  This demo shows how a sender's transmission rate adjusts based on network congestion.<br />
+  <br />
+  <em>Blue boxes (packets) move from Sender through the Router Queue (limited capacity) to Receiver.</em><br />
+  When the queue fills (congestion happens), the sender reduces its sending rate ("Throttle"). When the queue empties,
+  the sender increases the rate ("Additive Increase") to use available capacity efficiently.<br />
+  <br />
+  This models TCP's congestion control principles: Slow Start, Congestion Avoidance, and reacting to packet loss/congestion.
+</div>
+
+<div id="network" aria-label="Network congestion control animated demonstration">
+  <div class="queue" id="senderQueue">
+    <h3>Sender Buffer</h3>
+    <div id="senderPackets"></div>
+  </div>
+
+  <div class="queue" id="routerQueue" style="margin-top: 30px;">
+    <h3>Router Queue (Capacity: 10 packets)</h3>
+    <div id="routerPackets"></div>
+  </div>
+
+  <div class="queue" id="receiverBuffer" style="margin-top: 30px;">
+    <h3>Receiver</h3>
+    <div id="receiverPackets"></div>
+  </div>
+</div>
+
+<div id="stats" aria-live="polite" aria-atomic="true">
+  <strong>Statistics:</strong><br />
+  <div>Current Sending Rate: <span id="sendRate">1</span> packets/sec</div>
+  <div>Router Queue Size: <span id="queueSize">0</span> / 10 packets</div>
+  <div>Packets Sent: <span id="packetsSent">0</span></div>
+  <div>Packets Received: <span id="packetsReceived">0</span></div>
+  <div>Packets Dropped (due to congestion): <span id="packetsDropped">0</span></div>
+  <div>Current State: <span id="currentState">Slow Start</span></div>
+</div>
+
+<div id="controls">
+  <button id="startBtn" aria-label="Start simulation">Start</button>
+  <button id="pauseBtn" disabled aria-label="Pause simulation">Pause</button>
+  <button id="resetBtn" disabled aria-label="Reset simulation">Reset</button>
+</div>
+
+<script>
+(() => {
+// Constants
+const ROUTER_CAPACITY = 10;
+const MAX_SEND_RATE = 16; // Maximum packets per second allowed (for demo)
+const MIN_SEND_RATE = 0.25; // Minimum send rate (packets/sec before we stop)
+const SEND_RATE_INCREMENT_SLOW_START = 1; // Increase per RTT in slow start (doubling approx)
+const SEND_RATE_INCREMENT_CONGESTION_AVOIDANCE = 0.2; // Additive increase per RTT
+
+// Elements
+const senderPacketsEl = document.getElementById("senderPackets");
+const routerPacketsEl = document.getElementById("routerPackets");
+const receiverPacketsEl = document.getElementById("receiverPackets");
+const sendRateEl = document.getElementById("sendRate");
+const queueSizeEl = document.getElementById("queueSize");
+const packetsSentEl = document.getElementById("packetsSent");
+const packetsReceivedEl = document.getElementById("packetsReceived");
+const packetsDroppedEl = document.getElementById("packetsDropped");
+const currentStateEl = document.getElementById("currentState");
+
+const startBtn = document.getElementById("startBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+const resetBtn = document.getElementById("resetBtn");
+
+// State variables
+let sendRate = 1.0; // packets per second
+let senderBuffer = [];
+let routerQueue = [];
+let receiverBuffer = [];
+
+let packetsSent = 0;
+let packetsReceived = 0;
+let packetsDropped = 0;
+
+// Simulation Control
+let isRunning = false;
+let simInterval = null;
+let rtt = 1000; // round trip time approx 1 second
+
+// Congestion Control States
+const STATES = {
+  SLOW_START: "Slow Start",
+  CONGESTION_AVOIDANCE: "Congestion Avoidance",
+  FAST_RECOVERY: "Fast Recovery"
+};
+
+let currentState = STATES.SLOW_START;
+
+// Packet ID generator
+let nextPacketId = 1;
+
+// Utility to create a packet element
+function createPacketElement(id) {
+  const span = document.createElement("span");
+  span.className = "packet";
+  span.title = `Packet ${id}`;
+  span.setAttribute("aria-label", `Packet ${id}`);
+  span.dataset.id = id;
+  return span;
+}
+
+function renderQueues() {
+  // Clear all
+  senderPacketsEl.innerHTML = "";
+  routerPacketsEl.innerHTML = "";
+  receiverPacketsEl.innerHTML = "";
+
+  // Display sender buffer (show packets waiting to be sent)
+  senderBuffer.forEach((pktId) => {
+    senderPacketsEl.appendChild(createPacketElement(pktId));
+  });
+
+  // Display router queue
+  routerQueue.forEach((pktId) => {
+    routerPacketsEl.appendChild(createPacketElement(pktId));
+  });
+
+  // Display receiver packets (just show count as "received", so put fixed 10 max)
+  // We'll show last 10 packets received for visualization
+  let lastPackets = receiverBuffer.slice(-10);
+  lastPackets.forEach((pktId) => {
+    receiverPacketsEl.appendChild(createPacketElement(pktId));
+  });
+}
+
+function updateStats() {
+  sendRateEl.textContent = sendRate.toFixed(2);
+  queueSizeEl.textContent = routerQueue.length;
+  packetsSentEl.textContent = packetsSent;
+  packetsReceivedEl.textContent = packetsReceived;
+  packetsDroppedEl.textContent = packetsDropped;
+  currentStateEl.textContent = currentState;
+}
+
+// Logic for sending packets from sender buffer to router queue based on current sendRate
+// The sender creates packets at its current send rate (packets/sec)
+function sendPackets(deltaTimeMs) {
+  // Calculate how many packets to send in this tick (deltaTimeMs in ms)
+  // sendRate is packets/sec => packets/ms = sendRate / 1000
+  let packetsToSend = sendRate * (deltaTimeMs / 1000);
+  // We'll accumulate fractional packets each tick
+  if (typeof sendPackets.packetFraction === "undefined") {
+    sendPackets.packetFraction = 0;
+  }
+  packetsToSend += sendPackets.packetFraction;
+  let integerPackets = Math.floor(packetsToSend);
+  sendPackets.packetFraction = packetsToSend - integerPackets;
+
+  for (let i=0; i<integerPackets; i++) {
+    // Create new packet in sender buffer (sender generates packets)
+    senderBuffer.push(nextPacketId++);
+  }
+}
+
+// Logic for moving packets from sender buffer to router queue if router not full
+function transferToRouter() {
+  // Try to move packet from sender buffer to router queue
+  while (senderBuffer.length > 0 && routerQueue.length < ROUTER_CAPACITY) {
+    let pkt = senderBuffer.shift();
+    routerQueue.push(pkt);
+    packetsSent++;
+  }
+
+  // If router queue is full, packets in sender buffer start accumulating (simulating delay)
+  // However, if router is full, new packets cannot enter router and are effectively "congested".
+  // In TCP, sender reduces send rate upon congestion event (here simulated below).
+}
+
+const SEND_INTERVAL_MS = 100; // 100ms tick for smoother animations
+
+// Logic for router sending packets to receiver, one packet per tick if any
+function routerToReceiver() {
+  if (routerQueue.length > 0) {
+    // Simulate router output rate, fixed/output link speed
+    let pkt = routerQueue.shift();
+    receiverBuffer.push(pkt);
+    packetsReceived++;
+  }
+}
+
+// Detect congestion: if routerQueue is at capacity (can be treated as congestion signal)
+function checkCongestion() {
+  return routerQueue.length >= ROUTER_CAPACITY;
+}
+
+// Congestion control state update logic
+function updateCongestionControl() {
+  // Simple model:
+  // - If congestion detected => packet drop => reduce send rate multiplicatively and enter slow start or fast recovery
+  // - If no congestion for several RTTs => increase send rate additively (congestion avoidance)
+  // This is simplified from TCP Reno behavior.
+
+  if (checkCongestion()) {
+    // Congestion occurred
+    packetsDropped += senderBuffer.length; // Excess packets stuck waiting will be dropped for simplicity
+    senderBuffer = [];
+
+    if (currentState === STATES.SLOW_START) {
+      // Slow start: multiplicative decrease
+      sendRate /= 2;
+      if (sendRate < MIN_SEND_RATE) sendRate = MIN_SEND_RATE;
+      currentState = STATES.CONGESTION_AVOIDANCE;
+    } else if (currentState === STATES.CONGESTION_AVOIDANCE) {
+      // Enter slow start on congestion repeatedly
+      sendRate /= 2;
+      if (sendRate < MIN_SEND_RATE) sendRate = MIN_SEND_RATE;
+      // stay in congestion avoidance or slow start?
+      currentState = STATES.SLOW_START;
+    } else {
+      // Fast recovery (not fully modeled here) just reduce rate
+      sendRate /= 2;
+      if (sendRate < MIN_SEND_RATE) sendRate = MIN_SEND_RATE;
+      currentState = STATES.CONGESTION_AVOIDANCE;
+    }
+  } else {
+    // No congestion detected. Increase send rate depending on state.
+    if (currentState === STATES.SLOW_START) {
+      // exponential increase approx: double each RTT
+      // We'll increment sendRate by 1 pkt/sec per RTT
+      sendRate += SEND_RATE_INCREMENT_SLOW_START * (SEND_INTERVAL_MS / rtt);
+      if (sendRate >= MAX_SEND_RATE) {
+        sendRate = MAX_SEND_RATE;
+        currentState = STATES.CONGESTION_AVOIDANCE;
+      }
+    } else if (currentState === STATES.CONGESTION_AVOIDANCE) {
+      // Additive increase
+      sendRate += SEND_RATE_INCREMENT_CONGESTION_AVOIDANCE * (SEND_INTERVAL_MS / rtt);
+      if (sendRate > MAX_SEND_RATE) sendRate = MAX_SEND_RATE;
+    }
+  }
+}
+
+function simulationStep(deltaTimeMs) {
+  if (!isRunning) return;
+
+  // 1) Sender generates packets based on current send rate
+  sendPackets(deltaTimeMs);
+
+  // 2) Send packets from sender buffer to router queue if space
+  transferToRouter();
+
+  // 3) Router outputs packets to receiver buffer
+  routerToReceiver();
+
+  // 4) Update congestion control based on router queue state
+  updateCongestionControl();
+
+  // 5) Render update
+  renderQueues();
+  updateStats();
+}
+
+let lastTime = null;
+
+function gameLoop(timestamp) {
+  if (!lastTime) lastTime = timestamp;
+  const delta = timestamp - lastTime;
+  lastTime = timestamp;
+
+  simulationStep(delta);
+
+  if (isRunning) {
+    requestAnimationFrame(gameLoop);
+  }
+}
+
+function startSimulation() {
+  if (isRunning) return;
+
+  isRunning = true;
+  lastTime = null;
+  requestAnimationFrame(gameLoop);
+  startBtn.disabled = true;
+  pauseBtn.disabled = false;
+  resetBtn.disabled = false;
+}
+
+function pauseSimulation() {
+  if (!isRunning) return;
+  isRunning = false;
+  startBtn.disabled = false;
+  pauseBtn.disabled = true;
+  resetBtn.disabled = false;
+}
+
+function resetSimulation() {
+  isRunning = false;
+  senderBuffer = [];
+  routerQueue = [];
+  receiverBuffer = [];
+  packetsSent = 0;
+  packetsReceived = 0;
+  packetsDropped = 0;
+  sendRate = 1.0;
+  currentState = STATES.SLOW_START;
+  nextPacketId = 1;
+  sendPackets.packetFraction = 0;
+
+  renderQueues();
+  updateStats();
+
+  startBtn.disabled = false;
+  pauseBtn.disabled = true;
+  resetBtn.disabled = true;
+}
+
+startBtn.addEventListener("click", startSimulation);
+pauseBtn.addEventListener("click", pauseSimulation);
+resetBtn.addEventListener("click", resetSimulation);
+
+// Initial render
+resetSimulation();
+
+})();
+</script>
+
+</body>
+</html>

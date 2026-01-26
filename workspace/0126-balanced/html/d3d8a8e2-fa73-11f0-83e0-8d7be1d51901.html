@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Amortized Analysis — Interactive Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 20px; color:#111; background: #f6f8fb; }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  p.lead { margin: 4px 0 14px; color:#333; }
+  .container { display: grid; grid-template-columns: 360px 1fr; gap: 18px; align-items: start; }
+  .panel { background: #fff; padding: 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(27,31,35,0.06); }
+  label { display:block; margin-top: 8px; font-weight:600; font-size:13px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  button { padding:8px 10px; border-radius:6px; border:1px solid #c7cfe0; background:#f7fbff; cursor:pointer; }
+  button.primary { background:#1f7aed; color:white; border-color:#1660d6; }
+  button:active { transform: translateY(1px); }
+  input[type=number], select { padding:6px 8px; border-radius:6px; border:1px solid #d6dce8; }
+  .small { font-size:13px; color:#555; margin-top:8px; }
+  canvas { width:100%; height:260px; background: linear-gradient(#fff,#fbfdff); border-radius:6px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
+  .stats { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .stat { background:#f3f7ff; padding:8px 10px; border-radius:6px; font-weight:600; color:#10307a; }
+  .explain { margin-top:12px; font-size:14px; line-height:1.5; color:#222; }
+  .explain .muted { color:#555; font-weight:600; margin-top:8px; display:block; }
+  footer { margin-top:16px; font-size:12px; color:#444; }
+  .legend { display:flex; gap:8px; align-items:center; margin-top:8px; font-size:13px; }
+  .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
+  .controls-row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+</style>
+</head>
+<body>
+  <h1>Amortized Analysis — Interactive Demos</h1>
+  <p class="lead">See how average (amortized) cost per operation differs from the worst-case cost by simulating common examples: dynamic array (doubling) and binary counter.</p>
+
+  <div class="container">
+    <div class="panel" style="position:sticky; top:20px;">
+      <label>Choose demo</label>
+      <select id="demoSelect">
+        <option value="dynamic">Dynamic array (doubling resize)</option>
+        <option value="binary">Binary counter (increment flips)</option>
+      </select>
+
+      <div id="dynamicControls">
+        <label>Starting capacity</label>
+        <input id="startCapacity" type="number" min="1" value="1" />
+        <label>Resize strategy</label>
+        <select id="resizeStrategy">
+          <option value="double">Double capacity (×2)</option>
+          <option value="increment">Grow by 1 (bad strategy)</option>
+          <option value="factor1.5">Grow by 1.5 (approx)</option>
+        </select>
+        <label>Number of push operations to simulate</label>
+        <input id="opsCount" type="number" min="1" value="100" />
+      </div>
+
+      <div id="binaryControls" style="display:none;">
+        <label>Number of bits in counter</label>
+        <input id="bits" type="number" min="1" value="10" />
+        <label>Number of increment operations to simulate</label>
+        <input id="opsCountBinary" type="number" min="1" value="100" />
+      </div>
+
+      <div class="controls">
+        <button id="stepBtn">Step</button>
+        <button id="runBtn" class="primary">Run</button>
+        <button id="fastRunBtn">Fast Run</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+
+      <div class="controls-row">
+        <label style="margin:0;">Speed</label>
+        <input id="delay" type="number" min="0" value="60" style="width:80px" /> ms per step
+      </div>
+
+      <div class="small">Tips: Use "double" growth to see amortized O(1) push. Use "increment" to see O(n) amortized push (average ≈ O(n)). Binary counter shows amortized cost O(1) because most increments flip few bits.</div>
+
+      <div class="stats" id="statRow" >
+        <div class="stat" id="totalCost">Total: 0</div>
+        <div class="stat" id="lastCost">Last: 0</div>
+        <div class="stat" id="avgCost">Amortized: 0.00</div>
+        <div class="stat" id="opCount">Ops: 0</div>
+      </div>
+
+      <div class="legend">
+        <div><span class="swatch" style="background:#2479ff"></span> per-op cost</div>
+        <div><span class="swatch" style="background:#27c281"></span> running average</div>
+      </div>
+
+      <div class="explain">
+        <span class="muted">What's happening?</span>
+        <div id="explainText">Select a demo and run operations. Watch the cost each operation (bars) and the running average (green line). In amortized analysis we ask: over a sequence of operations, what is the average cost per operation in the worst case?</div>
+      </div>
+
+      <footer>
+        Amortized techniques: aggregate, accounting, potential. Examples here visualize aggregate (total cost / #ops) and show why doubling gives amortized O(1).
+      </footer>
+    </div>
+
+    <div class="panel">
+      <canvas id="chart" width="800" height="260"></canvas>
+      <div style="margin-top:10px; font-size:13px; color:#444;">
+        Chart: blue bars = cost of each operation (vertical). Green line = running average (amortized cost).
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Utilities
+  const $ = id => document.getElementById(id);
+  const chart = $('chart');
+  const ctx = chart.getContext('2d');
+
+  // State
+  let demo = 'dynamic';
+  let running = false;
+  let timer = null;
+  let stepDelay = 60;
+  let maxBars = 400;
+
+  // Simulation data arrays
+  let costs = [];   // per-op costs
+  let avg = [];     // running average after each op
+  let opIndex = 0;
+
+  // Dynamic array state
+  let size = 0, capacity = 1;
+  let strategy = 'double';
+  let startCap = 1;
+  let opsToDo = 100;
+
+  // Binary counter state
+  let bits = 10;
+  let counter = []; // array of 0/1
+  let opsBinary = 100;
+
+  // DOM elements
+  const demoSelect = $('demoSelect');
+  const startCapacity = $('startCapacity');
+  const resizeStrategy = $('resizeStrategy');
+  const opsCount = $('opsCount');
+  const bitsInput = $('bits');
+  const opsCountBinary = $('opsCountBinary');
+  const stepBtn = $('stepBtn');
+  const runBtn = $('runBtn');
+  const fastRunBtn = $('fastRunBtn');
+  const resetBtn = $('resetBtn');
+  const delayInput = $('delay');
+  const totalCostEl = $('totalCost');
+  const lastCostEl = $('lastCost');
+  const avgCostEl = $('avgCost');
+  const opCountEl = $('opCount');
+  const explainText = $('explainText');
+  const dynamicControls = $('dynamicControls');
+  const binaryControls = $('binaryControls');
+
+  // Canvas drawing helpers
+  function clearCanvas() {
+    ctx.clearRect(0,0,chart.width, chart.height);
+  }
+  function draw() {
+    clearCanvas();
+    const w = chart.width;
+    const h = chart.height;
+    const n = costs.length;
+    if (n === 0) return;
+
+    // compute scale
+    const maxCost = Math.max(1, Math.max(...costs));
+    // We'll ensure bars fit horizontally: show last up to maxBars
+    const showStart = Math.max(0, n - maxBars);
+    const shown = costs.slice(showStart);
+    const shownAvg = avg.slice(showStart);
+    const bw = Math.max(2, Math.floor(w / Math.max(1, shown.length)));
+    // draw bars
+    for (let i = 0; i < shown.length; i++) {
+      const c = shown[i];
+      const x = i * bw;
+      const barH = Math.round((c / maxCost) * (h - 30));
+      ctx.fillStyle = '#2479ff';
+      ctx.fillRect(x + 1, h - barH - 20, bw - 2, barH);
+    }
+    // draw average curve (green) smoothed
+    ctx.beginPath();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#27c281';
+    for (let i = 0; i < shownAvg.length; i++) {
+      const a = shownAvg[i];
+      const x = i * bw + (bw / 2);
+      const y = h - (a / maxCost) * (h - 30) - 20;
+      if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // axes labels: right side show maxCost
+    ctx.fillStyle = '#333';
+    ctx.font = '12px system-ui, Arial';
+    ctx.fillText('max cost ≈ ' + maxCost, 6, 14);
+    ctx.fillText('ops shown: ' + shown.length, 6, 28);
+  }
+
+  // Simulation functions
+  function resetSimulation() {
+    costs = [];
+    avg = [];
+    opIndex = 0;
+    running = false;
+    clearTimeout(timer);
+    timer = null;
+    // pick demo values from inputs
+    demo = demoSelect.value;
+    stepDelay = Number(delayInput.value) || 0;
+
+    if (demo === 'dynamic') {
+      dynamicControls.style.display = '';
+      binaryControls.style.display = 'none';
+      size = 0;
+      startCap = Math.max(1, parseInt(startCapacity.value,10) || 1);
+      capacity = startCap;
+      strategy = resizeStrategy.value;
+      opsToDo = Math.max(1, parseInt(opsCount.value,10) || 1);
+      explainText.innerHTML = 'Dynamic array: each push costs 1 normally. When the array is full it must be resized: allocate new array and copy all elements (cost proportional to capacity). Doubling (×2) gives amortized O(1) pushes; growing by 1 gives amortized O(n) pushes.';
+    } else {
+      dynamicControls.style.display = 'none';
+      binaryControls.style.display = '';
+      bits = Math.max(1, parseInt(bitsInput.value,10) || 1);
+      counter = new Array(bits).fill(0);
+      opsBinary = Math.max(1, parseInt(opsCountBinary.value,10) || 1);
+      explainText.innerHTML = 'Binary counter: increment flips trailing 1s to 0s and the first 0 to 1. The cost is number of bit flips. Over many increments the amortized number of bit flips per increment is O(1).';
+    }
+
+    updateStats();
+    draw();
+  }
+
+  function updateStats() {
+    const total = costs.reduce((a,b)=>a+b,0);
+    const last = costs.length ? costs[costs.length-1] : 0;
+    const amort = costs.length ? (total / costs.length) : 0;
+    totalCostEl.textContent = 'Total: ' + total;
+    lastCostEl.textContent = 'Last: ' + last;
+    avgCostEl.textContent = 'Amortized: ' + amort.toFixed(2);
+    opCountEl.textContent = 'Ops: ' + costs.length;
+  }
+
+  function stepOnce() {
+    if (demo === 'dynamic') {
+      // push operation
+      let cost = 1; // base cost to insert
+      if (size >= capacity) {
+        // resize cost: we copy 'capacity' items
+        cost += capacity;
+        // apply growth strategy
+        if (strategy === 'double') {
+          capacity = Math.max(1, capacity * 2);
+        } else if (strategy === 'increment') {
+          capacity = capacity + 1;
+        } else if (strategy === 'factor1.5') {
+          capacity = Math.floor(capacity * 1.5) + 1;
+        } else {
+          capacity = capacity * 2;
+        }
+      }
+      size++;
+      costs.push(cost);
+    } else {
+      // binary increment
+      let cost = 0;
+      for (let i = 0; i < counter.length; i++) {
+        cost++;
+        if (counter[i] === 0) {
+          counter[i] = 1;
+          break;
+        } else {
+          counter[i] = 0;
+        }
+        // if we flipped all bits and they were all 1, we've wrapped around
+      }
+      costs.push(cost);
+    }
+    // update running average
+    const total = costs.reduce((a,b)=>a+b,0);
+    avg.push(total / costs.length);
+    opIndex++;
+    updateStats();
+    draw();
+  }
+
+  function runSteps(n, fast=false) {
+    if (running) return;
+    running = true;
+    let remaining = n;
+    function loop() {
+      if (!running) return;
+      if (remaining <= 0) {
+        running = false;
+        return;
+      }
+      // do one step
+      stepOnce();
+      remaining--;
+      if (fast) {
+        // do batch quickly to avoid UI thrashing
+        // run many steps per animation frame if possible
+        const batch = Math.min(1000, remaining);
+        for (let b = 0; b < batch; b++) {
+          stepOnce();
+        }
+        remaining -= batch;
+        setTimeout(loop, 0);
+      } else {
+        timer = setTimeout(loop, stepDelay);
+      }
+    }
+    loop();
+  }
+
+  // Button actions
+  stepBtn.addEventListener('click', () => {
+    runSteps(1);
+  });
+  runBtn.addEventListener('click', () => {
+    // run requested number for current demo
+    if (demoSelect.value === 'dynamic') {
+      runSteps( Math.max(1, parseInt(opsCount.value,10) || 1) );
+    } else {
+      runSteps( Math.max(1, parseInt(opsCountBinary.value,10) || 1) );
+    }
+  });
+  fastRunBtn.addEventListener('click', () => {
+    if (demoSelect.value === 'dynamic') {
+      runSteps( Math.max(1, parseInt(opsCount.value,10) || 1), true );
+    } else {
+      runSteps( Math.max(1, parseInt(opsCountBinary.value,10) || 1), true );
+    }
+  });
+  resetBtn.addEventListener('click', () => {
+    resetSimulation();
+  });
+
+  demoSelect.addEventListener('change', () => {
+    resetSimulation();
+  });
+  resizeStrategy.addEventListener('change', () => resetSimulation());
+  startCapacity.addEventListener('change', () => resetSimulation());
+  opsCount.addEventListener('change', () => {});
+  bitsInput.addEventListener('change', () => resetSimulation());
+  opsCountBinary.addEventListener('change', () => {});
+  delayInput.addEventListener('change', () => {
+    stepDelay = Number(delayInput.value) || 0;
+  });
+
+  // initial setup
+  resetSimulation();
+
+  // Extra: show explanatory examples when double strategy selected display theoretical amortized cost
+  resizeStrategy.addEventListener('change', () => {
+    const s = resizeStrategy.value;
+    if (s === 'double') {
+      explainText.innerHTML = 'Dynamic array (doubling): Even though some pushes cost O(n) when resizing, the total cost of n pushes is O(n). So amortized cost per push is O(1). Intuition: each element gets copied only O(1) times across all resizes.';
+    } else if (s === 'increment') {
+      explainText.innerHTML = 'Grow-by-1 strategy: Every push when full will copy all existing elements, so performing n pushes can cost O(n^2) in total; amortized cost per push is O(n). This is why growth factor matters.';
+    } else {
+      explainText.innerHTML = 'Sub-linear growth (e.g. ×1.5) still gives amortized O(1) pushes (though with different constants).';
+    }
+    resetSimulation();
+  });
+
+  // Resize canvas for high DPI
+  function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    chart.width = chart.clientWidth * dpr;
+    chart.height = chart.clientHeight * dpr;
+    ctx.scale(dpr, dpr);
+    draw();
+  }
+  window.addEventListener('resize', () => {
+    // reset transform then rescale
+    ctx.setTransform(1,0,0,1,0,0);
+    resizeCanvas();
+  });
+  resizeCanvas();
+
+  // Educational overlay: show aggregated theoretical info when enough ops run
+  setInterval(() => {
+    if (costs.length > 0 && demoSelect.value === 'dynamic' && resizeStrategy.value === 'double') {
+      // approximate theoretical amortized <= 3 (for doubling with cost model base=1 + copy)
+      const amort = costs.reduce((a,b)=>a+b,0)/costs.length;
+      if (amort < 3.5) {
+        explainText.innerHTML = 'Observation: The running average stabilizes near a small constant (≈2-3) — this is the amortized O(1) cost per push for doubling arrays under this simple cost model.';
+      }
+    }
+  }, 1000);
+})();
+</script>
+
+</body>
+</html>

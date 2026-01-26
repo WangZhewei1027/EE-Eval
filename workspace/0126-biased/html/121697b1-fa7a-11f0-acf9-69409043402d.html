@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive REST API Explorer</title>
+<style>
+  /* Minimal styling: basic black text on white background */
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  label, input, select, button, textarea {
+    font-size: 1em;
+    font-family: monospace, monospace;
+    margin: 0.2em 0;
+  }
+  textarea {
+    width: 100%;
+    height: 8em;
+    font-family: monospace, monospace;
+  }
+  fieldset {
+    margin-top: 1em;
+    padding: 0.5em;
+  }
+  legend {
+    font-weight: bold;
+  }
+  #history {
+    max-height: 12em;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    border: 1px solid black;
+    padding: 0.3em;
+    margin-top: 0.5em;
+    font-size: 0.9em;
+    background: #fff;
+  }
+  #responseBody {
+    width: 100%;
+    min-height: 10em;
+    font-family: monospace, monospace;
+  }
+  #errorOutput {
+    color: black;
+    font-weight: normal;
+  }
+</style>
+</head>
+<body>
+<h1>Interactive REST API Explorer</h1>
+
+<section id="endpointConfig">
+  <fieldset>
+    <legend>Endpoint Configuration</legend>
+    <label for="urlInput">URL:</label><br />
+    <input type="text" id="urlInput" placeholder="https://api.example.com/items" size="60" value="https://jsonplaceholder.typicode.com/posts" /><br />
+
+    <label for="methodSelect">HTTP Method:</label><br />
+    <select id="methodSelect" aria-label="Select HTTP method">
+      <option value="GET" selected>GET</option>
+      <option value="POST">POST</option>
+      <option value="PUT">PUT</option>
+      <option value="PATCH">PATCH</option>
+      <option value="DELETE">DELETE</option>
+      <option value="HEAD">HEAD</option>
+      <option value="OPTIONS">OPTIONS</option>
+    </select><br />
+
+    <fieldset id="queryParamsFieldset">
+      <legend>Query Parameters</legend>
+      <button type="button" id="addQueryParam">Add Query Parameter</button>
+      <div id="queryParamsContainer"></div>
+    </fieldset>
+
+    <fieldset id="headersFieldset">
+      <legend>Request Headers</legend>
+      <button type="button" id="addHeader">Add Header</button>
+      <div id="headersContainer"></div>
+    </fieldset>
+
+    <fieldset id="bodyFieldset" style="display:none">
+      <legend>Request Body (JSON)</legend>
+      <textarea id="requestBody" placeholder='{"key": "value"}' aria-label="Request body JSON"></textarea>
+      <div id="bodyError" style="color: darkred; font-weight: normal;"></div>
+      <label><input type="checkbox" id="prettyPrintRequest" /> Pretty print body</label>
+    </fieldset>
+
+    <button type="button" id="sendRequest">Send Request</button>
+  </fieldset>
+</section>
+
+<section id="responseSection" style="margin-top:1em">
+  <fieldset>
+    <legend>Response</legend>
+    <div><b>Status:</b> <span id="responseStatus">N/A</span></div>
+    <div><b>Headers:</b></div>
+    <textarea id="responseHeaders" readonly aria-label="Response headers"></textarea>
+
+    <div><b>Body:</b></div>
+    <textarea id="responseBody" readonly aria-label="Response body"></textarea>
+
+    <button type="button" id="copyResponse">Copy Body to Clipboard</button>
+    <button type="button" id="clearResponse">Clear Response</button>
+  </fieldset>
+</section>
+
+<section id="historySection" style="margin-top:1em">
+  <fieldset>
+    <legend>Request History (click to load)</legend>
+    <button type="button" id="clearHistory">Clear History</button>
+    <div id="history" tabindex="0" aria-label="Request history"></div>
+  </fieldset>
+</section>
+
+<script>
+(() => {
+  // State
+  let history = [];
+  const maxHistoryEntries = 100;
+
+  // Cached elements
+  const urlInput = document.getElementById("urlInput");
+  const methodSelect = document.getElementById("methodSelect");
+  const queryParamsContainer = document.getElementById("queryParamsContainer");
+  const headersContainer = document.getElementById("headersContainer");
+  const addQueryParamBtn = document.getElementById("addQueryParam");
+  const addHeaderBtn = document.getElementById("addHeader");
+  const bodyFieldset = document.getElementById("bodyFieldset");
+  const requestBodyTextarea = document.getElementById("requestBody");
+  const bodyErrorDiv = document.getElementById("bodyError");
+  const prettyPrintCheckbox = document.getElementById("prettyPrintRequest");
+  const sendRequestBtn = document.getElementById("sendRequest");
+  const responseStatusSpan = document.getElementById("responseStatus");
+  const responseHeadersTextarea = document.getElementById("responseHeaders");
+  const responseBodyTextarea = document.getElementById("responseBody");
+  const copyResponseBtn = document.getElementById("copyResponse");
+  const clearResponseBtn = document.getElementById("clearResponse");
+  const historyDiv = document.getElementById("history");
+  const clearHistoryBtn = document.getElementById("clearHistory");
+
+  // Functions to create input sets for query params and headers
+  function createKeyValueInputPair(container, keyPlaceholder, valuePlaceholder, keyAria) {
+    // wrapper div
+    const wrapper = document.createElement("div");
+
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.placeholder = keyPlaceholder || "key";
+    keyInput.setAttribute("aria-label", keyAria || "Key");
+    keyInput.size = 20;
+
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.placeholder = valuePlaceholder || "value";
+    valueInput.setAttribute("aria-label", valuePlaceholder || "Value");
+    valueInput.size = 30;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => {
+      container.removeChild(wrapper);
+    });
+
+    wrapper.appendChild(keyInput);
+    wrapper.appendChild(document.createTextNode(" = "));
+    wrapper.appendChild(valueInput);
+    wrapper.appendChild(removeBtn);
+
+    container.appendChild(wrapper);
+    return { wrapper, keyInput, valueInput };
+  }
+
+  // Add initial row in query params and headers for usability
+  function addInitialRows() {
+    createKeyValueInputPair(queryParamsContainer, "param", "value", "Query parameter key");
+    createKeyValueInputPair(headersContainer, "Header-Name", "Header-Value", "Header value");
+  }
+
+  addInitialRows();
+
+  // Add event listeners for add buttons
+  addQueryParamBtn.addEventListener("click", () => {
+    createKeyValueInputPair(queryParamsContainer, "param", "value", "Query parameter key");
+  });
+
+  addHeaderBtn.addEventListener("click", () => {
+    createKeyValueInputPair(headersContainer, "Header-Name", "Header-Value", "Header value");
+  });
+
+  // Show/Hide body fieldset based on HTTP method
+  function updateBodyFieldsetVisibility() {
+    const method = methodSelect.value.toUpperCase();
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      bodyFieldset.style.display = "";
+    } else {
+      bodyFieldset.style.display = "none";
+      // Clear body error and textarea if hidden
+      bodyErrorDiv.textContent = "";
+    }
+  }
+
+  methodSelect.addEventListener("change", updateBodyFieldsetVisibility);
+  updateBodyFieldsetVisibility();
+
+  // Validate and pretty print request body if checkbox is checked
+  function validateRequestBody() {
+    const val = requestBodyTextarea.value.trim();
+    if (!val) {
+      bodyErrorDiv.textContent = "";
+      return true;
+    }
+    try {
+      const obj = JSON.parse(val);
+      bodyErrorDiv.textContent = "";
+      if (prettyPrintCheckbox.checked) {
+        requestBodyTextarea.value = JSON.stringify(obj, null, 2);
+      }
+      return true;
+    } catch (e) {
+      bodyErrorDiv.textContent = "INVALID JSON: " + e.message;
+      return false;
+    }
+  }
+
+  prettyPrintCheckbox.addEventListener("change", () => {
+    validateRequestBody();
+  });
+
+  requestBodyTextarea.addEventListener("input", () => {
+    // Remove body error as user types
+    bodyErrorDiv.textContent = "";
+  });
+
+  // Compose URL with query params
+  function composeUrlWithQueryParams(url, queryParams) {
+    if (!queryParams.length) return url;
+    let separator = url.includes("?") ? "&" : "?";
+    const parts = [];
+    for (const { key, value } of queryParams) {
+      if (key !== "") parts.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
+    }
+    return url + (parts.length ? separator + parts.join("&") : "");
+  }
+
+  // Parse query params from DOM inputs
+  function parseQueryParams() {
+    const params = [];
+    for (const div of queryParamsContainer.children) {
+      if (div.children.length < 3) continue;
+      const key = div.children[0].value.trim();
+      const value = div.children[2].value.trim();
+      if (key !== "") params.push({ key, value });
+    }
+    return params;
+  }
+
+  // Parse headers from DOM inputs
+  function parseHeaders() {
+    const hdrs = {};
+    for (const div of headersContainer.children) {
+      if (div.children.length < 3) continue;
+      const key = div.children[0].value.trim();
+      const value = div.children[2].value.trim();
+      if (key !== "") hdrs[key] = value;
+    }
+    return hdrs;
+  }
+
+  // Clear response display
+  function clearResponse() {
+    responseStatusSpan.textContent = "N/A";
+    responseHeadersTextarea.value = "";
+    responseBodyTextarea.value = "";
+  }
+
+  clearResponseBtn.addEventListener("click", clearResponse);
+
+  // Copy response body to clipboard
+  copyResponseBtn.addEventListener("click", () => {
+    if (responseBodyTextarea.value.trim() === "") return;
+    navigator.clipboard.writeText(responseBodyTextarea.value).then(() => {
+      alert("Response body copied to clipboard.");
+    }).catch(() => {
+      alert("Failed to copy to clipboard.");
+    });
+  });
+
+  // Store request+response in history
+  function storeInHistory(entry) {
+    history.unshift(entry);
+    if (history.length > maxHistoryEntries) history.pop();
+    refreshHistoryDom();
+  }
+
+  // Refresh history DOM list
+  function refreshHistoryDom() {
+    historyDiv.innerHTML = "";
+    if (!history.length) {
+      historyDiv.textContent = "(No history)";
+      return;
+    }
+    history.forEach((entry, idx) => {
+      const div = document.createElement("div");
+      div.tabIndex = 0;
+      div.style.cursor = "pointer";
+      div.setAttribute("role", "button");
+      div.setAttribute("aria-pressed", "false");
+      let endpoint = entry.url.split("?")[0];
+      if (endpoint.length > 60) endpoint = endpoint.slice(0, 60) + "...";
+      div.textContent = `${entry.method} ${endpoint} (Status: ${entry.status || "N/A"}, Req #${history.length - idx})`;
+      div.title = `${entry.method} ${entry.url}\nStatus: ${entry.status || "N/A"}\n\nClick to load this request.`;
+      div.addEventListener("click", () => {
+        loadEntryToInputs(entry);
+      });
+      div.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          div.click();
+        }
+      });
+      historyDiv.appendChild(div);
+    });
+  }
+
+  // Load entry from history to inputs
+  function loadEntryToInputs(entry) {
+    urlInput.value = entry.url.split("?")[0];
+    // parse query params from URL (overrides)
+    const urlObj = new URL(entry.url);
+    const qparams = [];
+    for (const [k,v] of urlObj.searchParams) {
+      qparams.push({ key: k, value: v });
+    }
+    // Clear and fill queryParamsContainer
+    queryParamsContainer.innerHTML = "";
+    qparams.forEach(({key,value}) => {
+      createKeyValueInputPair(queryParamsContainer, "param", "value", "Query parameter key").keyInput.value = key;
+      queryParamsContainer.lastChild.children[2].value = value;
+    });
+    if (!qparams.length) addInitialRowsQueryParamsIfEmpty();
+
+    methodSelect.value = entry.method.toUpperCase();
+    updateBodyFieldsetVisibility();
+
+    // Clear and fill headers
+    headersContainer.innerHTML = "";
+    if (entry.requestHeaders && typeof entry.requestHeaders === "object") {
+      for (const [k, v] of Object.entries(entry.requestHeaders)) {
+        createKeyValueInputPair(headersContainer, "Header-Name", "Header-Value", "Header value").keyInput.value = k;
+        headersContainer.lastChild.children[2].value = v;
+      }
+    }
+    if (!headersContainer.children.length) addInitialRowsHeadersIfEmpty();
+
+    // Fill body (if any)
+    if (entry.requestBody) {
+      if (typeof entry.requestBody === "object") {
+        requestBodyTextarea.value = JSON.stringify(entry.requestBody, null, 2);
+      } else if (typeof entry.requestBody === "string") {
+        requestBodyTextarea.value = entry.requestBody;
+      } else {
+        requestBodyTextarea.value = "";
+      }
+    } else {
+      requestBodyTextarea.value = "";
+    }
+
+    // Fill response
+    responseStatusSpan.textContent = entry.status || "N/A";
+
+    if (entry.responseHeaders) {
+      try {
+        let hdrText = "";
+        for (const [k, v] of Object.entries(entry.responseHeaders)) {
+          hdrText += `${k}: ${v}\n`;
+        }
+        responseHeadersTextarea.value = hdrText.trim();
+      } catch {
+        responseHeadersTextarea.value = "";
+      }
+    } else {
+      responseHeadersTextarea.value = "";
+    }
+
+    if (entry.responseBody) {
+      if (typeof entry.responseBody === "object") {
+        responseBodyTextarea.value = JSON.stringify(entry.responseBody, null, 2);
+      } else if (typeof entry.responseBody === "string") {
+        responseBodyTextarea.value = entry.responseBody;
+      } else {
+        responseBodyTextarea.value = "";
+      }
+    } else {
+      responseBodyTextarea.value = "";
+    }
+  }
+
+  function addInitialRowsQueryParamsIfEmpty() {
+    if (queryParamsContainer.children.length === 0) {
+      createKeyValueInputPair(queryParamsContainer, "param", "value", "Query parameter key");
+    }
+  }
+  function addInitialRowsHeadersIfEmpty() {
+    if (headersContainer.children.length === 0) {
+      createKeyValueInputPair(headersContainer, "Header-Name", "Header-Value", "Header value");
+    }
+  }
+  addInitialRowsQueryParamsIfEmpty();
+  addInitialRowsHeadersIfEmpty();
+
+  // Clear history on button click
+  clearHistoryBtn.addEventListener("click", () => {
+    if (!confirm("Clear all request history?")) return;
+    history = [];
+    refreshHistoryDom();
+  });
+
+  // Deep exploration: Support chaining requests by allowing viewing/copying response data,
+  // also provide small helper to extract JSON values for use in next request params
+  // Provide navigation for: on response, user can select JSON keys and copy their values for later use
+
+  // Parse JSON in response body for exploration if possible
+  function tryParseResponseBodyJson() {
+    const val = responseBodyTextarea.value.trim();
+    if (!val) return null;
+    try {
+      return JSON.parse(val);
+    } catch {
+      return null;
+    }
+  }
+
+  // Interactive JSON explorer: show keys in response JSON, click to copy value
+
+  // We’ll add a simple explorer below response body
+  const jsonExplorerContainer = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Explore Response JSON";
+  jsonExplorerContainer.appendChild(summary);
+  const explorerContent = document.createElement("pre");
+  explorerContent.style.whiteSpace = "pre-wrap";
+  explorerContent.style.maxHeight = "200px";
+  explorerContent.style.overflowY = "auto";
+  explorerContent.style.border = "1px solid black";
+  explorerContent.style.padding = "0.3em";
+  jsonExplorerContainer.appendChild(explorerContent);
+  document.getElementById("responseSection").appendChild(jsonExplorerContainer);
+
+  function buildJsonExplorer(obj, path=[]) {
+    if (typeof obj !== "object" || obj === null) return;
+    const container = document.createElement("ul");
+    container.style.listStyle = "none";
+    container.style.paddingLeft = "1em";
+
+    for (const key of Object.keys(obj)) {
+      const li = document.createElement("li");
+      const value = obj[key];
+      const spanKey = document.createElement("span");
+      spanKey.textContent = key + ": ";
+      spanKey.style.cursor = "pointer";
+      spanKey.title = "Click key path to copy its JSON path";
+
+      spanKey.addEventListener("click", e => {
+        const fullPath = [...path, key];
+        // JSON path string in dot notation
+        let jsonPath = fullPath.map(p => {
+          if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(p)) return "." + p;
+          else return "[" + JSON.stringify(p) + "]";
+        }).join("");
+        if (jsonPath.startsWith(".")) jsonPath = jsonPath.slice(1);
+        navigator.clipboard.writeText(jsonPath).then(() => {
+          alert(`JSON path copied: ${jsonPath}`);
+        }).catch(() => {
+          alert("Clipboard copy failed.");
+        });
+        e.stopPropagation();
+      });
+      li.appendChild(spanKey);
+
+      if (typeof value === "object" && value !== null) {
+        li.appendChild(document.createTextNode(typeof value === "object" && Array.isArray(value) ? "[Array]" : "[Object]"));
+        const childList = buildJsonExplorer(value, [...path, key]);
+        if (childList) li.appendChild(childList);
+      } else {
+        const spanVal = document.createElement("span");
+        let valDisplay = value === null ? "null" : value.toString();
+        if (typeof value === "string") valDisplay = `"${valDisplay}"`;
+        spanVal.textContent = valDisplay;
+        spanVal.style.cursor = "pointer";
+        spanVal.title = "Click value to copy";
+
+        spanVal.addEventListener("click", e => {
+          let copyText = "";
+          if (typeof value === "string") copyText = value;
+          else copyText = JSON.stringify(value);
+          navigator.clipboard.writeText(copyText).then(() => {
+            alert(`Value copied: ${copyText}`);
+          }).catch(() => {
+            alert("Clipboard copy failed.");
+          });
+          e.stopPropagation();
+        });
+
+        li.appendChild(spanVal);
+      }
+      container.appendChild(li);
+    }
+    return container;
+  }
+
+  // Update explorer on response update
+  function updateJsonExplorer() {
+    const json = tryParseResponseBodyJson();
+    if (!json) {
+      explorerContent.textContent = "(Response is not valid JSON)";
+      jsonExplorerContainer.open = false;
+      jsonExplorerContainer.style.display = "none";
+      return;
+    }
+    jsonExplorerContainer.style.display = "";
+    explorerContent.innerHTML = "";
+    const explorerTree = buildJsonExplorer(json);
+    if (!explorerTree) {
+      explorerContent.textContent = "(Empty JSON Object)";
+      jsonExplorerContainer.open = false;
+      return;
+    }
+    explorerContent.appendChild(explorerTree);
+    jsonExplorerContainer.open = false;
+  }
+
+
+  // On sendRequest click:
+  sendRequestBtn.addEventListener("click", async () => {
+    clearResponse();
+    updateJsonExplorer();
+
+    const method = methodSelect.value.toUpperCase();
+    let urlStr = urlInput.value.trim();
+    if (!urlStr) {
+      alert("URL is required.");
+      return;
+    }
+    // Compose URL with query parameters
+    const queryParams = parseQueryParams();
+    urlStr = composeUrlWithQueryParams(urlStr, queryParams);
+
+    // Parse headers
+    const headers = parseHeaders();
+
+    // Prepare body
+    let bodyPayload = null;
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      if (!validateRequestBody()) {
+        alert("Invalid JSON body.");
+        return;
+      }
+      const rawBody = requestBodyTextarea.value.trim();
+      if (rawBody) {
+        try {
+          // Send raw text for JSON body if valid JSON, it's safest to send stringified JSON with correct header
+          bodyPayload = rawBody;
+          if (!headers["Content-Type"] && !headers["content-type"]) {
+            // Assume JSON content type if not manually set
+            headers["Content-Type"] = "application/json; charset=utf-8";
+          }
+        } catch {
+          alert("Failed to parse request body.");
+          return;
+        }
+      }
+    }
+
+    sendRequestBtn.disabled = true;
+    sendRequestBtn.textContent = "Sending...";
+    try {
+      const fetchOptions = { method, headers };
+
+      // Use body only if method supports and bodyPayload is defined
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && bodyPayload !== null) {
+        fetchOptions.body = bodyPayload;
+      }
+
+      const response = await fetch(urlStr, fetchOptions);
+      // Status
+      responseStatusSpan.textContent = response.status + " " + response.statusText;
+
+      // Headers
+      let hdrsText = "";
+      response.headers.forEach((value, key) => {
+        hdrsText += `${key}: ${value}\n`;
+      });
+      responseHeadersTextarea.value = hdrsText.trim();
+
+      // Body
+      let respText = "";
+      let respBody = null;
+      try {
+        // Attempt JSON parse by default if content-type is JSON
+        const cType = response.headers.get("content-type") || "";
+        if (cType.includes("json")) {
+          respBody = await response.json();
+          respText = JSON.stringify(respBody, null, 2);
+        } else {
+          // fallback to text
+          respText = await response.text();
+          // Try parse JSON anyway (some APIs mislabel content-type)
+          try {
+            respBody = JSON.parse(respText);
+          } catch {}
+        }
+      } catch {
+        respText = "(Error reading response body)";
+      }
+      responseBodyTextarea.value = respText;
+
+      // Show explorer
+      updateJsonExplorer();
+
+      // Store in history
+      storeInHistory({
+        url: urlStr,
+        method,
+        requestHeaders: headers,
+        requestBody: (() => {
+          try {
+            return JSON.parse(requestBodyTextarea.value.trim());
+          } catch {
+            return requestBodyTextarea.value.trim() || null;
+          }
+        })(),
+        status: response.status + " " + response.statusText,
+        responseHeaders: (() => {
+          const h = {};
+          response.headers.forEach((v, k) => { h[k]=v; });
+          return h;
+        })(),
+        responseBody: respBody !== null ? respBody : responseBodyTextarea.value
+      });
+    } catch (e) {
+      responseStatusSpan.textContent = "Network/Fetch Error";
+      responseHeadersTextarea.value = "";
+      responseBodyTextarea.value = e.message || "(Error)";
+      updateJsonExplorer();
+      storeInHistory({
+        url: urlStr,
+        method,
+        requestHeaders: headers,
+        requestBody: requestBodyTextarea.value.trim() || null,
+        status: "Network/Fetch Error",
+        responseHeaders: null,
+        responseBody: e.message || "(Error)"
+      });
+      alert("Network error or fetch failed: " + e.message);
+    } finally {
+      sendRequestBtn.disabled = false;
+      sendRequestBtn.textContent = "Send Request";
+    }
+
+  });
+
+  // Initial refresh history empty state
+  refreshHistoryDom();
+
+  // Accessibility notes:
+  // We ensured all interactive elements have labels or aria-labels,
+  // keyboard navigation for history,
+  // buttons have focus and tab indices by default.
+
+})();
+</script>
+</body>
+</html>

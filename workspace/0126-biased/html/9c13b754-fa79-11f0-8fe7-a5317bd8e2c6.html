@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Selection Sort Interactive Explorer</title>
+  <style>
+    /* Extremely minimal styling to keep layout readable.
+       Default browser styles are otherwise used. */
+    body { background: white; color: black; font-family: Arial, sans-serif; margin: 10px; }
+    .row { margin: 6px 0; }
+    .array-button { margin: 2px; padding: 6px; }
+    textarea { width: 100%; height: 120px; }
+    select,input,button { margin-right: 6px; }
+    .pseudocode { font-family: monospace; white-space: pre; }
+    .controls { margin-bottom: 8px; }
+    .small { font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h2>Selection Sort — Interactive Explorer</h2>
+
+  <div class="controls">
+    Array size:
+    <input id="sizeRange" type="range" min="2" max="20" value="8">
+    <input id="sizeNumber" type="number" min="2" max="100" value="8" style="width:50px">
+    Generate:
+    <button id="randomBtn">Random</button>
+    <button id="sortedBtn">Sorted</button>
+    <button id="reverseBtn">Reverse</button>
+    Custom array (comma separated):
+    <input id="customArray" type="text" placeholder="e.g. 5,3,7,1" size="20">
+    <button id="setCustomBtn">Set</button>
+  </div>
+
+  <div class="controls">
+    Value range min:
+    <input id="valMin" type="number" value="0" style="width:60px">
+    max:
+    <input id="valMax" type="number" value="20" style="width:60px">
+    Random seed (optional):
+    <input id="seedInput" type="text" size="10">
+    <button id="randomWithSeed">Random w/ seed</button>
+  </div>
+
+  <div class="controls">
+    Comparator:
+    <select id="comparator">
+      <option value="asc">Ascending (a < b)</option>
+      <option value="desc">Descending (a > b)</option>
+    </select>
+
+    Granularity:
+    <select id="granularity">
+      <option value="atomic">Atomic step (compare/min/advance/swap)</option>
+      <option value="operation">Operation step (complete one i: inner loop + swap)</option>
+    </select>
+
+    Manual swap mode:
+    <label><input id="manualSwap" type="checkbox"> require manual confirmation for swaps</label>
+
+    Auto-play speed (ms):
+    <input id="speed" type="range" min="50" max="2000" value="350">
+    <span id="speedLabel">350</span>
+  </div>
+
+  <div class="controls">
+    <button id="stepBtn">Step</button>
+    <button id="opStepBtn">Step Operation</button>
+    <button id="playBtn">Play</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="runToSwapBtn">Run to next swap</button>
+    <button id="runToCompareBtn">Run to next comparison</button>
+    <button id="runToEndBtn">Run to end</button>
+    <button id="resetBtn">Reset</button>
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+  </div>
+
+  <div class="row">
+    Array (click elements for manual swap when enabled):
+    <div id="arrayContainer" class="small"></div>
+  </div>
+
+  <div class="row">
+    State summary:
+    <span id="stateSummary"></span>
+  </div>
+
+  <div class="row">
+    Pseudocode:
+    <div id="pseudocode" class="pseudocode small"></div>
+  </div>
+
+  <div class="row">
+    Actions log (toggle):
+    <label><input id="traceToggle" type="checkbox" checked> record trace</label>
+    <button id="clearLogBtn">Clear log</button>
+    <textarea id="logArea" readonly></textarea>
+  </div>
+
+  <div class="row">
+    Step timeline:
+    Current step index: <input id="stepIndex" type="number" value="0" style="width:70px">
+    <button id="gotoStepBtn">Go to step</button>
+    Total recorded steps: <span id="totalSteps">0</span>
+  </div>
+
+  <div class="row small">
+    Advanced learning controls:
+    <button id="verifyManualSwap">Verify manual swap</button>
+    <button id="forceSwapBtn">Force swap now</button>
+    Select two indices for manual swap (click array items) — selection state shown inline. Incorrect manual swaps are reported.
+  </div>
+
+  <script>
+    // Selection Sort Interactive Explorer
+    (function(){
+      // Utility random with optional seed (xorshift-ish)
+      function makeRNG(seed) {
+        let x = 0x9e3779b9;
+        if (typeof seed === 'number') x = seed | 0;
+        else if (typeof seed === 'string') {
+          for (let i=0;i<seed.length;i++) x ^= seed.charCodeAt(i) + ((x<<5)-(x>>2));
+        }
+        return function() {
+          x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967295;
+        };
+      }
+
+      // DOM references
+      const sizeRange = document.getElementById('sizeRange');
+      const sizeNumber = document.getElementById('sizeNumber');
+      const randomBtn = document.getElementById('randomBtn');
+      const sortedBtn = document.getElementById('sortedBtn');
+      const reverseBtn = document.getElementById('reverseBtn');
+      const setCustomBtn = document.getElementById('setCustomBtn');
+      const customArray = document.getElementById('customArray');
+      const valMin = document.getElementById('valMin');
+      const valMax = document.getElementById('valMax');
+      const seedInput = document.getElementById('seedInput');
+      const randomWithSeed = document.getElementById('randomWithSeed');
+
+      const comparatorSelect = document.getElementById('comparator');
+      const granularitySelect = document.getElementById('granularity');
+      const manualSwapCheckbox = document.getElementById('manualSwap');
+      const speed = document.getElementById('speed');
+      const speedLabel = document.getElementById('speedLabel');
+
+      const stepBtn = document.getElementById('stepBtn');
+      const opStepBtn = document.getElementById('opStepBtn');
+      const playBtn = document.getElementById('playBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const runToSwapBtn = document.getElementById('runToSwapBtn');
+      const runToCompareBtn = document.getElementById('runToCompareBtn');
+      const runToEndBtn = document.getElementById('runToEndBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const undoBtn = document.getElementById('undoBtn');
+      const redoBtn = document.getElementById('redoBtn');
+
+      const arrayContainer = document.getElementById('arrayContainer');
+      const stateSummary = document.getElementById('stateSummary');
+      const pseudocodeDiv = document.getElementById('pseudocode');
+
+      const traceToggle = document.getElementById('traceToggle');
+      const clearLogBtn = document.getElementById('clearLogBtn');
+      const logArea = document.getElementById('logArea');
+
+      const stepIndex = document.getElementById('stepIndex');
+      const gotoStepBtn = document.getElementById('gotoStepBtn');
+      const totalSteps = document.getElementById('totalSteps');
+
+      const verifyManualSwapBtn = document.getElementById('verifyManualSwap');
+      const forceSwapBtn = document.getElementById('forceSwapBtn');
+
+      // Pseudocode lines (plain text)
+      const pseudocodeLines = [
+        "1: for i = 0 to n-2",
+        "2:     min = i",
+        "3:     for j = i+1 to n-1",
+        "4:         if arr[j] < arr[min] then min = j",
+        "5:     if min != i then swap arr[i], arr[min]",
+        "6: end"
+      ];
+
+      // State model and history
+      let state = null;
+      let history = []; // array of snapshots
+      let historyPtr = 0; // current index in history (0..history.length-1)
+      let autoTimer = null;
+      let pendingPlayMode = null; // "runToSwap", "runToCompare", "runToEnd", or null
+      let rng = Math.random;
+
+      // For manual selection
+      let manualSelection = [];
+
+      // Initialize default array
+      function initialArray(n, minV, maxV, rngFunc) {
+        const arr = [];
+        for (let i=0;i<n;i++) {
+          arr.push(Math.floor(rngFunc()*(maxV-minV+1))+minV);
+        }
+        return arr;
+      }
+
+      function cloneState(s) {
+        return {
+          arr: s.arr.slice(),
+          i: s.i,
+          j: s.j,
+          minIndex: s.minIndex,
+          micro: s.micro,
+          comparisons: s.comparisons,
+          swaps: s.swaps,
+          event: s.event,
+          phaseNote: s.phaseNote,
+          comparator: s.comparator,
+          manualAwaitingSwap: s.manualAwaitingSwap
+        };
+      }
+
+      function pushHistorySnapshot(snap) {
+        // When pushing after having undone steps, drop future
+        if (historyPtr < history.length - 1) {
+          history = history.slice(0, historyPtr+1);
+        }
+        history.push(cloneState(snap));
+        historyPtr = history.length - 1;
+        updateTimelineUI();
+      }
+
+      function restoreFromHistory(index) {
+        if (index < 0 || index >= history.length) return;
+        const snap = history[index];
+        state = cloneState(snap);
+        historyPtr = index;
+        renderAll();
+      }
+
+      // Create initial state and push snapshot
+      function initialize(arr) {
+        state = {
+          arr: arr.slice(),
+          i: 0,
+          j: arr.length > 1 ? 1 : 0,
+          minIndex: 0,
+          micro: 'compare', // micro phases: 'compare','maybeUpdate','advance','endScan','swap','done'
+          comparisons: 0,
+          swaps: 0,
+          event: 'init',
+          phaseNote: 'initialized',
+          comparator: comparatorSelect.value,
+          manualAwaitingSwap: false
+        };
+        history = [];
+        pushHistorySnapshot(state);
+        manualSelection = [];
+        log('Initialized array: ['+state.arr.join(', ')+']');
+        renderAll();
+      }
+
+      // Basic logging
+      function log(msg) {
+        if (!traceToggle.checked) return;
+        const time = new Date().toLocaleTimeString();
+        logArea.value += "["+time+"] "+msg+"\n";
+        logArea.scrollTop = logArea.scrollHeight;
+      }
+
+      function clearLog() {
+        logArea.value = '';
+      }
+
+      // Rendering functions
+      function renderArray() {
+        arrayContainer.innerHTML = '';
+        const n = state.arr.length;
+        for (let idx=0; idx<n; idx++) {
+          const btn = document.createElement('button');
+          btn.className = 'array-button small';
+          btn.textContent = state.arr[idx];
+          // append simple labels in parentheses to denote roles (no colors)
+          const labels = [];
+          if (idx === state.i) labels.push('i');
+          if (idx === state.j) labels.push('j');
+          if (idx === state.minIndex) labels.push('min');
+          if (idx < state.i) labels.push('sorted');
+          if (state.manualAwaitingSwap && manualSelection.indexOf(idx) !== -1) labels.push('sel');
+          if (labels.length) btn.textContent += ' ('+labels.join(',')+')';
+          btn.dataset.index = idx;
+          btn.addEventListener('click', onArrayElementClick);
+          arrayContainer.appendChild(btn);
+        }
+      }
+
+      function renderStateSummary() {
+        const n = state.arr.length;
+        const leftSorted = state.i;
+        stateSummary.textContent = "i="+state.i+"  j="+state.j+"  min="+state.minIndex+"  comparisons="+state.comparisons+"  swaps="+state.swaps+"  sortedPrefix="+leftSorted+"/"+n+"  micro="+state.micro + (state.manualAwaitingSwap ? " (awaiting manual swap)" : "");
+      }
+
+      function renderPseudocode() {
+        // Decide which line to highlight by mapping micro/phase to pseudocode line
+        let highlight = null;
+        if (state.i >= state.arr.length-1) {
+          highlight = 6;
+        } else {
+          // basic mapping
+          if (state.micro === 'compare' || state.micro === 'maybeUpdate') highlight = 4;
+          else if (state.micro === 'advance') highlight = 3;
+          else if (state.micro === 'endScan' || state.micro === 'swap' || state.micro === 'manualSwap') highlight = 5;
+          else highlight = 1;
+        }
+        let out = '';
+        for (let i=0;i<pseudocodeLines.length;i++) {
+          if (i+1 === highlight) out += '>> ' + pseudocodeLines[i] + '\n';
+          else out += '   ' + pseudocodeLines[i] + '\n';
+        }
+        pseudocodeDiv.textContent = out;
+      }
+
+      function renderAll() {
+        renderArray();
+        renderStateSummary();
+        renderPseudocode();
+        stepIndex.value = historyPtr;
+        totalSteps.textContent = history.length;
+      }
+
+      // Comparator function
+      function compare(a,b) {
+        if (comparatorSelect.value === 'asc') return a < b;
+        else return a > b;
+      }
+
+      // Micro-step engine: performs exactly one micro action per call
+      function microStep() {
+        if (state.i >= state.arr.length - 1) {
+          state.micro = 'done';
+          state.event = 'done';
+          state.phaseNote = 'fully sorted';
+          pushHistorySnapshot(state);
+          log('Sorting complete.');
+          return;
+        }
+
+        // If manual awaiting swap is true, microStep should not auto-step swap; just set event
+        if (state.micro === 'compare') {
+          // Ensure j valid
+          if (state.j >= state.arr.length) {
+            state.micro = 'endScan';
+            state.event = 'endScan';
+            state.phaseNote = 'finished inner loop';
+            pushHistorySnapshot(state);
+            log('End of inner loop (i='+state.i+'). minIndex='+state.minIndex);
+            return;
+          }
+          // perform compare
+          const a = state.arr[state.j];
+          const b = state.arr[state.minIndex];
+          state.comparisons++;
+          state.event = 'compare';
+          state.phaseNote = 'compared arr['+state.j+'] ('+a+') vs arr['+state.minIndex+'] ('+b+')';
+          state.lastComparisonResult = compare(a,b);
+          state.micro = 'maybeUpdate';
+          pushHistorySnapshot(state);
+          log('Compare: arr['+state.j+']='+a+' vs arr['+state.minIndex+']='+b+' => '+(state.lastComparisonResult ? 'update min' : 'no update'));
+          return;
+        }
+
+        if (state.micro === 'maybeUpdate') {
+          if (state.lastComparisonResult) {
+            state.minIndex = state.j;
+            state.event = 'minUpdate';
+            state.phaseNote = 'minIndex updated to '+state.minIndex;
+            pushHistorySnapshot(state);
+            log('Min updated: minIndex='+state.minIndex);
+            // prepare to advance j next
+            state.micro = 'advance';
+            return;
+          } else {
+            state.event = 'noUpdate';
+            state.phaseNote = 'no min change';
+            pushHistorySnapshot(state);
+            state.micro = 'advance';
+            return;
+          }
+        }
+
+        if (state.micro === 'advance') {
+          state.j++;
+          state.event = 'advanceJ';
+          state.phaseNote = 'j advanced to '+state.j;
+          pushHistorySnapshot(state);
+          return;
+        }
+
+        if (state.micro === 'endScan') {
+          // handle swap
+          if (state.minIndex === state.i) {
+            state.event = 'noSwap';
+            state.phaseNote = 'min==i; no swap';
+            state.micro = 'afterSwap';
+            pushHistorySnapshot(state);
+            log('No swap needed for i='+state.i);
+            return;
+          }
+          // if manual swap is allowed and toggled: pause and await manual confirmation
+          if (manualSwapCheckbox.checked) {
+            state.event = 'awaitingManualSwap';
+            state.phaseNote = 'manual swap required for i='+state.i+' (min='+state.minIndex+')';
+            state.manualAwaitingSwap = true;
+            state.micro = 'manualSwap';
+            pushHistorySnapshot(state);
+            log('Manual swap required: swap arr['+state.i+'] and arr['+state.minIndex+']');
+            return;
+          } else {
+            // perform swap automatically
+            const tmp = state.arr[state.i];
+            state.arr[state.i] = state.arr[state.minIndex];
+            state.arr[state.minIndex] = tmp;
+            state.swaps++;
+            state.event = 'swap';
+            state.phaseNote = 'swapped i='+state.i+' with min='+state.minIndex;
+            state.micro = 'afterSwap';
+            pushHistorySnapshot(state);
+            log('Swapped arr['+state.i+'] and arr['+state.minIndex+']');
+            return;
+          }
+        }
+
+        if (state.micro === 'manualSwap') {
+          // waiting for user; microStep does nothing automatically
+          // But pushing a snapshot is handled when entering manualSwap
+          return;
+        }
+
+        if (state.micro === 'afterSwap') {
+          // finalize pass: increment i and reset for next pass
+          state.i++;
+          state.j = Math.max(0, state.i+1);
+          state.minIndex = state.i;
+          state.event = 'nextI';
+          state.phaseNote = 'advance to i='+state.i;
+          state.manualAwaitingSwap = false;
+          state.micro = 'compare';
+          pushHistorySnapshot(state);
+          log('Advance to next i='+state.i);
+          return;
+        }
+
+        if (state.micro === 'done') {
+          // nothing to do
+          return;
+        }
+      }
+
+      // Operation-level step: perform full inner loop and swap for current i as one "operation"
+      function operationStep() {
+        if (state.i >= state.arr.length - 1) {
+          state.micro = 'done';
+          state.event = 'done';
+          pushHistorySnapshot(state);
+          log('OperationStep: already done');
+          return;
+        }
+        // Run inner loop fully
+        while (state.j < state.arr.length) {
+          // perform compare
+          state.comparisons++;
+          if (compare(state.arr[state.j], state.arr[state.minIndex])) {
+            state.minIndex = state.j;
+          }
+          state.j++;
+        }
+        // swap if needed
+        if (state.minIndex !== state.i) {
+          if (manualSwapCheckbox.checked) {
+            // similar behavior: await manual swap then stop here; don't auto-swap
+            state.manualAwaitingSwap = true;
+            state.event = 'awaitingManualSwap';
+            state.micro = 'manualSwap';
+            pushHistorySnapshot(state);
+            log('OperationStep: awaiting manual swap for i='+state.i);
+            return;
+          } else {
+            const tmp = state.arr[state.i];
+            state.arr[state.i] = state.arr[state.minIndex];
+            state.arr[state.minIndex] = tmp;
+            state.swaps++;
+            state.event = 'swap';
+            pushHistorySnapshot(state);
+            log('OperationStep: swapped i='+state.i+' and min='+state.minIndex);
+          }
+        } else {
+          state.event = 'noSwap';
+          pushHistorySnapshot(state);
+          log('OperationStep: no swap needed for i='+state.i);
+        }
+        // prepare next i
+        state.i++;
+        state.j = state.i+1;
+        state.minIndex = state.i;
+        state.micro = 'compare';
+        pushHistorySnapshot(state);
+      }
+
+      // Step forward: respects history redo if possible, else computes new step
+      function stepForward() {
+        // if there is a future snapshot, move forward to it (redo)
+        if (historyPtr < history.length - 1) {
+          historyPtr++;
+          restoreFromHistory(historyPtr);
+          return;
+        }
+        if (granularitySelect.value === 'atomic') {
+          microStep();
+        } else {
+          operationStep();
+        }
+        renderAll();
+      }
+
+      // Step backward (undo): move back in history if possible
+      function stepBackward() {
+        if (historyPtr > 0) {
+          historyPtr--;
+          restoreFromHistory(historyPtr);
+          log('Undo: moved to step '+historyPtr);
+        } else {
+          log('Undo: already at beginning');
+        }
+      }
+
+      // Auto play setup
+      function startAutoPlay(mode) {
+        if (autoTimer) clearInterval(autoTimer);
+        pendingPlayMode = mode || null;
+        autoTimer = setInterval(function() {
+          // Stop if done
+          if (state.micro === 'done' || state.i >= state.arr.length-1) {
+            stopAutoPlay();
+            return;
+          }
+          // If we have future snapshots, just advance
+          if (historyPtr < history.length - 1) {
+            historyPtr++;
+            restoreFromHistory(historyPtr);
+            return;
+          }
+          // Run one step
+          if (granularitySelect.value === 'atomic') microStep();
+          else operationStep();
+
+          renderAll();
+
+          // Check pending modes
+          if (pendingPlayMode === 'runToSwap') {
+            if (state.event === 'swap' || state.event === 'noSwap' || state.event === 'awaitingManualSwap') {
+              stopAutoPlay();
+              return;
+            }
+          } else if (pendingPlayMode === 'runToCompare') {
+            // stop when we just did a compare micro event
+            if (state.event === 'compare') {
+              stopAutoPlay();
+              return;
+            }
+          } else if (pendingPlayMode === 'runToEnd') {
+            if (state.micro === 'done') {
+              stopAutoPlay();
+              return;
+            }
+          }
+        }, parseInt(speed.value,10));
+      }
+
+      function stopAutoPlay() {
+        if (autoTimer) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          pendingPlayMode = null;
+          log('Auto-play stopped.');
+        }
+      }
+
+      // Run to target events
+      function runToNextSwap() {
+        startAutoPlay('runToSwap');
+      }
+
+      function runToNextCompare() {
+        startAutoPlay('runToCompare');
+      }
+
+      function runToEnd() {
+        startAutoPlay('runToEnd');
+      }
+
+      // Manual swap handling
+      function onArrayElementClick(e) {
+        const idx = parseInt(e.currentTarget.dataset.index,10);
+        if (!state) return;
+        if (state.manualAwaitingSwap) {
+          // Allow selection of indices to attempt manual swap
+          if (manualSelection.indexOf(idx) === -1) {
+            manualSelection.push(idx);
+            if (manualSelection.length > 2) manualSelection.shift();
+          } else {
+            // deselect
+            manualSelection = manualSelection.filter(x => x !== idx);
+          }
+          renderAll();
+          return;
+        }
+
+        // If not awaiting manual swap, but user may still want to edit array via clicks:
+        // clicking an element prompts for a new value (via prompt)
+        const newVal = prompt('Change value at index '+idx+' (current '+state.arr[idx]+'):', ''+state.arr[idx]);
+        if (newVal !== null) {
+          const parsed = parseInt(newVal,10);
+          if (!isNaN(parsed)) {
+            state.arr[idx] = parsed;
+            // pushing snapshot after change
+            state.event = 'edit';
+            state.phaseNote = 'edited index '+idx;
+            pushHistorySnapshot(state);
+            log('Edited arr['+idx+'] to '+parsed);
+            renderAll();
+          } else {
+            alert('Invalid number.');
+          }
+        }
+      }
+
+      // Verify manual swap selection: user clicks "Verify manual swap"
+      function verifyManualSwap() {
+        if (!state.manualAwaitingSwap) {
+          alert('Not currently awaiting manual swap.');
+          return;
+        }
+        if (manualSelection.length !== 2) {
+          alert('Select two indices first by clicking array elements (they will be marked sel).');
+          return;
+        }
+        const a = manualSelection[0], b = manualSelection[1];
+        // Accept if they are exactly (i, minIndex) in any order
+        if ((a === state.i && b === state.minIndex) || (b === state.i && a === state.minIndex)) {
+          // perform swap
+          const tmp = state.arr[state.i];
+          state.arr[state.i] = state.arr[state.minIndex];
+          state.arr[state.minIndex] = tmp;
+          state.swaps++;
+          state.event = 'swap';
+          state.phaseNote = 'manual swap performed';
+          state.manualAwaitingSwap = false;
+          state.micro = 'afterSwap';
+          pushHistorySnapshot(state);
+          log('Manual swap successful: swapped '+a+' and '+b);
+          manualSelection = [];
+          renderAll();
+        } else {
+          // incorrect attempt
+          state.event = 'badManualSwap';
+          state.phaseNote = 'incorrect manual swap attempt: ('+a+','+b+')';
+          pushHistorySnapshot(state);
+          log('Incorrect manual swap attempt: ('+a+','+b+'); expected ('+state.i+','+state.minIndex+')');
+          // keep awaiting
+        }
+      }
+
+      function forceSwapNow() {
+        if (!state.manualAwaitingSwap) {
+          alert('Not awaiting manual swap.');
+          return;
+        }
+        // perform swap automatically (force)
+        const tmp = state.arr[state.i];
+        state.arr[state.i] = state.arr[state.minIndex];
+        state.arr[state.minIndex] = tmp;
+        state.swaps++;
+        state.event = 'forceSwap';
+        state.phaseNote = 'forced swap';
+        state.manualAwaitingSwap = false;
+        state.micro = 'afterSwap';
+        pushHistorySnapshot(state);
+        log('Forced swap executed for i='+state.i);
+        manualSelection = [];
+        renderAll();
+      }
+
+      // UI event hookups
+      sizeRange.addEventListener('input', function(){ sizeNumber.value = sizeRange.value; });
+      sizeNumber.addEventListener('input', function(){ sizeRange.value = sizeNumber.value; });
+
+      randomBtn.addEventListener('click', function(){
+        rng = Math.random;
+        const n = parseInt(sizeNumber.value,10);
+        const minV = parseInt(valMin.value,10);
+        const maxV = parseInt(valMax.value,10);
+        initialize(initialArray(n,minV,maxV,Math.random));
+      });
+
+      randomWithSeed.addEventListener('click', function(){
+        const seed = seedInput.value;
+        if (!seed) {
+          alert('Enter a seed string/number first.');
+          return;
+        }
+        rng = makeRNG(seed);
+        const n = parseInt(sizeNumber.value,10);
+        const minV = parseInt(valMin.value,10);
+        const maxV = parseInt(valMax.value,10);
+        initialize(initialArray(n,minV,maxV,rng));
+      });
+
+      sortedBtn.addEventListener('click', function(){
+        const n = parseInt(sizeNumber.value,10);
+        const arr = [];
+        const minV = parseInt(valMin.value,10);
+        for (let i=0;i<n;i++) arr.push(minV+i);
+        initialize(arr);
+      });
+
+      reverseBtn.addEventListener('click', function(){
+        const n = parseInt(sizeNumber.value,10);
+        const arr = [];
+        const maxV = parseInt(valMax.value,10);
+        for (let i=0;i<n;i++) arr.push(maxV - i);
+        initialize(arr);
+      });
+
+      setCustomBtn.addEventListener('click', function(){
+        const text = customArray.value.trim();
+        if (!text) { alert('Enter comma-separated numbers.'); return; }
+        const parts = text.split(',').map(s=>s.trim()).filter(s=>s.length>0);
+        const arr = [];
+        for (let p of parts) {
+          const v = parseInt(p,10);
+          if (isNaN(v)) { alert('Invalid number: '+p); return; }
+          arr.push(v);
+        }
+        initialize(arr);
+      });
+
+      comparatorSelect.addEventListener('change', function(){
+        state.comparator = comparatorSelect.value;
+        state.event = 'comparatorChange';
+        state.phaseNote = 'comparator set to '+comparatorSelect.value;
+        pushHistorySnapshot(state);
+        log('Comparator changed to '+comparatorSelect.value);
+        renderAll();
+      });
+
+      speed.addEventListener('input', function(){ speedLabel.textContent = speed.value; });
+
+      stepBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        stepForward();
+      });
+
+      opStepBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        // operation step does more; ensure history redo logic preserved:
+        if (historyPtr < history.length - 1) {
+          historyPtr++;
+          restoreFromHistory(historyPtr);
+          return;
+        }
+        operationStep();
+        renderAll();
+      });
+
+      playBtn.addEventListener('click', function(){
+        startAutoPlay(null);
+        log('Auto-play started.');
+      });
+
+      pauseBtn.addEventListener('click', function(){
+        stopAutoPlay();
+      });
+
+      runToSwapBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        runToNextSwap();
+        log('Running to next swap...');
+      });
+
+      runToCompareBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        runToNextCompare();
+        log('Running to next comparison...');
+      });
+
+      runToEndBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        runToEnd();
+        log('Running to end...');
+      });
+
+      resetBtn.addEventListener('click', function(){
+        if (!history.length) return;
+        restoreFromHistory(0);
+        log('Reset to initial state.');
+      });
+
+      undoBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        stepBackward();
+      });
+
+      redoBtn.addEventListener('click', function(){
+        stopAutoPlay();
+        if (historyPtr < history.length - 1) {
+          historyPtr++;
+          restoreFromHistory(historyPtr);
+          log('Redo to step '+historyPtr);
+        } else {
+          log('Redo: no future steps');
+        }
+      });
+
+      clearLogBtn.addEventListener('click', function(){
+        clearLog();
+      });
+
+      gotoStepBtn.addEventListener('click', function(){
+        const idx = parseInt(stepIndex.value,10);
+        if (isNaN(idx) || idx < 0 || idx >= history.length) { alert('Invalid step index.'); return; }
+        restoreFromHistory(idx);
+        log('Jumped to step '+idx);
+      });
+
+      verifyManualSwapBtn.addEventListener('click', function(){
+        verifyManualSwap();
+      });
+
+      forceSwapBtn.addEventListener('click', function(){
+        forceSwapNow();
+      });
+
+      // Initially populate with random array
+      initialize(initialArray(parseInt(sizeNumber.value,10), parseInt(valMin.value,10), parseInt(valMax.value,10), Math.random));
+
+      // Expose some debug in console (optional)
+      window._selsort = {
+        getState: ()=>cloneState(state),
+        history: ()=>history.slice(),
+        stepForward,
+        stepBackward
+      };
+
+    })();
+  </script>
+</body>
+</html>

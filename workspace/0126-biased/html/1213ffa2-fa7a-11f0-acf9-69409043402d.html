@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Binary Search Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  textarea, input[type=number], input[type=text] {
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  button {
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  .panel {
+    margin-bottom: 1em;
+  }
+  label {
+    display: inline-block;
+    min-width: 110px;
+  }
+  pre {
+    border: 1px solid black;
+    padding: 0.5em;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  td {
+    border: 1px solid black;
+    padding: 0.2em 0.4em;
+    text-align: center;
+    min-width: 25px;
+  }
+  td.pointer {
+    border-color: black;
+    font-weight: bold;
+  }
+  td.low, td.high {
+    border-style: double;
+  }
+  td.mid {
+    border-style: dotted;
+  }
+  td.found {
+    background: none;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h1>Binary Search Interactive Explorer</h1>
+
+<div class="panel">
+  <label for="arrayInput">Array elements (sorted, comma separated):</label><br />
+  <textarea id="arrayInput" rows="3" cols="80" spellcheck="false" aria-label="Array input"></textarea><br />
+  <button id="loadArrayBtn">Load Array</button>
+</div>
+
+<div class="panel">
+  <label for="targetInput">Target value:</label>
+  <input type="text" id="targetInput" aria-label="Target value input" />
+  <button id="setTargetBtn">Set Target</button>
+</div>
+
+<div class="panel">
+  <label for="stepDelayInput">Step delay (ms auto-step):</label>
+  <input type="number" id="stepDelayInput" min="100" max="5000" step="100" value="1000" aria-label="Automatic step delay milliseconds" />
+  <button id="autoStepToggleBtn" disabled>Start Auto-Step</button>
+  <button id="stepForwardBtn" disabled>Step Forward</button>
+  <button id="stepBackwardBtn" disabled>Step Backward</button>
+  <button id="resetSearchBtn" disabled>Reset Search</button>
+</div>
+
+<div class="panel" aria-live="polite" aria-atomic="true" aria-relevant="additions">
+  <label>Binary Search State:</label><br/>
+  <pre id="stateOutput">(Load array and set target to start)</pre>
+</div>
+
+<div class="panel">
+  <label>Array visualization:</label><br />
+  <div id="arrayVis" role="list" aria-label="Array elements visualization"></div>
+</div>
+
+<div class="panel">
+  <label for="manualCompareInput">Manual compare current middle with target:</label>
+  <select id="manualCompareInput" aria-label="Manual comparison">
+    <option value="unset">-- Select --</option>
+    <option value="less">Middle value less than target (&lt;)</option>
+    <option value="equal">Middle value equals target (=)</option>
+    <option value="greater">Middle value greater than target (&gt;)</option>
+  </select>
+  <button id="manualCompareBtn" disabled>Submit Comparison</button>
+</div>
+
+<hr/>
+
+<div class="panel">
+  <button id="exploreAllBtn" disabled>Explore All Search Paths (Exhaustive)</button>
+  <button id="showSummaryBtn" disabled>Show Search Summary</button>
+</div>
+
+<div class="panel" aria-live="polite" aria-atomic="true" aria-relevant="additions">
+  <label>Search Logs and Exploration Output:</label><br />
+  <pre id="logOutput" style="max-height:300px; overflow-y:auto;"></pre>
+</div>
+
+<script>
+(() => {
+  // State and helper functions for binary search interactive exploration
+  const arrayInput = document.getElementById('arrayInput');
+  const loadArrayBtn = document.getElementById('loadArrayBtn');
+  const targetInput = document.getElementById('targetInput');
+  const setTargetBtn = document.getElementById('setTargetBtn');
+  const stepDelayInput = document.getElementById('stepDelayInput');
+  const autoStepToggleBtn = document.getElementById('autoStepToggleBtn');
+  const stepForwardBtn = document.getElementById('stepForwardBtn');
+  const stepBackwardBtn = document.getElementById('stepBackwardBtn');
+  const resetSearchBtn = document.getElementById('resetSearchBtn');
+  const stateOutput = document.getElementById('stateOutput');
+  const arrayVis = document.getElementById('arrayVis');
+  const manualCompareInput = document.getElementById('manualCompareInput');
+  const manualCompareBtn = document.getElementById('manualCompareBtn');
+  const exploreAllBtn = document.getElementById('exploreAllBtn');
+  const showSummaryBtn = document.getElementById('showSummaryBtn');
+  const logOutput = document.getElementById('logOutput');
+
+  // Internal state
+  let array = [];
+  let target = null;
+  let sorted = false;
+
+  // Search session state: logs each step {low, high, mid, midVal, comparison} to reconstruct
+  let searchSteps = [];
+
+  // Current step index for walkthrough
+  let currentStepIndex = -1;
+
+  // Auto-step timer and running flag
+  let autoStepTimer = null;
+  let autoStepRunning = false;
+
+  // EXACT binary search algorithm simulation state and control
+  // For extra user control, we do NOT assume automatic comparison,
+  // instead user feeds comparison result manually.
+  // That means user controls the logic branch with manual input.
+
+  // Current low, high for binary search
+  // We will reset these on new start
+  let low = 0;
+  let high = -1;
+  // mid always recomputed: mid = Math.floor((low+high)/2)
+
+  // Flag indicating search ended (found or empty range)
+  let searchEnded = false;
+
+  // Result storage for the index found or -1
+  let foundIndex = -1;
+
+  // -------------------
+  // Utility Functions
+  // -------------------
+
+  // Display the array visually, marking low, mid, high indexes, highlight found index.
+  function renderArrayVis(lowIndex, midIndex, highIndex, foundIdx) {
+    if (array.length === 0) {
+      arrayVis.textContent = '(Array empty)';
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+
+    // Create a table to show array visually with labels
+    // 3 rows: elements, pointers labels below, highlights in styles with borders
+    const tbl = document.createElement('table');
+    tbl.setAttribute('role', 'list');
+
+    // First row: elements with possible highlights
+    const trEls = document.createElement('tr');
+    for (let i = 0; i < array.length; i++) {
+      const td = document.createElement('td');
+      td.textContent = array[i];
+      if (i === lowIndex) td.classList.add('low');
+      if (i === midIndex) td.classList.add('mid');
+      if (i === highIndex) td.classList.add('high');
+      if (i === foundIdx) td.classList.add('found');
+      trEls.appendChild(td);
+    }
+    tbl.appendChild(trEls);
+
+    // Second row: pointer labels below the elements
+    const trLabels = document.createElement('tr');
+    for (let i = 0; i < array.length; i++) {
+      const td = document.createElement('td');
+      const labels = [];
+      if (i === lowIndex) labels.push('low');
+      if (i === midIndex) labels.push('mid');
+      if (i === highIndex) labels.push('high');
+      if (labels.length > 0) {
+        td.textContent = labels.join(', ');
+        td.classList.add('pointer');
+      } else {
+        td.textContent = '';
+      }
+      trLabels.appendChild(td);
+    }
+    tbl.appendChild(trLabels);
+
+    fragment.appendChild(tbl);
+    while (arrayVis.firstChild) arrayVis.removeChild(arrayVis.firstChild);
+    arrayVis.appendChild(fragment);
+  }
+
+  // Output current binary search state and progress info
+  function updateStateOutput() {
+    if (array.length === 0) {
+      stateOutput.textContent = '(Load array to start)';
+      return;
+    }
+    if (target === null) {
+      stateOutput.textContent = 'Target not set.';
+      return;
+    }
+    if (searchEnded) {
+      if (foundIndex >= 0) {
+        stateOutput.textContent = `Search ended: target ${target} found at index ${foundIndex}.`;
+      } else {
+        stateOutput.textContent = `Search ended: target ${target} NOT found in array.`;
+      }
+      renderArrayVis(low, -1, high, foundIndex);
+      return;
+    }
+    if (low > high) {
+      stateOutput.textContent = `Range invalid (low > high), target not found: ${target}.`;
+      renderArrayVis(low, -1, high, -1);
+      return;
+    }
+    let mid = Math.floor((low + high) / 2);
+    stateOutput.textContent =
+`Current search state for target ${target}:
+Low index: ${low}, value: ${array[low]}
+High index: ${high}, value: ${array[high]}
+Mid index: ${mid}, value: ${array[mid]}
+
+Please compare middle value to target and submit comparison below.`;
+    renderArrayVis(low, mid, high, -1);
+  }
+
+  // Log messages with timestamps and scrolling
+  function addLog(message) {
+    const timestamp = new Date().toLocaleTimeString();
+    logOutput.textContent += `[${timestamp}] ${message}\n`;
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  // Parse and validate input array
+  function parseInputArray(text) {
+    // Accept integers or floats, allow whitespace, ignore empty tokens
+    // Reject if not sorted ascending
+    let parts = text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    if (parts.length === 0) return null;
+    let nums = [];
+    for (const p of parts) {
+      if (!/^(-?\d+(\.\d+)?|\.\d+)$/.test(p)) {
+        return null;
+      }
+      const n = Number(p);
+      if (Number.isNaN(n)) {
+        return null;
+      }
+      nums.push(n);
+    }
+    // Check sorted ascending (allow equal elements)
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] < nums[i-1]) {
+        return null;
+      }
+    }
+    return nums;
+  }
+
+  // Reset all state to initial after new array loaded or target set
+  function resetSearchSession() {
+    low = 0;
+    high = array.length - 1;
+    searchEnded = false;
+    foundIndex = -1;
+    searchSteps = [];
+    currentStepIndex = -1;
+    autoStepRunning = false;
+    clearInterval(autoStepTimer);
+    autoStepTimer = null;
+    manualCompareInput.value = 'unset';
+    manualCompareBtn.disabled = false;
+    autoStepToggleBtn.disabled = false;
+    stepForwardBtn.disabled = false;
+    stepBackwardBtn.disabled = false;
+    resetSearchBtn.disabled = false;
+    exploreAllBtn.disabled = false;
+    showSummaryBtn.disabled = false;
+    updateStateOutput();
+    addLog(`Search session reset for target ${target}.`);
+  }
+
+  // Execute one step of binary search given a comparison result ('less', 'equal', 'greater')
+  // Returns true if continues and false if search ended
+  function stepBinarySearch(comparison) {
+    if (searchEnded) return false;
+    if (low > high) {
+      searchEnded = true;
+      foundIndex = -1;
+      addLog(`Search ended: target ${target} not found.`);
+      updateStateOutput();
+      return false;
+    }
+    let mid = Math.floor((low + high) / 2);
+    const midVal = array[mid];
+
+    searchSteps.push({
+      low, high, mid, midVal, comparison
+    });
+
+    addLog(`Step: low=${low} (${array[low]}), high=${high} (${array[high]}), mid=${mid} (${midVal}), comparison ${comparison}`);
+
+    if (comparison === 'equal') {
+      searchEnded = true;
+      foundIndex = mid;
+      addLog(`Target ${target} found at index ${mid}.`);
+      updateStateOutput();
+      return false;
+    }
+    else if (comparison === 'less') {
+      // midVal < target means target is right side -> low = mid+1
+      low = mid + 1;
+      if (low > high) {
+        searchEnded = true;
+        foundIndex = -1;
+        addLog(`Range exhausted, target ${target} not found.`);
+        updateStateOutput();
+        return false;
+      }
+    }
+    else if (comparison === 'greater') {
+      // midVal > target means target is left side -> high = mid-1
+      high = mid - 1;
+      if (low > high) {
+        searchEnded = true;
+        foundIndex = -1;
+        addLog(`Range exhausted, target ${target} not found.`);
+        updateStateOutput();
+        return false;
+      }
+    } else {
+      // invalid input; do nothing
+      addLog(`Invalid comparison value '${comparison}' received.`);
+      return false;
+    }
+    updateStateOutput();
+    return true;
+  }
+
+  // Step backward: pops last step and reverts low/high accordingly
+  function stepBinarySearchBackward() {
+    if (searchSteps.length === 0) {
+      addLog('No previous step to go back to.');
+      return;
+    }
+    if (searchEnded) {
+      searchEnded = false;
+      foundIndex = -1;
+    }
+
+    // Remove last step
+    searchSteps.pop();
+
+    // Recompute low/high from remaining steps, or set to start
+    if (searchSteps.length === 0) {
+      low = 0;
+      high = array.length -1;
+    } else {
+      const lastStep = searchSteps[searchSteps.length -1];
+      low = lastStep.low;
+      high = lastStep.high;
+      // Apply last step's comparison to determine next low/high for next step
+      let comp = lastStep.comparison;
+      let mid = lastStep.mid;
+      if (comp === 'equal') {
+        // We are stepping back from a found state => unset
+        searchEnded = false;
+        foundIndex = -1;
+      }
+      else if (comp === 'less') {
+        // previous step advanced low = mid+1
+        low = mid;
+        high = lastStep.high;
+      }
+      else if (comp === 'greater') {
+        // previous step set high=mid-1
+        low = lastStep.low;
+        high = mid;
+      }
+    }
+    updateStateOutput();
+    addLog('Stepped backward one step.');
+  }
+
+  // Auto-step toggle start/stop
+  function toggleAutoStep() {
+    if (!autoStepRunning) {
+      // Start auto-step process:
+      if (searchEnded) {
+        addLog('Search ended, cannot auto-step.');
+        return;
+      }
+      autoStepRunning = true;
+      autoStepToggleBtn.textContent = 'Stop Auto-Step';
+      manualCompareInput.disabled = true;
+      manualCompareBtn.disabled = true;
+      stepForwardBtn.disabled = true;
+      stepBackwardBtn.disabled = true;
+      resetSearchBtn.disabled = true;
+      exploreAllBtn.disabled = true;
+      showSummaryBtn.disabled = true;
+
+      addLog('Auto-step started: at each interval provide simulated compare prompt (user manual still required to input).');
+      // In this version, due to interactive manual input requirement, auto-step will pause at each step for user input.
+      // So auto-step here just repeatedly shows prompts but waits for manual input.
+      // For demo, auto-step disables buttons and auto-advances if user submits manual input quickly.
+
+      // Actually we can't auto advance without comparison input: how to implement?
+
+      // Simplify: auto-step repeatedly enables manual compare with a timer, user must input comparison to continue.
+
+      // So we do nothing here except enforcing timer to check if manualCompareInput is set and auto-advance if so.
+      autoStepTimer = setInterval(() => {
+        if (searchEnded) {
+          toggleAutoStep(); // stop timer
+          return;
+        }
+        if (manualCompareInput.value !== 'unset') {
+          const comp = manualCompareInput.value;
+          manualCompareInput.value = 'unset';
+          stepBinarySearch(comp);
+          if (searchEnded) {
+            toggleAutoStep();
+          }
+        }
+      }, Number(stepDelayInput.value) || 1000);
+
+    } else {
+      // Stop auto-step
+      autoStepRunning = false;
+      autoStepToggleBtn.textContent = 'Start Auto-Step';
+      manualCompareInput.disabled = false;
+      manualCompareBtn.disabled = false;
+      stepForwardBtn.disabled = false;
+      stepBackwardBtn.disabled = false;
+      resetSearchBtn.disabled = false;
+      exploreAllBtn.disabled = false;
+      showSummaryBtn.disabled = false;
+      clearInterval(autoStepTimer);
+      autoStepTimer = null;
+      addLog('Auto-step stopped.');
+    }
+  }
+
+  // Handle manual submit comparison button
+  function submitManualComparison() {
+    if (manualCompareInput.value === 'unset') {
+      addLog('No comparison selected, cannot proceed step.');
+      return;
+    }
+    if (!stepBinarySearch(manualCompareInput.value)) {
+      // search ended
+      manualCompareBtn.disabled = true;
+      manualCompareInput.disabled = true;
+      autoStepToggleBtn.disabled = true;
+      stepForwardBtn.disabled = true;
+    }
+    manualCompareInput.value = 'unset';
+  }
+
+  // Step forward in search by one (simulate user entering correct comparison automatically)
+  // Auto-generate correct comparison here for convenience to help exploration without manual user input every time
+  function autoStepForward() {
+    if (searchEnded) {
+      addLog('Search already ended, cannot step forward.');
+      return;
+    }
+    if (low > high) {
+      searchEnded = true;
+      foundIndex = -1;
+      updateStateOutput();
+      addLog('Range invalid, search ended not found.');
+      return;
+    }
+    let mid = Math.floor((low + high) / 2);
+    const midVal = array[mid];
+    let comp;
+    if (midVal < target) comp = 'less';
+    else if (midVal > target) comp = 'greater';
+    else comp = 'equal';
+    addLog(`Auto-step forward using comparison: middle value ${midVal} vs target ${target}: ${comp}`);
+    stepBinarySearch(comp);
+    if (searchEnded) {
+      manualCompareBtn.disabled = true;
+      manualCompareInput.disabled = true;
+      autoStepToggleBtn.disabled = true;
+      stepForwardBtn.disabled = true;
+    }
+  }
+
+  // Reset entire search, keep same array and target
+  function resetSearch() {
+    if (array.length === 0 || target === null) {
+      addLog('Cannot reset search: array or target not set.');
+      return;
+    }
+    resetSearchSession();
+  }
+
+  // Explore all possible search paths exhaustively
+  // This is a complex exploration that tries all valid compare branches at each step,
+  // builds a complete tree of searches states that might occur, displaying every path.
+  // Results: all sequences of low,high,mid,comparison steps ending with found or not found.
+
+  // To prevent UI freezing with very large arrays, cap max depth search
+  const MAX_PATHS = 10000; // max number of paths to explore before stopping
+  const MAX_DEPTH = 100; // cutoff depth
+
+  // Structure for path node state:
+  // {low, high, steps: [{low,high,mid,midVal,comparison},...]}
+  // Recursively explore left/right branches depending on comparison made
+  // For each node, try comparisions less, equal, greater (only equal ends search early)
+  // But possible comparisons constrained by real value relative to target:
+  // Since target is known, only legit comparison is the real one.
+  // However, this exploration will explore all hypothetical comparisons ignoring correctness,
+  // to simulate how binary search branches upon any input comparison.
+
+  // We support this "deep exploration" by exploring all possible compare choices at each step,
+  // even if comparison is nonsensical with respect to array value and target,
+  // to demonstrate concept of step-by-step binary search control flow.
+
+  // This is not a standard binary search but a conceptual exploration of all branches.
+
+  // We recursively build a tree and produce log summary.
+
+  // Node example:
+  // {low, high, steps: [...], ended: bool, foundIndex: int}
+
+  // Returns array of terminal nodes (search ended states)
+
+  function exploreAllPathsRecursive(node, pathsSoFar) {
+    if (pathsSoFar.length > MAX_PATHS) {
+      return null; // limit reached: abort exploration
+    }
+
+    const {low, high, steps} = node;
+    if (low > high) {
+      // Not found - end node
+      node.ended = true;
+      node.foundIndex = -1;
+      pathsSoFar.push(node);
+      return pathsSoFar;
+    }
+    if (steps.length >= MAX_DEPTH) {
+      node.ended = true;
+      node.foundIndex = -1;
+      pathsSoFar.push(node);
+      return pathsSoFar;
+    }
+
+    const mid = Math.floor((low + high) / 2);
+    const midVal = (mid >= 0 && mid < array.length) ? array[mid] : null;
+
+    // Branches for comparison: less, equal, greater
+    // Each creates a new node with updated low/high and added step
+
+    // 1) Equal branch - ends search found
+    const equalNode = {
+      low: low, high: high,
+      steps: steps.concat([{low,high,mid,midVal,comparison:'equal'}]),
+      ended: true,
+      foundIndex: mid
+    };
+    pathsSoFar.push(equalNode);
+
+    if (pathsSoFar.length > MAX_PATHS) return null;
+
+    // 2) Less branch: midVal < target => low = mid+1, else next step range shrinks from left
+    const lessNode = {
+      low: mid + 1, 
+      high: high,
+      steps: steps.concat([{low,high,mid,midVal,comparison:'less'}]),
+      ended: false,
+      foundIndex: -1
+    };
+    let result = exploreAllPathsRecursive(lessNode, pathsSoFar);
+    if (result === null) return null;
+
+    // 3) Greater branch: midVal > target => high = mid -1, else next step range shrinks from right
+    const greaterNode = {
+      low: low,
+      high: mid -1,
+      steps: steps.concat([{low,high,mid,midVal,comparison:'greater'}]),
+      ended: false,
+      foundIndex: -1
+    };
+    result = exploreAllPathsRecursive(greaterNode, pathsSoFar);
+    if (result === null) return null;
+
+    return pathsSoFar;
+  }
+
+  // Start explore all paths
+  function exploreAllPaths() {
+    if (array.length === 0 || target === null) {
+      addLog('Cannot explore paths: array or target not set.');
+      return;
+    }
+    addLog('Starting exhaustive exploration of all binary search paths...');
+    exploreAllBtn.disabled = true;
+    showSummaryBtn.disabled = false;
+    let initialNode = {low:0, high: array.length-1, steps: [], ended:false, foundIndex:-1};
+    let allPaths = exploreAllPathsRecursive(initialNode, []);
+    if (allPaths === null) {
+      addLog(`Exploration aborted after reaching path limit (${MAX_PATHS}) or max depth (${MAX_DEPTH}).`);
+      searchExplorationResults = [];
+      exploreAllBtn.disabled = false;
+      return;
+    }
+    searchExplorationResults = allPaths;
+    addLog(`Exploration complete. Number of paths discovered: ${allPaths.length}.`);
+    exploreAllBtn.disabled = false;
+  }
+
+  // Global storage for exploration results array
+  let searchExplorationResults = [];
+
+  // Show summary of exploration results with counts and examples
+  function showExplorationSummary() {
+    if (!searchExplorationResults || searchExplorationResults.length === 0) {
+      addLog('No exploration results to show. Run exploration first.');
+      return;
+    }
+    let foundCount = 0;
+    let notFoundCount = 0;
+    for (const path of searchExplorationResults) {
+      if (path.foundIndex >= 0) foundCount++;
+      else notFoundCount++;
+    }
+    let out = '';
+    out += `EXPLORATION SUMMARY:\nTotal paths: ${searchExplorationResults.length}\nPaths where target found: ${foundCount}\nPaths where not found: ${notFoundCount}\n\n`;
+    out += `EXAMPLES of found paths:\n`;
+    let foundExampleCount = 0;
+    for (const path of searchExplorationResults) {
+      if (path.foundIndex >= 0) {
+        out += ` - Path length ${path.steps.length}, found at index ${path.foundIndex}\n`;
+        if (foundExampleCount < 3) {
+          for (const step of path.steps) {
+            out += `   step: low=${step.low}, high=${step.high}, mid=${step.mid}, val=${step.midVal}, cmp=${step.comparison}\n`;
+          }
+          foundExampleCount++;
+          out += '\n';
+        }
+        if (foundExampleCount >= 3) break;
+      }
+    }
+    out += `EXAMPLES of not found paths:\n`;
+    let notFoundExampleCount = 0;
+    for (const path of searchExplorationResults) {
+      if (path.foundIndex < 0) {
+        out += ` - Path length ${path.steps.length}\n`;
+        if (notFoundExampleCount < 3) {
+          for (const step of path.steps) {
+            out += `   step: low=${step.low}, high=${step.high}, mid=${step.mid}, val=${step.midVal}, cmp=${step.comparison}\n`;
+          }
+          notFoundExampleCount++;
+          out += '\n';
+        }
+        if (notFoundExampleCount >= 3) break;
+      }
+    }
+    logOutput.textContent = out;
+  }
+
+  // --- EVENT LISTENERS ---
+
+  loadArrayBtn.addEventListener('click', () => {
+    const inputText = arrayInput.value;
+    const parsed = parseInputArray(inputText);
+    if (!parsed) {
+      addLog('Invalid input array. Ensure it is sorted ascending numbers separated by commas.');
+      return;
+    }
+    array = parsed;
+    arrayInput.value = array.join(', ');
+    sorted = true;
+    addLog(`Array loaded with ${array.length} elements.`);
+    target = null;
+    targetInput.value = '';
+    updateStateOutput();
+    resetSearchBtn.disabled = true;
+    autoStepToggleBtn.disabled = true;
+    stepForwardBtn.disabled = true;
+    stepBackwardBtn.disabled = true;
+    manualCompareBtn.disabled = true;
+    manualCompareInput.disabled = true;
+    exploreAllBtn.disabled = true;
+    showSummaryBtn.disabled = true;
+    foundIndex = -1;
+    searchEnded = false;
+    while (arrayVis.firstChild) arrayVis.removeChild(arrayVis.firstChild);
+  });
+
+  setTargetBtn.addEventListener('click', () => {
+    if (array.length === 0) {
+      addLog('Load an array before setting target.');
+      return;
+    }
+    const val = targetInput.value.trim();
+    if (val.length === 0) {
+      addLog('Empty target input.');
+      return;
+    }
+    let numTarget = Number(val);
+    if (Number.isNaN(numTarget)) {
+      addLog('Target must be a valid number.');
+      return;
+    }
+    target = numTarget;
+    addLog(`Target set to ${target}.`);
+    resetSearchSession();
+  });
+
+  manualCompareBtn.addEventListener('click', () => {
+    submitManualComparison();
+  });
+
+  stepForwardBtn.addEventListener('click', () => {
+    autoStepRunning = false;
+    clearInterval(autoStepTimer);
+    autoStepTimer = null;
+    autoStepToggleBtn.textContent = 'Start Auto-Step';
+    manualCompareInput.disabled = false;
+    manualCompareBtn.disabled = false;
+    stepBackwardBtn.disabled = false;
+    resetSearchBtn.disabled = false;
+    exploreAllBtn.disabled = false;
+    showSummaryBtn.disabled = false;
+    autoStepToggleBtn.disabled = false;
+    autoStepForward();
+  });
+
+  stepBackwardBtn.addEventListener('click', () => {
+    autoStepRunning = false;
+    clearInterval(autoStepTimer);
+    autoStepTimer = null;
+    autoStepToggleBtn.textContent = 'Start Auto-Step';
+    manualCompareInput.disabled = false;
+    manualCompareBtn.disabled = false;
+    stepForwardBtn.disabled = false;
+    resetSearchBtn.disabled = false;
+    exploreAllBtn.disabled = false;
+    showSummaryBtn.disabled = false;
+    autoStepToggleBtn.disabled = false;
+    stepBinarySearchBackward();
+  });
+
+  resetSearchBtn.addEventListener('click', () => {
+    autoStepRunning = false;
+    clearInterval(autoStepTimer);
+    autoStepTimer = null;
+    autoStepToggleBtn.textContent = 'Start Auto-Step';
+    manualCompareInput.disabled = false;
+    manualCompareBtn.disabled = false;
+    stepForwardBtn.disabled = false;
+    stepBackwardBtn.disabled = false;
+    exploreAllBtn.disabled = false;
+    showSummaryBtn.disabled = false;
+    autoStepToggleBtn.disabled = false;
+    resetSearch();
+  });
+
+  autoStepToggleBtn.addEventListener('click', toggleAutoStep);
+
+  exploreAllBtn.addEventListener('click', () => {
+    exploreAllPaths();
+  });
+
+  showSummaryBtn.addEventListener('click', () => {
+    showExplorationSummary();
+  });
+
+  // Keyboard shortcuts: Enter key on manualCompareInput triggers click on manualCompareBtn
+  manualCompareInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!manualCompareBtn.disabled) manualCompareBtn.click();
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>

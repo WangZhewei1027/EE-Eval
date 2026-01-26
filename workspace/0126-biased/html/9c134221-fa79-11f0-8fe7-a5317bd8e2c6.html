@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Set — Interactive Explorer</title>
+<style>
+/* Minimal CSS only to keep layout readable. No colors, no animations. */
+body { font-family: sans-serif; margin: 12px; color: black; background: white; }
+button, input, select, textarea { font: inherit; }
+.card-button { width: 120px; height: 56px; white-space: pre-line; }
+.grid-table td { padding: 4px; vertical-align: top; }
+.small { font-size: 12px; }
+.controls { margin-bottom: 8px; }
+.panel { border: 1px solid #ccc; padding: 6px; margin-bottom: 8px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>Set — Interactive Explorer</h1>
+
+<div class="controls panel">
+  <div>
+    <button id="newGameBtn">New Game (Seed)</button>
+    <input id="seedInput" type="number" placeholder="seed (optional)" style="width:120px">
+    <label>Start cards:
+      <input id="startCards" type="number" value="12" min="3" max="21" style="width:60px">
+    </label>
+    <label>Replace on set:
+      <input id="replaceOnSet" type="checkbox" checked>
+    </label>
+    <label>Auto-deal when no set:
+      <input id="autoDealWhenNoSet" type="checkbox" checked>
+    </label>
+    <label>Columns:
+      <input id="columns" type="number" value="4" min="3" max="7" style="width:50px">
+    </label>
+  </div>
+
+  <div style="margin-top:8px;">
+    <button id="shuffleBtn">Shuffle Deck</button>
+    <button id="deal3Btn">Deal 3</button>
+    <button id="deal12Btn">Deal 12</button>
+    <button id="clearSelectionsBtn">Clear Selections</button>
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+    <label>Auto-play speed (ms):
+      <input id="autoPlaySpeed" type="range" min="100" max="3000" value="800">
+      <span id="autoPlaySpeedLabel">800</span>
+    </label>
+    <button id="autoPlayBtn">Auto-remove sets</button>
+    <button id="stopAutoPlayBtn" disabled>Stop Auto</button>
+  </div>
+
+  <div style="margin-top:8px;">
+    <button id="findAllSetsBtn">Find All Sets</button>
+    <button id="nextSetBtn">Next Set</button>
+    <button id="prevSetBtn">Prev Set</button>
+    <button id="hintBtn">Hint (one card)</button>
+    <label>Hint level:
+      <select id="hintLevel">
+        <option value="1">Show one card of a set</option>
+        <option value="2">Show two-card pair and missing card value</option>
+        <option value="3">Highlight full set</option>
+      </select>
+    </label>
+    <button id="pairCompleteBtn">Pair → Show third</button>
+  </div>
+
+  <div style="margin-top:8px;">
+    <label>Monte Carlo trials:
+      <input id="mcTrials" type="number" value="1000" min="10" max="200000" style="width:90px">
+    </label>
+    <button id="runMcBtn">Run Monte Carlo (probability table has set)</button>
+    <button id="stopMcBtn" disabled>Stop MC</button>
+    <label>MC progress: <span id="mcProgress">0/0</span></label>
+  </div>
+
+</div>
+
+<div class="panel">
+  <div><strong>Game state</strong></div>
+  <div>Deck remaining: <span id="deckCount">81</span></div>
+  <div>Cards on table: <span id="tableCount">0</span></div>
+  <div>Selected: <span id="selectedCount">0</span></div>
+  <div>Score: <span id="score">0</span> | Streak: <span id="streak">0</span> | Wrong tries: <span id="wrong">0</span></div>
+  <div>Last action: <span id="lastAction">---</span></div>
+  <div>Found sets on table: <span id="setsCount">0</span></div>
+  <div>Mode: <span id="modeLabel">Manual</span></div>
+</div>
+
+<div class="panel">
+  <div><strong>Solver output / Controls</strong></div>
+  <div>
+    <button id="listAllSetsBtn">List All Sets</button>
+    <button id="exportSetsBtn">Export Sets JSON</button>
+    <button id="importSetsBtn">Import & Filter Table (paste JSON)</button>
+    <textarea id="setsList" rows="6" style="width:100%"></textarea>
+  </div>
+  <div style="margin-top:6px;">
+    <label>Search table by attributes (use 1-3 or * for any). Order: number,shape,color,fill</label>
+    <input id="searchPattern" type="text" placeholder="e.g. 2,*,1,*" style="width:240px">
+    <button id="applySearchBtn">Apply Filter (highlight matches)</button>
+    <button id="clearSearchBtn">Clear Filter</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div><strong>Export / Import game state</strong></div>
+  <div>
+    <button id="exportStateBtn">Export Game State (JSON)</button>
+    <button id="importStateBtn">Import Game State (paste JSON)</button>
+    <textarea id="stateBox" rows="6" style="width:100%"></textarea>
+  </div>
+</div>
+
+<div class="panel">
+  <div><strong>Deck and card legend</strong></div>
+  <div class="small">
+    Attributes order (left→right): number (1,2,3) • shape (O = oval, D = diamond, S = squiggle) • color (R = red, G = green, P = purple) • fill (F = solid, T = striped, O = open)
+    <br>
+    Card code example: "2 D P T" means number=2, shape=diamond, color=purple, fill=striped.
+  </div>
+</div>
+
+<div>
+  <strong>Cards on table (click to select/unselect)</strong>
+  <div id="cardsContainer"></div>
+</div>
+
+<div class="panel">
+  <div><strong>Log / History</strong></div>
+  <textarea id="log" rows="8" style="width:100%" readonly></textarea>
+</div>
+
+<script>
+/*
+  Interactive Set game explorer.
+  - Standard Set deck: 4 attributes each with 3 values -> 81 unique cards.
+  - Rich controls: new game, shuffle, deal, solver, Monte Carlo, undo/redo, export/import, hints, auto-play.
+  - Visuals intentionally minimal.
+*/
+
+/* Utility helpers */
+function rng(seed) {
+  // simple seeded RNG (mulberry32)
+  let s = seed >>> 0;
+  return function() {
+    s += 0x6D2B79F5;
+    var t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleArray(arr, seed) {
+  let random = seed == null ? Math.random : rng(seed);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+/* Card representation */
+const shapes = ['O', 'D', 'S']; // oval, diamond, squiggle
+const colors = ['R', 'G', 'P']; // red, green, purple
+const fills = ['F', 'T', 'O'];  // full/solid, striped, open
+
+function makeDeck() {
+  const deck = [];
+  for (let n = 1; n <= 3; n++) {
+    for (let s = 0; s < 3; s++) {
+      for (let c = 0; c < 3; c++) {
+        for (let f = 0; f < 3; f++) {
+          deck.push({n, s, c, f, id: `${n}${shapes[s]}${colors[c]}${fills[f]}`});
+        }
+      }
+    }
+  }
+  return deck;
+}
+
+function cardToText(card) {
+  return `${card.n} ${shapes[card.s]} ${colors[card.c]} ${fills[card.f]}`;
+}
+
+function clone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/* Set rules */
+function thirdValue(a, b) {
+  if (a === b) return a;
+  // values are 0,1,2; third is the remaining one
+  return 0 ^ 1 ^ 2 ^ a ^ b;
+}
+
+function isSet(cards) {
+  if (!Array.isArray(cards) || cards.length !== 3) return false;
+  const [A, B, C] = cards;
+  return (
+    ((A.n === B.n && B.n === C.n) || (A.n !== B.n && A.n !== C.n && B.n !== C.n)) &&
+    ((A.s === B.s && B.s === C.s) || (A.s !== B.s && A.s !== C.s && B.s !== C.s)) &&
+    ((A.c === B.c && B.c === C.c) || (A.c !== B.c && A.c !== C.c && B.c !== C.c)) &&
+    ((A.f === B.f && B.f === C.f) || (A.f !== B.f && A.f !== C.f && B.f !== C.f))
+  );
+}
+
+function findSetsOnTable(table) {
+  const sets = [];
+  const n = table.length;
+  for (let i = 0; i < n - 2; i++) {
+    for (let j = i + 1; j < n - 1; j++) {
+      for (let k = j + 1; k < n; k++) {
+        if (isSet([table[i], table[j], table[k]])) {
+          sets.push([i, j, k]);
+        }
+      }
+    }
+  }
+  return sets;
+}
+
+function computeThirdFromTwo(a, b) {
+  // a and b are card objects
+  return {
+    n: (a.n === b.n ? a.n : (6 - (a.n + b.n))), // since n is 1..3, 1+2+3=6
+    s: thirdValue(a.s, b.s),
+    c: thirdValue(a.c, b.c),
+    f: thirdValue(a.f, b.f)
+  };
+}
+
+/* Game state */
+let state = {
+  deck: [],
+  table: [],
+  selectedIndices: [],
+  score: 0,
+  streak: 0,
+  wrong: 0,
+  history: [], // for undo
+  future: [],  // redo
+  lastAction: '',
+  seed: null,
+  autoPlayTimer: null,
+  autoPlayRunning: false,
+  autoPlaySpeed: 800,
+  setsCache: []
+};
+
+/* DOM elements */
+const cardsContainer = document.getElementById('cardsContainer');
+const deckCountSpan = document.getElementById('deckCount');
+const tableCountSpan = document.getElementById('tableCount');
+const selectedCountSpan = document.getElementById('selectedCount');
+const scoreSpan = document.getElementById('score');
+const streakSpan = document.getElementById('streak');
+const wrongSpan = document.getElementById('wrong');
+const lastActionSpan = document.getElementById('lastAction');
+const setsCountSpan = document.getElementById('setsCount');
+const modeLabel = document.getElementById('modeLabel');
+const logBox = document.getElementById('log');
+const setsListBox = document.getElementById('setsList');
+const stateBox = document.getElementById('stateBox');
+const mcProgress = document.getElementById('mcProgress');
+const autoPlaySpeedInput = document.getElementById('autoPlaySpeed');
+const autoPlaySpeedLabel = document.getElementById('autoPlaySpeedLabel');
+const stopAutoPlayBtn = document.getElementById('stopAutoPlayBtn');
+
+/* Initialization */
+function pushHistory(actionName) {
+  const snapshot = {
+    deck: clone(state.deck),
+    table: clone(state.table),
+    selectedIndices: clone(state.selectedIndices),
+    score: state.score,
+    streak: state.streak,
+    wrong: state.wrong,
+    lastAction: state.lastAction
+  };
+  state.history.push(snapshot);
+  // limit history size
+  if (state.history.length > 200) state.history.shift();
+  state.future = []; // clear redo
+  log(`Pushed history: ${actionName}`);
+}
+
+function undo() {
+  if (state.history.length === 0) return;
+  const snap = state.history.pop();
+  const redoSnap = {
+    deck: clone(state.deck),
+    table: clone(state.table),
+    selectedIndices: clone(state.selectedIndices),
+    score: state.score,
+    streak: state.streak,
+    wrong: state.wrong,
+    lastAction: state.lastAction
+  };
+  state.future.push(redoSnap);
+  state.deck = snap.deck;
+  state.table = snap.table;
+  state.selectedIndices = snap.selectedIndices;
+  state.score = snap.score;
+  state.streak = snap.streak;
+  state.wrong = snap.wrong;
+  state.lastAction = snap.lastAction;
+  updateUI();
+  log('Undo performed');
+}
+
+function redo() {
+  if (state.future.length === 0) return;
+  const snap = state.future.pop();
+  pushHistory('redo');
+  state.deck = snap.deck;
+  state.table = snap.table;
+  state.selectedIndices = snap.selectedIndices;
+  state.score = snap.score;
+  state.streak = snap.streak;
+  state.wrong = snap.wrong;
+  state.lastAction = snap.lastAction;
+  updateUI();
+  log('Redo performed');
+}
+
+function log(msg) {
+  const t = (new Date()).toLocaleTimeString();
+  logBox.value = `[${t}] ${msg}\n` + logBox.value;
+}
+
+function updateUI() {
+  deckCountSpan.textContent = state.deck.length;
+  tableCountSpan.textContent = state.table.length;
+  selectedCountSpan.textContent = state.selectedIndices.length;
+  scoreSpan.textContent = state.score;
+  streakSpan.textContent = state.streak;
+  wrongSpan.textContent = state.wrong;
+  lastActionSpan.textContent = state.lastAction || '---';
+  setsCountSpan.textContent = state.setsCache.length;
+  modeLabel.textContent = state.autoPlayRunning ? 'Auto' : 'Manual';
+  renderTable();
+}
+
+/* Render table */
+function renderTable(highlight = {}) {
+  // highlight: { selected: Set(index), foundSet: [i,j,k], matches: Set(index), hint: Set(index) }
+  const cols = Math.max(3, Math.min(7, parseInt(document.getElementById('columns').value || 4, 10)));
+  const table = state.table;
+  const rows = Math.ceil(table.length / cols);
+  const tbl = document.createElement('table');
+  tbl.className = 'grid-table';
+  let idx = 0;
+  for (let r = 0; r < rows; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < cols; c++) {
+      const td = document.createElement('td');
+      if (idx < table.length) {
+        const card = table[idx];
+        const btn = document.createElement('button');
+        btn.className = 'card-button';
+        btn.setAttribute('data-index', idx);
+        btn.textContent = cardToText(card);
+        // Minimal visual flags: we won't use color, but we can alter text labels with markers
+        let prefix = '';
+        if (state.selectedIndices.includes(idx)) prefix += '[S] ';
+        if (highlight.foundSet && highlight.foundSet.includes(idx)) prefix += '[SET] ';
+        if (highlight.matches && highlight.matches.has(idx)) prefix += '[M] ';
+        if (highlight.hint && highlight.hint.has(idx)) prefix += '[H] ';
+        btn.textContent = prefix + btn.textContent;
+        btn.onclick = () => onCardClick(idx);
+        td.appendChild(btn);
+      } else {
+        td.textContent = '';
+      }
+      tr.appendChild(td);
+      idx++;
+    }
+    tbl.appendChild(tr);
+  }
+  cardsContainer.innerHTML = '';
+  cardsContainer.appendChild(tbl);
+}
+
+/* Game actions */
+function newGame(seed = null, startCards = 12) {
+  pushHistory('newGame');
+  state.seed = seed != null ? Number(seed) : null;
+  state.deck = makeDeck();
+  if (seed != null && !isNaN(seed)) shuffleArray(state.deck, Number(seed));
+  else shuffleArray(state.deck, null);
+  state.table = [];
+  state.selectedIndices = [];
+  state.score = 0;
+  state.streak = 0;
+  state.wrong = 0;
+  state.lastAction = 'New game';
+  drawInitial(startCards);
+  state.setsCache = findSetsOnTable(state.table);
+  updateUI();
+  log(`New game started (seed=${state.seed})`);
+}
+
+function drawInitial(n) {
+  for (let i = 0; i < n && state.deck.length > 0; i++) {
+    state.table.push(state.deck.pop());
+  }
+}
+
+function shuffleDeck() {
+  pushHistory('shuffleDeck');
+  if (state.seed != null) shuffleArray(state.deck, state.seed + Math.floor(Math.random() * 1000));
+  else shuffleArray(state.deck, null);
+  state.lastAction = 'Deck shuffled';
+  updateUI();
+  log('Deck shuffled');
+}
+
+function deal3() {
+  pushHistory('deal3');
+  let added = 0;
+  for (let i = 0; i < 3 && state.deck.length > 0; i++) {
+    state.table.push(state.deck.pop());
+    added++;
+  }
+  state.lastAction = `Dealt ${added} card(s)`;
+  state.setsCache = findSetsOnTable(state.table);
+  updateUI();
+  log(`Dealt ${added} card(s)`);
+}
+
+function dealN(n) {
+  pushHistory('dealN');
+  let added = 0;
+  for (let i = 0; i < n && state.deck.length > 0; i++) {
+    state.table.push(state.deck.pop());
+    added++;
+  }
+  state.lastAction = `Dealt ${added} card(s)`;
+  state.setsCache = findSetsOnTable(state.table);
+  updateUI();
+  log(`Dealt ${added} card(s)`);
+}
+
+function onCardClick(index) {
+  // select/unselect
+  const sel = state.selectedIndices;
+  const pos = sel.indexOf(index);
+  if (pos >= 0) {
+    sel.splice(pos, 1);
+    state.lastAction = `Unselected card ${index}`;
+  } else {
+    sel.push(index);
+    state.lastAction = `Selected card ${index}`;
+  }
+  // if three are selected -> validate
+  if (sel.length === 3) {
+    const cards = sel.map(i => state.table[i]);
+    if (isSet(cards)) {
+      // valid set
+      pushHistory('removeSet');
+      state.score += 1;
+      state.streak += 1;
+      state.lastAction = `Removed set (${sel.join(',')})`;
+      // remove higher indices first
+      const removedIndices = sel.slice().sort((a,b)=>b-a);
+      const removedCards = [];
+      for (let idx of removedIndices) {
+        removedCards.push(state.table.splice(idx,1)[0]);
+      }
+      // replacement logic
+      if (document.getElementById('replaceOnSet').checked) {
+        for (let i = 0; i < removedIndices.length && state.deck.length > 0; i++) {
+          state.table.splice(removedIndices[i], 0, state.deck.pop());
+        }
+      }
+      state.selectedIndices = [];
+      state.setsCache = findSetsOnTable(state.table);
+      updateUI();
+      log(`Set removed. Score +1. Replaced? ${document.getElementById('replaceOnSet').checked}`);
+      // After removing, optionally auto-deal if no set and option enabled
+      if (state.setsCache.length === 0 && document.getElementById('autoDealWhenNoSet').checked) {
+        deal3();
+      }
+    } else {
+      // wrong
+      pushHistory('wrongTry');
+      state.wrong += 1;
+      state.streak = 0;
+      state.lastAction = `Wrong set attempt (${sel.join(',')})`;
+      state.selectedIndices = [];
+      updateUI();
+      log('Wrong attempt. Penalty recorded.');
+    }
+  } else {
+    updateUI();
+  }
+}
+
+/* Solver functions */
+let solverIndex = 0;
+function findAllSets() {
+  state.setsCache = findSetsOnTable(state.table);
+  solverIndex = 0;
+  updateUI();
+  log(`Found ${state.setsCache.length} set(s)`);
+  return state.setsCache;
+}
+
+function listAllSets() {
+  const sets = findAllSets();
+  const lines = sets.map((s, idx) => {
+    const txt = s.map(i => cardToText(state.table[i])).join(' | ');
+    return `${idx+1}. (${s.join(',')}) -> ${txt}`;
+  });
+  setsListBox.value = lines.join('\n');
+}
+
+function showNextSet() {
+  if (state.setsCache.length === 0) findAllSets();
+  if (state.setsCache.length === 0) {
+    log('No sets to show.');
+    return;
+  }
+  solverIndex = (solverIndex + 1) % state.setsCache.length;
+  const setIdx = solverIndex;
+  const trio = state.setsCache[setIdx];
+  renderTable({ foundSet: trio });
+  log(`Showing set ${setIdx+1} of ${state.setsCache.length}: indices ${trio.join(',')}`);
+}
+
+function showPrevSet() {
+  if (state.setsCache.length === 0) findAllSets();
+  if (state.setsCache.length === 0) {
+    log('No sets to show.');
+    return;
+  }
+  solverIndex = (solverIndex - 1 + state.setsCache.length) % state.setsCache.length;
+  const setIdx = solverIndex;
+  const trio = state.setsCache[setIdx];
+  renderTable({ foundSet: trio });
+  log(`Showing set ${setIdx+1} of ${state.setsCache.length}: indices ${trio.join(',')}`);
+}
+
+function hintOneCard() {
+  if (state.setsCache.length === 0) findAllSets();
+  if (state.setsCache.length === 0) {
+    log('No sets available for hint.');
+    return;
+  }
+  const trio = state.setsCache[0];
+  // reveal one card: choose the first index that is not selected
+  const hintSet = new Set([trio[0]]); // show first card
+  renderTable({ foundSet: [], hint: hintSet });
+  log(`Hint: one card at index ${trio[0]}`);
+}
+
+function pairComplete() {
+  if (state.selectedIndices.length !== 2) {
+    log('Select exactly two cards for pair completion.');
+    return;
+  }
+  const a = state.table[state.selectedIndices[0]];
+  const b = state.table[state.selectedIndices[1]];
+  const third = computeThirdFromTwo(a, b);
+  // find third on table
+  let found = -1;
+  for (let i = 0; i < state.table.length; i++) {
+    const c = state.table[i];
+    if (c.n === third.n && c.s === third.s && c.c === third.c && c.f === third.f) {
+      found = i; break;
+    }
+  }
+  if (found >= 0) {
+    renderTable({ hint: new Set([found]), matches: new Set([state.selectedIndices[0], state.selectedIndices[1], found]) });
+    log(`Third card found at index ${found} (${cardToText(state.table[found])})`);
+  } else {
+    log(`No matching third card on table. The third would be: ${third.n} ${shapes[third.s]} ${colors[third.c]} ${fills[third.f]}`);
+  }
+}
+
+/* Auto-play removal */
+function startAutoPlay() {
+  if (state.autoPlayRunning) return;
+  state.autoPlayRunning = true;
+  document.getElementById('autoPlayBtn').disabled = true;
+  stopAutoPlayBtn.disabled = false;
+  modeLabel.textContent = 'Auto';
+  log('Auto-play started');
+  function step() {
+    if (!state.autoPlayRunning) return;
+    state.setsCache = findSetsOnTable(state.table);
+    if (state.setsCache.length === 0) {
+      if (document.getElementById('autoDealWhenNoSet').checked && state.deck.length > 0) {
+        deal3();
+      } else {
+        log('No sets on table. Auto-play stopping.');
+        stopAutoPlay();
+        return;
+      }
+    }
+    // remove first set
+    state.setsCache = findSetsOnTable(state.table);
+    if (state.setsCache.length > 0) {
+      const trio = state.setsCache[0];
+      pushHistory('autoRemoveSet');
+      // remove by indices descending
+      for (let idx of trio.slice().sort((a,b)=>b-a)) {
+        state.table.splice(idx, 1);
+      }
+      // replace
+      if (document.getElementById('replaceOnSet').checked) {
+        for (let i = 0; i < 3 && state.deck.length > 0; i++) {
+          state.table.push(state.deck.pop());
+        }
+      }
+      state.score += 1;
+      state.streak += 1;
+      state.setsCache = findSetsOnTable(state.table);
+      state.lastAction = 'Auto removed a set';
+      updateUI();
+      log('Auto-removed a set');
+    } else {
+      log('No sets found this iteration.');
+    }
+    // schedule next
+    state.autoPlayTimer = setTimeout(step, Number(document.getElementById('autoPlaySpeed').value));
+  }
+  step();
+}
+
+function stopAutoPlay() {
+  state.autoPlayRunning = false;
+  if (state.autoPlayTimer) {
+    clearTimeout(state.autoPlayTimer);
+    state.autoPlayTimer = null;
+  }
+  document.getElementById('autoPlayBtn').disabled = false;
+  stopAutoPlayBtn.disabled = true;
+  modeLabel.textContent = 'Manual';
+  log('Auto-play stopped');
+}
+
+/* Monte Carlo simulation: probability that 12 random cards contain at least one set */
+let mcRunning = false;
+function runMonteCarlo(trials) {
+  if (mcRunning) return;
+  mcRunning = true;
+  document.getElementById('runMcBtn').disabled = true;
+  document.getElementById('stopMcBtn').disabled = false;
+  mcProgress.textContent = `0/${trials}`;
+  let hits = 0;
+  let completed = 0;
+  const batch = 2000;
+  const baseDeck = makeDeck();
+  function iterationBatch() {
+    if (!mcRunning) return;
+    const limit = Math.min(batch, trials - completed);
+    for (let i = 0; i < limit; i++) {
+      // shuffle and pick first 12
+      shuffleArray(baseDeck, null);
+      const sample = baseDeck.slice(0, 12);
+      if (findSetsOnTable(sample).length > 0) hits++;
+    }
+    completed += limit;
+    mcProgress.textContent = `${completed}/${trials}`;
+    if (completed < trials) {
+      setTimeout(iterationBatch, 0);
+    } else {
+      mcRunning = false;
+      document.getElementById('runMcBtn').disabled = false;
+      document.getElementById('stopMcBtn').disabled = true;
+      mcProgress.textContent = `${completed}/${trials} — Probability ≈ ${(hits / trials).toFixed(5)} (${hits} hits)`;
+      log(`Monte Carlo completed: probability ≈ ${(hits / trials).toFixed(5)} from ${trials} trials`);
+    }
+  }
+  iterationBatch();
+}
+
+function stopMonteCarlo() {
+  mcRunning = false;
+  document.getElementById('runMcBtn').disabled = false;
+  document.getElementById('stopMcBtn').disabled = true;
+  log('Monte Carlo stopped by user');
+}
+
+/* Export / Import */
+function exportGameState() {
+  const exportObj = {
+    deck: state.deck,
+    table: state.table,
+    score: state.score,
+    streak: state.streak,
+    wrong: state.wrong,
+    lastAction: state.lastAction,
+    seed: state.seed
+  };
+  stateBox.value = JSON.stringify(exportObj, null, 2);
+  log('Game state exported to text box');
+}
+
+function importGameState() {
+  try {
+    const obj = JSON.parse(stateBox.value);
+    pushHistory('importState');
+    state.deck = obj.deck || [];
+    state.table = obj.table || [];
+    state.score = obj.score || 0;
+    state.streak = obj.streak || 0;
+    state.wrong = obj.wrong || 0;
+    state.lastAction = obj.lastAction || 'Imported';
+    state.seed = obj.seed || null;
+    state.setsCache = findSetsOnTable(state.table);
+    updateUI();
+    log('Game state imported');
+  } catch (e) {
+    log('Import failed: invalid JSON');
+  }
+}
+
+/* Export sets JSON */
+function exportSets() {
+  const sets = findAllSets().map(s => ({
+    indices: s,
+    cards: s.map(i => state.table[i])
+  }));
+  setsListBox.value = JSON.stringify(sets, null, 2);
+  log('Sets exported to box');
+}
+
+/* Import sets: attempt to re-build table from provided JSON array */
+function importSetsToFilter() {
+  try {
+    const obj = JSON.parse(setsListBox.value);
+    if (!Array.isArray(obj)) {
+      log('Import failed: expected array');
+      return;
+    }
+    // Attempt to interpret as list of sets: each element either indices or cards
+    // We'll gather unique cards and replace table with those cards
+    const cardMap = new Map();
+    for (let el of obj) {
+      if (el.indices) {
+        for (let idx of el.indices) {
+          const c = state.table[idx];
+          if (c) cardMap.set(c.id, c);
+        }
+      } else if (el.cards) {
+        for (let c of el.cards) {
+          cardMap.set(c.id, c);
+        }
+      } else if (el.id || el.n) {
+        // maybe direct card object
+        const key = el.id || `${el.n}${shapes[el.s]}${colors[el.c]}${fills[el.f]}`;
+        cardMap.set(key, el);
+      }
+    }
+    if (cardMap.size === 0) {
+      log('No usable cards found in import');
+      return;
+    }
+    pushHistory('importSetsToFilter');
+    state.table = Array.from(cardMap.values());
+    state.setsCache = findSetsOnTable(state.table);
+    updateUI();
+    log(`Imported ${state.table.length} unique cards into table`);
+  } catch (e) {
+    log('Import sets failed: JSON parse error');
+  }
+}
+
+/* Search table by pattern */
+function applySearchPattern() {
+  const pat = document.getElementById('searchPattern').value.trim();
+  if (!pat) {
+    log('Enter a search pattern like 2,*,1,*');
+    return;
+  }
+  const parts = pat.split(',').map(p => p.trim());
+  const matches = new Set();
+  for (let i = 0; i < state.table.length; i++) {
+    const c = state.table[i];
+    const vals = [String(c.n), shapes[c.s], colors[c.c], fills[c.f]];
+    let ok = true;
+    for (let j = 0; j < 4; j++) {
+      const q = parts[j] || '*';
+      if (q === '*') continue;
+      if (q.length === 1 && ['O','D','S','R','G','P','F','T','O'].includes(q)) {
+        if (vals[j] !== q) { ok = false; break; }
+      } else {
+        if (vals[j] !== q) { ok = false; break; }
+      }
+    }
+    if (ok) matches.add(i);
+  }
+  renderTable({ matches });
+  log(`Search pattern applied, matches: ${matches.size}`);
+}
+
+function clearSearch() {
+  renderTable({});
+  log('Search cleared');
+}
+
+/* Set up event listeners */
+document.getElementById('newGameBtn').addEventListener('click', () => {
+  const seedVal = document.getElementById('seedInput').value;
+  const startN = parseInt(document.getElementById('startCards').value, 10) || 12;
+  newGame(seedVal === '' ? null : Number(seedVal), startN);
+});
+
+document.getElementById('shuffleBtn').addEventListener('click', () => shuffleDeck());
+document.getElementById('deal3Btn').addEventListener('click', () => deal3());
+document.getElementById('deal12Btn').addEventListener('click', () => dealN(12));
+document.getElementById('clearSelectionsBtn').addEventListener('click', () => { state.selectedIndices = []; updateUI(); });
+document.getElementById('undoBtn').addEventListener('click', () => undo());
+document.getElementById('redoBtn').addEventListener('click', () => redo());
+
+document.getElementById('findAllSetsBtn').addEventListener('click', () => { findAllSets(); listAllSets(); });
+document.getElementById('listAllSetsBtn').addEventListener('click', () => listAllSets());
+document.getElementById('exportSetsBtn').addEventListener('click', () => exportSets());
+document.getElementById('importSetsBtn').addEventListener('click', () => importSetsToFilter());
+document.getElementById('nextSetBtn').addEventListener('click', () => showNextSet());
+document.getElementById('prevSetBtn').addEventListener('click', () => showPrevSet());
+document.getElementById('hintBtn').addEventListener('click', () => {
+  const level = document.getElementById('hintLevel').value;
+  if (level === '1') hintOneCard();
+  else if (level === '2') {
+    // show two cards and third description
+    if (state.setsCache.length === 0) findAllSets();
+    if (state.setsCache.length === 0) log('No sets for hint'); else {
+      const trio = state.setsCache[0];
+      const a = state.table[trio[0]], b = state.table[trio[1]];
+      const third = computeThirdFromTwo(a, b);
+      const hintSet = new Set([trio[0], trio[1]]);
+      renderTable({ matches: hintSet, hint: new Set([trio[0], trio[1]]) });
+      log(`Two-card hint: ${cardToText(a)} + ${cardToText(b)} -> third would be ${third.n} ${shapes[third.s]} ${colors[third.c]} ${fills[third.f]}`);
+    }
+  } else {
+    findAllSets();
+    if (state.setsCache.length === 0) log('No sets to highlight'); else {
+      renderTable({ foundSet: state.setsCache[0] });
+      log('Highlighted a full set');
+    }
+  }
+});
+document.getElementById('pairCompleteBtn').addEventListener('click', () => pairComplete());
+
+document.getElementById('autoPlayBtn').addEventListener('click', () => startAutoPlay());
+stopAutoPlayBtn.addEventListener('click', () => stopAutoPlay());
+autoPlaySpeedInput.addEventListener('input', () => {
+  autoPlaySpeedLabel.textContent = autoPlaySpeedInput.value;
+  state.autoPlaySpeed = Number(autoPlaySpeedInput.value);
+});
+
+document.getElementById('mcTrials').addEventListener('change', () => {
+  // noop
+});
+document.getElementById('runMcBtn').addEventListener('click', () => {
+  const t = Number(document.getElementById('mcTrials').value) || 1000;
+  runMonteCarlo(t);
+});
+document.getElementById('stopMcBtn').addEventListener('click', () => stopMonteCarlo());
+
+document.getElementById('exportStateBtn').addEventListener('click', () => exportGameState());
+document.getElementById('importStateBtn').addEventListener('click', () => importGameState());
+
+document.getElementById('applySearchBtn').addEventListener('click', () => applySearchPattern());
+document.getElementById('clearSearchBtn').addEventListener('click', () => clearSearch());
+
+document.getElementById('deal3Btn').addEventListener('dblclick', () => { dealN(3); });
+document.getElementById('columns').addEventListener('change', () => updateUI());
+
+/* Keyboard shortcuts */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'u' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
+  if (e.key === 'r' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); redo(); }
+  if (e.key === 'h') hintOneCard();
+  if (e.key === 'f') { findAllSets(); listAllSets(); }
+});
+
+/* Start a default new game */
+newGame(null, 12);
+
+/* Additional exploration helpers: allow exporting current table to console, show pair-to-all mapping */
+function showPairToCompletion() {
+  const map = {};
+  for (let i = 0; i < state.table.length; i++) {
+    for (let j = i+1; j < state.table.length; j++) {
+      const third = computeThirdFromTwo(state.table[i], state.table[j]);
+      const key = `${i},${j}`;
+      // find if third exists on table
+      let found = -1;
+      for (let k = 0; k < state.table.length; k++) {
+        const c = state.table[k];
+        if (c.n === third.n && c.s === third.s && c.c === third.c && c.f === third.f) { found = k; break; }
+      }
+      map[key] = { third, found };
+    }
+  }
+  console.log('Pair -> completion map', map);
+  log('Pair-to-completion map logged to console');
+}
+
+/* Attach some utility buttons in log for advanced exploration */
+const utilBtn = document.createElement('button');
+utilBtn.textContent = 'Log pair->completion (console)';
+utilBtn.addEventListener('click', showPairToCompletion);
+document.querySelector('.panel').appendChild(utilBtn);
+
+</script>
+
+</body>
+</html>

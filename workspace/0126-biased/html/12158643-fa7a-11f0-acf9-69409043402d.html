@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mutex Interactive Explorer</title>
+<style>
+  body { font-family: monospace, monospace; background: white; color: black; margin: 1em; }
+  button, input[type=number], input[type=text], select { margin: 0.2em 0; }
+  #log { white-space: pre-wrap; border: 1px solid black; height: 200px; overflow-y: scroll; padding: 0.2em; margin-top: 1em; }
+  fieldset { margin-bottom: 1em; }
+  legend { font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>Mutex Interactive Explorer</h1>
+
+<p>This interactive tool simulates multiple threads contending for one or more mutexes (locks) with various behaviors. You can create threads, create mutexes, let threads lock/unlock, try to lock, attempt timeouts, queue policies, and see detailed state transitions.</p>
+
+<fieldset>
+  <legend>Create Mutex</legend>
+  <label for="mutexNameCreate">Mutex Name (unique): </label>
+  <input type="text" id="mutexNameCreate" aria-label="Mutex Name for creation" />
+  <button id="btnCreateMutex">Create Mutex</button>
+</fieldset>
+
+<fieldset>
+  <legend>Create Thread</legend>
+  <label for="threadNameCreate">Thread Name (unique): </label>
+  <input type="text" id="threadNameCreate" aria-label="Thread Name for creation" />
+  <button id="btnCreateThread">Create Thread</button>
+</fieldset>
+
+<fieldset>
+  <legend>Threads and Mutexes Status</legend>
+  <button id="btnShowStatus">Show Current Status</button>
+  <pre id="statusOutput" style="border:1px solid black; padding:5px; height:180px; overflow-y:scroll;"></pre>
+</fieldset>
+
+<fieldset>
+  <legend>Simulate Thread Actions on Mutex</legend>
+
+  <label for="selectThread">Select Thread:</label>
+  <select id="selectThread" aria-label="Select Thread"></select><br />
+
+  <label for="selectMutex">Select Mutex:</label>
+  <select id="selectMutex" aria-label="Select Mutex"></select><br />
+
+  <label for="actionSelect">Action:</label>
+  <select id="actionSelect" aria-label="Select Action on Mutex">
+    <option value="lock">Lock (blocking)</option>
+    <option value="tryLock">Try Lock (non-blocking)</option>
+    <option value="unlock">Unlock</option>
+  </select><br />
+  
+  <label for="timeoutInput">Timeout (ms, for lock with timeout; 0 = infinite):</label>
+  <input type="number" id="timeoutInput" min="0" value="0" aria-label="Timeout in milliseconds for lock action" /><br/>
+  
+  <label for="priorityInput">Thread Priority (integer, higher = more priority):</label>
+  <input type="number" id="priorityInput" min="-1000" max="1000" value="0" aria-label="Thread priority number" /><br/>
+  
+  <button id="btnPerformAction">Perform Action</button>
+</fieldset>
+
+<fieldset>
+  <legend>Global Controls</legend>
+  <button id="btnReset">Reset All (clear mutexes and threads)</button><br />
+  <button id="btnAdvanceTime">Advance Simulated Time by 100ms</button> (Triggers timeout attempts)
+  <button id="btnAdvanceCustomTime">Advance Custom Time (ms):</button>
+  <input type="number" id="customTimeAdvance" min="1" value="100" aria-label="Custom time advance in ms" />
+  <button id="btnAdvanceCustomTimeSubmit">Advance</button>
+</fieldset>
+
+<fieldset>
+  <legend>Log / Events</legend>
+  <div id="log"></div>
+  <button id="btnClearLog">Clear Log</button>
+</fieldset>
+
+<script>
+(() => {
+  // Data Model
+
+  // Mutexes:
+  //  { name: string
+  //    lockedBy: threadName|null,
+  //    queue: [ {threadName, timestamp, timeoutMs, priority, timerExpired} ],
+  //    lockCount: number // for recursive lock demonstration
+  //  }
+  //
+  // Threads:
+  //   { name: string,
+  //     priority: number,
+  //     holding: Set<mutexName>,
+  //     blockedOn: mutexName|null,
+  //     state: "running"|"blocked"|"waiting"
+  //   }
+  //
+  // Time:
+  //   Simulated timestamp in ms.
+
+  let state = {
+    mutexes: {},
+    threads: {},
+    time: 0
+  };
+
+  // Log system
+  const logDiv = document.getElementById('log');
+  function log(msg){
+    const now = state.time.toString().padStart(6,' ') + "ms";
+    logDiv.textContent += "[" + now + "] " + msg + "\n";
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+  function clearLog(){
+    logDiv.textContent = "";
+  }
+
+  // UI Elements
+  const mutexNameCreateInput = document.getElementById('mutexNameCreate');
+  const btnCreateMutex = document.getElementById('btnCreateMutex');
+
+  const threadNameCreateInput = document.getElementById('threadNameCreate');
+  const btnCreateThread = document.getElementById('btnCreateThread');
+
+  const selectThread = document.getElementById('selectThread');
+  const selectMutex = document.getElementById('selectMutex');
+  const actionSelect = document.getElementById('actionSelect');
+  const timeoutInput = document.getElementById('timeoutInput');
+  const priorityInput = document.getElementById('priorityInput');
+
+  const btnPerformAction = document.getElementById('btnPerformAction');
+
+  const btnShowStatus = document.getElementById('btnShowStatus');
+  const statusOutput = document.getElementById('statusOutput');
+
+  const btnReset = document.getElementById('btnReset');
+
+  const btnAdvanceTime = document.getElementById('btnAdvanceTime');
+  const btnAdvanceCustomTimeSubmit = document.getElementById('btnAdvanceCustomTimeSubmit');
+  const customTimeAdvanceInput = document.getElementById('customTimeAdvance');
+
+  const btnClearLog = document.getElementById('btnClearLog');
+
+  // Utility Functions
+
+  function updateThreadSelect(){
+    while(selectThread.options.length) selectThread.remove(0);
+    Object.keys(state.threads).forEach(tname => {
+      const o = document.createElement('option');
+      o.value = tname;
+      o.text = tname;
+      selectThread.appendChild(o);
+    });
+  }
+  function updateMutexSelect(){
+    while(selectMutex.options.length) selectMutex.remove(0);
+    Object.keys(state.mutexes).forEach(mname => {
+      const o = document.createElement('option');
+      o.value = mname;
+      o.text = mname;
+      selectMutex.appendChild(o);
+    });
+  }
+
+  function threadExists(name){
+    return !!state.threads[name];
+  }
+  function mutexExists(name){
+    return !!state.mutexes[name];
+  }
+
+  // Add Mutex
+  btnCreateMutex.onclick = () => {
+    const name = mutexNameCreateInput.value.trim();
+    if(!name){
+      alert("Mutex name cannot be empty.");
+      return;
+    }
+    if(mutexExists(name)){
+      alert("Mutex with that name already exists.");
+      return;
+    }
+    state.mutexes[name] = {
+      name,
+      lockedBy: null,
+      queue: [],
+      lockCount: 0 // for future recursive lock support
+    };
+    log(`Mutex '${name}' created.`);
+    mutexNameCreateInput.value = "";
+    updateMutexSelect();
+  };
+
+  // Add Thread
+  btnCreateThread.onclick = () => {
+    const name = threadNameCreateInput.value.trim();
+    if(!name){
+      alert("Thread name cannot be empty.");
+      return;
+    }
+    if(threadExists(name)){
+      alert("Thread with that name already exists.");
+      return;
+    }
+    state.threads[name] = {
+      name,
+      priority: 0,
+      holding: new Set(),
+      blockedOn: null,
+      state: "running"
+    };
+    log(`Thread '${name}' created.`);
+    threadNameCreateInput.value = "";
+    updateThreadSelect();
+  };
+
+  // Show Status
+  btnShowStatus.onclick = () => {
+    let out = `Simulated Time: ${state.time} ms\n\n=== Mutexes ===\n`;
+    for(const mname in state.mutexes){
+      const m = state.mutexes[mname];
+      out += `Mutex '${mname}':\n`;
+      if(m.lockedBy)
+        out += `  Locked By: ${m.lockedBy} (lock count: ${m.lockCount})\n`;
+      else
+        out += `  Free\n`;
+      out += `  Queue (${m.queue.length} waiting):\n`;
+      m.queue.forEach((req,i) => {
+        out += `   [${i}] Thread '${req.threadName}', priority=${req.priority}, timeoutMs=${req.timeoutMs}, waited=${state.time - req.timestamp}ms\n`;
+      });
+    }
+    out += `\n=== Threads ===\n`;
+    for(const tname in state.threads){
+      const t = state.threads[tname];
+      out += `Thread '${tname}':\n`;
+      out += `  State: ${t.state}\n`;
+      out += `  Priority: ${t.priority}\n`;
+      out += `  Holding locks: ${Array.from(t.holding).join(", ") || "(none)"}\n`;
+      out += `  Blocked on mutex: ${t.blockedOn || "(none)"}\n`;
+    }
+    statusOutput.textContent = out;
+  };
+
+  // Core Mutex Locking Simulation
+
+  // Lock action for thread :
+  // Options:
+  // lock(timeout=0 = infinite) => thread blocks if busy, else lock gained immediately
+  // tryLock: if free -> lock gained else fail immediately
+  // unlock: must be holding to unlock
+  //
+  // Note:
+  // Implements priority queuing: higher priority thread gets priority to acquire lock.
+  // When unlocking, next in queue (priority order) gets lock.
+  // Timeouts remove thread from queue if timed out.
+  //
+  // We also implement recursive locks for the same thread (lockCount to track).
+
+  function performLock(threadName, mutexName, timeoutMs, priority){
+    /*
+    -> If mutex is free, lock granted instantly
+    -> If already locked by same thread, increase lockCount (recursive lock)
+    -> If locked by another thread:
+       a) If timeout 0 (infinite), block thread until unlock
+       b) If timeout > 0, wait up to timeout
+    */
+    const thread = state.threads[threadName];
+    const mutex = state.mutexes[mutexName];
+
+    if(!thread || !mutex){
+      log(`ERROR: Invalid thread or mutex for locking.`);
+      return;
+    }
+    if(thread.state === "blocked"){
+      log(`Thread '${threadName}' is blocked and cannot initiate lock.`);
+      return;
+    }
+
+    // Update thread priority in data structure for queue use
+    thread.priority = priority;
+
+    if(mutex.lockedBy === null){
+      // free mutex
+      mutex.lockedBy = threadName;
+      mutex.lockCount = 1;
+      thread.holding.add(mutexName);
+      thread.state = "running";
+      thread.blockedOn = null;
+      log(`Thread '${threadName}' acquired lock '${mutexName}' immediately.`);
+    } else if(mutex.lockedBy === threadName){
+      // recursive lock
+      mutex.lockCount++;
+      thread.state = "running";
+      log(`Thread '${threadName}' recursively locked '${mutexName}'. Lock count is now ${mutex.lockCount}.`);
+    } else {
+      // locked by another thread; must queue and block if timeout > 0 or infinite (0)
+      const timestamp = state.time;
+      // Check if "tryLock" with timeout=0 means non-blocking
+      if(timeoutMs === 0){
+        // infinite wait, block thread and enqueue
+        mutex.queue.push({
+          threadName,
+          timestamp,
+          timeoutMs,
+          priority,
+          timerExpired: false
+        });
+        // sort queue by priority (desc), then by timestamp asc
+        mutex.queue.sort((a,b) => {
+          if(b.priority !== a.priority) return b.priority - a.priority;
+          return a.timestamp - b.timestamp;
+        });
+        thread.state = "blocked";
+        thread.blockedOn = mutexName;
+        log(`Thread '${threadName}' blocked on mutex '${mutexName}' indefinitely (no timeout). Added to wait queue.`);
+      } else {
+        // timeout > 0 => wait
+        mutex.queue.push({
+          threadName,
+          timestamp,
+          timeoutMs,
+          priority,
+          timerExpired: false
+        });
+        mutex.queue.sort((a,b) => {
+          if(b.priority !== a.priority) return b.priority - a.priority;
+          return a.timestamp - b.timestamp;
+        });
+        thread.state = "blocked";
+        thread.blockedOn = mutexName;
+        log(`Thread '${threadName}' blocked on mutex '${mutexName}' with timeout ${timeoutMs} ms. Added to wait queue.`);
+      }
+    }
+  }
+
+  function performTryLock(threadName, mutexName, priority){
+    const thread = state.threads[threadName];
+    const mutex = state.mutexes[mutexName];
+
+    if(!thread || !mutex){
+      log(`ERROR: Invalid thread or mutex for tryLock.`);
+      return;
+    }
+    if(thread.state === "blocked"){
+      log(`Thread '${threadName}' is currently blocked and cannot perform tryLock.`);
+      return;
+    }
+    thread.priority = priority;
+
+    if(mutex.lockedBy === null){
+      mutex.lockedBy = threadName;
+      mutex.lockCount = 1;
+      thread.holding.add(mutexName);
+      thread.state = "running";
+      thread.blockedOn = null;
+      log(`Thread '${threadName}' successfully performed tryLock on '${mutexName}'. Lock acquired.`);
+    } else if(mutex.lockedBy === threadName){
+      // recursive lock as above
+      mutex.lockCount++;
+      log(`Thread '${threadName}' recursively tryLock'ed '${mutexName}'. Lock count now ${mutex.lockCount}.`);
+    } else {
+      log(`Thread '${threadName}' tryLock on '${mutexName}' failed immediately (locked by '${mutex.lockedBy}').`);
+    }
+  }
+
+  function performUnlock(threadName, mutexName){
+    const thread = state.threads[threadName];
+    const mutex = state.mutexes[mutexName];
+    if(!thread || !mutex){
+      log(`ERROR: Invalid thread or mutex for unlock.`);
+      return;
+    }
+    if(mutex.lockedBy !== threadName){
+      log(`Thread '${threadName}' cannot unlock '${mutexName}' because it does not hold the lock.`);
+      return;
+    }
+    // Decrement lockCount for recursive lock support
+    mutex.lockCount--;
+    if(mutex.lockCount > 0){
+      log(`Thread '${threadName}' released one recursive lock on '${mutexName}'. Remaining lock count: ${mutex.lockCount}.`);
+      return;
+    }
+    // Fully unlock mutex
+    mutex.lockedBy = null;
+    mutex.lockCount = 0;
+    thread.holding.delete(mutexName);
+    log(`Thread '${threadName}' fully unlocked mutex '${mutexName}'.`);
+    // Wake next thread in queue by priority order
+    if(mutex.queue.length > 0){
+      // Remove any timed out threads before selecting next
+      cleanupExpiredWaitingThreads(mutexName);
+
+      if(mutex.queue.length === 0){
+        log(`No waiting threads to wake up for mutex '${mutexName}'.`);
+        return;
+      }
+
+      // Sort queue by priority desc, timestamp asc
+      mutex.queue.sort((a,b) => {
+        if(b.priority !== a.priority) return b.priority - a.priority;
+        return a.timestamp - b.timestamp;
+      });
+      const next = mutex.queue.shift();
+      const nextThread = state.threads[next.threadName];
+      // Grant lock to next thread
+      mutex.lockedBy = next.threadName;
+      mutex.lockCount = 1;
+      nextThread.holding.add(mutexName);
+      nextThread.state = "running";
+      nextThread.blockedOn = null;
+      log(`Thread '${next.threadName}' acquired lock '${mutexName}' from wait queue.`);
+
+      // Re-validate queue because some threads might have timed out meanwhile
+      cleanupExpiredWaitingThreads(mutexName);
+    }
+  }
+
+  function cleanupExpiredWaitingThreads(mutexName){
+    const mutex = state.mutexes[mutexName];
+    if(!mutex) return;
+
+    let changed = false;
+    const now = state.time;
+    const stillWaiting = [];
+
+    for(const req of mutex.queue){
+      if(req.timeoutMs === 0){
+        // infinite wait, does not expire
+        stillWaiting.push(req);
+        continue;
+      }
+      const waited = now - req.timestamp;
+      if(waited >= req.timeoutMs){
+        // timeout expired
+        const thread = state.threads[req.threadName];
+        if(thread && thread.blockedOn === mutexName && thread.state === "blocked"){
+          thread.state = "running";
+          thread.blockedOn = null;
+          log(`Timeout expired: Thread '${req.threadName}' removed from wait queue on mutex '${mutexName}'.`);
+        }
+        changed = true;
+      } else {
+        stillWaiting.push(req);
+      }
+    }
+    if(changed){
+      mutex.queue = stillWaiting;
+    }
+  }
+
+  function advanceTime(ms){
+    if(ms <= 0) return;
+    for(let i=0; i<ms; i++){
+      state.time++;
+    }
+    // After time advances check timeouts on all mutexes
+    for(const mname in state.mutexes){
+      cleanupExpiredWaitingThreads(mname);
+    }
+  }
+
+  // Perform action button logic
+  btnPerformAction.onclick = () => {
+    const threadName = selectThread.value;
+    const mutexName = selectMutex.value;
+    const action = actionSelect.value;
+    const timeoutMsRaw = timeoutInput.value;
+    const priorityRaw = priorityInput.value;
+    if(!threadName || !mutexName || !action){
+      alert("Please select a thread, mutex, and action.");
+      return;
+    }
+    const timeoutMs = Number(timeoutMsRaw);
+    if(isNaN(timeoutMs) || timeoutMs < 0){
+      alert("Timeout must be a number >= 0.");
+      return;
+    }
+    const priority = Number(priorityRaw);
+    if(isNaN(priority)){
+      alert("Priority must be a number.");
+      return;
+    }
+    if(!threadExists(threadName)){
+      alert(`Thread '${threadName}' no longer exists.`);
+      updateThreadSelect();
+      return;
+    }
+    if(!mutexExists(mutexName)){
+      alert(`Mutex '${mutexName}' no longer exists.`);
+      updateMutexSelect();
+      return;
+    }
+
+    if(action === "lock"){
+      performLock(threadName, mutexName, timeoutMs, priority);
+    } else if(action === "tryLock"){
+      performTryLock(threadName, mutexName, priority);
+    } else if(action === "unlock"){
+      performUnlock(threadName, mutexName);
+    }
+  };
+
+  btnReset.onclick = () => {
+    if(!confirm("Are you sure you want to reset and clear all mutexes and threads?")){
+      return;
+    }
+    state.mutexes = {};
+    state.threads = {};
+    state.time = 0;
+    updateMutexSelect();
+    updateThreadSelect();
+    statusOutput.textContent = "";
+    clearLog();
+  };
+
+  btnAdvanceTime.onclick = () => {
+    advanceTime(100);
+    log("Advanced simulated time by 100 ms.");
+  };
+
+  btnAdvanceCustomTimeSubmit.onclick = () => {
+    const ms = Number(customTimeAdvanceInput.value);
+    if(isNaN(ms) || ms < 1){
+      alert("Enter a valid positive number of milliseconds.");
+      return;
+    }
+    advanceTime(ms);
+    log(`Advanced simulated time by ${ms} ms.`);
+  };
+
+  btnClearLog.onclick = () => {
+    clearLog();
+  };
+
+  // Initialization
+
+  // For demonstration, pre-create some mutexes and threads for user to interact with:
+
+  function seedInitialData(){
+    // Create a Mutex "mutexA"
+    state.mutexes["mutexA"] = {name:"mutexA", lockedBy:null, queue:[], lockCount:0};
+    // Create Threads "T1", "T2", "T3"
+    state.threads["T1"] = {name:"T1", priority:0, holding:new Set(), blockedOn:null, state:"running"};
+    state.threads["T2"] = {name:"T2", priority:0, holding:new Set(), blockedOn:null, state:"running"};
+    state.threads["T3"] = {name:"T3", priority:0, holding:new Set(), blockedOn:null, state:"running"};
+
+    updateMutexSelect();
+    updateThreadSelect();
+    log("Seeded initial mutex 'mutexA' and threads 'T1', 'T2', 'T3'.");
+  }
+
+  seedInitialData();
+
+})();
+</script>
+
+</body>
+</html>

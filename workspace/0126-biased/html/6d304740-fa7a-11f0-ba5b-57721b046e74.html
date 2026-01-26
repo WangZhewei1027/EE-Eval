@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deadlock Simulation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { display: flex; flex-direction: column; gap: 20px; }
+        .panel { border: 1px solid #000; padding: 10px; }
+        .resource { margin: 5px 0; }
+        .process { margin: 10px 0; padding: 5px; border: 1px solid #000; }
+        .controls { display: flex; gap: 10px; margin-top: 10px; }
+        button { padding: 5px 10px; }
+        select, input { padding: 5px; }
+        .log { height: 200px; overflow-y: scroll; border: 1px solid #000; padding: 5px; }
+        .deadlock { background-color: #ffcccc; }
+    </style>
+</head>
+<body>
+    <h1>Deadlock Simulation</h1>
+    <div class="container">
+        <div class="panel">
+            <h2>Resources</h2>
+            <div id="resources">
+                <div class="resource" id="res1">
+                    Resource A: <span class="status">Available</span>
+                    <div class="controls">
+                        <button onclick="acquireResource('res1')">Acquire</button>
+                        <button onclick="releaseResource('res1')">Release</button>
+                    </div>
+                </div>
+                <div class="resource" id="res2">
+                    Resource B: <span class="status">Available</span>
+                    <div class="controls">
+                        <button onclick="acquireResource('res2')">Acquire</button>
+                        <button onclick="releaseResource('res2')">Release</button>
+                    </div>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="addResource()">Add Resource</button>
+                <button onclick="removeResource()">Remove Resource</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Processes</h2>
+            <div id="processes">
+                <div class="process" id="proc1">
+                    Process 1
+                    <div>
+                        Holds: <span class="holds"></span>
+                        <br>
+                        Waiting for: <span class="waiting"></span>
+                    </div>
+                    <div class="controls">
+                        <select id="proc1-action">
+                            <option value="none">Select action</option>
+                            <option value="acquire">Acquire Resource</option>
+                            <option value="release">Release Resource</option>
+                        </select>
+                        <select id="proc1-resource">
+                            <option value="res1">Resource A</option>
+                            <option value="res2">Resource B</option>
+                        </select>
+                        <button onclick="processAction('proc1')">Execute</button>
+                    </div>
+                </div>
+                <div class="process" id="proc2">
+                    Process 2
+                    <div>
+                        Holds: <span class="holds"></span>
+                        <br>
+                        Waiting for: <span class="waiting"></span>
+                    </div>
+                    <div class="controls">
+                        <select id="proc2-action">
+                            <option value="none">Select action</option>
+                            <option value="acquire">Acquire Resource</option>
+                            <option value="release">Release Resource</option>
+                        </select>
+                        <select id="proc2-resource">
+                            <option value="res1">Resource A</option>
+                            <option value="res2">Resource B</option>
+                        </select>
+                        <button onclick="processAction('proc2')">Execute</button>
+                    </div>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="addProcess()">Add Process</button>
+                <button onclick="removeProcess()">Remove Process</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Simulation Controls</h2>
+            <div class="controls">
+                <button onclick="runAutoDeadlock()">Run Deadlock Scenario</button>
+                <button onclick="runAutoNoDeadlock()">Run No-Deadlock Scenario</button>
+                <button onclick="resetAll()">Reset All</button>
+                <button onclick="checkDeadlock()">Check for Deadlock</button>
+            </div>
+            <div>
+                <label>Process Speed (ms): <input type="range" id="speed" min="100" max="2000" value="1000"></label>
+                <span id="speed-value">1000</span>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>System State</h2>
+            <div class="log" id="log"></div>
+            <div id="deadlock-status">No deadlock detected</div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        const state = {
+            resources: {
+                res1: { heldBy: null },
+                res2: { heldBy: null }
+            },
+            processes: {
+                proc1: { holds: [], waitingFor: null },
+                proc2: { holds: [], waitingFor: null }
+            },
+            nextResourceId: 3,
+            nextProcessId: 3,
+            logEntries: [],
+            autoRunning: false
+        };
+
+        // DOM elements
+        const speedSlider = document.getElementById('speed');
+        const speedValue = document.getElementById('speed-value');
+        const logElement = document.getElementById('log');
+        const deadlockStatus = document.getElementById('deadlock-status');
+
+        // Update speed display
+        speedSlider.addEventListener('input', () => {
+            speedValue.textContent = speedSlider.value;
+        });
+
+        // Core functions
+        function acquireResource(resourceId, processId) {
+            const resource = state.resources[resourceId];
+            const process = state.processes[processId];
+            
+            if (resource.heldBy === null) {
+                resource.heldBy = processId;
+                process.holds.push(resourceId);
+                log(`Process ${processId} acquired ${resourceId}`);
+                // Remove from waiting if it was waiting for this resource
+                if (process.waitingFor === resourceId) {
+                    process.waitingFor = null;
+                }
+                updateUI();
+                return true;
+            } else {
+                process.waitingFor = resourceId;
+                log(`Process ${processId} is waiting for ${resourceId} (held by ${resource.heldBy})`);
+                updateUI();
+                checkDeadlock();
+                return false;
+            }
+        }
+
+        function releaseResource(resourceId, processId) {
+            const resource = state.resources[resourceId];
+            const process = state.processes[processId];
+            
+            if (resource.heldBy === processId) {
+                resource.heldBy = null;
+                process.holds = process.holds.filter(r => r !== resourceId);
+                log(`Process ${processId} released ${resourceId}`);
+                
+                // Check if any process is waiting for this resource
+                for (const [pid, p] of Object.entries(state.processes)) {
+                    if (p.waitingFor === resourceId) {
+                        acquireResource(resourceId, pid);
+                    }
+                }
+                
+                updateUI();
+                checkDeadlock();
+                return true;
+            } else {
+                log(`Process ${processId} cannot release ${resourceId} (not held)`);
+                return false;
+            }
+        }
+
+        function processAction(processId) {
+            if (state.autoRunning) return;
+            
+            const actionSelect = document.getElementById(`${processId}-action`);
+            const resourceSelect = document.getElementById(`${processId}-resource`);
+            
+            const action = actionSelect.value;
+            const resourceId = resourceSelect.value;
+            
+            if (action === 'none') {
+                log('Please select an action');
+                return;
+            }
+            
+            if (action === 'acquire') {
+                acquireResource(resourceId, processId);
+            } else if (action === 'release') {
+                releaseResource(resourceId, processId);
+            }
+            
+            actionSelect.value = 'none';
+        }
+
+        function checkDeadlock() {
+            // Build wait-for graph
+            const graph = {};
+            for (const pid of Object.keys(state.processes)) {
+                graph[pid] = [];
+            }
+            
+            for (const [pid, process] of Object.entries(state.processes)) {
+                if (process.waitingFor) {
+                    const holder = state.resources[process.waitingFor].heldBy;
+                    if (holder) {
+                        graph[pid].push(holder);
+                    }
+                }
+            }
+            
+            // Check for cycles in the graph (deadlock)
+            const visited = new Set();
+            let hasDeadlock = false;
+            
+            function hasCycle(node, path = new Set()) {
+                if (path.has(node)) return true;
+                if (visited.has(node)) return false;
+                
+                visited.add(node);
+                path.add(node);
+                
+                for (const neighbor of graph[node] || []) {
+                    if (hasCycle(neighbor, new Set(path))) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            for (const node of Object.keys(graph)) {
+                if (!visited.has(node) && hasCycle(node)) {
+                    hasDeadlock = true;
+                    break;
+                }
+            }
+            
+            if (hasDeadlock) {
+                deadlockStatus.textContent = "DEADLOCK DETECTED!";
+                deadlockStatus.style.fontWeight = "bold";
+                document.querySelectorAll('.process').forEach(el => {
+                    if (graph[el.id] && graph[el.id].length > 0) {
+                        el.classList.add('deadlock');
+                    }
+                });
+                log("Deadlock detected in the system!");
+            } else {
+                deadlockStatus.textContent = "No deadlock detected";
+                deadlockStatus.style.fontWeight = "normal";
+                document.querySelectorAll('.process').forEach(el => {
+                    el.classList.remove('deadlock');
+                });
+            }
+            
+            return hasDeadlock;
+        }
+
+        // UI update functions
+        function updateUI() {
+            // Update resource status
+            for (const [id, resource] of Object.entries(state.resources)) {
+                const element = document.getElementById(id);
+                if (element) {
+                    const status = resource.heldBy ? `Held by ${resource.heldBy}` : 'Available';
+                    element.querySelector('.status').textContent = status;
+                }
+            }
+            
+            // Update process status
+            for (const [id, process] of Object.entries(state.processes)) {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.querySelector('.holds').textContent = process.holds.join(', ') || 'None';
+                    element.querySelector('.waiting').textContent = process.waitingFor || 'None';
+                }
+            }
+        }
+
+        function log(message) {
+            state.logEntries.push(message);
+            if (state.logEntries.length > 50) {
+                state.logEntries.shift();
+            }
+            logElement.innerHTML = state.logEntries.join('<br>');
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // Management functions
+        function addResource() {
+            if (state.autoRunning) return;
+            
+            const newId = `res${state.nextResourceId++}`;
+            state.resources[newId] = { heldBy: null };
+            
+            const newResource = document.createElement('div');
+            newResource.className = 'resource';
+            newResource.id = newId;
+            newResource.innerHTML = `
+                Resource ${String.fromCharCode(64 + state.nextResourceId - 1)}: <span class="status">Available</span>
+                <div class="controls">
+                    <button onclick="acquireResource('${newId}')">Acquire</button>
+                    <button onclick="releaseResource('${newId}')">Release</button>
+                </div>
+            `;
+            
+            document.getElementById('resources').appendChild(newResource);
+            
+            // Add to all process resource selectors
+            document.querySelectorAll('[id$="-resource"]').forEach(select => {
+                const option = document.createElement('option');
+                option.value = newId;
+                option.textContent = `Resource ${String.fromCharCode(64 + state.nextResourceId - 1)}`;
+                select.appendChild(option);
+            });
+            
+            log(`Added new resource: ${newId}`);
+        }
+
+        function removeResource() {
+            if (state.autoRunning) return;
+            
+            const resourceIds = Object.keys(state.resources);
+            if (resourceIds.length <= 2) {
+                log("Cannot remove - minimum 2 resources required");
+                return;
+            }
+            
+            const toRemove = resourceIds[resourceIds.length - 1];
+            
+            // Check if resource is in use
+            if (state.resources[toRemove].heldBy) {
+                log(`Cannot remove ${toRemove} - it's currently held by a process`);
+                return;
+            }
+            
+            // Check if any process is waiting for this resource
+            let waitingProcess = null;
+            for (const [pid, process] of Object.entries(state.processes)) {
+                if (process.waitingFor === toRemove) {
+                    waitingProcess = pid;
+                    break;
+                }
+            }
+            
+            if (waitingProcess) {
+                log(`Cannot remove ${toRemove} - process ${waitingProcess} is waiting for it`);
+                return;
+            }
+            
+            delete state.resources[toRemove];
+            document.getElementById(toRemove).remove();
+            
+            // Remove from all process resource selectors
+            document.querySelectorAll('[id$="-resource"]').forEach(select => {
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === toRemove) {
+                        select.remove(i);
+                        break;
+                    }
+                }
+            });
+            
+            log(`Removed resource: ${toRemove}`);
+        }
+
+        function addProcess() {
+            if (state.autoRunning) return;
+            
+            const newId = `proc${state.nextProcessId++}`;
+            state.processes[newId] = { holds: [], waitingFor: null };
+            
+            const newProcess = document.createElement('div');
+            newProcess.className = 'process';
+            newProcess.id = newId;
+            
+            // Build resource options
+            let resourceOptions = '';
+            for (const resId of Object.keys(state.resources)) {
+                const resName = `Resource ${String.fromCharCode(64 + parseInt(resId.slice(3)))}`;
+                resourceOptions += `<option value="${resId}">${resName}</option>`;
+            }
+            
+            newProcess.innerHTML = `
+                Process ${state.nextProcessId - 1}
+                <div>
+                    Holds: <span class="holds"></span>
+                    <br>
+                    Waiting for: <span class="waiting"></span>
+                </div>
+                <div class="controls">
+                    <select id="${newId}-action">
+                        <option value="none">Select action</option>
+                        <option value="acquire">Acquire Resource</option>
+                        <option value="release">Release Resource</option>
+                    </select>
+                    <select id="${newId}-resource">
+                        ${resourceOptions}
+                    </select>
+                    <button onclick="processAction('${newId}')">Execute</button>
+                </div>
+            `;
+            
+            document.getElementById('processes').appendChild(newProcess);
+            log(`Added new process: ${newId}`);
+        }
+
+        function removeProcess() {
+            if (state.autoRunning) return;
+            
+            const processIds = Object.keys(state.processes);
+            if (processIds.length <= 2) {
+                log("Cannot remove - minimum 2 processes required");
+                return;
+            }
+            
+            const toRemove = processIds[processIds.length - 1];
+            const process = state.processes[toRemove];
+            
+            // Check if process holds any resources
+            if (process.holds.length > 0) {
+                log(`Cannot remove ${toRemove} - it's currently holding resources`);
+                return;
+            }
+            
+            delete state.processes[toRemove];
+            document.getElementById(toRemove).remove();
+            log(`Removed process: ${toRemove}`);
+        }
+
+        // Simulation functions
+        function runAutoDeadlock() {
+            if (state.autoRunning) return;
+            
+            state.autoRunning = true;
+            log("Running deadlock scenario...");
+            
+            // Process 1 acquires Resource A
+            setTimeout(() => {
+                acquireResource('res1', 'proc1');
+                
+                // Process 2 acquires Resource B
+                setTimeout(() => {
+                    acquireResource('res2', 'proc2');
+                    
+                    // Process 1 tries to acquire Resource B (will wait)
+                    setTimeout(() => {
+                        acquireResource('res2', 'proc1');
+                        
+                        // Process 2 tries to acquire Resource A (deadlock)
+                        setTimeout(() => {
+                            acquireResource('res1', 'proc2');
+                            state.autoRunning = false;
+                        }, getSpeed());
+                    }, getSpeed());
+                }, getSpeed());
+            }, getSpeed());
+        }
+
+        function runAutoNoDeadlock() {
+            if (state.autoRunning) return;
+            
+            state.autoRunning = true;
+            log("Running no-deadlock scenario...");
+            
+            // Process 1 acquires Resource A
+            setTimeout(() => {
+                acquireResource('res1', 'proc1');
+                
+                // Process 1 releases Resource A
+                setTimeout(() => {
+                    releaseResource('res1', 'proc1');
+                    
+                    // Process 2 acquires Resource A
+                    setTimeout(() => {
+                        acquireResource('res1', 'proc2');
+                        
+                        // Process 2 releases Resource A
+                        setTimeout(() => {
+                            releaseResource('res1', 'proc2');
+                            state.autoRunning = false;
+                        }, getSpeed());
+                    }, getSpeed());
+                }, getSpeed());
+            }, getSpeed());
+        }
+
+        function resetAll() {
+            if (state.autoRunning) return;
+            
+            // Reset resources
+            for (const resId in state.resources) {
+                state.resources[resId].heldBy = null;
+            }
+            
+            // Reset processes
+            for (const procId in state.processes) {
+                state.processes[procId] = { holds: [], waitingFor: null };
+            }
+            
+            // Reset UI
+            updateUI();
+            log("System reset to initial state");
+            deadlockStatus.textContent = "No deadlock detected";
+            deadlockStatus.style.fontWeight = "normal";
+            document.querySelectorAll('.process').forEach(el => {
+                el.classList.remove('deadlock');
+            });
+        }
+
+        function getSpeed() {
+            return parseInt(speedSlider.value);
+        }
+
+        // Initialize
+        updateUI();
+        log("System initialized. Ready to simulate deadlocks.");
+    </script>
+</body>
+</html>

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Topological Sort Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  #container {
+    display: flex;
+    gap: 40px;
+  }
+  #graph, #result {
+    flex: 1;
+  }
+  svg {
+    border: 1px solid #ccc;
+    background: #fafafa;
+    width: 100%;
+    height: 400px;
+  }
+  .node {
+    cursor: default;
+    stroke: #333;
+    stroke-width: 1.5px;
+  }
+  .node circle {
+    fill: #69b3a2;
+    stroke: #333;
+    stroke-width: 1.5px;
+  }
+  .node.done circle {
+    fill: #4CAF50;
+  }
+  .node.current circle {
+    fill: #f39c12;
+  }
+  .edge path {
+    fill: none;
+    stroke: #333;
+    stroke-width: 1.2px;
+    marker-end: url(#arrowhead);
+  }
+  .edge.highlight path {
+    stroke: #f39c12;
+    stroke-width: 2.5px;
+  }
+  .edge.done path {
+    stroke: #4CAF50;
+    stroke-width: 2.5px;
+  }
+  #controls {
+    margin-bottom: 20px;
+  }
+  #order {
+    font-size: 1.1em;
+    margin-top: 10px;
+    min-height: 30px;
+  }
+  button {
+    padding: 8px 16px;
+    font-size: 1em;
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+  }
+  textarea {
+    width: 100%;
+    height: 100px;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  h2 {
+    margin-top: 0;
+  }
+  #message {
+    font-weight: bold;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Topological Sort Demonstration</h1>
+<div id="controls">
+  <label for="graphInput">Enter graph edges (one per line) in format:<br>
+  <code>fromNode toNode</code></label>
+  <textarea id="graphInput" spellcheck="false">A C
+B C
+C D
+D E
+B F
+F E</textarea>
+
+  <button id="startBtn">Start Topological Sort</button>
+  <button id="resetBtn" disabled>Reset</button>
+  <div id="message"></div>
+</div>
+
+<div id="container">
+  <div id="graph">
+    <h2>Graph Visualization</h2>
+    <svg id="svg" viewBox="0 0 600 400"></svg>
+  </div>
+  <div id="result">
+    <h2>Topological Order</h2>
+    <div id="order"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.getElementById('svg');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const graphInput = document.getElementById('graphInput');
+  const orderDiv = document.getElementById('order');
+  const messageDiv = document.getElementById('message');
+
+  // We will lay out nodes in a circular pattern for clarity.
+  const radius = 150;
+  const centerX = 300;
+  const centerY = 200;
+
+  let graph = new Map();
+  let nodes = new Set();
+  let positions = new Map();
+  let adjacencyList = new Map();
+  let inDegree = new Map();
+
+  // Animation control
+  let topoOrder = [];
+  let step = 0;
+  let intervalId = null;
+
+  // Parse input
+  function parseInput(){
+    graph.clear();
+    nodes.clear();
+    adjacencyList.clear();
+    inDegree.clear();
+
+    const lines = graphInput.value.trim().split('\n');
+    for(let line of lines){
+      line = line.trim();
+      if(!line) continue;
+      const parts = line.split(/\s+/);
+      if(parts.length !== 2) continue;
+      const from = parts[0];
+      const to = parts[1];
+
+      nodes.add(from);
+      nodes.add(to);
+
+      if(!adjacencyList.has(from)) adjacencyList.set(from, []);
+      adjacencyList.get(from).push(to);
+    }
+
+    // Add nodes who have no outgoing edges but might be isolated
+    for(let n of nodes){
+      if(!adjacencyList.has(n)) adjacencyList.set(n, []);
+    }
+
+    // Compute inDegree
+    for(let n of nodes){
+      inDegree.set(n, 0);
+    }
+    for(let [from, tos] of adjacencyList.entries()){
+      for(let to of tos){
+        inDegree.set(to, (inDegree.get(to) || 0) + 1);
+      }
+    }
+  }
+
+  // Clear SVG and draw graph
+  function drawGraph(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // Define arrowhead marker
+    const marker = document.createElementNS(svgNS, "marker");
+    marker.setAttribute("id", "arrowhead");
+    marker.setAttribute("markerWidth", "10");
+    marker.setAttribute("markerHeight", "7");
+    marker.setAttribute("refX", "10");
+    marker.setAttribute("refY", "3.5");
+    marker.setAttribute("orient", "auto");
+    marker.setAttribute("markerUnits", "strokeWidth");
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", "M0,0 L10,3.5 L0,7 Z");
+    path.setAttribute("fill", "#333");
+    marker.appendChild(path);
+    const defs = document.createElementNS(svgNS, "defs");
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    // Position nodes evenly in circle
+    const nodeCount = nodes.size;
+    let i = 0;
+    positions.clear();
+    for(let n of nodes){
+      const angle = (2 * Math.PI * i) / nodeCount - Math.PI / 2;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      positions.set(n, {x, y});
+      i++;
+    }
+
+    // Draw edges
+    for(let [from, tos] of adjacencyList.entries()){
+      const p1 = positions.get(from);
+      for(let to of tos){
+        const p2 = positions.get(to);
+        drawEdge(p1, p2, `${from}->${to}`);
+      }
+    }
+
+    // Draw nodes
+    for(let n of nodes){
+      const p = positions.get(n);
+      drawNode(n, p.x, p.y);
+    }
+  }
+
+  function drawEdge(p1, p2, id){
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("class", "edge");
+    g.setAttribute("id", "edge-" + id);
+
+    // Calculate edge line points with padding so arrow does not overlap circle
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const distance = Math.sqrt(dx*dx + dy*dy);
+    const normX = dx / distance;
+    const normY = dy / distance;
+    const r = 20; // node radius
+    const startX = p1.x + normX*r;
+    const startY = p1.y + normY*r;
+    const endX = p2.x - normX*r;
+    const endY = p2.y - normY*r;
+
+    const path = document.createElementNS(svgNS, "path");
+    // curve path to avoid overlapping node circles
+    // We'll do a simple quadratic curve with control point midpoint plus offset
+    const mx = (startX + endX) / 2;
+    const my = (startY + endY) / 2;
+    const ox = -normY * 20; // perpendicular offset for curve
+    const oy = normX * 20;
+    const qx = mx + ox;
+    const qy = my + oy;
+    const d = `M${startX},${startY} Q${qx},${qy} ${endX},${endY}`;
+
+    path.setAttribute("d", d);
+
+    g.appendChild(path);
+    svg.appendChild(g);
+  }
+
+  function drawNode(id, x, y){
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("class", "node");
+    g.setAttribute("id", "node-" + id);
+
+    const circle = document.createElementNS(svgNS, "circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", 20);
+    g.appendChild(circle);
+
+    const text = document.createElementNS(svgNS, "text");
+    text.setAttribute("x", x);
+    text.setAttribute("y", y + 5);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "16px");
+    text.setAttribute("fill", "white");
+    text.textContent = id;
+    g.appendChild(text);
+
+    svg.appendChild(g);
+  }
+
+  // Topological sort with animation support:
+  // We use Kahn's algorithm step by step
+  // At each step:
+  //  - Highlight nodes with inDegree 0 (candidates to remove)
+  //  - Remove one node: show it as "current" and then as "done"
+  //  - Remove edges from it, update inDegrees highlighted
+
+  function disableInterface(disabled){
+    startBtn.disabled = disabled;
+    graphInput.disabled = disabled;
+    resetBtn.disabled = !disabled;
+  }
+
+  function resetGraphStyles(){
+    for(let n of nodes){
+      const nodeG = document.getElementById("node-" + n);
+      if(nodeG){
+        nodeG.classList.remove("done", "current");
+      }
+    }
+    for(let [from, tos] of adjacencyList.entries()){
+      for(let to of tos){
+        let edgeG = document.getElementById("edge-" + from + "->" + to);
+        if(edgeG){
+          edgeG.classList.remove("highlight", "done");
+        }
+      }
+    }
+  }
+
+  function highlightCandidates(candidates){
+    for(let c of candidates){
+      const nodeG = document.getElementById("node-" + c);
+      if(nodeG){
+        nodeG.classList.add("current");
+      }
+    }
+  }
+
+  function clearHighlights(){
+    for(let n of nodes){
+      const nodeG = document.getElementById("node-" + n);
+      if(nodeG){
+        nodeG.classList.remove("current");
+      }
+    }
+    for(let [from, tos] of adjacencyList.entries()){
+      for(let to of tos){
+        let edgeG = document.getElementById("edge-" + from + "->" + to);
+        if(edgeG){
+          edgeG.classList.remove("highlight");
+        }
+      }
+    }
+  }
+
+  // Perform a topological sort step-by-step with animation
+  function* topologicalSortGen(){
+    // clone inDegree map to mutate
+    let inDeg = new Map(inDegree);
+    let adj = new Map();
+    for(let [k,v] of adjacencyList.entries()){
+      adj.set(k, v.slice());
+    }
+    let queue = [];
+    for(let [n, deg] of inDeg.entries()){
+      if(deg === 0) queue.push(n);
+    }
+
+    let order = [];
+
+    while(queue.length){
+      // Highlight current candidates
+      clearHighlights();
+      highlightCandidates(queue);
+
+      // Yield to show candidates
+      yield {type: "candidates", candidates: queue.slice()};
+
+      // Choose first node to remove (could be randomized, but deterministic here)
+      const n = queue.shift();
+
+      clearHighlights();
+      const nodeG = document.getElementById("node-" + n);
+      if(nodeG){
+        nodeG.classList.add("current");
+      }
+
+      yield {type: "removing", node: n};
+
+      order.push(n);
+
+      // remove edges from n
+      for(let m of adj.get(n) || []){
+        // highlight edge being removed
+        let edgeG = document.getElementById("edge-" + n + "->" + m);
+        if(edgeG){
+          edgeG.classList.add("highlight");
+        }
+        yield {type: "removingEdge", from: n, to: m};
+
+        inDeg.set(m, inDeg.get(m) - 1);
+
+        // after removal, edge done
+        if(edgeG){
+          edgeG.classList.remove("highlight");
+          edgeG.classList.add("done");
+        }
+
+        if(inDeg.get(m) === 0){
+          queue.push(m);
+        }
+      }
+
+      // mark node done
+      if(nodeG){
+        nodeG.classList.remove("current");
+        nodeG.classList.add("done");
+      }
+
+      yield {type: "doneNode", node: n, order: order.slice()};
+    }
+
+    // Check if all nodes visited
+    if(order.length !== nodes.size){
+      yield {type: "cycleDetected"};
+      return;
+    }
+    yield {type: "finished", order};
+  }
+
+  let gen = null;
+
+  function startAnimation(){
+    resetGraphStyles();
+    orderDiv.textContent = "";
+    messageDiv.textContent = "";
+    disableInterface(true);
+
+    gen = topologicalSortGen();
+
+    function stepAnimation(){
+      const res = gen.next();
+      if(res.done){
+        disableInterface(false);
+        return;
+      }
+      handleStep(res.value);
+    }
+
+    function handleStep(stepInfo){
+      switch(stepInfo.type){
+        case "candidates":
+          messageDiv.textContent = "Nodes with in-degree 0 (candidates): " + stepInfo.candidates.join(", ");
+          break;
+        case "removing":
+          messageDiv.textContent = "Removing node: " + stepInfo.node;
+          break;
+        case "removingEdge":
+          messageDiv.textContent = `Removing edge: ${stepInfo.from} → ${stepInfo.to}`;
+          break;
+        case "doneNode":
+          orderDiv.textContent = stepInfo.order.join(" → ");
+          messageDiv.textContent = "Node completed: " + stepInfo.node;
+          break;
+        case "cycleDetected":
+          messageDiv.textContent = "Cycle detected! Topological sort not possible.";
+          disableInterface(false);
+          clearInterval(intervalId);
+          intervalId = null;
+          return;
+        case "finished":
+          orderDiv.textContent = stepInfo.order.join(" → ");
+          messageDiv.textContent = "Topological sort completed!";
+          disableInterface(false);
+          clearInterval(intervalId);
+          intervalId = null;
+          return;
+      }
+    }
+
+    // run stepAnimation every 1500ms
+    stepAnimation();
+    intervalId = setInterval(() => {
+      stepAnimation();
+      if(intervalId === null){
+        clearInterval(intervalId);
+      }
+    }, 1500);
+  }
+
+  function resetAll(){
+    messageDiv.textContent = "";
+    orderDiv.textContent = "";
+    disableInterface(false);
+    if(intervalId){
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    resetGraphStyles();
+  }
+
+  // Button handlers
+  startBtn.addEventListener("click", () => {
+    parseInput();
+
+    if(nodes.size === 0){
+      messageDiv.textContent = "No nodes detected! Please enter graph edges.";
+      return;
+    }
+
+    drawGraph();
+    resetGraphStyles();
+    startAnimation();
+  });
+
+  resetBtn.addEventListener("click", () => {
+    resetAll();
+    parseInput();
+    drawGraph();
+  });
+
+  // Initial draw
+  parseInput();
+  drawGraph();
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Interactive DNS Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  textarea,input,select,button {
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  label {
+    display: block;
+    margin: 0.5em 0 0.2em 0;
+  }
+  fieldset {
+    margin-top: 1em;
+    padding: 0.5em;
+    border: 1px solid black;
+  }
+  .log {
+    white-space: pre-wrap;
+    font-family: monospace, monospace;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid black;
+    margin-top: 0.5em;
+    padding: 0.4em;
+  }
+  .section {
+    margin-bottom: 2em;
+  }
+  .inline {
+    display: inline-block;
+    margin-right: 0.5em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Interactive DNS Explorer</h1>
+
+<div class="section" id="intro">
+  <p>This tool lets you explore Domain Name System (DNS) concepts interactively. You can:</p>
+  <ul>
+    <li>Resolve domains step-by-step, simulating the full DNS lookup process</li>
+    <li>Explore DNS record types with custom inputs</li>
+    <li>Manually edit or create DNS zones and records</li>
+    <li>Explore caching and TTL</li>
+    <li>Simulate DNS query failures and errors</li>
+    <li>Explore DNS delegation, recursion, iterative queries</li>
+    <li>Interact with a curated DNS Query Simulator, Resolver Config, and Zone Editor</li>
+  </ul>
+</div>
+
+<!-- STATE: We will maintain a JS DNS simulation environment -->
+<!-- We'll simulate root servers, TLDs, authoritative servers, resolver cache -->
+
+<div class="section" id="dns-simulator">
+  <fieldset>
+    <legend>DNS Resolver Simulator</legend>
+
+    <label for="domainInput">Enter Domain to Resolve:</label>
+    <input type="text" id="domainInput" placeholder="e.g. www.example.com" size="30" autocomplete="off" />
+
+    <label for="queryType">Select Query Type:</label>
+    <select id="queryType" >
+      <option value="A">A (IPv4 Address)</option>
+      <option value="AAAA">AAAA (IPv6 Address)</option>
+      <option value="CNAME">CNAME (Alias)</option>
+      <option value="NS">NS (Name Server)</option>
+      <option value="MX">MX (Mail Exchange)</option>
+      <option value="TXT">TXT (Text Record)</option>
+      <option value="SOA">SOA (Start of Authority)</option>
+      <option value="PTR">PTR (Reverse Pointer)</option>
+      <option value="SRV">SRV (Service Location)</option>
+    </select>
+
+    <div style="margin-top:0.5em;">
+      <button id="startResolve">Start Resolution</button>
+      <button id="resetSim">Reset Simulator</button>
+    </div>
+
+    <label style="margin-top:0.8em;">Step Delay (ms): <input type="number" id="stepDelay" value="700" min="50" max="3000" step="50" /></label>
+    <label>Max Steps: <input type="number" id="maxSteps" value="30" min="1" max="100" step="1" /></label>
+    <label><input type="checkbox" id="autoStep" checked /> Auto-step (auto-continue resolution steps)</label>
+
+    <fieldset style="margin-top:1em;">
+      <legend>Resolver Cache Controls</legend>
+      <label>Cache TTL simulation scale (1 real sec = X simulated sec): <input type="number" id="cacheScale" value="30" min="1" max="3600" /></label>
+      <button id="clearCache">Clear Resolver Cache</button>
+      <button id="showCache">Show Resolver Cache</button>
+    </fieldset>
+
+    <fieldset style="margin-top:1em;">
+      <legend>Resolver Configuration</legend>
+      <p>Customize resolver behavior and policies:</p>
+      <label><input type="checkbox" id="enableRecursion" checked /> Enable Recursion</label>
+      <label><input type="checkbox" id="followCNAME" checked /> Follow CNAME records automatically</label>
+      <label>Max retries per query: <input type="number" id="maxRetries" value="3" min="1" max="10" /></label>
+      <label><input type="checkbox" id="simulateTimeouts" /> Simulate Random Timeouts (5% chance)</label>
+    </fieldset>
+
+    <fieldset style="margin-top:1em;">
+      <legend>Current Resolution Log</legend>
+      <div id="resolutionLog" class="log" tabindex="0" aria-live="polite" aria-atomic="true"></div>
+    </fieldset>
+
+    <fieldset style="margin-top:1em;">
+      <legend>Manual Step Controls</legend>
+      <button id="stepBack" disabled>&lt; Step Back</button>
+      <button id="stepNext" disabled>Step Next &gt;</button>
+      <button id="stepRunPause" disabled>Pause</button>
+    </fieldset>
+
+  </fieldset>
+</div>
+
+<div class="section" id="zone-editor">
+  <fieldset>
+    <legend>DNS Zone Editor and Configurator</legend>
+    <p>Create, edit, or load DNS zones to use in resolver simulation.</p>
+
+    <label for="zoneName">Zone Domain (FQDN):</label>
+    <input type="text" id="zoneName" placeholder="e.g. example.com" size="30" autocomplete="off" />
+
+    <label for="soaInput">SOA Record (required, multiline, zone root):</label>
+    <textarea id="soaInput" rows="4" cols="60" placeholder="Example SOA record format:
+@ IN SOA ns1.example.com. hostmaster.example.com. (
+  2024060601 ; serial
+  7200       ; refresh
+  3600       ; retry
+  1209600    ; expire
+  3600       ; minimum TTL
+)"></textarea>
+
+    <label for="zoneRecords">Zone Records (one per line):</label>
+    <textarea id="zoneRecords" rows="10" cols="60" placeholder="Record format examples:
+www 3600 IN A 93.184.216.34
+mail 3600 IN MX 10 mail.example.com.
+@ 3600 IN NS ns1.example.com.
+ns1 3600 IN A 192.0.2.53
+alias 3600 IN CNAME www
+"></textarea>
+
+    <div>
+      <button id="loadZone">Load Zone into Simulator</button>
+      <button id="clearZone">Clear Zone Editor</button>
+      <button id="showZone">Show Zone Data</button>
+    </div>
+
+    <fieldset style="margin-top:1em;">
+      <legend>Zone Authority and Delegation Simulation</legend>
+      <p>You can create child zones to simulate delegation. Use 'zone domain' input and load new zones. The root zone is fixed.</p>
+      <button id="showZoneTree">Show Current Zone Tree</button>
+      <pre id="zoneTreeOutput" style="white-space: pre-wrap; max-height:150px; overflow-y:auto; border:1px solid black; padding:0.5em; margin-top:0.5em;"></pre>
+    </fieldset>
+  </fieldset>
+</div>
+
+<div class="section" id="dns-info-explorer">
+  <fieldset>
+    <legend>DNS Concepts and Info Explorer</legend>
+    <p>Select a DNS concept/term below to get detailed explanations, examples, and interactive mini-demos.</p>
+    <select id="conceptSelect" size="10" style="width: 100%;">
+      <option value="">-- Select a Concept --</option>
+      <option value="root_servers">Root DNS Servers</option>
+      <option value="tld_servers">Top Level Domain (TLD) Servers</option>
+      <option value="authoritative_servers">Authoritative Name Servers</option>
+      <option value="recursive_resolvers">Recursive Resolvers</option>
+      <option value="iterative_queries">Iterative Queries</option>
+      <option value="dns_cache">DNS Cache and TTL</option>
+      <option value="dns_records">DNS Record Types</option>
+      <option value="dns_delegation">DNS Delegation</option>
+      <option value="cname_chains">CNAME Chains and Resolution</option>
+      <option value="reverse_dns">Reverse DNS Lookups (PTR)</option>
+      <option value="dns_security">DNS Security Extensions (DNSSEC)</option>
+      <option value="dns_failures">Common DNS Failures and Timeouts</option>
+      <option value="mx_records">Mail Exchange (MX) Records and Use</option>
+    </select>
+    <div id="conceptInfo" style="margin-top:1em; white-space: pre-wrap; max-height: 250px; overflow-y: auto; border:1px solid black; padding:0.5em;" tabindex="0"></div>
+  </fieldset>
+</div>
+
+<script>
+(() => {
+  // DNS Simulation Internal Data Structure & Logic
+
+  // DNS zones data storage
+  // Zones keyed by zone name (domain), values are objects with SOA and records
+  // Records are keyed by owner name (relative or @) are arrays of DNS entries
+  let zones = {};
+
+  // Root zone is special and fixed with limited known roots (list of root servers)
+  // We'll predefine root zone with TLD delegations
+
+  const ROOT_ZONE_NAME = ".";
+  // Storage of root servers with their IP to simulate referral on root queries
+  // Basic example: 13 root servers with sample IPs, simplified
+  const rootServers = [
+    {name:"a.root-servers.net.", ip:"198.41.0.4"},
+    {name:"b.root-servers.net.", ip:"199.9.14.201"},
+    {name:"c.root-servers.net.", ip:"192.33.4.12"},
+    {name:"d.root-servers.net.", ip:"199.7.91.13"},
+    {name:"e.root-servers.net.", ip:"192.203.230.10"},
+    {name:"f.root-servers.net.", ip:"192.5.5.241"},
+    {name:"g.root-servers.net.", ip:"192.112.36.4"},
+    {name:"h.root-servers.net.", ip:"198.97.190.53"},
+    {name:"i.root-servers.net.", ip:"192.36.148.17"},
+    {name:"j.root-servers.net.", ip:"192.58.128.30"},
+    {name:"k.root-servers.net.", ip:"193.0.14.129"},
+    {name:"l.root-servers.net.", ip:"199.7.83.42"},
+    {name:"m.root-servers.net.", ip:"202.12.27.33"}
+  ];
+
+  // Predefined TLD Zones with simulated authoritative NS records
+  const predefinedTLDZones = {
+    "com": {
+      SOA: {
+        mname:"a.gtld-servers.net.",
+        rname:"nstld.verisign-grs.com.",
+        serial:2024060601,
+        refresh:7200,
+        retry:3600,
+        expire:1209600,
+        minimum:3600
+      },
+      records: {
+        "@": [
+          {type:"NS", ttl:43200, value:"a.gtld-servers.net."},
+          {type:"NS", ttl:43200, value:"b.gtld-servers.net."}
+        ],
+        "a.gtld-servers.net.": [
+          {type:"A", ttl:86400, value:"192.5.6.30"},
+          {type:"AAAA", ttl:86400, value:"2001:503:a83e::2:30"}
+        ],
+        "b.gtld-servers.net.": [
+          {type:"A", ttl:86400, value:"192.33.14.30"},
+          {type:"AAAA", ttl:86400, value:"2001:503:231d::2:30"}
+        ],
+        "example": [
+          {type:"NS", ttl:86400, value:"ns1.example.com."},
+          {type:"NS", ttl:86400, value:"ns2.example.com."}
+        ],
+      }
+    },
+    "net": {
+      SOA: {
+        mname:"a.gtld-servers.net.",
+        rname:"nstld.verisign-grs.net.",
+        serial:2024060601,
+        refresh:7200,
+        retry:3600,
+        expire:1209600,
+        minimum:3600
+      },
+      records: {
+        "@": [
+          {type:"NS", ttl:43200, value:"a.gtld-servers.net."},
+          {type:"NS", ttl:43200, value:"b.gtld-servers.net."}
+        ]
+      }
+    },
+    // More TLDs could be added here...
+  };
+
+
+  // We will store a minimal zones cache with entries
+  // To simulate zone data loaded by user or predefined
+  zones["."] = {
+    SOA: {
+      mname:"a.root-servers.net.",
+      rname:"root-servers.net.",
+      serial:2024060601,
+      refresh:1800,
+      retry:900,
+      expire:604800,
+      minimum:86400
+    },
+    records: {
+      "@": rootServers.map(rs => ({type:"NS", ttl:172800, value: rs.name}))
+    }
+  };
+
+  for(const tld of Object.keys(predefinedTLDZones)) {
+    zones[tld] = {...predefinedTLDZones[tld]};
+  }
+
+  // We'll add a built-in example zone "example.com" authoritative servers
+  zones["example.com"] = {
+    SOA: {
+      mname:"ns1.example.com.",
+      rname:"hostmaster.example.com.",
+      serial:2024060601,
+      refresh:7200,
+      retry:3600,
+      expire:1209600,
+      minimum:3600
+    },
+    records: {
+      "@": [
+        {type:"NS", ttl:86400, value:"ns1.example.com."},
+        {type:"NS", ttl:86400, value:"ns2.example.com."}
+      ],
+      "ns1.example.com.": [
+        {type:"A", ttl:86400, value:"192.0.2.53"}
+      ],
+      "ns2.example.com.": [
+        {type:"A", ttl:86400, value:"192.0.2.54"}
+      ],
+      "www": [
+        {type:"A", ttl:3600, value:"93.184.216.34"},
+        {type:"AAAA", ttl:3600, value:"2606:2800:220:1:248:1893:25c8:1946"}
+      ],
+      "mail": [
+        {type:"MX", ttl:3600, value:"10 mail.example.com."}
+      ],
+      "mail.example.com.": [
+        {type:"A", ttl:3600, value:"192.0.2.25"}
+      ],
+      "alias": [
+        {type:"CNAME", ttl:3600, value:"www.example.com."}
+      ]
+    }
+  };
+
+  // For demo, empty zones can be loaded by user later
+
+  // Resolver Cache Data Structure:
+  // cache: key = LABEL|TYPE string, value = {records:[...], expiry:Date, isNegative:boolean}
+  let resolverCache = {};
+
+  // Resolver Config and State
+  const resolverConfig = {
+    recursionEnabled: true,
+    followCNAME: true,
+    stepDelay: 700,
+    maxSteps: 30,
+    maxRetries: 3,
+    simulateTimeouts: false,
+    cacheScale: 30,
+    autoStep: true
+  };
+
+  // For resolution step tracking and UI controls:
+  let resolutionSteps = [];
+  let currentStepIndex = -1;
+  let resolutionRunning = false;
+  let resolutionTimeoutId = null;
+
+  // Utility Functions
+
+  function domainNormalize(name) {
+    // Normalize domain: ensure trailing dot, lower case
+    if(!name) return "";
+    name = name.trim().toLowerCase();
+    if(!name.endsWith(".")) name = name + ".";
+    return name;
+  }
+
+  // Split domain into labels array, last label at end, root label as empty string
+  // www.example.com. => [www,example,com,""]
+  function domainLabels(domain) {
+    domain = domainNormalize(domain);
+    return domain === "." ? [""] : domain.split(".");
+  }
+
+  // Check if a domain is a subdomain (or equal) of another
+  // sub = www.example.com. , parent= example.com. => true
+  function isSubdomain(sub, parent) {
+    if(!sub || !parent) return false;
+    sub = domainNormalize(sub);
+    parent = domainNormalize(parent);
+    if(parent === ".") return true;
+    if(sub === parent) return true;
+    if(!parent.endsWith(".")) parent += ".";
+    return sub.endsWith("." + parent);
+  }
+
+
+  // Record lookup function inside a zone object. Returns array or empty.
+  // name can be FQDN or relative name to zone domain.
+  function findRecords(zoneData, name, type) {
+    if(!zoneData) return [];
+    if(!name) return [];
+    name = name.trim();
+    if(!name) return [];
+
+    // Normalize relative names: if ends with "." => FQDN else relative to zone domain
+    let normalizedName;
+    if(name.endsWith(".")) {
+      normalizedName = name.toLowerCase();
+    } else {
+      normalizedName = (name+"."+zoneDataZoneName(zoneData)).toLowerCase();
+    }
+    // Inside zone, records keys can be relative names or absolute? We store keys as relative or "@" for zone root for input
+    // We will index by relative owner names to zone domain:
+    // So to find the record, convert normalizedName to relative name against zone
+
+    let relativeName = relativeNameToZone(normalizedName, zoneDataZoneName(zoneData));
+    if(!relativeName) return [];
+
+    let r = zoneData.records[relativeName];
+    if(!r) return [];
+
+    if(!type || type==="ANY") return r;
+
+    return r.filter(rec => rec.type.toUpperCase()===type.toUpperCase());
+  }
+
+  // Convert normalized fqdn (with trailing .) to relative name inside zone
+  // Return "@" if fqdn equals zone domain name
+  function relativeNameToZone(fqdn, zoneDomain) {
+    fqdn = domainNormalize(fqdn);
+    zoneDomain = domainNormalize(zoneDomain);
+    if(fqdn === zoneDomain) return "@";
+
+    if(!fqdn.endsWith(zoneDomain)) return null;
+
+    let rel = fqdn.slice(0, fqdn.length - zoneDomain.length - 1); // remove zone domain + dot
+    return rel || "@";
+  }
+
+  function zoneDataZoneName(zoneData) {
+    // identify zoneName from zoneData by reverse-mapping 'zones' (could cache on zone data object)
+    for(const z in zones) {
+      if(zones[z] === zoneData) return domainNormalize(z);
+    }
+    return null;
+  }
+
+  function parseRecordLine(line, zoneDomain) {
+    // parse one DNS record line
+    // Format:
+    // [owner] [TTL] [IN] TYPE value
+    // Simplify some assumptions:
+    // owner can be "@" or label or fqdn
+    // TTL optional (auto-default to 3600)
+    // IN literal required (skip lines that don't contain)
+    //
+    // Example line:
+    // www 3600 IN A 93.184.216.34
+    // mail 3600 IN MX 10 mail.example.com.
+    // @ 3600 IN NS ns1.example.com.
+
+    line = line.trim();
+    if(!line) return null;
+    if(line.startsWith(";")) return null; // comment line
+    let parts = line.split(/\s+/);
+    if(parts.length < 4) return null;
+    let owner = parts[0];
+    let ttl = 3600;
+    let type = null;
+    let valueStartIndex = 3;
+
+    // if parts[1] is TTL (all digits):
+    if(/^\d+$/.test(parts[1])) {
+      ttl = parseInt(parts[1]);
+      if(parts[2] === "IN") {
+        type = parts[3].toUpperCase();
+        valueStartIndex = 4;
+      } else {
+        // skip invalid
+        return null;
+      }
+    } else if(parts[1] === "IN") {
+      type = parts[2].toUpperCase();
+      valueStartIndex = 3;
+    } else {
+      // Possibly missing IN or wrong format
+      return null;
+    }
+
+    let valueParts = parts.slice(valueStartIndex);
+    if(valueParts.length === 0) return null;
+
+    // Some record types have multiple tokens for value (like MX or SOA)
+    // We'll treat value as joined string except for SOA special
+    let value = valueParts.join(" ");
+
+    // For owner normalize form: if no trailing dot and not "@", add trailing '.' and zone domain
+    if(owner !== "@" && !owner.endsWith(".")) {
+      owner = owner + "." + zoneDomain;
+    }
+
+    owner = domainNormalize(owner);
+
+    return {
+      owner,
+      ttl,
+      type,
+      value
+    };
+  }
+
+  // Parses SOA record from multiline text input (returns parsed object or null)
+  // We'll parse basic SOA syntax with multiline parentheses for values:
+  // @ IN SOA mname rname (
+  //    serial ; serial
+  //    refresh ; refresh
+  //    retry ; retry
+  //    expire ; expire
+  //    minimum ; minimum TTL
+  // )
+  function parseSOA(soaText, zoneDomain) {
+    if(!soaText) return null;
+    let lines = soaText.trim().split("\n");
+    if(lines.length < 2) return null;
+
+    // Let's combine text and then parse SOA record components
+    let combined = lines.join(" ").replace(/\s+/g," ").trim();
+
+    // Find SOA line with (...) parentheses and extract fields inside parens
+    let m = combined.match(/SOA\s+(\S+)\s+(\S+)\s*\(([^)]+)\)/i);
+    if(!m) return null;
+
+    let mname = domainNormalize(m[1]);
+    let rname = domainNormalize(m[2]);
+
+    // inside parens is multiple fields separated by optional comments
+    let inside = m[3];
+    // Remove any ; comments at end of line fragments
+    inside = inside.replace(/;.*$/gm,"").trim();
+    // Split by whitespace
+    let fields = inside.split(/\s+/);
+    if(fields.length < 5) return null;
+
+    let serial=parseInt(fields[0]);
+    let refresh=parseInt(fields[1]);
+    let retry=parseInt(fields[2]);
+    let expire=parseInt(fields[3]);
+    let minimum=parseInt(fields[4]);
+
+    if([serial,refresh,retry,expire,minimum].some(isNaN)) return null;
+
+    return {mname,rname,serial,refresh,retry,expire,minimum};
+  }
+
+  // Deep clone an object - used for records array cloning
+  function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+
+  // ========== DNS Query Simulation ==========
+
+  // The main function to simulate a DNS query with step-wise progress:
+
+  /*
+    Resolver behavior summary:
+    1. Check cache for records.
+    2. If recursion enabled:
+      - Query root (.) if domain not in cache.
+      - Walk down delegation chain from root => TLD => domain zone.
+      - Use iterative queries, follow NS referrals.
+      - Follow CNAME chains if enabled.
+    3. Apply TTL behavior and caching.
+    4. Output each step to resolution log.
+  */
+
+  // Query object represents current query state
+  class Query {
+    constructor(domain, qtype) {
+      this.domain = domainNormalize(domain);
+      this.qtype = qtype.toUpperCase();
+      this.steps = [];
+      this.done = false;
+      this.failed = false;
+      this.attempts = 0;  // retry count for timeouts
+      this.resultRecords = null;
+      this.currentServers = null; // array of server names we query (starting root)
+      this.currentServerIdx = 0;
+      this.nextLowerZone = null;  // domain string for next lookup zone
+      this.recursionDepth = 0;
+      this.maxDepth = 20;
+      this.visitedCNAMES = new Set();
+      this.cacheHits = 0;
+    }
+  }
+
+  // Cache key function
+  function cacheKey(domain, type) {
+    return domain + "|" + type.toUpperCase();
+  }
+
+  // Cache get/set with TTL evictions
+  function cacheGet(domain, type) {
+    let key = cacheKey(domain, type);
+    const now = Date.now();
+    if(!resolverCache[key]) return null;
+    const entry = resolverCache[key];
+    if(entry.expiry < now) {
+      // expired
+      delete resolverCache[key];
+      return null;
+    }
+    return deepClone(entry);
+  }
+
+  function cacheSet(domain, type, records, ttl, isNegative=false) {
+    let key = cacheKey(domain, type);
+    const now = Date.now();
+    // ttl in seconds, scaled by cacheScale
+    const expiry = now + (ttl * 1000) / resolverConfig.cacheScale;
+    resolverCache[key] = {
+      records: deepClone(records),
+      expiry,
+      isNegative
+    };
+  }
+
+  // Cache clear
+  function cacheClear() {
+    resolverCache = {};
+  }
+
+  // Basic DNS record matching utilities
+
+  // Find authoritative zone for a domain in zones DB (longest suffix match)
+  function findAuthoritativeZone(domain) {
+    domain = domainNormalize(domain);
+    // find longest suffix
+    let parts = domainLabels(domain);
+    // parts: [label1,label2,...,""]
+    // try full domain, then parent labels until root
+    for(let i=0; i<parts.length; i++) {
+      let candidate = parts.slice(i).join(".");
+      if(candidate === "") candidate = ".";
+      else candidate += ".";
+      if(zones[candidate]) return candidate;
+    }
+    return null;
+  }
+
+  // Find NS records for domain or closest ancestor - to simulate referral finding
+  function findNSRecords(domain) {
+    domain = domainNormalize(domain);
+    // For domain or parent zone, find NS records
+    const zoneName = findAuthoritativeZone(domain);
+    if(!zoneName) return [];
+
+    const zoneData = zones[zoneName];
+    if(!zoneData) return [];
+
+    // See if there are delegation NS records at child level
+    // For example: if domain = "example.com.", zoneName="example.com."
+    // NS records for @ give authoritative servers.
+    // For subdomains delegated, NS look up at parent.
+    let relativeName = relativeNameToZone(domain, zoneName) || "@";
+
+    let nsRecords = findRecords(zoneData, relativeName, "NS");
+    if(nsRecords.length > 0) return nsRecords;
+
+    // fallback to zone apex NS records
+    nsRecords = findRecords(zoneData, "@", "NS");
+    return nsRecords;
+  }
+
+  // Find A/AAAA records for a name from zones DB
+  function findAddressRecords(domain, type) {
+    domain = domainNormalize(domain);
+    let zoneName = findAuthoritativeZone(domain);
+    if(!zoneName) return [];
+    let zoneData = zones[zoneName];
+    if(!zoneData) return [];
+
+    let relativeName = relativeNameToZone(domain, zoneName);
+    if(!relativeName) return [];
+
+    return findRecords(zoneData, relativeName, type);
+  }
+
+  // Find any CNAME record for domain in zones
+  function findCNAMERecord(domain) {
+    domain = domainNormalize(domain);
+    let zoneName = findAuthoritativeZone(domain);
+    if(!zoneName) return null;
+    let zoneData = zones[zoneName];
+    if(!zoneData) return null;
+    let relativeName = relativeNameToZone(domain, zoneName);
+    if(!relativeName) return null;
+
+    let cnames = findRecords(zoneData, relativeName, "CNAME");
+    if(cnames.length > 0) return cnames[0];
+    return null;
+  }
+
+  // Find records of any type for domain in zones
+  function findAnyRecords(domain) {
+    domain = domainNormalize(domain);
+    let zoneName = findAuthoritativeZone(domain);
+    if(!zoneName) return [];
+    let zoneData = zones[zoneName];
+    if(!zoneData) return [];
+    let relativeName = relativeNameToZone(domain, zoneName);
+    if(!relativeName) return [];
+    return findRecords(zoneData, relativeName, null);
+  }
+
+  // Simulate timeout randomness, 5% chance if enabled
+  function randomTimeout() {
+    if (!resolverConfig.simulateTimeouts) return false;
+    return Math.random() < 0.05;
+  }
+
+  // Simulation of one step of DNS resolution
+  // Returns a descriptive string of action and returns {done, failed} status
+  function simulationStep(query, logAppend) {
+    if(query.done || query.failed) return {done:true, failed:query.failed};
+
+    if(query.recursionDepth > query.maxDepth) {
+      logAppend("Maximum recursion depth exceeded.");
+      query.failed = true;
+      return {done:true, failed:true};
+    }
+
+    // Increase recursion depth for logging downstream calls
+    query.recursionDepth++;
+
+    query.attempts++;
+
+    // Start with check cache:
+    let cacheEntry = cacheGet(query.domain, query.qtype);
+    if(cacheEntry) {
+      query.cacheHits++;
+      query.steps.push(`Cache hit for ${query.domain} (${query.qtype}) -> ${cacheEntry.records.length} record(s)`);
+      query.resultRecords = cacheEntry.records;
+      query.done = true;
+      return {done:true, failed:false};
+    }
+
+    // Check for CNAME first, if qtype != CNAME and followCNAME enabled
+    if(query.qtype !== "CNAME" && resolverConfig.followCNAME) {
+      let cnameRec = findCNAMERecord(query.domain);
+      if(cnameRec) {
+        if(query.visitedCNAMES.has(cnameRec.value)) {
+          query.steps.push(`CNAME loop detected: ${cnameRec.value} already visited. Aborting.`);
+          query.failed = true;
+          query.done = true;
+          return {done:true, failed:true};
+        }
+        query.visitedCNAMES.add(cnameRec.value);
+        query.steps.push(`Found CNAME for ${query.domain}: points to ${cnameRec.value}`);
+        // Cache the CNAME record with its TTL before continuing
+        cacheSet(query.domain, "CNAME", [cnameRec], cnameRec.ttl);
+        // Redirect query to the target of CNAME with the original qtype
+        query.domain = domainNormalize(cnameRec.value);
+        // Reset attempts for new domain
+        query.attempts = 0;
+        // Keep recursionDepth within bounds
+        return {done:false, failed:false};
+      }
+    }
+
+    if(!resolverConfig.recursionEnabled) {
+      // Non recursive mode - only query authoritative servers explicitly set
+      // For demo, simplified to failure if no cache hit and no recursion
+      query.steps.push("Recursion disabled - no cached result available, cannot resolve further.");
+      query.failed = true;
+      query.done = true;
+      return {done:true, failed:true};
+    }
+
+    // Recursion enabled - we simulate iterative queries from root downward
+
+    // We simulate query to root servers first if no currentServers set
+    if(query.currentServers === null) {
+      query.currentServers = rootServers.map(srv => srv.name);
+      query.currentServerIdx = 0;
+      query.steps.push(`Starting iterative query at Root servers: ${query.currentServers.length} available.`);
+      return {done:false, failed:false};
+    }
+
+    // Simulate query to current server (by server name) for the requested domain and type
+    if(query.currentServerIdx >= query.currentServers.length) {
+      query.steps.push(`All servers queried at this level, retry limit reached. Query failed.`);
+      query.failed = true;
+      query.done = true;
+      return {done:true, failed:true};
+    }
+    let serverName = query.currentServers[query.currentServerIdx];
+
+    // Simulate possible timeout
+    if(randomTimeout()) {
+      query.steps.push(`Query to server ${serverName} timed out. Retrying with next server...`);
+      query.currentServerIdx++;
+      // We try next server on timeout
+      return {done:false, failed:false};
+    }
+
+    query.steps.push(`Querying server ${serverName} for ${query.domain} ${query.qtype}`);
+
+    // Simulation of server behavior - find zone served and look up records or referral
+
+    // Try to find zone served by serverName, i.e. zone where serverName is NS record
+    let zoneServed = null;
+    for(const z in zones) {
+      let zoneData = zones[z];
+      // Check if this serverName is in NS records of zone z
+      let nsForZone = findRecords(zoneData, "@", "NS");
+      for(const nsRec of nsForZone) {
+        if(domainNormalize(nsRec.value) === domainNormalize(serverName)) {
+          zoneServed = z; break;
+        }
+      }
+      if(zoneServed) break;
+    }
+
+    if(!zoneServed) {
+      // Could be root servers or external NS - fallback root zone for root servers
+      if(rootServers.find(r => domainNormalize(r.name) === domainNormalize(serverName))) {
+        zoneServed = ".";
+      } else {
+        // Unknown serverName, fail this server
+        query.steps.push(`Server ${serverName} is unknown or unreachable.`);
+        query.currentServerIdx++;
+        return {done:false, failed:false};
+      }
+    }
+
+    // Once zoneServed found, find record for query.domain & qtype
+    // If domain not under zoneServed (zoneServed is zone name, e.g. example.com.)
+    if(!isSubdomain(query.domain, zoneServed)) {
+      // Return referral to best known NS zone under domain:
+
+      // We try closest delegation:
+      let referralZoneName = findAuthoritativeZone(query.domain);
+
+      if(!referralZoneName || referralZoneName === zoneServed) {
+        // Can't find delegation, NXDOMAIN
+        query.steps.push(`Server ${serverName} responded NXDOMAIN for ${query.domain} ${query.qtype}`);
+        cacheSet(query.domain, query.qtype, [], 300, true);
+        query.failed = true;
+        query.done = true;
+        return {done:true, failed:true};
+      }
+
+      if(referralZoneName !== zoneServed) {
+        query.steps.push(`Server ${serverName} refers us to zone ${referralZoneName}`);
+
+        // Include NS record references as referral data
+        let nsRecs = findRecords(zones[referralZoneName], "@", "NS");
+        if(nsRecs.length === 0) {
+          query.steps.push(`But zone ${referralZoneName} has no NS records. NXDOMAIN.`);
+          cacheSet(query.domain, query.qtype, [], 300, true);
+          query.failed = true;
+          query.done = true;
+          return {done:true, failed:true};
+        }
+
+        // We'll simulate iterative resolver: next servers to query are NS names for referral zone
+        // Resolve NS names to A records - to simulate address information (glue records)
+        let referralServers = nsRecs.map(nsr => domainNormalize(nsr.value));
+        query.steps.push(`Referral to NS servers: ${referralServers.join(", ")}`);
+
+        query.currentServers = referralServers;
+        query.currentServerIdx = 0;
+        return {done:false, failed:false};
+      }
+    }
+
+    // Now server is authoritative for zoneServed and we query record
+
+    let zoneData = zones[zoneServed];
+    if(!zoneData) {
+      query.steps.push(`Zone data for ${zoneServed} is missing`);
+      query.failed = true;
+      query.done = true;
+      return {done:true, failed:true};
+    }
+
+    let relativeName = relativeNameToZone(query.domain, zoneServed);
+    if(!relativeName) {
+      query.failed = true;
+      query.done = true;
+      query.steps.push(`Domain ${query.domain} not found under zone ${zoneServed}`);
+      cacheSet(query.domain, query.qtype, [], 300, true);
+      return {done:true, failed:true};
+    }
+
+    let foundRecords = findRecords(zoneData, relativeName, query.qtype);
+    if(foundRecords.length > 0) {
+      query.steps.push(`Server ${serverName} authoritative answer with ${foundRecords.length} record(s)`);
+      cacheSet(query.domain, query.qtype, foundRecords, foundRecords[0].ttl);
+      query.resultRecords = foundRecords;
+      query.done = true;
+      return {done:true, failed:false};
+    }
+
+    // If no records and qtype not "ANY" or "SOA", try SOA record at zone apex - might mean NXDOMAIN or NODATA
+    if(query.qtype !== "SOA" && query.qtype !== "ANY") {
+      // Check for existence of domain name to distinguish NXDOMAIN/NODATA
+      let anyRecs = findAnyRecords(query.domain);
+      if(anyRecs.length === 0) {
+        query.steps.push(`Domain ${query.domain} does not exist (NXDOMAIN).`);
+        cacheSet(query.domain, query.qtype, [], 300, true);
+        query.failed = true;
+        query.done = true;
+        return {done:true, failed:true};
+      } else {
+        query.steps.push(`No ${query.qtype} record found for ${query.domain} (NODATA).`);
+        cacheSet(query.domain, query.qtype, [], 300, true);
+        query.done = true;
+        return {done:true, failed:false};
+      }
+    }
+
+    // qtype is SOA or ANY, try to find SOA record
+    if(query.qtype === "SOA" || query.qtype === "ANY") {
+      let soaRecs = findRecords(zoneData, "@", "SOA");
+      if(soaRecs.length > 0) {
+        query.steps.push(`Server ${serverName} authoritative answer with SOA record.`);
+        cacheSet(query.domain, query.qtype, soaRecs, soaRecs[0].ttl);
+        query.resultRecords = soaRecs;
+        query.done = true;
+        return {done:true, failed:false};
+      }
+    }
+
+    // Default fallback
+    query.steps.push(`No record found for ${query.domain} ${query.qtype}, returning empty response.`);
+    cacheSet(query.domain, query.qtype, [], 300, true);
+    query.done = true;
+    return {done:true, failed:false};
+  }
+
+  // =========== UI Binding and Logic ============
+
+  // DOM references
+  const domainInput = document.getElementById("domainInput");
+  const queryTypeSelect = document.getElementById("queryType");
+  const startResolveBtn = document.getElementById("startResolve");
+  const resetSimBtn = document.getElementById("resetSim");
+  const resolutionLog = document.getElementById("resolutionLog");
+  const stepBackBtn = document.getElementById("stepBack");
+  const stepNextBtn = document.getElementById("stepNext");
+  const stepRunPauseBtn = document.getElementById("stepRunPause");
+  const stepDelayInput = document.getElementById("stepDelay");
+  const maxStepsInput = document.getElementById("maxSteps");
+  const autoStepCheckbox = document.getElementById("autoStep");
+
+  const enableRecursionCheckbox = document.getElementById("enableRecursion");
+  const followCNAMECheckbox = document.getElementById("followCNAME");
+  const maxRetriesInput = document.getElementById("maxRetries");
+  const simulateTimeoutsCheckbox = document.getElementById("simulateTimeouts");
+  const cacheScaleInput = document.getElementById("cacheScale");
+  const clearCacheBtn = document.getElementById("clearCache");
+  const showCacheBtn = document.getElementById("showCache");
+
+  // Zone editor elements
+  const zoneNameInput = document.getElementById("zoneName");
+  const soaInput = document.getElementById("soaInput");
+  const zoneRecordsInput = document.getElementById("zoneRecords");
+  const loadZoneBtn = document.getElementById("loadZone");
+  const clearZoneBtn = document.getElementById("clearZone");
+  const showZoneBtn = document.getElementById("showZone");
+  const showZoneTreeBtn = document.getElementById("showZoneTree");
+  const zoneTreeOutput = document.getElementById("zoneTreeOutput");
+
+  // Concept explorer elements
+  const conceptSelect = document.getElementById("conceptSelect");
+  const conceptInfo = document.getElementById("conceptInfo");
+
+  // Resolution state
+  let currentQuery = null;
+
+  // History and stepping helpers
+  function updateStepButtons() {
+    stepBackBtn.disabled = currentStepIndex <= 0;
+    stepNextBtn.disabled = resolutionSteps.length === 0 || currentStepIndex >= resolutionSteps.length -1;
+    stepRunPauseBtn.disabled = resolutionSteps.length === 0;
+    stepRunPauseBtn.textContent = resolutionRunning ? "Pause" : "Run";
+  }
+
+  function logReset() {
+    resolutionSteps = [];
+    currentStepIndex = -1;
+    currentQuery = null;
+    resolutionRunning = false;
+    if(resolutionTimeoutId) {
+      clearTimeout(resolutionTimeoutId);
+      resolutionTimeoutId = null;
+    }
+    resolutionLog.textContent = "";
+    updateStepButtons();
+  }
+
+  function logAppend(message) {
+    resolutionSteps.push(message);
+    currentStepIndex = resolutionSteps.length - 1;
+    renderCurrentStep();
+    updateStepButtons();
+  }
+
+  function renderCurrentStep() {
+    if(currentStepIndex < 0 || currentStepIndex >= resolutionSteps.length) return;
+    resolutionLog.textContent = resolutionSteps.slice(0, currentStepIndex+1).join("\n");
+    resolutionLog.scrollTop = resolutionLog.scrollHeight;
+  }
+
+  // Start new resolution
+  function startResolution() {
+    logReset();
+
+    // Read config inputs
+    const domainRaw = domainInput.value.trim();
+    if(!domainRaw) {
+      alert("Please enter a domain to resolve.");
+      return;
+    }
+    let domain = domainNormalize(domainRaw);
+    let qtype = queryTypeSelect.value.trim().toUpperCase();
+
+    resolverConfig.recursionEnabled = enableRecursionCheckbox.checked;
+    resolverConfig.followCNAME = followCNAMECheckbox.checked;
+    resolverConfig.maxRetries = parseInt(maxRetriesInput.value) || 3;
+    resolverConfig.simulateTimeouts = simulateTimeoutsCheckbox.checked;
+    resolverConfig.cacheScale = parseInt(cacheScaleInput.value) || 30;
+    resolverConfig.stepDelay = Math.max(50, Math.min(3000, parseInt(stepDelayInput.value) || 700));
+    resolverConfig.maxSteps = Math.max(1, Math.min(100, parseInt(maxStepsInput.value) || 30));
+    resolverConfig.autoStep = autoStepCheckbox.checked;
+
+    // Create query object
+    currentQuery = new Query(domain, qtype);
+
+    resolutionSteps = [];
+    currentStepIndex = -1;
+    resolutionRunning = true;
+
+    logAppend(`Starting resolution for ${domain} ${qtype}`);
+
+    // Run multiple steps iteratively or wait for step next
+    nextStep();
+  }
+
+  function nextStep() {
+    if(!currentQuery || currentQuery.done || currentQuery.failed) {
+      resolutionRunning = false;
+      stepRunPauseBtn.textContent = "Run";
+      return;
+    }
+
+    if(resolutionSteps.length >= resolverConfig.maxSteps) {
+      logAppend(`Reached max steps limit (${resolverConfig.maxSteps}). Stopping.`);
+      resolutionRunning = false;
+      stepRunPauseBtn.textContent = "Run";
+      return;
+    }
+
+    let res = simulationStep(currentQuery, logAppend);
+
+    if(res.done) {
+      let summary = currentQuery.failed ? "Resolution failed." : `Resolution succeeded with ${currentQuery.resultRecords ? currentQuery.resultRecords.length : 0} record(s).`;
+      logAppend(summary);
+      resolutionRunning = false;
+      stepRunPauseBtn.textContent = "Run";
+      return;
+    }
+
+    if(resolutionRunning && resolverConfig.autoStep) {
+      resolutionTimeoutId = setTimeout(nextStep, resolverConfig.stepDelay);
+    } else {
+      resolutionRunning = false;
+      stepRunPauseBtn.textContent = "Run";
+    }
+  }
+
+  // Step controls handlers
+
+  stepNextBtn.addEventListener("click", () => {
+    if(currentStepIndex < resolutionSteps.length - 1) {
+      currentStepIndex++;
+      renderCurrentStep();
+      updateStepButtons();
+    } else if (!currentQuery.done && !currentQuery.failed) {
+      nextStep();
+      updateStepButtons();
+    }
+  });
+
+  stepBackBtn.addEventListener("click", () => {
+    if(currentStepIndex > 0) {
+      currentStepIndex--;
+      renderCurrentStep();
+      updateStepButtons();
+    }
+  });
+
+  stepRunPauseBtn.addEventListener("click", () => {
+    if(resolutionRunning) {
+      resolutionRunning = false;
+      if(resolutionTimeoutId) {
+        clearTimeout(resolutionTimeoutId);
+        resolutionTimeoutId=null;
+      }
+      stepRunPauseBtn.textContent = "Run";
+    } else {
+      if(currentQuery && !currentQuery.done && !currentQuery.failed) {
+        resolutionRunning = true;
+        stepRunPauseBtn.textContent = "Pause";
+        if(currentStepIndex >= resolutionSteps.length - 1) {
+          nextStep();
+        } else {
+          resolutionTimeoutId = setTimeout(nextStep, resolverConfig.stepDelay);
+        }
+        updateStepButtons();
+      }
+    }
+  });
+
+  // Start / Reset buttons
+  startResolveBtn.addEventListener("click", () => {
+    startResolution();
+  });
+
+  resetSimBtn.addEventListener("click", () => {
+    logReset();
+  });
+
+  clearCacheBtn.addEventListener("click", () => {
+    if(confirm("Clear all cached DNS records in resolver cache?")) {
+      cacheClear();
+      alert("Resolver cache cleared.");
+    }
+  });
+
+  showCacheBtn.addEventListener("click", () => {
+    let allKeys = Object.keys(resolverCache);
+    if(allKeys.length === 0) {
+      alert("Resolver cache is empty.");
+      return;
+    }
+    let entries = allKeys.map(k => {
+      let c = resolverCache[k];
+      let [domain,type] = k.split("|");
+      let remaining = Math.max(0, Math.round((c.expiry - Date.now())/1000));
+      return `${domain} [${type}] TTL left: ${remaining}s Records: ${c.records.length}${c.isNegative?" (negative)":""}`;
+    });
+    alert("Resolver Cache:\n\n" + entries.join("\n"));
+  });
+
+  // Zone Editor and Loader
+  loadZoneBtn.addEventListener("click", () => {
+    const zoneNameRaw = zoneNameInput.value.trim();
+    if(!zoneNameRaw) {
+      alert("Zone domain is required.");
+      return;
+    }
+    const zoneDomain = domainNormalize(zoneNameRaw);
+
+    const soaText = soaInput.value.trim();
+    if(!soaText) {
+      alert("SOA record text is required.");
+      return;
+    }
+    let parsedSOA = parseSOA(soaText, zoneDomain.slice(0,-1)); // remove trailing dot for parsing
+    if(!parsedSOA) {
+      alert("Failed to parse SOA record. Please ensure correct syntax as indicated in placeholder.");
+      return;
+    }
+
+    // Parse zone records line by line
+    const recLinesRaw = zoneRecordsInput.value.trim();
+    let parsedRecords = {}; 
+    let lines = recLinesRaw.split("\n");
+    for(let line of lines) {
+      line = line.trim();
+      if(!line || line.startsWith(";")) continue;
+      let rec = parseRecordLine(line, zoneDomain.slice(0,-1));
+      if(rec) {
+        let ownerKey = relativeNameToZone(rec.owner, zoneDomain);
+        if(!ownerKey) {
+          alert(`Record owner domain ${rec.owner} is outside of zone ${zoneDomain}. Skipping record.`);
+          continue;
+        }
+        if(!parsedRecords[ownerKey]) parsedRecords[ownerKey] = [];
+        // Fix value trailing dot for nameservers/mail targets
+        if(["NS","CNAME","MX","PTR","SRV"].includes(rec.type)) {
+          let vals = rec.value.trim().split(/\s+/);
+          // MX value starts with priority number, treat after that as domain name
+          if(rec.type === "MX" && vals.length > 1) {
+            let prio = vals[0];
+            let target = vals.slice(1).join(" ");
+            if(!target.endsWith(".")) target += "." + zoneDomain;
+            else target = domainNormalize(target);
+            rec.value = prio + " " + target;
+          } else if(rec.type === "SRV" && vals.length >= 4) {
+            // SRV priority weight port target
+            let priority = vals[0];
+            let weight = vals[1];
+            let port = vals[2];
+            let target = vals[3];
+            if(!target.endsWith(".")) target += "." + zoneDomain;
+            else target = domainNormalize(target);
+            rec.value = `${priority} ${weight} ${port} ${target}`;
+          } else {
+            if(!rec.value.endsWith(".")) {
+              rec.value += "." + zoneDomain;
+              rec.value = domainNormalize(rec.value);
+            } else {
+              rec.value = domainNormalize(rec.value);
+            }
+          }
+        }
+
+        parsedRecords[ownerKey].push(rec);
+      } else {
+        alert(`Failed to parse record line: "${line}"`);
+      }
+    }
+
+    // Save zone data
+    zones[zoneDomain] = {
+      SOA: parsedSOA,
+      records: parsedRecords
+    };
+
+    alert(`Zone ${zoneDomain} loaded into simulator with SOA and ${Object.keys(parsedRecords).length} record owners.`);
+  });
+
+  clearZoneBtn.addEventListener("click", () => {
+    zoneNameInput.value = "";
+    soaInput.value = "";
+    zoneRecordsInput.value = "";
+  });
+
+  showZoneBtn.addEventListener("click", () => {
+    const zoneNameRaw = zoneNameInput.value.trim();
+    if(!zoneNameRaw) {
+      alert("Zone domain is required.");
+      return;
+    }
+    const zoneDomain = domainNormalize(zoneNameRaw);
+    const zoneData = zones[zoneDomain];
+    if(!zoneData) {
+      alert(`Zone ${zoneDomain} is not loaded.`);
+      return;
+    }
+    let output = `Zone: ${zoneDomain}\nSOA:\n  mname: ${zoneData.SOA.mname}\n  rname: ${zoneData.SOA.rname}\n  serial: ${zoneData.SOA.serial}\n  refresh: ${zoneData.SOA.refresh}\n  retry: ${zoneData.SOA.retry}\n  expire: ${zoneData.SOA.expire}\n  minimum: ${zoneData.SOA.minimum}\n\nRecords:\n`;
+    for(const owner in zoneData.records) {
+      let recs = zoneData.records[owner];
+      for(const r of recs) {
+        output += `${owner} ${r.ttl} IN ${r.type} ${r.value}\n`;
+      }
+    }
+    alert(output);
+  });
+
+  function buildZoneTree() {
+    // Build tree of zones - root with child zones (delegations)
+    // Return string with indented tree
+
+    // We'll build mapping zone -> parent zone
+    function findParentZone(zone) {
+      if(zone === ".") return null;
+      let labels = domainLabels(zone);
+      // Remove leftmost label
+      if(labels.length <= 1) return ".";
+      let parent = labels.slice(1).join(".");
+      if(!parent.endsWith(".")) parent += ".";
+      if(zones[parent]) return parent;
+      return ".";
+    }
+
+    // Build parent map
+    let parentMap = {};
+    for(const z in zones) {
+      parentMap[z] = findParentZone(z);
+    }
+
+    // Build children map
+    let childrenMap = {};
+    for(const z in zones) {
+      childrenMap[z] = [];
+    }
+    for(const z in zones) {
+      let parent = parentMap[z];
+      if(parent !== null && parentMap[z] !== z) childrenMap[parent] = childrenMap[parent] || [];
+      if(parent !== null && parent !== z) childrenMap[parent].push(z);
+    }
+
+    // Recursive tree printing
+    function printZone(z, indent=0, visited=new Set()) {
+      let ind = " ".repeat(indent*2);
+      if(visited.has(z)) return ind + z + " (loop detected)\n";
+      visited.add(z);
+      let out = `${ind}${z}\n`;
+      if(childrenMap[z]) {
+        for(let c of childrenMap[z]) {
+          out += printZone(c, indent+1, visited);
+        }
+      }
+      return out;
+    }
+
+    return printZone(".");
+  }
+
+  showZoneTreeBtn.addEventListener("click", () => {
+    let treeStr = buildZoneTree();
+    zoneTreeOutput.textContent = treeStr;
+  });
+
+
+  // Concept Info and Mini Demos
+
+  const conceptData = {
+    "root_servers": `Root DNS Servers:
+Root servers are the top of the DNS hierarchy. They know where to find all TLD servers.
+13 logical root server addresses (A-M), e.g.:
+
+- a.root-servers.net. (198.41.0.4)
+- b.root-servers.net. (199.9.14.201)
+...
+They reply with referrals to TLD servers for requested domains.
+
+Mini-demo: Start a resolution for any domain; first queries go to root servers.`,
+
+    "tld_servers": `Top Level Domain (TLD) Servers:
+TLD servers are authoritative for top-level domains such as .com, .net, .org.
+They provide referrals to authoritative name servers for second-level domains.
+
+Example:
+- com TLD servers a.gtld-servers.net, b.gtld-servers.net, etc.
+
+Mini-demo: Load a zone for example.com, then resolve www.example.com to see TLD referrals.`,
+
+    "authoritative_servers": `Authoritative Name Servers:
+These servers hold the actual DNS records for a domain zone.
+They answer DNS queries for names within their zone exactly.
+
+Example: ns1.example.com hosts the example.com zone's records.
+
+Mini-demo: Edit or load a zone to create authoritative data, then resolve names.`,
+
+    "recursive_resolvers": `Recursive Resolvers:
+Resolvers query multiple servers on behalf of the client,
+following referrals starting at root servers,
+until authoritative data is found or an error occurs.
+They cache results for performance.
+
+Mini-demo: Enable recursion and start resolution; observe stepwise query and caching.`,
+
+    "iterative_queries": `Iterative Queries:
+Servers respond with the best answer they have, often referrals to other servers.
+Resolvers process iterative queries by asking each server in turn,
+building the full answer by following the delegation chain.`,
+
+    "dns_cache": `DNS Cache and TTL:
+Resolvers cache DNS records for a period defined by TTL (Time To Live).
+Cache reduces query traffic.
+TTL is decremented with cached age.
+
+Use cache controls to clear or inspect cache.
+Step delay controls helps observe cache hits.`,
+
+    "dns_records": `DNS Record Types:
+Common DNS record types include:
+
+- A: IPv4 address
+- AAAA: IPv6 address
+- CNAME: alias to another domain
+- NS: nameserver delegation
+- MX: mail exchange server
+- TXT: arbitrary text data
+- SOA: start of authority for zone
+- PTR: reverse mapping of IP to hostname
+- SRV: service location
+
+Change query type to explore each type.`,
+
+    "dns_delegation": `DNS Delegation:
+Delegation occurs when a parent zone assigns responsibility for a subdomain to other authoritative servers via NS records.
+The subdomain becomes a child zone.
+
+Create child zones in zone editor and reload to simulate.`,
+
+    "cname_chains": `CNAME Chains and Resolution:
+CNAME records alias a domain name to another.
+Resolvers follow chains of CNAMEs up to a limit.
+
+Observe CNAME resolution in the DNS simulator with followCNAME enabled/disabled.`,
+
+    "reverse_dns": `Reverse DNS Lookups (PTR):
+PTR records map IP addresses back to domain names.
+Used for logging, spam filtering.
+
+Try querying PTR records and create reverse zones in editor for testing.`,
+
+    "dns_security": `DNS Security Extensions (DNSSEC):
+DNSSEC adds cryptographic signatures to DNS to verify authenticity.
+Not simulated here but important for DNS trust.`,
+
+    "dns_failures": `Common DNS Failures and Timeouts:
+DNS failures include NXDOMAIN (domain does not exist),
+timeouts, and misconfigured zones.
+
+Enable simulated timeouts in config to experience retry behavior.`,
+
+    "mx_records": `Mail Exchange (MX) Records and Use:
+MX records specify mail servers for a domain with priorities.
+Mail servers query MX records to deliver email.
+
+Create MX and A records in zone editor to simulate mail setup.`
+  };
+
+  conceptSelect.addEventListener("change", () => {
+    const val = conceptSelect.value;
+    conceptInfo.textContent = conceptData[val] || "";
+  });
+
+  // Initialize default zone editor with example.com zone SOA and records
+  function initZoneEditor() {
+    zoneNameInput.value = "example.com";
+    soaInput.value = `@ IN SOA ns1.example.com. hostmaster.example.com. (
+  2024060601 ; serial
+  7200       ; refresh
+  3600       ; retry
+  1209600    ; expire
+  3600       ; minimum TTL
+)`;
+    zoneRecordsInput.value = 
+`www 3600 IN A 93.184.216.34
+www 3600 IN AAAA 2606:2800:220:1:248:1893:25c8:1946
+mail 3600 IN MX 10 mail.example.com.
+@ 3600 IN NS ns1.example.com.
+@ 3600 IN NS ns2.example.com.
+ns1 3600 IN A 192.0.2.53
+ns2 3600 IN A 192.0.2.54
+mail 3600 IN A 192.0.2.25
+alias 3600 IN CNAME www`;
+
+  }
+
+  initZoneEditor();
+
+})();
+</script>
+
+</body>
+</html>

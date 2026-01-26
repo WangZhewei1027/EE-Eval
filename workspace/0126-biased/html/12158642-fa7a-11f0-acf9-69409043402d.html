@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deadlock Demonstration and Exploration</title>
+<style>
+  /* Minimal styling: only for layout */
+  body {
+    font-family: monospace, monospace;
+    margin: 20px;
+    background: white;
+    color: black;
+  }
+  label, button {
+    cursor: pointer;
+  }
+  input[type="number"] {
+    width: 4em;
+  }
+  textarea {
+    width: 100%;
+    height: 8em;
+    font-family: monospace, monospace;
+  }
+  fieldset {
+    margin-bottom: 12px;
+  }
+  select {
+    font-family: monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<h1>Deadlock Concept Interactive Simulator</h1>
+<p>
+This tool simulates a system with multiple processes and resources to explore deadlocks.
+You can create processes, define resource requests and allocations, simulate step-by-step execution,
+and experiment with different scheduling / resource granting policies to see deadlock conditions arise or get resolved.
+</p>
+
+<fieldset>
+<legend>Create/Reset System</legend>
+<label for="processCount">Number of Processes (1-10): </label>
+<input id="processCount" type="number" min="1" max="10" value="3" />
+<label for="resourceCount">Number of Resource Types (1-6): </label>
+<input id="resourceCount" type="number" min="1" max="6" value="2" />
+<button id="initSystemBtn">Initialize System</button>
+<p>Click Initialize after changing values above to reset system state.</p>
+</fieldset>
+
+<fieldset id="resourcesFieldset" style="display:none;">
+<legend>Available Resources</legend>
+<div id="resourceInputsContainer">
+<!-- Dynamically generated resource count inputs -->
+</div>
+<button id="setAvailableBtn">Set Available Resources</button>
+</fieldset>
+
+<hr />
+
+<fieldset id="processControls" style="display:none;">
+<legend>Processes and Resource Requests / Allocations</legend>
+<table id="processTable" border="1" cellpadding="3" cellspacing="0">
+<thead>
+<tr>
+<th>Process ID</th>
+<th>Request Vector (resources)</th>
+<th>Allocation Vector (resources)</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody>
+<!-- dynamically generated process rows -->
+</tbody>
+</table>
+<p>Note: Request vector means resources the process is waiting to acquire before proceeding.<br />
+Allocation vector means resources currently held by the process.</p>
+<button id="autoFillRequestsBtn">Auto-Fill Random Requests</button>
+<button id="autoFillAllocationsBtn">Auto-Fill Random Allocations</button>
+</fieldset>
+
+<hr />
+
+<fieldset id="simulationControls" style="display:none;">
+<legend>Simulation Controls</legend>
+<label for="policySelect">Scheduling/Granting Policy:</label>
+<select id="policySelect" title="Choose resource granting strategy">
+  <option value="fifo">FIFO (Grant request in order)</option>
+  <option value="roundrobin">Round-Robin Scheduling</option>
+  <option value="banker">Banker’s Algorithm (Safe State Only)</option>
+  <option value="random">Random Granting</option>
+</select>
+<br /><br />
+<button id="stepBtn">Step Simulation</button>
+<button id="runBtn">Run Continuously</button>
+<button id="pauseBtn" disabled>Pause</button>
+<button id="detectDeadlockBtn">Detect Deadlock Now</button>
+<button id="resolveDeadlockBtn">Attempt Deadlock Resolution</button>
+<label for="resolutionStrategy">Resolution Strategy: </label>
+<select id="resolutionStrategy" title="Choose how to resolve deadlock">
+  <option value="abortOne">Abort One Process</option>
+  <option value="abortAllBlocked">Abort All Deadlocked</option>
+  <option value="preemptResources">Preempt Resources and Retry</option>
+</select>
+</fieldset>
+
+<hr />
+
+<fieldset>
+<legend>Simulation Log & Status</legend>
+<textarea id="simulationLog" readonly></textarea>
+</fieldset>
+
+<script>
+(() => {
+  // State variables
+  let processCount = 0;
+  let resourceCount = 0;
+  let available = []; // available resources vector
+  let processes = []; // Array of objects {id, request[], allocation[], state}
+  // state values: "running", "waiting", "terminated", "blocked"
+
+  // Simulation control
+  let simulationRunning = false;
+  let simulationInterval = null;
+
+  // Elements references
+  const processCountInput = document.getElementById('processCount');
+  const resourceCountInput = document.getElementById('resourceCount');
+  const initSystemBtn = document.getElementById('initSystemBtn');
+
+  const resourcesFieldset = document.getElementById('resourcesFieldset');
+  const resourceInputsContainer = document.getElementById('resourceInputsContainer');
+  const setAvailableBtn = document.getElementById('setAvailableBtn');
+
+  const processControls = document.getElementById('processControls');
+  const processTableBody = document.querySelector('#processTable tbody');
+  const autoFillRequestsBtn = document.getElementById('autoFillRequestsBtn');
+  const autoFillAllocationsBtn = document.getElementById('autoFillAllocationsBtn');
+
+  const simulationControls = document.getElementById('simulationControls');
+  const policySelect = document.getElementById('policySelect');
+  const stepBtn = document.getElementById('stepBtn');
+  const runBtn = document.getElementById('runBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const detectDeadlockBtn = document.getElementById('detectDeadlockBtn');
+  const resolveDeadlockBtn = document.getElementById('resolveDeadlockBtn');
+  const resolutionStrategySelect = document.getElementById('resolutionStrategy');
+  
+  const simulationLog = document.getElementById('simulationLog');
+
+  // Initialize system setup inputs after clicking init
+  initSystemBtn.addEventListener('click', () => {
+    const pCount = parseInt(processCountInput.value, 10);
+    const rCount = parseInt(resourceCountInput.value, 10);
+    if (
+      isNaN(pCount) || pCount < 1 || pCount > 10 ||
+      isNaN(rCount) || rCount < 1 || rCount > 6
+    ) {
+      alert('Process count must be 1-10 and Resource count must be 1-6.');
+      return;
+    }
+    processCount = pCount;
+    resourceCount = rCount;
+    resetSystemState();
+  });
+
+  function resetSystemState() {
+    // Reset all state
+    available = new Array(resourceCount).fill(0);
+    processes = [];
+    for (let i = 0; i < processCount; i++) {
+      processes.push({
+        id: i,
+        request: new Array(resourceCount).fill(0),
+        allocation: new Array(resourceCount).fill(0),
+        state: 'waiting' // assume all start waiting for resources
+      });
+    }
+    simulationRunning = false;
+    if (simulationInterval !== null) {
+      clearInterval(simulationInterval);
+      simulationInterval = null;
+    }
+    pauseBtn.disabled = true;
+    runBtn.disabled = false;
+    stepBtn.disabled = false;
+
+    logClear();
+    log(`System initialized with ${processCount} processes and ${resourceCount} resource types.`);
+
+    generateResourceInputs();
+    generateProcessTable();
+    resourcesFieldset.style.display = 'block';
+    processControls.style.display = 'block';
+    simulationControls.style.display = 'block';
+  }
+
+  // Generate inputs for resource available vector
+  function generateResourceInputs() {
+    resourceInputsContainer.innerHTML = '';
+    for (let r = 0; r < resourceCount; r++) {
+      const label = document.createElement('label');
+      label.textContent = `Resource R${r}: `;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.value = '0';
+      input.dataset.resourceIndex = r.toString();
+      input.size = 3;
+      label.appendChild(input);
+      resourceInputsContainer.appendChild(label);
+      resourceInputsContainer.appendChild(document.createTextNode(' '));
+    }
+  }
+
+  // Set available resources from inputs when user clicks setAvailableBtn
+  setAvailableBtn.addEventListener('click', () => {
+    const inputs = resourceInputsContainer.querySelectorAll('input[type=number]');
+    let sumAvailable = 0;
+    for (let i = 0; i < inputs.length; i++) {
+      let val = parseInt(inputs[i].value, 10);
+      if (isNaN(val) || val < 0) {
+        alert('Available resources must be non-negative integers.');
+        return;
+      }
+      available[i] = val;
+    }
+    log(`Available resource vector set to: [${available.join(', ')}]`);
+    generateProcessTable();
+  });
+
+  // Generate process table rows dynamically
+  function generateProcessTable() {
+    processTableBody.innerHTML = '';
+    processes.forEach((proc, idx) => {
+      const tr = document.createElement('tr');
+
+      // Process ID
+      const tdId = document.createElement('td');
+      tdId.textContent = `P${proc.id}`;
+      tr.appendChild(tdId);
+
+      // Request vector input fields
+      const tdRequest = document.createElement('td');
+      for (let r = 0; r < resourceCount; r++) {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.value = proc.request[r];
+        input.dataset.pid = proc.id;
+        input.dataset.type = 'request';
+        input.dataset.resourceIndex = r.toString();
+        input.size = 3;
+        input.addEventListener('change', onProcessResourceInputChange);
+        tdRequest.appendChild(input);
+        if (r < resourceCount - 1) tdRequest.appendChild(document.createTextNode(','));
+      }
+      tr.appendChild(tdRequest);
+
+      // Allocation vector input fields
+      const tdAllocation = document.createElement('td');
+      for (let r = 0; r < resourceCount; r++) {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.value = proc.allocation[r];
+        input.dataset.pid = proc.id;
+        input.dataset.type = 'allocation';
+        input.dataset.resourceIndex = r.toString();
+        input.size = 3;
+        input.addEventListener('change', onProcessResourceInputChange);
+        tdAllocation.appendChild(input);
+        if (r < resourceCount - 1) tdAllocation.appendChild(document.createTextNode(','));
+      }
+      tr.appendChild(tdAllocation);
+
+      // Actions
+      const tdActions = document.createElement('td');
+      // Terminate button
+      const terminateBtn = document.createElement('button');
+      terminateBtn.textContent = 'Terminate';
+      terminateBtn.dataset.pid = proc.id;
+      terminateBtn.addEventListener('click', () => {
+        terminateProcess(proc.id);
+      });
+      tdActions.appendChild(terminateBtn);
+
+      // Reset vectors button
+      const resetBtn = document.createElement('button');
+      resetBtn.textContent = 'Reset Req/Alloc';
+      resetBtn.dataset.pid = proc.id;
+      resetBtn.addEventListener('click', () => {
+        resetProcessVectors(proc.id);
+      });
+      tdActions.appendChild(document.createTextNode(' '));
+      tdActions.appendChild(resetBtn);
+
+      // Show state
+      const stateSpan = document.createElement('span');
+      stateSpan.textContent = ` State: ${proc.state}`;
+      stateSpan.style.whiteSpace = 'pre';
+      tdActions.appendChild(document.createTextNode(' '));
+      tdActions.appendChild(stateSpan);
+
+      tr.appendChild(tdActions);
+
+      processTableBody.appendChild(tr);
+    });
+  }
+
+  // Input handler to update process vectors
+  function onProcessResourceInputChange(e) {
+    const input = e.target;
+    const pid = parseInt(input.dataset.pid, 10);
+    const vecType = input.dataset.type; // 'request' or 'allocation'
+    const rIndex = parseInt(input.dataset.resourceIndex, 10);
+    let val = parseInt(input.value, 10);
+    if (isNaN(val) || val < 0) {
+      alert('Values must be non-negative integers.');
+      // reset to previous value
+      updateProcessTableInputs();
+      return;
+    }
+    const proc = processes.find(p => p.id === pid);
+    if (!proc) return;
+    if (vecType === 'request') {
+      proc.request[rIndex] = val;
+      if (proc.state === 'terminated') proc.state = 'waiting';
+    } else if (vecType === 'allocation') {
+      proc.allocation[rIndex] = val;
+      if (proc.state === 'terminated') proc.state = 'waiting';
+    }
+  }
+
+  // Update all process vector inputs from processes state (to correct any invalid inputs)
+  function updateProcessTableInputs() {
+    const inputs = processTableBody.querySelectorAll('input[type=number]');
+    inputs.forEach(input => {
+      const pid = parseInt(input.dataset.pid, 10);
+      const vecType = input.dataset.type;
+      const rIndex = parseInt(input.dataset.resourceIndex, 10);
+      const proc = processes.find(p => p.id === pid);
+      if (!proc) return;
+      if (vecType === 'request') {
+        if (input.value != proc.request[rIndex]) input.value = proc.request[rIndex];
+      } else if (vecType === 'allocation') {
+        if (input.value != proc.allocation[rIndex]) input.value = proc.allocation[rIndex];
+      }
+    });
+  }
+
+  // Terminate a process (freeing all resources allocated)
+  function terminateProcess(pid) {
+    const proc = processes.find(p => p.id === pid);
+    if (!proc) return;
+    if (proc.state === 'terminated') {
+      log(`Process P${pid} is already terminated.`);
+      return;
+    }
+    // Release resources back to available
+    for (let r = 0; r < resourceCount; r++) {
+      available[r] += proc.allocation[r];
+      proc.allocation[r] = 0;
+      proc.request[r] = 0;
+    }
+    proc.state = 'terminated';
+    updateProcessTableInputs();
+    log(`Process P${pid} terminated. Its allocated resources released back to available.`);
+  }
+
+  // Reset request and allocation vectors of a process to zero
+  function resetProcessVectors(pid) {
+    const proc = processes.find(p => p.id === pid);
+    if (!proc) return;
+    for(let r=0;r<resourceCount;r++){
+      proc.request[r] = 0;
+      proc.allocation[r] = 0;
+    }
+    if(proc.state === 'terminated') proc.state = 'waiting';
+    updateProcessTableInputs();
+    log(`Process P${pid}'s request and allocation vectors reset.`);
+  }
+
+  // Auto fill requests randomly (bounded by available resources + allocations)
+  autoFillRequestsBtn.addEventListener('click', () => {
+    processes.forEach(proc => {
+      if(proc.state === 'terminated') return;
+      for (let r = 0; r < resourceCount; r++) {
+        // can request up to (total system resources of Rr - currently allocated)
+        // But we don't have total system resource vector. Assume available + sum allocations = total system amount
+        let total = available[r];
+        processes.forEach(p => {
+          total += p.allocation[r];
+        });
+        // Request between 0 and (total - current allocation)
+        const maxReq = Math.max(0, total - proc.allocation[r]);
+        proc.request[r] = Math.floor(Math.random() * (maxReq + 1));
+      }
+    });
+    log('Random requests filled for all processes.');
+    updateProcessTableInputs();
+  });
+
+  // Auto fill allocations randomly (bounded by available + process request to keep it consistent)
+  autoFillAllocationsBtn.addEventListener('click', () => {
+    // We try to keep allocation <= (total system resources), and <= request + allocated to avoid absurd states
+    processes.forEach(proc => {
+      if(proc.state === 'terminated') return;
+      for (let r = 0; r < resourceCount; r++) {
+        // total resources for Rr
+        let total = available[r];
+        processes.forEach(p => {
+          total += p.allocation[r];
+        });
+        // Allocate a random number between 0 and total
+        // But ensure allocation + request doesn't exceed total
+        const maxAlloc = Math.min(total, proc.allocation[r] + proc.request[r]) || 0;
+        proc.allocation[r] = Math.floor(Math.random() * (maxAlloc + 1));
+        // If allocation exceeds total (rare), clamp
+        if(proc.allocation[r] > total) proc.allocation[r] = total;
+      }
+    });
+    log('Random allocations filled for all processes.');
+    updateProcessTableInputs();
+  });
+
+  // Simulation stepping
+  stepBtn.addEventListener('click', () => {
+    stepSimulation();
+  });
+
+  runBtn.addEventListener('click', () => {
+    if(simulationRunning) return;
+    simulationRunning = true;
+    runBtn.disabled = true;
+    pauseBtn.disabled = false;
+    stepBtn.disabled = true;
+    simulationInterval = setInterval(() => {
+      if(!simulationRunning) return;
+      const progress = stepSimulation();
+      if(progress === false){
+        // no progress, auto pause
+        log('No progress possible, simulation paused.');
+        pauseSimulation();
+      }
+    }, 1000);
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    pauseSimulation();
+  });
+
+  function pauseSimulation() {
+    simulationRunning = false;
+    runBtn.disabled = false;
+    pauseBtn.disabled = true;
+    stepBtn.disabled = false;
+    if(simulationInterval !== null){
+      clearInterval(simulationInterval);
+      simulationInterval = null;
+    }
+    log('Simulation paused.');
+  }
+
+  // Step simulation return true if any progress made, else false
+  function stepSimulation() {
+    // Apply scheduling policy and try grant requests if possible
+    const policy = policySelect.value;
+    log(`Simulation step under policy: ${policy}`);
+    switch(policy){
+      case 'fifo': return stepFIFO();
+      case 'roundrobin': return stepRoundRobin();
+      case 'banker': return stepBanker();
+      case 'random': return stepRandomGrant();
+      default: log('Unknown policy selected.'); return false;
+    }
+  }
+
+  // Returns true if any allocation change happened or process terminated; else false
+  function stepFIFO() {
+    // Grant requests in process order if possible
+    let progress = false;
+    for(let proc of processes){
+      if(proc.state === 'terminated') continue;
+      if(canGrantRequest(proc)){
+        grantResources(proc);
+        progress = true;
+        // After granting, check if process can terminate (all requests fulfilled)
+        if(isRequestFulfilled(proc)) {
+          terminateProcess(proc.id);
+          progress = true;
+        } else {
+          proc.state = 'running'; // running since granted resources
+        }
+      } else {
+        proc.state = 'waiting';
+      }
+    }
+    generateProcessTable();
+    return progress;
+  }
+
+  // Round-robin index state:
+  let rrIndex = 0;
+  function stepRoundRobin() {
+    if(processes.length === 0) return false;
+    let progress = false;
+    let count = 0;
+    // Try each process once in round robin order
+    while(count < processes.length) {
+      let proc = processes[rrIndex];
+      rrIndex = (rrIndex + 1) % processes.length;
+      if(proc.state === 'terminated'){
+        count++;
+        continue;
+      }
+      if(canGrantRequest(proc)){
+        grantResources(proc);
+        progress = true;
+        if(isRequestFulfilled(proc)) {
+          terminateProcess(proc.id);
+          progress = true;
+        } else {
+          proc.state = 'running';
+        }
+        break; // grant one per step
+      } else {
+        proc.state = 'waiting';
+      }
+      count++;
+    }
+    generateProcessTable();
+    return progress;
+  }
+
+  // Banker Algorithm: only grant if system remains in safe state after grant
+  function stepBanker() {
+    let grantedAny = false;
+    for(let proc of processes){
+      if(proc.state === 'terminated') continue;
+      if(canGrantRequest(proc)){
+        // simulate grant temporarily
+        const backupAvailable = available.slice();
+        for(let r=0;r<resourceCount;r++) {
+          available[r] -= proc.request[r];
+          proc.allocation[r] += proc.request[r];
+          proc.request[r] = 0;
+        }
+        // Check if safe state
+        if(isSafeState()){
+          grantedAny = true;
+          proc.state = 'running';
+          if(isRequestFulfilled(proc)){
+            terminateProcess(proc.id);
+          }
+          generateProcessTable();
+          log(`Process P${proc.id} granted safely under banker’s algorithm.`);
+          return true; // grant one process per step
+        } else {
+          // revert grant
+          available = backupAvailable;
+          for(let r=0;r<resourceCount;r++) {
+            proc.allocation[r] -= proc.request[r];
+            // proc.request[r] unchanged since revert
+          }
+          proc.state = 'waiting';
+        }
+      } else {
+        proc.state = 'waiting';
+      }
+    }
+    generateProcessTable();
+    return grantedAny;
+  }
+
+  // Random grant some process request which fits available
+  function stepRandomGrant(){
+    // collect candidates
+    const candidates = processes.filter(proc => proc.state !== 'terminated' && canGrantRequest(proc));
+    if(candidates.length === 0) {
+      // no progress
+      processes.forEach(p => {
+        if(p.state !== 'terminated') p.state = 'waiting';
+      });
+      generateProcessTable();
+      return false;
+    }
+    // Randomly pick one
+    const proc = candidates[Math.floor(Math.random()*candidates.length)];
+    grantResources(proc);
+    proc.state = 'running';
+    if(isRequestFulfilled(proc)){
+      terminateProcess(proc.id);
+    }
+    generateProcessTable();
+    log(`Process P${proc.id} randomly granted its request.`);
+    return true;
+  }
+
+  // Check if all request resources can be fulfilled with available
+  function canGrantRequest(proc) {
+    if(proc.state === 'terminated') return false;
+    for(let r=0;r<resourceCount;r++) {
+      if(proc.request[r] > available[r]) return false;
+    }
+    return true;
+  }
+
+  // Grant requested resources to process
+  function grantResources(proc) {
+    for(let r=0;r<resourceCount;r++){
+      available[r] -= proc.request[r];
+      proc.allocation[r] += proc.request[r];
+      proc.request[r] = 0;
+    }
+    log(`Resources granted to process P${proc.id}.`);
+  }
+
+  // Check if request vector is all zero (fulfilled)
+  function isRequestFulfilled(proc) {
+    return proc.request.every(v => v === 0);
+  }
+
+  // Banker Algorithm helper - check if system is in safe state:
+  function isSafeState() {
+    // Work vector copy of available
+    const work = available.slice();
+    const finish = processes.map(p => p.state === 'terminated');
+    let changed;
+
+    do {
+      changed = false;
+      for (let i = 0; i < processes.length; i++){
+        if(finish[i]) continue;
+        const p = processes[i];
+        let canFinish = true;
+        for(let r = 0; r < resourceCount; r++){
+          if(p.request[r] > work[r]){
+            canFinish = false;
+            break;
+          }
+        }
+        if(canFinish){
+          for(let r = 0; r < resourceCount; r++){
+            work[r] += p.allocation[r];
+          }
+          finish[i] = true;
+          changed = true;
+        }
+      }
+    } while(changed);
+
+    return finish.every(f => f);
+  }
+
+  // Deadlock detection (Coffman conditions) - Returns list of deadlocked processes by ID
+  function detectDeadlock() {
+    // Basic deadlock detection:
+    // Construct wait-for graph or use deadlock detection algorithm: If some processes cannot finish due to waiting circularly for resources.
+
+    // Work vector copy
+    const work = available.slice();
+    const finish = processes.map(p => p.state === 'terminated');
+    let changed;
+
+    do {
+      changed = false;
+      for (let i = 0; i < processes.length; i++){
+        if(finish[i]) continue;
+        const p = processes[i];
+        let canFinish = true;
+        for(let r = 0; r < resourceCount; r++){
+          if(p.request[r] > work[r]){
+            canFinish = false;
+            break;
+          }
+        }
+        if(canFinish){
+          for(let r = 0; r < resourceCount; r++){
+            work[r] += p.allocation[r];
+          }
+          finish[i] = true;
+          changed = true;
+        }
+      }
+    } while(changed);
+
+    // Processes not finished and not terminated are deadlocked
+    let deadlocked = [];
+    for(let i=0; i < processes.length; i++){
+      if(!finish[i] && processes[i].state !== 'terminated'){
+        deadlocked.push(processes[i].id);
+      }
+    }
+    return deadlocked;
+  }
+
+  // Detect deadlock button handler
+  detectDeadlockBtn.addEventListener('click', () => {
+    const deadlocked = detectDeadlock();
+    if(deadlocked.length === 0){
+      log('No deadlock detected.');
+    } else {
+      log(`Deadlock detected! Deadlocked processes: ${deadlocked.map(id => 'P'+id).join(', ')}`);
+    }
+  });
+
+  // Deadlock resolution strategies
+  resolveDeadlockBtn.addEventListener('click', () => {
+    const deadlocked = detectDeadlock();
+    if(deadlocked.length === 0){
+      log('No deadlock detected, no actions needed.');
+      return;
+    }
+    const strategy = resolutionStrategySelect.value;
+    log(`Attempting to resolve deadlock using strategy: ${strategy}`);
+    switch(strategy){
+      case 'abortOne': {
+        // Abort one process (lowest ID)
+        deadlocked.sort((a,b)=>a-b);
+        const pid = deadlocked[0];
+        abortProcess(pid);
+        break;
+      }
+      case 'abortAllBlocked': {
+        // Abort all deadlocked processes
+        deadlocked.forEach(pid => abortProcess(pid));
+        break;
+      }
+      case 'preemptResources': {
+        // Preempt resources from deadlocked processes forcibly back to available, clearing allocations and requests, then reset them to waiting
+        deadlocked.forEach(pid => preemptProcess(pid));
+        break;
+      }
+      default:
+        log('Unknown deadlock resolution strategy.');
+        break;
+    }
+    generateProcessTable();
+    log('Deadlock resolution attempted.');
+  });
+
+  // Abort a process forcibly (free all alloc and set terminated)
+  function abortProcess(pid){
+    const proc = processes.find(p => p.id === pid);
+    if(!proc) return;
+    for(let r=0;r<resourceCount;r++){
+      available[r] += proc.allocation[r];
+      proc.allocation[r] = 0;
+      proc.request[r] = 0;
+    }
+    proc.state = 'terminated';
+    log(`Process P${pid} aborted to resolve deadlock.`);
+  }
+
+  // Preempt a process (free all allocated resources forcibly, reset requests, but keep it waiting)
+  function preemptProcess(pid){
+    const proc = processes.find(p => p.id === pid);
+    if(!proc) return;
+    for(let r=0;r<resourceCount;r++){
+      available[r] += proc.allocation[r];
+      proc.allocation[r] = 0;
+      proc.request[r] = 0;
+    }
+    proc.state = 'waiting';
+    log(`Resources preempted from process P${pid}. Process reset to waiting.`);
+  }
+
+  // Logging functions
+  function log(msg){
+    const timestamp = new Date().toLocaleTimeString();
+    simulationLog.value += `[${timestamp}] ${msg}\n`;
+    simulationLog.scrollTop = simulationLog.scrollHeight;
+  }
+
+  function logClear(){
+    simulationLog.value = '';
+  }
+
+  // Initialize on load
+  resetSystemState();
+})();
+</script>
+</body>
+</html>

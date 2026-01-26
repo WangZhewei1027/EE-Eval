@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Random Forest Demo (Interactive)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; color: #111; }
+    h1 { margin: 0 0 6px 0; font-size: 20px; }
+    #container { display: flex; gap: 18px; }
+    #controls { width: 320px; }
+    label { display:block; margin-top:10px; font-size: 13px; color:#333; }
+    input[type="range"] { width:100%; }
+    .small { font-size:12px; color:#555; margin-top:3px; }
+    canvas { border: 1px solid #ddd; background: #fff; display:block; }
+    .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+    button { padding:8px 10px; font-size:13px; cursor:pointer; }
+    .stat { margin-top:8px; font-size:13px; color:#222; }
+    .note { margin-top:12px; font-size:13px; color:#444; line-height:1.4; }
+    .footer { margin-top:14px; font-size:12px; color:#666; }
+  </style>
+</head>
+<body>
+  <h1>Random Forest Interactive Demo</h1>
+  <div id="container">
+    <div id="controls">
+      <label>Dataset
+        <select id="dataset">
+          <option value="blobs">Two blobs (gaussians)</option>
+          <option value="xor">XOR</option>
+          <option value="circles">Concentric circles</option>
+          <option value="moons">Two moons</option>
+        </select>
+      </label>
+
+      <label>Number of trees: <span id="nTreesLabel">25</span>
+        <input id="nTrees" type="range" min="1" max="200" value="25"/>
+      </label>
+
+      <label>Max tree depth: <span id="maxDepthLabel">6</span>
+        <input id="maxDepth" type="range" min="1" max="12" value="6"/>
+      </label>
+
+      <label>Min samples leaf: <span id="minLeafLabel">3</span>
+        <input id="minLeaf" type="range" min="1" max="20" value="3"/>
+      </label>
+
+      <label>Sample fraction (bootstrap size): <span id="sampleFracLabel">0.8</span>
+        <input id="sampleFrac" type="range" min="0.3" max="1" step="0.05" value="0.8"/>
+      </label>
+
+      <label>Features considered per split: <span id="mtryLabel">1</span>
+        <input id="mtry" type="range" min="1" max="2" value="1"/>
+      </label>
+
+      <label>Grid resolution (px per cell): <span id="cellLabel">3</span>
+        <input id="cellSize" type="range" min="1" max="8" value="3"/>
+      </label>
+
+      <div class="row">
+        <button id="regen">Generate data</button>
+        <button id="train">Train / Recompute</button>
+      </div>
+
+      <div class="row">
+        <label style="margin:0;"><input type="checkbox" id="showInd" /> Show individual tree votes</label>
+      </div>
+
+      <div id="treeSelectRow" class="row" style="display:none;">
+        <label style="margin:0;">Tree index: <span id="treeIndexLabel">0</span>
+          <input id="treeIndex" type="range" min="0" max="0" value="0" />
+        </label>
+      </div>
+
+      <div class="stat" id="accuracy">Accuracy (train): —</div>
+      <div class="stat" id="treesInfo">Trees: —</div>
+
+      <div class="note">
+        How it works (brief): We build many decision trees from bootstrap samples and at each split consider only a random subset of features. Each tree votes; the forest prediction is the majority vote. Change number of trees, tree depth, or data and observe how the decision boundary and confidence change.
+      </div>
+
+      <div class="footer">This is a simplified implementation for demonstration purposes.</div>
+    </div>
+
+    <div>
+      <canvas id="surf" width="600" height="420"></canvas>
+    </div>
+  </div>
+
+<script>
+/*
+ Random Forest demo (classification)
+ - 2D synthetic datasets
+ - Simple CART-like trees with axis-aligned splits
+ - Bootstrap samples and random feature subset at each split (mtry)
+ - Visualize majority vote decision map + confidence
+*/
+
+// Utilities
+function randn_bm() {
+  // Box-Muller
+  let u=0,v=0;
+  while(u===0) u=Math.random();
+  while(v===0) v=Math.random();
+  return Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+}
+
+function sampleIndices(n, frac) {
+  const m = Math.max(1, Math.round(n*frac));
+  const idx = [];
+  for (let i=0;i<m;i++) idx.push(Math.floor(Math.random()*n));
+  return idx;
+}
+
+function majorityLabel(labels) {
+  const counts = {};
+  for (const l of labels) counts[l] = (counts[l]||0)+1;
+  let best = null, bc = -1;
+  for (const k in counts) if (counts[k] > bc) { best = k; bc = counts[k]; }
+  return [parseInt(best), bc];
+}
+
+function gini(labels) {
+  if (labels.length===0) return 0;
+  const counts = {};
+  for (const l of labels) counts[l] = (counts[l]||0)+1;
+  let impur = 1;
+  for (const k in counts) {
+    const p = counts[k] / labels.length;
+    impur -= p*p;
+  }
+  return impur;
+}
+
+// Tree constructor: axis-aligned splits only for speed
+function buildTree(X, y, maxDepth=6, minLeaf=3, mtry=1) {
+  // X: array of [x,y], y: labels array
+  function build(indices, depth) {
+    const labels = indices.map(i=>y[i]);
+    const [pred, count] = majorityLabel(labels);
+    const node = { prediction: pred, samples: indices.length };
+    if (depth>=maxDepth || indices.length<=minLeaf || gini(labels)===0) {
+      node.leaf = true;
+      return node;
+    }
+    const features = [];
+    while (features.length < mtry) {
+      const f = Math.floor(Math.random()*2);
+      if (!features.includes(f)) features.push(f);
+    }
+    let best = null;
+    let bestGain = 0;
+    const parentImp = gini(labels);
+    for (const f of features) {
+      // candidate thresholds: midpoints of sorted unique values
+      const vals = indices.map(i=>X[i][f]).sort((a,b)=>a-b);
+      const cand = [];
+      for (let i=1;i<vals.length;i++) {
+        if (vals[i] !== vals[i-1]) cand.push( (vals[i]+vals[i-1])/2 );
+      }
+      // limit number of candidates for speed
+      const step = Math.max(1, Math.floor(cand.length/15));
+      for (let ci=0; ci<cand.length; ci+=step) {
+        const thr = cand[ci];
+        const leftIdx = [];
+        const rightIdx = [];
+        for (const i of indices) {
+          if (X[i][f] <= thr) leftIdx.push(i); else rightIdx.push(i);
+        }
+        if (leftIdx.length < minLeaf || rightIdx.length < minLeaf) continue;
+        const gi = parentImp - (leftIdx.length/indices.length)*gini(leftIdx.map(i=>y[i]))
+                             - (rightIdx.length/indices.length)*gini(rightIdx.map(i=>y[i]));
+        if (gi > bestGain) {
+          bestGain = gi;
+          best = { feature: f, thr, leftIdx, rightIdx };
+        }
+      }
+    }
+    if (!best || bestGain <= 1e-9) {
+      node.leaf = true;
+      return node;
+    }
+    node.feature = best.feature;
+    node.threshold = best.thr;
+    node.left = build(best.leftIdx, depth+1);
+    node.right = build(best.rightIdx, depth+1);
+    node.leaf = false;
+    return node;
+  }
+  const allIdx = Array.from({length:X.length}, (_,i)=>i);
+  return build(allIdx, 0);
+}
+
+function predictTree(tree, x) {
+  let node = tree;
+  while (!node.leaf) {
+    if (x[node.feature] <= node.threshold) node = node.left;
+    else node = node.right;
+  }
+  return node.prediction;
+}
+
+// Data generators (normalized to roughly [-1,1] range)
+function genBlobs(n=200) {
+  const X=[], y=[];
+  for (let i=0;i<n;i++) {
+    if (i < n/2) {
+      X.push([randn_bm()*0.25 - 0.7, randn_bm()*0.25 + 0.0]);
+      y.push(0);
+    } else {
+      X.push([randn_bm()*0.25 + 0.7, randn_bm()*0.25 + 0.0]);
+      y.push(1);
+    }
+  }
+  return {X,y};
+}
+
+function genXOR(n=200) {
+  const X=[], y=[];
+  for (let i=0;i<n;i++) {
+    const x = (Math.random()*2 -1) * 0.9;
+    const yv = (Math.random()*2 -1) * 0.9;
+    const label = (x*yv>0) ? 0 : 1; // quadrants
+    X.push([x,yv]); y.push(label);
+  }
+  return {X,y};
+}
+
+function genCircles(n=200) {
+  const X=[], y=[];
+  for (let i=0;i<n;i++) {
+    if (i < n/2) {
+      const r = Math.random()*0.3 + 0.2;
+      const a = Math.random()*Math.PI*2;
+      X.push([Math.cos(a)*r, Math.sin(a)*r]); y.push(0);
+    } else {
+      const r = Math.random()*0.35 + 0.7;
+      const a = Math.random()*Math.PI*2;
+      X.push([Math.cos(a)*r, Math.sin(a)*r]); y.push(1);
+    }
+  }
+  return {X,y};
+}
+
+function genMoons(n=200) {
+  const X=[], y=[];
+  for (let i=0;i<n;i++) {
+    if (i < n/2) {
+      const a = Math.random()*Math.PI;
+      const r = 0.4 + (Math.random()-0.5)*0.06;
+      X.push([Math.cos(a)*r - 0.4, Math.sin(a)*r + 0.05]); y.push(0);
+    } else {
+      const a = Math.random()*Math.PI;
+      const r = 0.4 + (Math.random()-0.5)*0.06;
+      X.push([Math.cos(a)*r + 0.4, -Math.sin(a)*r - 0.05]); y.push(1);
+    }
+  }
+  return {X,y};
+}
+
+// Visualization
+const canvas = document.getElementById('surf');
+const ctx = canvas.getContext('2d');
+
+const controls = {
+  dataset: document.getElementById('dataset'),
+  nTrees: document.getElementById('nTrees'),
+  maxDepth: document.getElementById('maxDepth'),
+  minLeaf: document.getElementById('minLeaf'),
+  sampleFrac: document.getElementById('sampleFrac'),
+  mtry: document.getElementById('mtry'),
+  cellSize: document.getElementById('cellSize'),
+  regen: document.getElementById('regen'),
+  train: document.getElementById('train'),
+  showInd: document.getElementById('showInd'),
+  treeIndex: document.getElementById('treeIndex'),
+  treeSelectRow: document.getElementById('treeSelectRow'),
+  nTreesLabel: document.getElementById('nTreesLabel'),
+  maxDepthLabel: document.getElementById('maxDepthLabel'),
+  minLeafLabel: document.getElementById('minLeafLabel'),
+  sampleFracLabel: document.getElementById('sampleFracLabel'),
+  mtryLabel: document.getElementById('mtryLabel'),
+  cellLabel: document.getElementById('cellLabel'),
+  treeIndexLabel: document.getElementById('treeIndexLabel'),
+  accuracy: document.getElementById('accuracy'),
+  treesInfo: document.getElementById('treesInfo')
+};
+
+let data = genBlobs();
+let forest = [];
+let forestSamples = []; // indices used per tree (for potential display)
+let gridCache = null;
+
+function updateLabels() {
+  controls.nTreesLabel.textContent = controls.nTrees.value;
+  controls.maxDepthLabel.textContent = controls.maxDepth.value;
+  controls.minLeafLabel.textContent = controls.minLeaf.value;
+  controls.sampleFracLabel.textContent = (+controls.sampleFrac.value).toFixed(2);
+  controls.mtryLabel.textContent = controls.mtry.value;
+  controls.cellLabel.textContent = controls.cellSize.value;
+  controls.treeIndexLabel.textContent = controls.treeIndex.value;
+}
+updateLabels();
+
+controls.nTrees.addEventListener('input', ()=>{
+  updateLabels();
+  controls.treeIndex.max = Math.max(0, controls.nTrees.value-1);
+  controls.treeIndex.value = Math.min(controls.treeIndex.value, controls.nTrees.value-1);
+});
+controls.maxDepth.addEventListener('input', updateLabels);
+controls.minLeaf.addEventListener('input', updateLabels);
+controls.sampleFrac.addEventListener('input', updateLabels);
+controls.mtry.addEventListener('input', updateLabels);
+controls.cellSize.addEventListener('input', updateLabels);
+controls.treeIndex.addEventListener('input', ()=> { controls.treeIndexLabel.textContent = controls.treeIndex.value; render(); });
+
+controls.relay = function(){};
+controls.regen.addEventListener('click', ()=>{
+  const ds = controls.dataset.value;
+  if (ds==='blobs') data = genBlobs(220);
+  else if (ds==='xor') data = genXOR(220);
+  else if (ds==='circles') data = genCircles(220);
+  else if (ds==='moons') data = genMoons(220);
+  forest = [];
+  forestSamples = [];
+  gridCache = null;
+  trainForest();
+});
+controls.train.addEventListener('click', ()=> {
+  forest = [];
+  forestSamples = [];
+  gridCache = null;
+  trainForest();
+});
+
+controls.showInd.addEventListener('change', ()=>{
+  controls.treeSelectRow.style.display = controls.showInd.checked ? 'flex' : 'none';
+  render();
+});
+
+controls.dataset.addEventListener('change', ()=>{
+  controls.regen.click();
+});
+
+function trainForest() {
+  const X = data.X, y = data.y;
+  const nTrees = +controls.nTrees.value;
+  const maxDepth = +controls.maxDepth.value;
+  const minLeaf = +controls.minLeaf.value;
+  const sampleFrac = +controls.sampleFrac.value;
+  const mtry = +controls.mtry.value;
+  forest = [];
+  forestSamples = [];
+  const start = performance.now();
+  for (let t=0;t<nTrees;t++) {
+    const idx = sampleIndices(X.length, sampleFrac);
+    const Xb = idx.map(i=>X[i]);
+    const yb = idx.map(i=>y[i]);
+    const tree = buildTree(Xb, yb, maxDepth, minLeaf, mtry);
+    // Note: our tree built on resampled Xb expects indices 0..Xb.length-1.
+    // To use original coordinates we will use wrapper prediction that uses Xb.
+    // We'll store mapping.
+    forest.push({ tree, idxMap: idx });
+    forestSamples.push(idx.slice());
+  }
+  const elapsed = Math.round(performance.now()-start);
+  controls.treesInfo.textContent = `Trees: ${nTrees}  (built in ${elapsed} ms)`;
+  computeAccuracy();
+  controls.treeIndex.max = Math.max(0, nTrees-1);
+  controls.treeIndex.value = Math.min(controls.treeIndex.value, nTrees-1);
+  controls.treeIndexLabel.textContent = controls.treeIndex.value;
+  render();
+}
+
+function predictForest(x) {
+  // x is [x,y]
+  // Each tree was trained on a bootstrap sample mapped to Xb with indices 0..len-1.
+  // To predict: we need to call predictTree on its tree providing x in same coordinate space (works).
+  // Our tree nodes compare x coordinates; this is fine since tree thresholds are based on sampled values.
+  const votes = {};
+  for (const t of forest) {
+    const p = predictTree(t.tree, x);
+    votes[p] = (votes[p]||0) + 1;
+  }
+  let best=null, bc=-1, total=0;
+  for (const k in votes) { total += votes[k]; if (votes[k] > bc) { best=k; bc=votes[k]; } }
+  return { label: parseInt(best), votes, confidence: (bc/total) };
+}
+
+function predictSingleTreeIndex(x, treeIndex) {
+  const t = forest[treeIndex];
+  const p = predictTree(t.tree, x);
+  return p;
+}
+
+function computeAccuracy() {
+  if (forest.length===0) { controls.accuracy.textContent = 'Accuracy (train): —'; return; }
+  const X = data.X, y = data.y;
+  let correct = 0;
+  for (let i=0;i<X.length;i++) {
+    const p = predictForest(X[i]).label;
+    if (p===y[i]) correct++;
+  }
+  const acc = (100*correct/X.length).toFixed(1);
+  controls.accuracy.textContent = `Accuracy (train): ${acc}%`;
+}
+
+function render() {
+  const width = canvas.width, height = canvas.height;
+  ctx.clearRect(0,0,width,height);
+  // Define view to cover approx [-1.2,1.2] square with margin for data
+  const pad = 0.12;
+  const xs = data.X.map(p=>p[0]);
+  const ys = data.X.map(p=>p[1]);
+  const xmin = Math.min(...xs) - pad;
+  const xmax = Math.max(...xs) + pad;
+  const ymin = Math.min(...ys) - pad;
+  const ymax = Math.max(...ys) + pad;
+
+  const cell = +controls.cellSize.value;
+  const nx = Math.ceil(width / cell);
+  const ny = Math.ceil(height / cell);
+
+  const showInd = controls.showInd.checked;
+  const showTreeIdx = +controls.treeIndex.value;
+
+  // Precompute predictions for grid
+  const img = ctx.createImageData(width, height);
+  for (let gy=0; gy<ny; gy++) {
+    for (let gx=0; gx<nx; gx++) {
+      const px = Math.floor(gx * cell);
+      const py = Math.floor(gy * cell);
+      const cx = xmin + (gx + 0.5)/nx * (xmax-xmin);
+      const cy = ymax - (gy + 0.5)/ny * (ymax-ymin); // flip y
+      let r=255,g=255,b=255,a=255;
+      if (forest.length>0) {
+        if (showInd) {
+          const pred = predictSingleTreeIndex([cx,cy], showTreeIdx);
+          // color by that tree's class
+          if (pred===0) { r=200; g=235; b=255; } else { r=255; g=220; b=230; }
+        } else {
+          const result = predictForest([cx,cy]);
+          const cls = result.label;
+          const conf = result.confidence; // [0.5..1]
+          // color by class; stronger confidence => more saturated
+          if (cls===0) { r = Math.round(200*(1-conf)+50*conf); g = Math.round(235*(1-conf)+150*conf); b = Math.round(255*(1-conf)+60*conf); }
+          else { r = Math.round(255*(1-conf)+220*conf); g = Math.round(220*(1-conf)+80*conf); b = Math.round(230*(1-conf)+80*conf); }
+        }
+      } else {
+        r=245;g=245;b=245;
+      }
+      // Fill block
+      for (let dy=0; dy<cell; dy++) {
+        for (let dx=0; dx<cell; dx++) {
+          const x = px+dx, y = py+dy;
+          if (x>=width || y>=height) continue;
+          const idx = (y*width + x)*4;
+          img.data[idx] = r;
+          img.data[idx+1] = g;
+          img.data[idx+2] = b;
+          img.data[idx+3] = a;
+        }
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Draw training points
+  for (let i=0;i<data.X.length;i++) {
+    const x = data.X[i][0], y = data.X[i][1], label = data.y[i];
+    const px = Math.round((x - xmin)/(xmax-xmin) * width);
+    const py = Math.round((ymax - y)/(ymax-ymin) * height);
+    ctx.beginPath();
+    ctx.fillStyle = label===0 ? 'rgb(10,90,170)' : 'rgb(170,20,40)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1;
+    ctx.arc(px, py, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Optionally overlay boundaries of individual tree (outline of partitions) for the chosen tree
+  if (showInd && forest.length>0) {
+    const t = forest[+controls.treeIndex.value].tree;
+    // We can draw the splits recursively onto the canvas by mapping node thresholds -> lines
+    function drawNode(node, xminN, xmaxN, yminN, ymaxN) {
+      if (!node || node.leaf) return;
+      if (node.feature === 0) {
+        // vertical line at threshold
+        const x = (node.threshold - xmin) / (xmax - xmin) * width;
+        ctx.beginPath();
+        ctx.moveTo(x, (1 - (ymaxN - ymin)/(ymax-ymin)) * height);
+        ctx.lineTo(x, (1 - (yminN - ymin)/(ymax-ymin)) * height);
+        ctx.strokeStyle = 'rgba(20,20,20,0.15)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // left and right partitions
+        drawNode(node.left, xminN, node.threshold, yminN, ymaxN);
+        drawNode(node.right, node.threshold, xmaxN, yminN, ymaxN);
+      } else {
+        // horizontal split
+        const y = (ymax - node.threshold) / (ymax - ymin) * height;
+        ctx.beginPath();
+        ctx.moveTo((node.threshold - xmin)/(xmax-xmin)*width, y); // approximate
+        // better: draw line across the current partition
+        const yPx = (ymax - node.threshold) / (ymax - ymin) * height;
+        ctx.beginPath();
+        ctx.moveTo((xminN - xmin)/(xmax-xmin)*width, yPx);
+        ctx.lineTo((xmaxN - xmin)/(xmax-xmin)*width, yPx);
+        ctx.strokeStyle = 'rgba(20,20,20,0.15)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        drawNode(node.left, xminN, xmaxN, node.threshold, ymaxN);
+        drawNode(node.right, xminN, xmaxN, yminN, node.threshold);
+      }
+    }
+    drawNode(t, xmin, xmax, ymin, ymax);
+  }
+
+  // Legend
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.fillRect(8,8,150,42);
+  ctx.fillStyle = 'rgb(10,90,170)'; ctx.beginPath(); ctx.arc(18,24,6,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgb(170,20,40)'; ctx.beginPath(); ctx.arc(52,24,6,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#333'; ctx.font = '12px sans-serif'; ctx.fillText('Class 0', 30,28); ctx.fillText('Class 1', 64,28);
+}
+
+// Init
+controls.regen.click();
+
+// Small performance tweak: retrain on start; ensure canvas renders
+window.addEventListener('resize', ()=> render());
+
+</script>
+</body>
+</html>

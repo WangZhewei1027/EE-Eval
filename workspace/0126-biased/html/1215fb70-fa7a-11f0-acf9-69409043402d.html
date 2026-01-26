@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Indexing Interactive Explorer</title>
+<style>
+  /* Extremely minimal styling */
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    background: white;
+    color: black;
+  }
+  textarea, input, select, button {
+    font-family: monospace, monospace;
+    font-size: 14px;
+    margin: 2px 0;
+    padding: 2px 4px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+    font-weight: normal;
+  }
+  #output {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    height: 150px;
+    overflow: auto;
+    padding: 4px;
+    margin-top: 8px;
+  }
+  #indexTable {
+    margin-top: 8px;
+    border-collapse: collapse;
+    width: 100%;
+  }
+  #indexTable th, #indexTable td {
+    border: 1px solid black;
+    padding: 2px 4px;
+    text-align: left;
+  }
+  #pathsLog {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    height: 150px;
+    overflow: auto;
+    margin-top: 8px;
+    padding: 4px;
+  }
+  #controls > * {
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<h2>Indexing Interactive Explorer</h2>
+
+<label for="textInput">Enter or paste text to index:</label>
+<textarea id="textInput" rows="8" placeholder="Type or paste any text here..."></textarea>
+
+<div id="controls">
+  <label for="indexType">Select index type:</label>
+  <select id="indexType">
+    <option value="word">Word Index (case-insensitive)</option>
+    <option value="char">Character Index (case-sensitive)</option>
+    <option value="phrase">Phrase Index (custom phrase)</option>
+    <option value="regex">Regex Index</option>
+  </select>
+
+  <div id="phraseControl" style="display:none;">
+    <label for="phraseInput">Enter phrase to index (for Phrase Index):</label>
+    <input type="text" id="phraseInput" placeholder="e.g. data structures" />
+  </div>
+
+  <div id="regexControl" style="display:none;">
+    <label for="regexInput">Enter regular expression pattern:</label>
+    <input type="text" id="regexInput" placeholder="e.g. \b\w{4}\b" />
+    <label><input type="checkbox" id="regexFlags_i" /> Ignore case (i)</label>
+    <label><input type="checkbox" id="regexFlags_g" checked disabled /> Global (g, required)</label>
+    <label><input type="checkbox" id="regexFlags_m" /> Multiline (m)</label>
+  </div>
+
+  <label for="minLength">Minimum length to index (for words/phrase):</label>
+  <input type="number" id="minLength" value="1" min="1" max="100" />
+
+  <button id="buildIndex">Build Index</button>
+  <button id="clearIndex">Clear Index</button>
+</div>
+
+<h3>Index Summary</h3>
+<div id="summary">No index built yet.</div>
+
+<h3>Indexed Items</h3>
+<table id="indexTable">
+  <thead>
+    <tr><th>Item</th><th>Occurrences</th><th>Positions (0-based)</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h3>Search Indexed Items</h3>
+<label for="searchInput">Search indexed items (substring match):</label>
+<input type="text" id="searchInput" placeholder="Enter substring to filter items" />
+<label for="caseSensitive">Case sensitive:</label>
+<input type="checkbox" id="caseSensitive" />
+<button id="searchButton">Search</button>
+
+<h3>Search Results</h3>
+<div id="searchResults">No search done.</div>
+
+<h3>Position Explorer</h3>
+<p>
+  Enter a position (number) in the text to explore what indexed items appear at or near that position.
+</p>
+<label for="positionInput">Position (0-based):</label>
+<input type="number" id="positionInput" min="0" />
+<label for="contextRadius">Context radius (characters before and after):</label>
+<input type="number" id="contextRadius" value="5" min="0" max="50" />
+<button id="explorePosition">Explore</button>
+<div id="positionOutput">No position explored yet.</div>
+
+<h3>Indexing Workflow Log</h3>
+<div id="pathsLog">(No interactions yet.)</div>
+
+<script>
+(() => {
+  const textInput = document.getElementById('textInput');
+  const indexType = document.getElementById('indexType');
+  const phraseControl = document.getElementById('phraseControl');
+  const phraseInput = document.getElementById('phraseInput');
+  const regexControl = document.getElementById('regexControl');
+  const regexInput = document.getElementById('regexInput');
+  const regexFlags_i = document.getElementById('regexFlags_i');
+  const regexFlags_g = document.getElementById('regexFlags_g');
+  const regexFlags_m = document.getElementById('regexFlags_m');
+  const minLength = document.getElementById('minLength');
+  const buildIndex = document.getElementById('buildIndex');
+  const clearIndex = document.getElementById('clearIndex');
+  const summary = document.getElementById('summary');
+  const indexTableBody = document.querySelector('#indexTable tbody');
+  const searchInput = document.getElementById('searchInput');
+  const searchButton = document.getElementById('searchButton');
+  const caseSensitiveCheckbox = document.getElementById('caseSensitive');
+  const searchResults = document.getElementById('searchResults');
+  const positionInput = document.getElementById('positionInput');
+  const contextRadius = document.getElementById('contextRadius');
+  const explorePositionBtn = document.getElementById('explorePosition');
+  const positionOutput = document.getElementById('positionOutput');
+  const pathsLog = document.getElementById('pathsLog');
+
+  // State management
+  let indexedData = null; 
+  // Structure: { type:..., items: Map(item -> {count, positions: [pos]}), textLength: number }
+
+  // Workflow interaction log (tracks sequential user actions)
+  let interactionLog = [];
+
+  function logInteraction(action, details) {
+    const time = new Date().toISOString();
+    interactionLog.push({time, action, details});
+    updatePathsLog();
+  }
+  function updatePathsLog() {
+    const lines = interactionLog.map(({time,action,details},i) =>
+      `${i+1}. [${time}] ${action}${details ? ": "+details : ""}`
+    );
+    if(lines.length === 0) {
+      pathsLog.textContent = "(No interactions yet.)";
+    } else {
+      pathsLog.textContent = lines.join('\n');
+      pathsLog.scrollTop = pathsLog.scrollHeight;
+    }
+  }
+
+  // Show/hide controls based on index type
+  function onIndexTypeChange() {
+    const val = indexType.value;
+    phraseControl.style.display = 'none';
+    regexControl.style.display = 'none';
+    if(val === 'phrase') {
+      phraseControl.style.display = 'block';
+    } else if(val === 'regex') {
+      regexControl.style.display = 'block';
+    }
+  }
+
+  indexType.addEventListener('change', () => {
+    onIndexTypeChange();
+    logInteraction('Changed index type', indexType.value);
+  });
+
+  onIndexTypeChange();
+
+  // Clear index and related UI
+  function clearAll() {
+    indexedData = null;
+    summary.textContent = 'No index built yet.';
+    indexTableBody.textContent = '';
+    searchResults.textContent = 'No search done.';
+    positionOutput.textContent = 'No position explored yet.';
+    searchInput.value = '';
+    positionInput.value = '';
+    minLength.value = 1;
+    phraseInput.value = '';
+    regexInput.value = '';
+    regexFlags_i.checked = false;
+    regexFlags_m.checked = false;
+    // leave caseSensitive as is
+  }
+  clearIndex.addEventListener('click', () => {
+    clearAll();
+    logInteraction('Cleared all index and inputs');
+  });
+
+  // Utility: escape RegExp special characters for literal substring search
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Build index according to indexType
+  function buildIndexData() {
+    const text = textInput.value;
+    const type = indexType.value;
+    const minLen = Math.max(1, Math.floor(Number(minLength.value) || 1));
+    if (!text) {
+      alert('Input text is empty. Please enter some text.');
+      return null;
+    }
+
+    // Prepare variables
+    let items = new Map();
+    const textLength = text.length;
+
+    function addItem(item, position) {
+      if(item.length < minLen) return;
+      // Case normalization for word index only
+      let key = item;
+      if(type === 'word') key = item.toLowerCase();
+
+      if (!items.has(key)) {
+        items.set(key, {count:0, positions:[]});
+      }
+      const d = items.get(key);
+      d.count++;
+      d.positions.push(position);
+    }
+
+    if(type === 'word') {
+      // Word index is case-insensitive, tokenize by /\b\w+\b/
+      // We record start positions of each word
+      const wordRegex = /\b\w+\b/g;
+      let match;
+      while ((match = wordRegex.exec(text)) !== null) {
+        const word = match[0];
+        const pos = match.index;
+        addItem(word, pos);
+      }
+    } else if(type === 'char') {
+      // Character index case-sensitive, index every non-whitespace char and position
+      for(let i=0; i<text.length; i++) {
+        const c = text[i];
+        if(/\s/.test(c)) continue;
+        addItem(c, i);
+      }
+    } else if(type === 'phrase') {
+      // Phrase index: find all occurrences of phrase in text (case-sensitive exact)
+      const phrase = phraseInput.value;
+      if(!phrase) {
+        alert('Please enter a phrase for Phrase Index.');
+        return null;
+      }
+      if(phrase.length < minLen) {
+        alert('Phrase length is less than minimum length.');
+        return null;
+      }
+      // Find all occurrences of phrase
+      let startAt = 0;
+      while(true) {
+        const pos = text.indexOf(phrase, startAt);
+        if(pos === -1) break;
+        addItem(phrase, pos);
+        startAt = pos+1;
+      }
+    } else if(type === 'regex') {
+      // Regex index, global match all occurrences' index 0 position and matched text
+      let flags = 'g';
+      if(regexFlags_i.checked) flags += 'i';
+      if(regexFlags_m.checked) flags += 'm';
+      let pattern = regexInput.value;
+      if(!pattern) {
+        alert('Please enter a regex pattern.');
+        return null;
+      }
+      let regex;
+      try {
+        regex = new RegExp(pattern, flags);
+      } catch(e) {
+        alert('Invalid regex pattern: ' + e.message);
+        return null;
+      }
+      let match;
+      while((match = regex.exec(text)) !== null) {
+        if(match[0].length < minLen) continue;
+        addItem(match[0], match.index);
+        if(match[0].length === 0) {
+          // Avoid empty match infinite loop
+          regex.lastIndex++;
+        }
+      }
+    } else {
+      alert('Unknown index type selected.');
+      return null;
+    }
+    if(items.size === 0) {
+      alert('No items found indexed with current parameters.');
+    }
+    return {type, items, textLength};
+  }
+
+  // Sort the items by count desc, then lex ascending
+  function sortedIndexedItems() {
+    if(!indexedData) return [];
+    return Array.from(indexedData.items.entries()).sort((a,b) => {
+      if(b[1].count !== a[1].count) return b[1].count - a[1].count;
+      return a[0] < b[0] ? -1 : (a[0] > b[0]?1:0);
+    });
+  }
+
+  function updateIndexTable() {
+    if(!indexedData) {
+      indexTableBody.textContent = '';
+      return;
+    }
+    const rows = [];
+    for(let [item,data] of sortedIndexedItems()) {
+      rows.push('<tr><td>' + escapeHtml(item) + '</td><td>' + data.count + '</td><td>' + data.positions.join(', ') + '</td></tr>');
+    }
+    indexTableBody.innerHTML = rows.join('\n');
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, c => {
+      switch(c) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&#39;';
+      }
+    });
+  }
+
+  buildIndex.addEventListener('click', () => {
+    logInteraction('Build index started');
+    const built = buildIndexData();
+    if(built) {
+      indexedData = built;
+      summary.textContent = `Indexed ${indexedData.items.size} unique items of type "${indexedData.type}" in text length ${indexedData.textLength}.`;
+      updateIndexTable();
+      searchResults.textContent = 'No search done.';
+      positionOutput.textContent = 'No position explored yet.';
+      logInteraction('Build index succeeded', `${indexedData.items.size} items indexed`);
+    } else {
+      summary.textContent = 'Index build failed or no results.';
+      indexTableBody.textContent = '';
+      indexedData = null;
+      logInteraction('Build index failed or no data');
+    }
+  });
+
+  // Search indexed items by substring with case-sensitive or insensitive opt
+  searchButton.addEventListener('click', () => {
+    if(!indexedData) {
+      alert('No index to search. Build index first.');
+      return;
+    }
+    const query = searchInput.value;
+    if(!query) {
+      alert('Please enter a search substring.');
+      return;
+    }
+    const cs = caseSensitiveCheckbox.checked;
+    const items = sortedIndexedItems();
+    let matched = items.filter(([item,]) => {
+      if(cs) {
+        return item.includes(query);
+      } else {
+        return item.toLowerCase().includes(query.toLowerCase());
+      }
+    });
+    if(matched.length === 0) {
+      searchResults.textContent = 'No matching indexed items found.';
+    } else {
+      // Show up to 50 matches
+      const lines = matched.slice(0,50).map(([item,data]) => {
+        return `${item} (count: ${data.count}, positions: ${data.positions.join(', ')})`;
+      });
+      searchResults.textContent = lines.join('\n');
+      if(matched.length > 50) {
+        searchResults.textContent += `\n...and ${matched.length-50} more matches.`;
+      }
+    }
+    logInteraction('Search indexed items', `query="${query}", caseSensitive=${cs}, results=${matched.length}`);
+  });
+
+  // Explore position - what indexed items appear at or near position
+  explorePositionBtn.addEventListener('click', () => {
+    if(!indexedData) {
+      alert('No index built. Build index first.');
+      return;
+    }
+    const posRaw = positionInput.value;
+    const radiusRaw = contextRadius.value;
+    let pos = Number(posRaw);
+    let radius = Number(radiusRaw);
+    if(isNaN(pos) || pos < 0 || pos >= indexedData.textLength) {
+      alert(`Enter a valid position between 0 and ${indexedData.textLength - 1}.`);
+      return;
+    }
+    if(isNaN(radius) || radius < 0) radius = 0;
+
+    // Find items with positions falling within [pos - radius, pos + radius]
+    const minPos = Math.max(0, pos - radius);
+    const maxPos = Math.min(indexedData.textLength - 1, pos + radius);
+
+    // Find items that occur overlapping this range
+    // Overlap criteria depends on index type
+    // For word and phrase, items have a start index and length = item.length
+    // For character - length = 1
+    // For regex - items are matched text, length = item.length
+
+    // So for each item and its positions, check if any position interval overlaps [minPos,maxPos]
+
+    const results = [];
+
+    function positionRange(overlapStart, length) {
+      return [overlapStart, overlapStart + length - 1];
+    }
+    for(const [item, data] of indexedData.items.entries()) {
+      const len = item.length;
+      // For char type, length=1 guaranteed
+      // Data.positions is array of start positions
+      // find if any position range intersects [minPos,maxPos]
+      // We stop on first found occurrence per item (for brevity)
+      const foundPos = data.positions.find(p => {
+        const [start, end] = positionRange(p,len);
+        return !(end < minPos || start > maxPos);
+      });
+      if(foundPos !== undefined) {
+        results.push({
+          item,
+          count: data.count,
+          positions: data.positions,
+          firstPosInRange: foundPos,
+          length: len
+        });
+      }
+    }
+
+    if(results.length === 0) {
+      positionOutput.textContent = `No indexed items found overlapping position ${pos} ± ${radius}.`;
+      logInteraction('Explore position', `pos=${pos}, radius=${radius}, found=0 items`);
+      return;
+    }
+
+    // Sorting results by relevance: how close firstPosInRange is to pos, then count desc
+    results.sort((a,b) => {
+      const distA = Math.abs(a.firstPosInRange - pos);
+      const distB = Math.abs(b.firstPosInRange - pos);
+      if(distA !== distB) return distA - distB;
+      return b.count - a.count;
+    });
+
+    // Display context: show snippet of text around position and highlight found item near there
+    const snippetRadius = 15;
+    const fromIdx = Math.max(0, pos - snippetRadius);
+    const toIdx = Math.min(indexedData.textLength, pos + snippetRadius+1);
+    const snippet = textInput.value.slice(fromIdx,toIdx);
+
+    // Show results with first occurrence near pos position highlighted with |item|
+    // We'll mark the matched substrings inline with pipe |...| around first matched item found near pos
+
+    let snippetMarked = snippet;
+    const snippetOffset = fromIdx;
+
+    // Attempt to mark first detected item in snippet
+    // Find first item in results with a firstPosInRange inside snippet bounds
+    let markedOnce = false;
+
+    for(const r of results) {
+      if(markedOnce) break;
+      // For each position of this item, check if in snippet range and highlight the earliest one
+      const posInSnippet = r.positions.find(p => p >= fromIdx && p + r.length - 1 < toIdx);
+      if(posInSnippet !== undefined) {
+        // insert marks
+        const start = posInSnippet - snippetOffset;
+        const end = start + r.length;
+        snippetMarked =
+          snippetMarked.slice(0, start) +
+          '|' +
+          snippetMarked.slice(start, end) +
+          '|' +
+          snippetMarked.slice(end);
+        markedOnce = true;
+      }
+    }
+
+    let out = `Text snippet around position ${pos} (marked with |item|):\n` +
+      snippetMarked + '\n\n';
+
+    out += `Found ${results.length} indexed items overlapping position:\n`;
+    for(let i=0; i<Math.min(results.length,20); i++) {
+      const r = results[i];
+      out += `- "${r.item}" (count: ${r.count}), positions: ${r.positions.slice(0,10).join(', ')}${r.positions.length > 10 ? ' ...' : ''}\n`;
+    }
+    if(results.length > 20) {
+      out += `... and ${results.length-20} more items.\n`;
+    }
+    positionOutput.textContent = out;
+    logInteraction('Explore position', `pos=${pos}, radius=${radius}, found=${results.length} items`);
+  });
+
+  // Initial clear
+  clearAll();
+
+  // Extra: add keyboard shortcuts for frequent actions
+  document.addEventListener('keydown',function(e) {
+    if(e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      if(document.activeElement === searchInput) {
+        searchButton.click();
+      } else if(document.activeElement === positionInput) {
+        explorePositionBtn.click();
+      } else {
+        buildIndex.click();
+      }
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

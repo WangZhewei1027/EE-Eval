@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Big-Omega Notation Interactive Lab</title>
+<style>
+/* Minimal visual design: plain black text on white background, basic layout only */
+body { font-family: monospace; margin: 12px; color: black; background: white; }
+section { margin-bottom: 12px; }
+label { display: inline-block; min-width: 120px; }
+input[type="text"], input[type="number"], select, textarea { width: 320px; }
+textarea { height: 80px; }
+button { margin: 2px; }
+canvas { border: 1px solid #000; display: block; margin-top:6px; }
+small { color: black; }
+.controls { max-width: 980px; }
+.row { margin:6px 0; }
+.inline { display:inline-block; vertical-align:middle; margin-right:8px; }
+.logbox { width:100%; height:140px; }
+</style>
+</head>
+<body>
+<h1>Big-Omega Notation — Interactive Lab</h1>
+
+<section class="controls">
+  <div class="row">
+    <label>Example functions:</label>
+    <select id="exampleSelect"></select>
+    <button id="loadExample">Load</button>
+    <button id="resetExample">Reset</button>
+  </div>
+
+  <div class="row">
+    <label>f(n) (left side):</label>
+    <input id="fexpr" type="text" value="n" />
+  </div>
+
+  <div class="row">
+    <label>g(n) (right side):</label>
+    <input id="gexpr" type="text" value="1" />
+  </div>
+
+  <div class="row">
+    <label>Domain start n_min:</label>
+    <input id="nmin" type="number" value="1" min="0" />
+    <label style="min-width:80px">n_max (plot/test):</label>
+    <input id="nmax" type="number" value="200" min="1" />
+  </div>
+
+  <div class="row">
+    <label>Comparison type:</label>
+    <select id="cmpType">
+      <option value="omega">Omega (f(n) ∈ Ω(g(n)))</option>
+      <option value="omega_strict">Ω strict (&gt;)</option>
+      <option value="theta">Theta (Θ)</option>
+      <option value="not">Check counterexample (find violation)</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label>Proposed constant c:</label>
+    <input id="c_input" type="number" value="1" step="any" />
+    <label style="min-width:80px">Proposed n0:</label>
+    <input id="n0_input" type="number" value="1" />
+    <button id="applyProposition">Apply</button>
+  </div>
+
+  <div class="row">
+    <label>Search settings:</label>
+    <input id="searchMax" type="number" value="10000" /> (max n to search for violations)
+    <label style="min-width:80px">Sample points:</label>
+    <input id="sampleCount" type="number" value="200" />
+  </div>
+
+  <div class="row">
+    <label>Heuristic tools:</label>
+    <button id="autoFind">Auto-find c & n0 (heuristic)</button>
+    <button id="proveAuto">Attempt numeric "proof" (logs)</button>
+    <button id="findCounter">Find counterexample</button>
+  </div>
+
+  <div class="row">
+    <label>Graph options:</label>
+    <input id="showBand" type="checkbox" checked /> Show c·g(n)
+    <input id="logScale" type="checkbox" /> Log scale Y
+    <input id="showRatio" type="checkbox" /> Show f(n)/g(n)
+  </div>
+
+  <div class="row">
+    <label>Save / Load:</label>
+    <input id="saveName" type="text" placeholder="name" />
+    <button id="saveConfig">Save</button>
+    <select id="savedList"></select>
+    <button id="loadSaved">Load</button>
+    <button id="deleteSaved">Delete</button>
+  </div>
+
+  <div class="row">
+    <label>Undo / Redo:</label>
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+    <button id="clearLog">Clear Log</button>
+  </div>
+
+  <div class="row">
+    <label>Transcript / Log:</label><br/>
+    <textarea id="transcript" class="logbox" readonly></textarea>
+  </div>
+</section>
+
+<section>
+  <div class="row">
+    <label>Canvas (plot):</label>
+    <canvas id="plot" width="720" height="240"></canvas>
+  </div>
+
+  <div class="row">
+    <label>Detailed numeric table (samples):</label><br/>
+    <textarea id="tableOutput" readonly></textarea>
+  </div>
+
+  <div class="row">
+    <label>Proof assistant output:</label><br/>
+    <textarea id="assistant" readonly></textarea>
+  </div>
+</section>
+
+<section>
+  <div class="row">
+    <label>Workflow controls:</label>
+    <button id="step1">1. Validate expressions</button>
+    <button id="step2">2. Apply proposition</button>
+    <button id="step3">3. Run test</button>
+    <button id="step4">4. Refine / Autosearch</button>
+    <button id="resetAll">Reset Lab</button>
+  </div>
+</section>
+
+<script>
+/*
+Interactive Big-Omega Lab
+- User provides f(n) and g(n) expressions (use n variable; Math.* functions available without prefix)
+- Many interactive controls: propose c & n0, auto-find, find counterexample, plotting
+- Simple state machine with undo/redo and saved configurations
+- Minimal visual design; heavy interactivity and features
+*/
+
+(function(){
+  // Utilities
+  function log(msg){
+    const t = document.getElementById('transcript');
+    const now = new Date().toLocaleTimeString();
+    t.value += '['+now+'] '+msg + '\\n';
+    t.scrollTop = t.scrollHeight;
+  }
+
+  function safeEvalFactory(expr){
+    // Very simple sanitizer to prevent DOM or control access
+    const banned = ['window','document','localStorage','sessionStorage','alert','prompt','confirm','fetch','XMLHttpRequest','while','for','=>','function','class','new','constructor','prototype','eval','setInterval','setTimeout'];
+    const low = expr.toLowerCase();
+    for(const b of banned){
+      if(low.indexOf(b) !== -1) throw new Error('Expression contains a forbidden token: ' + b);
+    }
+    if(expr.indexOf(';') !== -1) throw new Error('Semicolons are not allowed in expressions.');
+    // Return a function that evaluates expression with n and Math in scope
+    // Use "with (Math)" to allow sin, log, pow etc.
+    try {
+      const fn = new Function('n', 'with(Math){ return (' + expr + ') }');
+      // quick test
+      const test = fn(1);
+      if(typeof test === 'object' && test !== null) {
+        // allow objects? probably not
+      }
+      return fn;
+    } catch(e){
+      throw new Error('Invalid expression: ' + e.message);
+    }
+  }
+
+  // Elements
+  const fexprEl = document.getElementById('fexpr');
+  const gexprEl = document.getElementById('gexpr');
+  const nminEl = document.getElementById('nmin');
+  const nmaxEl = document.getElementById('nmax');
+  const cmpTypeEl = document.getElementById('cmpType');
+  const cInput = document.getElementById('c_input');
+  const n0Input = document.getElementById('n0_input');
+  const sampleCountEl = document.getElementById('sampleCount');
+  const searchMaxEl = document.getElementById('searchMax');
+  const plot = document.getElementById('plot');
+  const ctx = plot.getContext('2d');
+  const showBandEl = document.getElementById('showBand');
+  const logScaleEl = document.getElementById('logScale');
+  const showRatioEl = document.getElementById('showRatio');
+  const tableOutput = document.getElementById('tableOutput');
+  const assistant = document.getElementById('assistant');
+  const transcript = document.getElementById('transcript');
+
+  // Example functions
+  const examples = [
+    {name:'Linear vs Constant', f:'n', g:'1'},
+    {name:'Quadratic vs Linear', f:'n*n', g:'n'},
+    {name:'n log n vs n', f:'n*log(n)', g:'n'},
+    {name:'Logarithm vs Constant', f:'log(n)', g:'1'},
+    {name:'Exponential vs Polynomial', f:'2**n', g:'n**5'},
+    {name:'Polynomial degree difference', f:'n**3 + 5*n', g:'n**2'},
+    {name:'Same order (Theta)', f:'3*n*log(n) + 5', g:'n*log(n)'},
+    {name:'Square root vs Log', f:'sqrt(n)', g:'log(n)'},
+    {name:'Oscillating (not Omega)', f:'sin(n) + 2', g:'1'},
+    {name:'Decreasing to 0', f:'1/n', g:'1'},
+    {name:'Factorial vs Exponential', f:'gamma(n+1)', g:'2**n'} // gamma used to emulate factorial (beware huge numbers)
+  ];
+
+  const exampleSelect = document.getElementById('exampleSelect');
+  examples.forEach((e,i)=> {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = e.name;
+    exampleSelect.appendChild(opt);
+  });
+
+  document.getElementById('loadExample').addEventListener('click', ()=> {
+    const idx = +exampleSelect.value;
+    const ex = examples[idx];
+    fexprEl.value = ex.f;
+    gexprEl.value = ex.g;
+    log('Loaded example: ' + ex.name + ' -> f(n)=' + ex.f + ', g(n)=' + ex.g);
+    pushState();
+    renderAll();
+  });
+
+  document.getElementById('resetExample').addEventListener('click', ()=> {
+    fexprEl.value = 'n';
+    gexprEl.value = '1';
+    nminEl.value = 1;
+    nmaxEl.value = 200;
+    cInput.value = 1;
+    n0Input.value = 1;
+    log('Reset inputs to defaults.');
+    pushState();
+    renderAll();
+  });
+
+  // Saved configs in localStorage
+  function refreshSavedList(){
+    const sel = document.getElementById('savedList');
+    sel.innerHTML = '';
+    for(let i=0;i<localStorage.length;i++){
+      const key = localStorage.key(i);
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = key;
+      sel.appendChild(opt);
+    }
+  }
+  document.getElementById('saveConfig').addEventListener('click', ()=> {
+    const name = document.getElementById('saveName').value || ('config_'+Date.now());
+    const data = {
+      f: fexprEl.value, g: gexprEl.value,
+      nmin: nminEl.value, nmax: nmaxEl.value,
+      c: cInput.value, n0: n0Input.value,
+      cmpType: cmpTypeEl.value
+    };
+    try {
+      localStorage.setItem(name, JSON.stringify(data));
+      log('Saved configuration "'+name+'".');
+      refreshSavedList();
+    } catch(e){
+      log('Save failed: ' + e.message);
+    }
+  });
+  document.getElementById('loadSaved').addEventListener('click', ()=> {
+    const sel = document.getElementById('savedList');
+    if(!sel.value){ log('No saved config selected.'); return; }
+    const raw = localStorage.getItem(sel.value);
+    if(!raw){ log('Saved item not found.'); refreshSavedList(); return; }
+    const data = JSON.parse(raw);
+    fexprEl.value = data.f; gexprEl.value = data.g;
+    nminEl.value = data.nmin; nmaxEl.value = data.nmax;
+    cInput.value = data.c; n0Input.value = data.n0;
+    cmpTypeEl.value = data.cmpType || 'omega';
+    log('Loaded saved configuration "'+sel.value+'".');
+    pushState();
+    renderAll();
+  });
+  document.getElementById('deleteSaved').addEventListener('click', ()=> {
+    const sel = document.getElementById('savedList');
+    if(!sel.value){ log('No saved config selected.'); return; }
+    localStorage.removeItem(sel.value);
+    log('Deleted saved configuration "'+sel.value+'".');
+    refreshSavedList();
+  });
+  refreshSavedList();
+
+  // Undo / Redo stack
+  let history = [];
+  let future = [];
+  function pushState(){
+    const state = {
+      f: fexprEl.value, g: gexprEl.value,
+      nmin: nminEl.value, nmax: nmaxEl.value,
+      c: cInput.value, n0: n0Input.value,
+      cmpType: cmpTypeEl.value,
+      showBand: showBandEl.checked, logScale: logScaleEl.checked, showRatio: showRatioEl.checked
+    };
+    history.push(JSON.stringify(state));
+    if(history.length>200) history.shift();
+    future = [];
+    updateUndoRedo();
+  }
+  function restoreState(serialized){
+    const s = JSON.parse(serialized);
+    fexprEl.value = s.f; gexprEl.value = s.g;
+    nminEl.value = s.nmin; nmaxEl.value = s.nmax;
+    cInput.value = s.c; n0Input.value = s.n0;
+    cmpTypeEl.value = s.cmpType;
+    showBandEl.checked = s.showBand; logScaleEl.checked = s.logScale; showRatioEl.checked = s.showRatio;
+    renderAll();
+  }
+  function updateUndoRedo(){
+    document.getElementById('undoBtn').disabled = history.length<=1;
+    document.getElementById('redoBtn').disabled = future.length===0;
+  }
+  document.getElementById('undoBtn').addEventListener('click', ()=> {
+    if(history.length<=1) return;
+    const cur = history.pop();
+    future.push(cur);
+    const prev = history[history.length-1];
+    restoreState(prev);
+    log('Undo applied.');
+    updateUndoRedo();
+  });
+  document.getElementById('redoBtn').addEventListener('click', ()=> {
+    if(future.length===0) return;
+    const s = future.pop();
+    history.push(s);
+    restoreState(s);
+    log('Redo applied.');
+    updateUndoRedo();
+  });
+
+  // Basic machine steps
+  document.getElementById('step1').addEventListener('click', ()=> { stepValidate(); });
+  document.getElementById('step2').addEventListener('click', ()=> { applyProposition(); });
+  document.getElementById('step3').addEventListener('click', ()=> { runTest(); });
+  document.getElementById('step4').addEventListener('click', ()=> { refineAndAuto(); });
+  document.getElementById('resetAll').addEventListener('click', ()=> { resetLab(); });
+
+  // Core numeric sampling
+  function sampleFunctions(fFn, gFn, opts){
+    // opts: nmin, nmax, sampleCount
+    const nmin = +opts.nmin || 1;
+    const nmax = +opts.nmax || 200;
+    const N = Math.max(1, +opts.sampleCount || (nmax-nmin+1));
+    const samples = [];
+    if(N >= (nmax - nmin + 1)){
+      for(let n=nmin;n<=nmax;n++){
+        samples.push(sampleOne(n,fFn,gFn));
+      }
+    } else {
+      // pick N points spaced
+      for(let i=0;i<N;i++){
+        const n = Math.floor(nmin + i*(nmax-nmin)/(N-1 || 1));
+        samples.push(sampleOne(n,fFn,gFn));
+      }
+    }
+    return samples;
+  }
+  function sampleOne(n,fFn,gFn){
+    let f=NaN,g=NaN,ratio=NaN;
+    try { f = +fFn(n); } catch(e){ f = NaN; }
+    try { g = +gFn(n); } catch(e){ g = NaN; }
+    if(isFinite(f) && isFinite(g) && g !== 0) ratio = f/g;
+    if(isFinite(f) && isFinite(g) && g === 0) ratio = (f>0? Infinity : (f<0? -Infinity : NaN));
+    return {n: n, f: f, g: g, ratio: ratio};
+  }
+
+  // Plotting
+  function renderPlot(samples, c, n0){
+    const W = plot.width, H = plot.height;
+    ctx.clearRect(0,0,W,H);
+    // compute ranges
+    let minY = Infinity, maxY = -Infinity;
+    for(const s of samples){
+      if(!isFinite(s.f) || !isFinite(s.g)) continue;
+      minY = Math.min(minY, s.f, s.g * (c!==null? c:1));
+      maxY = Math.max(maxY, s.f, s.g * (c!==null? c:1));
+      if(showRatioEl.checked && isFinite(s.ratio)) { minY = Math.min(minY, s.ratio); maxY = Math.max(maxY, s.ratio); }
+    }
+    if(!isFinite(minY)) { minY = -1; maxY = 1; }
+    if(minY === maxY) { minY -= 1; maxY += 1; }
+    // If log scale selected, transform
+    const logScale = logScaleEl.checked;
+    function transformY(val){
+      if(!isFinite(val)) return null;
+      if(logScale){
+        const v = (val<=0)? Math.log(Math.abs(val)+1) * (val<0 ? -1 : 1) : Math.log(val);
+        return v;
+      }
+      return val;
+    }
+    let tmin = transformY(minY), tmax = transformY(maxY);
+    if(!isFinite(tmin) || !isFinite(tmax)) { tmin = -1; tmax = 1; }
+    const pad = 20;
+    function mapX(i){
+      return pad + i*(W-2*pad)/(samples.length-1 || 1);
+    }
+    function mapY(v){
+      const tv = transformY(v);
+      if(!isFinite(tv)) return NaN;
+      const r = (tv - tmin) / (tmax - tmin || 1);
+      return H - pad - r*(H-2*pad);
+    }
+
+    // Draw axes
+    ctx.strokeStyle = 'black';
+    ctx.beginPath();
+    ctx.moveTo(pad, pad/2);
+    ctx.lineTo(pad, H-pad/2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pad, H-pad);
+    ctx.lineTo(W-pad, H-pad);
+    ctx.stroke();
+
+    // Draw f(n)
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started=false;
+    for(let i=0;i<samples.length;i++){
+      const s=samples[i];
+      const x = mapX(i);
+      const y = mapY(s.f);
+      if(!isFinite(y)) { started=false; continue; }
+      if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // Draw c*g(n) band if requested
+    if(showBandEl.checked && c!==null){
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,2]);
+      ctx.beginPath();
+      let started2=false;
+      for(let i=0;i<samples.length;i++){
+        const s=samples[i];
+        const x = mapX(i);
+        const y = mapY(s.g * c);
+        if(!isFinite(y)) { started2=false; continue; }
+        if(!started2){ ctx.moveTo(x,y); started2=true; } else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Draw ratio if requested (scaled down)
+    if(showRatioEl.checked){
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      let started3=false;
+      for(let i=0;i<samples.length;i++){
+        const s=samples[i];
+        const x = mapX(i);
+        const y = mapY(s.ratio);
+        if(!isFinite(y)) { started3=false; continue; }
+        if(!started3){ ctx.moveTo(x,y); started3=true; } else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+
+    // mark n0 vertical line
+    if(n0 !== null){
+      const idx = samples.findIndex(s=> s.n >= n0);
+      if(idx >= 0){
+        const x = mapX(idx);
+        ctx.strokeStyle = 'black';
+        ctx.beginPath();
+        ctx.moveTo(x, pad);
+        ctx.lineTo(x, H-pad);
+        ctx.stroke();
+      }
+    }
+
+    // simple legend
+    ctx.fillStyle = 'black';
+    ctx.fillText('Solid: f(n)  --  Dashed: c·g(n)  --  (vertical line: n0)', 8, 12);
+  }
+
+  // Core checking
+  function checkProposition(fFn, gFn, c, n0, opts){
+    // Check whether for all integers n >= n0 and <= searchMax, inequality holds:
+    // if cmpType is 'omega' => f(n) >= c*g(n)
+    // 'omega_strict' => f(n) > c*g(n)
+    // 'theta' => both Omega and O (we only check Omega here)
+    const searchMax = Math.min(+opts.searchMax || 10000, +opts.globalLimit || 1000000);
+    const cmpType = opts.cmp || 'omega';
+    const res = {violations: [], testedUpTo: null, ok:true};
+    for(let n = Math.max(1, Math.floor(n0)); n<=searchMax; n++){
+      let f,g;
+      try { f = +fFn(n); } catch(e){ f = NaN; }
+      try { g = +gFn(n); } catch(e){ g = NaN; }
+      if(!isFinite(f) || !isFinite(g)){ res.violations.push({n:n, f:f, g:g, reason:'non-finite'}); res.ok=false; break; }
+      const left = f;
+      const right = c * g;
+      const ok = (cmpType === 'omega_strict') ? (left > right + 1e-12) : (left + 1e-12 >= right);
+      if(!ok){
+        res.violations.push({n:n, f:f, g:g, reason:'inequality fails'});
+        res.ok=false;
+        break;
+      }
+      res.testedUpTo = n;
+    }
+    return res;
+  }
+
+  // Auto-find c & n0 heuristics
+  function autoFindConstants(fFn, gFn, opts){
+    // Sample many n, compute ratio r = f/g. We'll attempt to find positive lim inf.
+    const nmin = +opts.nmin || 1;
+    const nmax = +opts.nmax || 2000;
+    const step = Math.max(1, Math.floor((nmax - nmin)/1000) || 1);
+    const ratios = [];
+    for(let n=nmin; n<=nmax; n+=step){
+      let f,g;
+      try { f = +fFn(n); } catch(e){ f = NaN; }
+      try { g = +gFn(n); } catch(e){ g = NaN; }
+      let r = NaN;
+      if(isFinite(f) && isFinite(g)){
+        if(g === 0) r = (f>0? Infinity : (f<0? -Infinity : NaN));
+        else r = f/g;
+      }
+      ratios.push({n:n, r:r});
+    }
+    // compute moving minima of ratios for last half of domain
+    const valid = ratios.filter(x=> isFinite(x.r));
+    if(valid.length === 0) return {found:false, reason:'No valid samples'};
+    // estimate liminf as min of the tail ratios (e.g., last 30% of samples)
+    const tail = valid.slice(Math.floor(valid.length*0.3));
+    const minTail = tail.reduce((a,b)=> Math.min(a, b.r), Infinity);
+    if(!isFinite(minTail) || minTail <= 0) return {found:false, reason:'Estimated lim inf <= 0'};
+    // propose c = 0.9 * minTail
+    const c = Math.max(1e-12, minTail * 0.9);
+    // find n0 as first n after which ratio >= c for all subsequent sampled points
+    let n0 = nmin;
+    for(let i=0;i<ratios.length;i++){
+      const ok = ratios.slice(i).every(x => isFinite(x.r) && x.r >= c - 1e-12);
+      if(ok){ n0 = ratios[i].n; break; }
+    }
+    return {found:true, c:c, n0:n0, minTail:minTail};
+  }
+
+  // find counterexample: attempt to find n >= n0 where inequality fails within searchMax
+  function findCounterexample(fFn,gFn,c,n0,searchMax){
+    for(let n = Math.max(1, Math.floor(n0)); n<=searchMax; n++){
+      let f,g;
+      try { f = +fFn(n); } catch(e){ f = NaN; }
+      try { g = +gFn(n); } catch(e){ g = NaN; }
+      if(!isFinite(f) || !isFinite(g)) return {found:true,n:n,f:f,g:g,reason:'non-finite'};
+      if(!(f + 1e-12 >= c*g)) return {found:true,n:n,f:f,g:g,reason:'inequality fails'};
+    }
+    return {found:false};
+  }
+
+  // UI actions
+  function stepValidate(){
+    assistant.value = '';
+    try {
+      const fFn = safeEvalFactory(fexprEl.value);
+      const gFn = safeEvalFactory(gexprEl.value);
+      log('Expressions parsed OK.');
+      pushState();
+      renderAll();
+    } catch(e){
+      log('Validation error: ' + e.message);
+    }
+  }
+
+  function applyProposition(){
+    assistant.value = '';
+    const c = +cInput.value;
+    const n0 = +n0Input.value;
+    if(!isFinite(c) || !isFinite(n0)){ log('Invalid c or n0.'); return; }
+    log('Applied proposition: f(n) ' + ((cmpTypeEl.value==='omega_strict')? '>' : '≥') + ' ' + c + '·g(n) for all n ≥ ' + n0);
+    pushState();
+    renderAll();
+  }
+
+  function runTest(){
+    assistant.value = '';
+    let fFn, gFn;
+    try {
+      fFn = safeEvalFactory(fexprEl.value);
+      gFn = safeEvalFactory(gexprEl.value);
+    } catch(e){
+      log('Cannot run test: ' + e.message);
+      return;
+    }
+    const c = +cInput.value;
+    const n0 = +n0Input.value;
+    const cmp = cmpTypeEl.value;
+    const searchMax = +searchMaxEl.value;
+    log('Running test up to n=' + searchMax + '...');
+    const res = checkProposition(fFn,gFn,c,n0,{searchMax:searchMax, cmp:cmp});
+    if(res.ok){
+      log('No violation found up to search limit. Candidate holds on tested range (not a formal proof).');
+      assistant.value = 'Numeric test: passed up to n=' + res.testedUpTo + '.\\nThis suggests f(n) ∈ ' + (cmp==='omega_strict'? 'Ω_strict(g(n))' : 'Ω(g(n))') + ' with these constants on the tested domain.';
+    } else {
+      log('Violation found at n=' + (res.violations[0].n) + ' (reason: ' + res.violations[0].reason + ').');
+      assistant.value = 'Counterexample: n=' + res.violations[0].n + ', f(n)=' + res.violations[0].f + ', g(n)=' + res.violations[0].g + '.';
+    }
+    pushState();
+    renderAll();
+  }
+
+  document.getElementById('applyProposition').addEventListener('click', applyProposition);
+
+  document.getElementById('autoFind').addEventListener('click', ()=> {
+    assistant.value = '';
+    let fFn,gFn;
+    try{
+      fFn = safeEvalFactory(fexprEl.value);
+      gFn = safeEvalFactory(gexprEl.value);
+    } catch(e){
+      log('Auto-find failed: ' + e.message);
+      return;
+    }
+    const nmin = +nminEl.value || 1;
+    const nmax = +nmaxEl.value || 2000;
+    const r = autoFindConstants(fFn,gFn,{nmin:nmin, nmax:nmax});
+    if(!r.found){
+      log('Auto-find: No suitable positive lim inf found. Reason: ' + r.reason);
+      assistant.value = 'Auto-find failed: ' + r.reason;
+    } else {
+      cInput.value = r.c;
+      n0Input.value = r.n0;
+      log('Auto-find suggests c ≈ ' + r.c.toExponential(6) + ' and n0 = ' + r.n0 + ' (estimated lim inf = ' + r.minTail.toExponential(6) + ').');
+      assistant.value = 'Suggested constants: c=' + r.c + ', n0=' + r.n0 + '\\nThis is a numeric heuristic, not a formal proof.';
+      pushState();
+      renderAll();
+    }
+  });
+
+  document.getElementById('proveAuto').addEventListener('click', ()=> {
+    assistant.value = '';
+    let fFn,gFn;
+    try{
+      fFn = safeEvalFactory(fexprEl.value);
+      gFn = safeEvalFactory(gexprEl.value);
+    } catch(e){
+      log('Auto-prove failed: ' + e.message);
+      return;
+    }
+    const auto = autoFindConstants(fFn,gFn,{nmin:+nminEl.value, nmax:+nmaxEl.value});
+    if(!auto.found){
+      log('Auto-prove heuristic: could not find positive lim inf.');
+      assistant.value = 'Auto-prove failed: ' + auto.reason;
+      return;
+    }
+    const c = auto.c, n0 = auto.n0;
+    // verify strictly up to searchMax
+    const verify = checkProposition(fFn,gFn,c,n0,{searchMax:+searchMaxEl.value, cmp:cmpTypeEl.value});
+    if(verify.ok){
+      log('Auto-prove heuristic succeeded numerically: constants validated up to search limit.');
+      assistant.value = 'Numeric "proof": Verified f(n) ≥ ' + c + '·g(n) for all n in [' + n0 + ',' + verify.testedUpTo + '].\\nInterpretation: strong numeric evidence for Ω.';
+      cInput.value = c; n0Input.value = n0;
+      pushState();
+      renderAll();
+    } else {
+      log('Auto-prove check failed: violation at n=' + (verify.violations[0].n));
+      assistant.value = 'Auto-prove check failed: violation at n=' + verify.violations[0].n;
+    }
+  });
+
+  document.getElementById('findCounter').addEventListener('click', ()=> {
+    assistant.value = '';
+    let fFn,gFn;
+    try{
+      fFn = safeEvalFactory(fexprEl.value);
+      gFn = safeEvalFactory(gexprEl.value);
+    } catch(e){
+      log('Counterexample search failed: ' + e.message);
+      return;
+    }
+    const c = +cInput.value;
+    const n0 = +n0Input.value;
+    const searchMax = Math.min(+searchMaxEl.value, 1000000);
+    const res = findCounterexample(fFn,gFn,c,n0,searchMax);
+    if(res.found){
+      log('Counterexample found: n=' + res.n + ', f=' + res.f + ', g=' + res.g + ' (reason: ' + res.reason + ')');
+      assistant.value = 'Counterexample: n=' + res.n + ', f=' + res.f + ', g=' + res.g;
+      // set highlight in table by adjusting nmax to include it
+      nmaxEl.value = Math.max(+nmaxEl.value, res.n);
+      pushState();
+      renderAll();
+    } else {
+      log('No counterexample found in range up to ' + searchMax + '.');
+      assistant.value = 'No counterexample in inspected range.';
+    }
+  });
+
+  // Rendering everything: sampling, table, plot
+  function renderAll(){
+    // try to parse functions
+    let fFn, gFn;
+    try {
+      fFn = safeEvalFactory(fexprEl.value);
+      gFn = safeEvalFactory(gexprEl.value);
+    } catch(e){
+      tableOutput.value = 'Cannot render: ' + e.message;
+      ctx.clearRect(0,0,plot.width,plot.height);
+      return;
+    }
+    const nmin = Math.max(0, Math.floor(+nminEl.value || 1));
+    const nmax = Math.max(nmin+1, Math.floor(+nmaxEl.value || 200));
+    const sampleCount = Math.max(2, +sampleCountEl.value || Math.min(200, nmax-nmin+1));
+    const samples = sampleFunctions(fFn,gFn,{nmin:nmin, nmax:nmax, sampleCount:sampleCount});
+    // fill table
+    let lines = 'n\tf(n)\tg(n)\tf/g\n';
+    for(const s of samples){
+      lines += s.n + '\t' + (isFinite(s.f)? s.f.toExponential(6): String(s.f)) + '\t' + (isFinite(s.g)? s.g.toExponential(6): String(s.g)) + '\t' + (isFinite(s.ratio)? s.ratio.toExponential(6): String(s.ratio)) + '\\n';
+    }
+    tableOutput.value = lines;
+    // plot
+    const c = (showBandEl.checked? (+cInput.value || 0) : null);
+    const n0 = +n0Input.value || null;
+    renderPlot(samples, c, n0);
+  }
+
+  // refine and auto step
+  function refineAndAuto(){
+    assistant.value = '';
+    let fFn,gFn;
+    try{
+      fFn = safeEvalFactory(fexprEl.value);
+      gFn = safeEvalFactory(gexprEl.value);
+    } catch(e){
+      log('Refine failed: ' + e.message);
+      return;
+    }
+    log('Refining... running auto-find then verify.');
+    const auto = autoFindConstants(fFn,gFn,{nmin:+nminEl.value, nmax:+nmaxEl.value});
+    if(!auto.found){
+      log('Refine: auto-find failed (' + auto.reason + '). Consider manual inspection or larger sampling range.');
+      assistant.value = 'Refine failed: ' + auto.reason;
+      return;
+    }
+    cInput.value = auto.c;
+    n0Input.value = auto.n0;
+    log('Auto-suggested c=' + auto.c + ', n0=' + auto.n0 + '. Verifying...');
+    const verify = checkProposition(fFn,gFn,auto.c,auto.n0,{searchMax:+searchMaxEl.value, cmp:cmpTypeEl.value});
+    if(verify.ok){
+      log('Verification OK up to ' + verify.testedUpTo + '.');
+      assistant.value = 'Refinement successful: numeric verification passed up to n=' + verify.testedUpTo + '.';
+    } else {
+      log('Verification failed. Violation at n=' + verify.violations[0].n);
+      assistant.value = 'Refinement failed: violation at n=' + verify.violations[0].n;
+    }
+    pushState();
+    renderAll();
+  }
+
+  function resetLab(){
+    fexprEl.value='n';
+    gexprEl.value='1';
+    nminEl.value=1;
+    nmaxEl.value=200;
+    cInput.value=1;
+    n0Input.value=1;
+    sampleCountEl.value=200;
+    searchMaxEl.value=10000;
+    cmpTypeEl.value='omega';
+    showBandEl.checked=true;
+    logScaleEl.checked=false;
+    showRatioEl.checked=false;
+    transcript.value='';
+    assistant.value='';
+    tableOutput.value='';
+    history = [];
+    future = [];
+    pushState();
+    renderAll();
+    log('Lab reset.');
+  }
+
+  // event listeners to re-render when fields change
+  ['fexpr','gexpr','nmin','nmax','sampleCount','showBand','logScale','showRatio','c_input','n0_input'].forEach(id=>{
+    const el = document.getElementById(id) || document.getElementById(id.replace('_',''));
+    if(!el) return;
+    el.addEventListener('change', ()=> { pushState(); renderAll(); });
+    el.addEventListener('input', ()=> { /* don't push history on every keystroke */ });
+  });
+
+  // provide gamma function for factorial-like example
+  // simple approximation using Lanczos or using Math.gamma if available; implement basic Lanczos gamma
+  (function(){
+    function gamma(z){
+      // Lanczos approximation
+      const p = [
+        676.5203681218851, -1259.1392167224028,
+        771.32342877765313, -176.61502916214059,
+        12.507343278686905, -0.13857109526572012,
+        9.9843695780195716e-6, 1.5056327351493116e-7
+      ];
+      if(z < 0.5) return Math.PI / (Math.sin(Math.PI*z) * gamma(1-z));
+      z -= 1;
+      let x = 0.99999999999980993;
+      for(let i=0;i<p.length;i++) x += p[i]/(z+1+i);
+      const t = z + p.length - 0.5;
+      return Math.sqrt(2*Math.PI)*Math.pow(t, z+0.5)*Math.exp(-t)*x;
+    }
+    // expose gamma to the global scope for user expressions via "gamma(n+1)" as used in example
+    window.gamma = gamma;
+  })();
+
+  // initialization
+  resetLab();
+  log('Interactive Big-Omega Lab ready. Use functions like n, n*n, n**2, log(n), sqrt(n), sin(n), 2**n, gamma(n+1).');
+})();
+</script>
+</body>
+</html>

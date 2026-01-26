@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Encryption Interactive Playground</title>
+<style>
+/* Minimal/non-decorative CSS only to ensure layout works; no colors or animations */
+body { margin: 8px; font-family: monospace; font-size: 13px; }
+section { margin-bottom: 12px; }
+label { display: inline-block; min-width: 120px; vertical-align: middle; }
+textarea { width: 98%; height: 80px; }
+input[type="text"] { width: 300px; }
+input[type="number"] { width: 80px; }
+select { width: 240px; }
+button { margin: 2px; }
+pre { white-space: pre-wrap; word-wrap: break-word; max-height: 250px; overflow: auto; }
+ul { margin: 4px 0 8px 20px; padding: 0; }
+fieldset { margin: 6px 0; padding: 6px; }
+small { display: block; margin-top: 2px; }
+</style>
+</head>
+<body>
+<h3>Encryption Interactive Playground</h3>
+
+<section>
+<label for="plaintext">Plaintext</label><br>
+<textarea id="plaintext" placeholder="Enter plaintext here...">Hello, Encryption!</textarea>
+</section>
+
+<section>
+<label for="ciphertext">Ciphertext / Output</label><br>
+<textarea id="ciphertext" placeholder="Ciphertext appears here..."></textarea>
+</section>
+
+<section>
+<label for="algoSelect">Single-step Algorithm</label>
+<select id="algoSelect">
+  <option value="caesar">Caesar (shift letters)</option>
+  <option value="vigenere">Vigenère (repeating key)</option>
+  <option value="xor">XOR (text key)</option>
+  <option value="aesgcm">AES-GCM (password)</option>
+  <option value="base64">Base64 Encode/Decode</option>
+  <option value="hex">Hex Encode/Decode</option>
+  <option value="reverse">Reverse Text/Bytes</option>
+</select>
+</section>
+
+<section id="paramsArea">
+<!-- Dynamic parameters appear here -->
+</section>
+
+<section>
+<button id="encryptBtn">Encrypt / Apply</button>
+<button id="decryptBtn">Decrypt / Reverse</button>
+<button id="stepEncryptBtn">Step Encrypt (show steps)</button>
+<button id="stepDecryptBtn">Step Decrypt</button>
+<button id="swapBtn">Swap Plain/Cipher</button>
+</section>
+
+<hr>
+
+<section>
+<h4>Pipeline: Chain multiple operations</h4>
+<label for="pipelineName">Pipeline name</label>
+<input id="pipelineName" type="text" value="My pipeline">
+<button id="addStepBtn">Add current operation to pipeline</button>
+<button id="runPipelineBtn">Run pipeline (encrypt)</button>
+<button id="runPipelineReverseBtn">Run pipeline reverse (decrypt)</button>
+<button id="stepPipelineNext">Next step</button>
+<button id="stepPipelinePrev">Previous step</button>
+<button id="clearPipelineBtn">Clear pipeline</button>
+<button id="savePipelineBtn">Save pipeline (download JSON)</button>
+<input type="file" id="loadPipelineFile" style="display:inline-block">
+<fieldset>
+<legend>Pipeline steps</legend>
+<ul id="pipelineList"></ul>
+</fieldset>
+</section>
+
+<hr>
+
+<section>
+<h4>Tools & Explorers</h4>
+<button id="freqBtn">Frequency analysis (selected or plaintext)</button>
+<button id="bruteCaesarBtn">Brute-force Caesar</button>
+<button id="mutateBtn">Flip bit in ciphertext</button>
+<label for="mutateIndex">index</label>
+<input type="number" id="mutateIndex" value="0" min="0">
+<label for="mutateBit">bit (0-7)</label>
+<input type="number" id="mutateBit" value="0" min="0" max="7">
+<button id="attemptDecryptMutBtn">Attempt decrypt mutated (using pipeline reverse)</button>
+</section>
+
+<hr>
+
+<section>
+<h4>Key & Entropy Tools</h4>
+<label for="randomKeyLen">Random key length (bytes)</label>
+<input id="randomKeyLen" type="number" value="16" min="1" max="64">
+<button id="genKeyBtn">Generate random key</button>
+<input id="generatedKey" type="text" placeholder="hex key appears here">
+<br>
+<button id="startEntropy">Start entropy capture</button>
+<button id="stopEntropy">Stop entropy capture</button>
+<small id="entropyStatus">Entropy: 0 samples</small>
+</section>
+
+<hr>
+
+<section>
+<h4>Brute-force Dictionary Attack (password-based)</h4>
+<label>Dictionary words (one per line)</label><br>
+<textarea id="dictArea" placeholder="password1\npassword2\n..."></textarea><br>
+<button id="runDictAttackBtn">Run dictionary attack on ciphertext with AES-GCM pipeline step</button>
+<button id="abortAttackBtn">Abort attack</button>
+<small id="attackStatus"></small>
+</section>
+
+<hr>
+
+<section>
+<h4>History & Snapshots</h4>
+<button id="saveSnapshotBtn">Save snapshot</button>
+<button id="clearSnapshotsBtn">Clear snapshots</button>
+<ol id="snapshotsList"></ol>
+</section>
+
+<hr>
+
+<section>
+<h4>Logs & Step Output</h4>
+<pre id="log" aria-live="polite"></pre>
+</section>
+
+<script>
+/*
+  Encryption Interactive Playground
+  - Many interactive controls
+  - Pipeline of string-transform operations
+  - Single-step algorithms and parameters
+  - AES-GCM via Web Crypto; PBKDF2 for key derivation
+  - Brute force for Caesar and dictionary attack for AES password
+  - Entropy capture via mouse movement
+  - Undo/Redo for main state (simple)
+*/
+
+/* Utilities */
+function utf8ToBytes(str) {
+  return new TextEncoder().encode(str);
+}
+function bytesToUtf8(bytes) {
+  return new TextDecoder().decode(bytes);
+}
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function hexToBytes(hex) {
+  if (hex.length % 2) hex = '0' + hex;
+  const out = new Uint8Array(hex.length/2);
+  for (let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);
+  return out;
+}
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i=0;i<bytes.length;i+=chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return arr;
+}
+function base64EncodeString(str) { return bytesToBase64(utf8ToBytes(str)); }
+function base64DecodeToString(b64) { return bytesToUtf8(base64ToBytes(b64)); }
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent = msg + "\n\n" + el.textContent;
+}
+
+/* State */
+let pipeline = []; // array of step objects {type, params}
+let pipelineIndex = -1;
+let intermediateOutputs = []; // outputs after each step during stepping
+let snapshots = [];
+let entropySamples = [];
+let capturingEntropy = false;
+let attackAbortFlag = false;
+
+/* UI elements */
+const algoSelect = document.getElementById('algoSelect');
+const paramsArea = document.getElementById('paramsArea');
+const plaintextEl = document.getElementById('plaintext');
+const ciphertextEl = document.getElementById('ciphertext');
+
+function createParamsUI() {
+  paramsArea.innerHTML = '';
+  const type = algoSelect.value;
+  if (type === 'caesar') {
+    const f = document.createElement('div');
+    f.innerHTML = '<label>Shift</label> <input id="paramShift" type="range" min="-25" max="25" value="3"><input id="paramShiftNum" type="number" min="-25" max="25" value="3">';
+    paramsArea.appendChild(f);
+    const r = document.getElementById('paramShift');
+    const n = document.getElementById('paramShiftNum');
+    r.addEventListener('input', ()=>n.value = r.value);
+    n.addEventListener('input', ()=>r.value = n.value);
+    const opt = document.createElement('div');
+    opt.innerHTML = '<label>Preserve non-letters?</label> <input id="paramPreserve" type="checkbox" checked>';
+    paramsArea.appendChild(opt);
+  } else if (type === 'vigenere') {
+    const f = document.createElement('div');
+    f.innerHTML = '<label>Key</label> <input id="paramVigKey" type="text" value="KEY">';
+    paramsArea.appendChild(f);
+    const o = document.createElement('div');
+    o.innerHTML = '<label>Non-letters ignore</label> <input id="paramVigIgnore" type="checkbox" checked>';
+    paramsArea.appendChild(o);
+  } else if (type === 'xor') {
+    const f = document.createElement('div');
+    f.innerHTML = '<label>Key (text)</label> <input id="paramXorKey" type="text" value="secret">';
+    paramsArea.appendChild(f);
+    const enc = document.createElement('div');
+    enc.innerHTML = '<label>Output encoding</label> <select id="paramXorEnc"><option value="base64">base64</option><option value="hex">hex</option></select>';
+    paramsArea.appendChild(enc);
+  } else if (type === 'aesgcm') {
+    const f = document.createElement('div');
+    f.innerHTML = '<label>Password</label> <input id="paramAesPass" type="text" value="password">';
+    paramsArea.appendChild(f);
+    const s = document.createElement('div');
+    s.innerHTML = '<label>PBKDF2 iterations</label> <input id="paramAesIter" type="number" value="100000" min="1000" max="1000000">';
+    paramsArea.appendChild(s);
+    const sl = document.createElement('div');
+    sl.innerHTML = '<label>Salt (hex) optional</label> <input id="paramAesSalt" type="text" placeholder="leave blank to randomize">';
+    paramsArea.appendChild(sl);
+    const iv = document.createElement('div');
+    iv.innerHTML = '<label>IV length bytes</label> <input id="paramAesIvLen" type="number" value="12" min="8" max="16">';
+    paramsArea.appendChild(iv);
+    const enc = document.createElement('div');
+    enc.innerHTML = '<label>Output format</label> <select id="paramAesFormat"><option value="json">JSON (iv,salt,ct base64)</option><option value="compact">compact base64</option></select>';
+    paramsArea.appendChild(enc);
+  } else if (type === 'base64') {
+    paramsArea.innerHTML = '<div><label>Mode</label> <select id="paramB64Mode"><option value="encode">Encode</option><option value="decode">Decode</option></select></div>';
+  } else if (type === 'hex') {
+    paramsArea.innerHTML = '<div><label>Mode</label> <select id="paramHexMode"><option value="encode">Encode</option><option value="decode">Decode</option></select></div>';
+  } else if (type === 'reverse') {
+    paramsArea.innerHTML = '<div><label>Interpret as bytes?</label> <input id="paramReverseBytes" type="checkbox"></div>';
+  }
+}
+createParamsUI();
+algoSelect.addEventListener('change', createParamsUI);
+
+/* Algorithms as string->Promise<string> and reverse functions */
+const operations = {
+  caesar: {
+    async enc(input, params) {
+      const shift = Number(params.shift)||0;
+      const preserve = params.preserve !== false;
+      return applyCaesar(input, shift, preserve);
+    },
+    async dec(input, params) {
+      const shift = Number(params.shift)||0;
+      const preserve = params.preserve !== false;
+      return applyCaesar(input, -shift, preserve);
+    }
+  },
+  vigenere: {
+    async enc(input, params) {
+      return applyVigenere(input, params.key||'KEY', true, params.ignore);
+    },
+    async dec(input, params) {
+      return applyVigenere(input, params.key||'KEY', false, params.ignore);
+    }
+  },
+  xor: {
+    async enc(input, params) {
+      const out = xorStringToEncoded(input, params.key||'secret', params.encoding||'base64');
+      return out;
+    },
+    async dec(input, params) {
+      const out = xorEncodedToString(input, params.key||'secret', params.encoding||'base64');
+      return out;
+    }
+  },
+  aesgcm: {
+    async enc(input, params) {
+      const pass = params.password||'password';
+      const iterations = Number(params.iterations)||100000;
+      let salt = params.saltHex ? hexToBytes(params.saltHex) : crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(Number(params.ivLen)||12));
+      const key = await deriveKeyPBKDF2(pass, salt, iterations, 'AES-GCM', 256);
+      const ct = new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM', iv:iv}, key, utf8ToBytes(input)));
+      const payload = {
+        algo: 'aes-gcm',
+        iv: bytesToBase64(iv),
+        salt: bytesToBase64(salt),
+        iterations: iterations,
+        ct: bytesToBase64(ct)
+      };
+      if (params.format === 'compact') {
+        // compact: base64(iv || salt || ciphertext) - not standard but a compact option
+        const combined = new Uint8Array(iv.length + salt.length + ct.length);
+        combined.set(iv,0); combined.set(salt, iv.length); combined.set(ct, iv.length+salt.length);
+        return bytesToBase64(combined);
+      } else {
+        return JSON.stringify(payload);
+      }
+    },
+    async dec(input, params) {
+      // input may be JSON or compact base64; if params.providePassword, use it else try to parse input
+      let parsed;
+      let pass = params.password || '';
+      if (params.format === 'compact') {
+        const combined = base64ToBytes(input);
+        const ivLen = Number(params.ivLen)||12;
+        const saltLen = 16;
+        const iv = combined.slice(0,ivLen);
+        const salt = combined.slice(ivLen, ivLen+saltLen);
+        const ct = combined.slice(ivLen+saltLen);
+        const iterations = Number(params.iterations)||100000;
+        const key = await deriveKeyPBKDF2(pass, salt, iterations, 'AES-GCM', 256);
+        const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:iv}, key, ct);
+        return bytesToUtf8(new Uint8Array(plain));
+      } else {
+        try {
+          parsed = JSON.parse(input);
+        } catch(e) { throw new Error('Invalid AES payload JSON'); }
+        const iv = base64ToBytes(parsed.iv);
+        const salt = base64ToBytes(parsed.salt);
+        const iterations = Number(parsed.iterations || params.iterations || 100000);
+        pass = params.password || params.passwordFromInput || params.password;
+        if (!pass) throw new Error('Password required for AES decryption');
+        const key = await deriveKeyPBKDF2(pass, salt, iterations, 'AES-GCM', 256);
+        try {
+          const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:iv}, key, base64ToBytes(parsed.ct));
+          return bytesToUtf8(new Uint8Array(pt));
+        } catch(e) {
+          throw new Error('Decryption failed: ' + e.message);
+        }
+      }
+    }
+  },
+  base64: {
+    async enc(input, params) {
+      return bytesToBase64(utf8ToBytes(input));
+    },
+    async dec(input, params) {
+      try { return bytesToUtf8(base64ToBytes(input)); } catch(e) { throw new Error('Invalid base64'); }
+    }
+  },
+  hex: {
+    async enc(input, params) {
+      return bytesToHex(utf8ToBytes(input));
+    },
+    async dec(input, params) {
+      try { return bytesToUtf8(hexToBytes(input)); } catch(e) { throw new Error('Invalid hex'); }
+    }
+  },
+  reverse: {
+    async enc(input, params) {
+      if (params.asBytes) {
+        const b = utf8ToBytes(input);
+        return bytesToHex(b.reverse());
+      } else {
+        return input.split('').reverse().join('');
+      }
+    },
+    async dec(input, params) {
+      if (params.asBytes) {
+        const b = hexToBytes(input);
+        return bytesToUtf8((new Uint8Array(b)).reverse());
+      } else {
+        return input.split('').reverse().join('');
+      }
+    }
+  }
+};
+
+/* Implementations for Caesar and Vigenere and XOR utilities */
+function applyCaesar(text, shift, preserve=true) {
+  const s = Number(shift)|0;
+  return text.split('').map(ch=>{
+    const code = ch.charCodeAt(0);
+    if (code >= 65 && code <= 90) {
+      const base = 65;
+      return String.fromCharCode(((code - base + s + 26*100) % 26) + base);
+    } else if (code >= 97 && code <= 122) {
+      const base = 97;
+      return String.fromCharCode(((code - base + s + 26*100) % 26) + base);
+    } else {
+      return preserve ? ch : '';
+    }
+  }).join('');
+}
+function applyVigenere(text, key, encrypt=true, ignore=true) {
+  const k = key.replace(/[^A-Za-z]/g,'').toUpperCase();
+  if (!k) return text;
+  let ki = 0;
+  return text.split('').map(ch=>{
+    const code = ch.charCodeAt(0);
+    const keyChar = k[ki % k.length];
+    if ((code >= 65 && code <= 90) || (code >=97 && code<=122)) {
+      const isUpper = code < 97;
+      const base = isUpper ? 65 : 97;
+      const keyShift = keyChar.charCodeAt(0) - 65;
+      const s = encrypt ? keyShift : -keyShift;
+      const out = String.fromCharCode(((code - base + s + 26*100) % 26) + base);
+      ki++;
+      return out;
+    } else {
+      if (ignore) return ch;
+      else return '';
+    }
+  }).join('');
+}
+function xorStringToEncoded(text, key, encoding='base64') {
+  const tb = utf8ToBytes(text);
+  const kb = utf8ToBytes(key);
+  const out = new Uint8Array(tb.length);
+  for (let i=0;i<tb.length;i++) out[i] = tb[i] ^ kb[i % kb.length];
+  if (encoding === 'hex') return bytesToHex(out);
+  return bytesToBase64(out);
+}
+function xorEncodedToString(encoded, key, encoding='base64') {
+  let bytes;
+  if (encoding === 'hex') bytes = hexToBytes(encoded);
+  else bytes = base64ToBytes(encoded);
+  const kb = utf8ToBytes(key);
+  const out = new Uint8Array(bytes.length);
+  for (let i=0;i<bytes.length;i++) out[i] = bytes[i] ^ kb[i % kb.length];
+  return bytesToUtf8(out);
+}
+
+/* WebCrypto helpers */
+async function deriveKeyPBKDF2(password, saltBytes, iterations, alg, length) {
+  const enc = new TextEncoder();
+  const passKey = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey','deriveBits']);
+  const key = await crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt: saltBytes, iterations: iterations, hash: 'SHA-256'},
+    passKey,
+    {name: alg, length: length},
+    false,
+    ['encrypt','decrypt']
+  );
+  return key;
+}
+
+/* Single-step UI actions */
+document.getElementById('encryptBtn').addEventListener('click', async ()=>{
+  try {
+    const type = algoSelect.value;
+    const params = readParamsFromUI(type);
+    const input = plaintextEl.value;
+    const out = await operations[type].enc(input, params);
+    ciphertextEl.value = out;
+    log(`Applied ${type} (encrypt) - result length ${out.length}`);
+  } catch(e) {
+    log('Error: '+e.message);
+  }
+});
+document.getElementById('decryptBtn').addEventListener('click', async ()=>{
+  try {
+    const type = algoSelect.value;
+    const params = readParamsFromUI(type);
+    const input = ciphertextEl.value;
+    const out = await operations[type].dec(input, params);
+    plaintextEl.value = out;
+    log(`Applied ${type} (decrypt)`);
+  } catch(e) {
+    log('Error: '+e.message);
+  }
+});
+document.getElementById('stepEncryptBtn').addEventListener('click', async ()=>{
+  // Show internal steps for chosen alg if available
+  const type = algoSelect.value;
+  const params = readParamsFromUI(type);
+  log(`Step trace for ${type} (encrypt):`);
+  if (type === 'caesar') {
+    const shift = Number(params.shift);
+    const example = plaintextEl.value;
+    for (let s = 0; s <= shift; s++) {
+      const intermediate = applyCaesar(example, s, params.preserve);
+      log(`shift ${s}: ${intermediate}`);
+    }
+  } else {
+    log('Detailed step tracing not implemented for this algorithm. Use pipeline stepping to explore combinations.');
+  }
+});
+document.getElementById('stepDecryptBtn').addEventListener('click', async ()=>{
+  const type = algoSelect.value;
+  const params = readParamsFromUI(type);
+  log(`Step trace for ${type} (decrypt):`);
+  if (type === 'caesar') {
+    const example = ciphertextEl.value;
+    for (let s = -25; s <= 25; s++) {
+      log(`shift ${s}: ${applyCaesar(example, s, params.preserve)}`);
+    }
+  } else {
+    log('Detailed step tracing not implemented for this algorithm.');
+  }
+});
+document.getElementById('swapBtn').addEventListener('click', ()=>{
+  const pt = plaintextEl.value;
+  plaintextEl.value = ciphertextEl.value;
+  ciphertextEl.value = pt;
+});
+
+/* Read parameters from UI */
+function readParamsFromUI(type) {
+  const p = {};
+  if (type === 'caesar') {
+    p.shift = Number(document.getElementById('paramShift').value);
+    p.preserve = document.getElementById('paramPreserve').checked;
+  } else if (type === 'vigenere') {
+    p.key = document.getElementById('paramVigKey').value;
+    p.ignore = document.getElementById('paramVigIgnore').checked;
+  } else if (type === 'xor') {
+    p.key = document.getElementById('paramXorKey').value;
+    p.encoding = document.getElementById('paramXorEnc').value;
+  } else if (type === 'aesgcm') {
+    p.password = document.getElementById('paramAesPass').value;
+    p.iterations = Number(document.getElementById('paramAesIter').value);
+    const s = document.getElementById('paramAesSalt').value.trim();
+    p.saltHex = s ? s : null;
+    p.ivLen = Number(document.getElementById('paramAesIvLen').value);
+    p.format = document.getElementById('paramAesFormat').value;
+  } else if (type === 'base64') {
+    p.mode = document.getElementById('paramB64Mode').value;
+  } else if (type === 'hex') {
+    p.mode = document.getElementById('paramHexMode').value;
+  } else if (type === 'reverse') {
+    p.asBytes = document.getElementById('paramReverseBytes').checked;
+  }
+  return p;
+}
+
+/* Pipeline management */
+function renderPipeline() {
+  const list = document.getElementById('pipelineList');
+  list.innerHTML = '';
+  pipeline.forEach((step, idx)=>{
+    const li = document.createElement('li');
+    const text = `${idx+1}. ${step.type} ${JSON.stringify(step.params)}`;
+    li.textContent = text;
+    const up = document.createElement('button'); up.textContent = '↑'; up.addEventListener('click', ()=>{ swapSteps(idx, idx-1); });
+    const down = document.createElement('button'); down.textContent = '↓'; down.addEventListener('click', ()=>{ swapSteps(idx, idx+1); });
+    const edit = document.createElement('button'); edit.textContent = 'edit'; edit.addEventListener('click', ()=>{ editStep(idx); });
+    const remove = document.createElement('button'); remove.textContent = 'remove'; remove.addEventListener('click', ()=>{ pipeline.splice(idx,1); renderPipeline(); });
+    li.appendChild(up); li.appendChild(down); li.appendChild(edit); li.appendChild(remove);
+    list.appendChild(li);
+  });
+}
+function swapSteps(a,b) {
+  if (a<0||b<0||a>=pipeline.length||b>=pipeline.length) return;
+  const t = pipeline[a]; pipeline[a]=pipeline[b]; pipeline[b]=t; renderPipeline();
+}
+function editStep(idx) {
+  const step = pipeline[idx];
+  const newParams = prompt('Edit JSON params for step: ' + step.type, JSON.stringify(step.params));
+  if (newParams !== null) {
+    try {
+      step.params = JSON.parse(newParams);
+      renderPipeline();
+    } catch(e) { alert('Invalid JSON'); }
+  }
+}
+document.getElementById('addStepBtn').addEventListener('click', ()=>{
+  const type = algoSelect.value;
+  const params = readParamsFromUI(type);
+  pipeline.push({type, params});
+  renderPipeline();
+});
+document.getElementById('clearPipelineBtn').addEventListener('click', ()=>{ pipeline=[]; renderPipeline(); });
+document.getElementById('savePipelineBtn').addEventListener('click', ()=>{
+  const name = (document.getElementById('pipelineName').value || 'pipeline') + '.json';
+  const blob = new Blob([JSON.stringify(pipeline,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('loadPipelineFile').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader(); r.onload = ()=> {
+    try { pipeline = JSON.parse(r.result); renderPipeline(); } catch(e){ alert('Invalid pipeline JSON'); }
+  }; r.readAsText(f);
+});
+
+/* Run pipeline forward (encrypt) */
+async function runPipelineForward(input) {
+  intermediateOutputs = [input];
+  let cur = input;
+  for (let i=0;i<pipeline.length;i++) {
+    const step = pipeline[i];
+    const op = operations[step.type];
+    if (!op) throw new Error('Unknown op '+step.type);
+    log(`Pipeline step ${i+1}: ${step.type}`);
+    cur = await op.enc(cur, step.params);
+    intermediateOutputs.push(cur);
+  }
+  return cur;
+}
+async function runPipelineReverse(input) {
+  intermediateOutputs = [input];
+  let cur = input;
+  for (let i=pipeline.length-1;i>=0;i--) {
+    const step = pipeline[i];
+    const op = operations[step.type];
+    log(`Pipeline reverse step ${i+1}: ${step.type}`);
+    cur = await op.dec(cur, step.params);
+    intermediateOutputs.push(cur);
+  }
+  return cur;
+}
+document.getElementById('runPipelineBtn').addEventListener('click', async ()=>{
+  try {
+    const input = plaintextEl.value;
+    const out = await runPipelineForward(input);
+    ciphertextEl.value = out;
+    log('Pipeline finished (encrypt).');
+  } catch(e) { log('Pipeline error: '+e.message); }
+});
+document.getElementById('runPipelineReverseBtn').addEventListener('click', async ()=>{
+  try {
+    const input = ciphertextEl.value;
+    const out = await runPipelineReverse(input);
+    plaintextEl.value = out;
+    log('Pipeline finished (reverse/decrypt).');
+  } catch(e) { log('Pipeline reverse error: '+e.message); }
+});
+
+document.getElementById('stepPipelineNext').addEventListener('click', async ()=>{
+  try {
+    if (pipelineIndex < pipeline.length - 1) {
+      pipelineIndex++;
+      const input = (pipelineIndex === 0) ? plaintextEl.value : intermediateOutputs[pipelineIndex];
+      // run only this step
+      const step = pipeline[pipelineIndex];
+      const out = await operations[step.type].enc(intermediateOutputs[pipelineIndex], step.params);
+      intermediateOutputs[pipelineIndex+1] = out;
+      ciphertextEl.value = out;
+      log(`Step ${pipelineIndex+1} applied: ${step.type}`);
+    } else {
+      log('Already at end of pipeline.');
+    }
+  } catch(e) { log('Step error: '+e.message); }
+});
+document.getElementById('stepPipelinePrev').addEventListener('click', async ()=>{
+  try {
+    if (pipelineIndex > -1) {
+      pipelineIndex--;
+      const out = (pipelineIndex === -1) ? plaintextEl.value : intermediateOutputs[pipelineIndex+1];
+      ciphertextEl.value = out;
+      log(`Stepped back to ${pipelineIndex+1}`);
+    } else {
+      log('Already at pipeline start.');
+    }
+  } catch(e) { log('Step error: '+e.message); }
+});
+
+/* Frequency analysis and brute-force Caesar */
+document.getElementById('freqBtn').addEventListener('click', ()=>{
+  const txt = window.getSelection().toString() || plaintextEl.value || ciphertextEl.value;
+  if (!txt) { log('No text for frequency analysis.'); return; }
+  const freq = {};
+  for (let ch of txt) {
+    freq[ch] = (freq[ch]||0) + 1;
+  }
+  const arr = Object.keys(freq).map(k=>({k,count:freq[k]})).sort((a,b)=>b.count-a.count);
+  log('Frequency analysis:\n' + arr.map(a=>`${a.k}: ${a.count}`).join('\n'));
+});
+document.getElementById('bruteCaesarBtn').addEventListener('click', ()=>{
+  const txt = ciphertextEl.value || plaintextEl.value;
+  if (!txt) { log('No text to brute force'); return; }
+  const outputs = [];
+  for (let s = -25; s<=25; s++) {
+    outputs.push(`${s}: ${applyCaesar(txt, s, true)}`);
+  }
+  log('Caesar brute force:\n' + outputs.join('\n'));
+});
+
+/* Mutate ciphertext bit flipping */
+document.getElementById('mutateBtn').addEventListener('click', ()=>{
+  const idx = Number(document.getElementById('mutateIndex').value);
+  const bit = Number(document.getElementById('mutateBit').value);
+  const ct = ciphertextEl.value;
+  if (!ct) { log('No ciphertext'); return; }
+  // treat ciphertext as base64 or hex or raw text; try base64 decode first
+  let bytes;
+  try { bytes = base64ToBytes(ct); }
+  catch(e) {
+    try { bytes = hexToBytes(ct); } catch(e2) { bytes = utf8ToBytes(ct); }
+  }
+  if (idx < 0 || idx >= bytes.length) { log('Index out of range'); return; }
+  const mutated = new Uint8Array(bytes);
+  mutated[idx] = mutated[idx] ^ (1 << bit);
+  ciphertextEl.value = bytesToBase64(mutated);
+  log(`Flipped bit ${bit} at index ${idx}. New ciphertext (base64).`);
+});
+document.getElementById('attemptDecryptMutBtn').addEventListener('click', async ()=>{
+  try {
+    const out = await runPipelineReverse(ciphertextEl.value);
+    plaintextEl.value = out;
+    log('Attempted decryption of mutated ciphertext with pipeline reverse completed.');
+  } catch(e) { log('Decrypt mutated error: '+e.message); }
+});
+
+/* Key generation and entropy capture */
+document.getElementById('genKeyBtn').addEventListener('click', ()=>{
+  const len = Number(document.getElementById('randomKeyLen').value) || 16;
+  const arr = crypto.getRandomValues(new Uint8Array(len));
+  document.getElementById('generatedKey').value = bytesToHex(arr);
+  log('Random key generated (hex).');
+});
+document.getElementById('startEntropy').addEventListener('click', ()=>{
+  entropySamples = [];
+  capturingEntropy = true;
+  document.getElementById('entropyStatus').textContent = 'Entropy: 0 samples (move mouse over page)';
+});
+document.getElementById('stopEntropy').addEventListener('click', ()=>{
+  capturingEntropy = false;
+  document.getElementById('entropyStatus').textContent = `Entropy stopped: ${entropySamples.length} samples`;
+});
+document.addEventListener('mousemove', (e)=>{
+  if (!capturingEntropy) return;
+  // collect low-entropy samples of position and timestamp
+  entropySamples.push((e.clientX & 0xff) ^ (e.clientY & 0xff) ^ (Date.now() & 0xff));
+  document.getElementById('entropyStatus').textContent = `Entropy: ${entropySamples.length} samples`;
+  if (entropySamples.length > 256) capturingEntropy = false;
+});
+
+/* Dictionary attack for AES-GCM-like payload in pipeline */
+document.getElementById('runDictAttackBtn').addEventListener('click', async ()=>{
+  attackAbortFlag = false;
+  const dict = document.getElementById('dictArea').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if (!dict.length) { log('Dictionary empty'); return; }
+  const ct = ciphertextEl.value;
+  if (!ct) { log('No ciphertext'); return; }
+  document.getElementById('attackStatus').textContent = 'Running...';
+  for (let i=0;i<dict.length;i++) {
+    if (attackAbortFlag) { log('Attack aborted'); document.getElementById('attackStatus').textContent = 'Aborted'; return; }
+    const pass = dict[i];
+    try {
+      // attempt decrypt using AES-GCM step if pipeline contains AES or assume single aesgcm
+      // We'll try decrypting directly as AES JSON or compact
+      let success = false;
+      try {
+        const parsed = JSON.parse(ct);
+        if (parsed.algo === 'aes-gcm') {
+          const salt = base64ToBytes(parsed.salt);
+          const iv = base64ToBytes(parsed.iv);
+          const iters = Number(parsed.iterations||100000);
+          const key = await deriveKeyPBKDF2(pass, salt, iters, 'AES-GCM', 256);
+          const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:iv}, key, base64ToBytes(parsed.ct));
+          const txt = bytesToUtf8(new Uint8Array(pt));
+          log(`Password found: ${pass}\nPlaintext: ${txt}`);
+          document.getElementById('attackStatus').textContent = `Found: ${pass}`;
+          success = true;
+          break;
+        }
+      } catch(e) {
+        // maybe compact base64: attempt simple decode
+        try {
+          const combined = base64ToBytes(ct);
+          // try many possible iv sizes and salt sizes - heuristic
+          const ivLen = 12; const saltLen = 16;
+          if (combined.length > ivLen + saltLen) {
+            const iv = combined.slice(0,ivLen);
+            const salt = combined.slice(ivLen, ivLen+saltLen);
+            const ctbytes = combined.slice(ivLen+saltLen);
+            const iters = 100000;
+            const key = await deriveKeyPBKDF2(pass, salt, iters, 'AES-GCM', 256);
+            const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:iv}, key, ctbytes);
+            const txt = bytesToUtf8(new Uint8Array(pt));
+            log(`Password found (compact): ${pass}\nPlaintext: ${txt}`);
+            document.getElementById('attackStatus').textContent = `Found: ${pass}`;
+            success = true;
+            break;
+          }
+        } catch(e2){ /* failed for this pass */ }
+      }
+    } catch(e) {}
+    if (i % 5 === 0) {
+      document.getElementById('attackStatus').textContent = `Tried ${i+1}/${dict.length}`;
+      await new Promise(r=>setTimeout(r,50));
+    }
+  }
+  if (!attackAbortFlag) document.getElementById('attackStatus').textContent = 'Finished';
+});
+document.getElementById('abortAttackBtn').addEventListener('click', ()=>{ attackAbortFlag = true; });
+
+/* History & snapshots */
+document.getElementById('saveSnapshotBtn').addEventListener('click', ()=>{
+  const s = {
+    time: new Date().toISOString(),
+    plaintext: plaintextEl.value,
+    ciphertext: ciphertextEl.value,
+    pipeline: pipeline
+  };
+  snapshots.push(s);
+  renderSnapshots();
+  log('Snapshot saved.');
+});
+document.getElementById('clearSnapshotsBtn').addEventListener('click', ()=>{ snapshots = []; renderSnapshots(); log('Snapshots cleared'); });
+function renderSnapshots() {
+  const list = document.getElementById('snapshotsList');
+  list.innerHTML = '';
+  snapshots.forEach((s, idx)=> {
+    const li = document.createElement('li');
+    const loadBtn = document.createElement('button'); loadBtn.textContent = 'load'; loadBtn.addEventListener('click', ()=>{
+      plaintextEl.value = s.plaintext;
+      ciphertextEl.value = s.ciphertext;
+      pipeline = s.pipeline || [];
+      renderPipeline();
+      log('Snapshot loaded: ' + s.time);
+    });
+    const delBtn = document.createElement('button'); delBtn.textContent = 'del'; delBtn.addEventListener('click', ()=>{ snapshots.splice(idx,1); renderSnapshots(); });
+    li.textContent = `${s.time} `;
+    li.appendChild(loadBtn); li.appendChild(delBtn);
+    list.appendChild(li);
+  });
+}
+
+/* Undo/Redo (simple): track a small stack of states */
+let undoStack = [], redoStack = [];
+function pushState() {
+  undoStack.push({plaintext: plaintextEl.value, ciphertext: ciphertextEl.value, pipeline: JSON.parse(JSON.stringify(pipeline))});
+  if (undoStack.length > 50) undoStack.shift();
+  redoStack = [];
+}
+document.addEventListener('input', (e)=>{ pushState(); }, true); // naive but works
+function undo() {
+  if (!undoStack.length) return;
+  const s = undoStack.pop();
+  redoStack.push({plaintext: plaintextEl.value, ciphertext: ciphertextEl.value, pipeline: JSON.parse(JSON.stringify(pipeline))});
+  plaintextEl.value = s.plaintext; ciphertextEl.value = s.ciphertext; pipeline = s.pipeline; renderPipeline();
+}
+function redo() {
+  if (!redoStack.length) return;
+  const s = redoStack.pop();
+  undoStack.push({plaintext: plaintextEl.value, ciphertext: ciphertextEl.value, pipeline: JSON.parse(JSON.stringify(pipeline))});
+  plaintextEl.value = s.plaintext; ciphertextEl.value = s.ciphertext; pipeline = s.pipeline; renderPipeline();
+}
+document.addEventListener('keydown', (e)=> {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { undo(); e.preventDefault(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') { redo(); e.preventDefault(); }
+});
+
+/* Initialize */
+renderPipeline();
+log('Ready. Use the controls to experiment with encryption. Many different workflows are possible: single-step ops, build pipelines, step through, mutate bits and attempt decryption, or run small dictionary attacks.');
+
+/* End of script */
+</script>
+</body>
+</html>

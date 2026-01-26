@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Mutex Simulator - Interactive</title>
+<style>
+/* Minimal styling only to keep layout readable; otherwise plain elements */
+body { font-family: Arial, sans-serif; margin: 10px; color: #000; background: #fff; }
+section { margin-bottom: 12px; padding: 6px; border: 1px solid #000; }
+label { display: inline-block; width: 160px; }
+input[type="text"], input[type="number"], select, textarea { width: 320px; }
+textarea { height: 80px; }
+.small { width: 60px; }
+.mono { font-family: monospace; white-space: pre-wrap; }
+.inline { display: inline-block; vertical-align: middle; }
+</style>
+</head>
+<body>
+<h1>Mutex Simulator</h1>
+
+<section>
+  <strong>Overview</strong>
+  <div>
+    This simulator models mutexes and threads. You can create threads and locks, write small thread scripts, pick scheduling policies, and explore behaviors: contention, starvation, priority inversion, reentrancy, try-locks, timed locks, nested locks, deadlocks, and more. Use Start/Step/Run to control execution. Logs and metrics update live.
+  </div>
+</section>
+
+<section>
+  <strong>Simulation Controls</strong><br>
+  <label>Tick interval (ms):</label><input id="tickInterval" type="number" value="200" class="small"> 
+  <label>Run speed slider:</label><input id="speedSlider" type="range" min="50" max="1000" value="200"><br><br>
+
+  <button id="startBtn">Start</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="stepBtn">Step</button>
+  <button id="resetBtn">Reset</button>
+  <button id="randomizeBtn">Randomize Threads</button>
+  <label>Seed:</label><input id="seedInput" type="text" value="42" class="small">
+  <br><br>
+
+  <label>Scheduler:</label>
+  <select id="schedulerSelect">
+    <option value="rr">Round-Robin (cooperative)</option>
+    <option value="preemptive-rr">Preemptive Round-Robin</option>
+    <option value="priority">Priority-based (preemptive)</option>
+    <option value="cooperative">Cooperative</option>
+  </select>
+  <label>Enable Preemption:</label><input type="checkbox" id="preemptCheck"><br>
+
+  <label>Enable Priority Inheritance:</label><input type="checkbox" id="priorityInheritance">
+  <label>Detect Deadlock Automatically:</label><input type="checkbox" id="deadlockDetect" checked><br>
+
+  <label>Auto-detect starvation (threshold ms):</label><input id="starveMs" type="number" value="5000" class="small">
+</section>
+
+<section>
+  <strong>Locks</strong><br>
+  <label>Lock name:</label><input id="newLockName" type="text" value="L1">
+  <label>Type:</label>
+  <select id="lockTypeSelect">
+    <option value="mutex">Mutex (binary)</option>
+    <option value="recursive">Recursive Mutex</option>
+    <option value="ticket">Ticket Lock (FIFO)</option>
+    <option value="spin">Spinlock</option>
+    <option value="rw">Read-Write Lock (read-pref)</option>
+  </select>
+  <button id="addLockBtn">Add Lock</button>
+  <button id="clearLocksBtn">Clear Locks</button>
+  <div id="locksList"></div>
+</section>
+
+<section>
+  <strong>Threads</strong><br>
+  <label>Thread name:</label><input id="newThreadName" type="text" value="T1">
+  <label>Priority (higher = chooses first):</label><input id="newThreadPriority" type="number" value="1" class="small">
+  <label>Behavior:</label>
+  <select id="behaviorSelect">
+    <option value="script">Custom Script</option>
+    <option value="random">Stochastic</option>
+    <option value="busy">Busy Worker</option>
+    <option value="reader">Reader (for RW lock)</option>
+  </select>
+  <button id="addThreadBtn">Add Thread</button>
+  <button id="clearThreadsBtn">Clear Threads</button>
+  <div id="threadsList"></div>
+  <br>
+  <label>Default script template:</label><br>
+  <textarea id="scriptTemplate">acquire L1
+hold 300
+release L1
+sleep 200
+acquire L1
+hold 200
+release L1
+end</textarea>
+  <button id="applyTemplateBtn">Apply Template to Selected</button>
+</section>
+
+<section>
+  <strong>Thread Script Language</strong>
+  <div>
+    Simple commands (one per line). Parameters separated by spaces.
+    Commands:
+    acquire LOCKNAME - blocks until lock obtained (or respects try/timeout if specified)
+    tryacq LOCKNAME - try-lock, does not block
+    timeacq LOCKNAME ms - try to acquire with timeout (ms)
+    release LOCKNAME
+    hold ms - simulate working inside critical section or outside
+    sleep ms - non-CPU wait (yields)
+    yield - voluntarily yield scheduler
+    nested - placeholder for nested acquisitions in script
+    setprio N - change this thread's priority
+    end - thread terminates
+    Comments start with #
+  </div>
+</section>
+
+<section>
+  <strong>Thread Inspector & Controls</strong>
+  <div id="threadInspector"></div>
+</section>
+
+<section>
+  <strong>Execution & Manual Controls</strong><br>
+  <button id="stepSelectedBtn">Step Selected Thread</button>
+  <button id="resumeSelectedBtn">Resume Selected Thread</button>
+  <button id="suspendSelectedBtn">Suspend Selected Thread</button>
+  <button id="killSelectedBtn">Kill Selected Thread</button>
+  <label>Force acquire (bypass) lock:</label><input id="forceLockSelect" type="text" class="small" placeholder="L1">
+  <button id="forceAcquireBtn">Force Acquire</button>
+  <button id="forceReleaseBtn">Force Release</button>
+</section>
+
+<section>
+  <strong>Metrics & Analyzer</strong><br>
+  <button id="showWaitStatsBtn">Compute Wait Stats</button>
+  <button id="detectDeadlocksBtn">Detect Deadlocks Now</button>
+  <div id="metricsArea" class="mono"></div>
+</section>
+
+<section>
+  <strong>Logs & Timeline</strong><br>
+  <label>Max log lines:</label><input id="maxLogLines" type="number" value="500" class="small">
+  <button id="clearLogBtn">Clear Log</button>
+  <div id="logArea" class="mono" style="height:200px; overflow:auto; border:1px solid #000; padding:4px;"></div>
+</section>
+
+<script>
+/*
+  Mutex Simulator JavaScript
+  - Supports multiple locks (mutex, recursive, ticket, spinlock, rw)
+  - Multiple threads with simple script language
+  - Scheduler options: rr, preemptive-rr, priority, cooperative
+  - Priority inheritance simulation
+  - Deadlock detection and metrics
+  - Manual control per-thread
+*/
+
+/* Utility PRNG for deterministic runs */
+function makeRNG(seedStr) {
+  let seed = 0;
+  for (let i=0;i<seedStr.length;i++) seed = (seed*31 + seedStr.charCodeAt(i))|0;
+  return function() {
+    seed = (seed ^ 0x6D2B79F5) + ((seed << 5) | 0);
+    seed = seed | 0;
+    return Math.abs(seed) / 0x7FFFFFFF;
+  }
+}
+
+/* Global simulation state */
+const Sim = {
+  ticks: 0,
+  running: false,
+  intervalId: null,
+  tickInterval: 200,
+  speedMs: 200,
+  scheduler: 'rr',
+  preempt: false,
+  threads: [],
+  locks: {},
+  nextThreadId: 1,
+  nextLockId: 1,
+  logLines: [],
+  maxLog: 500,
+  rng: makeRNG("42"),
+  seed: "42",
+  priorityInheritance: false,
+  deadlockDetect: true,
+  starveMs: 5000
+};
+
+/* Logging */
+function log(msg) {
+  const t = Sim.ticks;
+  const line = '['+t+'] ' + msg;
+  Sim.logLines.push(line);
+  if (Sim.logLines.length > Sim.maxLog) Sim.logLines.shift();
+  const area = document.getElementById('logArea');
+  area.textContent = Sim.logLines.join("\n");
+  area.scrollTop = area.scrollHeight;
+}
+
+/* Thread model */
+class Thread {
+  constructor(name, priority=1, scriptText="", behavior="script") {
+    this.id = Sim.nextThreadId++;
+    this.name = name || ("T"+this.id);
+    this.priority = priority;
+    this.basePriority = priority;
+    this.state = "ready"; // ready, running, blocked, sleeping, finished, suspended
+    this.blockedOn = null; // lock name or null
+    this.holdUntilTick = 0; // for sleeping or holding
+    this.scriptText = scriptText;
+    this.actions = parseScript(scriptText);
+    this.pc = 0;
+    this.stats = {
+      acquired: {}, // per lock counts
+      waitTotal: {}, // total wait ms per lock
+      lastWaitStart: null
+    };
+    this.behavior = behavior;
+    this.recentAction = "";
+    this.waitingSinceTick = null;
+    this.suspended = false;
+  }
+
+  nameTag() { return this.name + " (p="+this.priority+")"; }
+
+  currentAction() {
+    return this.actions[this.pc];
+  }
+
+  isFinished() { return this.state === "finished"; }
+}
+
+/* Lock implementations */
+class LockBase {
+  constructor(name, type) {
+    this.name = name;
+    this.type = type;
+    this.owner = null; // for mutexes: thread id
+    this.queue = []; // waiting thread ids FIFO
+    this.recursiveCount = 0;
+    this.ticketNext = 0;
+    this.ticketNow = 0;
+    this.rwReaders = new Set();
+    this.rwWriter = null;
+    this.stats = {
+      acquisitions: 0,
+      contentions: 0,
+      waitTotalMs: 0,
+      lastAcquiredTick: null
+    };
+  }
+
+  info() {
+    return {
+      name: this.name,
+      type: this.type,
+      owner: this.owner,
+      queue: this.queue.slice(),
+      recursiveCount: this.recursiveCount,
+      ticketNext: this.ticketNext,
+      ticketNow: this.ticketNow
+    }
+  }
+}
+
+/* Script parsing */
+function parseScript(text) {
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l && !l.startsWith("#"));
+  const actions = [];
+  for (let ln of lines) {
+    const parts = ln.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    if (cmd === 'acquire') actions.push({cmd:'acquire', lock:parts[1]});
+    else if (cmd === 'tryacq') actions.push({cmd:'tryacq', lock:parts[1]});
+    else if (cmd === 'timeacq') actions.push({cmd:'timeacq', lock:parts[1], ms:Math.max(0, parseInt(parts[2]||0))});
+    else if (cmd === 'release') actions.push({cmd:'release', lock:parts[1]});
+    else if (cmd === 'hold') actions.push({cmd:'hold', ms:Math.max(0, parseInt(parts[1]||0))});
+    else if (cmd === 'sleep') actions.push({cmd:'sleep', ms:Math.max(0, parseInt(parts[1]||0))});
+    else if (cmd === 'yield') actions.push({cmd:'yield'});
+    else if (cmd === 'setprio') actions.push({cmd:'setprio', n:parseInt(parts[1]||0)});
+    else if (cmd === 'end') actions.push({cmd:'end'});
+    else actions.push({cmd:'noop', raw:ln});
+  }
+  return actions;
+}
+
+/* Lock utilities */
+function addLock(name, type) {
+  if (!name) name = "L"+Sim.nextLockId++;
+  if (Sim.locks[name]) {
+    log("Lock " + name + " already exists");
+    return null;
+  }
+  Sim.locks[name] = new LockBase(name, type);
+  log("Created lock " + name + " (" + type + ")");
+  refreshUI();
+  return Sim.locks[name];
+}
+
+function clearLocks() {
+  Sim.locks = {};
+  log("Cleared all locks");
+  refreshUI();
+}
+
+/* Thread utilities */
+function addThread(name, priority=1, script="", behavior="script") {
+  const t = new Thread(name, priority, script, behavior);
+  Sim.threads.push(t);
+  log("Added thread " + t.nameTag());
+  refreshUI();
+  return t;
+}
+
+function clearThreads() {
+  Sim.threads = [];
+  Sim.nextThreadId = 1;
+  log("Cleared threads");
+  refreshUI();
+}
+
+/* Scheduler choices - decide which thread runs next */
+function pickNextThread() {
+  const runnable = Sim.threads.filter(t => !t.suspended && (t.state==='ready' || t.state==='running'));
+  if (runnable.length === 0) return null;
+  if (Sim.scheduler === 'rr' || Sim.scheduler === 'cooperative' || Sim.scheduler === 'preemptive-rr') {
+    // simple round-robin order by id but rotate starting with last chosen
+    if (!Sim._rrIndex || Sim._rrIndex >= runnable.length) Sim._rrIndex = 0;
+    const t = runnable[Sim._rrIndex % runnable.length];
+    Sim._rrIndex = (Sim._rrIndex + 1) % runnable.length;
+    return t;
+  } else if (Sim.scheduler === 'priority') {
+    // highest effective priority first; break ties by id
+    const sorted = runnable.slice().sort((a,b)=> (b.priority - a.priority) || (a.id - b.id));
+    return sorted[0];
+  }
+  return runnable[0];
+}
+
+/* Attempt to acquire a lock for a thread (blocking behavior) */
+function attemptAcquire(thread, lockName, options={try:false, timeout:null}) {
+  const lock = Sim.locks[lockName];
+  if (!lock) {
+    log(thread.nameTag() + " attempted acquire on unknown lock " + lockName);
+    return {success:false, reason:'no-such-lock'};
+  }
+  const type = lock.type;
+  if (type === 'rw') {
+    // simple read-pref: acquire as write if thread requests exclusive (script uses acquire)
+    // For simplicity, treat acquire as write; tryacq as try write.
+    if (lock.rwWriter === null && lock.rwReaders.size === 0) {
+      lock.rwWriter = thread.id;
+      lock.stats.acquisitions++;
+      lock.stats.lastAcquiredTick = Sim.ticks;
+      thread.stats.acquired[lockName] = (thread.stats.acquired[lockName]||0) + 1;
+      log(thread.nameTag() + " acquired writer lock " + lockName);
+      return {success:true};
+    } else {
+      // blocked
+      if (options.try) {
+        log(thread.nameTag() + " tryacq failed on " + lockName);
+        return {success:false};
+      }
+      if (options.timeout === 0) {
+        log(thread.nameTag() + " timeacq(0) immediate fail on " + lockName);
+        return {success:false};
+      }
+      // enqueue
+      if (!lock.queue.includes(thread.id)) lock.queue.push(thread.id);
+      lock.stats.contentions++;
+      thread.state = 'blocked';
+      thread.blockedOn = lockName;
+      thread.waitingSinceTick = Sim.ticks;
+      log(thread.nameTag() + " blocked waiting for writer lock " + lockName);
+      if (options.timeout != null) {
+        thread._acqTimeoutTick = Sim.ticks + Math.ceil(options.timeout / Sim.tickInterval);
+      }
+      return {success:false, blocked:true};
+    }
+  } else if (type === 'recursive') {
+    if (lock.owner === null || lock.owner === thread.id) {
+      lock.owner = thread.id;
+      lock.recursiveCount = (lock.recursiveCount||0) + 1;
+      lock.stats.acquisitions++;
+      lock.stats.lastAcquiredTick = Sim.ticks;
+      thread.stats.acquired[lockName] = (thread.stats.acquired[lockName]||0) + 1;
+      log(thread.nameTag() + " acquired recursive lock " + lockName + " (count="+lock.recursiveCount+")");
+      return {success:true};
+    } else {
+      if (options.try) {
+        log(thread.nameTag() + " tryacq failed on " + lockName);
+        return {success:false};
+      }
+      if (!lock.queue.includes(thread.id)) lock.queue.push(thread.id);
+      lock.stats.contentions++;
+      thread.state = 'blocked';
+      thread.blockedOn = lockName;
+      thread.waitingSinceTick = Sim.ticks;
+      log(thread.nameTag() + " blocked waiting for recursive lock " + lockName);
+      if (options.timeout != null) {
+        thread._acqTimeoutTick = Sim.ticks + Math.ceil(options.timeout / Sim.tickInterval);
+      }
+      return {success:false, blocked:true};
+    }
+  } else if (type === 'ticket') {
+    // FIFO ticket lock
+    const myTicket = lock.ticketNext++;
+    if (myTicket === lock.ticketNow && lock.owner === null) {
+      lock.owner = thread.id;
+      lock.stats.acquisitions++;
+      lock.stats.lastAcquiredTick = Sim.ticks;
+      thread.stats.acquired[lockName] = (thread.stats.acquired[lockName]||0) + 1;
+      log(thread.nameTag() + " acquired ticket lock " + lockName + " ticket=" + myTicket);
+      return {success:true};
+    } else {
+      if (options.try) {
+        log(thread.nameTag() + " tryacq failed on ticket " + lockName);
+        return {success:false};
+      }
+      lock.queue.push(thread.id);
+      lock.stats.contentions++;
+      thread.state = 'blocked';
+      thread.blockedOn = lockName;
+      thread.waitingSinceTick = Sim.ticks;
+      log(thread.nameTag() + " queued for ticket lock " + lockName + " ticket=" + myTicket);
+      if (options.timeout != null) {
+        thread._acqTimeoutTick = Sim.ticks + Math.ceil(options.timeout / Sim.tickInterval);
+      }
+      return {success:false, blocked:true};
+    }
+  } else if (type === 'spin') {
+    // spinlock: if free, acquire; if not, either block or spin (we simulate as blocking to avoid busy loop)
+    if (lock.owner === null) {
+      lock.owner = thread.id;
+      lock.stats.acquisitions++;
+      lock.stats.lastAcquiredTick = Sim.ticks;
+      thread.stats.acquired[lockName] = (thread.stats.acquired[lockName]||0) + 1;
+      log(thread.nameTag() + " acquired spinlock " + lockName);
+      return {success:true};
+    } else {
+      if (options.try) {
+        log(thread.nameTag() + " tryacq failed on " + lockName);
+        return {success:false};
+      }
+      lock.queue.push(thread.id);
+      lock.stats.contentions++;
+      thread.state = 'blocked';
+      thread.blockedOn = lockName;
+      thread.waitingSinceTick = Sim.ticks;
+      log(thread.nameTag() + " blocked (spin) waiting for " + lockName);
+      if (options.timeout != null) {
+        thread._acqTimeoutTick = Sim.ticks + Math.ceil(options.timeout / Sim.tickInterval);
+      }
+      return {success:false, blocked:true};
+    }
+  } else { // default mutex
+    if (lock.owner === null) {
+      lock.owner = thread.id;
+      lock.stats.acquisitions++;
+      lock.stats.lastAcquiredTick = Sim.ticks;
+      thread.stats.acquired[lockName] = (thread.stats.acquired[lockName]||0) + 1;
+      log(thread.nameTag() + " acquired mutex " + lockName);
+      return {success:true};
+    } else {
+      if (options.try) {
+        log(thread.nameTag() + " tryacq failed on " + lockName);
+        return {success:false};
+      }
+      if (!lock.queue.includes(thread.id)) lock.queue.push(thread.id);
+      lock.stats.contentions++;
+      thread.state = 'blocked';
+      thread.blockedOn = lockName;
+      thread.waitingSinceTick = Sim.ticks;
+      log(thread.nameTag() + " blocked waiting for " + lockName);
+      if (options.timeout != null) {
+        thread._acqTimeoutTick = Sim.ticks + Math.ceil(options.timeout / Sim.tickInterval);
+      }
+      return {success:false, blocked:true};
+    }
+  }
+}
+
+/* Release lock */
+function releaseLock(thread, lockName) {
+  const lock = Sim.locks[lockName];
+  if (!lock) {
+    log(thread.nameTag() + " attempted release on unknown lock " + lockName);
+    return false;
+  }
+  const type = lock.type;
+  if (type === 'rw') {
+    if (lock.rwWriter === thread.id) {
+      lock.rwWriter = null;
+      lock.stats.lastAcquiredTick = null;
+      log(thread.nameTag() + " released writer lock " + lockName);
+      wakeNext(lock);
+      return true;
+    } else if (lock.rwReaders.has(thread.id)) {
+      lock.rwReaders.delete(thread.id);
+      log(thread.nameTag() + " released reader lock " + lockName);
+      if (lock.rwReaders.size === 0) wakeNext(lock);
+      return true;
+    } else {
+      log(thread.nameTag() + " attempted to release rw lock " + lockName + " but not owner");
+      return false;
+    }
+  } else if (type === 'recursive') {
+    if (lock.owner === thread.id) {
+      lock.recursiveCount = Math.max(0, lock.recursiveCount-1);
+      if (lock.recursiveCount === 0) {
+        lock.owner = null;
+        log(thread.nameTag() + " released recursive lock " + lockName);
+        wakeNext(lock);
+      } else {
+        log(thread.nameTag() + " released recursive lock " + lockName + " (count="+lock.recursiveCount+")");
+      }
+      return true;
+    } else {
+      log(thread.nameTag() + " attempted to release recursive lock " + lockName + " but not owner");
+      return false;
+    }
+  } else if (type === 'ticket') {
+    if (lock.owner === thread.id) {
+      lock.owner = null;
+      lock.ticketNow++;
+      log(thread.nameTag() + " released ticket lock " + lockName);
+      wakeNext(lock);
+      return true;
+    } else {
+      log(thread.nameTag() + " attempted to release ticket lock " + lockName + " but not owner");
+      return false;
+    }
+  } else {
+    if (lock.owner === thread.id) {
+      lock.owner = null;
+      log(thread.nameTag() + " released mutex " + lockName);
+      wakeNext(lock);
+      return true;
+    } else {
+      log(thread.nameTag() + " attempted to release lock " + lockName + " but not owner");
+      return false;
+    }
+  }
+}
+
+/* Wake next waiting thread according to lock type */
+function wakeNext(lock) {
+  if (!lock) return;
+  if (lock.type === 'rw') {
+    // prefer readers: wake all readers until writer in queue? For simplicity, if first queued thread exists and is a writer (we don't annotate), grab next
+    if (lock.queue.length === 0) return;
+    const nid = lock.queue.shift();
+    const t = Sim.threads.find(x=>x.id===nid);
+    if (!t) return;
+    // grant writer
+    lock.rwWriter = nid;
+    t.state = 'ready';
+    t.blockedOn = null;
+    t.waitingSinceTick = null;
+    log("Woke " + t.nameTag() + " as writer for " + lock.name);
+    return;
+  } else if (lock.type === 'ticket') {
+    // find the queued thread whose ticket equals ticketNow
+    if (lock.queue.length === 0) return;
+    const nid = lock.queue.shift();
+    lock.owner = nid;
+    const t = Sim.threads.find(x=>x.id===nid);
+    if (t) {
+      t.state = 'ready';
+      t.blockedOn = null;
+      t.waitingSinceTick = null;
+      log("Woke " + t.nameTag() + " (ticket) for " + lock.name);
+    }
+    return;
+  } else {
+    // regular mutex or spin or recursive
+    if (lock.queue.length === 0) return;
+    const nid = lock.queue.shift();
+    lock.owner = nid;
+    lock.recursiveCount = (lock.type==='recursive') ? 1 : 0;
+    const t = Sim.threads.find(x=>x.id===nid);
+    if (t) {
+      t.state = 'ready';
+      t.blockedOn = null;
+      t.waitingSinceTick = null;
+      log("Woke " + t.nameTag() + " for " + lock.name);
+    }
+    return;
+  }
+}
+
+/* Force acquire (bypass) */
+function forceAcquire(thread, lockName) {
+  const lock = Sim.locks[lockName];
+  if (!lock) { log("No such lock "+lockName); return; }
+  lock.owner = thread.id;
+  lock.recursiveCount = 1;
+  lock.queue = lock.queue.filter(id=>id!==thread.id);
+  thread.stats.acquired[lockName] = (thread.stats.acquired[lockName]||0) + 1;
+  log(thread.nameTag() + " force-acquired " + lockName);
+  refreshUI();
+}
+
+/* Force release */
+function forceReleaseLock(lockName) {
+  const lock = Sim.locks[lockName];
+  if (!lock) { log("No such lock "+lockName); return; }
+  lock.owner = null;
+  lock.recursiveCount = 0;
+  log("Force-released " + lockName);
+  wakeNext(lock);
+  refreshUI();
+}
+
+/* Scheduler tick - one step */
+function tickOnce() {
+  Sim.ticks++;
+  // check sleeping/holding threads
+  for (let t of Sim.threads) {
+    if (t.state === 'sleeping' && Sim.ticks >= t.holdUntilTick) {
+      t.state = 'ready';
+      log(t.nameTag() + " finished sleeping");
+    }
+    if ((t.state === 'running' || t.state === 'ready') && t.holdUntilTick && Sim.ticks >= t.holdUntilTick) {
+      // finishing hold
+      t.holdUntilTick = 0;
+      // nothing special; if it was running it will continue
+    }
+    // timeouts for blocked acquisitions
+    if (t.state === 'blocked' && t._acqTimeoutTick != null && Sim.ticks >= t._acqTimeoutTick) {
+      // timeout occurred
+      const lockName = t.blockedOn;
+      t.state = 'ready';
+      t.blockedOn = null;
+      t._acqTimeoutTick = null;
+      // remove from lock queue
+      const lock = Sim.locks[lockName];
+      if (lock) lock.queue = lock.queue.filter(id=>id!==t.id);
+      log(t.nameTag() + " acquisition timeout on " + lockName);
+    }
+  }
+
+  // deadlock detection optional
+  if (Sim.deadlockDetect) {
+    if (Sim.ticks % 10 === 0) { // check periodically
+      const cycles = detectDeadlocks();
+      if (cycles.length > 0) {
+        for (const c of cycles) {
+          log("Deadlock detected: " + c.map(id=>threadById(id)?.name||id).join(" -> "));
+        }
+      }
+    }
+  }
+
+  // pick thread to run
+  const choose = pickNextThread();
+  if (!choose) return;
+  // set running state
+  Sim.threads.forEach(t=>{ if (t !== choose && t.state==='running') t.state='ready'; });
+  if (choose.state !== 'blocked' && !choose.suspended && choose.state !== 'finished') choose.state = 'running';
+  // process one action for the chosen thread
+  processThreadAction(choose);
+  refreshUI();
+}
+
+/* Process one action from thread's script */
+function processThreadAction(thread) {
+  if (thread.state === 'blocked' || thread.suspended || thread.state === 'finished') return;
+  // for other behaviors: random, busy, reader
+  if (thread.behavior === 'random') {
+    // random attempt to acquire random lock occasionally
+    if (Object.keys(Sim.locks).length === 0) return;
+    const keys = Object.keys(Sim.locks);
+    if (Math.random() < 0.3) {
+      const ln = keys[Math.floor(Math.random()*keys.length)];
+      attemptAcquire(thread, ln, {});
+    } else {
+      // do some hold
+      thread.holdUntilTick = Sim.ticks + Math.ceil((100 + Math.random()*400) / Sim.tickInterval);
+      thread.state = 'sleeping';
+    }
+    return;
+  } else if (thread.behavior === 'busy') {
+    // busy worker: continually hold CPU for some ticks
+    thread.holdUntilTick = Sim.ticks + Math.ceil(100/Sim.tickInterval);
+    thread.state = 'sleeping';
+    return;
+  } else if (thread.behavior === 'reader') {
+    // attempt to read from first rw lock, else sleep
+    const rw = Object.values(Sim.locks).find(l=>l.type==='rw');
+    if (rw) {
+      // as a read, grant if no writer
+      if (rw.rwWriter === null) {
+        rw.rwReaders.add(thread.id);
+        log(thread.nameTag() + " acquired reader for " + rw.name);
+        thread.holdUntilTick = Sim.ticks + Math.ceil(200/Sim.tickInterval);
+        thread.state = 'sleeping';
+        // release after hold end when sleeping finishes we must release; but we mark to release by setting a flag
+        thread._pendingRelease = rw.name;
+      } else {
+        // blocked
+        thread.state = 'blocked';
+        thread.blockedOn = rw.name;
+        log(thread.nameTag() + " blocked wanting reader for " + rw.name);
+      }
+    } else {
+      thread.state = 'sleeping';
+      thread.holdUntilTick = Sim.ticks + Math.ceil(200/Sim.tickInterval);
+    }
+    return;
+  }
+
+  // script mode
+  const action = thread.actions[thread.pc];
+  if (!action) {
+    thread.state = 'finished';
+    log(thread.nameTag() + " finished (end of script)");
+    return;
+  }
+  thread.recentAction = action.cmd;
+  switch (action.cmd) {
+    case 'acquire':
+      {
+        const res = attemptAcquire(thread, action.lock, {});
+        if (res.success) {
+          thread.pc++;
+        } else {
+          // blocked or failed; do not advance pc
+        }
+      }
+      break;
+    case 'tryacq':
+      {
+        const res = attemptAcquire(thread, action.lock, {try:true});
+        if (res.success) {
+          thread.pc++;
+        } else {
+          thread.pc++;
+        }
+      }
+      break;
+    case 'timeacq':
+      {
+        const res = attemptAcquire(thread, action.lock, {timeout: action.ms});
+        if (res.success) thread.pc++;
+        // else blocked and pc stays
+      }
+      break;
+    case 'release':
+      {
+        releaseLock(thread, action.lock);
+        thread.pc++;
+      }
+      break;
+    case 'hold':
+      {
+        // hold ms - simulate busy work blocking for ms
+        thread.holdUntilTick = Sim.ticks + Math.ceil(action.ms/Sim.tickInterval);
+        thread.state = 'sleeping';
+        thread.pc++;
+      }
+      break;
+    case 'sleep':
+      {
+        thread.holdUntilTick = Sim.ticks + Math.ceil(action.ms/Sim.tickInterval);
+        thread.state = 'sleeping';
+        thread.pc++;
+      }
+      break;
+    case 'yield':
+      {
+        // voluntarily yield: move to next but maintain ready state
+        thread.state = 'ready';
+        thread.pc++;
+      }
+      break;
+    case 'setprio':
+      {
+        thread.priority = action.n;
+        thread.basePriority = action.n;
+        log(thread.nameTag() + " set priority to " + action.n);
+        thread.pc++;
+      }
+      break;
+    case 'end':
+      {
+        thread.state = 'finished';
+        log(thread.nameTag() + " reached end and terminated");
+        thread.pc++;
+      }
+      break;
+    default:
+      {
+        // noop or unknown
+        thread.pc++;
+      }
+      break;
+  }
+}
+
+/* Thread by id */
+function threadById(id) {
+  return Sim.threads.find(t=>t.id===id);
+}
+
+/* UI Refresh */
+function refreshUI() {
+  // Locks list
+  const ll = document.getElementById('locksList');
+  ll.innerHTML = '';
+  for (const [name, lock] of Object.entries(Sim.locks)) {
+    const owner = lock.owner ? (threadById(lock.owner)?.name||lock.owner) : '-';
+    const qnames = lock.queue.map(id => threadById(id)?.name || id).join(', ');
+    const info = document.createElement('div');
+    info.textContent = name + " [" + lock.type + "] owner: " + owner + " queue: [" + qnames + "]";
+    const btnInfo = document.createElement('button');
+    btnInfo.textContent = "Info";
+    btnInfo.onclick = ()=>{ alert(JSON.stringify(lock.info(), null, 2)); };
+    const btnRelease = document.createElement('button');
+    btnRelease.textContent = "Release";
+    btnRelease.onclick = ()=>{ forceReleaseLock(name); };
+    info.appendChild(btnInfo);
+    info.appendChild(btnRelease);
+    ll.appendChild(info);
+  }
+
+  // Threads list
+  const tl = document.getElementById('threadsList');
+  tl.innerHTML = '';
+  for (const t of Sim.threads) {
+    const d = document.createElement('div');
+    d.textContent = t.nameTag() + " state:" + t.state + " pc:" + t.pc + " action:" + (t.currentAction()?t.currentAction().cmd:'-') + (t.blockedOn?(" blockedOn:"+t.blockedOn):"");
+    const sel = document.createElement('input');
+    sel.type='radio'; sel.name='selectedThread'; sel.value=t.id;
+    sel.onclick = ()=>{ showThreadInspector(t.id); };
+    d.prepend(sel);
+    tl.appendChild(d);
+  }
+
+  // Thread inspector maybe update
+  const ins = document.getElementById('threadInspector');
+  ins.innerHTML = '';
+  for (const t of Sim.threads) {
+    const line = document.createElement('div');
+    line.textContent = t.nameTag() + " | state:" + t.state + " | pc:" + t.pc + " | scriptLen:" + t.actions.length;
+    ins.appendChild(line);
+  }
+
+  // metrics area update minimal
+  const metrics = document.getElementById('metricsArea');
+  const mlines = [];
+  mlines.push("Ticks: " + Sim.ticks + " Threads: " + Sim.threads.length + " Locks: " + Object.keys(Sim.locks).length);
+  for (const [lname, lock] of Object.entries(Sim.locks)) {
+    mlines.push("Lock " + lname + ": owner=" + (lock.owner?threadById(lock.owner)?.name: '-') + " queue=[" + lock.queue.map(id=>threadById(id)?.name||id).join(", ") + "]");
+  }
+  metrics.textContent = mlines.join("\n");
+}
+
+/* UI bindings */
+document.getElementById('tickInterval').addEventListener('input', (e)=>{
+  Sim.tickInterval = Math.max(20, parseInt(e.target.value)||200);
+  Sim.speedMs = Sim.tickInterval;
+});
+
+document.getElementById('speedSlider').addEventListener('input', (e)=>{
+  Sim.tickInterval = parseInt(e.target.value);
+  Sim.speedMs = Sim.tickInterval;
+  document.getElementById('tickInterval').value = Sim.tickInterval;
+});
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  if (Sim.running) return;
+  Sim.running = true;
+  Sim.seed = document.getElementById('seedInput').value || "42";
+  Sim.rng = makeRNG(Sim.seed);
+  Sim.tickInterval = Math.max(20, parseInt(document.getElementById('tickInterval').value)||200);
+  Sim.priorityInheritance = document.getElementById('priorityInheritance').checked;
+  Sim.deadlockDetect = document.getElementById('deadlockDetect').checked;
+  Sim.starveMs = Math.max(1000, parseInt(document.getElementById('starveMs').value)||5000);
+  Sim.scheduler = document.getElementById('schedulerSelect').value;
+  Sim.preempt = document.getElementById('preemptCheck').checked;
+  Sim.maxLog = parseInt(document.getElementById('maxLogLines').value) || 500;
+  Sim.intervalId = setInterval(()=>{ tickOnce(); }, Sim.tickInterval);
+  log("Simulation started. Scheduler: " + Sim.scheduler);
+});
+
+document.getElementById('pauseBtn').addEventListener('click', ()=>{
+  if (!Sim.running) return;
+  Sim.running = false;
+  clearInterval(Sim.intervalId);
+  Sim.intervalId = null;
+  log("Simulation paused");
+});
+
+document.getElementById('stepBtn').addEventListener('click', ()=>{
+  tickOnce();
+});
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  if (Sim.intervalId) clearInterval(Sim.intervalId);
+  Sim.running = false;
+  Sim.ticks = 0;
+  Sim.threads = [];
+  Sim.locks = {};
+  Sim.nextThreadId = 1;
+  Sim.nextLockId = 1;
+  Sim.logLines = [];
+  document.getElementById('logArea').textContent = '';
+  document.getElementById('locksList').innerHTML = '';
+  document.getElementById('threadsList').innerHTML = '';
+  document.getElementById('metricsArea').textContent = '';
+  log("Simulation reset");
+});
+
+document.getElementById('randomizeBtn').addEventListener('click', ()=>{
+  // create random threads and locks
+  clearThreads();
+  clearLocks();
+  const nlocks = 1 + Math.floor(Math.random()*3);
+  for (let i=0;i<nlocks;i++) addLock("L"+(i+1), ["mutex","recursive","ticket","spin","rw"][Math.floor(Math.random()*5)]);
+  const nthreads = 2 + Math.floor(Math.random()*6);
+  for (let i=0;i<nthreads;i++) {
+    const b = Math.random() < 0.3 ? "random" : "script";
+    addThread("T"+(i+1), Math.floor(Math.random()*3)+1, document.getElementById('scriptTemplate').value, b);
+  }
+});
+
+document.getElementById('addLockBtn').addEventListener('click', ()=>{
+  const nm = document.getElementById('newLockName').value || ("L"+Sim.nextLockId);
+  const tp = document.getElementById('lockTypeSelect').value;
+  addLock(nm, tp);
+});
+
+document.getElementById('clearLocksBtn').addEventListener('click', ()=>{
+  clearLocks();
+});
+
+document.getElementById('addThreadBtn').addEventListener('click', ()=>{
+  const nm = document.getElementById('newThreadName').value || ("T"+Sim.nextThreadId);
+  const pr = parseInt(document.getElementById('newThreadPriority').value) || 1;
+  const beh = document.getElementById('behaviorSelect').value;
+  let script = document.getElementById('scriptTemplate').value;
+  addThread(nm, pr, script, beh);
+});
+
+document.getElementById('clearThreadsBtn').addEventListener('click', ()=>{
+  clearThreads();
+});
+
+document.getElementById('applyTemplateBtn').addEventListener('click', ()=>{
+  const r = document.querySelector('input[name="selectedThread"]:checked');
+  if (!r) { alert("Select a thread to apply template"); return; }
+  const t = threadById(parseInt(r.value));
+  if (!t) return;
+  t.scriptText = document.getElementById('scriptTemplate').value;
+  t.actions = parseScript(t.scriptText);
+  t.pc = 0;
+  log("Applied template to " + t.name);
+});
+
+function showThreadInspector(id) {
+  const t = threadById(id);
+  if (!t) return;
+  const area = document.getElementById('threadInspector');
+  area.innerHTML = '';
+  const header = document.createElement('div');
+  header.textContent = "Inspecting " + t.nameTag();
+  area.appendChild(header);
+  const st = document.createElement('div');
+  st.textContent = "State: " + t.state + " BlockedOn:" + (t.blockedOn||'-') + " PC:" + t.pc;
+  area.appendChild(st);
+  const act = document.createElement('textarea');
+  act.value = t.scriptText;
+  act.rows = 8;
+  act.cols = 60;
+  area.appendChild(act);
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = "Save Script";
+  saveBtn.onclick = ()=>{ t.scriptText = act.value; t.actions = parseScript(act.value); t.pc = 0; log("Saved script for " + t.name); };
+  area.appendChild(saveBtn);
+  const suspend = document.createElement('button');
+  suspend.textContent = t.suspended ? "Resume" : "Suspend";
+  suspend.onclick = ()=>{ t.suspended = !t.suspended; refreshUI(); log((t.suspended?"Suspended ":"Resumed ") + t.name); showThreadInspector(t.id); };
+  area.appendChild(suspend);
+  const kill = document.createElement('button');
+  kill.textContent = "Kill";
+  kill.onclick = ()=>{ t.state='finished'; log("Killed " + t.name); refreshUI(); showThreadInspector(t.id); };
+  area.appendChild(kill);
+  const stepBtn = document.createElement('button');
+  stepBtn.textContent = "Step";
+  stepBtn.onclick = ()=>{ processThreadAction(t); refreshUI(); showThreadInspector(t.id); };
+  area.appendChild(stepBtn);
+}
+
+/* Manual control buttons */
+document.getElementById('stepSelectedBtn').addEventListener('click', ()=>{
+  const sel = document.querySelector('input[name="selectedThread"]:checked');
+  if (!sel) { alert("Select a thread"); return; }
+  const t = threadById(parseInt(sel.value));
+  processThreadAction(t);
+  refreshUI();
+});
+
+document.getElementById('resumeSelectedBtn').addEventListener('click', ()=>{
+  const sel = document.querySelector('input[name="selectedThread"]:checked');
+  if (!sel) { alert("Select a thread"); return; }
+  const t = threadById(parseInt(sel.value));
+  t.suspended = false;
+  t.state = 'ready';
+  log("Resumed " + t.name);
+  refreshUI();
+});
+
+document.getElementById('suspendSelectedBtn').addEventListener('click', ()=>{
+  const sel = document.querySelector('input[name="selectedThread"]:checked');
+  if (!sel) { alert("Select a thread"); return; }
+  const t = threadById(parseInt(sel.value));
+  t.suspended = true;
+  t.state = 'ready';
+  log("Suspended " + t.name);
+  refreshUI();
+});
+
+document.getElementById('killSelectedBtn').addEventListener('click', ()=>{
+  const sel = document.querySelector('input[name="selectedThread"]:checked');
+  if (!sel) { alert("Select a thread"); return; }
+  const t = threadById(parseInt(sel.value));
+  t.state = 'finished';
+  log("Killed " + t.name);
+  refreshUI();
+});
+
+document.getElementById('forceAcquireBtn').addEventListener('click', ()=>{
+  const sel = document.querySelector('input[name="selectedThread"]:checked');
+  const lockName = document.getElementById('forceLockSelect').value;
+  if (!sel) { alert("Select a thread"); return; }
+  if (!lockName) { alert("Specify lock name"); return; }
+  const t = threadById(parseInt(sel.value));
+  forceAcquire(t, lockName);
+});
+
+document.getElementById('forceReleaseBtn').addEventListener('click', ()=>{
+  const lockName = document.getElementById('forceLockSelect').value;
+  if (!lockName) { alert("Specify lock name"); return; }
+  forceReleaseLock(lockName);
+});
+
+document.getElementById('showWaitStatsBtn').addEventListener('click', ()=>{
+  const stats = {};
+  for (const t of Sim.threads) {
+    for (const [lname, count] of Object.entries(t.stats.acquired)) {
+      stats[lname] = stats[lname] || {acq:0};
+      stats[lname].acq += count;
+    }
+  }
+  let out = "Acquisitions per lock:\n";
+  for (const [k,v] of Object.entries(stats)) out += k + ": " + v.acq + "\n";
+  document.getElementById('metricsArea').textContent = out;
+});
+
+document.getElementById('detectDeadlocksBtn').addEventListener('click', ()=>{
+  const cycles = detectDeadlocks();
+  if (cycles.length === 0) alert("No cycles detected");
+  else alert("Deadlocks cycles:\n" + cycles.map(c=>c.join(" -> ")).join("\n"));
+});
+
+document.getElementById('clearLogBtn').addEventListener('click', ()=>{
+  Sim.logLines = [];
+  document.getElementById('logArea').textContent = '';
+});
+
+/* Deadlock detection - wait-for graph cycle detection */
+function detectDeadlocks() {
+  const graph = {}; // thread id -> set of thread ids it waits for
+  for (const t of Sim.threads) {
+    if (t.state === 'blocked' && t.blockedOn) {
+      const lock = Sim.locks[t.blockedOn];
+      if (lock) {
+        const owners = [];
+        if (lock.owner) owners.push(lock.owner);
+        if (lock.type === 'rw') {
+          for (const r of lock.rwReaders) owners.push(r);
+        }
+        graph[t.id] = new Set(owners.filter(o=>o !== null && o !== undefined));
+      } else {
+        graph[t.id] = new Set();
+      }
+    } else {
+      graph[t.id] = new Set();
+    }
+  }
+  // detect cycles using DFS
+  const cycles = [];
+  const visited = {};
+  const stack = {};
+  function dfs(u, path) {
+    visited[u] = true;
+    stack[u] = true;
+    path.push(u);
+    for (const v of graph[u]) {
+      if (!visited[v]) {
+        dfs(v, path);
+      } else if (stack[v]) {
+        // cycle found, extract path
+        const idx = path.indexOf(v);
+        if (idx >= 0) {
+          cycles.push(path.slice(idx));
+        } else {
+          cycles.push([v]);
+        }
+      }
+    }
+    path.pop();
+    stack[u] = false;
+  }
+  for (const nid of Object.keys(graph).map(x=>parseInt(x))) {
+    if (!visited[nid]) dfs(nid, []);
+  }
+  return cycles;
+}
+
+/* Init small demo */
+(function initDemo(){
+  addLock("L1","mutex");
+  addLock("L2","mutex");
+  addThread("T1", 1, "acquire L1\nhold 200\nacquire L2\nhold 200\nrelease L2\nrelease L1\nend", "script");
+  addThread("T2", 2, "sleep 100\nacquire L2\nhold 400\nrelease L2\nend", "script");
+  refreshUI();
+  log("Initialized demo: two threads and two locks (possible deadlock if order reversed).");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Query Optimization Explorer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .panel { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        .query-plan { font-family: monospace; white-space: pre; }
+        .hidden { display: none; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        button { margin: 2px; }
+        input, select { margin: 2px; }
+        .slider-container { width: 300px; margin: 10px 0; }
+        .cost-display { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Query Optimization Explorer</h1>
+    
+    <div class="panel">
+        <h2>Database Schema</h2>
+        <div>
+            <h3>Tables</h3>
+            <select id="table-selector">
+                <option value="customers">Customers (100,000 rows)</option>
+                <option value="orders">Orders (1,000,000 rows)</option>
+                <option value="products">Products (10,000 rows)</option>
+                <option value="order_items">Order Items (3,000,000 rows)</option>
+            </select>
+            <button id="show-schema-btn">Show Schema</button>
+            <div id="schema-display" class="query-plan"></div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Query Builder</h2>
+        <div>
+            <h3>Tables to Query</h3>
+            <div id="selected-tables">
+                <label><input type="checkbox" name="query-table" value="customers" checked> Customers</label>
+                <label><input type="checkbox" name="query-table" value="orders"> Orders</label>
+                <label><input type="checkbox" name="query-table" value="products"> Products</label>
+                <label><input type="checkbox" name="query-table" value="order_items"> Order Items</label>
+            </div>
+            
+            <h3>Join Conditions</h3>
+            <div id="join-conditions">
+                <div>
+                    <select class="join-table1">
+                        <option value="customers">customers</option>
+                        <option value="orders">orders</option>
+                    </select>
+                    <select class="join-column1">
+                        <option value="id">id</option>
+                        <option value="customer_id">customer_id</option>
+                    </select>
+                    =
+                    <select class="join-table2">
+                        <option value="orders">orders</option>
+                        <option value="customers">customers</option>
+                    </select>
+                    <select class="join-column2">
+                        <option value="customer_id">customer_id</option>
+                        <option value="id">id</option>
+                    </select>
+                    <button class="add-join-btn">Add Join</button>
+                </div>
+            </div>
+            
+            <h3>Filters</h3>
+            <div id="filter-conditions">
+                <div>
+                    <select class="filter-table">
+                        <option value="customers">customers</option>
+                        <option value="orders">orders</option>
+                    </select>
+                    <select class="filter-column">
+                        <option value="status">status</option>
+                        <option value="amount">amount</option>
+                    </select>
+                    <select class="filter-operator">
+                        <option value="=">=</option>
+                        <option value=">">></option>
+                        <option value="<"><</option>
+                        <option value="LIKE">LIKE</option>
+                    </select>
+                    <input type="text" class="filter-value" placeholder="value">
+                    <button class="add-filter-btn">Add Filter</button>
+                </div>
+            </div>
+            
+            <button id="generate-query-btn">Generate Query</button>
+            <div id="generated-query" class="query-plan"></div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Optimization Controls</h2>
+        <div>
+            <h3>Execution Plan Options</h3>
+            <div>
+                <label><input type="checkbox" id="use-indexes" checked> Use Indexes</label>
+                <label><input type="checkbox" id="enable-join-reorder"> Enable Join Reordering</label>
+                <label><input type="checkbox" id="enable-parallel" checked> Parallel Execution</label>
+            </div>
+            
+            <h3>Join Algorithm</h3>
+            <select id="join-algorithm">
+                <option value="nested_loop">Nested Loop Join</option>
+                <option value="hash">Hash Join</option>
+                <option value="merge">Merge Join</option>
+            </select>
+            
+            <h3>Memory Allocation</h3>
+            <div class="slider-container">
+                Work Memory: <input type="range" id="work-mem" min="1" max="100" value="50"> <span id="work-mem-value">50 MB</span>
+            </div>
+            
+            <button id="explain-btn">Explain Query</button>
+            <button id="execute-btn">Execute Query</button>
+        </div>
+    </div>
+    
+    <div class="results-panel panel">
+        <h2>Results</h2>
+        <div>
+            <h3>Execution Plan</h3>
+            <div id="execution-plan" class="query-plan"></div>
+            
+            <h3>Performance Metrics</h3>
+            <div id="performance-metrics">
+                <p>Estimated Cost: <span id="estimated-cost" class="cost-display">-</span></p>
+                <p>Actual Execution Time: <span id="execution-time" class="cost-display">-</span> ms</p>
+                <p>Rows Processed: <span id="rows-processed" class="cost-display">-</span></p>
+            </div>
+            
+            <h3>Result Data (First 10 Rows)</h3>
+            <div id="result-data"></div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Optimization Experiments</h2>
+        <div>
+            <h3>Compare Plans</h3>
+            <button id="save-plan-btn">Save Current Plan</button>
+            <button id="compare-plans-btn">Compare Saved Plans</button>
+            <div id="plan-comparison"></div>
+            
+            <h3>Index Advisor</h3>
+            <button id="analyze-query-btn">Analyze Query for Indexes</button>
+            <div id="index-recommendations"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Database schema information
+        const schemas = {
+            customers: {
+                columns: ['id', 'name', 'email', 'join_date', 'status', 'region'],
+                indexes: ['id (PK)', 'email', 'region'],
+                stats: { rows: 100000, size: '25MB' }
+            },
+            orders: {
+                columns: ['id', 'customer_id', 'order_date', 'status', 'amount'],
+                indexes: ['id (PK)', 'customer_id', 'order_date'],
+                stats: { rows: 1000000, size: '150MB' }
+            },
+            products: {
+                columns: ['id', 'name', 'category', 'price', 'stock'],
+                indexes: ['id (PK)', 'category'],
+                stats: { rows: 10000, size: '5MB' }
+            },
+            order_items: {
+                columns: ['id', 'order_id', 'product_id', 'quantity', 'price'],
+                indexes: ['id (PK)', 'order_id', 'product_id'],
+                stats: { rows: 3000000, size: '200MB' }
+            }
+        };
+        
+        // Sample data for results
+        const sampleResults = {
+            customers: [
+                { id: 1, name: 'John Doe', email: 'john@example.com', join_date: '2020-01-15', status: 'active', region: 'West' },
+                { id: 2, name: 'Jane Smith', email: 'jane@example.com', join_date: '2020-02-20', status: 'active', region: 'East' }
+            ],
+            orders: [
+                { id: 1001, customer_id: 1, order_date: '2021-05-10', status: 'completed', amount: 125.50 },
+                { id: 1002, customer_id: 2, order_date: '2021-05-12', status: 'shipped', amount: 89.99 }
+            ]
+        };
+        
+        // State
+        let currentQuery = null;
+        let savedPlans = [];
+        // DOM elements
+        const schemaDisplay = document.getElementById('schema-display');
+        const tableSelector = document.getElementById('table-selector');
+        const showSchemaBtn = document.getElementById('show-schema-btn');
+        const generateQueryBtn = document.getElementById('generate-query-btn');
+        const generatedQuery = document.getElementById('generated-query');
+        const explainBtn = document.getElementById('explain-btn');
+        const executeBtn = document.getElementById('execute-btn');
+        const executionPlan = document.getElementById('execution-plan');
+        const resultData = document.getElementById('result-data');
+        const savePlanBtn = document.getElementById('save-plan-btn');
+        const comparePlansBtn = document.getElementById('compare-plans-btn');
+        const planComparison = document.getElementById('plan-comparison');
+        const analyzeQueryBtn = document.getElementById('analyze-query-btn');
+        const indexRecommendations = document.getElementById('index-recommendations');
+        const workMemSlider = document.getElementById('work-mem');
+        const workMemValue = document.getElementById('work-mem-value');
+        
+        // Event listeners
+        showSchemaBtn.addEventListener('click', showSchema);
+        generateQueryBtn.addEventListener('click', generateQuery);
+        explainBtn.addEventListener('click', explainQuery);
+        executeBtn.addEventListener('click', executeQuery);
+        savePlanBtn.addEventListener('click', savePlan);
+        comparePlansBtn.addEventListener('click', comparePlans);
+        analyzeQueryBtn.addEventListener('click', analyzeForIndexes);
+        workMemSlider.addEventListener('input', updateWorkMemDisplay);
+        
+        // Initialize
+        updateWorkMemDisplay();
+        
+        // Functions
+        function showSchema() {
+            const table = tableSelector.value;
+            const schema = schemas[table];
+            
+            let displayText = `Table: ${table}\n`;
+            displayText += `Columns: ${schema.columns.join(', ')}\n`;
+            displayText += `Indexes: ${schema.indexes.join(', ')}\n`;
+            displayText += `Statistics: ${schema.stats.rows} rows, ${schema.stats.size}`;
+            
+            schemaDisplay.textContent = displayText;
+        }
+        
+        function generateQuery() {
+            const selectedTables = Array.from(document.querySelectorAll('input[name="query-table"]:checked'))
+                .map(el => el.value);
+            
+            if (selectedTables.length === 0) {
+                generatedQuery.textContent = "Please select at least one table";
+                return;
+            }
+            
+            // Simple query generation
+            let query = "SELECT ";
+            if (selectedTables.length > 1) {
+                query += "*\nFROM " + selectedTables.join(", ");
+            } else {
+                query += "*\nFROM " + selectedTables[0];
+            }
+            
+            // Add joins if multiple tables
+            if (selectedTables.length > 1) {
+                // This is simplified - real implementation would use the join conditions
+                query += "\nWHERE customers.id = orders.customer_id";
+                if (selectedTables.includes('order_items')) {
+                    query += " AND orders.id = order_items.order_id";
+                }
+                if (selectedTables.includes('products')) {
+                    query += " AND order_items.product_id = products.id";
+                }
+            }
+            
+            currentQuery = query;
+            generatedQuery.textContent = query;
+        }
+        
+        function explainQuery() {
+            if (!currentQuery) {
+                executionPlan.textContent = "Please generate a query first";
+                return;
+            }
+            
+            const useIndexes = document.getElementById('use-indexes').checked;
+            const joinAlgorithm = document.getElementById('join-algorithm').value;
+            const workMem = workMemSlider.value;
+            
+            let plan = "QUERY PLAN\n";
+            plan += "------------------------------------------------------------\n";
+            plan += `Cost settings: work_mem=${workMem}MB, join=${joinAlgorithm}\n`;
+            if (useIndexes) {
+                plan += "Using available indexes\n";
+            } else {
+                plan += "Not using indexes (seq scans)\n";
+            }
+            
+            if (currentQuery.includes("customers") && currentQuery.includes("orders")) {
+                plan += "\nNested Loop Join (cost=1000.00..1500.00 rows=50000 width=100)\n";
+                plan += "  ->  Seq Scan on customers (cost=0.00..100.00 rows=1000 width=50)\n";
+                if (useIndexes) {
+                    plan += "  ->  Index Scan using orders_customer_id_idx on orders (cost=0.00..1.20 rows=50 width=50)\n";
+                } else {
+                    plan += "  ->  Seq Scan on orders (cost=0.00..1000.00 rows=50000 width=50)\n";
+                }
+            } else if (currentQuery.includes("customers")) {
+                if (useIndexes) {
+                    plan += "Index Scan using customers_pkey on customers (cost=0.00..50.00 rows=1000 width=50)\n";
+                } else {
+                    plan += "Seq Scan on customers (cost=0.00..100.00 rows=1000 width=50)\n";
+                }
+            }
+            
+            // Update performance metrics
+            document.getElementById('estimated-cost').textContent = "1500.00";
+            document.getElementById('execution-time').textContent = "-";
+            document.getElementById('rows-processed').textContent = "50000";
+            
+            executionPlan.textContent = plan;
+        }
+        
+        function executeQuery() {
+            if (!currentQuery) {
+                resultData.textContent = "Please generate a query first";
+                return;
+            }
+            
+            explainQuery(); // Show plan first
+            
+            // Simulate execution
+            const startTime = performance.now();
+            
+            // Simulate different execution times based on query complexity
+            let executionTime = 50;
+            if (currentQuery.includes("customers") && currentQuery.includes("orders")) {
+                executionTime = 150;
+            }
+            if (currentQuery.includes("order_items")) {
+                executionTime = 300;
+            }
+            
+            // Simulate delay
+            setTimeout(() => {
+                const endTime = performance.now();
+                const actualTime = (endTime - startTime).toFixed(2);
+                
+                document.getElementById('execution-time').textContent = actualTime;
+                
+                // Show sample results
+                let resultHTML = "<table><tr>";
+                
+                // Add headers
+                if (currentQuery.includes("customers")) {
+                    Object.keys(sampleResults.customers[0]).forEach(col => {
+                        resultHTML += `<th>${col}</th>`;
+                    });
+                }
+                if (currentQuery.includes("orders")) {
+                    Object.keys(sampleResults.orders[0]).forEach(col => {
+                        resultHTML += `<th>${col}</th>`;
+                    });
+                }
+                
+                resultHTML += "</tr>";
+                
+                // Add data
+                for (let i = 0; i < 2; i++) {
+                    resultHTML += "<tr>";
+                    if (currentQuery.includes("customers")) {
+                        Object.values(sampleResults.customers[i]).forEach(val => {
+                            resultHTML += `<td>${val}</td>`;
+                        });
+                    }
+                    if (currentQuery.includes("orders")) {
+                        Object.values(sampleResults.orders[i]).forEach(val => {
+                            resultHTML += `<td>${val}</td>`;
+                        });
+                    }
+                    resultHTML += "</tr>";
+                }
+                
+                resultHTML += "</table>";
+                resultData.innerHTML = resultHTML;
+            }, executionTime);
+        }
+        
+        function savePlan() {
+            if (!executionPlan.textContent || executionPlan.textContent.includes("Please generate")) {
+                alert("No execution plan to save");
+                return;
+            }
+            
+            const planInfo = {
+                query: currentQuery,
+                plan: executionPlan.textContent,
+                cost: document.getElementById('estimated-cost').textContent,
+                time: document.getElementById('execution-time').textContent,
+                settings: {
+                    useIndexes: document.getElementById('use-indexes').checked,
+                    joinAlgorithm: document.getElementById('join-algorithm').value,
+                    workMem: workMemSlider.value
+                }
+            };
+            
+            savedPlans.push(planInfo);
+            alert(`Plan saved (${savedPlans.length} plans stored)`);
+        }
+        
+        function comparePlans() {
+            if (savedPlans.length < 2) {
+                planComparison.textContent = "Need at least 2 saved plans to compare";
+                return;
+            }
+            
+            let comparison = "PLAN COMPARISON\n";
+            comparison += "------------------------------------------------\n";
+            
+            savedPlans.forEach((plan, i) => {
+                comparison += `PLAN ${i+1}:\n`;
+                comparison += `Query: ${plan.query.split('\n')[0]}...\n`;
+                comparison += `Cost: ${plan.cost}\n`;
+                comparison += `Time: ${plan.time} ms\n`;
+                comparison += `Settings: ${JSON.stringify(plan.settings)}\n\n`;
+            });
+            
+            // Find best plan
+            const bestPlan = savedPlans.reduce((best, current) => {
+                return parseFloat(current.cost) < parseFloat(best.cost) ? current : best;
+            }, savedPlans[0]);
+            
+            comparison += `BEST PLAN: #${savedPlans.indexOf(bestPlan)+1} with cost ${bestPlan.cost}`;
+            
+            planComparison.textContent = comparison;
+        }
+        
+        function analyzeForIndexes() {
+            if (!currentQuery) {
+                indexRecommendations.textContent = "Please generate a query first";
+                return;
+            }
+            
+            let recommendations = "INDEX RECOMMENDATIONS\n";
+            recommendations += "------------------------------------------------\n";
+            
+            if (currentQuery.includes("customers") && currentQuery.includes("status")) {
+                recommendations += "- Consider adding an index on customers(status)\n";
+            }
+            
+            if (currentQuery.includes("orders") && currentQuery.includes("customer_id")) {
+                recommendations += "- Index on orders(customer_id) already exists\n";
+            }
+            
+            if (currentQuery.includes("orders") && currentQuery.includes("amount")) {
+                recommendations += "- Consider adding a partial index on orders(amount) WHERE amount > 100\n";
+            }
+            
+            if (recommendations === "INDEX RECOMMENDATIONS\n------------------------------------------------\n") {
+                recommendations += "No specific index recommendations for this query";
+            }
+            
+            indexRecommendations.textContent = recommendations;
+        }
+        
+        function updateWorkMemDisplay() {
+            workMemValue.textContent = `${workMemSlider.value} MB`;
+        }
+        
+        // Helper for join conditions (simplified)
+        document.querySelector('.add-join-btn').addEventListener('click', function() {
+            const table1 = this.parentElement.querySelector('.join-table1').value;
+            const col1 = this.parentElement.querySelector('.join-column1').value;
+            const table2 = this.parentElement.querySelector('.join-table2').value;
+            const col2 = this.parentElement.querySelector('.join-column2').value;
+            
+            alert(`Added join condition: ${table1}.${col1} = ${table2}.${col2}\n(Note: This demo simulates the UI - actual join logic would be implemented in a real application)`);
+        });
+        
+        // Helper for filter conditions (simplified)
+        document.querySelector('.add-filter-btn').addEventListener('click', function() {
+            const table = this.parentElement.querySelector('.filter-table').value;
+            const col = this.parentElement.querySelector('.filter-column').value;
+            const op = this.parentElement.querySelector('.filter-operator').value;
+            const value = this.parentElement.querySelector('.filter-value').value;
+            
+            alert(`Added filter: ${table}.${col} ${op} ${value}\n(Note: This demo simulates the UI - actual filter logic would be implemented in a real application)`);
+        });
+    </script>
+</body>
+</html>

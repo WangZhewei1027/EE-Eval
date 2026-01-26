@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Deadlock Interactive Simulator</title>
+  <style>
+    /* Minimal plain styling: keep everything default-looking */
+    body { font-family: Arial, sans-serif; color: black; background: white; margin: 12px; }
+    button, input, select, textarea { font: inherit; }
+    .section { margin-bottom: 16px; padding: 6px; border: 1px solid #00000022; }
+    label { margin-right: 6px; }
+    table { border-collapse: collapse; margin-top: 6px; }
+    td, th { padding: 4px 6px; border: 1px solid #ddd; }
+    .small { font-size: 12px; }
+    .mono { font-family: monospace; font-size: 13px; white-space: pre; }
+  </style>
+</head>
+<body>
+  <h2>Deadlock Simulator (Interactive)</h2>
+  <div class="section">
+    <div><strong>Overview:</strong> Create resources and processes that request and release resources. Run step-by-step or auto-run. Use detection and recovery tools, and try many policies (ordering, wait-die/wound-wait, timeouts, preemption). The UI is intentionally plain - focus on interactions.</div>
+  </div>
+
+  <div class="section">
+    <strong>1) Resources</strong><br>
+    <label>Resource name: <input id="newResName" value="R1" size="4"></label>
+    <label>Units: <input id="newResUnits" type="number" min="1" value="1" size="4"></label>
+    <button id="addResBtn">Add Resource</button>
+    <button id="clearResBtn">Clear All Resources</button>
+    <div>
+      <table id="resTable"><thead><tr><th>Res</th><th>Units</th><th>Available</th><th>Allocated</th><th>Actions</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="section">
+    <strong>2) Processes</strong><br>
+    <label>Process name: <input id="newProcName" value="P1" size="4"></label>
+    <label>Priority (higher runs first): <input id="newProcPriority" type="number" value="1" min="0" size="4"></label>
+    <label>Timestamp (for wait-die/wound): <input id="newProcTimestamp" type="number" value="1" min="1" size="4"></label>
+    <button id="addProcBtn">Add Process</button>
+    <button id="clearProcBtn">Clear All Processes</button>
+    <div>
+      <table id="procTable"><thead><tr><th>Proc</th><th>Priority</th><th>TS</th><th>State</th><th>Held</th><th>NextOp</th><th>Actions</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="section">
+    <strong>3) Define Operation Sequence for a Process</strong><br>
+    <label>Proc: <select id="opProc"></select></label>
+    <label>Type: <select id="opType"><option value="request">Request</option><option value="release">Release</option><option value="compute">Compute</option></select></label>
+    <label>Res: <select id="opRes"></select></label>
+    <label>Units: <input id="opUnits" type="number" value="1" min="1" size="4"></label>
+    <label>Duration (compute steps): <input id="opDuration" type="number" value="1" min="1" size="4"></label>
+    <button id="addOpBtn">Append Operation</button>
+    <button id="clearOpsBtn">Clear Ops for Selected Proc</button>
+    <div>
+      <div class="small">Operation sequence (per process) — use this to craft deadlock scenarios.</div>
+      <textarea id="procOps" rows="6" cols="80" class="mono" readonly></textarea>
+    </div>
+  </div>
+
+  <div class="section">
+    <strong>4) Scenarios & Generators</strong><br>
+    <button id="genDiningBtn">Generate Dining Philosophers (n)</button>
+    <input id="genDiningN" type="number" min="2" value="5" size="3">
+    <button id="genClassicBtn">Generate Classic 2x2 Deadlock</button>
+    <button id="genRandomBtn">Generate Random Scenario</button>
+    <label>Processes: <input id="randP" type="number" min="2" value="4" size="3"></label>
+    <label>Resources: <input id="randR" type="number" min="2" value="3" size="3"></label>
+    <label>Max units each: <input id="randMaxUnits" type="number" min="1" value="2" size="3"></label>
+  </div>
+
+  <div class="section">
+    <strong>5) Simulation Controls</strong><br>
+    <label>Mode: 
+      <select id="simMode">
+        <option value="auto">Auto-run (scheduler)</option>
+        <option value="step">Manual Step (single operation)</option>
+      </select>
+    </label>
+    <label>Scheduler: 
+      <select id="scheduler">
+        <option value="roundrobin">Round Robin</option>
+        <option value="priority">Priority</option>
+        <option value="fifo">FIFO</option>
+      </select>
+    </label>
+    <label>Policy: 
+      <select id="resourcePolicy">
+        <option value="none">No special policy</option>
+        <option value="ordering">Global resource ordering</option>
+        <option value="all_or_nothing">All-request at once</option>
+        <option value="wait_die">Wait-Die (timestamp)</option>
+        <option value="wound_wait">Wound-Wait (timestamp)</option>
+        <option value="timeout">Timeout</option>
+      </select>
+    </label>
+    <label>Timeout steps: <input id="timeoutSteps" type="number" min="1" value="5" size="3"></label>
+    <label>Allow Preemption: <input id="allowPreempt" type="checkbox"></label>
+    <br><br>
+    <button id="stepBtn">Step</button>
+    <button id="runBtn">Run</button>
+    <button id="pauseBtn">Pause</button>
+    <label>Speed (ms): <input id="runSpeed" type="range" min="100" max="2000" value="800"></label>
+    <span id="speedVal">800</span> ms
+  </div>
+
+  <div class="section">
+    <strong>6) Detection & Recovery</strong><br>
+    <button id="detectBtn">Detect Deadlocks</button>
+    <button id="safeCheckBtn">Banker's Safe-State Check</button>
+    <label>Max claims JSON: <input id="maxClaims" size="40" placeholder='{"P1":{"R1":1}}'></label>
+    <div>
+      <button id="abortSelectedBtn">Abort Selected Processes</button>
+      <select id="abortSelect" multiple size="4" style="vertical-align: top;"></select>
+      <button id="preemptSelectedBtn">Preempt Resources from Selected Processes</button>
+      <button id="releaseAllBtn">Force Release All Held Resources</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <strong>7) Manual Controls</strong><br>
+    <label>Proc: <select id="manualProc"></select></label>
+    <label>Resource: <select id="manualRes"></select></label>
+    <label>Units: <input id="manualUnits" type="number" min="1" value="1" size="4"></label>
+    <button id="manualAllocateBtn">Allocate to Proc (force)</button>
+    <button id="manualRequestBtn">Make Proc Request (simulate)</button>
+    <button id="manualReleaseBtn">Release from Proc</button>
+    <div>
+      <button id="killAllBtn">Reset Simulator (clear allocations but keep definitions)</button>
+      <button id="fullResetBtn">Full Reset (clear everything)</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <strong>8) Visualizations & Logs</strong><br>
+    <div class="small">Resource Allocation Graph (textual):</div>
+    <textarea id="rag" rows="6" cols="100" readonly class="mono"></textarea>
+    <div class="small">Event Log:</div>
+    <textarea id="log" rows="10" cols="100" readonly class="mono"></textarea>
+  </div>
+
+  <script>
+(function(){
+  // Minimal global-like simulator object
+  const SIM = {
+    resources: {},    // name -> {total, available, allocated: {proc:units}}
+    processes: {},    // name -> {priority, ts, state, ops:[], pc, held: {res:units}, waitingFor: {res,units}, waitSince: null}
+    schedulerQueue: [], // list of process names in order
+    runTimer: null,
+    running: false,
+    config: {
+      mode: 'auto',
+      scheduler: 'roundrobin',
+      policy: 'none',
+      timeoutSteps: 5,
+      allowPreempt: false,
+      globalOrder: null, // resource ordering array if ordering policy
+    },
+    logLines: [],
+    stepCount: 0,
+  };
+
+  // Helpers
+  function log(msg){
+    SIM.logLines.push('Step '+SIM.stepCount+': '+msg);
+    if(SIM.logLines.length>1000) SIM.logLines.shift();
+    document.getElementById('log').value = SIM.logLines.join('\\n');
+  }
+
+  function refreshTables(){
+    // Resources table
+    const resT = document.querySelector('#resTable tbody');
+    resT.innerHTML = '';
+    for(const rname of Object.keys(SIM.resources)){
+      const r = SIM.resources[rname];
+      const allocated = Object.entries(r.allocated).map(e=> e[0]+':'+e[1]).join(', ');
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+rname+'</td><td>'+r.total+'</td><td>'+r.available+'</td><td>'+allocated+'</td>'+
+        '<td><button data-res="'+rname+'" class="incUnits">+1</button> <button data-res="'+rname+'" class="decUnits">-1</button></td>';
+      resT.appendChild(tr);
+    }
+    // Processes table
+    const pT = document.querySelector('#procTable tbody');
+    pT.innerHTML = '';
+    for(const pname of Object.keys(SIM.processes)){
+      const p = SIM.processes[pname];
+      const held = Object.entries(p.held).map(e=> e[0]+':'+e[1]).join(', ') || '';
+      const nextOp = p.ops[p.pc] ? formatOp(p.ops[p.pc]) : '(none)';
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+pname+'</td><td>'+p.priority+'</td><td>'+p.ts+'</td><td>'+p.state+'</td><td>'+held+'</td><td>'+nextOp+'</td>' +
+        '<td><button data-proc="'+pname+'" class="selectProc">Select</button></td>';
+      pT.appendChild(tr);
+    }
+
+    // Update selects for operations and manual controls
+    updateProcSelects();
+    updateResSelects();
+    updateAbortSelect();
+    updateManualSelects();
+    refreshRAG();
+  }
+
+  function formatOp(op){
+    if(!op) return '';
+    if(op.type==='request') return 'REQ '+op.res+'('+op.units+')';
+    if(op.type==='release') return 'REL '+op.res+'('+op.units+')';
+    if(op.type==='compute') return 'COMPUTE '+op.duration;
+    return JSON.stringify(op);
+  }
+
+  function updateProcSelects(){
+    const opProc = document.getElementById('opProc');
+    const manualProc = document.getElementById('manualProc');
+    opProc.innerHTML = '';
+    manualProc.innerHTML = '';
+    for(const pname of Object.keys(SIM.processes)){
+      const opt = document.createElement('option'); opt.value = pname; opt.text = pname; opProc.appendChild(opt);
+      const opt2 = opt.cloneNode(true); manualProc.appendChild(opt2);
+    }
+    // update procOps textarea
+    const procOps = document.getElementById('procOps');
+    const sel = opProc.value;
+    if(sel && SIM.processes[sel]){
+      procOps.value = SIM.processes[sel].ops.map((o,i)=> i+': '+formatOp(o)).join('\\n');
+    } else {
+      // show combined
+      const lines = [];
+      for(const pname of Object.keys(SIM.processes)){
+        lines.push('== '+pname+' ==');
+        lines.push(...SIM.processes[pname].ops.map((o,i)=> i+': '+formatOp(o)));
+      }
+      procOps.value = lines.join('\\n');
+    }
+  }
+
+  function updateResSelects(){
+    const opRes = document.getElementById('opRes');
+    const manualRes = document.getElementById('manualRes');
+    opRes.innerHTML = '';
+    manualRes.innerHTML = '';
+    for(const rname of Object.keys(SIM.resources)){
+      const opt = document.createElement('option'); opt.value = rname; opt.text = rname; opRes.appendChild(opt);
+      const opt2 = opt.cloneNode(true); manualRes.appendChild(opt2);
+    }
+  }
+
+  function updateAbortSelect(){
+    const sel = document.getElementById('abortSelect');
+    sel.innerHTML = '';
+    for(const pname of Object.keys(SIM.processes)){
+      const opt = document.createElement('option'); opt.value = pname; opt.text = pname; sel.appendChild(opt);
+    }
+  }
+
+  function updateManualSelects(){
+    document.getElementById('opProc').dispatchEvent(new Event('change'));
+    document.getElementById('manualProc').dispatchEvent(new Event('change'));
+  }
+
+  function addResource(name, units){
+    if(!name) { alert('Resource name required'); return; }
+    if(SIM.resources[name]) { alert('Resource exists'); return; }
+    SIM.resources[name] = { total: units, available: units, allocated: {} };
+    log('Added resource '+name+' units='+units);
+    refreshTables();
+  }
+
+  function changeResourceUnits(rname, delta){
+    const r = SIM.resources[rname];
+    if(!r) return;
+    r.total = Math.max(1, r.total + delta);
+    // adjust available conservatively
+    r.available = Math.max(0, r.total - Object.values(r.allocated).reduce((a,b)=>a+b,0));
+    log('Changed resource '+rname+' total to '+r.total);
+    refreshTables();
+  }
+
+  function addProcess(name, priority, ts){
+    if(!name) { alert('Process name required'); return; }
+    if(SIM.processes[name]) { alert('Process exists'); return; }
+    SIM.processes[name] = { priority: priority, ts: ts, state: 'ready', ops: [], pc: 0, held: {}, waitingFor: null, waitSince: null };
+    SIM.schedulerQueue.push(name);
+    log('Added process '+name+' pr='+priority+' ts='+ts);
+    refreshTables();
+  }
+
+  function clearResources(){
+    SIM.resources = {};
+    log('Cleared resources');
+    refreshTables();
+  }
+  function clearProcesses(){
+    SIM.processes = {};
+    SIM.schedulerQueue = [];
+    log('Cleared processes');
+    refreshTables();
+  }
+
+  function appendOpToProc(pname, op){
+    const p = SIM.processes[pname];
+    if(!p) return;
+    p.ops.push(op);
+    log('Appended op to '+pname+': '+formatOp(op));
+    refreshTables();
+  }
+
+  // Simulation core: try to execute one operation for a given process (atomic attempt)
+  function tryExecute(procName){
+    const p = SIM.processes[procName];
+    if(!p) return false;
+    if(p.state === 'finished' || p.state === 'aborted') return false;
+    const op = p.ops[p.pc];
+    if(!op) { p.state = 'finished'; log(procName+' finished (no more ops)'); return false; }
+
+    if(op.type === 'compute'){
+      // Consume compute step
+      if(!op._remaining) op._remaining = op.duration;
+      op._remaining--;
+      log(procName+' computing, remaining '+op._remaining);
+      if(op._remaining <= 0){
+        p.pc++;
+      }
+      p.state = 'running';
+      p.waitingFor = null;
+      p.waitSince = null;
+      return true;
+    } else if(op.type === 'release'){
+      const r = op.res;
+      const units = op.units || 1;
+      if((p.held[r] || 0) < units){
+        log(procName+' attempted to release '+units+' of '+r+' but holds '+(p.held[r]||0)+' - adjusting to full release');
+      }
+      const toRel = Math.min(units, p.held[r]||0);
+      if(toRel > 0){
+        p.held[r] -= toRel;
+        if(p.held[r] === 0) delete p.held[r];
+        SIM.resources[r].allocated[procName] = (SIM.resources[r].allocated[procName] || 0) - toRel;
+        if(SIM.resources[r].allocated[procName] <= 0) delete SIM.resources[r].allocated[procName];
+        SIM.resources[r].available += toRel;
+        log(procName+' released '+toRel+' of '+r);
+      } else {
+        log(procName+' had nothing to release for '+r);
+      }
+      p.pc++;
+      p.state = 'running';
+      p.waitingFor = null;
+      p.waitSince = null;
+      return true;
+    } else if(op.type === 'request'){
+      const r = op.res;
+      const units = op.units || 1;
+      // Policy checks (ordering/all-or-nothing/wait-die/wound-wait)
+      const policy = SIM.config.policy;
+      if(policy === 'all_or_nothing'){
+        // Check if all future requests can be satisfied at once (simplified: only check remaining requests counts)
+        // Build a claim map: for current pc..end count maximum per resource
+        const claim = {};
+        for(let i=p.pc;i<p.ops.length;i++){
+          const o = p.ops[i];
+          if(o.type === 'request') claim[o.res] = Math.max(claim[o.res]||0, o.units || 1);
+        }
+        // Check availability across all resources (available + held by p)
+        for(const rr in claim){
+          const needed = claim[rr];
+          const available = SIM.resources[rr] ? SIM.resources[rr].available + (p.held[rr]||0) : 0;
+          if(available < needed){
+            // Cannot grant now, must wait
+            log(procName+' (all-or-nothing) cannot obtain full claim; will wait for '+rr);
+            p.state = 'waiting';
+            p.waitingFor = {res: rr, units: claim[rr]};
+            if(!p.waitSince) p.waitSince = SIM.stepCount;
+            return false;
+          }
+        }
+        // All available; grant this request as part of the all-at-once behavior (but we only perform the current request now)
+      }
+      if(policy === 'ordering' && SIM.config.globalOrder){
+        // Enforce that process requests resources in global order (resource names compared by position)
+        const order = SIM.config.globalOrder;
+        // If process holds a resource that has a higher order than r, block or abort depending on config - we will block
+        let maxHeldIndex = -1;
+        for(const hr in p.held){
+          const idx = order.indexOf(hr);
+          if(idx>maxHeldIndex) maxHeldIndex = idx;
+        }
+        const reqIdx = order.indexOf(r);
+        if(reqIdx < 0) {
+          // resource not in ordering, allow
+        } else if(maxHeldIndex > reqIdx){
+          // violates ordering: block and set waiting
+          log(procName+' violates global ordering by requesting '+r+' (will wait/retry)');
+          p.state = 'waiting';
+          p.waitingFor = {res:r, units:units};
+          if(!p.waitSince) p.waitSince = SIM.stepCount;
+          return false;
+        }
+      }
+      // Check availability
+      const resObj = SIM.resources[r];
+      if(!resObj){
+        log(procName+' requested unknown resource '+r+' - will wait');
+        p.state='waiting'; p.waitingFor={res:r, units:units}; if(!p.waitSince) p.waitSince = SIM.stepCount;
+        return false;
+      }
+      if(resObj.available >= units){
+        // grant
+        resObj.available -= units;
+        resObj.allocated[procName] = (resObj.allocated[procName]||0)+units;
+        p.held[r] = (p.held[r]||0) + units;
+        p.pc++;
+        p.state = 'running';
+        p.waitingFor = null;
+        p.waitSince = null;
+        log(procName+' granted '+units+' of '+r);
+        return true;
+      } else {
+        // Not immediately available - handle wait-die / wound-wait / timeout / preemption possibilities
+        if(policy === 'wait_die'){
+          // if ts of requesting older (smaller number) than holder(s) then it waits; otherwise aborts (dies)
+          const holders = Object.keys(resObj.allocated);
+          let shouldWait = true;
+          for(const h of holders){
+            if(SIM.processes[h] && SIM.processes[h].ts < p.ts){
+              // holder older -> requester younger, in wait-die younger -> dies (abort)
+              shouldWait = false;
+            }
+          }
+          if(!shouldWait){
+            // abort requester
+            p.state = 'aborted';
+            log(procName+' wait-die: aborted (dies) because younger than holder');
+            // release held resources
+            releaseAllHeld(pname);
+            return false;
+          } else {
+            // wait
+            p.state = 'waiting';
+            p.waitingFor = {res:r, units:units};
+            if(!p.waitSince) p.waitSince = SIM.stepCount;
+            log(procName+' wait-die: waiting for '+r);
+            return false;
+          }
+        } else if(policy === 'wound_wait'){
+          // if requester older than some holders, wound (preempt) them; otherwise wait
+          const holders = Object.keys(resObj.allocated);
+          let woundedAny = false;
+          for(const h of holders){
+            if(SIM.processes[h] && SIM.processes[h].ts > p.ts){
+              // holder younger - wound it: abort/roll back
+              woundedAny = true;
+              log(procName+' wound-wait: preempting/aborting '+h+' to obtain '+r);
+              abortProcess(h);
+            }
+          }
+          if(woundedAny && resObj.available >= units){
+            // now enough
+            resObj.available -= units;
+            resObj.allocated[procName] = (resObj.allocated[procName]||0)+units;
+            p.held[r] = (p.held[r]||0)+units;
+            p.pc++;
+            p.state='running';
+            p.waitingFor=null;
+            p.waitSince=null;
+            return true;
+          } else {
+            p.state='waiting';
+            p.waitingFor={res:r, units:units};
+            if(!p.waitSince) p.waitSince = SIM.stepCount;
+            log(procName+' wound-wait: waiting for '+r);
+            return false;
+          }
+        } else if(SIM.config.allowPreempt){
+          // Try to preempt some resources from other processes to satisfy
+          let freed = 0;
+          const holders = Object.entries(resObj.allocated);
+          for(const [hname, count] of holders){
+            if(hname === procName) continue;
+            // choose victim if lower priority
+            const victim = SIM.processes[hname];
+            if(!victim) continue;
+            if(victim.priority < SIM.processes[procName].priority){
+              // preempt some from victim
+              const take = Math.min(count, units - freed);
+              SIM.resources[r].allocated[hname] -= take;
+              if(SIM.resources[r].allocated[hname] <= 0) delete SIM.resources[r].allocated[hname];
+              victim.held[r] = (victim.held[r]||0) - take;
+              if(victim.held[r] <= 0) delete victim.held[r];
+              freed += take;
+              log('Preempted '+take+' of '+r+' from '+hname+' to satisfy '+procName);
+              if(freed >= units) break;
+            }
+          }
+          if(freed>0){
+            // increase available by freed amount
+            SIM.resources[r].available += freed;
+          }
+          if(SIM.resources[r].available >= units){
+            SIM.resources[r].available -= units;
+            SIM.resources[r].allocated[procName] = (SIM.resources[r].allocated[procName]||0) + units;
+            p.held[r] = (p.held[r] || 0) + units;
+            p.pc++;
+            p.state='running';
+            p.waitingFor=null; p.waitSince=null;
+            log(procName+' obtained '+units+' of '+r+' after preemption');
+            return true;
+          } else {
+            p.state='waiting'; p.waitingFor={res:r, units:units}; if(!p.waitSince) p.waitSince = SIM.stepCount;
+            log(procName+' waiting for '+r+' (not enough after preemption)');
+            return false;
+          }
+        } else if(policy === 'timeout'){
+          // mark waiting and if waiting long enough abort or force release
+          p.state='waiting'; p.waitingFor={res:r, units:units}; if(!p.waitSince) p.waitSince = SIM.stepCount;
+          if(SIM.stepCount - p.waitSince >= SIM.config.timeoutSteps){
+            // timed out - abort or force
+            log(procName+' timeout: aborting due to waiting too long');
+            abortProcess(procName);
+            return false;
+          }
+          log(procName+' waiting for '+r+' (timeout policy)');
+          return false;
+        } else {
+          // default: wait
+          p.state = 'waiting';
+          p.waitingFor = {res: r, units: units};
+          if(!p.waitSince) p.waitSince = SIM.stepCount;
+          log(procName+' waiting for '+r+' ('+resObj.available+'/'+units+' available)');
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
+  function scheduleOneStep(){
+    SIM.stepCount++;
+    const order = buildScheduleOrder();
+    if(order.length === 0){
+      log('No processes to schedule');
+      return;
+    }
+    let progressed = false;
+    if(SIM.config.scheduler === 'priority'){
+      order.sort((a,b)=> SIM.processes[b].priority - SIM.processes[a].priority);
+    }
+    for(const pname of order){
+      const p = SIM.processes[pname];
+      if(!p) continue;
+      if(p.state === 'ready' || p.state === 'running' || p.state === 'waiting'){
+        // attempt to execute if not waiting or if waiting try again
+        if(p.state === 'waiting'){
+          // If waiting but waitingFor satisfied, try to grant
+          const wf = p.waitingFor;
+          if(!wf) { p.state='ready'; }
+        }
+        const did = tryExecute(pname);
+        if(did) { progressed = true; if(SIM.config.mode==='step') break; }
+      }
+    }
+    // After attempting, if no progress, increment waiting counters and possibly detect deadlock later
+    if(!progressed) {
+      log('No progress in this scheduling cycle');
+    }
+    refreshTables();
+  }
+
+  function buildScheduleOrder(){
+    if(SIM.config.scheduler === 'fifo') return SIM.schedulerQueue.slice();
+    // default round robin: cycle queue
+    if(SIM.config.scheduler === 'roundrobin'){
+      // rotate queue so next is head
+      return SIM.schedulerQueue.slice();
+    }
+    // priority uses schedule order as listed
+    return SIM.schedulerQueue.slice();
+  }
+
+  function refreshRAG(){
+    // Build textual resource allocation graph: P->R (waiting) and R->P (allocated)
+    const lines = [];
+    for(const pname of Object.keys(SIM.processes)){
+      const p = SIM.processes[pname];
+      if(p.waitingFor){
+        lines.push(pname + ' -> ' + p.waitingFor.res + ' (waiting ' + p.waitingFor.units + ')');
+      }
+      for(const hr in p.held){
+        lines.push(hr + ' -> ' + pname + ' ('+p.held[hr]+')');
+      }
+    }
+    document.getElementById('rag').value = lines.join('\\n');
+  }
+
+  function detectDeadlocks(){
+    // Detect cycles in resource-allocation graph: nodes are processes and resources
+    // Build adjacency: process -> resource (if waiting), resource -> process (if allocated)
+    const adj = {};
+    function addEdge(a,b){ adj[a]=adj[a]||[]; adj[a].push(b); }
+    for(const pname in SIM.processes){
+      const p = SIM.processes[pname];
+      if(p.waitingFor){
+        addEdge(pname, p.waitingFor.res);
+      }
+      for(const r in p.held){
+        addEdge(r, pname);
+      }
+    }
+    const visited = {}, stack = {}, cycles = [];
+    function dfs(node, path){
+      if(stack[node]) {
+        // Found cycle
+        const idx = path.indexOf(node);
+        const cycle = path.slice(idx).concat(node);
+        cycles.push(cycle);
+        return;
+      }
+      if(visited[node]) return;
+      visited[node]=true; stack[node]=true;
+      const neigh = adj[node]||[];
+      for(const n of neigh) dfs(n, path.concat(n));
+      stack[node]=false;
+    }
+    for(const n in adj) if(!visited[n]) dfs(n,[n]);
+    if(cycles.length===0){
+      log('Deadlock detection: no cycles found');
+      alert('No deadlock cycles detected.');
+    } else {
+      log('Deadlock detection: cycles found: '+JSON.stringify(cycles));
+      alert('Deadlocks detected (cycles):\\n' + cycles.map(c=>c.join(' -> ')).join('\\n---\\n'));
+    }
+    return cycles;
+  }
+
+  function abortProcess(pname){
+    const p = SIM.processes[pname];
+    if(!p) return;
+    p.state = 'aborted';
+    // release everything
+    releaseAllHeld(pname);
+    p.ops = []; p.pc = 0; p.waitingFor = null;
+    log('Aborted process '+pname);
+    refreshTables();
+  }
+
+  function releaseAllHeld(pname){
+    const p = SIM.processes[pname];
+    if(!p) return;
+    for(const r in p.held){
+      const count = p.held[r];
+      SIM.resources[r].available += count;
+      SIM.resources[r].allocated[pname] = (SIM.resources[r].allocated[pname]||0) - count;
+      if(SIM.resources[r].allocated[pname] <= 0) delete SIM.resources[r].allocated[pname];
+    }
+    p.held = {};
+    refreshTables();
+  }
+
+  function manualAllocate(procName, resName, units){
+    const p = SIM.processes[procName]; const r = SIM.resources[resName];
+    if(!p || !r) { alert('Invalid proc or res'); return; }
+    if(r.available < units){
+      if(!confirm('Not enough units available; force allocation by reducing available (may make negatives)?')) return;
+    }
+    r.available = r.available - units;
+    r.allocated[procName] = (r.allocated[procName]||0) + units;
+    p.held[resName] = (p.held[resName]||0) + units;
+    log('Manually allocated '+units+' of '+resName+' to '+procName);
+    refreshTables();
+  }
+
+  function manualRelease(procName, resName, units){
+    const p = SIM.processes[procName]; const r = SIM.resources[resName];
+    if(!p || !r) { alert('Invalid'); return; }
+    const have = p.held[resName] || 0;
+    const toRel = Math.min(have, units);
+    if(toRel <= 0) { alert('Process holds none'); return; }
+    p.held[resName] -= toRel;
+    if(p.held[resName] <= 0) delete p.held[resName];
+    r.allocated[procName] = (r.allocated[procName]||0) - toRel;
+    if(r.allocated[procName] <= 0) delete r.allocated[procName];
+    r.available += toRel;
+    log('Manually released '+toRel+' of '+resName+' from '+procName);
+    refreshTables();
+  }
+
+  function abortSelected(){
+    const sel = Array.from(document.getElementById('abortSelect').selectedOptions).map(o=>o.value);
+    if(sel.length===0) { alert('Select at least one process to abort'); return; }
+    for(const p of sel) abortProcess(p);
+  }
+
+  function preemptSelected(){
+    const sel = Array.from(document.getElementById('abortSelect').selectedOptions).map(o=>o.value);
+    if(sel.length===0) { alert('Select at least one process to preempt'); return; }
+    // release all held by selected and add to available
+    for(const p of sel){
+      releaseAllHeld(p);
+      SIM.processes[p].state = 'ready';
+    }
+    log('Preempted resources from: '+sel.join(','));
+    refreshTables();
+  }
+
+  function releaseAll(){
+    for(const pname in SIM.processes) releaseAllHeld(pname);
+    log('All held resources released');
+    refreshTables();
+  }
+
+  // Banker's algorithm safe-state check (requires max claims input)
+  function bankersCheck(maxClaimsJSON){
+    // Parse JSON structure: {"P1":{"R1":2,"R2":1}, ...}
+    let maxClaims;
+    try{ maxClaims = JSON.parse(maxClaimsJSON); } catch(e){ alert('Invalid JSON'); return false; }
+    // Build data arrays
+    const procs = Object.keys(SIM.processes);
+    const resNames = Object.keys(SIM.resources);
+    const available = resNames.map(r=> SIM.resources[r].available);
+    const allocation = procs.map(p => resNames.map(r => SIM.processes[p].held[r]||0));
+    const maxC = procs.map(p => resNames.map(r => (maxClaims[p] && maxClaims[p][r]) ? maxClaims[p][r] : 0));
+    const need = allocation.map((alloc,i)=> alloc.map((a,j)=> Math.max(0, maxC[i][j] - a)));
+    // Safety algorithm
+    const work = available.slice();
+    const finish = procs.map(()=>false);
+    const safeOrder = [];
+    for(let iter=0; iter<procs.length; iter++){
+      let found = false;
+      for(let i=0;i<procs.length;i++){
+        if(finish[i]) continue;
+        let ok = true;
+        for(let j=0;j<resNames.length;j++){
+          if(need[i][j] > work[j]) { ok=false; break; }
+        }
+        if(ok){
+          for(let j=0;j<resNames.length;j++) work[j] += allocation[i][j];
+          finish[i] = true;
+          safeOrder.push(procs[i]);
+          found = true;
+        }
+      }
+      if(!found) break;
+    }
+    if(finish.every(x=>x)){
+      alert('System is in a SAFE state. Example safe order: '+safeOrder.join(' -> '));
+      log('Banker: SAFE. Order: '+safeOrder.join(' -> '));
+      return true;
+    } else {
+      alert('System is NOT safe!');
+      log('Banker: NOT SAFE');
+      return false;
+    }
+  }
+
+  // Scenario generators
+  function genDining(n){
+    if(n<2) return;
+    // Clear and create n resources and n processes
+    SIM.resources = {}; SIM.processes = {}; SIM.schedulerQueue=[];
+    for(let i=0;i<n;i++){
+      addResource('R'+(i+1), 1);
+    }
+    for(let i=0;i<n;i++){
+      const pname = 'P'+(i+1);
+      addProcess(pname, 1, i+1);
+      // Each philosopher requests left then right (classic deadlock if all take left)
+      const left = 'R'+((i+1));
+      const right = 'R'+(((i+1)%n)+1);
+      SIM.processes[pname].ops = [
+        {type:'request', res:left, units:1},
+        {type:'compute', duration:1},
+        {type:'request', res:right, units:1},
+        {type:'compute', duration:1},
+        {type:'release', res:left, units:1},
+        {type:'release', res:right, units:1}
+      ];
+    }
+    log('Generated dining philosophers n='+n);
+    refreshTables();
+  }
+
+  function genClassic2x2(){
+    SIM.resources = {}; SIM.processes = {}; SIM.schedulerQueue=[];
+    addResource('R1',1); addResource('R2',1);
+    addProcess('P1',1,1); addProcess('P2',1,2);
+    SIM.processes['P1'].ops = [{type:'request',res:'R1',units:1},{type:'compute',duration:1},{type:'request',res:'R2',units:1}];
+    SIM.processes['P2'].ops = [{type:'request',res:'R2',units:1},{type:'compute',duration:1},{type:'request',res:'R1',units:1}];
+    log('Generated classic 2x2 deadlock');
+    refreshTables();
+  }
+
+  function genRandom(pcount, rcount, maxUnits){
+    SIM.resources = {}; SIM.processes = {}; SIM.schedulerQueue=[];
+    for(let i=0;i<rcount;i++){
+      addResource('R'+(i+1), 1 + Math.floor(Math.random()*maxUnits));
+    }
+    for(let i=0;i<pcount;i++){
+      const pname = 'P'+(i+1);
+      addProcess(pname, Math.floor(Math.random()*3), i+1);
+      const ops = [];
+      const opsCount = 2 + Math.floor(Math.random()*5);
+      for(let j=0;j<opsCount;j++){
+        const t = Math.random();
+        if(t<0.5){
+          // request
+          const r = 'R'+(1+Math.floor(Math.random()*rcount));
+          const u = 1 + Math.floor(Math.random()*maxUnits);
+          ops.push({type:'request', res:r, units:u});
+          // sometimes release later
+          ops.push({type:'release', res:r, units:u});
+        } else {
+          ops.push({type:'compute', duration:1 + Math.floor(Math.random()*3)});
+        }
+      }
+      SIM.processes[pname].ops = ops;
+    }
+    log('Generated random scenario P='+pcount+' R='+rcount);
+    refreshTables();
+  }
+
+  // UI wiring
+  document.getElementById('addResBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newResName').value.trim();
+    const units = parseInt(document.getElementById('newResUnits').value,10) || 1;
+    addResource(name, units);
+  });
+  document.getElementById('clearResBtn').addEventListener('click', ()=>{ if(confirm('Clear resources?')) { clearResources(); }});
+  document.getElementById('addProcBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newProcName').value.trim();
+    const pr = parseInt(document.getElementById('newProcPriority').value,10) || 0;
+    const ts = parseInt(document.getElementById('newProcTimestamp').value,10) || (Object.keys(SIM.processes).length+1);
+    addProcess(name, pr, ts);
+  });
+  document.getElementById('clearProcBtn').addEventListener('click', ()=> { if(confirm('Clear processes?')) clearProcesses(); });
+
+  document.getElementById('opProc').addEventListener('change', updateProcSelects);
+  document.getElementById('addOpBtn').addEventListener('click', ()=>{
+    const pname = document.getElementById('opProc').value;
+    const type = document.getElementById('opType').value;
+    const res = document.getElementById('opRes').value;
+    const units = parseInt(document.getElementById('opUnits').value,10) || 1;
+    const duration = parseInt(document.getElementById('opDuration').value,10) || 1;
+    const op = {type: type};
+    if(type === 'request' || type === 'release'){ op.res = res; op.units = units; }
+    if(type === 'compute'){ op.duration = duration; }
+    appendOpToProc(pname, op);
+  });
+  document.getElementById('clearOpsBtn').addEventListener('click', ()=>{
+    const pname = document.getElementById('opProc').value;
+    if(!pname) return;
+    SIM.processes[pname].ops = [];
+    SIM.processes[pname].pc = 0;
+    log('Cleared ops for '+pname);
+    refreshTables();
+  });
+
+  // Generators
+  document.getElementById('genDiningBtn').addEventListener('click', ()=>{
+    const n = parseInt(document.getElementById('genDiningN').value,10) || 5;
+    if(confirm('Generate dining philosophers will wipe current definitions. Continue?')) genDining(n);
+  });
+  document.getElementById('genClassicBtn').addEventListener('click', ()=> {
+    if(confirm('Generate classic will wipe current definitions. Continue?')) genClassic2x2();
+  });
+  document.getElementById('genRandomBtn').addEventListener('click', ()=>{
+    const p = parseInt(document.getElementById('randP').value,10)||4;
+    const r = parseInt(document.getElementById('randR').value,10)||3;
+    const mu = parseInt(document.getElementById('randMaxUnits').value,10)||2;
+    if(confirm('Generate random scenario will wipe current definitions. Continue?')) genRandom(p,r,mu);
+  });
+
+  // Simulation controls
+  document.getElementById('simMode').addEventListener('change', (e)=>{ SIM.config.mode = e.target.value; });
+  document.getElementById('scheduler').addEventListener('change', (e)=>{ SIM.config.scheduler = e.target.value; });
+  document.getElementById('resourcePolicy').addEventListener('change', (e)=>{
+    SIM.config.policy = e.target.value;
+    if(e.target.value === 'ordering'){
+      // set a default ordering
+      SIM.config.globalOrder = Object.keys(SIM.resources).slice();
+      alert('Global ordering will be resource list order. You can reorder resources by removing/adding.');
+    } else SIM.config.globalOrder = null;
+  });
+  document.getElementById('timeoutSteps').addEventListener('change', (e)=> SIM.config.timeoutSteps = parseInt(e.target.value,10) || 5);
+  document.getElementById('allowPreempt').addEventListener('change', (e)=> SIM.config.allowPreempt = e.target.checked);
+
+  document.getElementById('stepBtn').addEventListener('click', ()=>{
+    scheduleOneStep();
+  });
+  document.getElementById('runSpeed').addEventListener('input', (e)=>{ document.getElementById('speedVal').innerText = e.target.value; });
+  document.getElementById('runBtn').addEventListener('click', ()=>{
+    if(SIM.running) return;
+    SIM.running = true;
+    const speed = parseInt(document.getElementById('runSpeed').value,10) || 800;
+    SIM.runTimer = setInterval(()=> {
+      scheduleOneStep();
+    }, speed);
+    log('Auto-run started');
+  });
+  document.getElementById('pauseBtn').addEventListener('click', ()=>{
+    if(SIM.runTimer) clearInterval(SIM.runTimer);
+    SIM.running = false;
+    SIM.runTimer = null;
+    log('Auto-run paused');
+  });
+
+  // Detection & recovery
+  document.getElementById('detectBtn').addEventListener('click', ()=> detectDeadlocks());
+  document.getElementById('safeCheckBtn').addEventListener('click', ()=> {
+    bankersCheck(document.getElementById('maxClaims').value || '{}');
+  });
+  document.getElementById('abortSelectedBtn').addEventListener('click', ()=> abortSelected());
+  document.getElementById('preemptSelectedBtn').addEventListener('click', ()=> preemptSelected());
+  document.getElementById('releaseAllBtn').addEventListener('click', ()=> { if(confirm('Force release all held resources?')) releaseAll(); });
+
+  // Manual control
+  document.getElementById('manualAllocateBtn').addEventListener('click', ()=>{
+    const p = document.getElementById('manualProc').value;
+    const r = document.getElementById('manualRes').value;
+    const u = parseInt(document.getElementById('manualUnits').value,10)||1;
+    manualAllocate(p,r,u);
+  });
+  document.getElementById('manualRequestBtn').addEventListener('click', ()=>{
+    const p = document.getElementById('manualProc').value;
+    const r = document.getElementById('manualRes').value;
+    const u = parseInt(document.getElementById('manualUnits').value,10)||1;
+    // Append a request op immediately at current pc so it will be attempted
+    if(!SIM.processes[p]) return;
+    SIM.processes[p].ops.splice(SIM.processes[p].pc,0,{type:'request', res:r, units:u});
+    log('Inserted immediate request for '+p+' -> '+r+'('+u+')');
+    refreshTables();
+  });
+  document.getElementById('manualReleaseBtn').addEventListener('click', ()=>{
+    const p = document.getElementById('manualProc').value;
+    const r = document.getElementById('manualRes').value;
+    const u = parseInt(document.getElementById('manualUnits').value,10)||1;
+    manualRelease(p,r,u);
+  });
+
+  document.getElementById('killAllBtn').addEventListener('click', ()=>{
+    if(!confirm('Reset simulator state (clear allocations, reset PC) but keep definitions?')) return;
+    // Release all held, reset PCs and states
+    for(const pname in SIM.processes){
+      const p = SIM.processes[pname];
+      for(const r in p.held){
+        const cnt = p.held[r];
+        SIM.resources[r].available += cnt;
+        SIM.resources[r].allocated[pname] = (SIM.resources[r].allocated[pname]||0) - cnt;
+        if(SIM.resources[r].allocated[pname] <= 0) delete SIM.resources[r].allocated[pname];
+      }
+      p.held = {}; p.pc = 0; p.state = 'ready'; p.waitingFor = null; p.waitSince = null;
+    }
+    log('Simulator state reset (allocations cleared)');
+    refreshTables();
+  });
+
+  document.getElementById('fullResetBtn').addEventListener('click', ()=>{
+    if(!confirm('Full reset clears everything. Continue?')) return;
+    SIM.resources = {}; SIM.processes = {}; SIM.schedulerQueue = []; SIM.logLines=[]; SIM.stepCount=0;
+    document.getElementById('log').value = '';
+    refreshTables();
+  });
+
+  // Resource unit increment/decrement buttons (delegate)
+  document.querySelector('#resTable').addEventListener('click', (e)=>{
+    if(e.target.classList.contains('incUnits')){
+      const r = e.target.getAttribute('data-res'); changeResourceUnits(r, 1);
+    } else if(e.target.classList.contains('decUnits')){
+      const r = e.target.getAttribute('data-res'); changeResourceUnits(r, -1);
+    } else if(e.target.classList.contains('selectProc')){
+      const p = e.target.getAttribute('data-proc');
+      // select in opProc and manualProc
+      document.getElementById('opProc').value = p;
+      document.getElementById('manualProc').value = p;
+      updateProcSelects();
+    }
+  });
+
+  // Abort select double click to toggle selection
+  document.getElementById('abortSelect').addEventListener('dblclick', ()=> { /* no-op */ });
+
+  // RAG and log initialization
+  refreshTables();
+
+  // Expose some functions for easy console experiments
+  window.SIM = SIM;
+
+  // preload some scenario for convenience
+  genClassic2x2();
+
+})();
+  </script>
+</body>
+</html>

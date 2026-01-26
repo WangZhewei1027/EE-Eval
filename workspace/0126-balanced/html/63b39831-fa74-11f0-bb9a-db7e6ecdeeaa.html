@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Version Control Demonstration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 800px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .container {
+            margin-top: 30px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: monospace;
+            font-size: 14px;
+            padding: 10px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 4px;
+            margin-right: 10px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover:not(:disabled) {
+            background-color: #3498db;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #commitList {
+            margin-top: 20px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+        .commit {
+            border-bottom: 1px solid #ccc;
+            padding: 6px 0;
+            cursor: pointer;
+        }
+        .commit:last-child {
+            border-bottom: none;
+        }
+        .commit:hover {
+            background-color: #e1eaf5;
+        }
+        .commit.active {
+            background-color: #d6e4f0;
+            font-weight: bold;
+        }
+        #versionLabel {
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 18px;
+            color: #34495e;
+        }
+        #diffOutput {
+            white-space: pre-wrap;
+            background-color: #272822;
+            color: #f8f8f2;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .diff-added {
+            color: #6a9917;
+            background-color: #243d13;
+            display: block;
+        }
+        .diff-removed {
+            color: #bf616a;
+            background-color: #4f1e1e;
+            display: block;
+        }
+        .diff-context {
+            color: #f8f8f2;
+            display: block;
+        }
+        #instructions {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 25px;
+            font-size: 15px;
+            line-height: 1.5;
+            color: #34495e;
+        }
+    </style>
+</head>
+<body>
+    <h1>Version Control Demonstration</h1>
+    <div id="instructions">
+        <p><strong>What is Version Control?</strong></p>
+        <p>Version control is a system that records changes to a file or set of files over time so you can recall specific versions later. It allows multiple people to collaborate, track changes, and revert to previous states.</p>
+        <p><strong>Try it out:</strong> Edit the text below, then "Commit" your changes with a message. Select previous commits to see differences from the current version.</p>
+    </div>
+    <div class="container">
+        <label for="editor"><strong>Editable Text:</strong></label>
+        <textarea id="editor" placeholder="Type or edit text here..."></textarea>
+        <br />
+        <input type="text" id="commitMessage" placeholder="Enter commit message" style="width:60%; padding:8px; font-size:14px; margin-bottom:10px;"/>
+        <button id="commitBtn" disabled>Commit</button>
+        <button id="revertBtn" disabled>Revert to Selected Commit</button>
+
+        <div id="versionLabel">No commits yet</div>
+
+        <div id="commitList" aria-label="List of commits" role="list"></div>
+
+        <div id="diffOutput" aria-live="polite" aria-atomic="true" aria-label="Diff output area" style="display:none;"></div>
+    </div>
+
+    <script>
+        (function() {
+            const editor = document.getElementById('editor');
+            const commitBtn = document.getElementById('commitBtn');
+            const revertBtn = document.getElementById('revertBtn');
+            const commitListEl = document.getElementById('commitList');
+            const commitMessageEl = document.getElementById('commitMessage');
+            const versionLabel = document.getElementById('versionLabel');
+            const diffOutput = document.getElementById('diffOutput');
+
+            // Array to hold commits
+            let commits = [];
+            let selectedCommitIndex = null;
+
+            // Enable Commit button only if text changed and message is not empty
+            function updateCommitButton() {
+                const message = commitMessageEl.value.trim();
+                const currentText = editor.value;
+                if(currentText === '') {
+                    commitBtn.disabled = true;
+                    return;
+                }
+
+                if(message.length === 0) {
+                    commitBtn.disabled = true;
+                    return;
+                }
+
+                if(commits.length === 0) {
+                    // Any non-empty text with message allows commit
+                    commitBtn.disabled = false;
+                } else {
+                    const lastCommitText = commits[commits.length - 1].text;
+                    commitBtn.disabled = (lastCommitText === currentText);
+                }
+            }
+
+            // Utility: Escape HTML for safe displaying diff output
+            function escapeHtml(text) {
+                const map = {
+                    '&': "&amp;",
+                    '<': "&lt;",
+                    '>': "&gt;",
+                    '"': "&quot;",
+                    "'": "&#039;"
+                };
+                return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+            }
+
+            // Simple line-based diff implementation, showing added (+), removed (-), unchanged lines
+            // Returns array of {type: 'added'|'removed'|'context', text: string}
+            function diffLines(oldStr, newStr) {
+                const oldLines = oldStr.split('\n');
+                const newLines = newStr.split('\n');
+
+                // Use a simple dynamic programming algorithm for longest common subsequence (LCS)
+                const dp = [];
+                for(let i = 0; i <= oldLines.length; i++) {
+                    dp[i] = [];
+                    for(let j = 0; j <= newLines.length; j++) {
+                        dp[i][j] = 0;
+                    }
+                }
+                for(let i = 1; i <= oldLines.length; i++) {
+                    for(let j = 1; j <= newLines.length; j++) {
+                        if(oldLines[i-1] === newLines[j-1]) {
+                            dp[i][j] = dp[i-1][j-1] + 1;
+                        } else {
+                            dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+                        }
+                    }
+                }
+
+                // Backtrack to find diff
+                let result = [];
+                let i = oldLines.length;
+                let j = newLines.length;
+
+                while(i > 0 && j > 0) {
+                    if(oldLines[i-1] === newLines[j-1]) {
+                        result.push({type: 'context', text: oldLines[i-1]});
+                        i--;
+                        j--;
+                    } else if(dp[i-1][j] >= dp[i][j-1]) {
+                        result.push({type: 'removed', text: oldLines[i-1]});
+                        i--;
+                    } else {
+                        result.push({type: 'added', text: newLines[j-1]});
+                        j--;
+                    }
+                }
+                while(i > 0) {
+                    result.push({type: 'removed', text: oldLines[i-1]});
+                    i--;
+                }
+                while(j > 0) {
+                    result.push({type: 'added', text: newLines[j-1]});
+                    j--;
+                }
+
+                result.reverse();
+                return result;
+            }
+
+            // Render the diff in the diffOutput area with colors
+            function renderDiff(diff) {
+                let html = '';
+                diff.forEach(part => {
+                    const escaped = escapeHtml(part.text);
+                    if(part.type === 'added') {
+                        html += `<span class="diff-added">+ ${escaped}</span>\n`;
+                    } else if(part.type === 'removed') {
+                        html += `<span class="diff-removed">- ${escaped}</span>\n`;
+                    } else {
+                        html += `<span class="diff-context">  ${escaped}</span>\n`;
+                    }
+                });
+                diffOutput.innerHTML = html;
+                diffOutput.style.display = 'block';
+            }
+
+            // Update the commit list UI
+            function renderCommitList() {
+                commitListEl.innerHTML = '';
+                commits.forEach((commit, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'commit';
+                    div.setAttribute('role', 'listitem');
+                    div.tabIndex = 0;
+                    div.textContent = `${commit.message} (${commit.timestamp.toLocaleString()})`;
+                    if(index === selectedCommitIndex) {
+                        div.classList.add('active');
+                    }
+                    div.addEventListener('click', () => {
+                        selectCommit(index);
+                    });
+                    div.addEventListener('keydown', e => {
+                        if(e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            selectCommit(index);
+                        }
+                    });
+                    commitListEl.appendChild(div);
+                });
+            }
+
+            // Select a commit and show diff with current editor text
+            function selectCommit(index) {
+                selectedCommitIndex = index;
+                renderCommitList();
+
+                const commit = commits[index];
+                const currentText = editor.value;
+                const diff = diffLines(commit.text, currentText);
+
+                renderDiff(diff);
+                revertBtn.disabled = false;
+                versionLabel.textContent = `Selected commit: "${commit.message}" (${commit.timestamp.toLocaleString()})`;
+            }
+
+            // Commit current editor text with message
+            function commitChanges() {
+                const message = commitMessageEl.value.trim();
+                if(!message) return;
+
+                const text = editor.value;
+                const timestamp = new Date();
+
+                commits.push({message, text, timestamp});
+                selectedCommitIndex = null;
+                diffOutput.style.display = 'none';
+                versionLabel.textContent = `Latest commit: "${message}" (${timestamp.toLocaleString()})`;
+                commitMessageEl.value = '';
+                commitBtn.disabled = true;
+                revertBtn.disabled = true;
+
+                renderCommitList();
+            }
+
+            // Revert editor to selected commit text
+            function revertToCommit() {
+                if(selectedCommitIndex === null) return;
+                const commit = commits[selectedCommitIndex];
+                editor.value = commit.text;
+                commitMessageEl.value = '';
+                updateCommitButton();
+                diffOutput.style.display = 'none';
+                revertBtn.disabled = true;
+                selectedCommitIndex = null;
+                renderCommitList();
+                versionLabel.textContent = `Reverted to commit: "${commit.message}" (${commit.timestamp.toLocaleString()})`;
+            }
+
+            // Event listeners
+            editor.addEventListener('input', () => {
+                updateCommitButton();
+                selectedCommitIndex = null;
+                diffOutput.style.display = 'none';
+                revertBtn.disabled = true;
+                renderCommitList();
+                versionLabel.textContent = commits.length > 0 ? 
+                    `Latest commit: "${commits[commits.length - 1].message}" (${commits[commits.length - 1].timestamp.toLocaleString()})` : 
+                    'No commits yet';
+            });
+
+            commitMessageEl.addEventListener('input', updateCommitButton);
+
+            commitBtn.addEventListener('click', () => {
+                commitChanges();
+                editor.focus();
+            });
+
+            revertBtn.addEventListener('click', () => {
+                revertToCommit();
+                editor.focus();
+            });
+
+            // Initial UI states
+            commitBtn.disabled = true;
+            revertBtn.disabled = true;
+            versionLabel.textContent = 'No commits yet';
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A* Search Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    margin-bottom: 5px;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(25, 22px);
+    grid-template-rows: repeat(25, 22px);
+    gap: 2px;
+    user-select: none;
+    margin-bottom: 15px;
+  }
+  .cell {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #ddd;
+    background-color: white;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+  .cell.wall {
+    background-color: #333;
+    cursor: not-allowed;
+  }
+  .cell.start {
+    background-color: #3aeb87;
+  }
+  .cell.end {
+    background-color: #eb3a3a;
+  }
+  .cell.open {
+    background-color: #8abeeb;
+  }
+  .cell.closed {
+    background-color: #1a60a3;
+  }
+  .cell.path {
+    background-color: #f1c40f;
+  }
+  #controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  button {
+    font-size: 14px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  #info {
+    max-width: 550px;
+    text-align: center;
+  }
+  #legend {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 14px;
+  }
+  .legend-color {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #bbb;
+  }
+  .legend-wall { background: #333; }
+  .legend-start { background: #3aeb87; }
+  .legend-end { background: #eb3a3a; }
+  .legend-open { background: #8abeeb; }
+  .legend-closed { background: #1a60a3; }
+  .legend-path { background: #f1c40f; }
+</style>
+</head>
+<body>
+<h1>A* Search Visualization</h1>
+<div id="grid" aria-label="Grid for A* pathfinding visualization" role="grid"></div>
+<div id="controls">
+  <button id="setStartBtn" aria-pressed="false">Set Start</button>
+  <button id="setEndBtn" aria-pressed="false">Set End</button>
+  <button id="addWallsBtn" aria-pressed="true">Add/Remove Walls</button>
+  <button id="runBtn">Run A* Search</button>
+  <button id="clearBtn">Clear Board</button>
+</div>
+<div id="info" aria-live="polite"></div>
+<div id="legend" aria-label="Legend for cell colors">
+  <div class="legend-item"><div class="legend-color legend-wall"></div> Wall</div>
+  <div class="legend-item"><div class="legend-color legend-start"></div> Start</div>
+  <div class="legend-item"><div class="legend-color legend-end"></div> End</div>
+  <div class="legend-item"><div class="legend-color legend-open"></div> Open set</div>
+  <div class="legend-item"><div class="legend-color legend-closed"></div> Closed set</div>
+  <div class="legend-item"><div class="legend-color legend-path"></div> Final Path</div>
+</div>
+
+<script>
+(() => {
+  const ROWS = 25;
+  const COLS = 25;
+
+  // States for user interaction mode
+  const MODE = {
+    ADD_WALLS: 'add_walls',
+    SET_START: 'set_start',
+    SET_END: 'set_end',
+  };
+  let currentMode = MODE.ADD_WALLS;
+
+  const gridElement = document.getElementById('grid');
+  const infoElement = document.getElementById('info');
+  const setStartBtn = document.getElementById('setStartBtn');
+  const setEndBtn = document.getElementById('setEndBtn');
+  const addWallsBtn = document.getElementById('addWallsBtn');
+  const runBtn = document.getElementById('runBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  // Data structures for cells
+  class Cell {
+    constructor(row, col) {
+      this.row = row;
+      this.col = col;
+      this.isWall = false;
+      this.isStart = false;
+      this.isEnd = false;
+
+      // A* parameters
+      this.g = Infinity; // cost from start node
+      this.h = Infinity; // heuristic cost to end node
+      this.f = Infinity; // g + h
+      this.parent = null;
+
+      this.status = 'unvisited'; // unvisited, open, closed, path
+
+      // DOM element for this cell
+      this.element = document.createElement('div');
+      this.element.classList.add('cell');
+      this.element.setAttribute('role', 'gridcell');
+      this.element.setAttribute('aria-label', `Cell r${row} c${col}`);
+      this.element.dataset.row = row;
+      this.element.dataset.col = col;
+
+      this.element.tabIndex = 0; // make focusable for accessibility
+
+      // Event listeners will be added after creating cell
+    }
+
+    reset() {
+      this.isWall = false;
+      this.isStart = false;
+      this.isEnd = false;
+      this.g = Infinity;
+      this.h = Infinity;
+      this.f = Infinity;
+      this.parent = null;
+      this.status = 'unvisited';
+      this.updateVisual();
+    }
+
+    updateVisual() {
+      this.element.className = 'cell'; // reset classes
+      if (this.isWall) this.element.classList.add('wall');
+      else if (this.isStart) this.element.classList.add('start');
+      else if (this.isEnd) this.element.classList.add('end');
+      else if (this.status === 'open') this.element.classList.add('open');
+      else if (this.status === 'closed') this.element.classList.add('closed');
+      else if (this.status === 'path') this.element.classList.add('path');
+      // otherwise plain cell
+    }
+  }
+
+  // Initialize grid data
+  const grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) {
+      const cell = new Cell(r, c);
+      row.push(cell);
+      gridElement.appendChild(cell.element);
+    }
+    grid.push(row);
+  }
+
+  // Start and end cells default
+  let startCell = grid[0][0];
+  startCell.isStart = true;
+  startCell.updateVisual();
+  let endCell = grid[ROWS - 1][COLS - 1];
+  endCell.isEnd = true;
+  endCell.updateVisual();
+
+  function setMode(newMode) {
+    currentMode = newMode;
+    setStartBtn.setAttribute('aria-pressed', newMode === MODE.SET_START);
+    setEndBtn.setAttribute('aria-pressed', newMode === MODE.SET_END);
+    addWallsBtn.setAttribute('aria-pressed', newMode === MODE.ADD_WALLS);
+
+    infoElement.textContent = (() => {
+      switch(newMode) {
+        case MODE.ADD_WALLS: return 'Click on cells to add/remove walls.';
+        case MODE.SET_START: return 'Click on a cell to set the start position.';
+        case MODE.SET_END: return 'Click on a cell to set the end position.';
+      }
+    })();
+  }
+  setMode(MODE.ADD_WALLS);
+
+  // User clicks on cells in the grid
+  function onCellClick(e) {
+    const r = +e.target.dataset.row;
+    const c = +e.target.dataset.col;
+    const cell = grid[r][c];
+
+    if (runInProgress) return; // disable interaction while running
+
+    if (currentMode === MODE.ADD_WALLS) {
+      if (cell.isStart || cell.isEnd) return;
+      cell.isWall = !cell.isWall;
+      cell.updateVisual();
+    } else if (currentMode === MODE.SET_START) {
+      if (cell.isWall || cell.isEnd) return;
+      startCell.isStart = false;
+      startCell.updateVisual();
+      cell.isStart = true;
+      startCell = cell;
+      cell.updateVisual();
+      // Reset pathfinding results
+      resetPathfindingVisuals();
+    } else if (currentMode === MODE.SET_END) {
+      if (cell.isWall || cell.isStart) return;
+      endCell.isEnd = false;
+      endCell.updateVisual();
+      cell.isEnd = true;
+      endCell = cell;
+      cell.updateVisual();
+      // Reset pathfinding results
+      resetPathfindingVisuals();
+    }
+  }
+
+  gridElement.addEventListener('click', onCellClick);
+
+  // Keydown to toggle walls with space for accessibility
+  gridElement.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+
+  // Button event handlers
+  setStartBtn.onclick = () => setMode(MODE.SET_START);
+  setEndBtn.onclick = () => setMode(MODE.SET_END);
+  addWallsBtn.onclick = () => setMode(MODE.ADD_WALLS);
+  clearBtn.onclick = () => {
+    if (runInProgress) return;
+    for (const row of grid) {
+      for (const cell of row) {
+        cell.isWall = false;
+        cell.status = 'unvisited';
+        cell.g = Infinity;
+        cell.h = Infinity;
+        cell.f = Infinity;
+        cell.parent = null;
+        cell.updateVisual();
+      }
+    }
+    // Restore start/end cells in case they were cleared visually by reset
+    startCell.isStart = true;
+    startCell.updateVisual();
+    endCell.isEnd = true;
+    endCell.updateVisual();
+    infoElement.textContent = 'Board cleared. You can add walls, set start/end, and run A*.';
+  };
+
+  // Reset cells with open/closed/path states before a new run
+  function resetPathfindingVisuals() {
+    for (const row of grid) {
+      for (const cell of row) {
+        cell.status = 'unvisited';
+        cell.g = Infinity;
+        cell.h = Infinity;
+        cell.f = Infinity;
+        cell.parent = null;
+        // Keep wall/start/end states but reset styling for states
+        if (!cell.isWall && !cell.isStart && !cell.isEnd) {
+          cell.updateVisual();
+        }
+      }
+    }
+  }
+
+  // Manhattan distance heuristic
+  function heuristic(a, b) {
+    return Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
+  }
+
+  // A* Search algorithm (async for visualization)
+  let runInProgress = false;
+
+  async function runAStar() {
+    if (runInProgress) return;
+    resetPathfindingVisuals();
+    infoElement.textContent = 'Running A* Search...';
+    runInProgress = true;
+    disableControls(true);
+
+    // Initialize start node
+    startCell.g = 0;
+    startCell.h = heuristic(startCell, endCell);
+    startCell.f = startCell.h;
+
+    // Priority queue implementation: simple array with sorting (for clarity)
+    // For performance, a real priority queue would be better
+    let openSet = [startCell];
+    startCell.status = 'open';
+    startCell.updateVisual();
+
+    while (openSet.length > 0) {
+      // Sort openSet by f value (lowest f first)
+      openSet.sort((a, b) => a.f - b.f);
+      const current = openSet.shift();
+      current.status = 'closed';
+      current.updateVisual();
+
+      if (current === endCell) {
+        infoElement.textContent = 'Path found!';
+        // Reconstruct path
+        let pathNode = current;
+        const pathCells = [];
+        while (pathNode) {
+          pathCells.push(pathNode);
+          pathNode = pathNode.parent;
+        }
+        // Draw path from start to end
+        for (const node of pathCells) {
+          if (node !== startCell && node !== endCell) {
+            node.status = 'path';
+            node.updateVisual();
+            await sleep(20);
+          }
+        }
+        runInProgress = false;
+        disableControls(false);
+        return;
+      }
+
+      // Check neighbors (up, right, down, left)
+      const neighbors = [];
+      const directions = [
+        [-1, 0],
+        [0, 1],
+        [1, 0],
+        [0, -1],
+      ];
+      for (const [dr, dc] of directions) {
+        const nr = current.row + dr;
+        const nc = current.col + dc;
+        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+          neighbors.push(grid[nr][nc]);
+        }
+      }
+
+      for (const neighbor of neighbors) {
+        if (neighbor.isWall || neighbor.status === 'closed') continue;
+
+        const tentativeG = current.g + 1;
+
+        if (tentativeG < neighbor.g) {
+          neighbor.parent = current;
+          neighbor.g = tentativeG;
+          neighbor.h = heuristic(neighbor, endCell);
+          neighbor.f = neighbor.g + neighbor.h;
+
+          if (neighbor.status !== 'open') {
+            openSet.push(neighbor);
+            neighbor.status = 'open';
+            neighbor.updateVisual();
+          }
+        }
+      }
+
+      // Visualization speed
+      await sleep(15);
+    }
+
+    infoElement.textContent = 'No path found.';
+    runInProgress = false;
+    disableControls(false);
+  }
+
+  // Utility sleep function for async visual delays
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function disableControls(disable) {
+    setStartBtn.disabled = disable;
+    setEndBtn.disabled = disable;
+    addWallsBtn.disabled = disable;
+    clearBtn.disabled = disable;
+    runBtn.disabled = disable;
+  }
+
+  runBtn.onclick = runAStar;
+
+  // Initial help text
+  infoElement.textContent = 'Use the buttons to set start/end points or add/remove walls, then run A* Search.';
+})();
+</script>
+</body>
+</html>

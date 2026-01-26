@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overfitting Demo — Polynomial Regression</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 18px; color: #111; }
+  h1 { margin: 0 0 6px 0; font-size: 20px; }
+  p { margin: 6px 0 14px 0; color: #333; max-width: 760px; }
+  .controls { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px; }
+  label { font-size:13px; color:#222; }
+  input[type=range] { width:160px; vertical-align:middle; margin-left:8px; }
+  input[type=number] { width:72px; margin-left:8px; }
+  button { padding:8px 12px; background:#2b79ff; color:white; border:0; border-radius:6px; cursor:pointer; }
+  button.secondary { background:#e9eefb; color:#1b2b4a; }
+  #canvasWrap { border:1px solid #ddd; width:820px; background:white; padding:12px; border-radius:8px; }
+  canvas { display:block; background:linear-gradient(#fff, #fbfdff); }
+  .metrics { margin-top:10px; display:flex; gap:18px; flex-wrap:wrap; align-items:center; }
+  .metric { font-size:14px; color:#111; background:#f6f9ff; padding:8px 10px; border-radius:6px; border:1px solid #e5eefc; }
+  .small { font-size:12px; color:#444; }
+  .footer { margin-top:12px; max-width:760px; color:#333; font-size:13px; }
+  .controls-group { display:flex; gap:6px; align-items:center; }
+  .checkbox { transform:translateY(1px); margin-left:8px; }
+  @media (max-width:860px){ #canvasWrap, canvas{ width:100%; } }
+</style>
+</head>
+<body>
+<h1>Overfitting (Interactive Demo)</h1>
+<p>
+  This interactive visualization shows how polynomial models can underfit, fit well, or overfit data.
+  Generate noisy samples from a fixed "true" function, fit a polynomial of adjustable degree, and compare
+  training vs test error. Increase degree too far and the model will follow noise — that is overfitting.
+</p>
+
+<div class="controls">
+  <div class="controls-group">
+    <label>Degree: <span id="degVal">3</span></label>
+    <input id="degree" type="range" min="0" max="20" value="3">
+  </div>
+
+  <div class="controls-group">
+    <label>Samples:</label>
+    <input id="nSamples" type="range" min="6" max="200" value="30">
+    <span id="nSamplesVal" class="small">30</span>
+  </div>
+
+  <div class="controls-group">
+    <label>Noise σ:</label>
+    <input id="noise" type="range" min="0" max="1.5" step="0.01" value="0.2">
+    <span id="noiseVal" class="small">0.20</span>
+  </div>
+
+  <div class="controls-group">
+    <label>Train %:</label>
+    <input id="trainPct" type="range" min="30" max="90" value="70">
+    <span id="trainPctVal" class="small">70%</span>
+  </div>
+
+  <div class="controls-group">
+    <label>Ridge λ:</label>
+    <input id="lambda" type="range" min="0" max="10" step="0.01" value="0">
+    <span id="lambdaVal" class="small">0.00</span>
+  </div>
+
+  <div style="margin-left:auto; display:flex; gap:8px;">
+    <button id="regen">Regenerate</button>
+    <button id="reset" class="secondary">Reset</button>
+  </div>
+</div>
+
+<div id="canvasWrap">
+  <canvas id="plot" width="800" height="360"></canvas>
+  <div class="metrics">
+    <div class="metric">Training MSE: <strong id="trainMse">-</strong></div>
+    <div class="metric">Test MSE: <strong id="testMse">-</strong></div>
+    <div class="metric small">Green = fitted curve • Blue = train points • Red = test points • Gray = true function</div>
+  </div>
+</div>
+
+<div class="footer">
+  Tip: move the Degree slider. With few samples and high degree you'll see the curve wiggle dramatically to pass through training points — high training accuracy but poor test performance = overfitting. Increasing λ (ridge) smooths the fit.
+</div>
+
+<script>
+// ==== Utilities: simple linear algebra ====
+function transpose(A) {
+  const m = A.length, n = A[0].length;
+  const T = Array.from({length:n},()=>Array(m));
+  for(let i=0;i<m;i++) for(let j=0;j<n;j++) T[j][i]=A[i][j];
+  return T;
+}
+function matMul(A,B) {
+  const m=A.length, p=A[0].length, n=B[0].length;
+  const C=Array.from({length:m},()=>Array(n).fill(0));
+  for(let i=0;i<m;i++) for(let k=0;k<p;k++){
+    const aik=A[i][k];
+    for(let j=0;j<n;j++) C[i][j]+=aik*B[k][j];
+  }
+  return C;
+}
+function vecDot(a,b){ let s=0; for(let i=0;i<a.length;i++) s+=a[i]*b[i]; return s; }
+function matVecMul(A,v){ const m=A.length, n=A[0].length; const out=Array(m).fill(0); for(let i=0;i<m;i++){ let s=0; for(let j=0;j<n;j++) s+=A[i][j]*v[j]; out[i]=s;} return out; }
+function addDiag(A,mu){ const n=A.length; const B=A.map((row,i)=>row.slice()); for(let i=0;i<n;i++) B[i][i]+=mu; return B; }
+
+// Solve linear system Ax = b using Gaussian elimination with partial pivoting (A is square)
+function solveLinear(Ain, bin) {
+  const n = Ain.length;
+  const A = Ain.map(r=>r.slice());
+  const b = bin.slice();
+  for(let k=0;k<n;k++){
+    // pivot
+    let pivot = k;
+    let maxv = Math.abs(A[k][k]);
+    for(let i=k+1;i<n;i++){
+      const av = Math.abs(A[i][k]);
+      if(av > maxv){ maxv=av; pivot=i; }
+    }
+    if(maxv < 1e-12) { // singular or nearly
+      // regularize a bit
+      A[k][k] += 1e-8;
+    }
+    if(pivot !== k){
+      [A[k], A[pivot]] = [A[pivot], A[k]];
+      [b[k], b[pivot]] = [b[pivot], b[k]];
+    }
+    const akk = A[k][k];
+    for(let i=k+1;i<n;i++){
+      const factor = A[i][k] / (akk || 1e-12);
+      b[i] -= factor * b[k];
+      for(let j=k;j<n;j++){
+        A[i][j] -= factor * A[k][j];
+      }
+    }
+  }
+  const x = Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){
+    let s = b[i];
+    for(let j=i+1;j<n;j++) s -= A[i][j]*x[j];
+    x[i] = s / (A[i][i] || 1e-12);
+  }
+  return x;
+}
+
+// Build Vandermonde design matrix for x array and degree d (columns: x^0 ... x^d)
+function vandermonde(xs, d) {
+  const n = xs.length;
+  const A = Array.from({length:n}, ()=>Array(d+1));
+  for(let i=0;i<n;i++){
+    let val = 1;
+    for(let j=0;j<=d;j++){
+      A[i][j]=val;
+      val *= xs[i];
+    }
+  }
+  return A;
+}
+
+// Fit polynomial via normal equations with optional ridge regularization λ
+function fitPoly(xs, ys, degree, lambda=0) {
+  const A = vandermonde(xs, degree);
+  const At = transpose(A);
+  const AtA = matMul(At, A); // (d+1)x(d+1)
+  const n = AtA.length;
+  const AtAreg = AtA.map((r,i)=>r.map((v,j)=> v + (i===j ? lambda : 0) ));
+  const Aty = matVecMul(At, ys); // (d+1) vector
+  const coeffs = solveLinear(AtAreg, Aty); // length d+1
+  return coeffs;
+}
+function predictPoly(coeffs, xs) {
+  const d = coeffs.length - 1;
+  return xs.map(x => {
+    let val = 0, pow=1;
+    for(let j=0;j<=d;j++){
+      val += coeffs[j]*pow;
+      pow *= x;
+    }
+    return val;
+  });
+}
+function mse(a,b){
+  let s=0;
+  for(let i=0;i<a.length;i++){ const e=a[i]-b[i]; s+=e*e; }
+  return s/a.length;
+}
+
+// ==== Demo: data generation and plotting ====
+
+const canvas = document.getElementById('plot');
+const ctx = canvas.getContext('2d');
+const width = canvas.width;
+const height = canvas.height;
+const pad = {l:44, r:12, t:12, b:36};
+
+let state = {
+  degree: 3,
+  nSamples: 30,
+  noise: 0.2,
+  trainPct: 0.7,
+  lambda: 0,
+  xs: [],
+  ys: [],
+  trainIdx: [],
+  testIdx: [],
+  trueFuncName: 'sin'
+};
+
+// True function (ground truth)
+function trueFunction(x) {
+  // Example non-linear function on [-1,1]
+  // a mixture of sin and polynomial to be interesting
+  return Math.sin(2.0 * x * Math.PI) * (0.6 + 0.4 * x) + 0.3 * x*x - 0.15 * x;
+}
+
+// Generate data
+function generateData() {
+  const n = state.nSamples;
+  const xs = [];
+  const ys = [];
+  for(let i=0;i<n;i++){
+    // sample x uniformly in [-1,1]
+    const x = -1 + 2*Math.random();
+    const ytrue = trueFunction(x);
+    const y = ytrue + randn()*state.noise;
+    xs.push(x);
+    ys.push(y);
+  }
+  // split into train/test
+  const indices = xs.map((_,i)=>i);
+  shuffle(indices);
+  const nTrain = Math.max(3, Math.round(state.trainPct/100 * n));
+  const trainIdx = indices.slice(0, nTrain);
+  const testIdx  = indices.slice(nTrain);
+  state.xs = xs; state.ys = ys;
+  state.trainIdx = trainIdx; state.testIdx = testIdx;
+}
+
+// random normal (Box-Muller)
+function randn(){
+  let u=0,v=0;
+  while(u===0) u=Math.random();
+  while(v===0) v=Math.random();
+  return Math.sqrt(-2.0*Math.log(u)) * Math.cos(2*Math.PI*v);
+}
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+// Draw everything
+function draw() {
+  // clear
+  ctx.clearRect(0,0,width,height);
+  // axes area
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0,0,width,height);
+
+  // compute plotting range
+  const xsAll = state.xs.slice();
+  const xMin = -1.05, xMax = 1.05;
+  // y range: include true function and data
+  let yMin = Infinity, yMax = -Infinity;
+  // include dense true curve
+  for(let i=0;i<=200;i++){
+    const x = xMin + (xMax-xMin)*i/200;
+    const y = trueFunction(x);
+    if(y<yMin) yMin = y;
+    if(y>yMax) yMax = y;
+  }
+  for(let y of state.ys){ if(y<yMin) yMin=y; if(y>yMax) yMax=y; }
+  // pad
+  const yPad = Math.max(0.2, 0.08*(yMax-yMin));
+  const yLo = yMin - yPad, yHi = yMax + yPad;
+
+  // transform coordinates
+  function tx(x){ return pad.l + (x - xMin) / (xMax - xMin) * (width - pad.l - pad.r); }
+  function ty(y){ return pad.t + (yHi - y) / (yHi - yLo) * (height - pad.t - pad.b); }
+
+  // grid lines and axes
+  ctx.strokeStyle = "#e9eefb";
+  ctx.lineWidth = 1;
+  for(let gx=-1; gx<=1; gx+=0.5){
+    const x = tx(gx);
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, height-pad.b); ctx.stroke();
+  }
+  for(let gy=Math.floor(yLo*10)/10; gy<=yHi; gy+= (yHi-yLo)/6 ){
+    const y = ty(gy);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(width-pad.r, y); ctx.stroke();
+  }
+  // axes lines
+  ctx.strokeStyle = "#bfcddb";
+  ctx.lineWidth = 1.2;
+  // x axis at y=0 if visible
+  if(yLo <= 0 && yHi >= 0){
+    ctx.beginPath(); ctx.moveTo(pad.l, ty(0)); ctx.lineTo(width-pad.r, ty(0)); ctx.stroke();
+  }
+  // y axis at x=0 if visible
+  if(xMin <= 0 && xMax >= 0){
+    ctx.beginPath(); ctx.moveTo(tx(0), pad.t); ctx.lineTo(tx(0), height-pad.b); ctx.stroke();
+  }
+
+  // draw true function (gray smooth)
+  ctx.beginPath();
+  for(let i=0;i<=400;i++){
+    const x = xMin + (xMax-xMin)*i/400;
+    const y = trueFunction(x);
+    const px = tx(x), py = ty(y);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.strokeStyle = "#888c94";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fit polynomial using training data
+  const xsTrain = state.trainIdx.map(i=>state.xs[i]);
+  const ysTrain = state.trainIdx.map(i=>state.ys[i]);
+  const xsTest  = state.testIdx.map(i=>state.xs[i]);
+  const ysTest  = state.testIdx.map(i=>state.ys[i]);
+
+  const coeffs = fitPoly(xsTrain, ysTrain, state.degree, state.lambda);
+
+  // plot fitted curve (green)
+  const curveX = [];
+  for(let i=0;i<=400;i++) curveX.push(xMin + (xMax-xMin)*i/400);
+  const curveY = predictPoly(coeffs, curveX);
+  ctx.beginPath();
+  for(let i=0;i<curveX.length;i++){
+    const px = tx(curveX[i]), py = ty(curveY[i]);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.strokeStyle = "#2aa450"; // green
+  ctx.lineWidth = 2.6;
+  ctx.stroke();
+
+  // draw training points (blue)
+  ctx.fillStyle = "#2b7fff";
+  for(let i=0;i<xsTrain.length;i++){
+    const px = tx(xsTrain[i]), py = ty(ysTrain[i]);
+    circle(px,py,4);
+  }
+  // draw test points (red)
+  ctx.fillStyle = "#ff3b3b";
+  for(let i=0;i<xsTest.length;i++){
+    const px = tx(xsTest[i]), py = ty(ysTest[i]);
+    circle(px,py,4);
+  }
+
+  // small axes labels
+  ctx.fillStyle = "#333";
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("x", width/2, height - 6);
+  ctx.save();
+  ctx.translate(12, height/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.textAlign = "center";
+  ctx.fillText("y", 0, 0);
+  ctx.restore();
+
+  // show legend dots
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#111";
+  ctx.fillText("Fitted (polynomial)", pad.l+4, pad.t+14);
+  ctx.fillStyle = "#2aa450"; ctx.fillRect(pad.l+120, pad.t+5, 18, 8);
+  ctx.fillStyle = "#111";
+  ctx.fillText("True function", pad.l+4, pad.t+28);
+  ctx.fillStyle = "#888c94"; ctx.fillRect(pad.l+120, pad.t+19, 18, 8);
+
+  // compute metrics
+  const yPredTrain = predictPoly(coeffs, xsTrain);
+  const yPredTest = predictPoly(coeffs, xsTest);
+  const trainErr = mse(yPredTrain, ysTrain);
+  const testErr = ysTest.length>0 ? mse(yPredTest, ysTest) : NaN;
+
+  document.getElementById('trainMse').innerText = trainErr.toFixed(4);
+  document.getElementById('testMse').innerText = isNaN(testErr) ? "-" : testErr.toFixed(4);
+
+  // show coefficients summary (small)
+  ctx.fillStyle = "#333";
+  ctx.font = "11px monospace";
+  ctx.textAlign = "right";
+  let coeffStr = coeffs.slice(0,6).map((c,i)=> (i===0? "" : " ") + c.toFixed(3)).join(",");
+  if(coeffs.length>6) coeffStr += " ...";
+  ctx.fillText("coeffs: [" + coeffStr + "]", width - 8, height - 10);
+}
+
+// helper: draw filled circle
+function circle(x,y,r){
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
+
+// ==== UI interactions ====
+const degSlider = document.getElementById('degree');
+const degVal = document.getElementById('degVal');
+const nSamples = document.getElementById('nSamples');
+const nSamplesVal = document.getElementById('nSamplesVal');
+const noiseS = document.getElementById('noise');
+const noiseVal = document.getElementById('noiseVal');
+const trainPct = document.getElementById('trainPct');
+const trainPctVal = document.getElementById('trainPctVal');
+const lambdaS = document.getElementById('lambda');
+const lambdaVal = document.getElementById('lambdaVal');
+const regen = document.getElementById('regen');
+const reset = document.getElementById('reset');
+
+function updateStateFromUI(){
+  state.degree = parseInt(degSlider.value,10);
+  state.nSamples = parseInt(nSamples.value,10);
+  state.noise = parseFloat(noiseS.value);
+  state.trainPct = parseInt(trainPct.value,10);
+  state.lambda = parseFloat(lambdaS.value);
+
+  degVal.innerText = state.degree;
+  nSamplesVal.innerText = state.nSamples;
+  noiseVal.innerText = state.noise.toFixed(2);
+  trainPctVal.innerText = state.trainPct + "%";
+  lambdaVal.innerText = state.lambda.toFixed(2);
+}
+
+degSlider.addEventListener('input', ()=>{ updateStateFromUI(); draw(); });
+nSamples.addEventListener('input', ()=>{ updateStateFromUI(); });
+noiseS.addEventListener('input', ()=>{ updateStateFromUI(); });
+trainPct.addEventListener('input', ()=>{ updateStateFromUI(); });
+lambdaS.addEventListener('input', ()=>{ updateStateFromUI(); draw(); });
+
+regen.addEventListener('click', ()=>{ updateStateFromUI(); generateData(); draw(); });
+reset.addEventListener('click', ()=>{
+  degSlider.value = 3; nSamples.value = 30; noiseS.value = 0.2; trainPct.value = 70; lambdaS.value = 0;
+  updateStateFromUI();
+  generateData();
+  draw();
+});
+
+// initialize
+updateStateFromUI();
+generateData();
+draw();
+
+</script>
+</body>
+</html>

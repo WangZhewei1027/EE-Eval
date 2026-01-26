@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CPU Scheduling Interactive Simulator</title>
+<style>
+/* Extremely minimal styling only for basic readability */
+body { font-family: Arial, Helvetica, sans-serif; color: black; background: white; margin: 12px; }
+input, select, button, textarea { font: inherit; }
+pre { background: transparent; padding: 0; margin: 0; white-space: pre-wrap; word-wrap: break-word; }
+.section { margin-bottom: 16px; }
+.small { font-size: 90%; }
+.grid { display: block; }
+.table { border-collapse: collapse; }
+.table td, .table th { padding: 2px 6px; vertical-align: top; }
+.note { font-size: 90%; color: black; }
+</style>
+</head>
+<body>
+
+<h2>CPU Scheduling Interactive Simulator (Minimal UI)</h2>
+
+<div class="section">
+  <strong>Simulation Controls</strong><br>
+  Algorithm:
+  <select id="algo">
+    <option value="FCFS">FCFS (First-Come First-Served)</option>
+    <option value="SJF">SJF (Shortest Job First - non-preemptive)</option>
+    <option value="SRTF">SRTF (Shortest Remaining Time First - preemptive)</option>
+    <option value="Priority">Priority (select preemptive toggle)</option>
+    <option value="RR">Round Robin</option>
+    <option value="Manual">Manual Scheduler (user chooses next)</option>
+  </select>
+  Preemptive (for Priority):
+  <input type="checkbox" id="priorityPreempt" />
+  Quantum (RR):
+  <input type="range" id="quantum" min="1" max="10" value="3" />
+  <span id="quantumVal">3</span>
+  Context switch cost:
+  <input type="number" id="contextCost" value="0" min="0" step="1" style="width:60px" />
+  Time per step (ms) playback speed:
+  <input type="range" id="speed" min="50" max="2000" step="10" value="500" />
+  <span id="speedVal">500ms</span>
+  Step size (time units per step): <input type="number" id="stepSize" min="1" value="1" style="width:60px"/>
+  <br>
+  <button id="startBtn">Start / Run</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="stepForwardBtn">Step Forward</button>
+  <button id="stepBackBtn">Step Back</button>
+  <button id="resetBtn">Reset</button>
+  <button id="fastForwardBtn">Fast Run to Completion</button>
+  <button id="clearLogBtn">Clear Log</button>
+  <label><input type="checkbox" id="autoAging"/> Aging (increase priority over time)</label>
+</div>
+
+<div class="section">
+  <strong>Process Controls</strong><br>
+  Add / Edit process (CPU bursts comma-separated; IO bursts comma-separated; #IO = #CPU - 1):<br>
+  Name: <input id="pName" value="P1" style="width:60px" />
+  Arrival: <input id="pArrival" type="number" value="0" style="width:60px""/>
+  CPU bursts: <input id="pCpu" value="5" style="width:160px" />
+  IO bursts: <input id="pIo" value="" style="width:160px" />
+  Priority: <input id="pPriority" type="number" value="1" style="width:60px" />
+  <button id="addProcessBtn">Add Process</button>
+  <button id="randomBtn">Generate Random</button>
+  <button id="presetBtn">Load Preset</button>
+  <button id="importBtn">Import JSON</button>
+  <button id="exportBtn">Export JSON</button>
+</div>
+
+<div class="section">
+  <strong>Processes</strong><br>
+  <table id="processTable" border="1" class="table small">
+    <thead><tr><th>ID</th><th>Name</th><th>Arrival</th><th>CPU bursts</th><th>IO bursts</th><th>Priority</th><th>State</th><th>Actions</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="section">
+  <strong>Manual Scheduler Controls (only in Manual algorithm)</strong><br>
+  Ready Queue: <select id="manualReady" style="width:200px"></select>
+  <button id="assignCpuBtn">Assign to CPU (for chosen time slice)</button>
+  Force context switch: <button id="forceSwitchBtn">Force Switch Now</button>
+</div>
+
+<div class="section">
+  <strong>Visualization</strong><br>
+  Current Time: <span id="currentTime">0</span> &nbsp; | &nbsp; CPU: <span id="cpuStatus">idle</span> &nbsp; | &nbsp; CSTimer: <span id="csTimer">0</span><br>
+  Ready Queue: <span id="readyStr"></span><br>
+  Blocked: <span id="blockedStr"></span><br>
+  Completed: <span id="completedStr"></span><br>
+</div>
+
+<div class="section">
+  <strong>Gantt Chart (per time unit)</strong><br>
+  <pre id="gantt" style="border:1px solid black; padding:6px; max-height:200px; overflow:auto;"></pre>
+</div>
+
+<div class="section">
+  <strong>Statistics</strong><br>
+  <div id="stats"></div>
+</div>
+
+<div class="section">
+  <strong>Trace Log</strong> (events): <button id="copyLogBtn">Copy Log</button><br>
+  <textarea id="log" rows="8" style="width:100%;"></textarea>
+</div>
+
+<div class="section">
+  <strong>Scenario Import/Export</strong><br>
+  <textarea id="scenarioJson" rows="6" style="width:100%;"></textarea><br>
+  <button id="loadScenarioBtn">Load Scenario</button>
+  <button id="saveScenarioBtn">Save Current Scenario</button>
+</div>
+
+<script>
+/*
+ CPU Scheduling Simulator - single-file interactive app
+ Minimal UI, rich controls and workflows, many interactive paths.
+*/
+
+(function(){
+
+// --- State model and initialization ---
+let state = {
+  time: 0,
+  processes: [], // each: {id,name,arrival,cpuBursts[],ioBursts[],curBurstIndex,remainingCpu,remainingIo,priority,state,firstResponseTime,finishTime,waitingTime,started}
+  running: null, // id of running process or null
+  csTimer: 0,
+  lastPid: 0,
+  gantt: [], // array of entries per time: {t,kind: 'P'/'idle'/'cs', pid}
+  log: [],
+  rrQueue: [], // for RR tracks order
+  history: [], // deep snapshots for step back
+  completedCount: 0,
+  autoRun: false,
+  runningInterval: null,
+};
+
+const UI = {
+  algo: document.getElementById('algo'),
+  priorityPreempt: document.getElementById('priorityPreempt'),
+  quantum: document.getElementById('quantum'),
+  quantumVal: document.getElementById('quantumVal'),
+  contextCost: document.getElementById('contextCost'),
+  startBtn: document.getElementById('startBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  stepForwardBtn: document.getElementById('stepForwardBtn'),
+  stepBackBtn: document.getElementById('stepBackBtn'),
+  resetBtn: document.getElementById('resetBtn'),
+  fastForwardBtn: document.getElementById('fastForwardBtn'),
+  clearLogBtn: document.getElementById('clearLogBtn'),
+  autoAging: document.getElementById('autoAging'),
+  speed: document.getElementById('speed'),
+  speedVal: document.getElementById('speedVal'),
+  stepSize: document.getElementById('stepSize'),
+  // process controls
+  pName: document.getElementById('pName'),
+  pArrival: document.getElementById('pArrival'),
+  pCpu: document.getElementById('pCpu'),
+  pIo: document.getElementById('pIo'),
+  pPriority: document.getElementById('pPriority'),
+  addProcessBtn: document.getElementById('addProcessBtn'),
+  randomBtn: document.getElementById('randomBtn'),
+  presetBtn: document.getElementById('presetBtn'),
+  importBtn: document.getElementById('importBtn'),
+  exportBtn: document.getElementById('exportBtn'),
+  processTableBody: document.querySelector('#processTable tbody'),
+  manualReady: document.getElementById('manualReady'),
+  assignCpuBtn: document.getElementById('assignCpuBtn'),
+  forceSwitchBtn: document.getElementById('forceSwitchBtn'),
+  // visualization
+  currentTime: document.getElementById('currentTime'),
+  cpuStatus: document.getElementById('cpuStatus'),
+  csTimerSpan: document.getElementById('csTimer'),
+  readyStr: document.getElementById('readyStr'),
+  blockedStr: document.getElementById('blockedStr'),
+  completedStr: document.getElementById('completedStr'),
+  gantt: document.getElementById('gantt'),
+  stats: document.getElementById('stats'),
+  log: document.getElementById('log'),
+  copyLogBtn: document.getElementById('copyLogBtn'),
+  scenarioJson: document.getElementById('scenarioJson'),
+  loadScenarioBtn: document.getElementById('loadScenarioBtn'),
+  saveScenarioBtn: document.getElementById('saveScenarioBtn'),
+  clearLogBtnEl: document.getElementById('clearLogBtn'),
+};
+
+// utility
+function logEvent(msg){
+  const s = '[' + state.time + '] ' + msg;
+  state.log.push(s);
+  UI.log.value += s + '\n';
+  UI.log.scrollTop = UI.log.scrollHeight;
+}
+function resetLogArea(){ UI.log.value = state.log.join('\n'); UI.log.scrollTop = UI.log.scrollHeight; }
+
+// process helpers
+function makePid(){ state.lastPid += 1; return 'P' + state.lastPid; }
+function parseBurstsCsv(text){
+  if (!text) return [];
+  return text.split(',').map(s => {
+    const v = parseInt(s.trim());
+    return isNaN(v) ? 0 : Math.max(0, v);
+  }).filter(x => x !== null);
+}
+function addProcessFromInputs(){
+  const name = UI.pName.value.trim() || makePid();
+  const arrival = Math.max(0, parseInt(UI.pArrival.value) || 0);
+  const cpuBursts = parseBurstsCsv(UI.pCpu.value);
+  if (cpuBursts.length === 0) { alert('At least one CPU burst required'); return; }
+  const ioBursts = parseBurstsCsv(UI.pIo.value);
+  // ioBursts should be length cpuBursts-1; if shorter pad zeros
+  while (ioBursts.length < cpuBursts.length - 1) ioBursts.push(0);
+  const priority = parseInt(UI.pPriority.value) || 0;
+  const p = {
+    id: makePid(),
+    name,
+    arrival,
+    cpuBursts,
+    ioBursts,
+    curBurstIndex: 0,
+    remainingCpu: cpuBursts[0],
+    remainingIo: 0,
+    priority,
+    state: 'new', // new, ready, running, blocked, terminated
+    firstResponseTime: null,
+    finishTime: null,
+    waitingTime: 0,
+    started: false,
+    rrQuota: 0
+  };
+  state.processes.push(p);
+  refreshProcessTable();
+  logEvent('Added process ' + p.name + ' arrival=' + arrival + ' cpu=' + cpuBursts.join(',') + ' io=' + ioBursts.join(',') + ' pr=' + priority);
+}
+function refreshProcessTable(){
+  UI.processTableBody.innerHTML = '';
+  state.processes.forEach(p => {
+    const tr = document.createElement('tr');
+    const td = (c)=>{ const t=document.createElement('td'); t.textContent=c; return t; };
+    tr.appendChild(td(p.id));
+    tr.appendChild(td(p.name));
+    tr.appendChild(td(p.arrival));
+    tr.appendChild(td(p.cpuBursts.join(',')));
+    tr.appendChild(td(p.ioBursts.join(',')));
+    tr.appendChild(td(p.priority));
+    tr.appendChild(td(p.state));
+    const actions = document.createElement('td');
+    const edit = document.createElement('button'); edit.textContent='Edit';
+    edit.onclick = ()=>{ editProcess(p.id); };
+    const del = document.createElement('button'); del.textContent='Delete';
+    del.onclick = ()=>{ deleteProcess(p.id); };
+    const toReady = document.createElement('button'); toReady.textContent='Set Ready';
+    toReady.onclick = ()=>{ p.state='ready'; logEvent('Process '+p.name+' forced to ready'); refreshAll(); };
+    actions.appendChild(edit); actions.appendChild(del); actions.appendChild(toReady);
+    tr.appendChild(actions);
+    UI.processTableBody.appendChild(tr);
+  });
+  refreshManualReadySelect();
+}
+
+// Edit/Delete
+function editProcess(pid){
+  const p = state.processes.find(x=>x.id===pid);
+  if (!p) return;
+  const n = prompt('Name', p.name); if (n===null) return;
+  p.name = n || p.name;
+  const a = prompt('Arrival', p.arrival); if (a===null) return;
+  p.arrival = Math.max(0, parseInt(a)||0);
+  const cpu = prompt('CPU bursts (comma-separated)', p.cpuBursts.join(',')); if (cpu===null) return;
+  const cpuBursts = parseBurstsCsv(cpu); if (cpuBursts.length>0) p.cpuBursts = cpuBursts;
+  const io = prompt('IO bursts (comma-separated)', p.ioBursts.join(',')); if (io===null) return;
+  const ioBursts = parseBurstsCsv(io); p.ioBursts = ioBursts;
+  p.priority = Math.max(0, parseInt(prompt('Priority', p.priority))||0);
+  // reset remaining fields
+  p.curBurstIndex = Math.min(p.curBurstIndex, p.cpuBursts.length-1);
+  p.remainingCpu = p.cpuBursts[p.curBurstIndex];
+  p.remainingIo = p.ioBursts[p.curBurstIndex] || 0;
+  refreshProcessTable();
+  logEvent('Edited process ' + p.name);
+}
+function deleteProcess(pid){
+  const idx = state.processes.findIndex(x=>x.id===pid);
+  if (idx>=0){
+    logEvent('Deleted process ' + state.processes[idx].name);
+    state.processes.splice(idx,1);
+    refreshProcessTable();
+    refreshAll();
+  }
+}
+
+// --- Scheduler decision functions ---
+function getReadyQueueAtTime(t){
+  // return array of process objects that are in ready state and arrival <= t
+  return state.processes.filter(p=>p.state==='ready' && p.arrival <= t);
+}
+function pickNextProcess(){
+  const algo = UI.algo.value;
+  const ready = getReadyQueueAtTime(state.time);
+  if (ready.length===0) return null;
+  if (algo === 'FCFS') {
+    // earliest arrival then id order
+    ready.sort((a,b)=> (a.arrival - b.arrival) || a.id.localeCompare(b.id));
+    return ready[0];
+  } else if (algo === 'SJF') {
+    // pick shortest next cpu burst (non-preemptive)
+    ready.sort((a,b)=> (a.cpuBursts[a.curBurstIndex] - b.cpuBursts[b.curBurstIndex]) || a.arrival - b.arrival);
+    return ready[0];
+  } else if (algo === 'SRTF') {
+    // pick shortest remaining time of current CPU burst (preemptive)
+    ready.sort((a,b)=> (a.remainingCpu - b.remainingCpu) || a.arrival - b.arrival);
+    return ready[0];
+  } else if (algo === 'Priority') {
+    ready.sort((a,b)=> (a.priority - b.priority) || a.arrival - b.arrival);
+    return ready[0];
+  } else if (algo === 'RR') {
+    // maintain RR queue: state.rrQueue holds ids in order; when ready, ensure they are present in rrQueue
+    // Add missing ready processes in arrival order
+    ready.sort((a,b)=> (a.arrival - b.arrival) || a.id.localeCompare(b.id));
+    ready.forEach(p=>{
+      if (!state.rrQueue.includes(p.id)) state.rrQueue.push(p.id);
+    });
+    // remove non-ready from rrQueue
+    state.rrQueue = state.rrQueue.filter(id => {
+      const p = state.processes.find(x=>x.id===id);
+      return p && p.state==='ready' && p.arrival <= state.time;
+    });
+    // front of rrQueue is next
+    if (state.rrQueue.length===0) return null;
+    const pid = state.rrQueue[0];
+    return state.processes.find(x=>x.id===pid) || null;
+  } else if (algo === 'Manual') {
+    // Manual mode: pick nothing automatically
+    return null;
+  }
+  return null;
+}
+
+// --- Core simulation step ---
+function snapshotState(){
+  // store deep clone of necessary state for stepping back
+  const snap = JSON.parse(JSON.stringify({
+    time: state.time,
+    processes: state.processes,
+    running: state.running,
+    csTimer: state.csTimer,
+    gantt: state.gantt,
+    rrQueue: state.rrQueue,
+    log: state.log,
+    completedCount: state.completedCount
+  }));
+  state.history.push(snap);
+  // keep history up to some large limit
+  if (state.history.length > 5000) state.history.shift();
+}
+function restoreSnapshot(){
+  if (state.history.length === 0) return false;
+  const snap = state.history.pop();
+  state.time = snap.time;
+  state.processes = JSON.parse(JSON.stringify(snap.processes));
+  state.running = snap.running;
+  state.csTimer = snap.csTimer;
+  state.gantt = JSON.parse(JSON.stringify(snap.gantt));
+  state.rrQueue = JSON.parse(JSON.stringify(snap.rrQueue));
+  state.log = JSON.parse(JSON.stringify(snap.log));
+  state.completedCount = snap.completedCount;
+  refreshAll(true);
+  return true;
+}
+
+function stepOneUnit(){
+  // step simulation by one time unit
+  snapshotState();
+  const stepUnits = Math.max(1, parseInt(UI.stepSize.value) || 1);
+  // apply multiple units if stepSize >1 by repeated micro-steps
+  for (let s=0; s<stepUnits; s++){
+    // First, check arrivals
+    state.processes.forEach(p=>{
+      if (p.state === 'new' && p.arrival <= state.time){
+        p.state = 'ready';
+        // remainingCpu should be set
+        if (p.remainingCpu == null) p.remainingCpu = p.cpuBursts[p.curBurstIndex];
+        logEvent('Process ' + p.name + ' arrived and moved to ready');
+      }
+    });
+    // Update blocked processes (IO)
+    state.processes.forEach(p=>{
+      if (p.state === 'blocked'){
+        if (p.remainingIo > 0){
+          p.remainingIo -= 1;
+        }
+        if (p.remainingIo <= 0){
+          p.curBurstIndex = Math.min(p.curBurstIndex + 1, p.cpuBursts.length - 1);
+          p.remainingCpu = p.cpuBursts[p.curBurstIndex];
+          p.state = 'ready';
+          logEvent('Process ' + p.name + ' finished IO and moved to ready');
+          // For RR: add to rrQueue
+          if (UI.algo.value === 'RR' && !state.rrQueue.includes(p.id)) state.rrQueue.push(p.id);
+        }
+      }
+    });
+
+    // Aging: optionally increase priority of waiting processes
+    if (UI.autoAging.checked){
+      state.processes.forEach(p=>{
+        if (p.state === 'ready') {
+          p.priority = Math.max(0, p.priority - 0.001); // minor aging over time
+        }
+      });
+    }
+
+    // If context switch is happening (csTimer > 0), decrement and mark gantt entry as 'cs'
+    if (state.csTimer > 0){
+      state.csTimer -= 1;
+      state.gantt.push({t: state.time, kind: 'cs', pid: null});
+      state.time += 1;
+      continue; // while cs active, CPU doesn't execute process
+    }
+
+    // If CPU idle (no running process), try to pick one
+    if (!state.running){
+      const next = pickNextProcess();
+      if (next){
+        // Start context switch if configured
+        const cost = parseInt(UI.contextCost.value) || 0;
+        if (cost > 0){
+          state.csTimer = cost;
+          // set running only after cs completes; store intended next
+          state.pendingRunning = next.id;
+          logEvent('Context switch scheduled to start ' + next.name + ' (cost ' + cost + ')');
+          // record a 'cs' gantt for this time unit in next iteration; but consume a time unit now
+          state.gantt.push({t: state.time, kind: 'cs', pid: null});
+          state.time += 1;
+          // because we consumed time unit for context switch, need to continue outer loop to next s
+          continue;
+        } else {
+          // no context cost, start running immediately
+          state.running = next.id;
+          next.state = 'running';
+          if (!next.started){
+            next.firstResponseTime = state.time;
+            next.started = true;
+            logEvent('Process ' + next.name + ' started (response time ' + (state.time - next.arrival) + ')');
+          } else {
+            logEvent('Process ' + next.name + ' resumed');
+          }
+        }
+      }
+    } else {
+      // a process is running; but preemption might happen depending on algorithm when new ready exists at this time
+      const runningProc = state.processes.find(p=>p.id===state.running);
+      // In SRTF, if a new process has smaller remaining time then preempt
+      if (runningProc){
+        const algo = UI.algo.value;
+        if (algo === 'SRTF'){
+          const ready = getReadyQueueAtTime(state.time);
+          const shorter = ready.find(p=>p.remainingCpu < runningProc.remainingCpu);
+          if (shorter){
+            // preempt
+            runningProc.state = 'ready';
+            state.running = null;
+            logEvent('Preempting ' + runningProc.name + ' for shorter ' + shorter.name);
+            // In RR also manage rrQueue, push preempted to rrQueue end
+            if (UI.algo.value === 'RR' && !state.rrQueue.includes(runningProc.id)) state.rrQueue.push(runningProc.id);
+            // start next iteration where pickNextProcess will consider new shorter
+            // apply context switch if any
+            const cost = parseInt(UI.contextCost.value) || 0;
+            if (cost>0){
+              state.csTimer = cost;
+              state.gantt.push({t: state.time, kind: 'cs', pid: null});
+              state.time += 1;
+              continue;
+            }
+          }
+        }
+        // Priority preemptive
+        if (UI.algo.value === 'Priority' && UI.priorityPreempt.checked){
+          const ready = getReadyQueueAtTime(state.time);
+          const higher = ready.find(p=>p.priority < runningProc.priority);
+          if (higher){
+            runningProc.state = 'ready';
+            state.running = null;
+            logEvent('Preempting ' + runningProc.name + ' for higher priority ' + higher.name);
+            const cost = parseInt(UI.contextCost.value) || 0;
+            if (cost>0){
+              state.csTimer = cost;
+              state.gantt.push({t: state.time, kind: 'cs', pid: null});
+              state.time += 1;
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    // Manual mode: if running is null, do nothing else; user must assign
+    if (UI.algo.value === 'Manual'){
+      // record idle time
+      if (!state.running){
+        state.gantt.push({t: state.time, kind: 'idle', pid: null});
+      } else {
+        // run manual assigned process
+        const rp = state.processes.find(p=>p.id===state.running);
+        if (rp){
+          rp.remainingCpu -= 1;
+          state.gantt.push({t: state.time, kind: 'P', pid: rp.id});
+          // mark started if first run
+          if (!rp.started){
+            rp.started = true; rp.firstResponseTime = state.time;
+            logEvent('Manual run: ' + rp.name + ' started');
+          }
+          // increment waiting for ready processes
+          state.processes.forEach(p=> {
+            if (p.state === 'ready') p.waitingTime += 1;
+          });
+          if (rp.remainingCpu <= 0){
+            // finish CPU burst
+            if (rp.curBurstIndex < rp.cpuBursts.length - 1){
+              // move to blocked for IO
+              rp.remainingIo = rp.ioBursts[rp.curBurstIndex];
+              rp.state = 'blocked';
+              logEvent('Manual run: ' + rp.name + ' finished CPU burst and moves to blocked for IO ' + rp.remainingIo);
+            } else {
+              rp.state = 'terminated';
+              rp.finishTime = state.time + 1;
+              state.completedCount += 1;
+              logEvent('Manual run: ' + rp.name + ' terminated at t=' + rp.finishTime);
+            }
+            state.running = null;
+          }
+        } else {
+          // weird: running id not found
+          state.running = null;
+          state.gantt.push({t: state.time, kind: 'idle', pid: null});
+        }
+      }
+      state.time += 1;
+      continue;
+    }
+
+    // If still no running process, pick one now (after context switch checks)
+    if (!state.running){
+      const next = pickNextProcess();
+      if (next){
+        state.running = next.id;
+        next.state = 'running';
+        if (!next.started){
+          next.firstResponseTime = state.time;
+          next.started = true;
+          logEvent('Process ' + next.name + ' started (response time ' + (state.time - next.arrival) + ')');
+        } else {
+          logEvent('Process ' + next.name + ' resumed');
+        }
+      }
+    }
+
+    // If still no running, CPU idle for this time unit
+    if (!state.running){
+      state.gantt.push({t: state.time, kind: 'idle', pid: null});
+      // increment waiting times
+      state.processes.forEach(p=>{ if (p.state === 'ready') p.waitingTime += 1; });
+      state.time += 1;
+      continue;
+    }
+
+    // Execute one unit on running process
+    const proc = state.processes.find(p=>p.id===state.running);
+    if (!proc){
+      state.running = null;
+      state.gantt.push({t: state.time, kind: 'idle', pid: null});
+      state.time += 1;
+      continue;
+    }
+
+    // For RR: manage quantum
+    let rrQuantum = parseInt(UI.quantum.value) || 1;
+    if (UI.algo.value === 'RR'){
+      if (proc.rrQuota == null || proc.rrQuota <= 0){
+        proc.rrQuota = rrQuantum;
+      }
+    }
+
+    // Run for one unit
+    proc.remainingCpu -= 1;
+    state.gantt.push({t: state.time, kind: 'P', pid: proc.id});
+    // increment waiting times for other ready processes
+    state.processes.forEach(p=>{ if (p.state === 'ready') p.waitingTime += 1; });
+
+    // Check if CPU burst finished
+    if (proc.remainingCpu <= 0){
+      if (proc.curBurstIndex < proc.cpuBursts.length - 1){
+        // move to blocked for IO
+        proc.remainingIo = proc.ioBursts[proc.curBurstIndex];
+        proc.state = 'blocked';
+        logEvent('Process ' + proc.name + ' completed CPU burst, will perform IO for ' + proc.remainingIo);
+        // advance will happen after IO completes
+      } else {
+        // terminate
+        proc.state = 'terminated';
+        proc.finishTime = state.time + 1;
+        state.completedCount += 1;
+        logEvent('Process ' + proc.name + ' terminated at t=' + proc.finishTime);
+      }
+      // remove from RR queue if present
+      state.rrQueue = state.rrQueue.filter(id => id !== proc.id);
+      state.running = null;
+      // Apply context switch cost if configured for next process in next iteration
+      const cost = parseInt(UI.contextCost.value) || 0;
+      if (cost > 0){
+        state.csTimer = cost;
+      }
+    } else {
+      // CPU burst not finished - handle RR timeslice expiry
+      if (UI.algo.value === 'RR') {
+        proc.rrQuota -= 1;
+        if (proc.rrQuota <= 0){
+          // timeslice exhausted: preempt to back of queue if other ready processes exist
+          // push to back and remove front
+          if (state.rrQueue.length>0 && state.rrQueue[0] === proc.id){
+            state.rrQueue.shift(); // remove front
+            state.rrQueue.push(proc.id);
+          } else {
+            // ensure present in queue
+            if (!state.rrQueue.includes(proc.id)) state.rrQueue.push(proc.id);
+          }
+          proc.state = 'ready';
+          state.running = null;
+          logEvent('RR: timeslice for ' + proc.name + ' expired; moved back to ready');
+          const cost = parseInt(UI.contextCost.value) || 0;
+          if (cost>0){
+            state.csTimer = cost;
+            state.gantt.push({t: state.time, kind: 'cs', pid: null});
+            // consume a time unit for cs (we will increment time below then keep)
+            state.time += 1;
+            // we already consumed current time unit for execution; but we've added extra cs step - consistent
+            continue;
+          }
+        }
+      }
+      // For preemptive priority: check if a higher priority process arrived this exact time and preempt
+      if (UI.algo.value === 'Priority' && UI.priorityPreempt.checked) {
+        const ready = getReadyQueueAtTime(state.time);
+        const higher = ready.find(p=>p.priority < proc.priority);
+        if (higher){
+          proc.state = 'ready';
+          state.running = null;
+          logEvent('Preempting ' + proc.name + ' for higher priority ' + higher.name);
+          const cost = parseInt(UI.contextCost.value) || 0;
+          if (cost>0){
+            state.csTimer = cost;
+            state.gantt.push({t: state.time, kind: 'cs', pid: null});
+            state.time += 1;
+            continue;
+          }
+        }
+      }
+    }
+
+    // increment simulation time after this micro-step
+    state.time += 1;
+  } // end stepUnits loop
+
+  refreshAll();
+}
+
+// Fast run until all processes terminated or for safety limit
+function fastRunToCompletion(){
+  const limit = 10000;
+  let counter = 0;
+  while (state.processes.some(p=>p.state !== 'terminated')){
+    stepOneUnit();
+    counter++;
+    if (counter > limit) { logEvent('Fast run aborted after limit'); break; }
+  }
+  logEvent('Fast run ended at time ' + state.time);
+}
+
+// UI refresh
+function refreshAll(skipLogUpdate){
+  UI.currentTime.textContent = state.time;
+  UI.csTimerSpan.textContent = state.csTimer;
+  UI.gantt.textContent = renderGantt();
+  UI.cpuStatus.textContent = state.running ? (state.processes.find(p=>p.id===state.running)?.name || state.running) : 'idle';
+  UI.readyStr.textContent = getReadyQueueAtTime(state.time).map(p=>p.name).join(', ');
+  UI.blockedStr.textContent = state.processes.filter(p=>p.state==='blocked').map(p=>p.name + '(io=' + p.remainingIo + ')').join(', ');
+  UI.completedStr.textContent = state.processes.filter(p=>p.state==='terminated').map(p=>p.name).join(', ');
+  refreshProcessTable();
+  refreshStats();
+  if (!skipLogUpdate) resetLogArea();
+  UI.quantumVal.textContent = UI.quantum.value;
+  UI.speedVal.textContent = UI.speed.value + 'ms';
+}
+
+function renderGantt(){
+  // produce a simple textual gantt with time indices
+  if (state.gantt.length === 0) return '';
+  // compress into blocks where consecutive same pid or idle/cs grouped
+  let out = '';
+  const blocks = [];
+  for (let i=0;i<state.gantt.length;i++){
+    const e = state.gantt[i];
+    const key = e.kind === 'P' ? e.pid : e.kind;
+    if (blocks.length === 0 || blocks[blocks.length-1].key !== key){
+      blocks.push({key, start: e.t, end: e.t+1});
+    } else {
+      blocks[blocks.length-1].end = e.t+1;
+    }
+  }
+  // build two-line display: labels then times
+  let line1 = '';
+  let line2 = '';
+  blocks.forEach(b=>{
+    const label = b.key === 'idle' ? 'idle' : (b.key === 'cs' ? 'CS' : b.key);
+    const width = b.end - b.start;
+    const cell = '[' + label + ' x' + width + ']';
+    line1 += cell;
+  });
+  // show time range
+  line2 = '0..' + state.time;
+  out = line1 + '\n' + line2;
+  return out;
+}
+
+function refreshStats(){
+  const procs = state.processes.filter(p=>p.cpuBursts && p.cpuBursts.length);
+  const completed = procs.filter(p=>p.state==='terminated');
+  const n = procs.length;
+  const avgTurn = completed.length ? (completed.reduce((acc,p)=>acc + (p.finishTime - p.arrival),0) / completed.length) : 0;
+  const avgWait = completed.length ? (completed.reduce((acc,p)=>acc + p.waitingTime,0) / completed.length) : 0;
+  const avgResp = completed.length ? (completed.reduce((acc,p)=>acc + (p.firstResponseTime - p.arrival),0) / completed.length) : 0;
+  const throughput = state.time > 0 ? (completed.length / state.time) : 0;
+  // CPU utilization: proportion of non-idle and non-cs entries
+  const nonIdle = state.gantt.filter(e=> e.kind === 'P').length;
+  const utilization = state.time>0 ? Math.round((nonIdle / state.time)*10000)/100 : 0;
+  UI.stats.innerHTML = `
+    Processes: ${n} | Completed: ${completed.length}<br>
+    Avg Turnaround: ${avgTurn.toFixed(2)} | Avg Waiting: ${avgWait.toFixed(2)} | Avg Response: ${avgResp.toFixed(2)}<br>
+    Throughput: ${throughput.toFixed(3)} per time unit | CPU Utilization: ${utilization}% 
+  `;
+}
+
+// --- UI event hookups ---
+UI.addProcessBtn.onclick = ()=> addProcessFromInputs();
+UI.presetBtn.onclick = ()=> {
+  // load a preset scenario with IO bursts
+  state.processes = [];
+  state.lastPid = 0;
+  const preset = [
+    {name:'P1', arrival:0, cpu:[5,3], io:[4], priority:2},
+    {name:'P2', arrival:2, cpu:[3], io:[], priority:1},
+    {name:'P3', arrival:4, cpu:[2,2,3], io:[3,2], priority:3},
+    {name:'P4', arrival:6, cpu:[4], io:[], priority:2},
+  ];
+  preset.forEach(x=>{
+    const p={ id: makePid(), name:x.name, arrival:x.arrival, cpuBursts:x.cpu.slice(), ioBursts:x.io.slice(), curBurstIndex:0, remainingCpu:x.cpu[0], remainingIo:0, priority:x.priority, state:'new', firstResponseTime:null, finishTime:null, waitingTime:0, started:false, rrQuota:0 };
+    state.processes.push(p);
+  });
+  state.time = 0;
+  state.gantt = [];
+  state.log = [];
+  state.history = [];
+  state.running = null;
+  state.lastPid = state.processes.length;
+  refreshAll();
+  logEvent('Loaded preset scenario');
+};
+UI.randomBtn.onclick = ()=> {
+  const count = parseInt(prompt('Number of processes', '6')) || 6;
+  const maxArrival = parseInt(prompt('Max arrival time', '8')) || 8;
+  const maxBurst = parseInt(prompt('Max CPU burst', '8')) || 8;
+  // clear and generate
+  state.processes = [];
+  state.lastPid = 0;
+  for (let i=0;i<count;i++){
+    const cpuCount = Math.random() < 0.3 ? 2 : 1;
+    const cpuBursts = [];
+    const ioBursts = [];
+    for (let j=0;j<cpuCount;j++){
+      cpuBursts.push(1 + Math.floor(Math.random()*maxBurst));
+      if (j < cpuCount-1) ioBursts.push(1 + Math.floor(Math.random()*maxBurst));
+    }
+    const p = { id: makePid(), name:'P' + (i+1), arrival: Math.floor(Math.random()*(maxArrival+1)), cpuBursts, ioBursts, curBurstIndex:0, remainingCpu:cpuBursts[0], remainingIo:0, priority: 1 + Math.floor(Math.random()*5), state:'new', firstResponseTime:null, finishTime:null, waitingTime:0, started:false, rrQuota:0 };
+    state.processes.push(p);
+  }
+  state.time = 0; state.gantt = []; state.log = []; state.history=[];
+  refreshAll();
+  logEvent('Generated random scenario with ' + count + ' processes');
+};
+UI.importBtn.onclick = ()=> {
+  const txt = UI.scenarioJson.value.trim();
+  if (!txt) { alert('Paste JSON into Scenario text area first'); return; }
+  try {
+    const s = JSON.parse(txt);
+    if (Array.isArray(s)){
+      state.processes = [];
+      state.lastPid = 0;
+      s.forEach(x=>{
+        const p = {
+          id: x.id || makePid(),
+          name: x.name || x.id || 'P?',
+          arrival: x.arrival || 0,
+          cpuBursts: x.cpuBursts || [1],
+          ioBursts: x.ioBursts || [],
+          curBurstIndex: x.curBurstIndex || 0,
+          remainingCpu: (x.remainingCpu != null) ? x.remainingCpu : (x.cpuBursts ? x.cpuBursts[0] : 1),
+          remainingIo: x.remainingIo || 0,
+          priority: x.priority || 0,
+          state: x.state || 'new',
+          firstResponseTime: x.firstResponseTime || null,
+          finishTime: x.finishTime || null,
+          waitingTime: x.waitingTime || 0,
+          started: x.started || false,
+          rrQuota: x.rrQuota || 0
+        };
+        state.processes.push(p);
+        const idNum = parseInt(p.id.replace(/\D/g,'')) || 0;
+        if (idNum > state.lastPid) state.lastPid = idNum;
+      });
+      state.time = 0; state.gantt = []; state.log = []; state.history=[];
+      refreshAll();
+      logEvent('Imported scenario with ' + state.processes.length + ' processes');
+    } else {
+      alert('JSON should be an array of process objects');
+    }
+  } catch (err){
+    alert('Invalid JSON: ' + err.message);
+  }
+};
+UI.exportBtn.onclick = ()=> {
+  const exportData = state.processes.map(p=>{
+    return {
+      id: p.id, name: p.name, arrival: p.arrival, cpuBursts: p.cpuBursts, ioBursts: p.ioBursts, priority: p.priority, state: p.state
+    };
+  });
+  UI.scenarioJson.value = JSON.stringify(exportData, null, 2);
+  logEvent('Exported scenario JSON to text area');
+};
+
+UI.startBtn.onclick = ()=>{
+  if (state.runningInterval) return;
+  state.autoRun = true;
+  const ms = parseInt(UI.speed.value) || 500;
+  state.runningInterval = setInterval(()=> {
+    stepOneUnit();
+    // stop if nothing left to run
+    if (!state.processes.some(p=>p.state !== 'terminated') && state.csTimer <= 0 && !state.running){
+      clearInterval(state.runningInterval); state.runningInterval = null; state.autoRun = false;
+      logEvent('Run complete');
+    }
+  }, ms);
+  logEvent('Started running (play)');
+};
+UI.pauseBtn.onclick = ()=>{
+  if (state.runningInterval){
+    clearInterval(state.runningInterval); state.runningInterval = null; state.autoRun = false;
+    logEvent('Paused');
+  }
+};
+UI.stepForwardBtn.onclick = ()=> { stepOneUnit(); };
+UI.stepBackBtn.onclick = ()=> {
+  const ok = restoreSnapshot();
+  if (ok) logEvent('Stepped back');
+  else logEvent('No history to step back');
+};
+UI.resetBtn.onclick = ()=> {
+  if (!confirm('Reset simulation? This will clear timeline and set time to 0 but keep processes (states reset).')) return;
+  state.time = 0;
+  state.gantt = [];
+  state.log = [];
+  state.history = [];
+  state.running = null;
+  state.csTimer = 0;
+  state.rrQueue = [];
+  state.processes.forEach(p=>{
+    p.curBurstIndex = 0;
+    p.remainingCpu = p.cpuBursts[0];
+    p.remainingIo = 0;
+    p.state = 'new';
+    p.firstResponseTime = null;
+    p.finishTime = null;
+    p.waitingTime = 0;
+    p.started = false;
+    p.rrQuota = 0;
+  });
+  refreshAll();
+  logEvent('Simulation reset');
+};
+UI.fastForwardBtn.onclick = ()=> { fastRunToCompletion(); refreshAll(); };
+UI.clearLogBtn.onclick = ()=> { state.log=[]; UI.log.value=''; };
+
+UI.quantum.oninput = ()=> { UI.quantumVal.textContent = UI.quantum.value; };
+UI.speed.oninput = ()=> { UI.speedVal.textContent = UI.speed.value + 'ms'; };
+
+UI.assignCpuBtn.onclick = ()=> {
+  const pid = UI.manualReady.value;
+  if (!pid) { alert('Choose a ready process from the dropdown'); return; }
+  // assign for one time slice (user can press step to run)
+  const p = state.processes.find(x=>x.id===pid);
+  if (!p) return;
+  state.running = p.id;
+  p.state = 'running';
+  logEvent('Manual: assigned ' + p.name + ' to CPU');
+  refreshAll();
+};
+UI.forceSwitchBtn.onclick = ()=> {
+  if (state.running){
+    const rp = state.processes.find(p=>p.id===state.running);
+    if (rp){
+      rp.state = 'ready';
+      logEvent('Force switching out ' + rp.name);
+    }
+  }
+  state.running = null;
+  const cost = parseInt(UI.contextCost.value)||0;
+  if (cost>0) state.csTimer = cost;
+  refreshAll();
+};
+
+UI.copyLogBtn.onclick = ()=> {
+  UI.log.select();
+  document.execCommand('copy');
+  alert('Log copied to clipboard');
+};
+
+UI.loadScenarioBtn.onclick = ()=> {
+  UI.importBtn.onclick();
+};
+UI.saveScenarioBtn.onclick = ()=> {
+  UI.exportBtn.onclick();
+};
+
+// manual-ready dropdown refresh
+function refreshManualReadySelect(){
+  UI.manualReady.innerHTML = '';
+  const ready = getReadyQueueAtTime(state.time);
+  ready.forEach(p=>{
+    const opt = document.createElement('option');
+    opt.value = p.id; opt.textContent = p.name + ' (remCpu=' + p.remainingCpu + ')';
+    UI.manualReady.appendChild(opt);
+  });
+}
+
+// Copy log quickly on some button
+UI.clearLogBtnEl.onclick = ()=> { state.log=[]; UI.log.value=''; };
+
+// --- Scenario import/export using scenarioJson area -> simple save/load ---
+UI.scenarioJson.value = '';
+
+
+// Initialize with an empty scenario
+refreshAll();
+
+// Expose debug functions in window for advanced exploration (user may open dev console)
+window.__sim = {
+  state, stepOneUnit, fastRunToCompletion, pickNextProcess, snapshotState, restoreSnapshot
+};
+
+logEvent('Simulator ready. Add processes and use controls to simulate CPU scheduling.');
+
+})(); // end closure
+</script>
+
+</body>
+</html>

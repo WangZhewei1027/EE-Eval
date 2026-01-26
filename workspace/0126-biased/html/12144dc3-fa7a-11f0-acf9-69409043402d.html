@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bellman-Ford Algorithm Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    padding: 10px;
+    white-space: pre-wrap;
+  }
+  input[type=number] {
+    width: 4em;
+  }
+  button, input, select, label {
+    margin: 2px 4px 2px 0;
+  }
+  textarea {
+    width: 100%;
+    height: 100px;
+    margin-top: 6px;
+    font-family: monospace;
+  }
+  #graph-area, #output, #step-info {
+    border: 1px solid black;
+    height: 150px;
+    overflow: auto;
+    white-space: pre;
+    margin-top: 6px;
+  }
+  #control-panel > div {
+    margin-bottom: 6px;
+  }
+  #distance-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  #distance-table td, #distance-table th {
+    border: 1px solid black;
+    padding: 2px 5px;
+    text-align: center;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<h2>Bellman-Ford Algorithm Interactive Demo</h2>
+
+<div id="instruction" style="max-width:600px;">
+The Bellman-Ford Algorithm finds shortest paths from a source vertex to all other vertices in a weighted graph.
+It can detect negative weight cycles reachable from the source.
+
+This demo allows you to:
+- Build your own directed weighted graph (with negative weights allowed)
+- Input the source vertex
+- Step through the algorithm iteration by iteration or run it fully
+- See the distance table updates and edge relaxation details
+- Detect negative cycles interactively
+- Reset, clear, or import/export graph + settings
+
+Use the controls below to interact.
+</div>
+
+<hr/>
+
+<div id="control-panel">
+
+  <div>
+    <label for="vertex-count">Number of vertices (max 20): </label>
+    <input type="number" id="vertex-count" min="1" max="20" value="5" />
+    <button id="set-vertex-count">Set Vertices</button>
+  </div>
+
+  <div>
+    <label for="edge-from">Add edge: from</label>
+    <input type="number" id="edge-from" min="0" max="19" value="0" />
+    <label for="edge-to">to</label>
+    <input type="number" id="edge-to" min="0" max="19" value="1" />
+    <label for="edge-weight">weight</label>
+    <input type="number" id="edge-weight" value="1" step="any" />
+    <button id="add-edge">Add Edge</button>
+    <button id="remove-edge">Remove Edge</button>
+  </div>
+
+  <div>
+    <label for="source-vertex">Source vertex: </label>
+    <input type="number" id="source-vertex" min="0" max="19" value="0" />
+    <button id="set-source">Set Source</button>
+  </div>
+
+  <div>
+    <button id="reset-algorithm">Reset Algorithm</button>
+    <button id="step-forward" disabled>Step Forward</button>
+    <button id="step-backward" disabled>Step Backward</button>
+    <button id="run-to-end" disabled>Run To End</button>
+  </div>
+
+  <div>
+    <label for="import-export-area">Import/Export Graph + Source (JSON format):</label><br/>
+    <textarea id="import-export-area" placeholder='{"vertexCount":5,"edges":[{"from":0,"to":1,"weight":2},...],"source":0}'></textarea><br/>
+    <button id="import-graph">Import</button>
+    <button id="export-graph">Export</button>
+    <button id="clear-graph">Clear Graph</button>
+  </div>
+
+</div>
+
+<hr/>
+
+<div>
+  <b>Current Graph Edges (directed):</b>
+  <div id="graph-area"></div>
+</div>
+
+<div style="margin-top:10px;">
+  <b>Algorithm Step Info:</b>
+  <div id="step-info"></div>
+</div>
+
+<div style="margin-top:10px;">
+  <b>Distance Table (vertex : distance from source):</b>
+  <div id="distance-table-container" style="overflow:auto; max-height:150px;"></div>
+</div>
+
+<div style="margin-top:10px;">
+  <b>Algorithm Output / Messages:</b>
+  <div id="output" aria-live="polite"></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // Data structures
+  let vertexCount = 5;
+  let edges = []; // {from:number, to:number, weight:number}
+  let sourceVertex = 0;
+
+  // Bellman-Ford algorithm state for stepping
+  let distances = [];
+  let predecessors = [];
+  let stepIndex = 0; // Current relaxation step (0-based)
+  /*
+   Relaxation steps numbering:
+   Each iteration has |V|-1 relaxation rounds.
+   Each round relaxes all edges in order.
+   Total steps = (vertexCount - 1) * edges.length
+  */
+  let totalSteps = 0;
+
+  // For storing history of distance arrays for stepping backward (deep exploration)
+  let distanceHistory = [];
+  let predecessorHistory = [];
+
+  // For user messages
+  const messages = {
+    invalidVertexCount: "Invalid vertex count. Min=1, Max=20.",
+    invalidEdgeVertex: "Edge vertices must be between 0 and vertexCount-1.",
+    invalidWeight: "Edge weight must be a valid number.",
+    invalidSource: "Source vertex must be between 0 and vertexCount-1.",
+    noVertices: "Graph must have at least one vertex.",
+  };
+
+  // Elements references
+  const vertexCountInput = document.getElementById("vertex-count");
+  const setVertexCountBtn = document.getElementById("set-vertex-count");
+  const edgeFromInput = document.getElementById("edge-from");
+  const edgeToInput = document.getElementById("edge-to");
+  const edgeWeightInput = document.getElementById("edge-weight");
+  const addEdgeBtn = document.getElementById("add-edge");
+  const removeEdgeBtn = document.getElementById("remove-edge");
+  const sourceVertexInput = document.getElementById("source-vertex");
+  const setSourceBtn = document.getElementById("set-source");
+  const resetAlgorithmBtn = document.getElementById("reset-algorithm");
+  const stepForwardBtn = document.getElementById("step-forward");
+  const stepBackwardBtn = document.getElementById("step-backward");
+  const runToEndBtn = document.getElementById("run-to-end");
+  const importExportArea = document.getElementById("import-export-area");
+  const importGraphBtn = document.getElementById("import-graph");
+  const exportGraphBtn = document.getElementById("export-graph");
+  const clearGraphBtn = document.getElementById("clear-graph");
+  const graphArea = document.getElementById("graph-area");
+  const stepInfoArea = document.getElementById("step-info");
+  const outputArea = document.getElementById("output");
+  const distanceTableContainer = document.getElementById("distance-table-container");
+
+  // Utility cloning function
+  function cloneArray(arr) {
+    if (Array.isArray(arr)) return arr.map(x => (Array.isArray(x) ? cloneArray(x) : x));
+    return arr;
+  }
+
+  // Validate inputs
+
+  function validateVertexCount(n) {
+    if (typeof n !== "number") return false;
+    if (!Number.isInteger(n)) return false;
+    if (n < 1 || n > 20) return false;
+    return true;
+  }
+
+  function validateVertex(v) {
+    if (typeof v !== "number") return false;
+    if (!Number.isInteger(v)) return false;
+    if (v < 0 || v >= vertexCount) return false;
+    return true;
+  }
+
+  function validateWeight(w) {
+    if (typeof w !== "number") return false;
+    if (isNaN(w) || !isFinite(w)) return false;
+    return true;
+  }
+
+  // Display Graph edges text
+  function renderGraph() {
+    if (vertexCount === 0) {
+      graphArea.textContent = "(No vertices)";
+      return;
+    }
+    if (edges.length === 0) {
+      graphArea.textContent = "(No edges)";
+      return;
+    }
+    // Sort edges by from then to for stable display
+    const sortedEdges = edges.slice().sort((a,b) => a.from - b.from || a.to - b.to);
+    let s = "";
+    for (let e of sortedEdges) {
+      s += `${e.from} -> ${e.to} (w=${e.weight})\n`;
+    }
+    graphArea.textContent = s;
+  }
+
+  // Render distances table
+  function renderDistances() {
+    if (vertexCount === 0) {
+      distanceTableContainer.innerHTML = "(No vertices)";
+      return;
+    }
+    const createCell = (content) => `<td>${content}</td>`;
+    const rows = [];
+    rows.push("<tr><th>Vertex</th><th>Distance</th><th>Predecessor</th></tr>");
+    for (let v = 0; v < vertexCount; v++) {
+      let dist = distances[v];
+      let distDisplay = dist === Infinity ? "∞" : dist.toFixed(4).replace(/\.?0+$/,"");
+      let pred = predecessors[v];
+      let predDisplay = (typeof pred === "number") ? pred : "";
+      rows.push(`<tr>${createCell(v)}${createCell(distDisplay)}${createCell(predDisplay)}</tr>`);
+    }
+    distanceTableContainer.innerHTML = "<table id='distance-table'>" + rows.join("") + "</table>";
+  }
+
+  // Initialize the graph data
+  function initializeGraph(n) {
+    vertexCount = n;
+    edges = [];
+    sourceVertex = 0;
+    // Reset inputs
+    vertexCountInput.value = vertexCount;
+    edgeFromInput.max = vertexCount - 1;
+    edgeToInput.max = vertexCount - 1;
+    sourceVertexInput.max = vertexCount - 1;
+    edgeFromInput.value = 0;
+    edgeToInput.value = 1 <= vertexCount - 1 ? 1 : 0;
+    sourceVertexInput.value = 0;
+    // Reset dist & pred and history
+    resetAlgorithmState();
+    updateAllDisplays();
+  }
+
+  // Resets algorithm state to initial with current graph and source
+  function resetAlgorithmState() {
+    distances = new Array(vertexCount).fill(Infinity);
+    predecessors = new Array(vertexCount).fill(null);
+    if (validateVertex(sourceVertex)) {
+      distances[sourceVertex] = 0;
+    }
+    stepIndex = 0;
+    distanceHistory = [];
+    predecessorHistory = [];
+
+    // Calculate total relaxation steps:
+    totalSteps = (vertexCount - 1) * edges.length;
+    enableSteppingControls(totalSteps > 0 && validateVertex(sourceVertex));
+  }
+
+  // Enable/Disable stepping controls
+  function enableSteppingControls(enabled) {
+    stepForwardBtn.disabled = !enabled;
+    runToEndBtn.disabled = !enabled;
+    stepBackwardBtn.disabled = true; // Initially backward disabled because no step done
+  }
+
+  // Add edge
+  function addEdge(f,t,w) {
+    if (!validateVertex(f) || !validateVertex(t)) {
+      showMessage(messages.invalidEdgeVertex, true);
+      return false;
+    }
+    if (!validateWeight(w)) {
+      showMessage(messages.invalidWeight, true);
+      return false;
+    }
+    // Check if edge exists - if yes, replace weight
+    let idx = edges.findIndex(e => e.from === f && e.to === t);
+    if (idx !== -1) {
+      edges[idx].weight = w;
+    } else {
+      edges.push({from:f, to:t, weight:w});
+    }
+    resetAlgorithmState();
+    updateAllDisplays();
+    showMessage("Edge added or updated.");
+    return true;
+  }
+
+  // Remove edge
+  function removeEdge(f,t) {
+    if (!validateVertex(f) || !validateVertex(t)) {
+      showMessage(messages.invalidEdgeVertex, true);
+      return false;
+    }
+    let countBefore = edges.length;
+    edges = edges.filter(e => !(e.from === f && e.to === t));
+    if (edges.length < countBefore) {
+      resetAlgorithmState();
+      updateAllDisplays();
+      showMessage("Edge removed.");
+      return true;
+    }
+    showMessage("Edge to remove not found.", true);
+    return false;
+  }
+
+  // Set source vertex
+  function setSource(s) {
+    if (!validateVertex(s)) {
+      showMessage(messages.invalidSource, true);
+      return false;
+    }
+    sourceVertex = s;
+    resetAlgorithmState();
+    updateAllDisplays();
+    showMessage("Source vertex set.");
+    return true;
+  }
+
+  // Show message (with error flag)
+  function showMessage(msg, isError = false) {
+    outputArea.textContent = msg;
+    // No special styling so just plain text
+  }
+
+  // Update all displays: graph, dist table, step info
+  function updateAllDisplays() {
+    renderGraph();
+    renderDistances();
+    renderStepInfo();
+  }
+
+  // Render step info:
+  // Step index meaning:
+  // We do (vertexCount -1) iterations over all edges.
+  // Each step relaxes one edge.
+
+  function renderStepInfo() {
+    if (vertexCount === 0) {
+      stepInfoArea.textContent = "(No graph)";
+      return;
+    }
+    if (!validateVertex(sourceVertex)) {
+      stepInfoArea.textContent = "Source vertex not set or invalid.";
+      return;
+    }
+    if (edges.length === 0) {
+      stepInfoArea.textContent = "No edges to relax.";
+      return;
+    }
+    if (stepIndex === 0) {
+      stepInfoArea.textContent = "Before any relaxations, distances initialized.\n" +
+        `Source vertex: ${sourceVertex}\n` +
+        `Distances: ${distances.map((d,i)=>`${i}:${d===Infinity?"∞":d}`).join(", ")}`;
+      stepBackwardBtn.disabled = true;
+      return;
+    }
+    if (stepIndex > totalSteps) {
+      stepInfoArea.textContent = "Algorithm finished all relaxation steps.";
+      stepForwardBtn.disabled = true;
+      stepBackwardBtn.disabled = false;
+      return;
+    }
+
+    // Decode stepIndex into iteration and which edge relaxing
+    // steps count from 1 to totalSteps included
+    // stepIndex=1 means iteration=1 edge=0; stepIndex=totalSteps means iteration=vertexCount-1 edge=edges.length-1
+
+    const iteration = Math.floor((stepIndex-1)/edges.length) + 1; // iteration 1-based
+    const edgeId = (stepIndex-1) % edges.length;
+    const e = edges[edgeId];
+    const u = e.from;
+    const v = e.to;
+    const w = e.weight;
+
+    let info = `Iteration ${iteration} / ${vertexCount-1}\n`;
+    info += `Relaxing edge ${u} -> ${v} (weight=${w})\n`;
+    info += `Current distance to ${u}: ${distances[u] === Infinity ? "∞" : distances[u]}\n`;
+    info += `Current distance to ${v}: ${distances[v] === Infinity ? "∞" : distances[v]}\n`;
+
+    if (distances[u] !== Infinity && distances[u] + w < distances[v]) {
+      info += `Edge can be relaxed.\nNew distance for vertex ${v}: ${distances[u] + w}`;
+    } else {
+      info += `No relaxation performed on this edge.`;
+    }
+
+    stepInfoArea.textContent = info;
+  }
+
+  // Perform one relaxation step (step forward)
+  function stepForward() {
+    if (stepIndex >= totalSteps) {
+      showMessage("Algorithm already finished.");
+      stepForwardBtn.disabled = true;
+      return;
+    }
+    // Save current state before relaxation for backward stepping
+    distanceHistory.push(distances.slice());
+    predecessorHistory.push(predecessors.slice());
+
+    stepIndex++;
+    // Identify edge to relax
+    const currEdgeId = (stepIndex - 1) % edges.length;
+    const u = edges[currEdgeId].from;
+    const v = edges[currEdgeId].to;
+    const w = edges[currEdgeId].weight;
+
+    // Relax edge
+    if (distances[u] !== Infinity && distances[u] + w < distances[v]) {
+      distances[v] = distances[u] + w;
+      predecessors[v] = u;
+    }
+
+    updateAllDisplays();
+
+    stepBackwardBtn.disabled = false;
+    if (stepIndex === totalSteps) {
+      stepForwardBtn.disabled = true;
+      detectNegativeCycle();
+    }
+  }
+
+  // Step backward (undo last relaxation)
+  function stepBackward() {
+    if (stepIndex === 0) {
+      showMessage("At initial state, cannot step backward.");
+      stepBackwardBtn.disabled = true;
+      return;
+    }
+    stepIndex--;
+    distances = distanceHistory.pop();
+    predecessors = predecessorHistory.pop();
+
+    updateAllDisplays();
+
+    stepForwardBtn.disabled = false;
+    if (stepIndex === 0) {
+      stepBackwardBtn.disabled = true;
+    }
+  }
+
+  // Run algorithm to end in one go (non-animated)
+  function runToEnd() {
+    if (stepIndex >= totalSteps) {
+      showMessage("Algorithm already finished.");
+      stepForwardBtn.disabled = true;
+      runToEndBtn.disabled = true;
+      return;
+    }
+    // Save current state before running for backward capability
+    // We'll save each step in history so user can step back through full run
+    for(; stepIndex < totalSteps; stepIndex++) {
+      distanceHistory.push(distances.slice());
+      predecessorHistory.push(predecessors.slice());
+
+      const currEdgeId = (stepIndex) % edges.length;
+      const u = edges[currEdgeId].from;
+      const v = edges[currEdgeId].to;
+      const w = edges[currEdgeId].weight;
+
+      if (distances[u] !== Infinity && distances[u] + w < distances[v]) {
+        distances[v] = distances[u] + w;
+        predecessors[v] = u;
+      }
+    }
+    updateAllDisplays();
+    stepForwardBtn.disabled = true;
+    runToEndBtn.disabled = true;
+    stepBackwardBtn.disabled = (stepIndex === 0);
+
+    detectNegativeCycle();
+  }
+
+  // Check for negative weight cycles reachable from source
+  function detectNegativeCycle() {
+    // After |V|-1 iterations, relax edges one more time:
+    // if any edge can still relax, negative cycle reachable from source exists
+    for (const e of edges) {
+      if (distances[e.from] !== Infinity && distances[e.from] + e.weight < distances[e.to]) {
+        showMessage("Warning: Negative weight cycle detected reachable from source vertex.");
+        return;
+      }
+    }
+    showMessage("Algorithm completed without detecting negative weight cycles.");
+  }
+
+  // Clear graph completely
+  function clearGraph() {
+    vertexCount = 0;
+    edges = [];
+    sourceVertex = 0;
+    distances = [];
+    predecessors = [];
+    stepIndex = 0;
+    distanceHistory = [];
+    predecessorHistory = [];
+    totalSteps = 0;
+    vertexCountInput.value = "";
+    edgeFromInput.value = "";
+    edgeToInput.value = "";
+    edgeWeightInput.value = "";
+    sourceVertexInput.value = "";
+    importExportArea.value = "";
+    enableSteppingControls(false);
+    updateAllDisplays();
+    showMessage("Graph cleared.");
+  }
+
+  // Import graph from JSON
+  function importGraph() {
+    let data;
+    try {
+      data = JSON.parse(importExportArea.value);
+    } catch(e) {
+      showMessage("Import failed: invalid JSON.", true);
+      return;
+    }
+    // Should have vertexCount (int), edges (array), source (int)
+    if (!validateVertexCount(data.vertexCount)) {
+      showMessage("Import failed: invalid or missing vertexCount.", true);
+      return;
+    }
+    if (!Array.isArray(data.edges)) {
+      showMessage("Import failed: edges should be an array.", true);
+      return;
+    }
+    if (!validateVertex(data.source)) {
+      showMessage("Import failed: invalid or missing source vertex.", true);
+      return;
+    }
+    let importedEdges = [];
+    for(const edge of data.edges) {
+      if (typeof edge !== "object" || edge === null) {
+        showMessage("Import failed: edges array contains invalid entry.", true);
+        return;
+      }
+      const {from, to, weight} = edge;
+      if (!validateVertex(from) || !validateVertex(to)) {
+        showMessage("Import failed: edge vertices out of range.", true);
+        return;
+      }
+      if (!validateWeight(weight)) {
+        showMessage("Import failed: invalid edge weight.", true);
+        return;
+      }
+      importedEdges.push({from, to, weight});
+    }
+    // Set the graph
+    vertexCount = data.vertexCount;
+    edges = importedEdges;
+    sourceVertex = data.source;
+
+    // Update inputs controls and states
+    vertexCountInput.value = vertexCount;
+    edgeFromInput.max = vertexCount - 1;
+    edgeToInput.max = vertexCount - 1;
+    sourceVertexInput.max = vertexCount -1;
+    edgeFromInput.value = 0;
+    edgeToInput.value = 1 <= vertexCount - 1 ? 1 : 0;
+    sourceVertexInput.value = sourceVertex;
+
+    resetAlgorithmState();
+    updateAllDisplays();
+    showMessage("Graph imported successfully.");
+  }
+
+  // Export graph as JSON
+  function exportGraph() {
+    const exportData = {
+      vertexCount,
+      edges,
+      source: sourceVertex,
+    };
+    importExportArea.value = JSON.stringify(exportData, null, 2);
+    showMessage("Graph exported to JSON.");
+  }
+
+  // --- Event bindings ---
+  setVertexCountBtn.addEventListener("click", () => {
+    const n = Number(vertexCountInput.value);
+    if (!validateVertexCount(n)) {
+      showMessage(messages.invalidVertexCount, true);
+      return;
+    }
+    initializeGraph(n);
+    showMessage(`Number of vertices set to ${n}.`);
+  });
+
+  addEdgeBtn.addEventListener("click", () => {
+    const f = Number(edgeFromInput.value);
+    const t = Number(edgeToInput.value);
+    const w = Number(edgeWeightInput.value);
+    addEdge(f,t,w);
+  });
+
+  removeEdgeBtn.addEventListener("click", () => {
+    const f = Number(edgeFromInput.value);
+    const t = Number(edgeToInput.value);
+    removeEdge(f,t);
+  });
+
+  setSourceBtn.addEventListener("click", () => {
+    const s = Number(sourceVertexInput.value);
+    setSource(s);
+  });
+
+  resetAlgorithmBtn.addEventListener("click", () => {
+    if (vertexCount === 0) {
+      showMessage(messages.noVertices, true);
+      return;
+    }
+    if (!validateVertex(sourceVertex)) {
+      showMessage(messages.invalidSource, true);
+      return;
+    }
+    resetAlgorithmState();
+    updateAllDisplays();
+    showMessage("Algorithm reset to initial state.");
+  });
+
+  stepForwardBtn.addEventListener("click", () => {
+    stepForward();
+  });
+
+  stepBackwardBtn.addEventListener("click", () => {
+    stepBackward();
+  });
+
+  runToEndBtn.addEventListener("click", () => {
+    runToEnd();
+  });
+
+  importGraphBtn.addEventListener("click", () => {
+    importGraph();
+  });
+
+  exportGraphBtn.addEventListener("click", () => {
+    exportGraph();
+  });
+
+  clearGraphBtn.addEventListener("click", () => {
+    clearGraph();
+  });
+
+  // Initial setup
+  initializeGraph(vertexCount);
+
+  // Accessibility: add keyboard shortcuts hints in console
+  /*
+  Controls keyboard shortcuts (not implemented due to minimal UI):
+  - Set Vertices: click button
+  - Add Edge: click Add Edge
+  - Remove Edge: click Remove Edge
+  - Set Source: click Set Source
+  - Reset Algorithm: click Reset Algorithm
+  - Step Forward: click Step Forward
+  - Step Backward: click Step Backward
+  - Run To End: click Run To End
+  - Import: Paste JSON in textarea then Import
+  - Export: Export JSON to textarea
+  - Clear Graph: click Clear Graph
+  */
+
+})();
+</script>
+
+</body>
+</html>

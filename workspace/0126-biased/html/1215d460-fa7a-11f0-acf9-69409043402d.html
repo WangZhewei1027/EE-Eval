@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Relational Database Interactive Exploration</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 10px;
+    line-height: 1.4;
+  }
+  input[type=text], select, textarea {
+    font-family: monospace, monospace;
+    font-size: 1em;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  table {
+    border-collapse: collapse;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    width: 100%;
+  }
+  table, th, td {
+    border: 1px solid black;
+    padding: 2px 4px;
+  }
+  button {
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  #state {
+    white-space: pre-wrap;
+    font-size: 0.9em;
+    border: 1px solid black;
+    padding: 3px;
+    margin-top: 5px;
+    max-height: 150px;
+    overflow-y: auto;
+    background: #f9f9f9;
+  }
+</style>
+</head>
+<body>
+
+<h1>Relational Database Interactive Exploration</h1>
+
+<p>This tool demonstrates relational database concepts by letting you create tables, define columns with types, add rows, create relations (foreign keys), and perform basic queries / joins interactively.</p>
+
+<hr />
+
+<h2>1. Create or Manage Tables</h2>
+<div>
+  <label for="newTableName">New Table Name: </label>
+  <input type="text" id="newTableName" placeholder="e.g. Employees" />
+  <button id="btnCreateTable">Create Table</button>
+  <button id="btnDropTable">Drop Table</button>
+  <br /><br />
+  <label for="selectTable">Select Table: </label>
+  <select id="selectTable" style="min-width: 150px;"></select>
+  <button id="btnLoadTable">Load Table</button>
+  <button id="btnClearTableView">Clear View</button>
+</div>
+
+<hr />
+
+<h2>2. Define / Edit Columns of Selected Table</h2>
+<div id="columnsSection" style="display:none;">
+  <p>
+    <label for="newColumnName">Column Name: </label>
+    <input type="text" id="newColumnName" placeholder="e.g. ID" style="width:120px;" />
+    <label for="newColumnType">Type: </label>
+    <select id="newColumnType">
+      <option value="int">int</option>
+      <option value="text">text</option>
+      <option value="fk">foreign key (relation)</option>
+    </select>
+    <span id="fkTargetTableContainer" style="display:none;">
+      <label for="fkTargetTable">Target Table: </label>
+      <select id="fkTargetTable"></select>
+      <label for="fkTargetColumn">Target Column: </label>
+      <select id="fkTargetColumn"></select>
+    </span>
+    <button id="btnAddColumn">Add Column</button>
+  </p>
+  <div>
+    <strong>Columns in Table:</strong>
+    <table id="columnsTable">
+      <thead><tr><th>Name</th><th>Type</th><th>FK Target</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<hr />
+
+<h2>3. Add / Edit Rows in Selected Table</h2>
+<div id="rowsSection" style="display:none;">
+  <div id="rowInputForm"></div>
+  <button id="btnAddRow">Add Row</button>
+  <button id="btnClearRowInputs">Clear Inputs</button>
+  <p><strong>Existing Rows:</strong></p>
+  <table id="rowsTable">
+    <thead><tr id="rowsTableHeader"></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<hr />
+
+<h2>4. Create / Manage Relations (FK Constraints)</h2>
+<div id="relationsSection" style="display:none;">
+  <p>
+    <label for="relSourceTable">Source Table: </label>
+    <select id="relSourceTable"></select>
+    <label for="relSourceColumn">Source Column: </label>
+    <select id="relSourceColumn"></select>
+    <label for="relTargetTable">Target Table: </label>
+    <select id="relTargetTable"></select>
+    <label for="relTargetColumn">Target Column: </label>
+    <select id="relTargetColumn"></select>
+    <button id="btnAddRelation">Add Relation</button>
+  </p>
+  <div>
+    <strong>Current Relations (Foreign Keys):</strong>
+    <table id="relationsTable">
+      <thead><tr><th>Source Table.Column</th><th>Target Table.Column</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<hr />
+
+<h2>5. Query / Explore Data</h2>
+<div>
+  <p>Use this panel to formulate simple SELECT queries using interactive join controls.</p>
+  <div>
+    <label for="querySelectTables">Tables (comma separated): </label>
+    <input type="text" id="querySelectTables" placeholder="e.g. Employees,Departments" />
+  </div>
+  <div style="margin-top:4px;">
+    <label for="queryColumns">Select Columns (comma separated, with optional table prefix): </label><br />
+    <input type="text" id="queryColumns" placeholder="e.g. Employees.Name,Departments.Name" style="width:100%;" />
+  </div>
+  <div style="margin-top:4px;">
+    <label for="queryWhere">WHERE Clause (simple conditions, e.g. Employees.Age &gt; 30): </label><br />
+    <input type="text" id="queryWhere" placeholder="e.g. Employees.Age > 30 AND Departments.Name = 'HR'" style="width:100%;" />
+  </div>
+  <button id="btnRunQuery" style="margin-top:6px;">Run Query</button>
+</div>
+
+<div id="queryResults" style="margin-top:10px;">
+  <strong>Query Result:</strong>
+  <table id="queryResultTable"><thead></thead><tbody></tbody></table>
+</div>
+
+<hr />
+
+<h2>Debug / State</h2>
+<pre id="state" aria-live="polite"></pre>
+
+<script>
+(() => {
+  // DATA MODEL
+  // Each table has name: string
+  // Each table has columns: [{name, type('int'|'text'|'fk'), fkTarget:{table,column} or null}]
+  // Each table has rows: array of objects with keys as column names
+  // Relations stored redundantly in columns with fkTarget set, and in relations array (for convenience)
+
+  // State object
+  const state = {
+    tables: {},
+    relations: [], // { sourceTable, sourceColumn, targetTable, targetColumn }
+  };
+
+  // Utility - Escape HTML for safety
+  function htmlEscape(str) {
+    if (typeof str !== 'string') return str;
+    return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  // UI elements references
+  const newTableNameInput = document.getElementById('newTableName');
+  const btnCreateTable = document.getElementById('btnCreateTable');
+  const btnDropTable = document.getElementById('btnDropTable');
+  const selectTable = document.getElementById('selectTable');
+  const btnLoadTable = document.getElementById('btnLoadTable');
+  const btnClearTableView = document.getElementById('btnClearTableView');
+
+  const columnsSection = document.getElementById('columnsSection');
+  const newColumnNameInput = document.getElementById('newColumnName');
+  const newColumnTypeSelect = document.getElementById('newColumnType');
+  const fkTargetTableContainer = document.getElementById('fkTargetTableContainer');
+  const fkTargetTableSelect = document.getElementById('fkTargetTable');
+  const fkTargetColumnSelect = document.getElementById('fkTargetColumn');
+  const btnAddColumn = document.getElementById('btnAddColumn');
+  const columnsTableBody = document.querySelector('#columnsTable tbody');
+
+  const rowsSection = document.getElementById('rowsSection');
+  const rowInputForm = document.getElementById('rowInputForm');
+  const btnAddRow = document.getElementById('btnAddRow');
+  const btnClearRowInputs = document.getElementById('btnClearRowInputs');
+  const rowsTable = document.getElementById('rowsTable');
+  const rowsTableHeader = document.getElementById('rowsTableHeader');
+  const rowsTableBody = rowsTable.querySelector('tbody');
+
+  const relationsSection = document.getElementById('relationsSection');
+  const relSourceTableSelect = document.getElementById('relSourceTable');
+  const relSourceColumnSelect = document.getElementById('relSourceColumn');
+  const relTargetTableSelect = document.getElementById('relTargetTable');
+  const relTargetColumnSelect = document.getElementById('relTargetColumn');
+  const btnAddRelation = document.getElementById('btnAddRelation');
+  const relationsTableBody = document.querySelector('#relationsTable tbody');
+
+  const querySelectTablesInput = document.getElementById('querySelectTables');
+  const queryColumnsInput = document.getElementById('queryColumns');
+  const queryWhereInput = document.getElementById('queryWhere');
+  const btnRunQuery = document.getElementById('btnRunQuery');
+  const queryResultTable = document.getElementById('queryResultTable');
+  const queryResultThead = queryResultTable.querySelector('thead');
+  const queryResultTbody = queryResultTable.querySelector('tbody');
+
+  const statePre = document.getElementById('state');
+
+  // Display State for debugging
+  function updateStateView() {
+    statePre.textContent = JSON.stringify(state, null, 2);
+  }
+
+  // Update Select Table dropdown
+  function updateTablesDropdowns() {
+    // For selectTable + fkTargetTable + relation selects
+    const tables = Object.keys(state.tables).sort();
+    // Update selectTable
+    fillSelectOptions(selectTable, tables, null, "(Select a table)");
+    // fkTargetTable
+    fillSelectOptions(fkTargetTableSelect, tables);
+    updateFkTargetColumns();
+    // relations selects
+    fillSelectOptions(relSourceTableSelect, tables);
+    fillSelectOptions(relTargetTableSelect, tables);
+    updateRelSourceColumns();
+    updateRelTargetColumns();
+  }
+
+  function fillSelectOptions(selectElem, options, selectedValue = null, placeholder=null) {
+    selectElem.innerHTML = '';
+    if(placeholder) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = placeholder;
+      opt.disabled = true;
+      opt.selected = true;
+      selectElem.appendChild(opt);
+    }
+    options.forEach(o=>{
+      const opt = document.createElement('option');
+      opt.value = o;
+      opt.textContent = o;
+      if(selectedValue !== null && selectedValue === o) opt.selected = true;
+      selectElem.appendChild(opt);
+    });
+  }
+
+  // Load a table's columns and rows into UI
+  let currentTable = null;
+  function loadTable(name) {
+    if (!name || !state.tables[name]) {
+      alert("Invalid table selected.");
+      return;
+    }
+    currentTable = name;
+    // Show column section
+    columnsSection.style.display = '';
+    rowsSection.style.display = '';
+    relationsSection.style.display = '';
+
+    // Load columns in UI
+    renderColumnsTable();
+
+    // Render row inputs
+    renderRowInputForm();
+
+    // Render rows table
+    renderRowsTable();
+
+    updateRelationsSection();
+
+  }
+
+  // Clear current view
+  function clearCurrentView() {
+    currentTable = null;
+    columnsSection.style.display = 'none';
+    rowsSection.style.display = 'none';
+    relationsSection.style.display = 'none';
+    columnsTableBody.innerHTML = '';
+    rowInputForm.innerHTML = '';
+    rowsTableHeader.innerHTML = '';
+    rowsTableBody.innerHTML = '';
+    relationsTableBody.innerHTML = '';
+  }
+
+  // Render columns table for currentTable
+  function renderColumnsTable() {
+    columnsTableBody.innerHTML = '';
+    if (!currentTable) return;
+    const cols = state.tables[currentTable].columns;
+    cols.forEach((col,i)=>{
+      const tr = document.createElement('tr');
+      const tdName = document.createElement('td');
+      tdName.textContent = col.name;
+      const tdType = document.createElement('td');
+      tdType.textContent = col.type;
+      const tdFk = document.createElement('td');
+      tdFk.textContent = '';
+      if(col.type === 'fk' && col.fkTarget) {
+        tdFk.textContent = col.fkTarget.table + '.' + col.fkTarget.column;
+      }
+      const tdActions = document.createElement('td');
+      const btnDel = document.createElement('button');
+      btnDel.textContent = 'Delete';
+      btnDel.onclick = () => {
+        if(confirm(`Delete column "${col.name}" from table "${currentTable}"? This will remove data from rows.`)) {
+          deleteColumn(currentTable, col.name);
+        }
+      };
+      tdActions.appendChild(btnDel);
+      tr.appendChild(tdName);
+      tr.appendChild(tdType);
+      tr.appendChild(tdFk);
+      tr.appendChild(tdActions);
+      columnsTableBody.appendChild(tr);
+    });
+  }
+
+  // Delete column from table
+  function deleteColumn(table, colName) {
+    const t = state.tables[table];
+    if(!t) return;
+    // Remove column from columns
+    const idx = t.columns.findIndex(c => c.name === colName);
+    if(idx < 0) return;
+    // Remove any relations involving this column
+    state.relations = state.relations.filter(rel => !( (rel.sourceTable === table && rel.sourceColumn === colName) || (rel.targetTable === table && rel.targetColumn === colName) ));
+    // Remove column
+    t.columns.splice(idx,1);
+    // Remove from rows
+    t.rows.forEach(r=>{
+      delete r[colName];
+    });
+    renderColumnsTable();
+    renderRowsTable();
+    updateRelationsSection();
+    updateStateView();
+    updateTablesDropdowns();
+  }
+
+  // Render row input form for currentTable
+  function renderRowInputForm() {
+    if(!currentTable) {
+      rowInputForm.innerHTML = '';
+      return;
+    }
+    const cols = state.tables[currentTable].columns;
+    rowInputForm.innerHTML = '';
+    cols.forEach(col=>{
+      const div = document.createElement('div');
+      div.style.marginBottom = '4px';
+
+      const lbl = document.createElement('label');
+      lbl.textContent = col.name + ' (' + col.type + '): ';
+      lbl.htmlFor = 'rowinput-'+col.name;
+      div.appendChild(lbl);
+
+      if(col.type === 'fk' && col.fkTarget) {
+        // input select - values from target table
+        const sel = document.createElement('select');
+        sel.id = 'rowinput-'+col.name;
+        // Add empty option
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '(null)';
+        sel.appendChild(emptyOpt);
+        const targetTable = state.tables[col.fkTarget.table];
+        if(targetTable) {
+          const targetCol = col.fkTarget.column;
+          targetTable.rows.forEach(r => {
+            const val = r[targetCol];
+            const opt = document.createElement('option');
+            opt.value = val === undefined || val === null ? '' : String(val);
+            opt.textContent = String(val);
+            sel.appendChild(opt);
+          });
+        }
+        div.appendChild(sel);
+      } else {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'rowinput-'+col.name;
+        input.placeholder = col.type === 'int' ? 'integer' : 'text';
+        div.appendChild(input);
+      }
+      rowInputForm.appendChild(div);
+    });
+  }
+
+  // Render rows table for currentTable
+  function renderRowsTable() {
+    if(!currentTable) {
+      rowsTableHeader.innerHTML = '';
+      rowsTableBody.innerHTML = '';
+      return;
+    }
+    const t = state.tables[currentTable];
+    const cols = t.columns;
+    rowsTableHeader.innerHTML = '';
+    rowsTableBody.innerHTML = '';
+    // Table header
+    cols.forEach(col=>{
+      const th = document.createElement('th');
+      th.textContent = col.name;
+      rowsTableHeader.appendChild(th);
+    });
+    const thActions = document.createElement('th');
+    thActions.textContent = 'Actions';
+    rowsTableHeader.appendChild(thActions);
+
+    // Rows body
+    t.rows.forEach((r,i)=>{
+      const tr = document.createElement('tr');
+      cols.forEach(col=>{
+        const td = document.createElement('td');
+        let val = r[col.name];
+        if(val === undefined || val === null) val = '';
+        td.textContent = String(val);
+        tr.appendChild(td);
+      });
+      const tdActions = document.createElement('td');
+      // Edit button
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = 'Edit';
+      btnEdit.onclick = () => {
+        populateRowInputsForEdit(i);
+      };
+      // Delete button
+      const btnDel = document.createElement('button');
+      btnDel.textContent = 'Delete';
+      btnDel.onclick = () => {
+        if(confirm(`Delete row ${i+1} from table "${currentTable}"?`)) {
+          deleteRow(currentTable, i);
+        }
+      };
+      tdActions.appendChild(btnEdit);
+      tdActions.appendChild(document.createTextNode(' '));
+      tdActions.appendChild(btnDel);
+      tr.appendChild(tdActions);
+      rowsTableBody.appendChild(tr);
+    });
+  }
+
+  // Populate row input fields for edit mode
+  let editingRowIndex = null;
+  function populateRowInputsForEdit(rowIndex) {
+    if(!currentTable) return;
+    const row = state.tables[currentTable].rows[rowIndex];
+    if(!row) return;
+    editingRowIndex = rowIndex;
+    state.tables[currentTable].columns.forEach(col=>{
+      const el = document.getElementById('rowinput-'+col.name);
+      if(!el) return;
+      const val = row[col.name];
+      if(el.tagName === 'SELECT') {
+        // Set selected option by val
+        for(let i=0;i<el.options.length;i++) {
+          if(el.options[i].value === (val === undefined || val === null ? '' : String(val))) {
+            el.selectedIndex = i;
+            break;
+          }
+        }
+      } else {
+        el.value = val === undefined || val === null ? '' : String(val);
+      }
+    });
+  }
+
+  // Clear row inputs and cancel edit mode
+  function clearRowInputs() {
+    editingRowIndex = null;
+    state.tables[currentTable].columns.forEach(col=>{
+      const el = document.getElementById('rowinput-'+col.name);
+      if(!el) return;
+      if(el.tagName === 'SELECT') {
+        el.selectedIndex = 0;
+      } else {
+        el.value = '';
+      }
+    });
+  }
+
+  // Add or Update a row in currentTable
+  function addOrUpdateRow() {
+    if(!currentTable) return;
+    const t = state.tables[currentTable];
+    const newRow = {};
+    // Validate and collect inputs
+    for(const col of t.columns) {
+      const el = document.getElementById('rowinput-'+col.name);
+      if(!el) continue;
+      // Validate based on type
+      let valRaw = '';
+      if(el.tagName === 'SELECT') {
+        valRaw = el.value.trim();
+      } else {
+        valRaw = el.value.trim();
+      }
+      if(col.type === 'int') {
+        if(valRaw === '') {
+          newRow[col.name] = null;
+        } else {
+          const n = parseInt(valRaw,10);
+          if(isNaN(n)) {
+            alert(`Invalid integer value for column "${col.name}"`);
+            return;
+          }
+          newRow[col.name] = n;
+        }
+      } else if(col.type === 'text') {
+        newRow[col.name] = valRaw;
+      } else if(col.type === 'fk') {
+        newRow[col.name] = valRaw === '' ? null : valRaw;
+        // Validate FK referential integrity
+        if(valRaw !== '') {
+          if(!validateForeignKey(col.fkTarget.table, col.fkTarget.column, valRaw)) {
+            alert(`Foreign key constraint failed: value "${valRaw}" not found in ${col.fkTarget.table}.${col.fkTarget.column}`);
+            return;
+          }
+        }
+      }
+    }
+    if(editingRowIndex !== null) {
+      // Update existing row
+      t.rows[editingRowIndex] = newRow;
+      editingRowIndex = null;
+    } else {
+      // Append new row
+      t.rows.push(newRow);
+    }
+    clearRowInputs();
+    renderRowsTable();
+    updateStateView();
+    updateFkTargetColumns();
+  }
+
+  // Delete row
+  function deleteRow(tableName, index) {
+    const t = state.tables[tableName];
+    if(!t) return;
+    if(index<0 || index>=t.rows.length) return;
+    // Check if row is referenced by any foreign key in other tables (referential integrity)
+    for(const rel of state.relations) {
+      if(rel.targetTable === tableName) {
+        // For each referencing row in sourceTable sourceColumn check if has FK value equal to the to-be-deleted
+        const valToCheck = t.rows[index][rel.targetColumn];
+        for(const rRow of state.tables[rel.sourceTable].rows) {
+          if(rRow[rel.sourceColumn] === valToCheck) {
+            alert(`Cannot delete row because it is referenced by foreign key in table "${rel.sourceTable}", column "${rel.sourceColumn}"`);
+            return;
+          }
+        }
+      }
+    }
+
+    t.rows.splice(index,1);
+    renderRowsTable();
+    updateStateView();
+    updateFkTargetColumns();
+  }
+
+  // Validate FK value exists in target table column
+  function validateForeignKey(targetTable, targetColumn, val) {
+    if(!state.tables[targetTable]) return false;
+    const rows = state.tables[targetTable].rows;
+    for(const r of rows) {
+      if(String(r[targetColumn]) === val) return true;
+    }
+    return false;
+  }
+
+  // When FK target table changes, update FK target column options to existing columns (int or text)
+  function updateFkTargetColumns() {
+    const tName = fkTargetTableSelect.value;
+    fkTargetColumnSelect.innerHTML = '';
+    if(!tName || !state.tables[tName]) return;
+    const cols = state.tables[tName].columns.filter(c=> c.type === 'int' || c.type === 'text');
+    cols.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = c.name;
+      fkTargetColumnSelect.appendChild(opt);
+    });
+  }
+
+  fkTargetTableSelect.addEventListener('change', updateFkTargetColumns);
+
+  // Show or hide FK target table/column selectors depending on selected column type
+  newColumnTypeSelect.addEventListener('change', () => {
+    if(newColumnTypeSelect.value === 'fk') {
+      fkTargetTableContainer.style.display = '';
+      updateFkTargetColumns();
+    } else {
+      fkTargetTableContainer.style.display = 'none';
+    }
+  });
+
+  // Add column to currentTable when clicked
+  btnAddColumn.addEventListener('click', () => {
+    if(!currentTable) {
+      alert('No table loaded.');
+      return;
+    }
+    const colName = newColumnNameInput.value.trim();
+    if(!colName) {
+      alert('Column name cannot be empty.');
+      return;
+    }
+    // Validate column name unique within table
+    if(state.tables[currentTable].columns.some(c=>c.name === colName)) {
+      alert(`Column "${colName}" already exists in table "${currentTable}".`);
+      return;
+    }
+    const colType = newColumnTypeSelect.value;
+    let fkTarget = null;
+    if(colType === 'fk') {
+      const tgtTable = fkTargetTableSelect.value;
+      const tgtColumn = fkTargetColumnSelect.value;
+      if(!tgtTable || !tgtColumn) {
+        alert('Foreign key target table and column must be selected.');
+        return;
+      }
+      fkTarget = {table: tgtTable, column: tgtColumn};
+    }
+    // Add column
+    state.tables[currentTable].columns.push({name: colName, type: colType, fkTarget: fkTarget});
+    // Add null default to existing rows for this column
+    state.tables[currentTable].rows.forEach(r=>{
+      r[colName] = null;
+    });
+    renderColumnsTable();
+    renderRowInputForm();
+    renderRowsTable();
+    updateStateView();
+    updateTablesDropdowns();
+
+    // Clear inputs
+    newColumnNameInput.value = '';
+  });
+
+  // Add row button event
+  btnAddRow.addEventListener('click', addOrUpdateRow);
+
+  // Clear row inputs button
+  btnClearRowInputs.addEventListener('click', clearRowInputs);
+
+  // Create a new table button
+  btnCreateTable.addEventListener('click', () => {
+    const tname = newTableNameInput.value.trim();
+    if(!tname) {
+      alert('Table name cannot be empty.');
+      return;
+    }
+    if(state.tables[tname]) {
+      alert(`Table "${tname}" already exists.`);
+      return;
+    }
+    state.tables[tname] = {columns: [], rows: []};
+    newTableNameInput.value = '';
+    updateTablesDropdowns();
+    updateStateView();
+  });
+
+  // Drop table button
+  btnDropTable.addEventListener('click', () => {
+    const tname = newTableNameInput.value.trim();
+    if(!tname || !state.tables[tname]) {
+      alert('Invalid table name to drop.');
+      return;
+    }
+    // Check if table is referenced by any FK relations
+    for(const rel of state.relations) {
+      if(rel.targetTable === tname || rel.sourceTable === tname) {
+        alert(`Cannot drop table "${tname}" because it is involved in foreign key relations.`);
+        return;
+      }
+    }
+    if(confirm(`Are you sure to drop table "${tname}"? This operation cannot be undone.`)) {
+      delete state.tables[tname];
+      updateTablesDropdowns();
+      updateStateView();
+      if(currentTable === tname) clearCurrentView();
+    }
+  });
+
+  btnLoadTable.addEventListener('click', () => {
+    const tname = selectTable.value;
+    if(!tname) {
+      alert('No table selected.');
+      return;
+    }
+    loadTable(tname);
+  });
+
+  btnClearTableView.addEventListener('click', () => {
+    clearCurrentView();
+  });
+
+  // RELATIONS SECTION controls
+
+  function updateRelSourceColumns() {
+    const tname = relSourceTableSelect.value;
+    relSourceColumnSelect.innerHTML = '';
+    if(!tname || !state.tables[tname]) return;
+    const cols = state.tables[tname].columns;
+    cols.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = c.name;
+      relSourceColumnSelect.appendChild(opt);
+    });
+  }
+  function updateRelTargetColumns() {
+    const tname = relTargetTableSelect.value;
+    relTargetColumnSelect.innerHTML = '';
+    if(!tname || !state.tables[tname]) return;
+    const cols = state.tables[tname].columns;
+    cols.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = c.name;
+      relTargetColumnSelect.appendChild(opt);
+    });
+  }
+
+  relSourceTableSelect.addEventListener('change', updateRelSourceColumns);
+  relTargetTableSelect.addEventListener('change', updateRelTargetColumns);
+
+  // Add Relation FK by user
+  btnAddRelation.addEventListener('click', () => {
+    const srcTable = relSourceTableSelect.value;
+    const srcColumn = relSourceColumnSelect.value;
+    const tgtTable = relTargetTableSelect.value;
+    const tgtColumn = relTargetColumnSelect.value;
+    if(!srcTable || !srcColumn || !tgtTable || !tgtColumn) {
+      alert('Select source table, source column, target table, and target column.');
+      return;
+    }
+    // Validate source column exists and source column type matches target column type
+    const srcTblObj = state.tables[srcTable];
+    const tgtTblObj = state.tables[tgtTable];
+    if(!srcTblObj || !tgtTblObj) {
+      alert('Source or target table not found.');
+      return;
+    }
+    const srcColObj = srcTblObj.columns.find(c => c.name === srcColumn);
+    const tgtColObj = tgtTblObj.columns.find(c => c.name === tgtColumn);
+    if(!srcColObj || !tgtColObj) {
+      alert('Source or target column not found.');
+      return;
+    }
+    if(srcColObj.type !== 'fk') {
+      alert('Source column must be a foreign key type to add relation.');
+      return;
+    }
+    if(!srcColObj.fkTarget || srcColObj.fkTarget.table !== tgtTable || srcColObj.fkTarget.column !== tgtColumn) {
+      alert('FK target table and column mismatch with source column FK definition.');
+      return;
+    }
+    // Check if relation already exists
+    if(state.relations.some(r => r.sourceTable === srcTable && r.sourceColumn === srcColumn && r.targetTable === tgtTable && r.targetColumn === tgtColumn)) {
+      alert('This relation already exists.');
+      return;
+    }
+    // Add relation
+    state.relations.push({sourceTable: srcTable,sourceColumn: srcColumn,targetTable: tgtTable,targetColumn: tgtColumn});
+    updateRelationsSection();
+    updateStateView();
+  });
+
+  // Update relations table display
+  function updateRelationsSection() {
+    if(!currentTable) {
+      relationsSection.style.display = 'none';
+      return;
+    }
+    relationsSection.style.display = '';
+    relationsTableBody.innerHTML = '';
+    state.relations.forEach((rel,i)=>{
+      const tr = document.createElement('tr');
+      const tdSrc = document.createElement('td');
+      tdSrc.textContent = rel.sourceTable + '.' + rel.sourceColumn;
+      const tdTgt = document.createElement('td');
+      tdTgt.textContent = rel.targetTable + '.' + rel.targetColumn;
+      const tdActions = document.createElement('td');
+      const btnDel = document.createElement('button');
+      btnDel.textContent = 'Remove';
+      btnDel.onclick = () => {
+        if(confirm('Remove this relation?')) {
+          state.relations.splice(i,1);
+          updateRelationsSection();
+          updateStateView();
+        }
+      };
+      tdActions.appendChild(btnDel);
+
+      tr.appendChild(tdSrc);
+      tr.appendChild(tdTgt);
+      tr.appendChild(tdActions);
+      relationsTableBody.appendChild(tr);
+    });
+  }
+
+  // QUERY SECTION
+  // Simple query engine: support SELECT columns FROM tables WHERE condition (AND only, =, !=, >, <, >=, <=)
+  // Also supports natural join on FK relations between tables
+  // SELECT with comma separated columns (qualified or unqualified)
+  // WHERE conditions separated by AND, each condition: [table.]column operator value (string/int)
+  // Result: table with selected columns or error messages
+
+  btnRunQuery.addEventListener('click', () => {
+    const tablesInput = querySelectTablesInput.value.trim();
+    const columnsInput = queryColumnsInput.value.trim();
+    const whereInput = queryWhereInput.value.trim();
+
+    if(!tablesInput) {
+      alert('Please enter table names.');
+      return;
+    }
+    if(!columnsInput) {
+      alert('Please enter columns to select.');
+      return;
+    }
+
+    // Parse tables list
+    const tableNames = tablesInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    // Validate tables exist
+    for(const tname of tableNames) {
+      if(!state.tables[tname]) {
+        alert(`Table "${tname}" does not exist.`);
+        return;
+      }
+    }
+
+    // Build combined dataset from tables with joins on FK relations (only natural joins using FK defined in relations)
+    // We do inner joins (only rows matching on the relation)
+    // Algorithm:
+    // Start with first table rows (array of objects keyed by table.column)
+    // For each other table:
+    // - Find relations between included tables (any relation between current combined tables and this table)
+    // - Join on those relations
+    // If no relation found joining to existing combined dataset, perform CROSS JOIN (all pairs)
+
+    // Construct datasets keyed by table.column
+    // row keys are qualified by table.column
+    // e.g. Employees.Name, Departments.Name
+
+    function qualifyRow(tableName, row) {
+      const res = {};
+      for(const col of Object.keys(row)) {
+        res[tableName + '.' + col] = row[col];
+      }
+      return res;
+    }
+
+    // Initial dataset is table1 rows qualified
+    let combinedRows = state.tables[tableNames[0]].rows.map(r => qualifyRow(tableNames[0], r));
+
+    for(let i=1; i < tableNames.length; i++) {
+      const newTable = tableNames[i];
+      const newRowsQualified = state.tables[newTable].rows.map(r => qualifyRow(newTable, r));
+      // Find relations connecting any table in combined set and newTable
+      // Relations can connect sourceTable to targetTable or vice versa (use both directions)
+      const connectedRelations = state.relations.filter(r => 
+        (tableNames.includes(r.sourceTable) && r.targetTable === newTable) ||
+        (tableNames.includes(r.targetTable) && r.sourceTable === newTable)
+      );
+
+      if(connectedRelations.length === 0) {
+        // No relation: CROSS JOIN (can be very large)
+        const crossJoined = [];
+        for(const r1 of combinedRows) {
+          for(const r2 of newRowsQualified) {
+            crossJoined.push(Object.assign({}, r1, r2));
+          }
+        }
+        combinedRows = crossJoined;
+      } else {
+        // Inner join on all matched relations
+        let joinResult = [];
+        for(const r1 of combinedRows) {
+          for(const r2 of newRowsQualified) {
+            // Check all connected relations for this pair
+            let allMatch = true;
+            for(const rel of connectedRelations) {
+              let srcVal, tgtVal;
+              if(rel.sourceTable === newTable) {
+                // newTable is source
+                srcVal = r2[rel.sourceTable + '.' + rel.sourceColumn];
+                tgtVal = r1[rel.targetTable + '.' + rel.targetColumn];
+              } else {
+                // newTable is target
+                srcVal = r1[rel.sourceTable + '.' + rel.sourceColumn];
+                tgtVal = r2[rel.targetTable + '.' + rel.targetColumn];
+              }
+              if(srcVal !== tgtVal) {
+                allMatch = false;
+                break;
+              }
+            }
+            if(allMatch) {
+              joinResult.push(Object.assign({}, r1, r2));
+            }
+          }
+        }
+        combinedRows = joinResult;
+      }
+    }
+
+    // If no rows after join, clear result
+    if(combinedRows.length === 0) {
+      queryResultThead.innerHTML = '';
+      queryResultTbody.innerHTML = '';
+      alert('No results found for the query (empty result set).');
+      return;
+    }
+
+    // Parse columns input
+    // columnsInput: comma separated selected columns, can be table.col or just col (should resolve uniquely)
+    const selectedColsRaw = columnsInput.split(',').map(s => s.trim()).filter(s => s.length>0);
+    const selectedCols = [];
+    for(const colRaw of selectedColsRaw) {
+      if(colRaw.includes('.')) {
+        // qualified
+        selectedCols.push(colRaw);
+      } else {
+        // unqualified - search tables for column
+        let foundTables = [];
+        for(const tname of tableNames) {
+          const t = state.tables[tname];
+          if(t.columns.some(c => c.name === colRaw)) {
+            foundTables.push(tname);
+          }
+        }
+        if(foundTables.length === 0) {
+          alert(`Column "${colRaw}" not found in any selected table.`);
+          return;
+        }
+        if(foundTables.length > 1) {
+          alert(`Ambiguous column "${colRaw}" found in multiple tables: ${foundTables.join(', ')}. Please qualify with table name.`);
+          return;
+        }
+        selectedCols.push(foundTables[0] + '.' + colRaw);
+      }
+    }
+
+    // Parse WHERE clause
+    // Simple support for AND separated conditions only, condition of form: [table.]column operator value
+    // Operators supported: = != > < >= <=
+    // Values: strings (single ' or double " quotes) or numbers or bare words (treated as strings)
+    // e.g. Employees.Age > 25 AND Departments.Name = 'HR'
+
+    function parseWhere(whereStr) {
+      if(!whereStr) return [];
+      // Split by AND (ignore case)
+      const parts = whereStr.split(/AND/i).map(s => s.trim()).filter(s => s.length > 0);
+      const conds = [];
+      for(const part of parts) {
+        // Match pattern: [table.]column operator value
+        // operators regex: >=, <=, !=, =, >, <
+        // Use regex with capture groups
+        const m = part.match(/^(([a-zA-Z_]\w*)\.)?([a-zA-Z_]\w*)\s*(>=|<=|!=|=|>|<)\s*(.+)$/);
+        if(!m) {
+          alert(`Invalid condition in WHERE clause: "${part}"`);
+          return null;
+        }
+        let [, , tbl, col, op, valRaw] = m;
+        if(!tbl) {
+          // unqualified column - resolve uniquely
+          let foundTables = [];
+          for(const tname of tableNames) {
+            const t = state.tables[tname];
+            if(t.columns.some(c => c.name === col)) {
+              foundTables.push(tname);
+            }
+          }
+          if(foundTables.length === 0) {
+            alert(`Column "${col}" not found in the query tables.`);
+            return null;
+          }
+          if(foundTables.length > 1) {
+            alert(`Ambiguous column "${col}" found in multiple tables in WHERE clause. Please qualify it.`);
+            return null;
+          }
+          tbl = foundTables[0];
+        }
+        // Parse valRaw - handle quoted strings or number or unquoted string
+        valRaw = valRaw.trim();
+        let val = valRaw;
+        if((valRaw.startsWith("'") && valRaw.endsWith("'")) || (valRaw.startsWith('"') && valRaw.endsWith('"'))) {
+          val = valRaw.slice(1,-1);
+        } else if(!isNaN(Number(valRaw))) {
+          val = Number(valRaw);
+        } else {
+          val = valRaw; // bare word string
+        }
+        conds.push({table: tbl, column: col, operator: op, value: val});
+      }
+      return conds;
+    }
+
+    const conditions = parseWhere(whereInput);
+    if(conditions === null) return;
+
+    // Evaluate conditions on combinedRows
+    function evalCondition(r, c) {
+      const key = c.table + '.' + c.column;
+      const val = r[key];
+      const condVal = c.value;
+      switch(c.operator) {
+        case '=': return val == condVal;
+        case '!=': return val != condVal;
+        case '>': return val > condVal;
+        case '<': return val < condVal;
+        case '>=': return val >= condVal;
+        case '<=': return val <= condVal;
+      }
+      return false;
+    }
+
+    const filteredRows = combinedRows.filter(r => {
+      for(const c of conditions) {
+        if(!evalCondition(r,c)) return false;
+      }
+      return true;
+    });
+
+    if(filteredRows.length === 0) {
+      queryResultThead.innerHTML = '';
+      queryResultTbody.innerHTML = '';
+      alert('No results found after applying WHERE conditions.');
+      return;
+    }
+
+    // Display results table
+    queryResultThead.innerHTML = '';
+    queryResultTbody.innerHTML = '';
+
+    // Header row
+    const trHead = document.createElement('tr');
+    selectedCols.forEach(cn => {
+      const th = document.createElement('th');
+      th.textContent = cn;
+      trHead.appendChild(th);
+    });
+    queryResultThead.appendChild(trHead);
+    // Rows
+    filteredRows.forEach(r => {
+      const tr = document.createElement('tr');
+      selectedCols.forEach(cn => {
+        const td = document.createElement('td');
+        let val = r[cn];
+        if(val === undefined || val === null) val = '';
+        td.textContent = String(val);
+        tr.appendChild(td);
+      });
+      queryResultTbody.appendChild(tr);
+    });
+
+  });
+
+  // Initial update
+  updateTablesDropdowns();
+  updateStateView();
+
+  // Prepare FK select initial display
+  newColumnTypeSelect.dispatchEvent(new Event('change'));
+
+})();
+</script>
+
+</body>
+</html>

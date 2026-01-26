@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Socket Programming Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    white-space: pre-wrap;
+  }
+  label, button, input, select {
+    margin: 2px 0;
+    display: block;
+  }
+  fieldset {
+    margin: 8px 0;
+    padding: 6px;
+  }
+  textarea {
+    width: 100%;
+    height: 150px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Socket Programming Interactive Simulator</h1>
+
+<div>
+  <fieldset>
+    <legend>Socket Configuration</legend>
+    <label for="ipAddress">Remote IP Address:</label>
+    <input type="text" id="ipAddress" placeholder="e.g. 192.168.1.10" value="127.0.0.1"/>
+    
+    <label for="portNumber">Port Number:</label>
+    <input type="number" id="portNumber" min="1" max="65535" value="8080" />
+    
+    <label for="protocolSelect">Protocol:</label>
+    <select id="protocolSelect">
+      <option value="TCP">TCP</option>
+      <option value="UDP">UDP</option>
+    </select>
+    
+    <label for="socketTypeSelect">Socket Type:</label>
+    <select id="socketTypeSelect">
+      <option value="client">Client</option>
+      <option value="server">Server</option>
+    </select>
+    
+    <button id="createSocketBtn">Create Socket</button>
+    <button id="closeSocketBtn" disabled>Close Socket</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Socket State</legend>
+    <div id="socketState">Socket not created</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Server Controls (only for server sockets)</legend>
+    <button id="listenBtn" disabled>Start Listening</button>
+    <button id="stopListenBtn" disabled>Stop Listening</button>
+    <label for="backlogSlider">Backlog (connection queue size): <span id="backlogValue">5</span></label>
+    <input type="range" id="backlogSlider" min="1" max="20" value="5" disabled />
+  </fieldset>
+
+  <fieldset>
+    <legend>Connection Controls (only for client sockets or accepted server sockets)</legend>
+    <button id="connectBtn" disabled>Connect to Server</button>
+    <button id="disconnectBtn" disabled>Disconnect</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Message Exchange</legend>
+    <label for="messageInput">Message to send:</label>
+    <input type="text" id="messageInput" disabled />
+    <button id="sendMsgBtn" disabled>Send Message</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Received Messages (Simulated)</legend>
+    <textarea id="receivedMessages" readonly></textarea>
+  </fieldset>
+
+  <fieldset>
+    <legend>Simulated Network Conditions</legend>
+    <label for="latencySlider">Latency (ms): <span id="latencyValue">0</span></label>
+    <input type="range" id="latencySlider" min="0" max="3000" value="0" />
+    <label for="packetLossSlider">Packet Loss (%): <span id="packetLossValue">0</span></label>
+    <input type="range" id="packetLossSlider" min="0" max="100" value="0" />
+  </fieldset>
+
+  <fieldset>
+    <legend>Logs</legend>
+    <textarea id="logs" readonly></textarea>
+  </fieldset>
+</div>
+
+<script>
+(() => {
+  // States possible for socket:
+  // Not created -> Created (closed) -> Server: Listening/Not Listening
+  // Client: Connected/Disconnected
+  // Server: On accept can create new connection sockets with Connected/Disconnected states
+  // We will simulate socket connections & data transfers in JS only - no real networking
+
+  const ipAddressInput = document.getElementById('ipAddress');
+  const portNumberInput = document.getElementById('portNumber');
+  const protocolSelect = document.getElementById('protocolSelect');
+  const socketTypeSelect = document.getElementById('socketTypeSelect');
+  const createSocketBtn = document.getElementById('createSocketBtn');
+  const closeSocketBtn = document.getElementById('closeSocketBtn');
+
+  const socketStateDiv = document.getElementById('socketState');
+
+  const listenBtn = document.getElementById('listenBtn');
+  const stopListenBtn = document.getElementById('stopListenBtn');
+  const backlogSlider = document.getElementById('backlogSlider');
+  const backlogValue = document.getElementById('backlogValue');
+
+  const connectBtn = document.getElementById('connectBtn');
+  const disconnectBtn = document.getElementById('disconnectBtn');
+
+  const messageInput = document.getElementById('messageInput');
+  const sendMsgBtn = document.getElementById('sendMsgBtn');
+
+  const receivedMessages = document.getElementById('receivedMessages');
+
+  const latencySlider = document.getElementById('latencySlider');
+  const latencyValue = document.getElementById('latencyValue');
+  const packetLossSlider = document.getElementById('packetLossSlider');
+  const packetLossValue = document.getElementById('packetLossValue');
+
+  const logs = document.getElementById('logs');
+
+  // The main simulated socket object
+  class SimSocket {
+    constructor(type, protocol, ip, port) {
+      this.type = type; // 'client' or 'server'
+      this.protocol = protocol; // 'TCP' or 'UDP'
+      this.ip = ip;
+      this.port = port;
+      this.state = 'created'; // 'created', 'listening', 'connected', 'disconnected', 'closed'
+      this.serverBacklog = 5;
+      this.listeningQueue = [];
+      this.acceptedConnections = [];
+      this.onAccept = null;
+      this.onReceive = null;
+      this.isClosed = false;
+      this.log(`Socket created: ${this.type} ${this.protocol} ${this.ip}:${this.port}`);
+    }
+    log(txt) {
+      appendLog(`[Socket ${this.type} ${this.protocol}]: ${txt}`);
+    }
+    close() {
+      this.state = 'closed';
+      this.isClosed = true;
+      this.log('Socket closed.');
+    }
+    listen(backlog) {
+      if(this.type !== 'server') {
+        this.log('Listen called on non-server socket.');
+        return false;
+      }
+      if(this.state !== 'created' && this.state !== 'disconnected') {
+        this.log(`Cannot listen while state is ${this.state}`);
+        return false;
+      }
+      this.state = 'listening';
+      this.serverBacklog = backlog;
+      this.listeningQueue = [];
+      this.log(`Now listening with backlog ${backlog}`);
+      return true;
+    }
+    stopListen() {
+      if(this.state !== 'listening') {
+        this.log('Not currently listening.');
+        return false;
+      }
+      this.state = 'created';
+      this.listeningQueue = [];
+      this.log('Stopped listening.');
+      return true;
+    }
+    accept() {
+      // Accept next connection in queue if any
+      if(this.state !== 'listening') {
+        this.log('Cannot accept if not listening.');
+        return null;
+      }
+      if(this.listeningQueue.length === 0) {
+        this.log('No pending connections to accept.');
+        return null;
+      }
+      const conn = this.listeningQueue.shift();
+      conn.state = 'connected';
+      this.acceptedConnections.push(conn);
+      this.log(`Accepted connection from ${conn.ip}:${conn.port}`);
+      return conn;
+    }
+    queueConnection(conn) {
+      if(this.state !== 'listening') {
+        this.log('Server not listening, cannot queue connection.');
+        return false;
+      }
+      if(this.listeningQueue.length >= this.serverBacklog) {
+        this.log(`Backlog full (${this.serverBacklog}), rejecting connection from ${conn.ip}:${conn.port}`);
+        return false; // Reject due to full backlog
+      }
+      this.listeningQueue.push(conn);
+      this.log(`Queued new connection from ${conn.ip}:${conn.port} (queue size: ${this.listeningQueue.length}/${this.serverBacklog})`);
+      return true;
+    }
+    connect() {
+      if(this.type !== 'client') {
+        this.log('Connect called on non-client socket.');
+        return false;
+      }
+      if(this.state === 'connected') {
+        this.log('Already connected.');
+        return false;
+      }
+      this.state = 'connecting';
+      this.log(`Connecting to ${this.ip}:${this.port}...`);
+      return true;
+    }
+    acceptConnectionOnServer(serverSocket) {
+      // For client socket trying to connect, try to place into server backlog or connect immediately?
+      if(serverSocket.state !== 'listening') return false;
+      return serverSocket.queueConnection(this);
+    }
+    disconnect() {
+      if(this.state !== 'connected' && this.state !== 'connecting') {
+        this.log('Socket not connected.');
+        return false;
+      }
+      this.state = 'disconnected';
+      this.log('Socket disconnected.');
+      return true;
+    }
+    sendMessage(msg, networkSimulator) {
+      if(this.state !== 'connected') {
+        this.log('Cannot send message, socket not connected.');
+        return false;
+      }
+      this.log(`Sending message: ${msg}`);
+      if(this.onReceive) {
+        // Simulate network conditions using networkSimulator
+        networkSimulator.sendWithConditions(this, msg, this.onReceive);
+      }
+      return true;
+    }
+  }
+
+  // Network Simulator manages latency, packet loss, and simulates message delivery between sockets.
+  class NetworkSimulator {
+    constructor() {
+      this.latency = 0;
+      this.packetLossPercent = 0;
+      this.connections = new Set(); // all sockets connected
+    }
+    setLatency(ms) {
+      this.latency = ms;
+    }
+    setPacketLoss(percent) {
+      this.packetLossPercent = percent;
+    }
+    // Simulate sending msg from socket, msg passed to recvCallback after latency if not lost
+    sendWithConditions(sock, msg, recvCallback) {
+      if(Math.random()*100 < this.packetLossPercent) {
+        appendLog(`[Network] Packet lost: "${msg}"`);
+        // packet lost silently
+        return;
+      }
+      setTimeout(() => {
+        recvCallback(msg, sock);
+      }, this.latency);
+      appendLog(`[Network] Message scheduled with latency ${this.latency}ms: "${msg}"`);
+    }
+  }
+
+  // Global Network Simulator Instance
+  const netSim = new NetworkSimulator();
+
+  // Logging helpers
+  function appendLog(text) {
+    logs.value += text + '\n';
+    logs.scrollTop = logs.scrollHeight;
+  }
+  function appendReceived(text) {
+    receivedMessages.value += text + '\n';
+    receivedMessages.scrollTop = receivedMessages.scrollHeight;
+  }
+
+  // UI and socket state
+  let currentSocket = null; // main socket (client or server)
+  let activeAcceptedSockets = []; // for accepted connections on server
+  let connectedClientSocket = null; // for client sockets or accepted connections
+
+  // UI update functions
+  function setSocketState(stateText) {
+    socketStateDiv.textContent = stateText;
+  }
+
+  function enableControlsForState() {
+    // Disable or enable controls based on state & socket type:
+
+    if(!currentSocket || currentSocket.isClosed) {
+      // no socket
+      listenBtn.disabled = true;
+      stopListenBtn.disabled = true;
+      backlogSlider.disabled = true;
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = true;
+      messageInput.disabled = true;
+      sendMsgBtn.disabled = true;
+      closeSocketBtn.disabled = true;
+      createSocketBtn.disabled = false;
+      return;
+    }
+
+    createSocketBtn.disabled = true;
+    closeSocketBtn.disabled = false;
+
+    if(currentSocket.type === 'server') {
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = true;
+      messageInput.disabled = true;
+      sendMsgBtn.disabled = true;
+
+      backlogSlider.disabled = false;
+      backlogSlider.value = currentSocket.serverBacklog;
+      backlogValue.textContent = backlogSlider.value;
+
+      if(currentSocket.state === 'created' || currentSocket.state === 'disconnected') {
+        listenBtn.disabled = false;
+        stopListenBtn.disabled = true;
+      } else if(currentSocket.state === 'listening') {
+        listenBtn.disabled = true;
+        stopListenBtn.disabled = false;
+      } else {
+        listenBtn.disabled = true;
+        stopListenBtn.disabled = true;
+      }
+
+    } else if(currentSocket.type === 'client') {
+      backlogSlider.disabled = true;
+      listenBtn.disabled = true;
+      stopListenBtn.disabled = true;
+
+      if(currentSocket.state === 'created' || currentSocket.state === 'disconnected') {
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        messageInput.disabled = true;
+        sendMsgBtn.disabled = true;
+      } else if(currentSocket.state === 'connecting') {
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        messageInput.disabled = true;
+        sendMsgBtn.disabled = true;
+      } else if(currentSocket.state === 'connected') {
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        messageInput.disabled = false;
+        sendMsgBtn.disabled = false;
+      } else {
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = true;
+        messageInput.disabled = true;
+        sendMsgBtn.disabled = true;
+      }
+    }
+  }
+
+  function updateStateText() {
+    if(!currentSocket) {
+      setSocketState('Socket not created');
+      return;
+    }
+    let s = `Socket (${currentSocket.type} | ${currentSocket.protocol}) at ${currentSocket.ip}:${currentSocket.port} - State: ${currentSocket.state}`;
+    if(currentSocket.type === 'server' && currentSocket.state === 'listening') {
+      s+= ` (Backlog: ${currentSocket.serverBacklog}, queued: ${currentSocket.listeningQueue.length})`;
+    }
+    setSocketState(s);
+  }
+
+  // Event Handlers
+
+  createSocketBtn.addEventListener('click', () => {
+    const ip = ipAddressInput.value.trim();
+    const port = parseInt(portNumberInput.value, 10);
+    const protocol = protocolSelect.value;
+    const type = socketTypeSelect.value;
+
+    if(!ip) {
+      alert('Enter valid IP address.');
+      return;
+    }
+    if(isNaN(port) || port < 1 || port > 65535) {
+      alert('Enter valid port number (1-65535).');
+      return;
+    }
+
+    if(currentSocket && !currentSocket.isClosed) {
+      alert('Close existing socket before creating a new one.');
+      return;
+    }
+
+    currentSocket = new SimSocket(type, protocol, ip, port);
+    receivedMessages.value = '';
+    logs.value = '';
+    appendLog(`Created new ${type.toUpperCase()} socket (${protocol})`);
+    updateStateText();
+    enableControlsForState();
+  });
+
+  closeSocketBtn.addEventListener('click', () => {
+    if(currentSocket) {
+      currentSocket.close();
+      currentSocket = null;
+      activeAcceptedSockets = [];
+      connectedClientSocket = null;
+      updateStateText();
+      enableControlsForState();
+      appendLog('Socket closed and cleared.');
+    }
+  });
+
+  backlogSlider.addEventListener('input', () => {
+    backlogValue.textContent = backlogSlider.value;
+    if(currentSocket && currentSocket.type === 'server') {
+      currentSocket.serverBacklog = parseInt(backlogSlider.value, 10);
+      appendLog(`Backlog changed to ${currentSocket.serverBacklog}`);
+      updateStateText();
+      enableControlsForState();
+    }
+  });
+
+  listenBtn.addEventListener('click', () => {
+    if(!currentSocket) return;
+
+    const backlog = parseInt(backlogSlider.value, 10) || 5;
+    if(currentSocket.listen(backlog)) {
+      appendLog('Server started listening');
+    }
+    updateStateText();
+    enableControlsForState();
+  });
+  stopListenBtn.addEventListener('click', () => {
+    if(!currentSocket) return;
+    if(currentSocket.stopListen()) {
+      appendLog('Server stopped listening');
+    }
+    updateStateText();
+    enableControlsForState();
+  });
+
+  connectBtn.addEventListener('click', () => {
+    if(!currentSocket) return;
+    if(currentSocket.state === 'connected') {
+      appendLog('Already connected.');
+      return;
+    }
+    if(currentSocket.connect()) {
+      appendLog('Client initiating connection...');
+      updateStateText();
+      enableControlsForState();
+
+      // Simulate server presence and connection behavior
+      // Find server socket listening at ip and port on this page if any:
+      // Since this demo simulates one socket only, we simulate connection success/failure depending on current socket type & state.
+
+      // To allow richer exploration: allow user to create a server socket in a separate "virtual" space that client can connect to.
+      // But since there's only one main socket, we simulate server presence internally:
+      // We simulate success or failure with latency.
+
+      // Simulate connection attempt with arbitrary delay & success/failure based on "fake" server presence for demo purposes:
+      const simulatedServerSocket = window._simulatedServerSocket;
+
+      function finalizeClientConnect(success) {
+        if(success) {
+          currentSocket.state = 'connected';
+          appendLog('Client connected successfully.');
+          messageInput.disabled = false;
+          sendMsgBtn.disabled = false;
+        } else {
+          currentSocket.state = 'disconnected';
+          appendLog('Connection failed or refused.');
+          messageInput.disabled = true;
+          sendMsgBtn.disabled = true;
+        }
+        updateStateText();
+        enableControlsForState();
+      }
+
+      if(simulatedServerSocket && simulatedServerSocket.state === 'listening' &&
+         simulatedServerSocket.ip === currentSocket.ip &&
+         simulatedServerSocket.port === currentSocket.port) {
+        // Try to queue connection on server
+        let accepted = simulatedServerSocket.queueConnection(currentSocket);
+        if(!accepted){
+          setTimeout(() => {
+            finalizeClientConnect(false);
+          }, 1000 + Math.random()*1000);
+          return;
+        }
+        // Accepted connection queued, simulate delay then promote to connected:
+        setTimeout(() => {
+          // server accepts the connection:
+          simulatedServerSocket.accept();
+
+          // client connected
+          finalizeClientConnect(true);
+        }, 500 + Math.random()*1500);
+      } else {
+        // No server found or not listening: fail connection
+        setTimeout(() => {
+          finalizeClientConnect(false);
+        }, 1000 + Math.random()*2000);
+      }
+    }
+  });
+  disconnectBtn.addEventListener('click', () => {
+    if(!currentSocket) return;
+    if(currentSocket.disconnect()) {
+      appendLog('Disconnected.');
+      messageInput.disabled = true;
+      sendMsgBtn.disabled = true;
+      updateStateText();
+      enableControlsForState();
+    }
+  });
+
+  sendMsgBtn.addEventListener('click', () => {
+    if(!currentSocket) return;
+    const msg = messageInput.value.trim();
+    if(!msg) return;
+    // Send message from user current socket through network simulator to the peer
+    // Since this is simulation, we echo message and simulate reply or forward based on type
+
+    if(currentSocket.state !== 'connected') {
+      appendLog('Cannot send message: socket not connected.');
+      return;
+    }
+
+    appendLog(`Sending message: "${msg}"`);
+    messageInput.value = '';
+
+    // Message receive handler: when this socket receives message
+    currentSocket.onReceive = (incomingMsg, fromSocket) => {
+      // Show incoming message from peer
+      appendReceived(`From ${fromSocket.type}: ${incomingMsg}`);
+      appendLog(`Received message: "${incomingMsg}" from ${fromSocket.type}`);
+    };
+
+    // Simulate message transmission with network conditions:
+    // We simulate a peer socket to receive message and respond
+
+    // Setup simulated peer sockets for the demo:
+
+    if(currentSocket.type === 'client') {
+      // Client sends message to server
+      // The server is the simulatedServerSocket
+      const serverSock = window._simulatedServerSocket;
+
+      if(serverSock && serverSock.state === 'listening' || serverSock.state === 'connected') {
+        // Server will receive message and respond after delay
+        serverSock.onReceive = (msgRecv, fromSock) => {
+          appendLog(`Server received message: "${msgRecv}" from client`);
+          // Echo back + append info
+          const response = `Echo from server: "${msgRecv}"`;
+          netSim.sendWithConditions(serverSock, response, currentSocket.onReceive);
+        };
+        // Send the message to server socket:
+        netSim.sendWithConditions(currentSocket, msg, serverSock.onReceive);
+      } else {
+        appendLog('No server connected to receive message.');
+      }
+
+    } else if(currentSocket.type === 'server') {
+      // Server message sending: send to all connected clients if any
+      if(currentSocket.acceptedConnections.length === 0) {
+        appendLog('No connected clients to send message to.');
+        return;
+      }
+      currentSocket.acceptedConnections.forEach(clientSock => {
+        if(clientSock.state === 'connected') {
+          clientSock.onReceive = (msgRecv, fromSock) => {
+            appendReceived(`From server: ${msgRecv}`);
+            appendLog(`Client received message: "${msgRecv}"`);
+          };
+          netSim.sendWithConditions(currentSocket, msg, clientSock.onReceive);
+        }
+      });
+    }
+  });
+
+  // Simulate a global server socket for interaction with client:
+  // This adds complexity to explore interaction between a server & client on same page.
+  window._simulatedServerSocket = null;
+
+  // When a server socket is created, keep a reference as simulatedServerSocket if type=server
+  // When a client socket created, it attempts connection only if simulatedServerSocket available.
+
+  // Patch createSocketBtn to track server socket globally:
+  createSocketBtn.addEventListener('click', () => {
+    setTimeout(() => {
+      if(currentSocket && currentSocket.type === 'server') {
+        window._simulatedServerSocket = currentSocket;
+        appendLog('Simulated server socket registered globally for client connections.');
+      } else if(currentSocket && currentSocket.type === 'client') {
+        appendLog('Client socket ready to connect to simulated server socket if available.');
+      }
+    }, 1);
+  });
+
+  // Latency and packet loss control handlers
+  latencySlider.addEventListener('input', () => {
+    latencyValue.textContent = latencySlider.value;
+    netSim.setLatency(parseInt(latencySlider.value, 10));
+    appendLog(`Network latency set to ${latencySlider.value} ms`);
+  });
+  packetLossSlider.addEventListener('input', () => {
+    packetLossValue.textContent = packetLossSlider.value;
+    netSim.setPacketLoss(parseInt(packetLossSlider.value, 10));
+    appendLog(`Packet loss set to ${packetLossSlider.value}%`);
+  });
+
+  // Initial UI updates
+  updateStateText();
+  enableControlsForState();
+  latencyValue.textContent = latencySlider.value;
+  packetLossValue.textContent = packetLossSlider.value;
+
+  // Extra explorative capabilities: allow user to accept connections manually on server
+  // New Buttons and controls:
+
+  // Add new UI controls dynamically since problem said single file only:
+
+  const extraControlsDiv = document.createElement('div');
+  extraControlsDiv.style.marginTop = '10px';
+  extraControlsDiv.textContent = 'Server Accepted Connections and Control:';
+
+  // Accept connection button
+  const acceptConBtn = document.createElement('button');
+  acceptConBtn.textContent = 'Accept Next Connection';
+  acceptConBtn.disabled = true;
+  extraControlsDiv.appendChild(acceptConBtn);
+
+  // Connection list select
+  const connectionsSelect = document.createElement('select');
+  connectionsSelect.size = 4;
+  connectionsSelect.style.width = '100%';
+  extraControlsDiv.appendChild(connectionsSelect);
+
+  // Controls to send message and disconnect accepted connection
+  const sendToConnInput = document.createElement('input');
+  sendToConnInput.placeholder = 'Message to selected connection';
+  sendToConnInput.disabled = true;
+  extraControlsDiv.appendChild(sendToConnInput);
+
+  const sendToConnBtn = document.createElement('button');
+  sendToConnBtn.textContent = 'Send to Selected Connection';
+  sendToConnBtn.disabled = true;
+  extraControlsDiv.appendChild(sendToConnBtn);
+
+  const disconnectConnBtn = document.createElement('button');
+  disconnectConnBtn.textContent = 'Disconnect Selected Connection';
+  disconnectConnBtn.disabled = true;
+  extraControlsDiv.appendChild(disconnectConnBtn);
+
+  // Add extra controls after logs fieldset
+  const logsFieldset = logs.parentNode;
+  logsFieldset.parentNode.insertBefore(extraControlsDiv, logsFieldset.nextSibling);
+
+  // Update UI function for accepted connections
+  function refreshAcceptedConnectionsList() {
+    connectionsSelect.innerHTML = '';
+    if(!currentSocket || currentSocket.type !== 'server') {
+      acceptConBtn.disabled = true;
+      sendToConnInput.disabled = true;
+      sendToConnBtn.disabled = true;
+      disconnectConnBtn.disabled = true;
+      return;
+    }
+    acceptConBtn.disabled = (currentSocket.state !== 'listening' || currentSocket.listeningQueue.length === 0);
+
+    currentSocket.acceptedConnections.forEach((conn, idx) => {
+      const option = document.createElement('option');
+      option.value = idx;
+      option.textContent = `[${conn.protocol}] Client ${conn.ip}:${conn.port} - State: ${conn.state}`;
+      connectionsSelect.appendChild(option);
+    });
+
+    const selectedIndex = connectionsSelect.selectedIndex;
+    if(selectedIndex >= 0 && currentSocket.acceptedConnections[selectedIndex]) {
+      const selConn = currentSocket.acceptedConnections[selectedIndex];
+      sendToConnInput.disabled = (selConn.state !== 'connected');
+      sendToConnBtn.disabled = (selConn.state !== 'connected');
+      disconnectConnBtn.disabled = (selConn.state !== 'connected' && selConn.state !== 'connecting');
+    } else {
+      sendToConnInput.disabled = true;
+      sendToConnBtn.disabled = true;
+      disconnectConnBtn.disabled = true;
+    }
+  }
+
+  acceptConBtn.addEventListener('click', () => {
+    if(!currentSocket || currentSocket.type !== 'server') return;
+    const accepted = currentSocket.accept();
+    if(accepted) {
+      appendLog(`Accepted new connection from ${accepted.ip}:${accepted.port}`);
+      // Setup onReceive for accepted connection (simulate client response)
+      accepted.onReceive = (msg, fromSock) => {
+        appendReceived(`From client ${accepted.ip}:${accepted.port}: ${msg}`);
+        appendLog(`Server connection received message from client ${accepted.ip}:${accepted.port}: "${msg}"`);
+        // Server echoes back message after delay
+        netSim.sendWithConditions(accepted, `Server echo: "${msg}"`, accepted.onReceive);
+      };
+    } else {
+      appendLog('No connections to accept.');
+    }
+    refreshAcceptedConnectionsList();
+  });
+
+  connectionsSelect.addEventListener('change', () => {
+    refreshAcceptedConnectionsList();
+  });
+
+  sendToConnBtn.addEventListener('click', () => {
+    if(!currentSocket || currentSocket.type !== 'server') return;
+    const idx = connectionsSelect.selectedIndex;
+    if(idx < 0) return;
+    const conn = currentSocket.acceptedConnections[idx];
+    if(!conn || conn.state !== 'connected') return;
+    const msg = sendToConnInput.value.trim();
+    if(!msg) return;
+
+    appendLog(`Server sending to client ${conn.ip}:${conn.port}: "${msg}"`);
+
+    // Send msg to client connection
+    conn.onReceive = (incomingMsg, fromSock) => {
+      appendLog(`Client ${conn.ip}:${conn.port} received message: "${incomingMsg}"`);
+      appendReceived(`To client ${conn.ip}:${conn.port}: ${incomingMsg}`);
+    };
+    netSim.sendWithConditions(currentSocket, msg, conn.onReceive);
+    sendToConnInput.value = '';
+  });
+
+  disconnectConnBtn.addEventListener('click', () => {
+    if(!currentSocket || currentSocket.type !== 'server') return;
+    const idx = connectionsSelect.selectedIndex;
+    if(idx < 0) return;
+    const conn = currentSocket.acceptedConnections[idx];
+    if(!conn) return;
+    conn.state = 'disconnected';
+    appendLog(`Client connection ${conn.ip}:${conn.port} disconnected.`);
+    // Remove from acceptedConnections
+    currentSocket.acceptedConnections.splice(idx,1);
+    refreshAcceptedConnectionsList();
+  });
+
+  // Refresh accepted connection list frequently (for state changes)
+  setInterval(() => {
+    refreshAcceptedConnectionsList();
+  }, 1000);
+
+})();
+</script>
+
+</body>
+</html>

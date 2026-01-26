@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Context Switching Simulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* Extremely minimal styling to arrange controls; content is plain black on white */
+  html,body { height:100%; margin:8px; font-family: sans-serif; color: #000; background: #fff; }
+  .row { display: flex; gap:12px; align-items:flex-start; }
+  .col { display: flex; flex-direction: column; gap:8px; }
+  .panel { padding:8px; border:1px solid #000; box-sizing:border-box; }
+  input, textarea, select, button { font: inherit; }
+  textarea { width:100%; height:120px; }
+  .small { font-size:13px; }
+  .list { max-height:360px; overflow:auto; border:1px solid #000; padding:6px; }
+  .controls { display:flex; gap:6px; flex-wrap:wrap; }
+  label { font-size:13px; }
+  .flex-row { display:flex; gap:6px; align-items:center; }
+  .half { width:48%; }
+  .metrics { white-space:pre-wrap; font-family: monospace; }
+  .table { display:table; width:100%; }
+  .tr { display:table-row; }
+  .td { display:table-cell; padding:2px 6px; vertical-align:middle; border-bottom:1px solid #ccc; }
+  .kbd { border:1px solid #000; padding:2px 4px; font-family: monospace; font-size:12px; }
+  .muted { font-size:12px; color:#000; opacity:0.7; }
+  /* keep everything visually plain and unpolished */
+</style>
+</head>
+<body>
+<h1>Context Switching Simulator</h1>
+
+<div class="row">
+  <!-- Left column: contexts list -->
+  <div class="col" style="width:28%;">
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>Contexts</strong>
+        <span class="muted small">Shortcuts: <span class="kbd">Ctrl+N</span> new, <span class="kbd">Ctrl+S</span> snapshot</span>
+      </div>
+      <div class="controls">
+        <button id="newContextBtn">New Context</button>
+        <button id="duplicateContextBtn">Duplicate</button>
+        <button id="deleteContextBtn">Delete</button>
+        <button id="pinToggleBtn">Pin/Unpin</button>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Filter / Search: <input id="filterInput" placeholder="search by name or tag"></label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Sort:
+          <select id="sortSelect">
+            <option value="recent">Most recent activity</option>
+            <option value="name">Name</option>
+            <option value="priority">Priority</option>
+            <option value="pinned">Pinned first</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="list" id="contextsList" aria-label="List of contexts"></div>
+
+      <div style="margin-top:6px;" class="controls">
+        <button id="exportAllBtn">Export All (JSON)</button>
+        <button id="importBtn">Import</button>
+        <input type="file" id="importFile" style="display:none">
+        <button id="clearAllBtn">Clear All</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:8px;">
+      <strong>Context Map / Switch Graph</strong>
+      <div id="mapArea" class="list" style="height:140px; font-family:monospace; font-size:12px;"></div>
+      <div style="margin-top:6px;">
+        <button id="recomputeMapBtn">Recompute Map</button>
+        <button id="exportMapBtn">Export Map</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Middle column: context detail and editing -->
+  <div class="col" style="width:44%;">
+    <div class="panel">
+      <strong>Context Detail</strong>
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <div style="flex:1;">
+          <label>Name: <input id="contextName" style="width:100%"></label>
+        </div>
+        <div style="width:120px;">
+          <label>Priority:
+            <input id="priorityInput" type="range" min="0" max="10" value="5" style="width:100%">
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Tags (comma separated): <input id="tagsInput" style="width:100%"></label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label><input id="pinnedCheckbox" type="checkbox"> Pinned</label>
+        <label style="margin-left:12px;"><input id="readonlyCheckbox" type="checkbox"> Read-only (simulate freeze)</label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Content:
+          <textarea id="contentArea" placeholder="Write notes, code, steps..."></textarea>
+        </label>
+      </div>
+
+      <div class="controls">
+        <button id="saveSnapshotBtn">Save Snapshot</button>
+        <button id="autoSnapshotToggleBtn">Enable Auto Snapshot</button>
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
+        <div style="flex:1;">
+          <label>Snapshot timeline:
+            <input id="snapshotSlider" type="range" min="0" max="0" value="0" style="width:100%">
+          </label>
+        </div>
+        <div style="width:120px;">
+          <button id="restoreSnapshotBtn">Restore</button>
+        </div>
+      </div>
+
+      <div style="margin-top:6px; display:flex; gap:8px;">
+        <div style="flex:1;">
+          <strong>History</strong>
+          <div id="historyList" class="list" style="height:160px;"></div>
+        </div>
+        <div style="width:260px;">
+          <strong>Branches</strong>
+          <div id="branchesList" class="list" style="height:160px;"></div>
+          <div style="margin-top:6px;" class="controls">
+            <button id="createBranchBtn">Create Branch</button>
+            <button id="mergeBranchBtn">Merge Branch</button>
+            <button id="deleteBranchBtn">Delete Branch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:8px;">
+      <strong>Diff / Compare</strong>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+        <select id="diffLeft" class="half"></select>
+        <select id="diffRight" class="half"></select>
+      </div>
+      <div style="margin-top:6px;">
+        <button id="diffBtn">Show Diff</button>
+      </div>
+      <div style="margin-top:6px;">
+        <textarea id="diffOutput" readonly style="height:140px;"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: global controls and simulation -->
+  <div class="col" style="width:28%;">
+    <div class="panel">
+      <strong>Active / Switch Controls</strong>
+      <div style="margin-top:6px;" class="controls">
+        <button id="switchToBtn">Switch To</button>
+        <button id="pushBtn">Push & Switch</button>
+        <button id="popBtn">Pop Back</button>
+        <button id="stashBtn">Stash (save & switch)</button>
+      </div>
+
+      <div style="margin-top:6px;">
+        <strong>Context Stack</strong>
+        <div id="stackArea" class="list" style="height:120px;"></div>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Switch Cost (simulated cognitive cost):
+          <input id="switchCost" type="range" min="0" max="10" value="3" style="width:100%">
+        </label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Focus / Deep Work (lower -> less likely to switch):
+          <input id="focusSlider" type="range" min="0" max="10" value="5" style="width:100%">
+        </label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <strong>Simulation</strong>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <button id="startSimBtn">Start Simulation</button>
+          <button id="stopSimBtn">Stop</button>
+        </div>
+        <div style="margin-top:6px;">
+          <label>Interrupt intensity (frequency):
+            <input id="interruptIntensity" type="range" min="0" max="10" value="4" style="width:100%">
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:6px;">
+        <strong>Metrics</strong>
+        <div id="metricsArea" class="metrics" style="height:170px; overflow:auto;"></div>
+        <div style="margin-top:6px;" class="controls">
+          <button id="resetMetricsBtn">Reset Metrics</button>
+          <button id="recomputeMetricsBtn">Recompute</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:8px;">
+      <strong>Tools & Workflow Actions</strong>
+      <div style="margin-top:6px;" class="controls">
+        <button id="autoApplyRulesBtn">Auto-Switch Rules</button>
+        <button id="batchMergeBtn">Batch Merge Selected</button>
+        <button id="compareContextsBtn">Compare Two Contexts</button>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Auto-snapshot interval (sec): <input id="autoSnapshotInterval" type="number" value="30" style="width:80px"></label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>Interrupt generator seeds per minute: <input id="interruptSeedCount" type="number" value="2" style="width:80px"></label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <strong>Persistence</strong>
+        <div class="controls">
+          <button id="saveLocalBtn">Save to LocalStorage</button>
+          <button id="loadLocalBtn">Load from LocalStorage</button>
+          <button id="clearLocalBtn">Clear LocalStorage</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top:12px;" class="panel">
+  <strong>Activity Log</strong>
+  <div id="logArea" class="list" style="height:160px;"></div>
+  <div style="margin-top:6px;" class="controls">
+    <button id="clearLogBtn">Clear Log</button>
+    <button id="exportLogBtn">Export Log</button>
+  </div>
+</div>
+
+<script>
+/*
+  Context Switching Simulator
+  - Plain UI with many interactive controls demonstrating context switching concepts.
+  - All data stored in JS structures; can export/import JSON.
+  - Minimal visual styling intentionally.
+*/
+
+// Utility helpers
+function uid(prefix='id') {
+  return prefix + '_' + Math.random().toString(36).slice(2,9);
+}
+function now() { return Date.now(); }
+function ts(t=now()) { return new Date(t).toLocaleString(); }
+
+// Simple diff: line-by-line with +/-
+function diffText(a,b) {
+  const aLines = (a||'').split('\\n');
+  const bLines = (b||'').split('\\n');
+  const out = [];
+  const maxlen = Math.max(aLines.length,bLines.length);
+  for (let i=0;i<maxlen;i++) {
+    const al = aLines[i];
+    const bl = bLines[i];
+    if (al===bl) {
+      out.push('  ' + (al===undefined?'':al));
+    } else {
+      if (al!==undefined) out.push('- ' + al);
+      if (bl!==undefined) out.push('+ ' + bl);
+    }
+  }
+  return out.join('\\n');
+}
+
+// Basic persistence
+const STORAGE_KEY = 'context_switch_sim_data_v1';
+
+// Main data structures
+const store = {
+  contexts: {}, // id->context
+  order: [], // ids order
+  activeContextId: null,
+  stack: [], // context ids for push/pop
+  switches: [], // events: {from,to,t}
+  metrics: {
+    switchCount: 0,
+    timeSpent: {}, // id->ms
+    lastActiveSince: null, // timestamp when current context activated
+  },
+  log: [],
+  autoSnapshotEnabled: false,
+  sim: { running: false, intervalId: null },
+};
+
+// Context structure
+// {
+//   id, name, tags:[], priority:number, pinned:boolean, readonly:boolean,
+//   branches: { branchId -> { id, name, snapshots:[{id,t,content,meta}], headIndex } },
+//   activeBranchId,
+//   createdAt, updatedAt
+// }
+
+// UI elements
+const els = {
+  contextsList: document.getElementById('contextsList'),
+  newContextBtn: document.getElementById('newContextBtn'),
+  duplicateContextBtn: document.getElementById('duplicateContextBtn'),
+  deleteContextBtn: document.getElementById('deleteContextBtn'),
+  pinToggleBtn: document.getElementById('pinToggleBtn'),
+  filterInput: document.getElementById('filterInput'),
+  sortSelect: document.getElementById('sortSelect'),
+  exportAllBtn: document.getElementById('exportAllBtn'),
+  importBtn: document.getElementById('importBtn'),
+  importFile: document.getElementById('importFile'),
+  clearAllBtn: document.getElementById('clearAllBtn'),
+
+  contextName: document.getElementById('contextName'),
+  priorityInput: document.getElementById('priorityInput'),
+  tagsInput: document.getElementById('tagsInput'),
+  pinnedCheckbox: document.getElementById('pinnedCheckbox'),
+  readonlyCheckbox: document.getElementById('readonlyCheckbox'),
+  contentArea: document.getElementById('contentArea'),
+  saveSnapshotBtn: document.getElementById('saveSnapshotBtn'),
+  autoSnapshotToggleBtn: document.getElementById('autoSnapshotToggleBtn'),
+  undoBtn: document.getElementById('undoBtn'),
+  redoBtn: document.getElementById('redoBtn'),
+  snapshotSlider: document.getElementById('snapshotSlider'),
+  restoreSnapshotBtn: document.getElementById('restoreSnapshotBtn'),
+  historyList: document.getElementById('historyList'),
+  branchesList: document.getElementById('branchesList'),
+  createBranchBtn: document.getElementById('createBranchBtn'),
+  mergeBranchBtn: document.getElementById('mergeBranchBtn'),
+  deleteBranchBtn: document.getElementById('deleteBranchBtn'),
+
+  diffLeft: document.getElementById('diffLeft'),
+  diffRight: document.getElementById('diffRight'),
+  diffBtn: document.getElementById('diffBtn'),
+  diffOutput: document.getElementById('diffOutput'),
+
+  switchToBtn: document.getElementById('switchToBtn'),
+  pushBtn: document.getElementById('pushBtn'),
+  popBtn: document.getElementById('popBtn'),
+  stashBtn: document.getElementById('stashBtn'),
+  stackArea: document.getElementById('stackArea'),
+  switchCost: document.getElementById('switchCost'),
+  focusSlider: document.getElementById('focusSlider'),
+
+  startSimBtn: document.getElementById('startSimBtn'),
+  stopSimBtn: document.getElementById('stopSimBtn'),
+  interruptIntensity: document.getElementById('interruptIntensity'),
+
+  metricsArea: document.getElementById('metricsArea'),
+  resetMetricsBtn: document.getElementById('resetMetricsBtn'),
+  recomputeMetricsBtn: document.getElementById('recomputeMetricsBtn'),
+
+  autoApplyRulesBtn: document.getElementById('autoApplyRulesBtn'),
+  batchMergeBtn: document.getElementById('batchMergeBtn'),
+  compareContextsBtn: document.getElementById('compareContextsBtn'),
+  autoSnapshotInterval: document.getElementById('autoSnapshotInterval'),
+  interruptSeedCount: document.getElementById('interruptSeedCount'),
+
+  saveLocalBtn: document.getElementById('saveLocalBtn'),
+  loadLocalBtn: document.getElementById('loadLocalBtn'),
+  clearLocalBtn: document.getElementById('clearLocalBtn'),
+
+  mapArea: document.getElementById('mapArea'),
+  recomputeMapBtn: document.getElementById('recomputeMapBtn'),
+  exportMapBtn: document.getElementById('exportMapBtn'),
+
+  logArea: document.getElementById('logArea'),
+  clearLogBtn: document.getElementById('clearLogBtn'),
+  exportLogBtn: document.getElementById('exportLogBtn'),
+
+  duplicateSelectedCheckboxes: null,
+};
+
+// Logging
+function log(msg, tag) {
+  const entry = { t: now(), msg, tag };
+  store.log.unshift(entry);
+  renderLog();
+}
+function renderLog() {
+  els.logArea.innerHTML = store.log.slice(0,200).map(e => `${ts(e.t)} - ${e.msg}`).join('\\n');
+}
+
+// Create a default new context
+function makeContext(name) {
+  const id = uid('ctx');
+  const nowt = now();
+  const content = '';
+  const snapshot = { id: uid('snap'), t: nowt, content, meta: { note: 'initial' } };
+  const mainBranch = { id: uid('br'), name: 'main', snapshots: [snapshot], headIndex: 0 };
+  const ctx = {
+    id, name: name || 'Context ' + (Object.keys(store.contexts).length+1),
+    tags: [],
+    priority: 5,
+    pinned: false,
+    readonly: false,
+    branches: { [mainBranch.id]: mainBranch },
+    activeBranchId: mainBranch.id,
+    createdAt: nowt,
+    updatedAt: nowt,
+    undoStack: [],
+    redoStack: [],
+  };
+  return ctx;
+}
+
+// Render contexts list
+function renderContextsList() {
+  const filter = (els.filterInput.value||'').toLowerCase();
+  const sort = els.sortSelect.value;
+  let arr = Object.values(store.contexts);
+  if (filter) {
+    arr = arr.filter(c => (c.name||'').toLowerCase().includes(filter) || (c.tags||[]).join(',').toLowerCase().includes(filter));
+  }
+  if (sort==='recent') {
+    arr.sort((a,b) => (store.metrics.timeSpent[b.id]||0) - (store.metrics.timeSpent[a.id]||0));
+  } else if (sort==='name') {
+    arr.sort((a,b)=>a.name.localeCompare(b.name));
+  } else if (sort==='priority') {
+    arr.sort((a,b)=>b.priority - a.priority);
+  } else if (sort==='pinned') {
+    arr.sort((a,b)=> (b.pinned?1:0) - (a.pinned?1:0));
+  }
+  els.contextsList.innerHTML = '';
+  const container = document.createElement('div');
+  arr.forEach(ctx => {
+    const div = document.createElement('div');
+    div.style.display = 'flex';
+    div.style.justifyContent = 'space-between';
+    div.style.alignItems = 'center';
+    div.style.padding = '4px 0';
+    const left = document.createElement('div');
+    left.style.display = 'flex';
+    left.style.gap = '6px';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.ctx = ctx.id;
+    left.appendChild(checkbox);
+    const nameBtn = document.createElement('button');
+    nameBtn.textContent = ctx.name + (ctx.pinned ? ' [P]' : '');
+    nameBtn.style.textAlign = 'left';
+    nameBtn.style.flex = '1';
+    nameBtn.onclick = ()=> selectContext(ctx.id);
+    left.appendChild(nameBtn);
+    const meta = document.createElement('div');
+    meta.textContent = '[' + (ctx.tags.join(',')||'') + ']';
+    meta.className = 'muted';
+    left.appendChild(meta);
+    div.appendChild(left);
+
+    const right = document.createElement('div');
+    const switchBtn = document.createElement('button');
+    switchBtn.textContent = 'Switch';
+    switchBtn.onclick = ()=> switchToContext(ctx.id);
+    right.appendChild(switchBtn);
+    const quickBtn = document.createElement('button');
+    quickBtn.textContent = 'QuickSnap';
+    quickBtn.onclick = ()=> {
+      selectContext(ctx.id);
+      saveSnapshot();
+    };
+    right.appendChild(quickBtn);
+
+    div.appendChild(right);
+    container.appendChild(div);
+  });
+  els.contextsList.appendChild(container);
+}
+
+// Select context and display details
+function selectContext(id) {
+  if (!store.contexts[id]) return;
+  store.activeContextId = id;
+  ensureMetricsActivation();
+  const c = store.contexts[id];
+  els.contextName.value = c.name;
+  els.priorityInput.value = c.priority;
+  els.tagsInput.value = c.tags.join(',');
+  els.pinnedCheckbox.checked = !!c.pinned;
+  els.readonlyCheckbox.checked = !!c.readonly;
+  const branch = c.branches[c.activeBranchId];
+  const snap = branch.snapshots[branch.headIndex];
+  els.contentArea.value = snap.content;
+  renderHistory(c.id);
+  renderBranches(c.id);
+  renderDiffSelectors();
+  renderStack();
+  renderMetrics();
+  log('Selected context: ' + c.name);
+}
+
+// Save changes in the form back to context meta (not snapshot)
+function commitContextMeta() {
+  const id = store.activeContextId;
+  if (!id) return;
+  const c = store.contexts[id];
+  c.name = els.contextName.value;
+  c.priority = Number(els.priorityInput.value);
+  c.tags = (els.tagsInput.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  c.pinned = els.pinnedCheckbox.checked;
+  c.readonly = els.readonlyCheckbox.checked;
+  c.updatedAt = now();
+  renderContextsList();
+}
+
+// Save snapshot
+function saveSnapshot(note) {
+  const id = store.activeContextId;
+  if (!id) {
+    alert('No active context selected');
+    return;
+  }
+  const c = store.contexts[id];
+  if (c.readonly) {
+    alert('Context is read-only/frozen. Cannot save snapshot.');
+    return;
+  }
+  const branch = c.branches[c.activeBranchId];
+  const content = els.contentArea.value;
+  const snapshot = { id: uid('snap'), t: now(), content, meta: { note: note || '' } };
+  branch.snapshots.push(snapshot);
+  branch.headIndex = branch.snapshots.length - 1;
+  c.updatedAt = now();
+  // push to undo stack
+  c.undoStack.push(snapshot.id);
+  c.redoStack = [];
+  log('Saved snapshot in ' + c.name);
+  renderHistory(id);
+  renderContextsList();
+  renderDiffSelectors();
+  // update slider
+  els.snapshotSlider.max = Math.max(0, branch.snapshots.length-1);
+  els.snapshotSlider.value = branch.headIndex;
+}
+
+// Auto snapshot toggle
+function toggleAutoSnapshot() {
+  store.autoSnapshotEnabled = !store.autoSnapshotEnabled;
+  els.autoSnapshotToggleBtn.textContent = store.autoSnapshotEnabled ? 'Disable Auto Snapshot' : 'Enable Auto Snapshot';
+  if (store.autoSnapshotEnabled) {
+    startAutoSnapshotTimer();
+  } else {
+    stopAutoSnapshotTimer();
+  }
+}
+
+let autoSnapshotTimerId = null;
+function startAutoSnapshotTimer() {
+  stopAutoSnapshotTimer();
+  const intervalSec = Number(els.autoSnapshotInterval.value) || 30;
+  autoSnapshotTimerId = setInterval(() => {
+    if (store.activeContextId && store.autoSnapshotEnabled) {
+      saveSnapshot('auto');
+    }
+  }, Math.max(1000, intervalSec*1000));
+}
+function stopAutoSnapshotTimer() {
+  if (autoSnapshotTimerId) clearInterval(autoSnapshotTimerId);
+  autoSnapshotTimerId = null;
+}
+
+// Render history for selected context
+function renderHistory(ctxId) {
+  const c = store.contexts[ctxId];
+  if (!c) return;
+  const branch = c.branches[c.activeBranchId];
+  els.historyList.innerHTML = '';
+  const list = document.createElement('div');
+  branch.snapshots.slice().reverse().forEach(snap => {
+    const d = document.createElement('div');
+    d.style.padding = '4px 0';
+    const t = document.createElement('div');
+    t.textContent = ts(snap.t) + ' — ' + (snap.meta.note || '');
+    t.style.fontSize = '12px';
+    const buttons = document.createElement('div');
+    buttons.style.display = 'flex';
+    buttons.style.gap = '6px';
+    const viewBtn = document.createElement('button');
+    viewBtn.textContent = 'View';
+    viewBtn.onclick = ()=> {
+      els.contentArea.value = snap.content;
+      log('Viewed snapshot from ' + ts(snap.t));
+    };
+    buttons.appendChild(viewBtn);
+    const restoreBtn = document.createElement('button');
+    restoreBtn.textContent = 'Restore';
+    restoreBtn.onclick = ()=> {
+      branch.snapshots.push({ id: uid('snap'), t: now(), content: snap.content, meta: { note: 'restored from ' + ts(snap.t) } });
+      branch.headIndex = branch.snapshots.length - 1;
+      c.updatedAt = now();
+      renderHistory(ctxId);
+      renderDiffSelectors();
+      log('Restored snapshot into ' + c.name);
+    };
+    buttons.appendChild(restoreBtn);
+    d.appendChild(t);
+    d.appendChild(buttons);
+    list.appendChild(d);
+  });
+  els.historyList.appendChild(list);
+  // update slider
+  els.snapshotSlider.max = Math.max(0, branch.snapshots.length-1);
+  els.snapshotSlider.value = branch.headIndex;
+}
+
+// Branch management
+function renderBranches(ctxId) {
+  const c = store.contexts[ctxId];
+  if (!c) return;
+  els.branchesList.innerHTML = '';
+  const div = document.createElement('div');
+  Object.values(c.branches).forEach(b => {
+    const item = document.createElement('div');
+    item.style.display = 'flex';
+    item.style.justifyContent = 'space-between';
+    item.style.padding = '4px 0';
+    const left = document.createElement('div');
+    left.textContent = b.name + (b.id===c.activeBranchId? ' (active)' : '');
+    const right = document.createElement('div');
+    const switchBtn = document.createElement('button');
+    switchBtn.textContent = 'Switch';
+    switchBtn.onclick = ()=> {
+      c.activeBranchId = b.id;
+      renderBranches(ctxId);
+      renderHistory(ctxId);
+      log('Switched branch to ' + b.name + ' in ' + c.name);
+    };
+    right.appendChild(switchBtn);
+    div.appendChild(item);
+    item.appendChild(left);
+    item.appendChild(right);
+  });
+  els.branchesList.appendChild(div);
+}
+
+// Create branch from current head
+function createBranch() {
+  const id = store.activeContextId;
+  if (!id) { alert('Select a context'); return; }
+  const c = store.contexts[id];
+  const name = prompt('Branch name', 'branch-' + (Object.keys(c.branches).length+1));
+  if (!name) return;
+  const currentBranch = c.branches[c.activeBranchId];
+  // clone snapshots up to current head
+  const headSnapshot = currentBranch.snapshots[currentBranch.headIndex];
+  const newSnapshots = [ { id: uid('snap'), t: now(), content: headSnapshot.content, meta: { note: 'branch from ' + ts(headSnapshot.t) } } ];
+  const newBranch = { id: uid('br'), name, snapshots: newSnapshots, headIndex: 0 };
+  c.branches[newBranch.id] = newBranch;
+  c.activeBranchId = newBranch.id;
+  log('Created branch ' + name + ' in ' + c.name);
+  renderBranches(id);
+  renderHistory(id);
+  renderDiffSelectors();
+}
+
+// Merge branch into active branch
+function mergeBranch() {
+  const id = store.activeContextId;
+  if (!id) { alert('Select a context'); return; }
+  const c = store.contexts[id];
+  const branches = Object.values(c.branches).filter(b => b.id!==c.activeBranchId);
+  if (!branches.length) { alert('No other branches to merge'); return; }
+  const bNames = branches.map(b => b.name).join(', ');
+  const chosen = prompt('Merge which branch into current? Options: ' + bNames, branches[0].name);
+  if (!chosen) return;
+  const branchToMerge = branches.find(b => b.name===chosen);
+  if (!branchToMerge) { alert('Branch not found'); return; }
+  // present diff and allow manual merge
+  const activeBranch = c.branches[c.activeBranchId];
+  const activeText = activeBranch.snapshots[activeBranch.headIndex].content || '';
+  const mergeText = branchToMerge.snapshots[branchToMerge.headIndex].content || '';
+  const d = diffText(activeText, mergeText);
+  const accept = confirm('Show diff between active branch and branch to merge. Proceed to automatic merge (merge content = active + "\\n---MERGED---\\n" + branch)? Click OK to auto-merge. Cancel to open manual merge window.');
+  if (accept) {
+    const mergedContent = activeText + "\\n---MERGED FROM " + branchToMerge.name + " ---\\n" + mergeText;
+    activeBranch.snapshots.push({ id: uid('snap'), t: now(), content: mergedContent, meta: { note: 'merged ' + branchToMerge.name } });
+    activeBranch.headIndex = activeBranch.snapshots.length - 1;
+    c.updatedAt = now();
+    log('Auto-merged branch ' + branchToMerge.name + ' into ' + c.name);
+    renderHistory(id);
+  } else {
+    const manual = prompt('Manual merge: edit the merged content below. Diff:\\n' + d + '\\n\\nEnter merged content here:', activeText + '\\n' + mergeText);
+    if (manual!==null) {
+      activeBranch.snapshots.push({ id: uid('snap'), t: now(), content: manual, meta: { note: 'manual merged ' + branchToMerge.name } });
+      activeBranch.headIndex = activeBranch.snapshots.length - 1;
+      c.updatedAt = now();
+      log('Manual merged branch ' + branchToMerge.name + ' into ' + c.name);
+      renderHistory(id);
+    }
+  }
+  renderDiffSelectors();
+}
+
+// Delete branch
+function deleteBranch() {
+  const id = store.activeContextId;
+  if (!id) { alert('Select a context'); return; }
+  const c = store.contexts[id];
+  const branches = Object.values(c.branches).filter(b => b.id!==c.activeBranchId);
+  if (!branches.length) { alert('No deletable branches'); return; }
+  const toDel = prompt('Enter branch name to delete: ' + branches.map(b=>b.name).join(', '), branches[0].name);
+  if (!toDel) return;
+  const b = branches.find(bb=>bb.name===toDel);
+  if (!b) { alert('Branch not found'); return; }
+  delete c.branches[b.id];
+  log('Deleted branch ' + b.name + ' from ' + c.name);
+  renderBranches(id);
+  renderDiffSelectors();
+}
+
+// Diff UI
+function renderDiffSelectors() {
+  const list = [];
+  Object.values(store.contexts).forEach(c => {
+    Object.values(c.branches).forEach(b => {
+      const snap = b.snapshots[b.headIndex];
+      list.push({ label: c.name + ' / ' + b.name + ' @ ' + ts(snap.t), value: JSON.stringify({ctx:c.id,branch:b.id,snap:snap.id}) });
+    });
+  });
+  ['diffLeft','diffRight'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    sel.innerHTML = '';
+    list.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// Show diff between two selected snapshots
+function showDiff() {
+  try {
+    const left = JSON.parse(els.diffLeft.value);
+    const right = JSON.parse(els.diffRight.value);
+    const leftSnap = getSnapshotById(left.ctx, left.branch, left.snap);
+    const rightSnap = getSnapshotById(right.ctx, right.branch, right.snap);
+    const d = diffText(leftSnap.content, rightSnap.content);
+    els.diffOutput.value = d;
+    log('Displayed diff between two snapshots');
+  } catch (e) {
+    alert('Invalid selection');
+  }
+}
+function getSnapshotById(ctxId, branchId, snapId) {
+  const c = store.contexts[ctxId];
+  const b = c.branches[branchId];
+  const s = b.snapshots.find(s=>s.id===snapId);
+  return s;
+}
+
+// Context switching actions
+function switchToContext(id) {
+  if (!store.contexts[id]) return;
+  if (store.activeContextId === id) {
+    log('Already in context ' + store.contexts[id].name);
+    return;
+  }
+  const prev = store.activeContextId;
+  // record time spent
+  recordTimeSpent(prev);
+  store.activeContextId = id;
+  // record switch event
+  store.switches.push({ from: prev, to: id, t: now() });
+  store.metrics.switchCount++;
+  ensureMetricsActivation();
+  selectContext(id);
+  renderContextsList();
+  renderStack();
+  log('Switched to ' + store.contexts[id].name + ' from ' + (prev?store.contexts[prev].name:'<none>'));
+}
+
+function pushAndSwitch(id) {
+  if (!store.contexts[id]) return;
+  if (store.activeContextId) {
+    store.stack.push(store.activeContextId);
+  }
+  switchToContext(id);
+}
+
+function popBack() {
+  if (!store.stack.length) {
+    alert('Stack empty');
+    return;
+  }
+  const id = store.stack.pop();
+  switchToContext(id);
+}
+
+function stashAndSwitch(id) {
+  if (!store.contexts[id]) return;
+  // stash: save snapshot and switch
+  const prevSave = store.activeContextId;
+  if (prevSave) {
+    selectContext(prevSave);
+    saveSnapshot('stash before switching');
+  }
+  switchToContext(id);
+}
+
+// Record time spent when leaving context
+function recordTimeSpent(prevId) {
+  if (!prevId) {
+    // starting the first context
+    store.metrics.lastActiveSince = now();
+    return;
+  }
+  const last = store.metrics.lastActiveSince || now();
+  const dur = now() - last;
+  store.metrics.timeSpent[prevId] = (store.metrics.timeSpent[prevId] || 0) + dur;
+  store.metrics.lastActiveSince = now();
+}
+
+// Ensure that metrics.lastActiveSince set when active context exists
+function ensureMetricsActivation() {
+  if (store.activeContextId && !store.metrics.lastActiveSince) {
+    store.metrics.lastActiveSince = now();
+  }
+}
+
+// Simulation (interrupt generator)
+let simInterval = null;
+function startSimulation() {
+  if (store.sim.running) return;
+  store.sim.running = true;
+  log('Simulation started');
+  // interval depends on interruptIntensity and seed count
+  const intervalMs = Math.max(500, 20000 - Number(els.interruptIntensity.value) * 1700);
+  simInterval = setInterval(simTick, Math.max(300, intervalMs));
+}
+function stopSimulation() {
+  if (!store.sim.running) return;
+  store.sim.running = false;
+  if (simInterval) clearInterval(simInterval);
+  simInterval = null;
+  log('Simulation stopped');
+}
+function simTick() {
+  // generate an interrupt; probability increased by interruptIntensity and decreased by focus
+  const intensity = Number(els.interruptIntensity.value);
+  const focus = Number(els.focusSlider.value);
+  // base probability
+  const p = Math.max(0, (intensity - focus + 5) / 20);
+  if (Math.random() < p) {
+    // choose target context: maybe pinned or random weighted by priority
+    const ids = Object.keys(store.contexts);
+    if (!ids.length) return;
+    // weighted random by priority and randomness
+    const weights = ids.map(id => (store.contexts[id].priority || 1) + (store.contexts[id].pinned ? 3 : 0) + Math.random());
+    const total = weights.reduce((a,b)=>a+b,0);
+    let r = Math.random() * total;
+    let chosen = ids[0];
+    for (let i=0;i<ids.length;i++) {
+      r -= weights[i];
+      if (r <= 0) { chosen = ids[i]; break; }
+    }
+    // maybe stay on same context sometimes to simulate interruption ignored
+    if (chosen === store.activeContextId && Math.random() < 0.6) {
+      log('Interrupt occurred but ignored in ' + (store.contexts[chosen].name||''));
+      return;
+    }
+    // perform switch, with chance to push vs replace based on randomness
+    if (Math.random() < 0.4) pushAndSwitch(chosen);
+    else switchToContext(chosen);
+    // track this 'cost' - additional downtime: apply simulated cost
+    const cost = Number(els.switchCost.value) * 1000;
+    // add a simulated pause to metric: reduce productivity measure by cost
+    store.metrics.timeSpent['__interrupt_cost__'] = (store.metrics.timeSpent['__interrupt_cost__'] || 0) + cost;
+  }
+  // occasionally perform random edits in active context to generate more snapshots
+  if (store.activeContextId && Math.random() < 0.2) {
+    const c = store.contexts[store.activeContextId];
+    if (!c.readonly) {
+      // small auto-change
+      const branch = c.branches[c.activeBranchId];
+      const head = branch.snapshots[branch.headIndex];
+      const newContent = head.content + '\\n[auto edit ' + new Date().toLocaleTimeString() + ']';
+      branch.snapshots.push({ id: uid('snap'), t: now(), content: newContent, meta: { note:'auto-edit' }});
+      branch.headIndex = branch.snapshots.length - 1;
+      log('Auto-edit in ' + c.name);
+      renderHistory(c.id);
+    }
+  }
+  renderMetrics();
+  renderContextsList();
+}
+
+// Metrics computation and rendering
+function computeMetrics() {
+  // recompute timeSpent using recorded switches (approx)
+  // We'll use store.metrics.timeSpent + current active duration
+  const currentDur = store.metrics.lastActiveSince ? (now() - store.metrics.lastActiveSince) : 0;
+  const perContext = Object.assign({}, store.metrics.timeSpent);
+  if (store.activeContextId) {
+    perContext[store.activeContextId] = (perContext[store.activeContextId] || 0) + currentDur;
+  }
+  const totalTime = Object.values(perContext).reduce((a,b)=>a+b,0);
+  const productivity = computeProductivity(perContext, totalTime);
+  return { perContext, totalTime, productivity, switchCount: store.metrics.switchCount };
+}
+function computeProductivity(perContext, totalTime) {
+  // simplistic productivity score: proportion of time in top-priority contexts adjusted by switch penalty
+  const contexts = Object.values(store.contexts);
+  if (!contexts.length) return 0;
+  // Score components:
+  // - Focus score: time in context with priority >= median
+  const priorities = contexts.map(c=>c.priority).sort((a,b)=>a-b);
+  const median = priorities[Math.floor(priorities.length/2)] || 0;
+  let timeHighPriority = 0;
+  contexts.forEach(c => {
+    const t = perContext[c.id] || 0;
+    if (c.priority >= median) timeHighPriority += t;
+  });
+  const focusScore = totalTime ? timeHighPriority / totalTime : 0;
+  // - switch penalty
+  const penalties = (store.metrics.switchCount || 0) * (Number(els.switchCost.value) || 0);
+  const penaltyFactor = Math.max(0, 1 - penalties / 100);
+  // - interrupt cost
+  const interruptCost = (perContext['__interrupt_cost__'] || 0) / Math.max(1,totalTime);
+  const productivity = Math.max(0, focusScore * penaltyFactor - (interruptCost * 0.05));
+  return Math.round(productivity * 100);
+}
+function renderMetrics() {
+  const m = computeMetrics();
+  let text = 'Switches: ' + m.switchCount + '\\n';
+  text += 'Productivity score (0-100): ' + m.productivity + '\\n';
+  text += 'Total tracked time: ' + Math.round(m.totalTime/1000) + 's\\n';
+  text += 'Time per context:\\n';
+  Object.entries(m.perContext).sort((a,b)=>b[1]-a[1]).forEach(([id,t])=>{
+    if (id==='__interrupt_cost__') return;
+    const name = (store.contexts[id] && store.contexts[id].name) || id;
+    text += ' - ' + name + ': ' + Math.round(t/1000) + 's\\n';
+  });
+  text += '\\nRecent switches (last 10):\\n';
+  const rec = store.switches.slice(-10).reverse();
+  rec.forEach(s => {
+    const from = s.from ? (store.contexts[s.from] && store.contexts[s.from].name) : '<none>';
+    const to = s.to ? (store.contexts[s.to] && store.contexts[s.to].name) : '<none>';
+    text += ts(s.t) + ' : ' + from + ' -> ' + to + '\\n';
+  });
+  els.metricsArea.textContent = text;
+}
+
+// Stack rendering
+function renderStack() {
+  els.stackArea.innerHTML = store.stack.map(id => {
+    const c = store.contexts[id];
+    return (c? c.name : id);
+  }).reverse().join('\\n');
+}
+
+// Undo/redo using snapshot ids
+function undo() {
+  const id = store.activeContextId;
+  if (!id) return;
+  const c = store.contexts[id];
+  const branch = c.branches[c.activeBranchId];
+  if (branch.snapshots.length <= 1) { alert('Nothing to undo'); return; }
+  // pop last snapshot into redo
+  const last = branch.snapshots.pop();
+  c.redoStack.push(last);
+  branch.headIndex = branch.snapshots.length - 1;
+  renderHistory(id);
+  els.contentArea.value = branch.snapshots[branch.headIndex].content;
+  log('Undo in ' + c.name);
+}
+function redo() {
+  const id = store.activeContextId;
+  if (!id) return;
+  const c = store.contexts[id];
+  if (!c.redoStack.length) { alert('Nothing to redo'); return; }
+  const snap = c.redoStack.pop();
+  const branch = c.branches[c.activeBranchId];
+  branch.snapshots.push(snap);
+  branch.headIndex = branch.snapshots.length - 1;
+  renderHistory(id);
+  els.contentArea.value = snap.content;
+  log('Redo in ' + c.name);
+}
+
+// Export/import
+function exportAll() {
+  const data = JSON.stringify(store, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'context_switch_store.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importFile(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Basic validation: has contexts
+      if (!data || !data.contexts) {
+        alert('Invalid file');
+        return;
+      }
+      // Overwrite current store minimally while preserving logs optionally
+      store.contexts = data.contexts;
+      store.order = data.order || Object.keys(store.contexts);
+      store.activeContextId = data.activeContextId;
+      store.stack = data.stack || [];
+      store.switches = data.switches || [];
+      store.metrics = data.metrics || store.metrics;
+      store.log = (data.log || []).concat(store.log).slice(0,500);
+      renderAll();
+      log('Imported data from file');
+    } catch (e) {
+      alert('Failed to import: ' + e.message);
+    }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+// Clear everything
+function clearAll() {
+  if (!confirm('Clear all contexts and data?')) return;
+  store.contexts = {};
+  store.order = [];
+  store.activeContextId = null;
+  store.stack = [];
+  store.switches = [];
+  store.metrics = { switchCount:0, timeSpent:{}, lastActiveSince:null };
+  store.log = [];
+  renderAll();
+  log('Cleared all data');
+}
+
+// Map / adjacency
+function recomputeMap() {
+  // Build adjacency counts
+  const adj = {};
+  store.switches.forEach(s => {
+    const from = s.from || '<none>';
+    const to = s.to || '<none>';
+    adj[from] = adj[from] || {};
+    adj[from][to] = (adj[from][to] || 0) + 1;
+  });
+  // Render simple map lines
+  const lines = [];
+  Object.keys(adj).forEach(from => {
+    Object.keys(adj[from]).forEach(to => {
+      const fn = from==='<'+'none'+'>'? from : (store.contexts[from] && store.contexts[from].name) || from;
+      const tn = to==='<'+'none'+'>'? to : (store.contexts[to] && store.contexts[to].name) || to;
+      lines.push(fn + ' -> ' + tn + ' : ' + adj[from][to]);
+    });
+  });
+  els.mapArea.textContent = lines.join('\\n') || '<no switch data>';
+  log('Recomputed context map');
+}
+function exportMap() {
+  const data = els.mapArea.textContent;
+  const blob = new Blob([data], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'context_map.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Persistence to localStorage
+function saveToLocal() {
+  try {
+    const copy = JSON.parse(JSON.stringify(store));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(copy));
+    alert('Saved to localStorage');
+    log('Saved store to localStorage');
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+function loadFromLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) { alert('No saved data'); return; }
+    const data = JSON.parse(raw);
+    store.contexts = data.contexts || {};
+    store.order = data.order || Object.keys(store.contexts);
+    store.activeContextId = data.activeContextId;
+    store.stack = data.stack || [];
+    store.switches = data.switches || [];
+    store.metrics = data.metrics || store.metrics;
+    store.log = (data.log || []).slice(0,500);
+    renderAll();
+    alert('Loaded from localStorage');
+    log('Loaded store from localStorage');
+  } catch (e) {
+    alert('Load failed: ' + e.message);
+  }
+}
+function clearLocal() {
+  if (!confirm('Clear saved data in localStorage?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  alert('Cleared local storage');
+  log('Cleared local storage');
+}
+
+// Batch operations: Duplicate selected, delete selected
+function getSelectedContextIds() {
+  const checkboxes = Array.from(els.contextsList.querySelectorAll('input[type=checkbox]'));
+  return checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.ctx);
+}
+function duplicateSelected() {
+  const ids = getSelectedContextIds();
+  if (!ids.length) { alert('Select contexts to duplicate'); return; }
+  ids.forEach(id => {
+    const c = store.contexts[id];
+    const clone = JSON.parse(JSON.stringify(c));
+    const newid = uid('ctx');
+    clone.id = newid;
+    clone.name = c.name + ' (copy)';
+    // regenerate branch ids and snapshot ids to avoid collisions
+    const newBranches = {};
+    Object.values(clone.branches).forEach(b => {
+      const nbid = uid('br');
+      const newSnaps = b.snapshots.map(s => ({ id: uid('snap'), t: s.t, content: s.content, meta: s.meta }));
+      newBranches[nbid] = { id: nbid, name: b.name, snapshots: newSnaps, headIndex: newSnaps.length-1 };
+    });
+    // set activeBranch to one of the new ones
+    clone.branches = newBranches;
+    clone.activeBranchId = Object.keys(newBranches)[0];
+    clone.createdAt = now();
+    clone.updatedAt = now();
+    store.contexts[newid] = clone;
+    store.order.push(newid);
+    log('Duplicated context ' + c.name + ' -> ' + clone.name);
+  });
+  renderAll();
+}
+
+function deleteSelected() {
+  const ids = getSelectedContextIds();
+  if (!ids.length) { alert('Select contexts to delete'); return; }
+  if (!confirm('Delete ' + ids.length + ' contexts?')) return;
+  ids.forEach(id => {
+    const name = (store.contexts[id] && store.contexts[id].name) || id;
+    delete store.contexts[id];
+    store.order = store.order.filter(i=>i!==id);
+    // remove from switches history references (not necessary but ok)
+    log('Deleted context ' + name);
+  });
+  if (ids.includes(store.activeContextId)) store.activeContextId = null;
+  renderAll();
+}
+
+// Batch merge selected: merge all selected into the first selected
+function batchMergeSelected() {
+  const ids = getSelectedContextIds();
+  if (ids.length < 2) { alert('Select at least 2 contexts for batch merge'); return; }
+  const targetId = ids[0];
+  const target = store.contexts[targetId];
+  for (let i=1;i<ids.length;i++) {
+    const src = store.contexts[ids[i]];
+    // simple merge: append content
+    const tgtBranch = target.branches[target.activeBranchId];
+    const srcBranch = src.branches[src.activeBranchId];
+    const mergedContent = (tgtBranch.snapshots[tgtBranch.headIndex].content || '') +
+      '\\n---MERGED FROM ' + (src.name || ids[i]) + '---\\n' +
+      (srcBranch.snapshots[srcBranch.headIndex].content || '');
+    tgtBranch.snapshots.push({ id: uid('snap'), t: now(), content: mergedContent, meta: { note: 'batch merged ' + src.name }});
+    tgtBranch.headIndex = tgtBranch.snapshots.length - 1;
+    log('Batch-merged ' + src.name + ' into ' + target.name);
+  }
+  renderAll();
+}
+
+// Compare two contexts via prompt for names
+function compareTwoContexts() {
+  const ids = Object.keys(store.contexts);
+  if (ids.length < 2) { alert('Need at least two contexts'); return; }
+  const names = ids.map(id => store.contexts[id].name).join(', ');
+  const a = prompt('Context A name (exact): ' + names, store.contexts[ids[0]].name);
+  const b = prompt('Context B name (exact): ' + names, store.contexts[ids[1]].name);
+  if (!a || !b) return;
+  const ca = Object.values(store.contexts).find(c=>c.name===a);
+  const cb = Object.values(store.contexts).find(c=>c.name===b);
+  if (!ca || !cb) { alert('Contexts not found'); return; }
+  const ta = ca.branches[ca.activeBranchId].snapshots[ca.branches[ca.activeBranchId].headIndex].content;
+  const tb = cb.branches[cb.activeBranchId].snapshots[cb.branches[cb.activeBranchId].headIndex].content;
+  const d = diffText(ta,tb);
+  els.diffOutput.value = d;
+  log('Compared ' + ca.name + ' vs ' + cb.name);
+}
+
+// Simple auto-rules: switch to context with given tag when it's time (demonstration)
+let autoRulesEnabled = false;
+function autoApplyRules() {
+  autoRulesEnabled = !autoRulesEnabled;
+  els.autoApplyRulesBtn.textContent = autoRulesEnabled ? 'Auto-Switch Rules (ON)' : 'Auto-Switch Rules (OFF)';
+  if (autoRulesEnabled) {
+    // perform a single-pass: if any context has tag 'urgent' switch to it
+    const urgent = Object.values(store.contexts).find(c=>c.tags && c.tags.includes('urgent'));
+    if (urgent) {
+      switchToContext(urgent.id);
+      log('Auto-rule switched to urgent context: ' + urgent.name);
+    } else {
+      log('Auto-rules enabled but found no target');
+    }
+  } else {
+    log('Auto-rules disabled');
+  }
+}
+
+// Logging export
+function exportLog() {
+  const data = store.log.map(l => ts(l.t) + ' - ' + l.msg).join('\\n');
+  const blob = new Blob([data], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'activity_log.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Render all
+function renderAll() {
+  renderContextsList();
+  if (store.activeContextId) selectContext(store.activeContextId);
+  renderDiffSelectors();
+  renderHistory(store.activeContextId);
+  renderBranches(store.activeContextId);
+  renderStack();
+  renderMetrics();
+  renderLog();
+  recomputeMap();
+}
+function renderLog() { renderLog = renderLog; renderLog = ()=>{} ; } // no-op placeholder (we have renderLog earlier)
+renderLog = renderLog; // ensure defined
+
+// Initialize UI events
+els.newContextBtn.onclick = ()=> {
+  const name = prompt('Context name', 'Context ' + (Object.keys(store.contexts).length+1));
+  const ctx = makeContext(name);
+  store.contexts[ctx.id] = ctx;
+  store.order.push(ctx.id);
+  selectContext(ctx.id);
+  renderContextsList();
+  log('Created new context ' + ctx.name);
+};
+els.duplicateContextBtn.onclick = duplicateSelected;
+els.deleteContextBtn.onclick = deleteSelected;
+els.pinToggleBtn.onclick = ()=> {
+  const id = store.activeContextId;
+  if (!id) return;
+  store.contexts[id].pinned = !store.contexts[id].pinned;
+  renderContextsList();
+  renderBranches(id);
+  log('Toggled pin for ' + store.contexts[id].name);
+};
+els.filterInput.oninput = renderContextsList;
+els.sortSelect.onchange = renderContextsList;
+els.exportAllBtn.onclick = exportAll;
+els.importBtn.onclick = ()=> els.importFile.click();
+els.importFile.onchange = importFile;
+els.clearAllBtn.onclick = clearAll;
+
+els.contextName.onchange = commitContextMeta;
+els.priorityInput.onchange = commitContextMeta;
+els.tagsInput.onchange = commitContextMeta;
+els.pinnedCheckbox.onchange = commitContextMeta;
+els.readonlyCheckbox.onchange = commitContextMeta;
+els.saveSnapshotBtn.onclick = ()=> saveSnapshot(document.getElementById('snapshotNote') && document.getElementById('snapshotNote').value);
+els.autoSnapshotToggleBtn.onclick = toggleAutoSnapshot;
+els.undoBtn.onclick = undo;
+els.redoBtn.onclick = redo;
+els.snapshotSlider.oninput = ()=> {
+  const id = store.activeContextId;
+  if (!id) return;
+  const c = store.contexts[id];
+  const branch = c.branches[c.activeBranchId];
+  const idx = Number(els.snapshotSlider.value);
+  if (idx >= 0 && idx < branch.snapshots.length) {
+    els.contentArea.value = branch.snapshots[idx].content;
+  }
+};
+els.restoreSnapshotBtn.onclick = ()=> {
+  const id = store.activeContextId;
+  if (!id) return;
+  const c = store.contexts[id];
+  const branch = c.branches[c.activeBranchId];
+  const idx = Number(els.snapshotSlider.value);
+  if (idx >= 0 && idx < branch.snapshots.length) {
+    branch.snapshots.push({ id: uid('snap'), t: now(), content: branch.snapshots[idx].content, meta: { note: 'restore via slider' } });
+    branch.headIndex = branch.snapshots.length - 1;
+    c.updatedAt = now();
+    renderHistory(id);
+    log('Restored snapshot via slider in ' + c.name);
+  }
+};
+
+els.createBranchBtn.onclick = createBranch;
+els.mergeBranchBtn.onclick = mergeBranch;
+els.deleteBranchBtn.onclick = deleteBranch;
+els.diffBtn.onclick = showDiff;
+
+els.switchToBtn.onclick = ()=> {
+  const id = (store.activeContextId) ? store.activeContextId : Object.keys(store.contexts)[0];
+  const ids = getSelectedContextIds();
+  if (ids.length!==1) { alert('Select exactly one context (via checkbox) to Switch To'); return; }
+  switchToContext(ids[0]);
+};
+els.pushBtn.onclick = ()=> {
+  const ids = getSelectedContextIds();
+  if (ids.length !== 1) { alert('Select exactly one context to push & switch'); return; }
+  pushAndSwitch(ids[0]);
+};
+els.popBtn.onclick = popBack;
+els.stashBtn.onclick = ()=> {
+  const ids = getSelectedContextIds();
+  if (ids.length !== 1) { alert('Select exactly one context to stash & switch'); return; }
+  stashAndSwitch(ids[0]);
+};
+
+els.startSimBtn.onclick = startSimulation;
+els.stopSimBtn.onclick = stopSimulation;
+els.resetMetricsBtn.onclick = ()=> {
+  store.metrics = { switchCount:0, timeSpent:{}, lastActiveSince: null };
+  renderMetrics();
+  log('Metrics reset');
+};
+els.recomputeMetricsBtn.onclick = renderMetrics;
+
+els.autoApplyRulesBtn.onclick = autoApplyRules;
+els.batchMergeBtn.onclick = batchMergeSelected;
+els.compareContextsBtn.onclick = compareTwoContexts;
+els.autoSnapshotInterval.onchange = ()=> {
+  if (store.autoSnapshotEnabled) startAutoSnapshotTimer();
+};
+els.interruptSeedCount.onchange = ()=> {};
+els.saveLocalBtn.onclick = saveToLocal;
+els.loadLocalBtn.onclick = loadFromLocal;
+els.clearLocalBtn.onclick = clearLocal;
+
+els.recomputeMapBtn.onclick = recomputeMap;
+els.exportMapBtn.onclick = exportMap;
+
+els.clearLogBtn.onclick = ()=> { store.log = []; renderLog(); };
+els.exportLogBtn.onclick = exportLog;
+
+// Keybindings
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key.toLowerCase()==='n') {
+    e.preventDefault();
+    els.newContextBtn.click();
+  } else if (e.ctrlKey && e.key.toLowerCase()==='s') {
+    e.preventDefault();
+    els.saveSnapshotBtn.click();
+  } else if (e.ctrlKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+    // switch context in list
+    const ids = Object.keys(store.contexts);
+    if (!ids.length) return;
+    let idx = ids.indexOf(store.activeContextId);
+    if (idx === -1) idx = 0;
+    if (e.key === 'ArrowRight') idx = (idx+1) % ids.length;
+    if (e.key === 'ArrowLeft') idx = (idx-1 + ids.length) % ids.length;
+    switchToContext(ids[idx]);
+  }
+});
+
+// Initial seed: create a few contexts
+function seed() {
+  const a = makeContext('Inbox');
+  a.tags = ['inbox'];
+  a.priority = 7;
+  const b = makeContext('Project A');
+  b.tags = ['project','A'];
+  b.priority = 9;
+  const c = makeContext('Research');
+  c.tags = ['read','research'];
+  c.priority = 6;
+  const d = makeContext('Admin');
+  d.tags = ['todo'];
+  d.priority = 4;
+  store.contexts[a.id] = a;
+  store.contexts[b.id] = b;
+  store.contexts[c.id] = c;
+  store.contexts[d.id] = d;
+  store.order = [a.id,b.id,c.id,d.id];
+  store.activeContextId = a.id;
+  // create some snapshots
+  saveSnapshot.call(null); // this needs active context selected; ensure UI updated
+}
+
+// Because saveSnapshot relies on DOM context active, we need to select initial context before saving
+function initialSetup() {
+  if (!Object.keys(store.contexts).length) {
+    // seed basic contexts
+    const a = makeContext('Inbox');
+    a.tags = ['inbox'];
+    a.priority = 7;
+    const b = makeContext('Project A');
+    b.tags = ['project','A'];
+    b.priority = 9;
+    const c = makeContext('Research');
+    c.tags = ['read','research'];
+    c.priority = 6;
+    const d = makeContext('Admin');
+    d.tags = ['todo'];
+    d.priority = 4;
+    store.contexts[a.id] = a;
+    store.contexts[b.id] = b;
+    store.contexts[c.id] = c;
+    store.contexts[d.id] = d;
+    store.order = [a.id,b.id,c.id,d.id];
+    store.activeContextId = a.id;
+  }
+  renderAll();
+  selectContext(store.activeContextId);
+  // create a few synthetic switch events for demonstration
+  store.switches.push({ from: null, to: store.activeContextId, t: now() - 60000 });
+  store.switches.push({ from: store.activeContextId, to: Object.keys(store.contexts)[1], t: now() - 40000 });
+  store.metrics.switchCount = store.switches.length;
+  renderMetrics();
+  recomputeMap();
+  log('Initialized simulator');
+}
+
+initialSetup();
+
+// Render log function (implemented after initialSetup to avoid hoisting issues)
+function renderLog() {
+  els.logArea.textContent = store.log.map(e => ts(e.t) + ' - ' + e.msg).join('\\n');
+}
+renderLog();
+
+</script>
+
+</body>
+</html>

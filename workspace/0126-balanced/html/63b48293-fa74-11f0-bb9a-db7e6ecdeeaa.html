@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overfitting Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  h1 {
+    text-align: center;
+  }
+  #canvas-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+  }
+  canvas {
+    border: 1px solid #ccc;
+    margin: 0 10px;
+  }
+  #info {
+    max-width: 600px;
+    margin: 20px auto;
+    line-height: 1.5;
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+  }
+  input[type="range"] {
+    width: 100%;
+  }
+  #error {
+    margin-top: 10px;
+    font-weight: bold;
+  }
+  #footer {
+    margin-top: 40px;
+    font-size: 0.9em;
+    color: #666;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<h1>Overfitting Demonstration</h1>
+<div id="info">
+  <p>
+    This demo shows a simple regression problem with noisy data points generated from a known function.
+    You can fit different polynomial curves to the data by adjusting the polynomial degree using the slider.
+    <strong>Underfitting</strong> occurs when the model degree is too low and can't capture the true pattern,
+    while <strong>overfitting</strong> happens when the degree is too high, making the model capture noise as if it were signal.
+  </p>
+  <p>
+    The plot on the left shows the original noisy data points and the true underlying function (dashed line).
+    The plot on the right shows the fitted polynomial curve for the degree you selected.
+  </p>
+  <label for="degreeRange">Polynomial Degree: <span id="degreeValue">1</span></label>
+  <input type="range" id="degreeRange" min="0" max="15" step="1" value="1"/>
+  <div id="error"></div>
+</div>
+<div id="canvas-container">
+  <canvas id="canvasData" width="400" height="300" aria-label="Plot of data points and true function"></canvas>
+  <canvas id="canvasFit" width="400" height="300" aria-label="Plot of fitted polynomial curve"></canvas>
+</div>
+
+<script>
+  // Generate synthetic data from a true function with noise
+  const canvasData = document.getElementById("canvasData");
+  const ctxData = canvasData.getContext("2d");
+  const canvasFit = document.getElementById("canvasFit");
+  const ctxFit = canvasFit.getContext("2d");
+  const degreeRange = document.getElementById("degreeRange");
+  const degreeValue = document.getElementById("degreeValue");
+  const errorDisplay = document.getElementById("error");
+
+  const WIDTH = canvasData.width;
+  const HEIGHT = canvasData.height;
+
+  // True function: sin(2*pi*x)
+  function trueFunction(x) {
+    return Math.sin(2 * Math.PI * x);
+  }
+
+  // Generate noisy data points
+  const NUM_POINTS = 30;
+  const noiseSigma = 0.3;
+  let dataPoints = [];
+  for(let i=0; i < NUM_POINTS; i++){
+    let x = i/(NUM_POINTS - 1);
+    let y = trueFunction(x) + (Math.random() * 2 - 1) * noiseSigma;
+    dataPoints.push({x: x, y: y});
+  }
+
+  // Coordinate mapping helpers
+  function xToCanvas(x) {
+    return x * (WIDTH - 40) + 30;
+  }
+  function yToCanvas(y) {
+    // y range ~ [-1.5 to 1.5]
+    return HEIGHT/2 - (y * (HEIGHT/3));
+  }
+
+  // Draw axes & true function and points on left canvas
+  function drawDataCanvas() {
+    ctxData.clearRect(0, 0, WIDTH, HEIGHT);
+    ctxData.font = "12px sans-serif";
+    ctxData.fillStyle = "#000";
+
+    // Draw axes
+    ctxData.strokeStyle = "#aaa";
+    ctxData.lineWidth = 1;
+    // x axis
+    ctxData.beginPath();
+    ctxData.moveTo(xToCanvas(0), yToCanvas(0));
+    ctxData.lineTo(xToCanvas(1), yToCanvas(0));
+    ctxData.stroke();
+    // y axis
+    ctxData.beginPath();
+    ctxData.moveTo(xToCanvas(0), yToCanvas(1.5));
+    ctxData.lineTo(xToCanvas(0), yToCanvas(-1.5));
+    ctxData.stroke();
+
+    // Draw true function (dashed)
+    ctxData.strokeStyle = "green";
+    ctxData.lineWidth = 2;
+    ctxData.setLineDash([5, 5]);
+    ctxData.beginPath();
+    for (let i=0; i<=100; i++){
+      let x = i/100;
+      let y = trueFunction(x);
+      let cx = xToCanvas(x);
+      let cy = yToCanvas(y);
+      if(i===0) ctxData.moveTo(cx, cy);
+      else ctxData.lineTo(cx, cy);
+    }
+    ctxData.stroke();
+    ctxData.setLineDash([]);
+
+    // Draw data points
+    ctxData.fillStyle = "blue";
+    for(let pt of dataPoints){
+      ctxData.beginPath();
+      ctxData.arc(xToCanvas(pt.x), yToCanvas(pt.y), 4, 0, 2*Math.PI);
+      ctxData.fill();
+    }
+
+    // Labels
+    ctxData.fillStyle = "black";
+    ctxData.fillText("True Function (green dashed)", 160, 20);
+    ctxData.fillText("Noisy Data Points (blue)", 160, 40);
+  }
+
+  // Polynomial regression fitting using normal equations
+  // returns array of coefficients, lowest power first
+  function polyFit(data, degree) {
+    if (degree < 0) return [];
+
+    const N = data.length;
+    const X = [];
+    const Y = [];
+
+    for(let i=0; i<N; i++){
+      // design matrix row with powers of x
+      let row = [];
+      for(let d=0; d<=degree; d++){
+        row.push(Math.pow(data[i].x, d));
+      }
+      X.push(row);
+      Y.push(data[i].y);
+    }
+
+    // Compute transpose(X)*X
+    let XtX = numericDotTranspose(X, X);
+    // Compute transpose(X)*Y
+    let XtY = numericDotTransposeVector(X, Y);
+    // Solve linear system XtX * a = XtY
+    let coef = numericSolve(XtX, XtY);
+    return coef;
+  }
+
+  // Matrix multiplication: transpose(A)*B
+  function numericDotTranspose(A, B) {
+    let rowsA = A.length;
+    let colsA = A[0].length;
+    let rowsB = B.length;
+    let colsB = B[0].length;
+    if(rowsB !== rowsA)
+      throw new Error("Incompatible dimensions in numericDotTranspose");
+
+    // Result dims: colsA x colsB
+    let result = [];
+    for(let i=0; i<colsA; i++){
+      result[i] = [];
+      for(let j=0; j<colsB; j++){
+        let sum = 0;
+        for(let k=0; k<rowsA; k++){
+          sum += A[k][i] * B[k][j];
+        }
+        result[i][j] = sum;
+      }
+    }
+    return result;
+  }
+
+  // transpose(A)*v where v is vector
+  function numericDotTransposeVector(A, v) {
+    let rows = A.length;
+    let cols = A[0].length;
+    if(rows !== v.length) throw new Error("Incompatible sizes in numericDotTransposeVector");
+    let result = new Array(cols).fill(0);
+    for(let i=0; i<cols; i++){
+      for(let j=0; j<rows; j++){
+        result[i] += A[j][i]*v[j];
+      }
+    }
+    return result;
+  }
+
+  // Solve Ax = b using Gaussian elimination
+  // A is square matrix NxN, b is vector length N
+  // returns vector solution
+  function numericSolve(A, b) {
+    let n = A.length;
+    // Clone matrix and vector
+    let M = A.map(row => row.slice());
+    let x = b.slice();
+
+    for(let k=0; k<n; k++){
+      // Find pivot
+      let max = Math.abs(M[k][k]);
+      let maxRow = k;
+      for(let i=k+1; i<n; i++){
+        if(Math.abs(M[i][k]) > max){
+          max = Math.abs(M[i][k]);
+          maxRow = i;
+        }
+      }
+      if(max === 0) return new Array(n).fill(0); // singular
+
+      // Swap rows k and maxRow
+      [M[k], M[maxRow]] = [M[maxRow], M[k]];
+      [x[k], x[maxRow]] = [x[maxRow], x[k]];
+
+      // Elimination
+      for(let i=k+1; i<n; i++){
+        let factor = M[i][k] / M[k][k];
+        for(let j=k; j<n; j++){
+          M[i][j] = M[i][j] - factor * M[k][j];
+        }
+        x[i] = x[i] - factor * x[k];
+      }
+    }
+
+    // Back substitution
+    let result = new Array(n);
+    for(let i=n-1; i>=0; i--){
+      let sum = 0;
+      for(let j=i+1; j<n; j++){
+        sum += M[i][j] * result[j];
+      }
+      result[i] = (x[i] - sum) / M[i][i];
+    }
+    return result;
+  }
+
+  // Evaluate polynomial at x given coefficients
+  function polyEval(coef, x) {
+    let y = 0;
+    for(let i=0; i<coef.length; i++){
+      y += coef[i]*Math.pow(x, i);
+    }
+    return y;
+  }
+
+  // Draw fitted polynomial curve on right canvas
+  function drawFitCanvas(coef) {
+    ctxFit.clearRect(0,0,WIDTH,HEIGHT);
+
+    // Draw axes (same as left canvas)
+    ctxFit.strokeStyle = "#aaa";
+    ctxFit.lineWidth = 1;
+    ctxFit.beginPath();
+    // x axis
+    ctxFit.moveTo(xToCanvas(0), yToCanvas(0));
+    ctxFit.lineTo(xToCanvas(1), yToCanvas(0));
+    ctxFit.stroke();
+    // y axis
+    ctxFit.beginPath();
+    ctxFit.moveTo(xToCanvas(0), yToCanvas(1.5));
+    ctxFit.lineTo(xToCanvas(0), yToCanvas(-1.5));
+    ctxFit.stroke();
+
+    // Draw fitted polynomial curve
+    ctxFit.strokeStyle = "red";
+    ctxFit.lineWidth = 2;
+    ctxFit.beginPath();
+    for(let i=0; i<=100; i++){
+      let x = i/100;
+      let y = polyEval(coef, x);
+      let cx = xToCanvas(x);
+      let cy = yToCanvas(y);
+      if(i===0) ctxFit.moveTo(cx, cy);
+      else ctxFit.lineTo(cx, cy);
+    }
+    ctxFit.stroke();
+
+    // Draw data points for reference
+    ctxFit.fillStyle = "rgba(0,0,255,0.3)";
+    for(let pt of dataPoints){
+      ctxFit.beginPath();
+      ctxFit.arc(xToCanvas(pt.x), yToCanvas(pt.y), 4, 0, 2*Math.PI);
+      ctxFit.fill();
+    }
+
+    // Labels
+    ctxFit.fillStyle = "black";
+    ctxFit.fillText("Fitted Polynomial (red)", 150, 20);
+    ctxFit.fillText("Degree: " + (coef.length - 1), 150, 40);
+  }
+
+  // Calculate mean squared error on data points
+  function meanSquaredError(coef, data) {
+    if(coef.length === 0) return 0;
+    let sum = 0;
+    for(let pt of data){
+      let yPred = polyEval(coef, pt.x);
+      let diff = yPred - pt.y;
+      sum += diff*diff;
+    }
+    let mse = sum / data.length;
+    return mse;
+  }
+
+  // Update function called on slider changes
+  function update() {
+    const degree = parseInt(degreeRange.value);
+    degreeValue.textContent = degree;
+
+    // Fit polynomial
+    let coef;
+    if(degree === 0){
+      // Degree 0: model predicts mean of y values (intercept only)
+      let sumY = dataPoints.reduce((acc,p) => acc + p.y, 0);
+      coef = [sumY / dataPoints.length];
+    } else {
+      coef = polyFit(dataPoints, degree);
+    }
+
+    drawDataCanvas();
+    drawFitCanvas(coef);
+
+    // Calculate MSE and also error on true function points (to illustrate overfit)
+    // We'll compute two errors:
+    //  - Train error on noisy data
+    //  - True error on exact (noise-free) points
+
+    const trainMSE = meanSquaredError(coef, dataPoints);
+
+    // True error: sample 100 pts from true function without noise
+    let trueData = [];
+    for(let i=0; i<100; i++){
+      let x = i/99;
+      trueData.push({x:x, y:trueFunction(x)});
+    }
+    const trueMSE = meanSquaredError(coef, trueData);
+
+    // Display errors
+    errorDisplay.innerHTML = 
+      `<div style="color:#cc0000">Training MSE (noisy data): ${trainMSE.toFixed(4)}</div>`+
+      `<div style="color:#007700">True MSE (noise-free): ${trueMSE.toFixed(4)}</div>`+
+      `<div style="font-style:italic; margin-top:6px;">`+
+      `Notice how training error decreases monotonically as degree increases, but true error is lowest at moderate degree and then increases due to <strong>overfitting</strong>.`+
+      `</div>`;
+  }
+
+  // Initialize
+  drawDataCanvas();
+  update();
+
+  degreeRange.addEventListener("input", update);
+</script>
+</body>
+</html>

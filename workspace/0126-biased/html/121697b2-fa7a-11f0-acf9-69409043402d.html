@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Version Control Simulator</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    white-space: pre-wrap;
+  }
+  textarea {
+    width: 100%;
+    height: 150px;
+    font-family: monospace, monospace;
+  }
+  input[type="text"] {
+    width: 250px;
+  }
+  button, input[type="text"], select {
+    margin: 2px 0;
+  }
+  .section {
+    margin-bottom: 16px;
+  }
+  #commitList {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 4px;
+  }
+  #branchList {
+    max-height: 100px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 4px;
+  }
+  #logOutput {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 4px;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+  }
+  #graphOutput {
+    font-family: monospace;
+    white-space: pre;
+    border: 1px solid black;
+    padding: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+
+<h1>Version Control Simulator (Minimal)</h1>
+
+<div class="section" id="workspaceSection">
+  <h2>Workspace (Unstaged Changes)</h2>
+  <textarea id="workspaceInput" aria-label="Workspace text area" placeholder="Edit your project files here..."></textarea><br />
+  <button id="stageAllBtn">Stage All Changes</button>
+  <button id="discardChangesBtn">Discard All Unstaged Changes</button>
+  <div>
+    <label><input type="checkbox" id="autoStageCheckbox" /> Auto Stage changes on edit</label>
+  </div>
+</div>
+
+<div class="section" id="stagingSection">
+  <h2>Staging Area (Staged Changes)</h2>
+  <textarea id="stagingArea" aria-label="Staging area" readonly></textarea><br />
+  <button id="unstageAllBtn">Unstage All Changes</button>
+</div>
+
+<div class="section" id="commitSection">
+  <h2>Commit</h2>
+  <label for="commitMessage">Commit Message:</label><br />
+  <input type="text" id="commitMessage" aria-label="Commit message input" placeholder="Enter commit message" /><br />
+  <button id="commitBtn">Commit Staged Changes</button>
+</div>
+
+<div class="section" id="branchesSection">
+  <h2>Branches</h2>
+  <div id="branchList" aria-label="Branches list" tabindex="0"></div>
+  <input type="text" id="newBranchName" aria-label="New branch name input" placeholder="New branch name" />
+  <button id="createBranchBtn">Create Branch</button>
+  <button id="checkoutBranchBtn">Checkout Selected Branch</button>
+  <button id="mergeBranchBtn">Merge Selected Branch Into Current</button>
+  <button id="deleteBranchBtn">Delete Selected Branch</button>
+  <div id="branchError" style="color: black; font-weight: bold;"></div>
+</div>
+
+<div class="section" id="commitHistorySection">
+  <h2>Commit History / Log</h2>
+  <div id="logOutput" role="log"></div>
+  <label for="logFilter">Filter commits: </label>
+  <input type="text" id="logFilter" aria-label="Log filter input" placeholder="Filter by message or hash" />
+  <button id="refreshLogBtn">Refresh Log</button>
+</div>
+
+<div class="section" id="graphSection">
+  <h2>Repository Graph</h2>
+  <div id="graphOutput" aria-label="Commit graph"></div>
+</div>
+
+<script>
+(() => {
+  // --- Data Structures for the Version Control Sim ---
+
+  // Commit structure:
+  // id (hash) - string
+  // message - string
+  // content - string (snapshot of file content)
+  // parents - array of parent commit ids (for merges 2-parents)
+  // timestamp - number (Date.now())
+
+  // Branch structure:
+  // name - string
+  // commitId - string (points to a commit)
+
+  // State:
+  // workspaceContent: string
+  // stagedContent: string or null (null = nothing staged)
+  // commits: map<string, commit>
+  // branches: map<string, branch>
+  // currentBranch: string
+  // HEAD: string (commit id the repo points to)
+  // working directory content is separate from HEAD commit.content
+
+  // Utility function to generate short-ish commit id (hash)
+  function generateCommitId() {
+    // random 7-char alphanum:
+    const chars = "abcdef0123456789";
+    let id = "";
+    for (let i = 0; i < 7; i++) {
+      id += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return id;
+  }
+
+  // Deep clone object (simple JSON clone)
+  function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  // Simple timestamp formatting
+  function formatDate(t) {
+    const d = new Date(t);
+    return d.toISOString().replace("T", " ").slice(0, 19);
+  }
+
+  // --- Internal State Variables ---
+  // Initialize repo with initial commit
+
+  let commits = {};
+  let branches = {};
+  let workspaceContent = "";
+  let stagingContent = null;
+  let currentBranch = "main";
+  let HEAD = null;
+
+  // Initialize repository
+  function initRepo() {
+    const initialCommitId = generateCommitId();
+    const initialCommit = {
+      id: initialCommitId,
+      message: "Initial commit",
+      content: "",
+      parents: [],
+      timestamp: Date.now()
+    };
+    commits[initialCommitId] = initialCommit;
+    branches["main"] = {
+      name: "main",
+      commitId: initialCommitId
+    };
+    currentBranch = "main";
+    HEAD = initialCommitId;
+    workspaceContent = "";
+    stagingContent = null;
+  }
+
+  initRepo();
+
+  // --- DOM Elements ---
+  const workspaceInput = document.getElementById("workspaceInput");
+  const stagingArea = document.getElementById("stagingArea");
+  const stageAllBtn = document.getElementById("stageAllBtn");
+  const discardChangesBtn = document.getElementById("discardChangesBtn");
+  const autoStageCheckbox = document.getElementById("autoStageCheckbox");
+
+  const unstagedWarning = null;
+
+  const commitMessageInput = document.getElementById("commitMessage");
+  const commitBtn = document.getElementById("commitBtn");
+
+  const branchListDiv = document.getElementById("branchList");
+  const newBranchNameInput = document.getElementById("newBranchName");
+  const createBranchBtn = document.getElementById("createBranchBtn");
+  const checkoutBranchBtn = document.getElementById("checkoutBranchBtn");
+  const mergeBranchBtn = document.getElementById("mergeBranchBtn");
+  const deleteBranchBtn = document.getElementById("deleteBranchBtn");
+  const branchErrorDiv = document.getElementById("branchError");
+
+  const logOutputDiv = document.getElementById("logOutput");
+  const logFilterInput = document.getElementById("logFilter");
+  const refreshLogBtn = document.getElementById("refreshLogBtn");
+
+  const graphOutputDiv = document.getElementById("graphOutput");
+
+  // --- Helpers for repo state ---
+
+  // Returns commit by id or null
+  function getCommit(id) {
+    return commits[id] || null;
+  }
+
+  // Returns the commit ID the given branch points to or null
+  function getBranchCommitId(branchName) {
+    return branches[branchName] ? branches[branchName].commitId : null;
+  }
+
+  // Returns the commit object for HEAD
+  function getHeadCommit() {
+    return getCommit(HEAD);
+  }
+
+  // Returns true if workspaceContent differs from HEAD content
+  function workspaceDiffersFromHEAD() {
+    const headCommit = getHeadCommit();
+    return workspaceContent !== (headCommit ? headCommit.content : "");
+  }
+
+  // Returns true if staging area has any changes compared to HEAD
+  function stagingHasChanges() {
+    if (stagingContent === null) return false;
+    const headCommit = getHeadCommit();
+    return stagingContent !== (headCommit ? headCommit.content : "");
+  }
+
+  // Returns true if staging is empty
+  function stagingIsEmpty() {
+    return stagingContent === null;
+  }
+
+  // --- Update DOM to reflect current state ---
+
+  function updateWorkspaceDisplay() {
+    // Set workspace input if different
+    if (workspaceInput.value !== workspaceContent) {
+      workspaceInput.value = workspaceContent;
+    }
+  }
+
+  function updateStagingDisplay() {
+    stagingArea.value = stagingContent === null ? "" : stagingContent;
+  }
+
+  // Display branches with current highlighted
+  // Allows selecting one branch at a time (for checkout, merge etc)
+  // Use <select> with size for minimal UI or clickable divs
+
+  // We'll create a list of radio buttons + label for branches
+  function updateBranchesDisplay() {
+    branchListDiv.innerHTML = "";
+    const sortedBranchNames = Object.keys(branches).sort((a,b)=>a.localeCompare(b));
+    sortedBranchNames.forEach(branchName => {
+      const br = branches[branchName];
+      const branchElemId = "branchRadio_" + branchName;
+      const isChecked = (branchName === currentBranch);
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "branchSelection";
+      radio.id = branchElemId;
+      radio.value = branchName;
+      if (isChecked) radio.checked = true;
+
+      const label = document.createElement("label");
+      label.htmlFor = branchElemId;
+      label.appendChild(document.createTextNode(branchName));
+      if (branchName === currentBranch) {
+        label.appendChild(document.createTextNode(" (current)"));
+      }
+
+      const container = document.createElement("div");
+      container.appendChild(radio);
+      container.appendChild(label);
+
+      branchListDiv.appendChild(container);
+    });
+  }
+
+  // Refresh the log output
+  // We show commit id, message, timestamp, parents, branch refs
+  // Apply filter to messages/ids
+  // Order: newest (HEAD) to oldest
+
+  // We traverse commits from HEAD backwards
+  function getAllCommitsForLog() {
+    // Return array of commits reachable from current HEAD
+    // with no duplicates
+    const seen = new Set();
+    const result = [];
+
+    function traverse(id) {
+      if (!id || seen.has(id)) return;
+      const c = getCommit(id);
+      if (!c) return;
+      seen.add(id);
+      result.push(c);
+      c.parents.forEach(p => traverse(p));
+    }
+
+    traverse(HEAD);
+    // We have newest first in result order, sort them newest first by timestamp to ensure order
+    result.sort((a,b) => b.timestamp - a.timestamp);
+    return result;
+  }
+
+  function updateLogDisplay() {
+    const filter = logFilterInput.value.trim().toLowerCase();
+    const commitsToShow = getAllCommitsForLog().filter(c => {
+      if (!filter) return true;
+      return c.id.toLowerCase().includes(filter)
+          || (c.message.toLowerCase().includes(filter));
+    });
+    let logText = "";
+    commitsToShow.forEach(c => {
+      const parentsText = c.parents.length ? c.parents.join(", ") : "[none]";
+      // Check if branch points here
+      const branchRefs = [];
+      for (const bName in branches) {
+        if (branches[bName].commitId === c.id) {
+          branchRefs.push(bName);
+        }
+      }
+      const branchStr = branchRefs.length ? "branches: " + branchRefs.join(", ") : "";
+      logText += `Commit: ${c.id}\nMessage: ${c.message}\nParents: ${parentsText}\nTime: ${formatDate(c.timestamp)}\n${branchStr}\n\n`;
+    });
+    if (logText === "") logText = "[No commits match filter]";
+    logOutputDiv.textContent = logText;
+  }
+
+  // Graph output: simplified ASCII graph showing commits and branches.
+  // We'll show commits in order of creation and indicate parents and branch heads.
+  // Represent commits as nodes with commit id,
+  // branches as labels next to their commits,
+  // parents with links (arrows)
+  //
+  // This will be a textual adjacency list essentially:
+  // CommitID (branches: ...) -> parents: ...
+  // Also show a chain starting from HEAD backwards, with pipes.
+
+  function updateGraphDisplay() {
+    // We'll list all commits reachable from HEAD (like log), ordered youngest to oldest
+    const commitsOrder = getAllCommitsForLog().slice().reverse(); // oldest to newest
+
+    // Map commits to sequential indices to draw vertical graph
+    const lines = [];
+    // For each commit, show info with parents & branch refs
+
+    commitsOrder.forEach((commit, idx) => {
+      const branchesHere = [];
+      for (const bName in branches) {
+        if (branches[bName].commitId === commit.id) branchesHere.push(bName);
+      }
+      let line = `${commit.id}`;
+      if (branchesHere.length) {
+        line += " (branches: " + branchesHere.join(", ") + ")";
+      }
+      line += " parents: ";
+      if (commit.parents.length === 0) {
+        line += "[none]";
+      } else {
+        line += commit.parents.join(", ");
+      }
+      line += " - \"" + commit.message + "\"";
+      lines.push(line);
+    });
+
+    // Additional: Draw linear chain from HEAD (desc) to root (asc) using characters:
+    // HEAD commit at the bottom with arrows pointing to parents above.
+
+    // Using vertical pipe '|', commit blocks with '|- commitID' style
+
+    // Build linear path from HEAD backwards (pick first parent only)
+    let linearPath = [];
+    let current = HEAD;
+    while(current) {
+      linearPath.push(current);
+      const commit = getCommit(current);
+      if (!commit) break;
+      if (commit.parents.length > 0) {
+        current = commit.parents[0];
+      } else {
+        break;
+      }
+    }
+
+    linearPath.reverse();
+
+    // Build string with commit and pipe connections and branch markers
+    let graphText = "";
+    linearPath.forEach((cid, i) => {
+      const c = getCommit(cid);
+      if (!c) return;
+      const branchesHere = [];
+      for (const bName in branches) {
+        if (branches[bName].commitId === cid) branchesHere.push(bName);
+      }
+      let line = "";
+      if (i > 0) {
+        line += "   |   \n";
+      }
+      line += `--o-- ${cid}`;
+      if (branchesHere.length) line += " (" + branchesHere.join(", ") + ")";
+      line += `\n      "${c.message}"`;
+      graphText += line + "\n";
+    });
+
+    graphText += "\nAll commits reachable from HEAD:\n";
+    lines.forEach(ln => {
+      graphText += "* " + ln + "\n";
+    });
+
+    graphOutputDiv.textContent = graphText;
+  }
+
+  // --- User Actions ---
+
+  // Stage all changes = copy workspace content to staging area
+  stageAllBtn.addEventListener("click", () => {
+    if (workspaceContent === getHeadCommit().content) {
+      alert("No changes to stage.");
+      return;
+    }
+    stagingContent = workspaceContent;
+    updateStagingDisplay();
+  });
+
+  // Discard all unstaged changes: revert workspace to HEAD commit content, but leave staging intact
+  discardChangesBtn.addEventListener("click", () => {
+    if (!workspaceDiffersFromHEAD()) {
+      alert("No unstaged changes to discard.");
+      return;
+    }
+    if (!confirm("Discard all unstaged changes? This cannot be undone.")) {
+      return;
+    }
+    workspaceContent = getHeadCommit().content;
+    updateWorkspaceDisplay();
+  });
+
+  // Unstage all changes: clear staging area (but keep workspace untouched)
+  unstageAllBtn.addEventListener("click", () => {
+    if (stagingIsEmpty()) {
+      alert("No staged changes to unstage.");
+      return;
+    }
+    if (!confirm("Unstage all staged changes?")) {
+      return;
+    }
+    stagingContent = null;
+    updateStagingDisplay();
+  });
+
+  // Commit staged changes with message
+  commitBtn.addEventListener("click", () => {
+    if (stagingIsEmpty()) {
+      alert("No staged changes to commit.");
+      return;
+    }
+    const msg = commitMessageInput.value.trim();
+    if (!msg) {
+      alert("Please enter a commit message.");
+      return;
+    }
+    // Create new commit object
+    let parentCommitId = HEAD;
+    const newCommitId = generateCommitId();
+
+    // Timestamp now
+    const newCommit = {
+      id: newCommitId,
+      message: msg,
+      content: stagingContent,
+      parents: [parentCommitId].filter(Boolean),
+      timestamp: Date.now()
+    };
+    commits[newCommitId] = newCommit;
+
+    // Update current branch tip and HEAD
+    branches[currentBranch].commitId = newCommitId;
+    HEAD = newCommitId;
+    stagingContent = null;
+
+    // Update workspace to new content (commit content)
+    workspaceContent = newCommit.content;
+    updateWorkspaceDisplay();
+    updateStagingDisplay();
+
+    // Clear commit message field
+    commitMessageInput.value = "";
+
+    refreshAllDisplays();
+  });
+
+  // Workspace edit event: update workspaceContent state
+  // If auto stage enabled, update staging content as well
+  workspaceInput.addEventListener("input", () => {
+    workspaceContent = workspaceInput.value;
+    if (autoStageCheckbox.checked) {
+      stagingContent = workspaceContent;
+      updateStagingDisplay();
+    }
+  });
+
+  // Branch operations
+
+  // Create branch from current HEAD
+  createBranchBtn.addEventListener("click", () => {
+    const newName = newBranchNameInput.value.trim();
+    if (!newName) {
+      branchErrorDiv.textContent = "Branch name cannot be empty.";
+      return;
+    }
+    if (branches[newName]) {
+      branchErrorDiv.textContent = "Branch name already exists.";
+      return;
+    }
+    // Validate branch name: no spaces, etc
+    if (!/^[-a-zA-Z0-9_]+$/.test(newName)) {
+      branchErrorDiv.textContent = "Invalid branch name. Use letters, numbers, '-', '_'.";
+      return;
+    }
+    branches[newName] = {
+      name: newName,
+      commitId: HEAD
+    };
+    newBranchNameInput.value = "";
+    branchErrorDiv.textContent = "";
+    updateBranchesDisplay();
+  });
+
+  // Get selected branch from branch list
+  function getSelectedBranch() {
+    const radios = branchListDiv.querySelectorAll("input[name=branchSelection]");
+    for (const r of radios) {
+      if (r.checked) return r.value;
+    }
+    return null;
+  }
+
+  // Checkout branch: update currentBranch, HEAD, workspace content and staging cleared
+  checkoutBranchBtn.addEventListener("click", () => {
+    const selected = getSelectedBranch();
+    if (!selected) {
+      branchErrorDiv.textContent = "No branch selected.";
+      return;
+    }
+    if (selected === currentBranch) {
+      branchErrorDiv.textContent = "Already on branch '" + selected + "'.";
+      return;
+    }
+    // Warn if unstaged or staged changes present and not committed, to avoid losing work
+    if (stagingHasChanges() || workspaceDiffersFromHEAD()) {
+      if (!confirm("Checkout will discard unstaged/staged changes. Continue?")) {
+        return;
+      }
+    }
+    currentBranch = selected;
+    HEAD = branches[currentBranch].commitId;
+    const headCommit = getHeadCommit();
+    workspaceContent = headCommit ? headCommit.content : "";
+    stagingContent = null;
+    branchErrorDiv.textContent = "";
+    updateWorkspaceDisplay();
+    updateStagingDisplay();
+    updateBranchesDisplay();
+    refreshAllDisplays();
+  });
+
+  // Merge selected branch into current branch
+  // For simplicity, use a very naive merge:
+  // If contents equal ==> no merge needed
+  // If one branch is ancestor of the other ==> fast forward
+  // Otherwise create a new merge commit with 2 parents and merge contents by line lines:
+
+  mergeBranchBtn.addEventListener("click", () => {
+    const selected = getSelectedBranch();
+    if (!selected) {
+      branchErrorDiv.textContent = "No branch selected.";
+      return;
+    }
+    if (selected === currentBranch) {
+      branchErrorDiv.textContent = "Cannot merge branch into itself.";
+      return;
+    }
+    // Check out current and selected branch commit ids
+    const currentCommitId = branches[currentBranch].commitId;
+    const mergeCommitId = branches[selected].commitId;
+    if (!currentCommitId || !mergeCommitId) {
+      branchErrorDiv.textContent = "Invalid commit pointers for merge.";
+      return;
+    }
+
+    // Find if mergeCommitId is ancestor of currentCommitId (fast-forward no)
+    if (isAncestor(mergeCommitId, currentCommitId)) {
+      branchErrorDiv.textContent = "Merge branch is ancestor of current. Nothing to merge.";
+      return;
+    }
+    // Find if currentCommitId is ancestor of mergeCommitId => fast forward possible
+    if (isAncestor(currentCommitId, mergeCommitId)) {
+      if (!confirm("Fast-forward merge possible. Proceed?")) return;
+      // Fast forward: move current branch pointer
+      branches[currentBranch].commitId = mergeCommitId;
+      HEAD = mergeCommitId;
+      const headC = getHeadCommit();
+      workspaceContent = headC ? headC.content : "";
+      stagingContent = null;
+      branchErrorDiv.textContent = "Fast-forward merged.";
+      updateWorkspaceDisplay();
+      updateStagingDisplay();
+      updateBranchesDisplay();
+      refreshAllDisplays();
+      return;
+    }
+
+    // Non fast-forward merge: create new merge commit with two parents
+    // Merge contents by line:
+    // Simple strategy: if contents equal -> nothing to merge; else
+    // For each line, if line differs merge as:
+    // - common lines: keep
+    // - conflicting lines: show <<<<<<< current\ncurrent line\n=======\nmerge line\n>>>>>>>
+
+    const currentContent = commits[currentCommitId].content;
+    const mergeContent = commits[mergeCommitId].content;
+
+    const mergedResult = mergeContentsByLines(currentContent, mergeContent);
+
+    // Open commit message prompt - user must enter merge commit message
+    let mergeMsg = prompt("Enter merge commit message (default: Merge branch '" + selected + "' into '" + currentBranch + "')");
+    if (mergeMsg === null) return; // canceled
+    mergeMsg = mergeMsg.trim() || `Merge branch '${selected}' into '${currentBranch}'`;
+
+    // Create merge commit with two parents
+    const newMergeCommitId = generateCommitId();
+    const newMergeCommit = {
+      id: newMergeCommitId,
+      message: mergeMsg,
+      content: mergedResult,
+      parents: [currentCommitId, mergeCommitId],
+      timestamp: Date.now()
+    };
+
+    commits[newMergeCommitId] = newMergeCommit;
+    branches[currentBranch].commitId = newMergeCommitId;
+    HEAD = newMergeCommitId;
+    workspaceContent = mergedResult;
+    stagingContent = null;
+    branchErrorDiv.textContent = "";
+    updateWorkspaceDisplay();
+    updateStagingDisplay();
+    updateBranchesDisplay();
+    refreshAllDisplays();
+  });
+
+  // Delete selected branch
+  deleteBranchBtn.addEventListener("click", () => {
+    const selected = getSelectedBranch();
+    if (!selected) {
+      branchErrorDiv.textContent = "No branch selected.";
+      return;
+    }
+    if (selected === currentBranch) {
+      branchErrorDiv.textContent = "Cannot delete the current branch.";
+      return;
+    }
+    // Confirm delete
+    if (!confirm("Delete branch '" + selected + "'? This is permanent.")) return;
+    delete branches[selected];
+    branchErrorDiv.textContent = "";
+    updateBranchesDisplay();
+  });
+
+  // --- Utilities ---
+
+  // Check ancestor relationship (is aId an ancestor of bId?)
+  // Traverse parents of bId looking for aId
+  function isAncestor(aId, bId) {
+    if (!aId || !bId) return false;
+    if (aId === bId) return true;
+    let visited = new Set();
+    let stack = [bId];
+    while (stack.length) {
+      let cur = stack.pop();
+      if (cur === aId) return true;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      const c = getCommit(cur);
+      if (!c) continue;
+      c.parents.forEach(p => stack.push(p));
+    }
+    return false;
+  }
+
+  // Merge two strings of multi-line text by lines with conflict markers if different
+  function mergeContentsByLines(base, incoming) {
+    const baseLines = base.split(/\r?\n/);
+    const incomingLines = incoming.split(/\r?\n/);
+
+    const maxLines = Math.max(baseLines.length, incomingLines.length);
+    let mergedLines = [];
+    for (let i=0; i < maxLines; i++) {
+      const bLine = baseLines[i] === undefined ? "" : baseLines[i];
+      const iLine = incomingLines[i] === undefined ? "" : incomingLines[i];
+      if (bLine === iLine) {
+        mergedLines.push(bLine);
+      } else {
+        // conflict
+        mergedLines.push("<<<<<<< current branch");
+        mergedLines.push(bLine);
+        mergedLines.push("=======");
+        mergedLines.push(iLine);
+        mergedLines.push(">>>>>>> merged branch");
+      }
+    }
+    return mergedLines.join("\n");
+  }
+
+  // Refresh all relevant displays
+  function refreshAllDisplays() {
+    updateBranchesDisplay();
+    updateLogDisplay();
+    updateGraphDisplay();
+  }
+
+  // --- Initialize Interface State ---
+
+  updateWorkspaceDisplay();
+  updateStagingDisplay();
+  updateBranchesDisplay();
+  updateLogDisplay();
+  updateGraphDisplay();
+
+  // Refresh log btn handler
+  refreshLogBtn.addEventListener("click", () => {
+    updateLogDisplay();
+  });
+
+  // Fast refresh log on filter change
+  logFilterInput.addEventListener("input", () => {
+    updateLogDisplay();
+  });
+
+})();
+</script>
+</body>
+</html>

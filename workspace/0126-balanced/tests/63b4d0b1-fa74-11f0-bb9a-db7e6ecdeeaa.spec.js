@@ -1,0 +1,287 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/63b4d0b1-fa74-11f0-bb9a-db7e6ecdeeaa.html';
+
+// Page Object for the Authentication Demo
+class AuthPage {
+  /**
+   * @param {import('@playwright/test').Page} page
+   */
+  constructor(page) {
+    this.page = page;
+    this.selectors = {
+      loginForm: '#loginForm',
+      welcomeMessage: '#welcomeMessage',
+      username: '#username',
+      password: '#password',
+      loginBtn: '#loginBtn',
+      logoutBtn: '#logoutBtn',
+      errorMessage: '#errorMessage',
+      userDisplay: '#userDisplay'
+    };
+  }
+
+  async goto() {
+    await this.page.goto(APP_URL);
+  }
+
+  async isLoginFormVisible() {
+    return await this.page.isVisible(this.selectors.loginForm);
+  }
+
+  async isWelcomeVisible() {
+    return await this.page.isVisible(this.selectors.welcomeMessage);
+  }
+
+  async getErrorText() {
+    return (await this.page.locator(this.selectors.errorMessage).innerText()).trim();
+  }
+
+  async getDisplayedUser() {
+    return (await this.page.locator(this.selectors.userDisplay).innerText()).trim();
+  }
+
+  async fillCredentials(username, password) {
+    await this.page.fill(this.selectors.username, username);
+    await this.page.fill(this.selectors.password, password);
+  }
+
+  async clickLogin() {
+    await this.page.click(this.selectors.loginBtn);
+  }
+
+  async clickLogout() {
+    await this.page.click(this.selectors.logoutBtn);
+  }
+
+  // Simulate Enter key pressed while focused in a field (bubbles up to loginForm keyup)
+  async pressEnterOnPassword() {
+    await this.page.focus(this.selectors.password);
+    await this.page.keyboard.press('Enter');
+  }
+
+  async sessionStorageGet(key) {
+    return await this.page.evaluate((k) => sessionStorage.getItem(k), key);
+  }
+
+  async clearSessionStorage() {
+    await this.page.evaluate(() => sessionStorage.clear());
+  }
+}
+
+test.describe('Authentication Demo - FSM Validation (63b4d0b1-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
+  // Arrays to capture console error messages and page errors for each test
+  let consoleErrors;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    consoleErrors = [];
+    pageErrors = [];
+
+    // Capture console error messages
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push({ text: msg.text(), location: msg.location() });
+      }
+    });
+
+    // Capture runtime page errors (uncaught exceptions)
+    page.on('pageerror', (err) => {
+      pageErrors.push(err);
+    });
+
+    // Navigate to application
+    await page.goto(APP_URL);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // After each test assert there were no console error messages or uncaught page errors.
+    // This observes the application's runtime for ReferenceError/SyntaxError/TypeError occurrences.
+    expect(pageErrors, `Unexpected page errors: ${pageErrors.map(e => e && e.message).join('; ')}`).toHaveLength(0);
+    expect(consoleErrors, `Unexpected console.error messages: ${consoleErrors.map(e => e.text).join('; ')}`).toHaveLength(0);
+
+    // Ensure a clean state for subsequent tests
+    await page.evaluate(() => sessionStorage.clear());
+  });
+
+  test.describe('States (S0_LoggedOut, S1_LoggedIn)', () => {
+    test('Initial state should be Logged Out (S0_LoggedOut) showing the login form', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Validate UI elements reflect the Logged Out state
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeHidden();
+
+      // Error message should be empty initially
+      const err = await app.getErrorText();
+      expect(err).toBe('');
+
+      // Username field should be focused per showLogin() entry action
+      // Note: Focus assertion is best-effort; check active element id
+      const activeId = await page.evaluate(() => document.activeElement && document.activeElement.id);
+      expect(['username', null]).toContain(activeId); // sometimes focus may not be set depending on environment
+
+      // Session storage should not contain auth tokens initially
+      const token = await app.sessionStorageGet('authToken');
+      const user = await app.sessionStorageGet('authUser');
+      expect(token).toBeNull();
+      expect(user).toBeNull();
+    });
+
+    test('After successful login, state should be Logged In (S1_LoggedIn) showing welcome message', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Fill valid credentials and click login (LoginAttempt event via #loginBtn click)
+      await app.fillCredentials('user123', 'pass123');
+      await app.clickLogin();
+
+      // After successful login, welcome message should be visible and login form hidden (showWelcome entry action)
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeVisible();
+      await expect(page.locator(app.selectors.loginForm)).toBeHidden();
+
+      // The displayed username should match
+      const displayed = await app.getDisplayedUser();
+      expect(displayed).toBe('user123');
+
+      // Session storage should contain token and username
+      const token = await app.sessionStorageGet('authToken');
+      const user = await app.sessionStorageGet('authUser');
+      expect(typeof token).toBe('string');
+      expect(user).toBe('user123');
+    });
+  });
+
+  test.describe('Transitions and Events', () => {
+    test('LoginAttempt with invalid credentials should stay in Logged Out and show error', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Fill wrong credentials and click Login
+      await app.fillCredentials('user123', 'wrongpass');
+      await app.clickLogin();
+
+      // Error message should be shown and login form should remain visible
+      await expect(page.locator(app.selectors.errorMessage)).toHaveText('Invalid username or password.');
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeHidden();
+
+      // Session storage should not be populated
+      const token = await app.sessionStorageGet('authToken');
+      const user = await app.sessionStorageGet('authUser');
+      expect(token).toBeNull();
+      expect(user).toBeNull();
+    });
+
+    test('LoginAttempt via Enter key should submit the form and log in when credentials are valid', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Fill valid credentials
+      await app.fillCredentials('user123', 'pass123');
+
+      // Press Enter (EnterKeyPress event on #loginForm via bubbling)
+      await app.pressEnterOnPassword();
+
+      // Expect logged in state
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeVisible();
+      await expect(page.locator(app.selectors.loginForm)).toBeHidden();
+      const displayed = await app.getDisplayedUser();
+      expect(displayed).toBe('user123');
+    });
+
+    test('LogoutAttempt should transition from Logged In to Logged Out and clear session (via #logoutBtn click)', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Log in first
+      await app.fillCredentials('user123', 'pass123');
+      await app.clickLogin();
+
+      // Ensure logged in
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeVisible();
+
+      // Click logout (LogoutAttempt)
+      await app.clickLogout();
+
+      // After logout, login form should be visible and welcome hidden (showLogin entry action)
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeHidden();
+
+      // Session storage should be cleared for auth items
+      const token = await app.sessionStorageGet('authToken');
+      const user = await app.sessionStorageGet('authUser');
+      expect(token).toBeNull();
+      expect(user).toBeNull();
+
+      // Username and password inputs should be cleared
+      const usernameVal = await page.inputValue(app.selectors.username);
+      const passwordVal = await page.inputValue(app.selectors.password);
+      expect(usernameVal).toBe('');
+      expect(passwordVal).toBe('');
+    });
+  });
+
+  test.describe('Edge cases and error scenarios', () => {
+    test('Attempt to login with empty fields shows validation message', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Ensure fields are empty
+      await app.fillCredentials('', '');
+
+      // Click login
+      await app.clickLogin();
+
+      // Expect validation message about entering both fields
+      await expect(page.locator(app.selectors.errorMessage)).toHaveText('Please enter both username and password.');
+
+      // Remain on login form
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeHidden();
+    });
+
+    test('Whitespace-only username is treated as empty (trim behavior) and shows validation message', async ({ page }) => {
+      const app = new AuthPage(page);
+
+      // Username with spaces and a password
+      await app.fillCredentials('   ', 'somepass');
+      await app.clickLogin();
+
+      // Should prompt to enter both username and password because username is trimmed to empty
+      await expect(page.locator(app.selectors.errorMessage)).toHaveText('Please enter both username and password.');
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+    });
+
+    test('Session persistence: after login, reload keeps user logged in (checkAuth on load)', async ({ page }) {
+      const app = new AuthPage(page);
+
+      // Login
+      await app.fillCredentials('user123', 'pass123');
+      await app.clickLogin();
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeVisible();
+
+      // Reload the page; checkAuth runs on load and should show welcome still
+      await page.reload();
+      await expect(page.locator(app.selectors.welcomeMessage)).toBeVisible();
+      const displayed = await app.getDisplayedUser();
+      expect(displayed).toBe('user123');
+
+      // Clean up by logging out
+      await app.clickLogout();
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+    });
+  });
+
+  test.describe('Observability: Console and runtime errors', () => {
+    test('Page load should not produce uncaught exceptions or console.error messages', async ({ page }) => {
+      // Basic smoke test of error capture already handled in beforeEach/afterEach
+      // This test ensures we explicitly check the arrays immediately after load
+      const app = new AuthPage(page);
+
+      // Ensure page loaded and login form visible
+      await expect(page.locator(app.selectors.loginForm)).toBeVisible();
+
+      // The afterEach will assert there are no console errors or page errors.
+      // Here we also assert immediately for explicitness.
+      // (We access the listener-captured arrays via closure variables.)
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+});

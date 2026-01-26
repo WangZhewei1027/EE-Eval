@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CPU Scheduling Simulator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { display: flex; gap: 20px; }
+        .control-panel { width: 300px; }
+        .visualization { flex-grow: 1; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #000; padding: 5px; text-align: left; }
+        .gantt-chart { display: flex; margin-top: 20px; height: 60px; }
+        .gantt-block { border: 1px solid #000; text-align: center; padding: 5px 0; }
+        .process-form { margin-bottom: 20px; }
+        .process-form input { width: 50px; margin-right: 10px; }
+        .stats { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>CPU Scheduling Simulator</h1>
+    
+    <div class="container">
+        <div class="control-panel">
+            <div>
+                <h2>Controls</h2>
+                <div>
+                    <label>Algorithm:</label>
+                    <select id="algorithm">
+                        <option value="fcfs">First-Come First-Served (FCFS)</option>
+                        <option value="sjf">Shortest Job First (Non-preemptive)</option>
+                        <option value="srtf">Shortest Remaining Time First (Preemptive)</option>
+                        <option value="rr">Round Robin</option>
+                        <option value="priority">Priority (Non-preemptive)</option>
+                        <option value="priority_p">Priority (Preemptive)</option>
+                    </select>
+                </div>
+                <div id="quantum-control" style="display: none;">
+                    <label>Time Quantum:</label>
+                    <input type="number" id="quantum" min="1" value="2">
+                </div>
+                <button id="run">Run Simulation</button>
+                <button id="reset">Reset</button>
+            </div>
+
+            <div class="process-form">
+                <h2>Add Process</h2>
+                <div>
+                    <label>ID:</label>
+                    <input type="text" id="pid" placeholder="P1">
+                </div>
+                <div>
+                    <label>Arrival Time:</label>
+                    <input type="number" id="arrival" min="0" value="0">
+                </div>
+                <div>
+                    <label>Burst Time:</label>
+                    <input type="number" id="burst" min="1" value="3">
+                </div>
+                <div>
+                    <label>Priority:</label>
+                    <input type="number" id="priority" min="1" value="1">
+                </div>
+                <button id="add-process">Add Process</button>
+            </div>
+
+            <div>
+                <h2>Process Table</h2>
+                <table id="process-table">
+                    <thead>
+                        <tr>
+                            <th>Process</th>
+                            <th>Arrival</th>
+                            <th>Burst</th>
+                            <th>Priority</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="visualization">
+            <h2>Simulation</h2>
+            <div id="output"></div>
+            <div id="gantt-chart" class="gantt-chart"></div>
+            
+            <div class="stats">
+                <h2>Statistics</h2>
+                <div id="stats-output"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let processes = [];
+        let simulationResults = null;
+        
+        // DOM elements
+        const algorithmSelect = document.getElementById('algorithm');
+        const quantumControl = document.getElementById('quantum-control');
+        const quantumInput = document.getElementById('quantum');
+        const runButton = document.getElementById('run');
+        const resetButton = document.getElementById('reset');
+        const addProcessButton = document.getElementById('add-process');
+        const processTable = document.getElementById('process-table').querySelector('tbody');
+        const outputDiv = document.getElementById('output');
+        const ganttChart = document.getElementById('gantt-chart');
+        const statsOutput = document.getElementById('stats-output');
+        
+        // Event listeners
+        algorithmSelect.addEventListener('change', () => {
+            quantumControl.style.display = algorithmSelect.value === 'rr' ? 'block' : 'none';
+        });
+        
+        addProcessButton.addEventListener('click', addProcess);
+        runButton.addEventListener('click', runSimulation);
+        resetButton.addEventListener('click', resetSimulation);
+        
+        function addProcess() {
+            const pid = document.getElementById('pid').value || `P${processes.length + 1}`;
+            const arrival = parseInt(document.getElementById('arrival').value);
+            const burst = parseInt(document.getElementById('burst').value);
+            const priority = parseInt(document.getElementById('priority').value);
+            
+            if (isNaN(arrival) || isNaN(burst) || isNaN(priority)) {
+                alert('Please enter valid numbers');
+                return;
+            }
+            
+            const process = { pid, arrival, burst, remaining: burst, priority };
+            processes.push(process);
+            updateProcessTable();
+            
+            // Reset form
+            document.getElementById('pid').value = '';
+            document.getElementById('arrival').value = arrival + 1;
+            document.getElementById('burst').value = 3;
+        }
+        
+        function updateProcessTable() {
+            processTable.innerHTML = '';
+            processes.forEach((process, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${process.pid}</td>
+                    <td>${process.arrival}</td>
+                    <td>${process.burst}</td>
+                    <td>${process.priority}</td>
+                    <td><button onclick="removeProcess(${index})">Remove</button></td>
+                `;
+                processTable.appendChild(row);
+            });
+        }
+        
+        function removeProcess(index) {
+            processes.splice(index, 1);
+            updateProcessTable();
+        }
+        
+        function runSimulation() {
+            if (processes.length === 0) {
+                alert('Please add at least one process');
+                return;
+            }
+            
+            const algorithm = algorithmSelect.value;
+            const quantum = algorithm === 'rr' ? parseInt(quantumInput.value) : null;
+            
+            // Reset remaining time for all processes
+            processes.forEach(p => p.remaining = p.burst);
+            
+            switch (algorithm) {
+                case 'fcfs':
+                    simulationResults = fcfs();
+                    break;
+                case 'sjf':
+                    simulationResults = sjf();
+                    break;
+                case 'srtf':
+                    simulationResults = srtf();
+                    break;
+                case 'rr':
+                    simulationResults = roundRobin(quantum);
+                    break;
+                case 'priority':
+                    simulationResults = priorityNonPreemptive();
+                    break;
+                case 'priority_p':
+                    simulationResults = priorityPreemptive();
+                    break;
+            }
+            
+            displayResults();
+        }
+        
+        function fcfs() {
+            const results = {
+                timeline: [],
+                processes: {},
+                stats: {}
+            };
+            
+            // Initialize process data
+            processes.forEach(p => {
+                results.processes[p.pid] = {
+                    arrival: p.arrival,
+                    burst: p.burst,
+                    start: null,
+                    finish: null,
+                    waiting: 0,
+                    turnaround: 0
+                };
+            });
+            
+            // Sort by arrival time
+            const sortedProcesses = [...processes].sort((a, b) => a.arrival - b.arrival);
+            
+            let currentTime = 0;
+            
+            for (const process of sortedProcesses) {
+                if (currentTime < process.arrival) {
+                    results.timeline.push({ time: currentTime, process: 'Idle', duration: process.arrival - currentTime });
+                    currentTime = process.arrival;
+                }
+                
+                const startTime = currentTime;
+                const finishTime = startTime + process.burst;
+                
+                results.timeline.push({ time: startTime, process: process.pid, duration: process.burst });
+                
+                results.processes[process.pid].start = startTime;
+                results.processes[process.pid].finish = finishTime;
+                results.processes[process.pid].waiting = startTime - process.arrival;
+                results.processes[process.pid].turnaround = finishTime - process.arrival;
+                
+                currentTime = finishTime;
+            }
+            
+            calculateStats(results);
+            return results;
+        }
+        
+        function sjf() {
+            const results = {
+                timeline: [],
+                processes: {},
+                stats: {}
+            };
+            
+            // Initialize process data
+            processes.forEach(p => {
+                results.processes[p.pid] = {
+                    arrival: p.arrival,
+                    burst: p.burst,
+                    start: null,
+                    finish: null,
+                    waiting: 0,
+                    turnaround: 0
+                };
+            });
+            
+            let currentTime = 0;
+            const readyQueue = [];
+            const allProcesses = [...processes].map(p => ({ ...p }));
+            
+            while (allProcesses.length > 0 || readyQueue.length > 0) {
+                // Add arrived processes to ready queue
+                for (let i = 0; i < allProcesses.length; i++) {
+                    if (allProcesses[i].arrival <= currentTime) {
+                        readyQueue.push(allProcesses.splice(i, 1)[0]);
+                        i--;
+                    }
+                }
+                
+                if (readyQueue.length === 0) {
+                    // No processes ready, advance time
+                    const nextArrival = Math.min(...allProcesses.map(p => p.arrival));
+                    const idleTime = nextArrival - currentTime;
+                    results.timeline.push({ time: currentTime, process: 'Idle', duration: idleTime });
+                    currentTime = nextArrival;
+                    continue;
+                }
+                
+                // Sort ready queue by burst time
+                readyQueue.sort((a, b) => a.burst - b.burst);
+                
+                const process = readyQueue.shift();
+                const startTime = currentTime;
+                const finishTime = startTime + process.burst;
+                
+                results.timeline.push({ time: startTime, process: process.pid, duration: process.burst });
+                
+                results.processes[process.pid].start = startTime;
+                results.processes[process.pid].finish = finishTime;
+                results.processes[process.pid].waiting = startTime - process.arrival;
+                results.processes[process.pid].turnaround = finishTime - process.arrival;
+                
+                currentTime = finishTime;
+            }
+            
+            calculateStats(results);
+            return results;
+        }
+        
+        function srtf() {
+            const results = {
+                timeline: [],
+                processes: {},
+                stats: {}
+            };
+            
+            // Initialize process data
+            processes.forEach(p => {
+                results.processes[p.pid] = {
+                    arrival: p.arrival,
+                    burst: p.burst,
+                    start: null,
+                    finish: null,
+                    waiting: 0,
+                    turnaround: 0,
+                    remaining: p.burst
+                };
+            });
+            
+            let currentTime = 0;
+            const allProcesses = [...processes].map(p => ({ ...p }));
+            const readyQueue = [];
+            let currentProcess = null;
+            let lastSwitchTime = 0;
+            
+            while (allProcesses.length > 0 || readyQueue.length > 0 || currentProcess) {
+                // Add arrived processes to ready queue
+                for (let i = 0; i < allProcesses.length; i++) {
+                    if (allProcesses[i].arrival <= currentTime) {
+                        const process = allProcesses.splice(i, 1)[0];
+                        readyQueue.push(process);
+                        i--;
+                    }
+                }
+                
+                // Sort ready queue by remaining time
+                readyQueue.sort((a, b) => a.remaining - b.remaining);
+                
+                // Get the process with shortest remaining time
+                const nextProcess = readyQueue.length > 0 ? readyQueue[0] : null;
+                
+                if (currentProcess) {
+                    // Check if we should preempt
+                    if (nextProcess && nextProcess.remaining < currentProcess.remaining) {
+                        // Preempt current process
+                        const duration = currentTime - lastSwitchTime;
+                        if (duration > 0) {
+                            results.timeline.push({ 
+                                time: lastSwitchTime, 
+                                process: currentProcess.pid, 
+                                duration: duration 
+                            });
+                            
+                            // Update remaining time
+                            currentProcess.remaining -= duration;
+                            results.processes[currentProcess.pid].remaining = currentProcess.remaining;
+                            
+                            // Put back to ready queue
+                            readyQueue.push(currentProcess);
+                        }
+                        
+                        currentProcess = nextProcess;
+                        readyQueue.shift();
+                        lastSwitchTime = currentTime;
+                    }
+                } else {
+                    if (nextProcess) {
+                        currentProcess = nextProcess;
+                        readyQueue.shift();
+                        lastSwitchTime = currentTime;
+                    }
+                }
+                
+                if (!currentProcess) {
+                    // No processes ready, advance time
+                    if (allProcesses.length > 0) {
+                        const nextArrival = Math.min(...allProcesses.map(p => p.arrival));
+                        const idleTime = nextArrival - currentTime;
+                        results.timeline.push({ time: currentTime, process: 'Idle', duration: idleTime });
+                        currentTime = nextArrival;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Determine next event time
+                let nextEventTime = currentTime + 1;
+                
+                // Check if a new process arrives before we finish current
+                if (allProcesses.length > 0) {
+                    nextEventTime = Math.min(nextEventTime, Math.min(...allProcesses.map(p => p.arrival)));
+                }
+                
+                // Check if current process will finish
+                const timeToFinish = currentProcess.remaining;
+                if (timeToFinish <= (nextEventTime - currentTime)) {
+                    nextEventTime = currentTime + timeToFinish;
+                }
+                
+                // Execute until next event
+                const duration = nextEventTime - currentTime;
+                
+                // Record start time if this is the first time process runs
+                if (results.processes[currentProcess.pid].start === null) {
+                    results.processes[currentProcess.pid].start = currentTime;
+                }
+                
+                // Update remaining time
+                currentProcess.remaining -= duration;
+                results.processes[currentProcess.pid].remaining = currentProcess.remaining;
+                
+                if (currentProcess.remaining <= 0) {
+                    // Process finished
+                    results.timeline.push({ 
+                        time: lastSwitchTime, 
+                        process: currentProcess.pid, 
+                        duration: duration 
+                    });
+                    
+                    results.processes[currentProcess.pid].finish = nextEventTime;
+                    results.processes[currentProcess.pid].turnaround = 
+                        nextEventTime - currentProcess.arrival;
+                    results.processes[currentProcess.pid].waiting = 
+                        results.processes[currentProcess.pid].turnaround - currentProcess.burst;
+                    
+                    currentProcess = null;
+                }
+                
+                currentTime = nextEventTime;
+            }
+            
+            calculateStats(results);
+            return results;
+        }
+        
+        function roundRobin(quantum) {
+            const results = {
+                timeline: [],
+                processes: {},
+                stats: {}
+            };
+            
+            // Initialize process data
+            processes.forEach(p => {
+                results.processes[p.pid] = {
+                    arrival: p.arrival,
+                    burst: p.burst,
+                    start: null,
+                    finish: null,
+                    waiting: 0,
+                    turnaround: 0,
+                    remaining: p.burst
+                };
+            });
+            
+            let currentTime = 0;
+            const allProcesses = [...processes].map(p => ({ ...p }));
+            const readyQueue = [];
+            let currentProcess = null;
+            let remainingQuantum = 0;
+            let lastSwitchTime = 0;
+            
+            while (allProcesses.length > 0 || readyQueue.length > 0 || currentProcess) {
+                // Add arrived processes to ready queue
+                for (let i = 0; i < allProcesses.length; i++) {
+                    if (allProcesses[i].arrival <= currentTime) {
+                        readyQueue.push(allProcesses.splice(i, 1)[0]);
+                        i--;
+                    }
+                }
+                
+                if (currentProcess) {
+                    if (remainingQuantum <= 0 || currentProcess.remaining <= 0) {
+                        // Time quantum expired or process finished
+                        const duration = currentTime - lastSwitchTime;
+                        
+                        if (duration > 0) {
+                            results.timeline.push({ 
+                                time: lastSwitchTime, 
+                                process: currentProcess.pid, 
+                                duration: duration 
+                            });
+                            
+                            // Update remaining time
+                            currentProcess.remaining -= duration;
+                            results.processes[currentProcess.pid].remaining = currentProcess.remaining;
+                            
+                            if (currentProcess.remaining > 0) {
+                                // Put back to ready queue
+                                readyQueue.push(currentProcess);
+                            } else {
+                                // Process finished
+                                results.processes[currentProcess.pid].finish = currentTime;
+                                results.processes[currentProcess.pid].turnaround = 
+                                    currentTime - currentProcess.arrival;
+                                results.processes[currentProcess.pid].waiting = 
+                                    results.processes[currentProcess.pid].turnaround - currentProcess.burst;
+                            }
+                        }
+                        
+                        currentProcess = null;
+                    }
+                }
+                
+                if (!currentProcess && readyQueue.length > 0) {
+                    currentProcess = readyQueue.shift();
+                    remainingQuantum = quantum;
+                    // Record start time if this is the first time process runs
+                    if (results.processes[currentProcess.pid].start === null) {
+                        results.processes[currentProcess.pid].start = currentTime;
+                    }
+                    lastSwitchTime = currentTime;
+                }
+                
+                if (!currentProcess) {
+                    // No processes ready, advance time
+                    if (allProcesses.length > 0) {
+                        const nextArrival = Math.min(...allProcesses.map(p => p.arrival));
+                        const idleTime = nextArrival - currentTime;
+                        results.timeline.push({ time: currentTime, process: 'Idle', duration: idleTime });
+                        currentTime = nextArrival;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Determine next event time
+                let nextEventTime = currentTime + 1;
+                
+                // Check if a new process arrives before quantum expires
+                if (allProcesses.length > 0) {
+                    nextEventTime = Math.min(nextEventTime, Math.min(...allProcesses.map(p => p.arrival)));
+                }
+                
+                // Check if quantum will expire
+                if (remainingQuantum <= (nextEventTime - currentTime)) {
+                    nextEventTime = currentTime + remainingQuantum;
+                }
+                
+                // Check if process will finish
+                if (currentProcess.remaining <= (nextEventTime - currentTime)) {
+                    nextEventTime = currentTime + currentProcess.remaining;
+                }
+                
+                // Execute until next event
+                const duration = nextEventTime - currentTime;
+                remainingQuantum -= duration;
+                currentTime = nextEventTime;
+            }
+            
+            calculateStats(results);
+            return results;
+        }
+        
+        function priorityNonPreemptive() {
+            const results = {
+                timeline: [],
+                processes: {},
+                stats: {}
+            };
+            
+            // Initialize process data
+            processes.forEach(p => {
+                results.processes[p.pid] = {
+                    arrival: p.arrival,
+                    burst: p.burst,
+                    start: null,
+                    finish: null,
+                    waiting: 0,
+                    turnaround: 0
+                };
+            });
+            
+            let currentTime = 0;
+            const readyQueue = [];
+            const allProcesses = [...processes].map(p => ({ ...p }));
+            
+            while (allProcesses.length > 0 || readyQueue.length > 0) {
+                // Add arrived processes to ready queue
+                for (let i = 0; i < allProcesses.length; i++) {
+                    if (allProcesses[i].arrival <= currentTime) {
+                        readyQueue.push(allProcesses.splice(i, 1)[0]);
+                        i--;
+                    }
+                }
+                
+                if (readyQueue.length === 0) {
+                    // No processes ready, advance time
+                    const nextArrival = Math.min(...allProcesses.map(p => p.arrival));
+                    const idleTime = nextArrival - currentTime;
+                    results.timeline.push({ time: currentTime, process: 'Idle', duration: idleTime });
+                    currentTime = nextArrival;
+                    continue;
+                }
+                
+                // Sort ready queue by priority (lower number = higher priority)
+                readyQueue.sort((a, b) => a.priority - b.priority);
+                
+                const process = readyQueue.shift();
+                const startTime = currentTime;
+                const finishTime = startTime + process.burst;
+                
+                results.timeline.push({ time: startTime, process: process.pid, duration: process.burst });
+                
+                results.processes[process.pid].start = startTime;
+                results.processes[process.pid].finish = finishTime;
+                results.processes[process.pid].waiting = startTime - process.arrival;
+                results.processes[process.pid].turnaround = finishTime - process.arrival;
+                
+                currentTime = finishTime;
+            }
+            
+            calculateStats(results);
+            return results;
+        }
+        
+        function priorityPreemptive() {
+            const results = {
+                timeline: [],
+                processes: {},
+                stats: {}
+            };
+            
+            // Initialize process data
+            processes.forEach(p => {
+                results.processes[p.pid] = {
+                    arrival: p.arrival,
+                    burst: p.burst,
+                    start: null,
+                    finish: null,
+                    waiting: 0,
+                    turnaround: 0,
+                    remaining: p.burst,
+                    priority: p.priority
+                };
+            });
+            
+            let currentTime = 0;
+            const allProcesses = [...processes].map(p => ({ ...p }));
+            const readyQueue = [];
+            let currentProcess = null;
+            let lastSwitchTime = 0;
+            
+            while (allProcesses.length > 0 || readyQueue.length > 0 || currentProcess) {
+                // Add arrived processes to ready queue
+                for (let i = 0; i < allProcesses.length; i++) {
+                    if (allProcesses[i].arrival <= currentTime) {
+                        const process = allProcesses.splice(i, 1)[0];
+                        readyQueue.push(process);
+                        i--;
+                    }
+                }
+                
+                // Sort ready queue by priority (lower number = higher priority)
+                readyQueue.sort((a, b) => a.priority - b.priority);
+                
+                // Get the highest priority process
+                const nextProcess = readyQueue.length > 0 ? readyQueue[0] : null;
+                
+                if (currentProcess) {
+                    // Check if we should preempt
+                    if (nextProcess && nextProcess.priority < currentProcess.priority) {
+                        // Preempt current process
+                        const duration = currentTime - lastSwitchTime;
+                        if (duration > 0) {
+                            results.timeline.push({ 
+                                time: lastSwitchTime, 
+                                process: currentProcess.pid, 
+                                duration: duration 
+                            });
+                            
+                            // Update remaining time
+                            currentProcess.remaining -= duration;
+                            results.processes[currentProcess.pid].remaining = currentProcess.remaining;
+                            
+                            // Put back to ready queue
+                            readyQueue.push(currentProcess);
+                        }
+                        
+                        currentProcess = nextProcess;
+                        readyQueue.shift();
+                        lastSwitchTime = currentTime;
+                    }
+                } else {
+                    if (nextProcess) {
+                        currentProcess = nextProcess;
+                        readyQueue.shift();
+                        lastSwitchTime = currentTime;
+                    }
+                }
+                
+                if (!currentProcess) {
+                    // No processes ready, advance time
+                    if (allProcesses.length > 0) {
+                        const nextArrival = Math.min(...allProcesses.map(p => p.arrival));
+                        const idleTime = nextArrival - currentTime;
+                        results.timeline.push({ time: currentTime, process: 'Idle', duration: idleTime });
+                        currentTime = nextArrival;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Determine next event time
+                let nextEventTime = currentTime + 1;
+                
+                // Check if a new process arrives before we finish current
+                if (allProcesses.length > 0) {
+                    nextEventTime = Math.min(nextEventTime, Math.min(...allProcesses.map(p => p.arrival)));
+                }
+                
+                // Check if current process will finish
+                const timeToFinish = currentProcess.remaining;
+                if (timeToFinish <= (nextEventTime - currentTime)) {
+                    nextEventTime = currentTime + timeToFinish;
+                }
+                
+                // Execute until next event
+                const duration = nextEventTime - currentTime;
+                
+                // Record start time if this is the first time process runs
+                if (results.processes[currentProcess.pid].start === null) {
+                    results.processes[currentProcess.pid].start = currentTime;
+                }
+                
+                // Update remaining time
+                currentProcess.remaining -= duration;
+                results.processes[currentProcess.pid].remaining = currentProcess.remaining;
+                
+                if (currentProcess.remaining <= 0) {
+                    // Process finished
+                    results.timeline.push({ 
+                        time: lastSwitchTime, 
+                        process: currentProcess.pid, 
+                        duration: duration 
+                    });
+                    
+                    results.processes[currentProcess.pid].finish = nextEventTime;
+                    results.processes[currentProcess.pid].turnaround = 
+                        nextEventTime - currentProcess.arrival;
+                    results.processes[currentProcess.pid].waiting = 
+                        results.processes[currentProcess.pid].turnaround - currentProcess.burst;
+                    
+                    currentProcess = null;
+                }
+                
+                currentTime = nextEventTime;
+            }
+            
+            calculateStats(results);
+            return results;
+        }
+        
+        function calculateStats(results) {
+            let totalWaiting = 0;
+            let totalTurnaround = 0;
+            let count = 0;
+            
+            for (const pid in results.processes) {
+                totalWaiting += results.processes[pid].waiting;
+                totalTurnaround += results.processes[pid].turnaround;
+                count++;
+            }
+            
+            results.stats.avgWaiting = totalWaiting / count;
+            results.stats.avgTurnaround = totalTurnaround / count;
+        }
+        
+        function displayResults() {
+            if (!simulationResults) return;
+            
+            // Display timeline
+            outputDiv.innerHTML = '<h3>Execution Timeline</h3>';
+            const timelineTable = document.createElement('table');
+            timelineTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Process</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            
+            const timelineBody = timelineTable.querySelector('tbody');
+            simulationResults.timeline.forEach(entry => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${entry.time}</td>
+                    <td>${entry.process}</td>
+                    <td>${entry.duration}</td>
+                `;
+                timelineBody.appendChild(row);
+            });
+            
+            outputDiv.appendChild(timelineTable);
+            
+            // Display Gantt chart
+            ganttChart.innerHTML = '<h3>Gantt Chart</h3>';
+            const ganttContainer = document.createElement('div');
+            ganttContainer.className = 'gantt-chart';
+            
+            simulationResults.timeline.forEach(entry => {
+                const block = document.createElement('div');
+                block.className = 'gantt-block';
+                block.style.width = `${entry.duration * 30}px`;
+                block.textContent = entry.process;
+                ganttContainer.appendChild(block);
+            });
+            
+            ganttChart.appendChild(ganttContainer);
+            
+            // Display process details
+            const processDetails = document.createElement('div');
+            processDetails.innerHTML = '<h3>Process Details</h3>';
+            const detailsTable = document.createElement('table');
+            detailsTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Process</th>
+                        <th>Arrival</th>
+                        <th>Burst</th>
+                        <th>Start</th>
+                        <th>Finish</th>
+                        <th>Waiting</th>
+                        <th>Turnaround</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            
+            const detailsBody = detailsTable.querySelector('tbody');
+            for (const pid in simulationResults.processes) {
+                const p = simulationResults.processes[pid];
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${pid}</td>
+                    <td>${p.arrival}</td>
+                    <td>${p.burst}</td>
+                    <td>${p.start}</td>
+                    <td>${p.finish}</td>
+                    <td>${p.waiting}</td>
+                    <td>${p.turnaround}</td>
+                `;
+                detailsBody.appendChild(row);
+            }
+            
+            processDetails.appendChild(detailsTable);
+            outputDiv.appendChild(processDetails);
+            
+            // Display statistics
+            statsOutput.innerHTML = `
+                <h3>Performance Metrics</h3>
+                <p>Average Waiting Time: ${simulationResults.stats.avgWaiting.toFixed(2)}</p>
+                <p>Average Turnaround Time: ${simulationResults.stats.avgTurnaround.toFixed(2)}</p>
+            `;
+        }
+        
+        function resetSimulation() {
+            processes = [];
+            simulationResults = null;
+            processTable.innerHTML = '';
+            outputDiv.innerHTML = '';
+            ganttChart.innerHTML = '';
+            statsOutput.innerHTML = '';
+            document.getElementById('pid').value = '';
+            document.getElementById('arrival').value = '0';
+            document.getElementById('burst').value = '3';
+            document.getElementById('priority').value = '1';
+        }
+    </script>
+</body>
+</html>

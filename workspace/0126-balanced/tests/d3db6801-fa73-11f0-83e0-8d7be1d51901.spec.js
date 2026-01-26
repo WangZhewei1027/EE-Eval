@@ -1,0 +1,139 @@
+import { test, expect } from '@playwright/test';
+
+const URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3db6801-fa73-11f0-83e0-8d7be1d51901.html';
+
+test.describe('Decision Trees — Interactive Demo (FSM validation)', () => {
+  let consoleMessages;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    // collect console messages and page errors for each test
+    consoleMessages = [];
+    pageErrors = [];
+
+    page.on('console', msg => {
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+
+    page.on('pageerror', err => {
+      pageErrors.push(err);
+    });
+
+    // Load the page exactly as-is and wait until the demo object is exposed
+    await page.goto(URL, { waitUntil: 'load' });
+
+    // The page exposes window._demo at the end of its initialization.
+    await page.waitForFunction(() => !!window._demo);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // keep page open cleanup handled by Playwright fixtures
+    // but surface any console/page errors in case of test failures
+    if (pageErrors.length > 0) {
+      // Log errors to test output for debugging (tests will assert on this as needed)
+      // eslint-disable-next-line no-console
+      console.error('Page errors captured:', pageErrors);
+    }
+  });
+
+  test('S0_Idle: initial UI is updated (entry action updateUI)', async ({ page }) => {
+    // This test validates the Idle state on initial load.
+    // It asserts that updateUI ran: predictionBox shows None, nodeCount shows 0,
+    // and initial dataset was generated (circles exist equal to nPerClass*2).
+    const nPerClass = await page.locator('#nPerClass').inputValue();
+    const nPer = parseInt(nPerClass, 10);
+
+    // prediction box should show "None"
+    const predText = await page.locator('#predictionBox').innerText();
+    expect(predText).toContain('None');
+
+    // node count should be zero before training
+    const nodeCountText = await page.locator('#nodeCount').innerText();
+    expect(nodeCountText).toMatch(/^Nodes:\s*0$/);
+
+    // Plot should contain initial points: nPerClass * 2
+    // Use page.evaluate to count circle elements that correspond to data points (they have dataset.i)
+    const initialPoints = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('#plot > circle'))
+        .filter(c => c.dataset && typeof c.dataset.i !== 'undefined').length;
+    });
+    expect(initialPoints).toBe(nPer * 2);
+
+    // Ensure there were no uncaught page errors during initial load
+    expect(pageErrors.length).toBe(0);
+
+    // Also ensure no console errors were emitted
+    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    expect(consoleErrors.length).toBe(0);
+  });
+
+  test('RegenerateData event transitions to S1_DataGenerated and regenerates points', async ({ page }) => {
+    // This test clicks the Regenerate button and validates that data is regenerated
+    // by checking the number of points matches the input and tree is cleared.
+    const regen = page.locator('#regen');
+    const nPerClassVal = await page.locator('#nPerClass').inputValue();
+    const nPer = parseInt(nPerClassVal, 10);
+
+    // Ensure a tree is not present before regen (nodeCount should be 0)
+    await expect(page.locator('#nodeCount')).toHaveText(/Nodes:\s*0/);
+
+    await regen.click();
+
+    // After regeneration, the tree should still be null (no tree built) and points count should be nPer*2
+    await page.waitForTimeout(150); // allow brief time for UI update
+
+    const circlesAfter = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('#plot > circle'))
+        .filter(c => c.dataset && typeof c.dataset.i !== 'undefined').length;
+    });
+    expect(circlesAfter).toBe(nPer * 2);
+
+    // tree text should indicate no tree yet
+    const treeText = await page.locator('#treeText').innerText();
+    expect(treeText).toMatch(/No tree yet/);
+
+    // No uncaught page errors
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('BuildTree event transitions to S2_TreeBuilt and renders tree', async ({ page }) => {
+    // This test clicks Build Tree and validates that a tree is constructed,
+    // node count increases and treeSvg contains node groups.
+    const trainBtn = page.locator('#train');
+
+    // click the Build Tree button
+    await trainBtn.click();
+
+    // wait for treeText to update indicating a tree exists
+    await expect(page.locator('#treeText')).not.toHaveText(/No tree yet/);
+
+    // nodeCount should be > 0
+    const nodeCountText = await page.locator('#nodeCount').innerText();
+    const match = nodeCountText.match(/Nodes:\s*(\d+)/);
+    expect(match).not.toBeNull();
+    const nodeCount = parseInt(match[1], 10);
+    expect(nodeCount).toBeGreaterThan(0);
+
+    // treeSvg should contain at least one group (<g> element) representing nodes
+    const gCount = await page.evaluate(() => {
+      return document.querySelectorAll('#treeSvg > g').length;
+    });
+    expect(gCount).toBeGreaterThan(0);
+
+    // No page errors during tree building
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('ToggleBoundaries toggles display of decision regions', async ({ page }) => {
+    // This test ensures that the Toggle Boundaries button shows/hides the colored regions.
+    // Build tree first to have boundaries rendered.
+    await page.locator('#train').click();
+    await page.waitForTimeout(100);
+
+    // helper to count region rects (excluding the background rect which has fill="transparent")
+    const countRegionRects = async () => {
+      return page.evaluate(() => {
+        const rects = Array.from(document.querySelectorAll('#plot > rect'));
+        // Exclude the background rect (fill "transparent") and exclude highlight rects added later that may have class highlight
+        return rects.filter(r => {
+          const fill =

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Floyd-Warshall Algorithm Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f0f0f0;
+  }
+  h1 {
+    text-align: center;
+  }
+  #graphInput {
+    margin-bottom: 20px;
+  }
+  label {
+    font-weight: bold;
+  }
+  textarea {
+    width: 100%;
+    font-family: monospace;
+    font-size: 14px;
+    height: 120px;
+  }
+  button {
+    margin-top: 10px;
+    padding: 10px 15px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  #output {
+    margin-top: 20px;
+    overflow-x:auto;
+  }
+  table {
+    border-collapse: collapse;
+    margin: 10px 0;
+    width: 100%;
+    max-width: 600px;
+  }
+  th, td {
+    border: 1px solid #999;
+    padding: 6px 10px;
+    text-align: center;
+  }
+  th {
+    background: #555;
+    color: white;
+  }
+  td.infinity {
+    color: #d00;
+    font-weight: bold;
+  }
+  #step-description {
+    white-space: pre-wrap;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 10px;
+    max-width: 600px;
+    margin-bottom: 10px;
+    height: 100px;
+    overflow-y: auto;
+  }
+  #controls {
+    margin-top: 15px;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  #legend {
+    margin-top: 30px;
+    max-width: 600px;
+  }
+  #legend div {
+    display: inline-block;
+    margin-right: 15px;
+    font-size: 14px;
+  }
+  #legend .infinity {
+    color: #d00;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h1>Floyd-Warshall Algorithm Demonstration</h1>
+
+<div id="graphInput">
+  <label for="matrixInput">Enter adjacency matrix (use "INF" or a large number for no direct edge):</label><br/>
+  <textarea id="matrixInput" spellcheck="false">0 3 INF 5
+2 0 INF 4
+INF 1 0 INF
+INF INF 2 0</textarea><br/>
+  <small>Example for graph with 4 vertices:</small>
+  <pre>
+0 3 INF 5
+2 0 INF 4
+INF 1 0 INF
+INF INF 2 0
+  </pre>
+  <button id="startBtn">Start Algorithm</button>
+</div>
+
+<div id="output" style="display:none;">
+  <h2>Step <span id="stepNumber">0</span> / <span id="maxSteps">0</span></h2>
+  <div id="step-description"></div>
+  <div id="matrixContainer"></div>
+  <div id="controls">
+    <button id="prevStep" disabled>&lt; Previous Step</button>
+    <button id="nextStep" disabled>Next Step &gt;</button>
+  </div>
+</div>
+
+<div id="legend">
+  <strong>Legend:</strong>
+  <div><span style="color:#0a0; font-weight:bold">Green</span> = Updated shortest distance</div>
+  <div><span class="infinity">INF</span> = No path / Infinity</div>
+</div>
+
+<script>
+(() => {
+  const INF = Infinity;
+
+  // Parse input matrix text area and return adjacency matrix (2D array)
+  function parseMatrix(text) {
+    const rows = text.trim().split('\n');
+    const matrix = [];
+    for (const rowText of rows) {
+      const values = rowText.trim().split(/\s+/).map(v => {
+        if (v.toUpperCase() === 'INF' || v === '∞') return INF;
+        const num = Number(v);
+        return isNaN(num) ? INF : num;
+      });
+      matrix.push(values);
+    }
+    // Validate matrix shape: must be square
+    const n = matrix.length;
+    if (matrix.some(row => row.length !== n)) {
+      return null;
+    }
+    return matrix;
+  }
+
+  // Render matrix as HTML table highlighting updated cells
+  function renderMatrix(matrix, updateCoords = [], vertices) {
+    // updateCoords: array of [i,j] pairs to highlight
+    let html = '<table><thead><tr><th></th>';
+    for(let c = 0; c < matrix.length; c++) {
+      html += `<th>v${c}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    for(let r = 0; r < matrix.length; r++) {
+      html += `<tr><th>v${r}</th>`;
+      for(let c = 0; c < matrix.length; c++) {
+        let val = matrix[r][c];
+        let display = val === INF ? 'INF' : val;
+        let cls = '';
+        // Highlight if in updateCoords
+        if(updateCoords.some(([rr,cc]) => rr === r && cc === c)) {
+          cls = 'style="background: #ccffcc; font-weight: bold;"'; // green highlight
+        }
+        // color INF in red
+        if(val === INF) cls = (cls ? cls.replace('"', ' color:#d00;"') : 'class="infinity"');
+        html += `<td ${cls}>${display}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
+  }
+
+  // Implementation of Floyd-Warshall algorithm with step recording for visualization
+  function floydWarshall(matrix) {
+    const n = matrix.length;
+    // Distance matrix copy
+    const dist = [];
+    for(let i = 0; i < n; i++) {
+      dist[i] = [];
+      for(let j = 0; j < n; j++) {
+        dist[i][j] = matrix[i][j];
+      }
+    }
+
+    // Steps: each element is an object:
+    // {k, i, j, updated: boolean, distSnapshot: [][]
+    //  desc: string description
+    //  updatedCell: [i,j] or null }
+    const steps = [];
+
+    // Initial state (k=-1 means before any iteration)
+    steps.push({
+      k: -1,
+      i: -1,
+      j: -1,
+      updated: false,
+      distSnapshot: JSON.parse(JSON.stringify(dist)),
+      desc: 'Initial distance matrix before running algorithm.',
+      updatedCell: null,
+    });
+
+    for(let k = 0; k < n; k++) {
+      for(let i = 0; i < n; i++) {
+        for(let j = 0; j < n; j++) {
+          let newDistance;
+          if (dist[i][k] === INF || dist[k][j] === INF) {
+            newDistance = INF;
+          } else {
+            newDistance = dist[i][k] + dist[k][j];
+          }
+          if(newDistance < dist[i][j]) {
+            const old = dist[i][j];
+            dist[i][j] = newDistance;
+            steps.push({
+              k, i, j,
+              updated: true,
+              distSnapshot: JSON.parse(JSON.stringify(dist)),
+              desc: `Considering vertex v${k} as an intermediate, we update distance d[v${i}][v${j}] from ${old === INF ? 'INF' : old} to ${newDistance}.`,
+              updatedCell: [i, j],
+            });
+          } else {
+            steps.push({
+              k, i, j,
+              updated: false,
+              distSnapshot: JSON.parse(JSON.stringify(dist)),
+              desc: `Considering vertex v${k} as an intermediate, distance d[v${i}][v${j}] remains ${dist[i][j] === INF ? 'INF' : dist[i][j]} (no update).`,
+              updatedCell: null,
+            });
+          }
+        }
+      }
+    }
+
+    return steps;
+  }
+
+  // Elements
+  const matrixInput = document.getElementById('matrixInput');
+  const startBtn = document.getElementById('startBtn');
+  const output = document.getElementById('output');
+  const stepNumberSpan = document.getElementById('stepNumber');
+  const maxStepsSpan = document.getElementById('maxSteps');
+  const stepDescDiv = document.getElementById('step-description');
+  const matrixContainer = document.getElementById('matrixContainer');
+  const prevStepBtn = document.getElementById('prevStep');
+  const nextStepBtn = document.getElementById('nextStep');
+
+  let steps = [];
+  let currentStep = 0;
+
+  function updateStepDisplay() {
+    const step = steps[currentStep];
+    stepNumberSpan.textContent = currentStep;
+    maxStepsSpan.textContent = steps.length - 1;
+    stepDescDiv.textContent = step.desc;
+    const highlight = step.updatedCell ? [step.updatedCell] : [];
+    matrixContainer.innerHTML = renderMatrix(step.distSnapshot, highlight);
+
+    prevStepBtn.disabled = currentStep <= 0;
+    nextStepBtn.disabled = currentStep >= steps.length - 1;
+  }
+
+  startBtn.addEventListener('click', () => {
+    const matrix = parseMatrix(matrixInput.value);
+    if (!matrix) {
+      alert('Invalid matrix: Ensure it is square and uses numbers/INF.');
+      return;
+    }
+    steps = floydWarshall(matrix);
+    currentStep = 0;
+
+    output.style.display = 'block';
+    startBtn.disabled = true;
+    matrixInput.disabled = true;
+
+    updateStepDisplay();
+  });
+
+  prevStepBtn.addEventListener('click', () => {
+    if(currentStep > 0) {
+      currentStep--;
+      updateStepDisplay();
+    }
+  });
+
+  nextStepBtn.addEventListener('click', () => {
+    if(currentStep < steps.length - 1) {
+      currentStep++;
+      updateStepDisplay();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

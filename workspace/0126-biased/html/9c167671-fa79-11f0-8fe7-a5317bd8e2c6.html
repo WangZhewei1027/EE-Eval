@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Garbage Collection Simulator</title>
+<style>
+/* Extremely minimal styling to keep layout readable; plain black on white */
+body { font-family: monospace; color: black; background: white; margin: 12px; }
+h1 { font-size: 18px; margin: 0 0 8px 0; }
+section { margin-bottom: 12px; }
+label { margin-right: 6px; }
+button, input, select, textarea { font-family: monospace; margin: 2px 4px 2px 0; }
+#controls { display:block; }
+#heapView { width:100%; height:240px; }
+#log { width:100%; height:160px; }
+.small { font-size:12px; }
+.row { margin-bottom:6px; }
+.split { display:flex; gap:8px; }
+.col { flex:1; }
+</style>
+</head>
+<body>
+<h1>Garbage Collection Simulator (Plain Interface)</h1>
+
+<section id="controls">
+ <div class="row">
+  <label>Algorithm:</label>
+  <select id="algo">
+    <option value="markSweep">Mark-and-Sweep (Full)</option>
+    <option value="minorMarkSweep">Minor Mark-Sweep (Young)</option>
+    <option value="copying">Copying (Semi-space)</option>
+    <option value="generational">Generational (Minor+Major)</option>
+    <option value="refcount">Reference Counting</option>
+    <option value="incremental">Incremental Mark</option>
+  </select>
+
+  <label>Auto-run:</label>
+  <input type="checkbox" id="autorun">
+
+  <label>Speed (ms):</label>
+  <input type="range" id="speed" min="50" max="2000" value="400">
+  <span id="speedLabel">400</span> ms
+
+  <label>Allocation Pressure:</label>
+  <input type="range" id="pressure" min="0" max="100" value="30">
+  <span id="pressureLabel">30</span> %
+ </div>
+
+ <div class="row">
+  <button id="allocOne">Allocate Object</button>
+  <button id="allocMany">Allocate Many</button>
+  <input type="number" id="allocCount" value="10" min="1" style="width:64px;">
+  <label>Size range:</label>
+  <input type="number" id="minSize" value="1" min="1" style="width:48px;">
+  <input type="number" id="maxSize" value="8" min="1" style="width:48px;">
+  <label>Fields per object:</label>
+  <input type="number" id="fields" value="2" min="0" style="width:48px;">
+  <label><input type="checkbox" id="allowWeak"> Allow weak fields</label>
+ </div>
+
+ <div class="row">
+  <button id="createRoot">Add Random Root</button>
+  <button id="removeRoot">Remove Random Root</button>
+  <button id="toggleRootMode">Root Mode: OFF</button>
+  <span class="small">(Click an object in heap to toggle root when Root Mode ON)</span>
+ </div>
+
+ <div class="row">
+  <button id="mutateOne">Mutate One Reference</button>
+  <button id="mutateMany">Mutate Many</button>
+  <input type="number" id="mutateCount" value="5" min="1" style="width:56px;">
+  <button id="createCycle">Create Cycle</button>
+  <button id="createChain">Create Chain</button>
+  <input type="number" id="chainLen" value="6" min="1" style="width:48px;">
+ </div>
+
+ <div class="row">
+  <button id="stepGC">Step GC</button>
+  <button id="runGC">Run GC</button>
+  <button id="stopGC">Stop GC</button>
+  <button id="compact">Compact</button>
+  <button id="detectLeaks">Detect Leaks</button>
+  <button id="exportHeap">Export Heap</button>
+  <button id="importHeap">Import Heap</button>
+  <input type="file" id="importFile" style="display:none;">
+ </div>
+
+ <div class="row">
+  <label>Heap size (slots):</label>
+  <input type="number" id="heapSlots" value="200" min="10" style="width:72px;">
+  <label>Young size (slots):</label>
+  <input type="number" id="youngSlots" value="80" min="5" style="width:72px;">
+  <label>Promotion age threshold:</label>
+  <input type="number" id="promoteAge" value="2" min="0" style="width:48px;">
+  <label>Max roots:</label>
+  <input type="number" id="maxRoots" value="10" min="1" style="width:56px;">
+ </div>
+
+ <div class="row">
+  <button id="reset">Reset Simulator</button>
+  <button id="clearLogs">Clear Logs</button>
+  <select id="scenario">
+    <option value="">-- Load Scenario --</option>
+    <option value="leakyService">Leaky Service (finalizers & cycles)</option>
+    <option value="interactiveDemo">Interactive Demo (mix roots & cycles)</option>
+    <option value="stress">Stress Test (many objects)</option>
+  </select>
+ </div>
+</section>
+
+<section class="split">
+ <div class="col">
+  <div><strong>Heap View (click object id to select for editing)</strong></div>
+  <pre id="heapView"></pre>
+  <div class="row">
+    <label>Selected object id:</label>
+    <input type="text" id="selectedId" style="width:140px;">
+    <button id="selectRefresh">Refresh Selection</button>
+    <button id="toggleRootSelected">Toggle Root</button>
+    <button id="deleteSelected">Delete Selected</button>
+    <label>Size:</label>
+    <input type="number" id="editSize" style="width:64px;">
+    <button id="setSize">Set Size</button>
+  </div>
+  <div class="row">
+    <label>Fields (comma-separated target ids or null):</label>
+    <input type="text" id="editFields" style="width:420px;">
+    <button id="setFields">Set Fields</button>
+    <label><input type="checkbox" id="editWeak"> Mark fields as weak (applies to all)</label>
+  </div>
+ </div>
+
+ <div class="col">
+  <div><strong>Inspector / Logs / Timeline</strong></div>
+  <div class="row">
+    <label>Inspector:</label>
+    <pre id="inspector" style="height:120px;"></pre>
+  </div>
+  <div class="row">
+    <label>Log:</label>
+    <textarea id="log"></textarea>
+  </div>
+  <div class="row">
+    <label>History (click to restore snapshot):</label>
+    <select id="history" size="6" style="width:100%;"></select>
+    <div class="row">
+      <button id="snapshot">Save Snapshot</button>
+      <button id="restore">Restore Selected</button>
+      <button id="deleteSnapshot">Delete Snapshot</button>
+    </div>
+  </div>
+ </div>
+</section>
+
+<script>
+/*
+ Garbage Collection Simulator - Single File
+ - Minimal visual design (plain text)
+ - Maximum interactivity: many controls, complex state transitions
+*/
+
+/* Core simulator state */
+(function() {
+  'use strict';
+
+  // Utilities
+  function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+  function now(){ return (new Date()).toISOString(); }
+  function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+  // DOM refs
+  const heapView = document.getElementById('heapView');
+  const logArea = document.getElementById('log');
+  const inspector = document.getElementById('inspector');
+  const historySel = document.getElementById('history');
+
+  const algoSel = document.getElementById('algo');
+  const autorunChk = document.getElementById('autorun');
+  const speedRange = document.getElementById('speed');
+  const speedLabel = document.getElementById('speedLabel');
+  const pressureRange = document.getElementById('pressure');
+  const pressureLabel = document.getElementById('pressureLabel');
+
+  const allocOneBtn = document.getElementById('allocOne');
+  const allocManyBtn = document.getElementById('allocMany');
+  const allocCountInput = document.getElementById('allocCount');
+  const minSizeInput = document.getElementById('minSize');
+  const maxSizeInput = document.getElementById('maxSize');
+  const fieldsInput = document.getElementById('fields');
+  const allowWeakChk = document.getElementById('allowWeak');
+
+  const createRootBtn = document.getElementById('createRoot');
+  const removeRootBtn = document.getElementById('removeRoot');
+  const toggleRootModeBtn = document.getElementById('toggleRootMode');
+  let rootMode = false;
+
+  const mutateOneBtn = document.getElementById('mutateOne');
+  const mutateManyBtn = document.getElementById('mutateMany');
+  const mutateCountInput = document.getElementById('mutateCount');
+  const createCycleBtn = document.getElementById('createCycle');
+  const createChainBtn = document.getElementById('createChain');
+  const chainLenInput = document.getElementById('chainLen');
+
+  const stepGCBtn = document.getElementById('stepGC');
+  const runGCBtn = document.getElementById('runGC');
+  const stopGCBtn = document.getElementById('stopGC');
+  const compactBtn = document.getElementById('compact');
+  const detectLeaksBtn = document.getElementById('detectLeaks');
+  const exportHeapBtn = document.getElementById('exportHeap');
+  const importHeapBtn = document.getElementById('importHeap');
+  const importFileInput = document.getElementById('importFile');
+
+  const heapSlotsInput = document.getElementById('heapSlots');
+  const youngSlotsInput = document.getElementById('youngSlots');
+  const promoteAgeInput = document.getElementById('promoteAge');
+  const maxRootsInput = document.getElementById('maxRoots');
+
+  const resetBtn = document.getElementById('reset');
+  const clearLogsBtn = document.getElementById('clearLogs');
+  const scenarioSel = document.getElementById('scenario');
+
+  const selectedIdInput = document.getElementById('selectedId');
+  const selectRefreshBtn = document.getElementById('selectRefresh');
+  const toggleRootSelectedBtn = document.getElementById('toggleRootSelected');
+  const deleteSelectedBtn = document.getElementById('deleteSelected');
+  const editSizeInput = document.getElementById('editSize');
+  const setSizeBtn = document.getElementById('setSize');
+  const editFieldsInput = document.getElementById('editFields');
+  const setFieldsBtn = document.getElementById('setFields');
+  const editWeakChk = document.getElementById('editWeak');
+
+  const snapshotBtn = document.getElementById('snapshot');
+  const restoreBtn = document.getElementById('restore');
+  const deleteSnapshotBtn = document.getElementById('deleteSnapshot');
+
+  // Simulation state
+  let nextId = 1;
+  let slotsUsed = 0;
+  let heapSlots = parseInt(heapSlotsInput.value,10);
+  let youngSlots = parseInt(youngSlotsInput.value,10);
+  let promoteAge = parseInt(promoteAgeInput.value,10);
+  let maxRoots = parseInt(maxRootsInput.value,10);
+
+  // Represent objects as:
+  // { id, addr, size, fields: [{target:null|id, weak:false}], age, generation: 'young'|'old',
+  //   marked:false, refcount:0, finalizer:false, pinned:false, forwarded:null, bornAt:number }
+  let objects = {}; // id -> object
+  let roots = new Set(); // set of ids
+  let freeAddr = 1; // simple address counter
+  let history = []; // snapshots
+  let autorunTimer = null;
+  let incrementalWorklist = [];
+  let incrementalState = null;
+
+  // Logging
+  function log(s){
+    const line = '['+now()+'] '+s;
+    logArea.value = line + '\n' + logArea.value;
+  }
+  function clearLog(){ logArea.value = ''; }
+
+  // Helpers
+  function getObject(id){ return objects[id] || null; }
+  function allObjects(){ return Object.values(objects).sort((a,b)=>a.addr-b.addr); }
+
+  function allocateObject(opts){
+    opts = opts || {};
+    const size = opts.size || randInt(parseInt(minSizeInput.value,10), parseInt(maxSizeInput.value,10));
+    const fieldsCount = ('fields' in opts) ? opts.fields : parseInt(fieldsInput.value,10);
+    const allowWeak = allowWeakChk.checked;
+    // Check available slots (simple)
+    if (slotsUsed + size > heapSlots) {
+      log('Allocation failed: not enough heap slots. Consider running GC or increasing heap slots.');
+      return null;
+    }
+    const id = nextId++;
+    const obj = {
+      id:id,
+      addr: freeAddr,
+      size: size,
+      fields: [],
+      age: 0,
+      generation: 'young',
+      marked: false,
+      refcount: 0,
+      finalizer: !!opts.finalizer,
+      pinned: !!opts.pinned,
+      forwarded: null,
+      bornAt: Date.now()
+    };
+    for (let i=0;i<fieldsCount;i++){
+      const f = { target: null, weak: allowWeak && Math.random()<0.25 };
+      obj.fields.push(f);
+    }
+    objects[id]=obj;
+    slotsUsed += size;
+    freeAddr += size; // simplistic address assignment
+    // Update refcounts for any fields set on creation (none by default)
+    log('Allocated object id='+id+' size='+size+' fields='+obj.fields.length);
+    return obj;
+  }
+
+  function freeObject(id){
+    const obj = getObject(id);
+    if (!obj) return;
+    // Kick finalizer if present
+    if (obj.finalizer) {
+      log('Finalizer run for object '+id);
+    }
+    // Decrease refcounts for targets
+    for (const f of obj.fields){
+      if (f.target !== null){
+        decRef(f.target);
+      }
+    }
+    slotsUsed -= obj.size;
+    delete objects[id];
+    roots.delete(id);
+    log('Freed object '+id);
+  }
+
+  function incRef(id){
+    const o = getObject(id);
+    if (!o) return;
+    o.refcount++;
+  }
+  function decRef(id){
+    const o = getObject(id);
+    if (!o) return;
+    o.refcount--;
+  }
+
+  function setField(sourceId, fieldIndex, targetId, weak=false){
+    const source = getObject(sourceId);
+    if (!source) return false;
+    if (fieldIndex<0 || fieldIndex>=source.fields.length) return false;
+    const prev = source.fields[fieldIndex].target;
+    if (prev !== null) decRef(prev);
+    source.fields[fieldIndex].target = (targetId===null? null : targetId);
+    source.fields[fieldIndex].weak = !!weak;
+    if (targetId !== null) incRef(targetId);
+    return true;
+  }
+
+  function addRoot(id){
+    if (!getObject(id)) return false;
+    if (roots.size >= maxRoots) {
+      log('Cannot add root '+id+' — root set limit reached');
+      return false;
+    }
+    if (!roots.has(id)) {
+      roots.add(id);
+      log('Added root '+id);
+    }
+    return true;
+  }
+
+  function removeRoot(id){
+    if (roots.has(id)) {
+      roots.delete(id);
+      log('Removed root '+id);
+      return true;
+    }
+    return false;
+  }
+
+  // Rendering
+  function renderHeap(){
+    // Minimal plain representation
+    const lines = [];
+    lines.push('Heap slots used: '+slotsUsed+' / '+heapSlots+'  (young slots: '+youngSlots+')');
+    lines.push('Roots: ['+Array.from(roots).join(', ')+']');
+    lines.push('Objects (addr,size,age,gen,refcount,marked,finalizer,pinned):');
+    for (const o of allObjects()){
+      const fstrings = o.fields.map((f,i)=>('f'+i+':'+(f.target===null?'null':f.target)+(f.weak?'<weak>':'')));
+      lines.push('id='+o.id+' @'+o.addr+' size='+o.size+' age='+o.age+' gen='+o.generation
+           +' rc='+o.refcount+' mark='+o.marked+' fin='+(o.finalizer?'Y':'N')+' pin='+(o.pinned?'Y':'N')
+           +' fields={'+fstrings.join(', ')+'}');
+    }
+    lines.push('');
+    lines.push('Controls: Click an object id below to select it for editing.');
+    lines.push('');
+    lines.push('Object ids:');
+    // List object ids as clickable tokens (we will emulate clickable by linking)
+    let idsLine = '';
+    for (const o of allObjects()){
+      idsLine += '['+o.id+'] ';
+    }
+    lines.push(idsLine);
+    heapView.textContent = lines.join('\n');
+  }
+
+  function inspect(id){
+    const o = getObject(parseInt(id,10));
+    if (!o){
+      inspector.textContent = 'No object with id '+id;
+      return;
+    }
+    const lines = [];
+    lines.push('Object id='+o.id);
+    lines.push('Address: '+o.addr);
+    lines.push('Size: '+o.size);
+    lines.push('Age: '+o.age);
+    lines.push('Generation: '+o.generation);
+    lines.push('Refcount: '+o.refcount);
+    lines.push('Marked: '+o.marked);
+    lines.push('Finalizer: '+o.finalizer);
+    lines.push('Pinned: '+o.pinned);
+    lines.push('Fields:');
+    o.fields.forEach((f,i)=>{
+      lines.push('  ['+i+'] -> '+(f.target===null?'null':f.target)+' (weak='+f.weak+')');
+    });
+    inspector.textContent = lines.join('\n');
+    selectedIdInput.value = o.id;
+    editSizeInput.value = o.size;
+    editFieldsInput.value = o.fields.map(f=>f.target===null?'null':f.target).join(',');
+    editWeakChk.checked = o.fields.length>0 && o.fields.every(f=>f.weak);
+  }
+
+  // Click handling in heapView: detect id on click
+  heapView.addEventListener('click', function(e){
+    // Determine click position contents
+    // Simpler: open a prompt to enter id? But requirement: click object id in heap.
+    // We'll find nearest number under click by mapping coordinates -> line content.
+    // For simplicity, prompt for id if rootMode true.
+    if (rootMode){
+      const id = prompt('Enter object id to toggle root:');
+      if (id) {
+        const iid = parseInt(id,10);
+        if (!getObject(iid)) { alert('No such id'); return; }
+        if (roots.has(iid)) removeRoot(iid); else addRoot(iid);
+        renderAll();
+      }
+      return;
+    }
+    // Otherwise prompt for id to inspect
+    const id = prompt('Enter object id to inspect/edit:');
+    if (!id) return;
+    if (!getObject(parseInt(id,10))) { alert('No such id'); return; }
+    inspect(id);
+  });
+
+  // GC Algorithms
+
+  // Mark-and-Sweep (full)
+  function markAndSweepFull(){
+    log('Starting full mark-and-sweep');
+    // Clear marks
+    for (const o of Object.values(objects)) o.marked = false;
+    // Mark phase
+    const stack = [];
+    roots.forEach(r=>stack.push(r));
+    while (stack.length){
+      const id = stack.pop();
+      const o = getObject(id);
+      if (!o || o.marked) continue;
+      o.marked = true;
+      for (const f of o.fields){
+        if (f.target !== null && !f.weak){
+          stack.push(f.target);
+        }
+      }
+    }
+    // Sweep
+    const toFree = [];
+    for (const o of Object.values(objects)){
+      if (!o.marked){
+        toFree.push(o.id);
+      }
+    }
+    for (const id of toFree) freeObject(id);
+    log('Mark-and-sweep complete. Freed '+toFree.length+' objects.');
+    renderAll();
+  }
+
+  // Minor mark-sweep (young only)
+  function markAndSweepYoung(){
+    log('Starting minor mark-and-sweep (young generation)');
+    for (const o of Object.values(objects)) {
+      if (o.generation==='young') o.marked = false;
+    }
+    const stack = [];
+    roots.forEach(r=>stack.push(r));
+    while (stack.length){
+      const id = stack.pop();
+      const o = getObject(id);
+      if (!o) continue;
+      if (o.marked) continue;
+      o.marked = true;
+      for (const f of o.fields){
+        if (f.target !== null && !f.weak){
+          // Mark reachable objects but only propagate into young space for minor GC? We'll mark regardless but only sweep young.
+          stack.push(f.target);
+        }
+      }
+    }
+    const toFree = [];
+    for (const o of Object.values(objects)){
+      if (o.generation==='young' && !o.marked){
+        toFree.push(o.id);
+      }
+    }
+    for (const id of toFree) freeObject(id);
+    // Age increment for surviving young objects; possibly promote
+    for (const o of Object.values(objects)){
+      if (o.generation==='young' && o.marked){
+        o.age++;
+        if (o.age > promoteAgeInput.value) {
+          o.generation = 'old';
+          log('Promoted object '+o.id+' to old generation');
+        }
+      }
+    }
+    log('Minor mark-and-sweep complete. Freed '+toFree.length+' young objects.');
+    renderAll();
+  }
+
+  // Copying (semi-space) for young generation: allocate new objects in to-space and forward pointers
+  function copyingGC(){
+    log('Starting copying GC (semi-space) on young generation');
+    // create mapping from old id to new object (simulate new address)
+    const newMap = {};
+    const newObjects = {};
+    let newSlotsUsed = 0;
+    // Copy reachable young objects reachable from roots
+    const queue = [];
+    roots.forEach(r=>queue.push(r));
+    while (queue.length){
+      const id = queue.shift();
+      const o = getObject(id);
+      if (!o) continue;
+      for (const f of o.fields){
+        if (f.target !== null && !f.weak){
+          const t = getObject(f.target);
+          if (!t) continue;
+          if (t.generation === 'young' && !newMap[t.id]){
+            // copy
+            const copyId = nextId++;
+            const copyObj = clone(t);
+            copyObj.id = copyId;
+            copyObj.addr = freeAddr + newSlotsUsed;
+            copyObj.marked = false;
+            copyObj.forwarded = null;
+            copyObj.age = t.age+1;
+            // Note: copied objects are considered still young or promoted?
+            if (copyObj.age > promoteAgeInput.value) {
+              copyObj.generation = 'old';
+              log('Promotion during copying: original '+t.id+' -> copy '+copyId+' now old');
+            } else {
+              copyObj.generation = 'young';
+            }
+            newMap[t.id] = copyId;
+            newObjects[copyId] = copyObj;
+            newSlotsUsed += copyObj.size;
+            // Enqueue original's fields targets to be scanned later
+            // We'll handle pointers after we've created nodes
+            queue.push(t.id); // ensure transitive closure
+          }
+        }
+      }
+    }
+    // If nothing to copy, just return
+    const newIds = Object.keys(newObjects).map(x=>parseInt(x,10));
+    if (newIds.length===0) {
+      log('Copying GC: no young objects reachable, nothing copied.');
+      return;
+    }
+    // Build copies for each mapped original
+    for (const oldIdStr of Object.keys(newMap)){
+      const oldId = parseInt(oldIdStr,10);
+      const copyId = newMap[oldId];
+      const oldObj = getObject(oldId);
+      const copy = clone(oldObj);
+      copy.id = copyId;
+      copy.addr = freeAddr; freeAddr += copy.size;
+      copy.forwarded = null;
+      // Update fields: if target within young and copied, update to new id; otherwise keep target id
+      for (let i=0;i<copy.fields.length;i++){
+        const f = copy.fields[i];
+        if (f.target !== null && newMap[f.target]){
+          copy.fields[i].target = newMap[f.target];
+        }
+      }
+      newObjects[copyId] = copy;
+    }
+    // Insert copied objects to heap and remove originals that were copied
+    for (const newId of Object.keys(newObjects)){
+      const n = newObjects[newId];
+      objects[n.id] = n;
+      slotsUsed += n.size;
+    }
+    // Remove old young objects that were copied (simulate from-space clearing)
+    const removed = [];
+    for (const oldIdStr of Object.keys(newMap)){
+      const oldId = parseInt(oldIdStr,10);
+      const old = getObject(oldId);
+      if (old) {
+        slotsUsed -= old.size;
+        delete objects[oldId];
+        removed.push(oldId);
+      }
+    }
+    log('Copying GC copied '+newIds.length+' objects, removed '+removed.length+' originals.');
+    renderAll();
+  }
+
+  // Reference counting collector (simple): recompute refcounts from scratch, free zero-ref objects iteratively, then detect cycles
+  function referenceCountingPass(){
+    log('Starting reference counting pass');
+    // Reset refcounts
+    for (const o of Object.values(objects)) o.refcount = 0;
+    // Count references from roots and fields (only strong)
+    for (const r of roots) {
+      const o = getObject(r);
+      if (!o) continue;
+      o.refcount++;
+    }
+    for (const o of Object.values(objects)){
+      for (const f of o.fields){
+        if (f.target !== null && !f.weak){
+          const t = getObject(f.target);
+          if (t) t.refcount++;
+        }
+      }
+    }
+    // Free objects with zero refcount iteratively
+    const queue = [];
+    for (const o of Object.values(objects)) if (o.refcount<=0) queue.push(o.id);
+    const freed = [];
+    while (queue.length){
+      const id = queue.pop();
+      const o = getObject(id);
+      if (!o) continue;
+      // If any root reference exists, skip
+      if (roots.has(id)) continue;
+      // Free it
+      for (const f of o.fields){
+        if (f.target !== null){
+          const t = getObject(f.target);
+          if (!t) continue;
+          t.refcount--;
+          if (t.refcount<=0) queue.push(t.id);
+        }
+      }
+      freed.push(id);
+      slotsUsed -= o.size;
+      delete objects[id];
+    }
+    log('Reference counting freed '+freed.length+' objects (not including cycles).');
+    renderAll();
+  }
+
+  // Simple cycle detection: find SCCs of remaining objects not reachable from roots using graph traversal
+  function detectCycles(){
+    log('Detecting unreachable cycles');
+    // Build graph of strong references
+    const nodes = Object.keys(objects).map(x=>parseInt(x,10));
+    const nodeIndex = {};
+    nodes.forEach((n,i)=>nodeIndex[n]=i);
+    const adj = nodes.map(()=>[]);
+    for (const o of Object.values(objects)){
+      const u = nodeIndex[o.id];
+      for (const f of o.fields){
+        if (f.target !== null && !f.weak){
+          if (nodeIndex[f.target] !== undefined){
+            adj[u].push(nodeIndex[f.target]);
+          }
+        }
+      }
+    }
+    // Determine reachable from roots
+    const reachable = new Set();
+    const stack = [];
+    roots.forEach(r=>{
+      if (nodeIndex[r]!==undefined) stack.push(nodeIndex[r]);
+    });
+    while (stack.length){
+      const u = stack.pop();
+      if (reachable.has(u)) continue;
+      reachable.add(u);
+      for (const v of adj[u]) stack.push(v);
+    }
+    // Objects not reachable are candidates; find SCCs among them
+    const candidates = nodes.map((n,i)=>i).filter(i=>!reachable.has(i));
+    if (candidates.length===0){
+      log('No unreachable objects found.');
+      return [];
+    }
+    // Tarjan's SCC
+    let index = 0;
+    const indices = Array(nodes.length).fill(-1);
+    const lowlink = Array(nodes.length).fill(0);
+    const onstack = Array(nodes.length).fill(false);
+    const S = [];
+    const sccs = [];
+    function strongconnect(v){
+      indices[v] = index; lowlink[v] = index; index++;
+      S.push(v); onstack[v]=true;
+      for (const w of adj[v]){
+        if (indices[w]===-1){
+          strongconnect(w);
+          lowlink[v] = Math.min(lowlink[v], lowlink[w]);
+        } else if (onstack[w]){
+          lowlink[v] = Math.min(lowlink[v], indices[w]);
+        }
+      }
+      if (lowlink[v] === indices[v]){
+        const comp = [];
+        let w;
+        do {
+          w = S.pop();
+          onstack[w]=false;
+          comp.push(nodes[w]);
+        } while (w !== v);
+        sccs.push(comp);
+      }
+    }
+    for (const v of candidates) if (indices[v]===-1) strongconnect(v);
+    // Filter SCCs which are cycles (size>1 or self-loop)
+    const cycles = sccs.filter(comp=>{
+      if (comp.length>1) return true;
+      const single = comp[0];
+      const o = getObject(single);
+      if (!o) return false;
+      return o.fields.some(f=>f.target===single);
+    });
+    log('Detected '+cycles.length+' unreachable cycles / SCCs.');
+    // Optionally free them
+    const freed = [];
+    for (const comp of cycles){
+      for (const id of comp){
+        if (getObject(id)) { freed.push(id); delete objects[id]; slotsUsed -= 0; } // size accounted below
+      }
+    }
+    // Now adjust slotsUsed by adding sizes of freed objects
+    let removedSize = 0;
+    for (const id of freed){
+      // Freed earlier via delete but we didn't subtract sizes; compute from snapshot? We can't now; simpler: recompute slotsUsed
+    }
+    // recompute slotsUsed:
+    slotsUsed = 0;
+    for (const o of Object.values(objects)) slotsUsed += o.size;
+    log('Freed objects from cycles: '+freed.join(', '));
+    renderAll();
+    return cycles;
+  }
+
+  // Incremental marking: push some objects per step
+  function startIncremental(){
+    incrementalWorklist = [];
+    // Initialize with roots
+    for (const r of roots) incrementalWorklist.push(r);
+    incrementalState = { phase: 'marking' };
+    log('Started incremental marking. Use Step GC to process worklist.');
+  }
+
+  function stepIncremental(){
+    if (!incrementalState || incrementalState.phase!=='marking'){
+      startIncremental();
+    }
+    const batchSize = Math.max(1, Math.floor(10 * (100/pressureRange.value)));
+    let processed = 0;
+    while (processed < batchSize && incrementalWorklist.length){
+      const id = incrementalWorklist.shift();
+      const o = getObject(id);
+      if (!o || o.marked) continue;
+      o.marked = true;
+      for (const f of o.fields){
+        if (f.target !== null && !f.weak){
+          incrementalWorklist.push(f.target);
+        }
+      }
+      processed++;
+    }
+    log('Incremental step processed '+processed+' objects; remaining worklist='+incrementalWorklist.length);
+    if (incrementalWorklist.length===0){
+      // Do sweep for unmarked objects
+      const toFree = [];
+      for (const o of Object.values(objects)){
+        if (!o.marked) toFree.push(o.id);
+      }
+      for (const id of toFree) freeObject(id);
+      // Clear marks
+      for (const o of Object.values(objects)) o.marked = false;
+      incrementalState = null;
+      log('Incremental marking complete; swept '+toFree.length+' objects.');
+    }
+    renderAll();
+  }
+
+  // Compaction: move objects to eliminate gaps and update addresses
+  function compactHeap(){
+    log('Starting heap compaction');
+    const objs = allObjects();
+    let addr = 1;
+    for (const o of objs){
+      o.addr = addr;
+      addr += o.size;
+    }
+    freeAddr = addr;
+    log('Compaction complete; addresses reassigned.');
+    renderAll();
+  }
+
+  // Manual GC control
+  function stepGC(){
+    const algo = algoSel.value;
+    if (algo==='markSweep') markAndSweepFull();
+    else if (algo==='minorMarkSweep') markAndSweepYoung();
+    else if (algo==='copying') copyingGC();
+    else if (algo==='generational') {
+      // Minor GC on young; if pressure high or young full, trigger major
+      if (slotsUsed > heapSlots * 0.85 || pressureRange.value > 70) {
+        log('Generational: conditions met for major GC');
+        markAndSweepFull();
+      } else {
+        markAndSweepYoung();
+      }
+    } else if (algo==='refcount') {
+      referenceCountingPass();
+      // optionally detect cycles
+      detectCycles();
+    } else if (algo==='incremental') {
+      stepIncremental();
+    }
+  }
+
+  let running = false;
+  function runGC(){
+    if (running) return;
+    running = true;
+    log('Auto GC run started for algorithm: '+algoSel.value);
+    const loop = ()=>{
+      if (!running) return;
+      // allocate some objects based on pressure to simulate runtime
+      simulateAllocations();
+      stepGC();
+      if (autorunChk.checked){
+        autorunTimer = setTimeout(loop, parseInt(speedRange.value,10));
+      } else {
+        running = false;
+      }
+    };
+    if (autorunChk.checked){
+      loop();
+    } else {
+      // Single run once
+      stepGC();
+    }
+  }
+
+  function stopGC(){
+    running = false;
+    if (autorunTimer) { clearTimeout(autorunTimer); autorunTimer = null; }
+    log('Auto GC stopped.');
+  }
+
+  // Simulate allocations triggered by pressure
+  function simulateAllocations(){
+    const pressure = parseInt(pressureRange.value,10);
+    // With some probability, allocate objects
+    const p = pressure/100;
+    const r = Math.random();
+    if (r < p){
+      const n = Math.max(1, Math.floor(p * 5));
+      for (let i=0;i<n;i++){
+        const o = allocateObject();
+        // randomly assign some fields to existing objects
+        if (o){
+          const objs = Object.keys(objects).map(x=>parseInt(x,10));
+          for (let fi=0; fi<o.fields.length; fi++){
+            if (objs.length>1 && Math.random()<0.6){
+              const tgt = objs[randInt(0,objs.length-1)];
+              if (tgt!==o.id) setField(o.id, fi, tgt, Math.random()<0.1);
+            }
+          }
+          if (Math.random()<0.2) addRoot(o.id);
+        }
+      }
+    }
+  }
+
+  // UI actions
+  allocOneBtn.addEventListener('click', function(){
+    const o = allocateObject();
+    renderAll();
+    if (o) inspect(o.id);
+  });
+  allocManyBtn.addEventListener('click', function(){
+    const n = Math.max(1, parseInt(allocCountInput.value,10));
+    for (let i=0;i<n;i++){
+      const o = allocateObject();
+      if (o && Math.random()<0.1) addRoot(o.id);
+    }
+    renderAll();
+  });
+
+  createRootBtn.addEventListener('click', function(){
+    const ids = Object.keys(objects).map(x=>parseInt(x,10));
+    if (ids.length===0) { log('No objects to add as root'); return; }
+    const id = ids[randInt(0, ids.length-1)];
+    addRoot(id);
+    renderAll();
+  });
+  removeRootBtn.addEventListener('click', function(){
+    const ids = Array.from(roots);
+    if (ids.length===0) { log('No roots to remove'); return; }
+    const id = ids[randInt(0, ids.length-1)];
+    removeRoot(id);
+    renderAll();
+  });
+  toggleRootModeBtn.addEventListener('click', function(){
+    rootMode = !rootMode;
+    toggleRootModeBtn.textContent = 'Root Mode: '+(rootMode?'ON':'OFF');
+  });
+
+  mutateOneBtn.addEventListener('click', function(){
+    const ids = Object.keys(objects).map(x=>parseInt(x,10));
+    if (ids.length===0) { log('No objects to mutate'); return; }
+    const id = ids[randInt(0, ids.length-1)];
+    const o = getObject(id);
+    if (!o || o.fields.length===0) { log('Selected object has no fields'); return; }
+    const fi = randInt(0, o.fields.length-1);
+    const targetCandidates = ids.filter(x=>x!==id);
+    const tgt = (targetCandidates.length>0 && Math.random()<0.8) ? targetCandidates[randInt(0,targetCandidates.length-1)] : null;
+    setField(id, fi, tgt, allowWeakChk.checked && Math.random()<0.2);
+    log('Mutated object '+id+' field['+fi+'] -> '+(tgt===null?'null':tgt));
+    renderAll();
+  });
+
+  mutateManyBtn.addEventListener('click', function(){
+    const n = Math.max(1, parseInt(mutateCountInput.value,10));
+    for (let i=0;i<n;i++) mutateOneBtn.click();
+  });
+
+  createCycleBtn.addEventListener('click', function(){
+    // create a small cycle of new objects and no roots
+    const size = randInt(2,5);
+    const ids = [];
+    for (let i=0;i<size;i++){
+      const o = allocateObject({size:1, fields:1});
+      ids.push(o.id);
+    }
+    for (let i=0;i<size;i++){
+      setField(ids[i], 0, ids[(i+1)%size]);
+    }
+    log('Created cycle of ids: '+ids.join(', '));
+    renderAll();
+  });
+
+  createChainBtn.addEventListener('click', function(){
+    const len = Math.max(1, parseInt(chainLenInput.value,10));
+    const ids = [];
+    for (let i=0;i<len;i++){
+      const o = allocateObject({size:1, fields:1});
+      ids.push(o.id);
+    }
+    for (let i=0;i<len-1;i++){
+      setField(ids[i],0,ids[i+1]);
+    }
+    // optionally root the head
+    if (Math.random()<0.5) addRoot(ids[0]);
+    log('Created chain: '+ids.join(' -> '));
+    renderAll();
+  });
+
+  stepGCBtn.addEventListener('click', function(){ stepGC(); });
+  runGCBtn.addEventListener('click', function(){ autorunChk.checked = true; runGC(); });
+  stopGCBtn.addEventListener('click', function(){ autorunChk.checked = false; stopGC(); });
+
+  compactBtn.addEventListener('click', function(){ compactHeap(); });
+
+  detectLeaksBtn.addEventListener('click', function(){ detectCycles(); });
+
+  exportHeapBtn.addEventListener('click', function(){
+    const data = {
+      nextId, slotsUsed, freeAddr, objects, roots:Array.from(roots),
+      heapSlots: parseInt(heapSlotsInput.value,10), youngSlots: parseInt(youngSlotsInput.value,10)
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'heap.json';
+    a.click();
+  });
+
+  importHeapBtn.addEventListener('click', function(){ importFileInput.click(); });
+  importFileInput.addEventListener('change', function(e){
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = function(ev){
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.objects) throw 'Invalid file';
+        objects = data.objects;
+        nextId = data.nextId || (Math.max(0, ...Object.keys(objects).map(x=>parseInt(x,10)))+1);
+        slotsUsed = 0;
+        for (const o of Object.values(objects)) slotsUsed += o.size;
+        freeAddr = data.freeAddr || 1;
+        roots = new Set(data.roots || []);
+        heapSlotsInput.value = data.heapSlots || heapSlotsInput.value;
+        youngSlotsInput.value = data.youngSlots || youngSlotsInput.value;
+        renderAll();
+        log('Imported heap from file');
+      } catch(e){
+        alert('Failed to import: '+e);
+      }
+    };
+    r.readAsText(f);
+  });
+
+  resetBtn.addEventListener('click', function(){
+    if (!confirm('Reset simulator? All objects will be cleared.')) return;
+    objects = {};
+    roots = new Set();
+    nextId = 1;
+    slotsUsed = 0;
+    freeAddr = 1;
+    history = [];
+    historySel.innerHTML = '';
+    clearLog();
+    renderAll();
+    log('Simulator reset');
+  });
+
+  clearLogsBtn.addEventListener('click', clearLog);
+
+  scenarioSel.addEventListener('change', function(){
+    const v = scenarioSel.value;
+    if (!v) return;
+    if (v==='leakyService'){
+      resetBtn.click();
+      // Create objects with finalizers and cycles and some roots missing
+      for (let i=0;i<10;i++){
+        const o = allocateObject({size:2, fields:2, finalizer:(i%3===0)});
+        if (i%4===0) addRoot(o.id);
+      }
+      // create cycles
+      createCycleBtn.click();
+      createCycleBtn.click();
+      log('Loaded scenario: leakyService');
+      renderAll();
+    } else if (v==='interactiveDemo'){
+      resetBtn.click();
+      for (let i=0;i<20;i++){
+        const o = allocateObject({size:1+randInt(0,3), fields:randInt(1,3)});
+        if (Math.random()<0.2) addRoot(o.id);
+      }
+      log('Loaded scenario: interactiveDemo');
+      renderAll();
+    } else if (v==='stress'){
+      resetBtn.click();
+      for (let i=0;i<120;i++){
+        allocateObject({size:1, fields:1});
+      }
+      // random references
+      const ids = Object.keys(objects).map(x=>parseInt(x,10));
+      for (const id of ids){
+        const o = getObject(id);
+        for (let fi=0;fi<o.fields.length;fi++){
+          const tgt = ids[randInt(0, ids.length-1)];
+          setField(o.id, fi, tgt, Math.random()<0.05);
+        }
+      }
+      log('Loaded scenario: stress');
+      renderAll();
+    }
+  });
+
+  // Selection and editing
+  selectRefreshBtn.addEventListener('click', function(){
+    const id = selectedIdInput.value;
+    if (!id) { alert('Enter id'); return; }
+    inspect(id);
+  });
+  toggleRootSelectedBtn.addEventListener('click', function(){
+    const id = parseInt(selectedIdInput.value,10);
+    if (!getObject(id)) { alert('No such object'); return; }
+    if (roots.has(id)) removeRoot(id); else addRoot(id);
+    renderAll();
+  });
+  deleteSelectedBtn.addEventListener('click', function(){
+    const id = parseInt(selectedIdInput.value,10);
+    if (!getObject(id)) { alert('No such object'); return; }
+    freeObject(id);
+    renderAll();
+  });
+  setSizeBtn.addEventListener('click', function(){
+    const id = parseInt(selectedIdInput.value,10);
+    const o = getObject(id);
+    if (!o) { alert('No such object'); return; }
+    const newSize = parseInt(editSizeInput.value,10);
+    if (newSize<=0) return;
+    slotsUsed += (newSize - o.size);
+    o.size = newSize;
+    renderAll();
+  });
+  setFieldsBtn.addEventListener('click', function(){
+    const id = parseInt(selectedIdInput.value,10);
+    const o = getObject(id);
+    if (!o) { alert('No such object'); return; }
+    const parts = editFieldsInput.value.split(',').map(s=>s.trim());
+    // ensure objects have fields to match or adjust length
+    while (o.fields.length < parts.length) o.fields.push({target:null,weak:false});
+    for (let i=0;i<o.fields.length;i++){
+      const p = parts[i];
+      const tgt = (p===undefined || p==='' || p.toLowerCase()==='null') ? null : parseInt(p,10);
+      setField(id, i, tgt, editWeakChk.checked);
+    }
+    renderAll();
+  });
+
+  // Snapshots
+  snapshotBtn.addEventListener('click', function(){
+    const snap = {
+      ts: now(),
+      state: { nextId, slotsUsed, freeAddr, objects: clone(objects), roots: Array.from(roots) }
+    };
+    history.push(snap);
+    const opt = document.createElement('option');
+    opt.text = snap.ts + ' ('+Object.keys(snap.state.objects).length+' objs)';
+    opt.value = history.length-1;
+    historySel.add(opt);
+    log('Saved snapshot '+snap.ts);
+  });
+  restoreBtn.addEventListener('click', function(){
+    const idx = historySel.value;
+    if (!idx) { alert('Select snapshot'); return; }
+    const snap = history[idx];
+    if (!snap) { alert('Invalid snapshot'); return; }
+    if (!confirm('Restore snapshot from '+snap.ts+'? This will overwrite current heap.')) return;
+    nextId = snap.state.nextId;
+    slotsUsed = snap.state.slotsUsed;
+    freeAddr = snap.state.freeAddr;
+    objects = clone(snap.state.objects);
+    roots = new Set(snap.state.roots);
+    renderAll();
+    log('Restored snapshot '+snap.ts);
+  });
+  deleteSnapshotBtn.addEventListener('click', function(){
+    const idx = historySel.value;
+    if (!idx) { alert('Select snapshot'); return; }
+    history.splice(idx,1);
+    historySel.remove(idx);
+    log('Deleted snapshot '+idx);
+  });
+
+  // Misc UI updates
+  speedRange.addEventListener('input', function(){ speedLabel.textContent = speedRange.value; });
+  pressureRange.addEventListener('input', function(){ pressureLabel.textContent = pressureRange.value; });
+
+  // Render all
+  function renderAll(){
+    heapSlots = Math.max(10, parseInt(heapSlotsInput.value,10));
+    youngSlots = Math.max(5, parseInt(youngSlotsInput.value,10));
+    promoteAge = Math.max(0, parseInt(promoteAgeInput.value,10));
+    maxRoots = Math.max(1, parseInt(maxRootsInput.value,10));
+    renderHeap();
+    const sel = selectedIdInput.value;
+    if (sel) {
+      const o = getObject(parseInt(sel,10));
+      if (o) inspect(sel); else inspector.textContent = 'Selected object not found';
+    }
+  }
+
+  // Initialize with a small demo
+  function initDemo(){
+    for (let i=0;i<8;i++){
+      const o = allocateObject({size:randInt(1,4), fields:randInt(0,3)});
+      if (i<2) addRoot(o.id);
+    }
+    // Link some
+    const ids = Object.keys(objects).map(x=>parseInt(x,10));
+    if (ids.length>=3){
+      setField(ids[0], 0, ids[1]);
+      setField(ids[1], 0, ids[2]);
+    }
+    renderAll();
+    log('Initialized demo heap with '+Object.keys(objects).length+' objects.');
+  }
+
+  // first render
+  initDemo();
+
+  // Global keyboard shortcuts
+  window.addEventListener('keydown', function(e){
+    if (e.key==='g') { stepGCBtn.click(); }
+    if (e.key==='r') { runGCBtn.click(); }
+    if (e.key==='s') { snapshotBtn.click(); }
+  });
+
+  // Expose simple API for console debugging
+  window.GCSim = {
+    allocateObject, freeObject, objects, roots, renderAll, log
+  };
+
+})();
+</script>
+</body>
+</html>

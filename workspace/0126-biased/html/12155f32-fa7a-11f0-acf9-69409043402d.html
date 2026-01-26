@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Process Exploration Interactive</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  label, button, input, select, textarea {
+    font-family: monospace, monospace;
+    margin: 0.2em 0.4em 0.6em 0;
+  }
+  button:focus, input:focus, select:focus, textarea:focus {
+    outline: 1px solid black;
+  }
+  fieldset {
+    margin-bottom: 1em;
+    padding: 0.5em 1em;
+  }
+  .hidden {
+    display: none;
+  }
+  #log {
+    width: 100%;
+    height: 12em;
+    resize: vertical;
+    font-family: monospace, monospace;
+  }
+  #stateDisplay {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    padding: .5em;
+    margin-bottom: 1em;
+  }
+  .section {
+    margin-bottom: 1em;
+  }
+</style>
+</head>
+<body>
+<h1>Process Exploration Interactive</h1>
+
+<div id="stateDisplay" aria-live="polite"></div>
+
+<!-- Controls -->
+<fieldset>
+  <legend>Process Controls</legend>
+
+  <button id="startProcessBtn" type="button">Start Process</button>
+  <button id="pauseProcessBtn" type="button" disabled>Pause Process</button>
+  <button id="resumeProcessBtn" type="button" disabled>Resume Process</button>
+  <button id="resetProcessBtn" type="button" disabled>Reset Process</button>
+
+  <br />
+
+  <label for="progressSlider">Progress:</label>
+  <input id="progressSlider" type="range" min="0" max="100" value="0" disabled />
+  <span id="progressValue">0%</span>
+
+  <br />
+
+  <label for="stepSelector">Jump to Step:</label>
+  <select id="stepSelector" disabled></select>
+  <button id="jumpStepBtn" type="button" disabled>Jump</button>
+
+  <br />
+
+  <label for="customInput">Custom Input:</label>
+  <input id="customInput" type="text" disabled placeholder="Type here..." />
+  <button id="submitInputBtn" type="button" disabled>Submit Input</button>
+</fieldset>
+
+<fieldset>
+  <legend>Process Actions</legend>
+  <button id="advanceStepBtn" type="button" disabled>Advance to Next Step</button>
+  <button id="branchStepBtn" type="button" disabled>Take Branch</button>
+  <button id="modifyDataBtn" type="button" disabled>Modify Process Data</button>
+</fieldset>
+
+<fieldset>
+  <legend>Process Data Control</legend>
+  <label for="dataKeyInput">Key:</label>
+  <input id="dataKeyInput" type="text" placeholder="e.g. status" />
+  <label for="dataValueInput">Value:</label>
+  <input id="dataValueInput" type="text" placeholder="e.g. ready" />
+  <button id="setDataBtn" type="button">Set Data</button>
+  <button id="deleteDataBtn" type="button">Delete Key</button>
+
+  <br />
+  <label for="filterDataInput">Filter Displayed Data:</label>
+  <input id="filterDataInput" type="text" placeholder="Filter keys..." />
+  <button id="clearFilterBtn" type="button">Clear Filter</button>
+</fieldset>
+
+<fieldset>
+  <legend>Process Data View</legend>
+  <textarea id="dataView" rows="10" readonly></textarea>
+</fieldset>
+
+<fieldset>
+  <legend>Process Log</legend>
+  <textarea id="log" readonly></textarea>
+  <button id="clearLogBtn" type="button">Clear Log</button>
+</fieldset>
+
+<script>
+(() => {
+  // Process data and states
+
+  /*
+   Process concept:
+   - Multiple steps, each step can have multiple branches.
+   - Process data can change at each step.
+   - User can advance steps, jump between them, pause/resume/reset process.
+   - User input can affect next step or data.
+   - Progress slider controls/reflects progress (0-100).
+   - Data key-value store accessible for modification/view/filtering.
+   - Log tracks all actions.
+
+   Internal representation:
+
+   processSteps: Array of step objects with:
+    - id: unique string
+    - name: string for display
+    - description: details
+    - possibleNext: array of strings (step ids) for next steps or branches
+    - requiresInput: boolean whether step needs user input before advancing
+    - onEnter: function (data, input) => alters data or state
+  */
+
+  // Utility functions
+  function log(msg) {
+    const time = new Date().toLocaleTimeString();
+    state.log.push(`[${time}] ${msg}`);
+    renderLog();
+  }
+
+  function changeState(newState) {
+    state.status = newState;
+    renderState();
+  }
+
+  // Process definition
+  const processSteps = [
+    {
+      id: "start",
+      name: "Start",
+      description: "The process begins. No action required, ready to advance.",
+      possibleNext: ["validation"],
+      requiresInput: false,
+      onEnter: (data, input) => {
+        data.startedAt = new Date().toISOString();
+        return "Process started.";
+      },
+    },
+    {
+      id: "validation",
+      name: "Validation Step",
+      description:
+        "Validate process inputs. You can enter custom input to decide next step.",
+      possibleNext: ["approved", "rejected"],
+      requiresInput: true,
+      onEnter: (data, input) => {
+        if (!input) return "Waiting for input to validate.";
+        if (input.toLowerCase().includes("pass")) {
+          return "Validation passed.";
+        } else if (input.toLowerCase().includes("fail")) {
+          return "Validation failed.";
+        }
+        return "Validation unknown, defaulting to rejected.";
+      },
+    },
+    {
+      id: "approved",
+      name: "Approved Branch",
+      description: "Process approved. Proceed to execution or review.",
+      possibleNext: ["execution", "review"],
+      requiresInput: false,
+      onEnter: (data, input) => {
+        data.validationResult = "approved";
+        return "Approved path entered.";
+      },
+    },
+    {
+      id: "rejected",
+      name: "Rejected Branch",
+      description:
+        "Process rejected. You may restart or modify data before restart.",
+      possibleNext: ["modifyData", "start"],
+      requiresInput: false,
+      onEnter: (data, input) => {
+        data.validationResult = "rejected";
+        return "Rejected path entered.";
+      },
+    },
+    {
+      id: "execution",
+      name: "Execution Step",
+      description:
+        "Process execution in progress. Use progress slider to reflect completion.",
+      possibleNext: ["completed", "failed"],
+      requiresInput: false,
+      onEnter: (data, input) => {
+        data.executedAt = new Date().toISOString();
+        return "Execution started.";
+      },
+    },
+    {
+      id: "review",
+      name: "Review Step",
+      description:
+        "Review process results. You may approve to complete or reject to modify.",
+      possibleNext: ["completed", "modifyData"],
+      requiresInput: true,
+      onEnter: (data, input) => {
+        if (!input) return "Waiting for review input.";
+        if (input.toLowerCase().includes("approve")) {
+          return "Review approved.";
+        } else if (input.toLowerCase().includes("reject")) {
+          return "Review rejected.";
+        }
+        return "Review undecided.";
+      },
+    },
+    {
+      id: "modifyData",
+      name: "Modify Data",
+      description:
+        "Modify process data directly. Use controls to change key/value pairs.",
+      possibleNext: ["validation", "start"],
+      requiresInput: false,
+      onEnter: (data, input) => "Modify data step.";
+    },
+    {
+      id: "completed",
+      name: "Completed",
+      description:
+        "Process completed successfully. You can reset to start again.",
+      possibleNext: [],
+      requiresInput: false,
+      onEnter: (data, input) => {
+        data.completedAt = new Date().toISOString();
+        return "Process successfully completed.";
+      },
+    },
+    {
+      id: "failed",
+      name: "Failed",
+      description:
+        "Process failed during execution. You may reset or modify data.",
+      possibleNext: ["modifyData", "start"],
+      requiresInput: false,
+      onEnter: (data, input) => {
+        data.failedAt = new Date().toISOString();
+        return "Process failed.";
+      },
+    },
+  ];
+
+  // Indexed for quick lookup
+  const processStepById = {};
+  processSteps.forEach((step) => {
+    processStepById[step.id] = step;
+  });
+
+  // State management
+  const state = {
+    currentStepId: null,
+    status: "idle", // or running, paused, completed
+    data: {},
+    log: [],
+    userInput: "",
+    progress: 0,
+    paused: false,
+  };
+
+  // DOM elements
+  const stateDisplay = document.getElementById("stateDisplay");
+  const startProcessBtn = document.getElementById("startProcessBtn");
+  const pauseProcessBtn = document.getElementById("pauseProcessBtn");
+  const resumeProcessBtn = document.getElementById("resumeProcessBtn");
+  const resetProcessBtn = document.getElementById("resetProcessBtn");
+  const progressSlider = document.getElementById("progressSlider");
+  const progressValue = document.getElementById("progressValue");
+  const stepSelector = document.getElementById("stepSelector");
+  const jumpStepBtn = document.getElementById("jumpStepBtn");
+  const customInput = document.getElementById("customInput");
+  const submitInputBtn = document.getElementById("submitInputBtn");
+  const advanceStepBtn = document.getElementById("advanceStepBtn");
+  const branchStepBtn = document.getElementById("branchStepBtn");
+  const modifyDataBtn = document.getElementById("modifyDataBtn");
+  const dataKeyInput = document.getElementById("dataKeyInput");
+  const dataValueInput = document.getElementById("dataValueInput");
+  const setDataBtn = document.getElementById("setDataBtn");
+  const deleteDataBtn = document.getElementById("deleteDataBtn");
+  const filterDataInput = document.getElementById("filterDataInput");
+  const clearFilterBtn = document.getElementById("clearFilterBtn");
+  const dataView = document.getElementById("dataView");
+  const logArea = document.getElementById("log");
+  const clearLogBtn = document.getElementById("clearLogBtn");
+
+  // Render functions
+  function renderState() {
+    if (!state.currentStepId) {
+      stateDisplay.textContent = "Process not started. Press 'Start Process' to begin.";
+      disableControls(true);
+      return;
+    }
+
+    const step = processStepById[state.currentStepId];
+    const statusLine = `Status: ${state.status.toUpperCase()}${state.paused ? " (PAUSED)" : ""}`;
+    const stepLine = `Current Step: ${step.name} [${step.id}]`;
+    const descLine = `Description:\n${step.description}`;
+    const dataKeysCount = Object.keys(state.data).length;
+
+    const possibleNextSteps = step.possibleNext
+      .map((id) => {
+        const s = processStepById[id];
+        return s ? `${s.name} [${s.id}]` : id;
+      })
+      .join(", ") || "None";
+
+    stateDisplay.textContent =
+      statusLine +
+      "\n" +
+      stepLine +
+      "\n" +
+      descLine +
+      "\nPossible Next Steps: " +
+      possibleNextSteps +
+      `\nData keys: ${dataKeysCount}` +
+      `\nProgress: ${state.progress}%` +
+      `\nUser Input: "${state.userInput}"`;
+  }
+
+  function renderLog() {
+    logArea.value = state.log.join("\n");
+    logArea.scrollTop = logArea.scrollHeight;
+  }
+
+  function renderDataView(filterText = "") {
+    const entries = Object.entries(state.data);
+    const filtered = entries.filter(([k]) => k.includes(filterText));
+    if (filtered.length === 0) {
+      dataView.value = "(No data keys match filter)";
+    } else {
+      const lines = filtered.map(([k, v]) => `${k}: ${v}`);
+      dataView.value = lines.join("\n");
+    }
+  }
+
+  // Enable/disable controls depending on state
+  function disableControls(disableAll) {
+    startProcessBtn.disabled = !disableAll ? false : false;
+    pauseProcessBtn.disabled = disableAll || state.status !== "running" || state.paused;
+    resumeProcessBtn.disabled = disableAll || !state.paused;
+    resetProcessBtn.disabled = disableAll || state.status === "idle";
+
+    progressSlider.disabled =
+      disableAll || state.status !== "running" || state.currentStepId !== "execution";
+
+    stepSelector.disabled = disableAll || state.status === "idle";
+    jumpStepBtn.disabled = stepSelector.disabled;
+
+    customInput.disabled = disableAll || !currentStepRequiresInput();
+    submitInputBtn.disabled = customInput.disabled;
+
+    advanceStepBtn.disabled = disableAll || state.status !== "running" || state.paused || currentStepRequiresInput();
+    branchStepBtn.disabled = disableAll || state.status !== "running" || state.paused || !hasBranchingOptions();
+    modifyDataBtn.disabled = disableAll || state.status !== "running" || state.paused;
+
+    dataKeyInput.disabled = disableAll;
+    dataValueInput.disabled = disableAll;
+    setDataBtn.disabled = disableAll;
+    deleteDataBtn.disabled = disableAll;
+    filterDataInput.disabled = disableAll;
+    clearFilterBtn.disabled = disableAll;
+
+  }
+
+  function populateStepSelector() {
+    stepSelector.innerHTML = "";
+    processSteps.forEach((step) => {
+      const option = document.createElement("option");
+      option.value = step.id;
+      option.textContent = `${step.name} [${step.id}]`;
+      stepSelector.appendChild(option);
+    });
+  }
+
+  // Step helpers
+  function currentStepRequiresInput() {
+    if (!state.currentStepId) return false;
+    const step = processStepById[state.currentStepId];
+    return step.requiresInput;
+  }
+
+  function hasBranchingOptions() {
+    if (!state.currentStepId) return false;
+    const step = processStepById[state.currentStepId];
+    // Branching if multiple next steps available
+    return step.possibleNext.length > 1;
+  }
+
+  // Process control functions
+  function startProcess() {
+    if (state.status !== "idle") return;
+    state.currentStepId = "start";
+    state.data = {};
+    state.userInput = "";
+    state.progress = 0;
+    state.status = "running";
+    state.paused = false;
+    log("Process started.");
+    enterStep(state.currentStepId);
+    disableControls(false);
+  }
+
+  function pauseProcess() {
+    if (state.status !== "running" || state.paused) return;
+    state.paused = true;
+    log("Process paused.");
+    disableControls(false);
+  }
+  function resumeProcess() {
+    if (!state.paused) return;
+    state.paused = false;
+    log("Process resumed.");
+    disableControls(false);
+  }
+  function resetProcess() {
+    log("Process reset.");
+    state.status = "idle";
+    state.currentStepId = null;
+    state.userInput = "";
+    state.progress = 0;
+    state.paused = false;
+    disableControls(true);
+    renderState();
+    renderDataView(filterDataInput.value);
+  }
+
+  // Enter a step, call onEnter handler
+  function enterStep(stepId, input = null) {
+    state.currentStepId = stepId;
+    state.userInput = input || "";
+    const step = processStepById[stepId];
+    if (!step) return;
+    const outcome = step.onEnter(state.data, state.userInput);
+    log(`Entered step: ${step.name}. ${outcome || ""}`);
+
+    // Reset progress for execution step only
+    if (stepId === "execution") {
+      if (!state.data.progress) state.data.progress = 0;
+      state.progress = 0;
+      progressSlider.value = 0;
+      progressValue.textContent = "0%";
+    }
+    renderState();
+    renderDataView(filterDataInput.value);
+  }
+
+  // Advance to next step - if only one next step, go there;
+  // if multiple next steps, must branch instead.
+  function advanceStep() {
+    if (state.status !== "running" || state.paused) return;
+    const step = processStepById[state.currentStepId];
+    if (!step) return;
+    if (step.requiresInput && !state.userInput) {
+      log("Cannot advance: input required.");
+      alert("This step requires you to submit input first.");
+      return;
+    }
+    if (step.possibleNext.length === 1) {
+      enterStep(step.possibleNext[0]);
+    } else if (step.possibleNext.length === 0) {
+      log("No next steps. Process completed or stuck.");
+      alert("No next steps available to advance.");
+    } else {
+      log("Multiple next steps available, use 'Take Branch' button.");
+      alert(
+        "Multiple next steps available. Use the 'Take Branch' button to choose."
+      );
+    }
+  }
+
+  // Take branch: prompt user to select one of the next steps
+  function takeBranch() {
+    if (state.status !== "running" || state.paused) return;
+    const step = processStepById[state.currentStepId];
+    if (!step) return;
+    if (step.possibleNext.length < 2) {
+      alert("No branching options available in this step.");
+      return;
+    }
+    // Prompt user with choices
+    const choices = step.possibleNext.map((id) => {
+      const s = processStepById[id];
+      return s ? `${s.name} [${s.id}]` : id;
+    });
+    let msg = `Select next step (branch):\n`;
+    choices.forEach((c, i) => {
+      msg += `  ${i + 1}: ${c}\n`;
+    });
+    let choiceIdx = prompt(msg + "Enter number of choice:");
+    if (choiceIdx === null) {
+      log("Branching cancelled by user.");
+      return;
+    }
+    choiceIdx = parseInt(choiceIdx, 10);
+    if (
+      isNaN(choiceIdx) ||
+      choiceIdx < 1 ||
+      choiceIdx > step.possibleNext.length
+    ) {
+      alert("Invalid choice.");
+      return;
+    }
+    const chosenStepId = step.possibleNext[choiceIdx - 1];
+    enterStep(chosenStepId);
+  }
+
+  // Submit input for current step
+  function submitInput() {
+    let input = customInput.value.trim();
+    if (!input) {
+      alert("Input cannot be empty.");
+      return;
+    }
+    // For steps requiring input, set userInput and call onEnter with input
+    state.userInput = input;
+    const step = processStepById[state.currentStepId];
+    if (step && step.requiresInput) {
+      const outcome = step.onEnter(state.data, input);
+      log(`Input submitted at step ${step.name}: "${input}" -> ${outcome}`);
+      // For validation or review step, possibly auto branch depending on input
+      if (state.currentStepId === "validation") {
+        if (input.toLowerCase().includes("pass")) {
+          enterStep("approved");
+        } else if (input.toLowerCase().includes("fail")) {
+          enterStep("rejected");
+        } else {
+          enterStep("rejected");
+        }
+      } else if (state.currentStepId === "review") {
+        if (input.toLowerCase().includes("approve")) {
+          enterStep("completed");
+        } else if (input.toLowerCase().includes("reject")) {
+          enterStep("modifyData");
+        } else {
+          log("Review undecided; remain in review step.");
+        }
+      }
+    } else {
+      log("Current step does not accept input.");
+    }
+    customInput.value = "";
+    renderState();
+    renderDataView(filterDataInput.value);
+  }
+
+  // Jump to arbitrary step
+  function jumpToStep() {
+    let stepId = stepSelector.value;
+    if (!stepId) return;
+    if (!processStepById[stepId]) {
+      alert("Selected step does not exist.");
+      return;
+    }
+    enterStep(stepId);
+  }
+
+  // Progress slider control for execution step
+  function setProgress(value) {
+    if (state.currentStepId !== "execution") return;
+    let val = Number(value);
+    if (isNaN(val)) return;
+    val = Math.min(Math.max(val, 0), 100);
+    state.progress = val;
+    progressValue.textContent = val + "%";
+    // Update data too
+    state.data.progress = val;
+    log(`Execution progress set to ${val}%`);
+    renderState();
+    renderDataView(filterDataInput.value);
+  }
+
+  // Modify process data (update or delete)
+  function setDataKeyValue() {
+    const key = dataKeyInput.value.trim();
+    const val = dataValueInput.value;
+    if (!key) {
+      alert("Data key cannot be empty.");
+      return;
+    }
+    state.data[key] = val;
+    log(`Data key set: ${key} = ${val}`);
+    renderDataView(filterDataInput.value);
+  }
+  function deleteDataKey() {
+    const key = dataKeyInput.value.trim();
+    if (!key) {
+      alert("Data key cannot be empty.");
+      return;
+    }
+    if (key in state.data) {
+      delete state.data[key];
+      log(`Data key deleted: ${key}`);
+      renderDataView(filterDataInput.value);
+    } else {
+      alert("Data key not found.");
+    }
+  }
+
+  // Filter keys in data view
+  function filterData() {
+    renderDataView(filterDataInput.value.trim());
+  }
+  function clearFilter() {
+    filterDataInput.value = "";
+    renderDataView("");
+  }
+
+  // Modify data action button: jump to Modify Data step
+  function modifyDataStep() {
+    if (state.status !== "running" || state.paused) return;
+    enterStep("modifyData");
+  }
+
+  // Event bindings
+  startProcessBtn.addEventListener("click", () => {
+    startProcess();
+  });
+  pauseProcessBtn.addEventListener("click", () => pauseProcess());
+  resumeProcessBtn.addEventListener("click", () => resumeProcess());
+  resetProcessBtn.addEventListener("click", () => resetProcess());
+
+  progressSlider.addEventListener("input", (e) => setProgress(e.target.value));
+
+  jumpStepBtn.addEventListener("click", () => jumpToStep());
+
+  submitInputBtn.addEventListener("click", () => submitInput());
+
+  advanceStepBtn.addEventListener("click", () => advanceStep());
+
+  branchStepBtn.addEventListener("click", () => takeBranch());
+
+  setDataBtn.addEventListener("click", () => setDataKeyValue());
+
+  deleteDataBtn.addEventListener("click", () => deleteDataKey());
+
+  filterDataInput.addEventListener("input", () => filterData());
+
+  clearFilterBtn.addEventListener("click", () => clearFilter());
+
+  modifyDataBtn.addEventListener("click", () => modifyDataStep());
+
+  clearLogBtn.addEventListener("click", () => {
+    state.log = [];
+    renderLog();
+  });
+
+  // Initialize interface
+  disableControls(true);
+  populateStepSelector();
+  renderState();
+  renderDataView();
+
+  // Accessibility helper: focus first button
+  startProcessBtn.focus();
+})();
+</script>
+</body>
+</html>

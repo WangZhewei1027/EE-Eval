@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Abstract Syntax Tree Interactive Explorer</title>
+<style>
+  /* Minimal styling: only default browser styles */
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    white-space: pre-wrap;
+  }
+  textarea, input[type=text], select, button {
+    font-family: monospace, monospace;
+    font-size: 14px;
+    margin: 3px 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  label {
+    margin-top: 10px;
+    display: block;
+  }
+  #astContainer {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #000;
+    padding: 5px;
+    margin-top: 10px;
+  }
+  details {
+    margin-left: 20px;
+  }
+  summary {
+    cursor: pointer;
+    user-select: none;
+  }
+  button {
+    width: auto;
+    margin-right: 5px;
+  }
+  #info {
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Abstract Syntax Tree Interactive Explorer</h1>
+
+<label for="codeInput">Enter JavaScript code (small snippets recommended):</label>
+<textarea id="codeInput" rows="8" spellcheck="false">// Example: function add(a, b) { return a + b; }
+</textarea>
+
+<div>
+  <button id="parseBtn">Parse Code → Generate AST</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<label for="modeSelect">AST View Mode:</label>
+<select id="modeSelect" title="Choose how the AST nodes are displayed">
+  <option value="full">Full Node Details (Type + Properties)</option>
+  <option value="typeOnly" selected>Type Only</option>
+  <option value="summary">Summary (Type + Key Info)</option>
+</select>
+
+<label for="expandLevelSlider">Initial Expand Level (0 = collapsed, 5 = fully expanded): <span id="expandLevelValue">2</span></label>
+<input type="range" id="expandLevelSlider" min="0" max="5" value="2" />
+
+<label for="filterInput">Filter Nodes (by type or property value, case-insensitive):</label>
+<input type="text" id="filterInput" placeholder="e.g. Identifier, Literal, +, return" />
+
+<div>
+  <button id="expandAllBtn">Expand All Visible</button>
+  <button id="collapseAllBtn">Collapse All Visible</button>
+  <button id="highlightBtn">Highlight Filter Matches</button>
+  <button id="clearHighlightBtn">Clear Highlights</button>
+</div>
+
+<label for="nodeSelector">Jump to Node by ID:</label>
+<input type="text" id="nodeSelector" placeholder="Enter node ID (e.g. n10)" />
+<button id="gotoNodeBtn">Go</button>
+
+<div id="astContainer" aria-live="polite" aria-label="AST display area" tabindex="0" role="region"></div>
+
+<div id="info" aria-live="assertive" role="alert" style="min-height:2em;"></div>
+
+<hr />
+
+<h2>Interactive AST Node Inspector</h2>
+
+<label for="selectedNodeId">Selected Node ID:</label>
+<input type="text" id="selectedNodeId" readonly />
+
+<label for="selectedNodeType">Node Type:</label>
+<input type="text" id="selectedNodeType" readonly />
+
+<label for="selectedNodeValue">Node Value / Key Property:</label>
+<input type="text" id="selectedNodeValue" readonly />
+
+<label for="editPropertySelect">Select Property to Edit:</label>
+<select id="editPropertySelect" disabled>
+  <option value="">-- no property --</option>
+</select>
+
+<label for="editPropertyInput">Edit Property Value:</label>
+<input type="text" id="editPropertyInput" disabled />
+
+<div>
+  <button id="applyEditBtn" disabled>Apply Edit</button>
+  <button id="undoEditBtn" disabled>Undo Last Edit</button>
+</div>
+
+<div>
+  <button id="serializeBtn">Serialize AST to JSON</button>
+  <button id="downloadBtn" disabled>Download JSON</button>
+</div>
+
+<hr />
+
+<h2>Help & Instructions</h2>
+<ul>
+  <li>Enter JavaScript code above and click "Parse Code" to generate the AST.</li>
+  <li>Use "AST View Mode" and "Initial Expand Level" to control display details.</li>
+  <li>Filter displayed nodes by typing in the filter box and pressing "Highlight Filter Matches".</li>
+  <li>Click on node summaries in the tree to select nodes and inspect/edit properties below.</li>
+  <li>After editing, apply changes or undo edits. Serialize and download the AST anytime.</li>
+  <li>The AST node tree uses &lt;details&gt; elements for expand/collapse. Keys and values can be inspected.</li>
+  <li>The interface supports deep interaction paths with node filtering, selection, editing, and serialization.</li>
+</ul>
+
+<script>
+(() => {
+  // Minimal parser / AST generator:
+  // We will use Acorn JavaScript parser to generate real AST.
+  // Because external libraries not allowed, build a minimal JS parser for demonstration:
+  // But it's complicated - instead, implement a minimal example parser for arithmetic expressions with variables and functions:
+  // For maximal richness, include a hand-crafted parser for limited JS expressions (like expressions only)
+  // However, prompt says "focus on abstraction trees" not real parsing.
+  // So, we will use the built-in Function constructor to parse code and create an AST with Esprima-like keys (simulate minimal AST).
+  //
+  // Since no external libraries allowed and prompt prohibits any external network or libraries, we must build a very limited JS AST generator.
+  //
+  // To allow maximal interactivity, we assume input is JS code and use Function.toString() and self-made minimal parse from tokenization.
+  // For demo purposes, we'll generate a very coarse AST:
+  //
+  // We'll:
+  //   - tokenize input by splitting on whitespace and punctuation,
+  //   - categorize tokens,
+  //   - support function declarations, variable declarations, return statements, expressions with +, -, *, /
+  //   - build a small AST.
+  //
+  // This rough parser is not complete or proper but sufficient for demo interactivity.
+
+  // The AST node ids generator:
+  let nodeIdCounter = 1;
+  function genNodeId() {
+    return 'n' + (nodeIdCounter++);
+  }
+
+  // Node Constructor:
+  function AstNode(type, props = {}) {
+    this.id = genNodeId();
+    this.type = type;
+    Object.assign(this, props);
+  }
+
+  // --- Tokenizer ---
+  function tokenize(input) {
+    // Split by JS reserved words, identifiers, literals, operators, punctuators
+    // We'll use a RegExp to extract tokens:
+
+    // For demo support keywords: function, return, var, let, const, if, else, for, while
+    // Support operators: + - * / = ; ( ) { } , < > <= >= == === != !==
+
+    // Token regex parts:
+    const regexs = [
+      {type: 'whitespace', regex: /^[ \t\r\n]+/},
+      {type: 'number', regex: /^\d+(\.\d+)?/},
+      {type: 'string', regex: /^('(\\'|[^'])*'|"(\\\"|[^"])*")/},
+      {type: 'identifier', regex: /^[a-zA-Z_$][a-zA-Z0-9_$]*/},
+      {type: 'operator', regex: /^(\+|\-|\*|\/|=|<|>|<=|>=|==|===|!=|!==)/},
+      {type: 'punctuator', regex: /^(\{|\}|\(|\)|;|,)/},
+      {type: 'unknown', regex: /^.+?/},
+    ];
+
+    let pos = 0;
+    const tokens = [];
+
+    while (pos < input.length) {
+      let match = null;
+      for (const tokenDef of regexs) {
+        match = tokenDef.regex.exec(input.slice(pos));
+        if (match && match[0].length > 0) {
+          if (tokenDef.type !== 'whitespace') {
+            tokens.push({type: tokenDef.type, value: match[0], pos});
+          }
+          pos += match[0].length;
+          break;
+        }
+      }
+      if (!match) {
+        // No progress
+        tokens.push({type: 'unknown', value: input[pos], pos});
+        pos++;
+      }
+    }
+    return tokens;
+  }
+
+  // --- Parser ---
+  // Basic recursive descent parser for a tiny subset of JS (functions, var/let/const, return, binary expressions, identifiers, literals)
+  //
+  // Grammar (partial, simplified):
+  // Program := StatementList
+  // StatementList := Statement*
+  // Statement := FunctionDeclaration | VariableDeclaration | ExpressionStatement | ReturnStatement | BlockStatement
+  // FunctionDeclaration := 'function' Identifier '(' ParameterList ')' BlockStatement
+  // ParameterList := Identifier (',' Identifier)*
+  // VariableDeclaration := ('var'|'let'|'const') Identifier ('=' Expression)? ';'
+  // ReturnStatement := 'return' Expression? ';'
+  // ExpressionStatement := Expression ';'
+  // Expression := BinaryExpression | Identifier | Literal | FunctionCall
+  // BinaryExpression := Expression Operator Expression (only left-associative, no precedence for demo)
+  // FunctionCall := Identifier '(' ArgumentList ')'
+  // ArgumentList := Expression (',' Expression)*
+  // BlockStatement := '{' StatementList '}'
+  // Identifier := as token.type === 'identifier'
+  // Literal := number or string token
+  //
+
+  // Parsing helper utilities:
+  function Parser(tokens) {
+    this.tokens = tokens;
+    this.pos = 0;
+  }
+
+  Parser.prototype.peek = function() {
+    return this.tokens[this.pos];
+  };
+
+  Parser.prototype.next = function() {
+    return this.tokens[this.pos++];
+  };
+
+  Parser.prototype.eof = function() {
+    return this.pos >= this.tokens.length;
+  };
+
+  Parser.prototype.expect = function(type, value) {
+    const token = this.peek();
+    if (!token || token.type !== type || (value !== undefined && token.value !== value)) {
+      throw new Error(`Expected token type ${type}${value!==undefined?' with value '+value:''} at position ${token?token.pos:'EOF'}`);
+    }
+    return this.next();
+  };
+
+  // Consume optional punctuation:
+  Parser.prototype.consumeIf = function(type, value) {
+    const token = this.peek();
+    if (token && token.type === type && (value===undefined || token.value === value)) {
+      this.next();
+      return true;
+    }
+    return false;
+  };
+
+  // Parse Program
+  Parser.prototype.parseProgram = function() {
+    const body = [];
+    while (!this.eof()) {
+      const stmt = this.parseStatement();
+      if (stmt) body.push(stmt);
+      else break;
+    }
+    return new AstNode('Program', {body});
+  };
+
+  Parser.prototype.parseStatement = function() {
+    const token = this.peek();
+    if (!token) return null;
+    if (token.type === 'identifier' && token.value === 'function') {
+      return this.parseFunctionDeclaration();
+    } else if (token.type === 'identifier' && (token.value === 'var' || token.value === 'let' || token.value === 'const')) {
+      return this.parseVariableDeclaration();
+    } else if (token.type === 'identifier' && token.value === 'return') {
+      return this.parseReturnStatement();
+    } else if (token.type === 'punctuator' && token.value === '{') {
+      return this.parseBlockStatement();
+    } else {
+      return this.parseExpressionStatement();
+    }
+  };
+
+  Parser.prototype.parseFunctionDeclaration = function() {
+    this.expect('identifier','function');
+    const id = this.parseIdentifier();
+    this.expect('punctuator','(');
+    const params = this.parseParameterList();
+    this.expect('punctuator',')');
+    const body = this.parseBlockStatement();
+    return new AstNode('FunctionDeclaration', {id, params, body});
+  };
+
+  Parser.prototype.parseParameterList = function() {
+    const params = [];
+    if (this.consumeIf('punctuator',')')) {
+      this.pos--;
+      return params;
+    }
+    while(true) {
+      const param = this.parseIdentifier();
+      params.push(param);
+      if (!this.consumeIf('punctuator',',')) break;
+    }
+    return params;
+  };
+
+  Parser.prototype.parseVariableDeclaration = function() {
+    const kindToken = this.next(); // var|let|const
+    const kind = kindToken.value;
+    const declarations = [];
+    while(true) {
+      const id = this.parseIdentifier();
+      let init = null;
+      if (this.consumeIf('operator','=')) {
+        init = this.parseExpression();
+      }
+      declarations.push(new AstNode('VariableDeclarator', {id, init}));
+      if (!this.consumeIf('punctuator',',')) break;
+    }
+    this.expect('punctuator',';');
+    return new AstNode('VariableDeclaration', {kind, declarations});
+  };
+
+  Parser.prototype.parseReturnStatement = function() {
+    this.expect('identifier','return');
+    let argument = null;
+    if (!this.consumeIf('punctuator',';')) {
+      argument = this.parseExpression();
+      this.expect('punctuator',';');
+    }
+    return new AstNode('ReturnStatement', {argument});
+  };
+
+  Parser.prototype.parseBlockStatement = function() {
+    this.expect('punctuator','{');
+    const body = [];
+    while(!this.consumeIf('punctuator','}')) {
+      if(this.eof()) throw new Error('Unclosed block statement');
+      const stmt = this.parseStatement();
+      if (stmt) body.push(stmt);
+      else break;
+    }
+    return new AstNode('BlockStatement', {body});
+  };
+
+  Parser.prototype.parseExpressionStatement = function() {
+    const expr = this.parseExpression();
+    this.expect('punctuator',';');
+    return new AstNode('ExpressionStatement', {expression: expr});
+  };
+
+  Parser.prototype.parseExpression = function() {
+    // Parse left-associative binary expression without precedence for demo:
+    let left = this.parsePrimaryExpression();
+    while(true) {
+      const token = this.peek();
+      if (token && token.type === 'operator' && ['+', '-', '*', '/'].includes(token.value)) {
+        const op = this.next().value;
+        const right = this.parsePrimaryExpression();
+        left = new AstNode('BinaryExpression', {operator: op, left, right});
+      } else {
+        break;
+      }
+    }
+    return left;
+  };
+
+  Parser.prototype.parsePrimaryExpression = function() {
+    const token = this.peek();
+    if (!token) throw new Error("Unexpected EOF in expression");
+    if (token.type === 'identifier') {
+      // Check for function call
+      const id = this.parseIdentifier();
+      if (this.consumeIf('punctuator','(')) {
+        const args = this.parseArgumentList();
+        this.expect('punctuator',')');
+        return new AstNode('CallExpression', {callee: id, arguments: args});
+      }
+      return id;
+    } else if (token.type === 'number') {
+      return this.parseLiteral();
+    } else if (token.type === 'string') {
+      return this.parseLiteral();
+    } else if (token.type === 'punctuator' && token.value === '(') {
+      this.next();
+      const expr = this.parseExpression();
+      this.expect('punctuator',')');
+      return expr;
+    } else {
+      throw new Error(`Unexpected token ${token.type} ${token.value} at position ${token.pos}`);
+    }
+  };
+
+  Parser.prototype.parseArgumentList = function() {
+    const args = [];
+    if (this.peek() && this.peek().type === 'punctuator' && this.peek().value === ')') {
+      return args;
+    }
+    while(true) {
+      const expr = this.parseExpression();
+      args.push(expr);
+      if (!this.consumeIf('punctuator',',')) break;
+    }
+    return args;
+  };
+
+  Parser.prototype.parseIdentifier = function() {
+    const token = this.expect('identifier');
+    return new AstNode('Identifier', {name: token.value});
+  };
+
+  Parser.prototype.parseLiteral = function() {
+    const token = this.next();
+    return new AstNode('Literal', {value: token.type === 'number' ? Number(token.value) : token.value.slice(1,-1)});
+  };
+
+  // --- End of parser ---
+
+  // --- AST Tree Rendering and interaction ---
+
+  // We will generate DOM tree using <details> and <summary> per node, indenting nested nodes with HTML hierarchy.
+
+  // Store AST globally:
+  let astRoot = null;
+
+  // Store edits history stack:
+  const editHistory = [];
+
+  // Current selected node:
+  let selectedNode = null;
+
+  // Map from node id to dom node & data
+  const idToNode = new Map();
+
+  // === AST Renderer Functions ===
+
+  // Mode: "full" : show full details of each node including all props and values
+  // Mode: "typeOnly" : show only node type label in summary
+  // Mode: "summary" : show type plus key prop or short summary (like for Identifier show name, for Literal show value)
+
+  // We support expanding levels (initial open depth). Use recursion position.
+
+  // Filter: function(node) -> boolean to decide if node matches filter or contains matches
+
+  // Highlights: highlight matched nodes in filter
+
+  const astContainer = document.getElementById('astContainer');
+  const info = document.getElementById('info');
+
+  // Simple utility, sort object keys alphabetically for consistent order
+  function sortedKeys(obj) {
+    return Object.keys(obj).sort();
+  }
+
+  // Function to check if an object is an AST Node (has 'type' and 'id' props)
+  function isAstNode(obj) {
+    return obj && typeof obj === 'object' && typeof obj.type === 'string' && typeof obj.id === 'string';
+  }
+
+  // Find a short preview string for node key info:
+  function previewNodeSummary(node) {
+    if (!node || typeof node !== 'object') return '';
+    try {
+      switch(node.type) {
+        case 'Identifier':
+          return node.name;
+        case 'Literal':
+          return JSON.stringify(node.value);
+        case 'VariableDeclarator':
+          return node.id ? ('id: ' + (node.id.name || node.id.type || '?')) : '';
+        case 'FunctionDeclaration':
+          if (node.id && node.id.name) return node.id.name + '(...)';
+          return 'function(...)';
+        case 'BinaryExpression':
+          return node.operator || '';
+        case 'CallExpression':
+          return node.callee ? (node.callee.name || node.callee.type) + '(...)' : 'call(...)';
+        case 'VariableDeclaration':
+          return node.kind || '';
+        case 'ReturnStatement':
+          return node.argument ? previewNodeSummary(node.argument) : '';
+        default:
+          // Try to find first property that is string or number or literal
+          for (const key of sortedKeys(node)) {
+            const val = node[key];
+            if (typeof val === 'string' && val.length < 20) return val;
+            if (typeof val === 'number') return String(val);
+            if (typeof val === 'object' && val !== null && val.type) return previewNodeSummary(val);
+          }
+          return '';
+      }
+    } catch(e) {
+      return '';
+    }
+  }
+
+  // Highlight and unhighlight utility
+  function highlightNodeSummary(summaryEl) {
+    summaryEl.style.fontWeight = 'bold';
+    summaryEl.style.textDecoration = 'underline';
+  }
+  function clearHighlightNodeSummary(summaryEl) {
+    summaryEl.style.fontWeight = '';
+    summaryEl.style.textDecoration = '';
+  }
+
+  // Clear all highlights
+  function clearAllHighlights() {
+    idToNode.forEach(({summaryEl}) => {
+      if (summaryEl) clearHighlightNodeSummary(summaryEl);
+    });
+  }
+
+  // DOM renderer recursive function:
+
+  // Parameters:
+  // node: AstNode
+  // mode: string ("full", "typeOnly", "summary")
+  // expandLevel: number (initial expand depth, >=0)
+  // currentDepth: number(used internally)
+  // filter: function(node) => boolean or null
+  // returns DOM element (<details> or text node)
+
+  function renderAstNode(node, mode, expandLevel, currentDepth, filter) {
+    // Check node is AstNode
+    if (!isAstNode(node)) return document.createTextNode('');
+
+    // Filter: We want to show node if it matches filter or any of its descendants matches filter,
+    // else hide it (return null or empty text)
+
+    const matchesFilter = filter ? filter(node) : true;
+
+    // Recursively check children for filter:
+    let childVisible = false;
+    const childrenNodes = [];
+
+    for (const key of sortedKeys(node)) {
+      if (key === 'id' || key === 'type') continue;
+      const val = node[key];
+      if (val === null || val === undefined) continue;
+      if (Array.isArray(val)) {
+        for (const v of val) {
+          if (isAstNode(v)) {
+            const child = renderAstNode(v, mode, expandLevel, currentDepth + 1, filter);
+            if (child !== null) {
+              childVisible = true;
+              childrenNodes.push({key, node: v, el: child});
+            }
+          }
+        }
+      } else if (isAstNode(val)) {
+        const child = renderAstNode(val, mode, expandLevel, currentDepth + 1, filter);
+        if (child !== null) {
+          childVisible = true;
+          childrenNodes.push({key, node: val, el: child});
+        }
+      }
+    }
+
+    if (!matchesFilter && !childVisible) return null; // node filtered out completely
+
+    // Create <details> and <summary> for this node
+    const details = document.createElement('details');
+    details.setAttribute('data-id', node.id);
+    details.tabIndex = -1;
+
+    // Expand details if currentDepth < expandLevel
+    if (currentDepth < expandLevel) {
+      details.open = true;
+    }
+
+    const summary = document.createElement('summary');
+    summary.tabIndex = 0; // to allow focus
+    summary.textContent = '';
+
+    // Compose summary text according to mode:
+    if (mode === 'typeOnly') {
+      summary.textContent = node.type;
+    } else if (mode === 'summary') {
+      const shortInfo = previewNodeSummary(node);
+      summary.textContent = node.type + (shortInfo ? ' - ' + shortInfo : '');
+    } else if (mode === 'full') {
+      // Show type + all props
+      summary.textContent = node.type;
+    }
+
+    // Add summary attributes for accessibility and selection:
+    summary.title = 'Node ID: ' + node.id;
+
+    details.appendChild(summary);
+
+    // Save to map for selection and highlighting:
+    idToNode.set(node.id, {node, element: details, summaryEl: summary});
+
+    // If mode full, show all properties as subnodes:
+    if (mode === 'full') {
+      // Show all props as entries:
+      for (const key of sortedKeys(node)) {
+        if (key === 'id' || key === 'type') continue;
+        const val = node[key];
+        let propDetails = document.createElement('details');
+        propDetails.style.marginLeft = '1em';
+        let propSummary = document.createElement('summary');
+        propSummary.textContent = key;
+        propSummary.title = 'Property: ' + key;
+        propDetails.appendChild(propSummary);
+
+        if (val === null) {
+          const n = document.createTextNode('null');
+          propDetails.appendChild(n);
+        } else if (val === undefined) {
+          const n = document.createTextNode('undefined');
+          propDetails.appendChild(n);
+        } else if (Array.isArray(val)) {
+          if (val.length === 0) {
+            propDetails.appendChild(document.createTextNode('[ ]'));
+          } else {
+            for (let i = 0; i < val.length; i++) {
+              const e = val[i];
+              if (isAstNode(e)) {
+                const child = renderAstNode(e, mode, expandLevel, currentDepth + 2, filter);
+                if (child !== null) {
+                  propDetails.appendChild(child);
+                }
+              } else {
+                let textVal = (typeof e === 'string' ? '"' + e + '"' : String(e));
+                propDetails.appendChild(document.createTextNode(textVal));
+                propDetails.appendChild(document.createElement('br'));
+              }
+            }
+          }
+        } else if (isAstNode(val)) {
+          const child = renderAstNode(val, mode, expandLevel, currentDepth + 2, filter);
+          if (child !== null) propDetails.appendChild(child);
+        } else if (typeof val === 'object') {
+          // Plain object:
+          propDetails.appendChild(document.createTextNode(JSON.stringify(val)));
+        } else {
+          // Primitive value:
+          propDetails.appendChild(document.createTextNode(String(val)));
+        }
+        details.appendChild(propDetails);
+      }
+    } else {
+      // For other modes, render children nodes under details:
+      for (const child of childrenNodes) {
+        details.appendChild(child.el);
+      }
+    }
+
+    // Highlight filter matches if filter provided
+    if (filter && matchesFilter) {
+      summary.style.fontWeight = 'bold';
+      summary.style.textDecoration = 'underline';
+    }
+
+    return details;
+  }
+
+  // --- Filtering ---
+
+  // Return function to match node if any of node.type or string props or key props contain filter string
+  function buildFilterFunction(filterStr) {
+    if (!filterStr || filterStr.trim() === '') return null;
+    const frag = filterStr.trim().toLowerCase();
+    return function filter(node) {
+      // Check type
+      if (node.type.toLowerCase().includes(frag)) return true;
+      for (const key of sortedKeys(node)) {
+        const val = node[key];
+        if (val === null || val === undefined) continue;
+        if (typeof val === 'string' && val.toLowerCase().includes(frag)) return true;
+        if (typeof val === 'number' && String(val).includes(frag)) return true;
+        if (Array.isArray(val)) {
+          for (const e of val) {
+            if (e && typeof e === 'object') {
+              if (filter(e)) return true;
+            } else if (typeof e === 'string' && e.toLowerCase().includes(frag)) return true;
+          }
+        } else if (typeof val === 'object' && val !== null) {
+          if (filter(val)) return true;
+        }
+      }
+      return false;
+    };
+  }
+
+  // --- Selection and Node Inspector ---
+
+  // Elements:
+  const selectedNodeIdInput = document.getElementById('selectedNodeId');
+  const selectedNodeTypeInput = document.getElementById('selectedNodeType');
+  const selectedNodeValueInput = document.getElementById('selectedNodeValue');
+  const editPropertySelect = document.getElementById('editPropertySelect');
+  const editPropertyInput = document.getElementById('editPropertyInput');
+  const applyEditBtn = document.getElementById('applyEditBtn');
+  const undoEditBtn = document.getElementById('undoEditBtn');
+  const serializeBtn = document.getElementById('serializeBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+
+  // Selected property to edit:
+  let selectedPropertyKey = null;
+
+  // When a node is clicked in the tree, select it:
+  function onNodeSummaryClick(event) {
+    let summaryEl = event.target;
+    if (summaryEl.tagName !== 'SUMMARY') return;
+    const details = summaryEl.parentElement;
+    if (!details.hasAttribute('data-id')) return;
+    const nid = details.getAttribute('data-id');
+    selectNodeById(nid);
+  }
+
+  function selectNodeById(nid) {
+    const entry = idToNode.get(nid);
+    if (!entry) {
+      info.textContent = 'Node with ID "' + nid + '" not found.';
+      clearInspector();
+      return;
+    }
+    selectedNode = entry.node;
+    updateInspector();
+    info.textContent = 'Selected node ' + nid;
+  }
+
+  function clearInspector() {
+    selectedNodeIdInput.value = '';
+    selectedNodeTypeInput.value = '';
+    selectedNodeValueInput.value = '';
+    editPropertySelect.innerHTML = '<option value="">-- no property --</option>';
+    editPropertySelect.disabled = true;
+    editPropertyInput.value = '';
+    editPropertyInput.disabled = true;
+    applyEditBtn.disabled = true;
+  }
+
+  function updateInspector() {
+    if (!selectedNode) {
+      clearInspector();
+      return;
+    }
+    selectedNodeIdInput.value = selectedNode.id || '';
+    selectedNodeTypeInput.value = selectedNode.type || '';
+    selectedNodeValueInput.value = previewNodeSummary(selectedNode) || '';
+
+    // Fill editPropertySelect with editable properties (strings and numbers only, excluding id and type)
+    editPropertySelect.innerHTML = '<option value="">-- select property to edit --</option>';
+    let optionsExist = false;
+    for (const key of sortedKeys(selectedNode)) {
+      if (key === 'id' || key === 'type') continue;
+      const val = selectedNode[key];
+      if (typeof val === 'string' || typeof val === 'number') {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key + ': ' + val;
+        editPropertySelect.appendChild(opt);
+        optionsExist = true;
+      }
+    }
+
+    if (optionsExist) {
+      editPropertySelect.disabled = false;
+      // disable editing inputs until a property is chosen
+      editPropertyInput.value = '';
+      editPropertyInput.disabled = true;
+      applyEditBtn.disabled = true;
+    } else {
+      editPropertySelect.disabled = true;
+      editPropertyInput.value = '';
+      editPropertyInput.disabled = true;
+      applyEditBtn.disabled = true;
+    }
+  }
+
+  // Event for property select change:
+  editPropertySelect.addEventListener('change', () => {
+    selectedPropertyKey = editPropertySelect.value || null;
+    if (selectedPropertyKey && selectedNode) {
+      const val = selectedNode[selectedPropertyKey];
+      editPropertyInput.value = val;
+      editPropertyInput.disabled = false;
+      applyEditBtn.disabled = false;
+    } else {
+      editPropertyInput.value = '';
+      editPropertyInput.disabled = true;
+      applyEditBtn.disabled = true;
+    }
+  });
+
+  // Apply Edit button click:
+  applyEditBtn.addEventListener('click', () => {
+    if (!selectedNode || !selectedPropertyKey) return;
+    const oldVal = selectedNode[selectedPropertyKey];
+    let newValRaw = editPropertyInput.value;
+
+    // Try to guess type:
+    let newVal;
+    if (typeof oldVal === 'number') {
+      newVal = Number(newValRaw);
+      if (isNaN(newVal)) {
+        info.textContent = 'Invalid number: ' + newValRaw;
+        return;
+      }
+    } else {
+      newVal = newValRaw;
+    }
+
+    // Record undo info:
+    editHistory.push({node: selectedNode, key: selectedPropertyKey, oldValue: oldVal, newValue: newVal});
+
+    // Apply
+    selectedNode[selectedPropertyKey] = newVal;
+    info.textContent = `Applied edit on node ${selectedNode.id}: ${selectedPropertyKey} = ${newValRaw}`;
+
+    // Refresh inspector display (in case preview changed)
+    updateInspector();
+
+    // Re-render AST display (to reflect change)
+    renderCurrentAst();
+
+    // Enable undo:
+    undoEditBtn.disabled = false;
+  });
+
+  // Undo last edit:
+  undoEditBtn.addEventListener('click', () => {
+    if (editHistory.length === 0) {
+      info.textContent = 'Nothing to undo.';
+      undoEditBtn.disabled = true;
+      return;
+    }
+    const lastEdit = editHistory.pop();
+    lastEdit.node[lastEdit.key] = lastEdit.oldValue;
+    info.textContent = `Undid edit on node ${lastEdit.node.id}: ${lastEdit.key} restored to ${lastEdit.oldValue}`;
+
+    // Refresh inspector if current node affected:
+    if (selectedNode && selectedNode.id === lastEdit.node.id) {
+      updateInspector();
+    }
+
+    renderCurrentAst();
+
+    if (editHistory.length === 0) {
+      undoEditBtn.disabled = true;
+    }
+  });
+
+  // --- UI Controls & Events ---
+
+  const codeInput = document.getElementById('codeInput');
+  const parseBtn = document.getElementById('parseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const modeSelect = document.getElementById('modeSelect');
+  const expandLevelSlider = document.getElementById('expandLevelSlider');
+  const expandLevelValue = document.getElementById('expandLevelValue');
+  const filterInput = document.getElementById('filterInput');
+  const expandAllBtn = document.getElementById('expandAllBtn');
+  const collapseAllBtn = document.getElementById('collapseAllBtn');
+  const highlightBtn = document.getElementById('highlightBtn');
+  const clearHighlightBtn = document.getElementById('clearHighlightBtn');
+  const nodeSelector = document.getElementById('nodeSelector');
+  const gotoNodeBtn = document.getElementById('gotoNodeBtn');
+
+  // Update expand level span:
+  expandLevelSlider.addEventListener('input', () => {
+    expandLevelValue.textContent = expandLevelSlider.value;
+  });
+
+  function renderCurrentAst() {
+    if (!astRoot) return;
+    idToNode.clear();
+    clearInspector();
+    selectedNode = null;
+
+    const mode = modeSelect.value;
+    const expandLevel = parseInt(expandLevelSlider.value, 10);
+    const filter = buildFilterFunction(filterInput.value);
+
+    // Because renderAstNode can return null when filtered out, handle that:
+    let renderedAst = renderAstNode(astRoot, mode, expandLevel, 0, filter);
+    if (!renderedAst) {
+      astContainer.textContent = 'No AST to display with current filter.';
+    } else {
+      astContainer.innerHTML = '';
+      astContainer.appendChild(renderedAst);
+    }
+  }
+
+  // Parse button handler:
+  parseBtn.addEventListener('click', () => {
+    const code = codeInput.value;
+    if (!code.trim()) {
+      info.textContent = 'Please enter some code to parse.';
+      return;
+    }
+    try {
+      const tokens = tokenize(code);
+      nodeIdCounter = 1;
+      const parser = new Parser(tokens);
+      astRoot = parser.parseProgram();
+
+      info.textContent = 'Parsing succeeded. AST generated with root node ID ' + astRoot.id + '.';
+      editHistory.length = 0; // clear history
+      undoEditBtn.disabled = true;
+      downloadBtn.disabled = true;
+      renderCurrentAst();
+    } catch(e) {
+      info.textContent = 'Parse error: ' + e.message;
+      astContainer.textContent = '';
+      astRoot = null;
+      clearInspector();
+      editHistory.length = 0;
+      undoEditBtn.disabled = true;
+      downloadBtn.disabled = true;
+    }
+  });
+
+  // Reset button handler:
+  resetBtn.addEventListener('click', () => {
+    codeInput.value = '';
+    astContainer.textContent = '';
+    info.textContent = 'Reset done.';
+    astRoot = null;
+    clearInspector();
+    editHistory.length = 0;
+    undoEditBtn.disabled = true;
+    downloadBtn.disabled = true;
+  });
+
+  // Mode select changes:
+  modeSelect.addEventListener('change', () => {
+    renderCurrentAst();
+  });
+
+  // Expand level changed:
+  expandLevelSlider.addEventListener('change', () => {
+    renderCurrentAst();
+  });
+
+  // Filter input change does not trigger automatic render to let user control highlight button
+  // Highlight filter matches button handler:
+  highlightBtn.addEventListener('click', () => {
+    const filter = buildFilterFunction(filterInput.value);
+    if (!astRoot) {
+      info.textContent = 'No AST generated.';
+      return;
+    }
+    if (!filter) {
+      info.textContent = 'Please enter filter text.';
+      return;
+    }
+    clearAllHighlights();
+    let count = 0;
+    idToNode.forEach(({node, summaryEl}) => {
+      if (filter(node)) {
+        highlightNodeSummary(summaryEl);
+        count++;
+      }
+    });
+    info.textContent = 'Highlight done: ' + count + ' nodes matched filter.';
+  });
+
+  // Clear highlight:
+  clearHighlightBtn.addEventListener('click', () => {
+    clearAllHighlights();
+    info.textContent = 'Highlights cleared.';
+  });
+
+  // Expand all visible button:
+  expandAllBtn.addEventListener('click', () => {
+    idToNode.forEach(({element}) => {
+      element.open = true;
+    });
+  });
+
+  // Collapse all visible button:
+  collapseAllBtn.addEventListener('click', () => {
+    idToNode.forEach(({element}) => {
+      element.open = false;
+    });
+  });
+
+  // Go to Node button:
+  gotoNodeBtn.addEventListener('click', () => {
+    const nid = nodeSelector.value.trim();
+    if (!nid) {
+      info.textContent = 'Enter a node ID.';
+      return;
+    }
+    const entry = idToNode.get(nid);
+    if (!entry) {
+      info.textContent = 'Node ID "' + nid + '" not found.';
+      return;
+    }
+    // Expand all parent details to reveal node
+    let curr = entry.element;
+    while (curr && curr !== astContainer) {
+      if (curr.tagName === 'DETAILS') curr.open = true;
+      curr = curr.parentElement;
+    }
+    const rect = entry.element.getBoundingClientRect();
+    astContainer.scrollTop += rect.top - astContainer.getBoundingClientRect().top - 20;
+    // Select node
+    selectNodeById(nid);
+  });
+
+  // AST container click handler to select nodes on summary click
+  astContainer.addEventListener('click', onNodeSummaryClick);
+
+  // --- AST Serialization ---
+  function serializeAst(node) {
+    // Remove cyclic or circular refs, only keep valid properties, no functions
+    if (!node || typeof node !== 'object') return node;
+    if (Array.isArray(node)) return node.map(serializeAst);
+    const obj = {};
+    for (const key of Object.keys(node)) {
+      const val = node[key];
+      if (key === 'id') continue; // omit id in serialization to keep clean output, can be adjusted
+      if (typeof val === 'function') continue;
+      if (typeof val === 'object') {
+        obj[key] = serializeAst(val);
+      } else {
+        obj[key] = val;
+      }
+    }
+    obj.type = node.type; // always include type
+    return obj;
+  }
+
+  serializeBtn.addEventListener('click', () => {
+    if (!astRoot) {
+      info.textContent = 'No AST to serialize.';
+      return;
+    }
+    try {
+      const ser = serializeAst(astRoot);
+      const jsonStr = JSON.stringify(ser, null, 2);
+      // Show jsonStr in a prompt or modal (since no styling, use prompt)
+      // But prompt only max few KB. Instead show in textarea below AST container
+      let existingArea = document.getElementById('jsonOutputArea');
+      if (!existingArea) {
+        existingArea = document.createElement('textarea');
+        existingArea.id = 'jsonOutputArea';
+        existingArea.rows = 20;
+        existingArea.readOnly = true;
+        existingArea.style.width = '100%';
+        existingArea.style.marginTop = '10px';
+        astContainer.parentElement.appendChild(existingArea);
+      }
+      existingArea.value = jsonStr;
+      info.textContent = 'AST serialized to JSON below. Use Download to save.';
+      downloadBtn.disabled = false;
+      // Store for download:
+      downloadBtn.dataset.json = jsonStr;
+    } catch(e) {
+      info.textContent = 'Serialization error: ' + e.message;
+    }
+  });
+
+  // Download button:
+  downloadBtn.addEventListener('click', () => {
+    const jsonStr = downloadBtn.dataset.json;
+    if (!jsonStr) {
+      info.textContent = 'No JSON available to download.';
+      return;
+    }
+    const blob = new Blob([jsonStr], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ast.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    info.textContent = 'AST JSON downloaded.';
+  });
+})();
+</script>
+
+</body>
+</html>

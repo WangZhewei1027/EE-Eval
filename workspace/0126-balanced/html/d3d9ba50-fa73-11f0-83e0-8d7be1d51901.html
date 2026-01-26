@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ACID Properties Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; color: #111; background: #f7fafc; }
+    h1 { margin-bottom: 6px; }
+    p.lead { margin-top: 0; color:#334155 }
+    .container { display: grid; grid-template-columns: 360px 1fr 320px; gap: 14px; margin-top: 12px; }
+    .panel { background: white; border-radius: 10px; padding: 12px; box-shadow: 0 1px 4px rgba(2,6,23,0.06); }
+    .small { font-size: 13px; color:#475569; }
+    .accounts { display:flex; flex-direction:column; gap:8px; }
+    .acct { padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; background:#f1f5f9;}
+    .acct strong { font-size: 15px; }
+    .controls { display:flex; gap:8px; margin-top:8px; }
+    button { background: #0369a1; color: white; border: none; padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:600; }
+    button.secondary { background:#64748b; }
+    button.warn { background:#b45309; }
+    button.ghost { background: transparent; color: #0f172a; border:1px solid #e2e8f0; }
+    label { display:block; font-size:13px; margin:6px 0 4px; color:#334155; }
+    select,input[type="number"] { width:100%; padding:8px; border-radius:8px; border:1px solid #e2e8f0; font-size:14px; }
+    .txn-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    .txn { padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; background:#eef2ff; cursor:pointer; }
+    .txn.active { outline: 3px solid #c7f9ff; box-shadow: 0 6px 14px rgba(2,6,23,0.04); }
+    .txn small { color:#475569; }
+    .ops { margin-top:10px; max-height:120px; overflow:auto; background:#0f172a10; padding:8px; border-radius:8px; }
+    .ops div { padding:6px 8px; border-radius:6px; margin-bottom:6px; background: white; border:1px solid #e6eef5; }
+    .log { height: 300px; overflow:auto; background:#0b122120; padding:10px; border-radius:8px; color:#02122a; font-family:monospace; font-size:13px; }
+    .status { margin-top:8px; padding:8px; border-radius:8px; background:#f8fafc; font-size:13px; color:#0f172a; border:1px solid #e6eef5; }
+    .mode { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    footer { margin-top:12px; color:#475569; font-size:13px; }
+    .pill { background:#f1f5f9; padding:6px 8px; border-radius:999px; font-weight:600; color:#0f172a; border:1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <h1>ACID Properties — Interactive Demo</h1>
+  <p class="lead">This small in-browser demo illustrates the four ACID properties (Atomicity, Consistency, Isolation, Durability) using simple account transfers and transactions.</p>
+
+  <div class="container">
+    <!-- Left: Database / modes -->
+    <div class="panel">
+      <h3>Database (Committed State)</h3>
+      <div class="small">Committed values are persisted (durable). Transactions work on private snapshots/workspaces.</div>
+
+      <div class="accounts" id="accounts"></div>
+
+      <div style="margin-top:12px;">
+        <label>Total Sum:</label>
+        <div class="pill" id="totalSum"></div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Modes</label>
+        <div class="mode">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="radio" name="isolation" value="serializable" checked> Serializable
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="radio" name="isolation" value="none"> No Isolation (last-writer wins)
+          </label>
+        </div>
+        <div class="small">Serializable = optimistic concurrency check on commit (detects conflicts). No Isolation = commits overwrite without checks (shows anomalies).</div>
+      </div>
+
+      <div class="controls" style="margin-top:12px;">
+        <button id="resetDb" class="ghost">Reset DB</button>
+        <button id="simulateCrash" class="secondary">Simulate Crash (reload)</button>
+      </div>
+
+      <div class="status" id="dbStatus" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- Middle: Transactions area -->
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0">Transactions</h3>
+        <div class="small">Open transactions and operations (atomic units)</div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <div style="display:flex; gap:8px;">
+          <button id="newTxn">Start Transaction</button>
+          <button id="closeAll" class="secondary">Close All</button>
+        </div>
+      </div>
+
+      <div class="txn-list" id="txnList" style="margin-top:12px;"></div>
+
+      <div id="txnDetail" style="margin-top:12px;"></div>
+
+      <div style="margin-top:12px;">
+        <h4 style="margin:0">Operations</h4>
+        <div class="small">Create transfer operations inside a selected transaction (atomic group).</div>
+
+        <label>From</label>
+        <select id="fromAcct"></select>
+
+        <label>To</label>
+        <select id="toAcct"></select>
+
+        <label>Amount</label>
+        <input type="number" id="amount" min="1" value="10">
+
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button id="applyOp">Apply Operation</button>
+          <button id="commitTxn" class="secondary">Commit Selected</button>
+          <button id="rollbackTxn" class="warn">Rollback Selected</button>
+        </div>
+
+        <div class="small" style="margin-top:8px;">Consistency rule: total sum must remain the same and balances cannot be negative. Commits that violate consistency will be rejected.</div>
+      </div>
+    </div>
+
+    <!-- Right: Logs and info -->
+    <div class="panel">
+      <h3>Logs & Info</h3>
+      <div class="log" id="log"></div>
+
+      <div style="margin-top:10px;">
+        <h4 style="margin:0">ACID Quick Guide</h4>
+        <div class="small" style="margin-top:8px;">
+          Atomicity: a transaction's operations either all happen (commit) or none (rollback). <br><br>
+          Consistency: transactions must preserve database rules (here: total sum and non-negative balances).<br><br>
+          Isolation: concurrent transactions do not interfere; serializable mode detects conflicts on commit. No isolation mode demonstrates anomalies. <br><br>
+          Durability: once committed, changes survive crashes (persisted in localStorage).
+        </div>
+      </div>
+      <footer>
+        Tip: Try creating two transactions that change the same account and test both isolation modes. Then simulate a crash after a commit vs after creating but not committing a transaction.
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    // Simple in-browser DB for demonstration
+    (function() {
+      // Default initial DB
+      const DEFAULT_DB = {
+        accounts: {
+          Alice: 100,
+          Bob: 80,
+          Carol: 50
+        },
+        versions: { /* per-account version numbers for optimistic CC */ },
+        initialTotal: 0
+      };
+      // Init versions and initialTotal
+      function initializeDefault() {
+        const db = JSON.parse(JSON.stringify(DEFAULT_DB));
+        for (const k of Object.keys(db.accounts)) db.versions[k] = 1;
+        db.initialTotal = Object.values(db.accounts).reduce((a,b)=>a+b,0);
+        return db;
+      }
+
+      // Storage keys
+      const STORAGE_KEY = 'acid_demo_db_v1';
+
+      // In-memory state
+      let db = loadDb();
+      let transactions = {}; // txId -> txn object
+      let selectedTxn = null;
+      let nextTxnId = 1;
+
+      // UI elements
+      const accountsDiv = document.getElementById('accounts');
+      const totalSumEl = document.getElementById('totalSum');
+      const txnListEl = document.getElementById('txnList');
+      const txnDetailEl = document.getElementById('txnDetail');
+      const fromAcctSel = document.getElementById('fromAcct');
+      const toAcctSel = document.getElementById('toAcct');
+      const amountInput = document.getElementById('amount');
+      const logEl = document.getElementById('log');
+      const dbStatus = document.getElementById('dbStatus');
+
+      // Initialize DB if not present
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(initializeDefault()));
+      }
+
+      function loadDb() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return initializeDefault();
+          const parsed = JSON.parse(raw);
+          // ensure versions and initialTotal exist
+          if (!parsed.versions) {
+            parsed.versions = {};
+            for (const k of Object.keys(parsed.accounts)) parsed.versions[k] = 1;
+          }
+          if (!parsed.initialTotal) parsed.initialTotal = Object.values(parsed.accounts).reduce((a,b)=>a+b,0);
+          return parsed;
+        } catch (e) {
+          console.error('Failed loading DB, resetting', e);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(initializeDefault()));
+          return loadDb();
+        }
+      }
+
+      function persistDb() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      }
+
+      function log(msg) {
+        const time = new Date().toLocaleTimeString();
+        logEl.innerHTML = `<div>[${time}] ${escapeHtml(msg)}</div>` + logEl.innerHTML;
+      }
+
+      function escapeHtml(s) {
+        return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+      }
+
+      function renderDb() {
+        accountsDiv.innerHTML = '';
+        for (const [name, bal] of Object.entries(db.accounts)) {
+          const ver = db.versions[name] || 0;
+          const div = document.createElement('div');
+          div.className = 'acct';
+          div.innerHTML = `<strong>${name}</strong><div style="text-align:right"><div>$${bal.toFixed(2)}</div><small style="color:#475569">v${ver}</small></div>`;
+          accountsDiv.appendChild(div);
+        }
+        const total = Object.values(db.accounts).reduce((a,b)=>a+b,0);
+        totalSumEl.textContent = `$${total.toFixed(2)}`;
+        dbStatus.textContent = `Initial total (consistency rule): $${db.initialTotal.toFixed(2)} — Current total: $${total.toFixed(2)}`;
+        // update selects
+        const keys = Object.keys(db.accounts);
+        fromAcctSel.innerHTML = '';
+        toAcctSel.innerHTML = '';
+        for (const k of keys) {
+          const o1 = document.createElement('option'); o1.value = k; o1.textContent = k;
+          const o2 = document.createElement('option'); o2.value = k; o2.textContent = k;
+          fromAcctSel.appendChild(o1);
+          toAcctSel.appendChild(o2);
+        }
+      }
+
+      // Transaction structure:
+      // { id, state: 'active'|'committed'|'aborted', baseSnapshot: {accounts, versions}, workspace: {account: value}, ops: [string], createdAt }
+      function newTransaction() {
+        const id = 'T' + (nextTxnId++);
+        const base = {
+          accounts: JSON.parse(JSON.stringify(db.accounts)),
+          versions: JSON.parse(JSON.stringify(db.versions))
+        };
+        const tx = {
+          id,
+          state: 'active',
+          baseSnapshot: base,
+          workspace: {}, // only modified accounts
+          ops: [],
+          createdAt: Date.now()
+        };
+        transactions[id] = tx;
+        log(`Started transaction ${id}`);
+        renderTxList();
+        return tx;
+      }
+
+      function closeAllTransactions() {
+        transactions = {};
+        selectedTxn = null;
+        renderTxList();
+        renderTxnDetail();
+        log('Closed all transactions (in-memory only).');
+      }
+
+      function applyOperationToTxn(tx, from, to, amount) {
+        if (!tx || tx.state !== 'active') { alert('Select an active transaction'); return; }
+        if (from === to) { alert('From and To must be different'); return; }
+        if (amount <= 0) { alert('Amount must be > 0'); return; }
+        // Read current values for tx: check workspace first, else base snapshot
+        const read = (acct) => {
+          if (acct in tx.workspace) return tx.workspace[acct];
+          return tx.baseSnapshot.accounts[acct];
+        };
+        const fromVal = read(from);
+        const toVal = read(to);
+        const newFrom = +(fromVal - amount);
+        const newTo = +(toVal + amount);
+        tx.workspace[from] = newFrom;
+        tx.workspace[to] = newTo;
+        tx.ops.push(`${from} -> ${to} : $${amount.toFixed(2)}`);
+        log(`${tx.id}: Applied op ${from} -> ${to} $${amount.toFixed(2)}`);
+        renderTxnDetail();
+      }
+
+      // Commit behavior depends on isolation mode
+      function getIsolationMode() {
+        const radios = document.getElementsByName('isolation');
+        for (const r of radios) if (r.checked) return r.value;
+        return 'serializable';
+      }
+
+      function commitTransaction(tx) {
+        if (!tx || tx.state !== 'active') { alert('Select an active transaction'); return; }
+        const mode = getIsolationMode();
+        // Build the new committed snapshot candidate
+        const candidate = JSON.parse(JSON.stringify(db.accounts));
+        // apply tx.workspace changes into candidate (these are absolute values)
+        for (const [acct, val] of Object.entries(tx.workspace)) {
+          candidate[acct] = val;
+        }
+        // Check consistency: no negative balances and total must equal initialTotal
+        for (const [acct, val] of Object.entries(candidate)) {
+          if (val < -1e-9) {
+            log(`${tx.id}: Commit rejected — negative balance for ${acct}`);
+            alert(`Commit rejected: negative balance for ${acct}`);
+            return false;
+          }
+        }
+        const total = Object.values(candidate).reduce((a,b)=>a+b,0);
+        if (Math.abs(total - db.initialTotal) > 1e-6) {
+          log(`${tx.id}: Commit rejected — consistency rule violated (total ${total.toFixed(2)} != ${db.initialTotal.toFixed(2)})`);
+          alert(`Commit rejected: consistency rule violated (total ${total.toFixed(2)} != ${db.initialTotal.toFixed(2)})`);
+          return false;
+        }
+
+        if (mode === 'serializable') {
+          // optimistic concurrency: ensure versions of accounts modified have not changed since transaction start
+          for (const acct of Object.keys(tx.workspace)) {
+            const committedVer = db.versions[acct] || 0;
+            const baseVer = tx.baseSnapshot.versions[acct] || 0;
+            if (committedVer !== baseVer) {
+              // conflict detected
+              log(`${tx.id}: Commit aborted due to conflict on ${acct} (base v${baseVer} != committed v${committedVer})`);
+              alert(`Commit aborted due to conflict on ${acct}. Try again.`);
+              tx.state = 'aborted';
+              renderTxList();
+              renderTxnDetail();
+              return false;
+            }
+          }
+        } else {
+          // mode 'none' -> no checks; last-writer wins
+        }
+
+        // Apply commit: write candidate to db and bump versions on changed accounts, persist
+        for (const [acct, val] of Object.entries(tx.workspace)) {
+          db.accounts[acct] = val;
+          db.versions[acct] = (db.versions[acct] || 0) + 1;
+        }
+        persistDb();
+        tx.state = 'committed';
+        log(`${tx.id} committed (${mode === 'serializable' ? 'serializable' : 'no-isolation'} mode).`);
+        renderDb();
+        renderTxList();
+        renderTxnDetail();
+        return true;
+      }
+
+      function rollbackTransaction(tx) {
+        if (!tx || tx.state !== 'active') { alert('Select an active transaction'); return; }
+        tx.state = 'aborted';
+        tx.workspace = {};
+        tx.ops.push('[rolled back]');
+        log(`${tx.id} rolled back.`);
+        renderTxList();
+        renderTxnDetail();
+      }
+
+      function renderTxList() {
+        txnListEl.innerHTML = '';
+        const keys = Object.keys(transactions).sort((a,b)=>transactions[a].createdAt - transactions[b].createdAt);
+        for (const k of keys) {
+          const tx = transactions[k];
+          const div = document.createElement('div');
+          div.className = 'txn' + (selectedTxn===tx.id ? ' active' : '');
+          div.onclick = () => { selectedTxn = tx.id; renderTxList(); renderTxnDetail(); };
+          div.innerHTML = `<div><strong>${tx.id}</strong><div style="font-size:12px;color:#475569">${tx.state}</div></div><div style="text-align:right"><small>${tx.ops.length} ops</small></div>`;
+          txnListEl.appendChild(div);
+        }
+      }
+
+      function renderTxnDetail() {
+        txnDetailEl.innerHTML = '';
+        if (!selectedTxn) {
+          txnDetailEl.innerHTML = '<div class="small">Select a transaction to view details.</div>';
+          return;
+        }
+        const tx = transactions[selectedTxn];
+        if (!tx) { selectedTxn = null; renderTxnDetail(); return; }
+        const container = document.createElement('div');
+        container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <h3 style="margin:0">${tx.id} <small style="font-size:13px;color:#475569">(${tx.state})</small></h3>
+            <div class="small">Created: ${new Date(tx.createdAt).toLocaleTimeString()}</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button onclick="window.conflictSamples && window.conflictSamples('${tx.id}')" class="ghost">Sample Conflicts</button>
+          </div>
+        </div>`;
+
+        // Show snapshot values (base), workspace differences, ops
+        const base = tx.baseSnapshot.accounts;
+        const work = tx.workspace;
+        const table = document.createElement('div');
+        table.style.marginTop = '10px';
+        for (const acct of Object.keys(db.accounts)) {
+          const row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.justifyContent = 'space-between';
+          row.style.padding = '6px 8px';
+          row.style.borderRadius = '8px';
+          row.style.marginBottom = '6px';
+          row.style.background = '#f8fafc';
+          const baseVal = base[acct];
+          const workVal = (acct in work) ? work[acct] : null;
+          row.innerHTML = `<div>${acct}</div><div style="text-align:right">${workVal===null?`<small class="small">base</small> $${baseVal.toFixed(2)}`:`<div><small style="color:#64748b">workspace</small> $${workVal.toFixed(2)}</div>`}</div>`;
+          table.appendChild(row);
+        }
+
+        const opsDiv = document.createElement('div');
+        opsDiv.className = 'ops';
+        if (tx.ops.length===0) opsDiv.textContent = 'No operations yet.';
+        else for (const op of tx.ops) {
+          const d = document.createElement('div'); d.textContent = op; opsDiv.appendChild(d);
+        }
+
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.gap = '8px';
+        actions.style.marginTop = '8px';
+        const commitBtn = document.createElement('button'); commitBtn.textContent = 'Commit'; commitBtn.onclick = ()=>{commitTransaction(tx);};
+        const rollbackBtn = document.createElement('button'); rollbackBtn.textContent = 'Rollback'; rollbackBtn.className='warn'; rollbackBtn.onclick = ()=>{rollbackTransaction(tx);};
+        actions.appendChild(commitBtn); actions.appendChild(rollbackBtn);
+
+        txnDetailEl.appendChild(container);
+        txnDetailEl.appendChild(table);
+        txnDetailEl.appendChild(opsDiv);
+        txnDetailEl.appendChild(actions);
+      }
+
+      // Buttons
+      document.getElementById('newTxn').onclick = () => { newTransaction(); };
+      document.getElementById('closeAll').onclick = () => { if (confirm('Close all open transactions (in-memory only)?')) closeAllTransactions(); };
+      document.getElementById('applyOp').onclick = () => {
+        if (!selectedTxn) { alert('Select a transaction first'); return; }
+        const tx = transactions[selectedTxn];
+        if (!tx || tx.state!=='active') { alert('Select an active transaction'); return; }
+        const from = fromAcctSel.value;
+        const to = toAcctSel.value;
+        const amt = parseFloat(amountInput.value);
+        applyOperationToTxn(tx, from, to, amt);
+        renderTxnDetail();
+      };
+      document.getElementById('commitTxn').onclick = () => {
+        if (!selectedTxn) { alert('Select a transaction'); return; }
+        commitTransaction(transactions[selectedTxn]);
+      };
+      document.getElementById('rollbackTxn').onclick = () => {
+        if (!selectedTxn) { alert('Select a transaction'); return; }
+        rollbackTransaction(transactions[selectedTxn]);
+      };
+
+      document.getElementById('resetDb').onclick = () => {
+        if (!confirm('Reset the committed database to its initial values? This will overwrite committed state.')) return;
+        db = initializeDefault();
+        persistDb();
+        log('Database reset to initial state.');
+        renderDb();
+      };
+
+      document.getElementById('simulateCrash').onclick = () => {
+        // Simulate crash: reload the page. Transactions living in-memory will be lost; committed data persisted.
+        log('Simulating crash: reloading page. Uncommitted transactions (in-memory) will be lost.');
+        setTimeout(()=>location.reload(), 300);
+      };
+
+      // Utility: sample scenarios to quickly show conflicts
+      window.conflictSamples = function(txId) {
+        // For demo: create another transaction and show a typical lost update scenario in no-isolation mode
+        const tx = transactions[txId];
+        if (!tx) return;
+        const accounts = Object.keys(db.accounts);
+        if (accounts.length < 2) return;
+        // Create another tx that reads same account and modifies
+        const other = newTransaction();
+        selectedTxn = other.id;
+        // Apply an operation on the other tx that modifies the same account as tx workspace (or pick first account)
+        const acct = accounts[0];
+        if (!(acct in tx.workspace)) {
+          // If tx hasn't modified it, modify both to create conflict
+          applyOperationToTxn(tx, acct, accounts[1], 10); // tx withdraw 10
+        }
+        applyOperationToTxn(other, acct, accounts[1], 20); // other withdraw 20
+        renderTxList(); renderTxnDetail();
+        alert('Created a second transaction that also modifies the same account. Try committing them in different orders with different isolation modes to observe anomalies.');
+      };
+
+      // Render loop
+      renderDb();
+      renderTxList();
+      renderTxnDetail();
+
+      // Seed some logs
+      log('Demo loaded. Start by creating a transaction.');
+      log('Try: Start two transactions, modify the same account, commit with "Serializable" vs "No Isolation" to see differences.');
+
+      // Expose some helpers for console experimentation
+      window._acid = { db, transactions, persistDb };
+    })();
+  </script>
+</body>
+</html>

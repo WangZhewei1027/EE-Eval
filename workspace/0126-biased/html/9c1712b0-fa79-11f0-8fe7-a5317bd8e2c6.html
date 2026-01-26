@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Overfitting Interactive Demo</title>
+<style>
+/* Minimal visual design as requested: plain black text on white background, default form elements */
+body { font-family: sans-serif; margin: 10px; color: black; background: white; }
+section { margin-bottom: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls > * { margin: 2px; }
+canvas { border: 1px solid #000; cursor: crosshair; }
+small { display: block; margin-top: 4px; }
+pre { white-space: pre-wrap; word-wrap: break-word; max-height: 200px; overflow: auto; border: 1px solid #000; padding: 4px; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid #000; padding: 4px; }
+</style>
+</head>
+<body>
+
+<h2>Overfitting Interactive Demo (Minimal UI)</h2>
+
+<section>
+  <div class="controls">
+    <label>Seed <input type="number" id="seed" value="1" style="width:80px;"></label>
+    <label>Num points <input type="range" id="numPoints" min="5" max="200" value="30"></label>
+    <span id="numPointsVal">30</span>
+    <label>Noise σ <input type="range" id="noise" min="0" max="4" step="0.1" value="0.5"></label>
+    <span id="noiseVal">0.5</span>
+    <label>Train % <input type="range" id="trainPct" min="10" max="90" value="70"></label>
+    <span id="trainPctVal">70%</span>
+    <label>Degree <input type="range" id="degree" min="0" max="15" value="3"></label>
+    <span id="degreeVal">3</span>
+    <label>Lambda (L2) <input type="range" id="lambda" min="0" max="100" step="0.1" value="0"></label>
+    <span id="lambdaVal">0</span>
+    <button id="genData">Generate Data</button>
+    <button id="fitModel">Fit Model</button>
+    <button id="fitWithReg">Fit with L2</button>
+    <button id="clearPoints">Clear Points</button>
+  </div>
+  <small>Use the canvas to drag points to reposition them. Click to add a point when "Add Point" mode is ON. Delete nearest point with "Delete Nearest".</small>
+</section>
+
+<section>
+  <div class="controls">
+    <label><input type="checkbox" id="addPointMode"> Add Point Mode</label>
+    <button id="deleteNearest">Delete Nearest</button>
+    <button id="addOutlier">Add Random Outlier</button>
+    <button id="undo">Undo</button>
+    <button id="redo">Redo</button>
+    <button id="saveState">Save State (JSON)</button>
+    <button id="loadStateBtn">Load State</button>
+    <button id="exportCSV">Export CSV</button>
+    <button id="importCSVBtn">Import CSV</button>
+  </div>
+  <textarea id="stateBox" placeholder="Saved JSON or CSV paste area" rows="4" style="width:100%"></textarea>
+</section>
+
+<section>
+  <div style="display:flex; gap:12px;">
+    <canvas id="plot" width="700" height="300"></canvas>
+    <div style="flex:1;">
+      <div><strong>Metrics</strong></div>
+      <div id="metrics">
+        Train MSE: - <br>
+        Test MSE: - <br>
+        CV MSE: - <br>
+        Coeffs: - <br>
+      </div>
+      <hr>
+      <div><strong>Cross-Validation & Grid Search</strong></div>
+      <div class="controls">
+        <label>K folds <input type="number" id="kfolds" min="2" max="20" value="5" style="width:60px"></label>
+        <label>Max degree <input type="number" id="gridMaxDeg" min="0" max="15" value="10" style="width:60px"></label>
+        <label>Lambda list (comma) <input type="text" id="gridLambdas" value="0,0.1,1,10" style="width:140px"></label>
+        <button id="runGrid">Run Grid Search (CV)</button>
+        <button id="runCV">Run CV for current model</button>
+      </div>
+      <div id="gridResults" style="max-height:220px; overflow:auto"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Bootstrap Bias-Variance Estimate</strong>
+    <div class="controls">
+      <label># Bootstrap <input type="number" id="nBoot" min="10" max="2000" value="200" style="width:80px"></label>
+      <label>Eval points <input type="number" id="evalPts" min="10" max="200" value="100" style="width:80px"></label>
+      <button id="runBootstrap">Run Bootstrap</button>
+    </div>
+    <div id="bootstrapResults"></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Automated Degree Sweep</strong>
+    <div class="controls">
+      <label>From <input type="number" id="sweepFrom" min="0" max="15" value="0" style="width:60px"></label>
+      <label>To <input type="number" id="sweepTo" min="0" max="15" value="12" style="width:60px"></label>
+      <label>Step <input type="number" id="sweepStep" min="1" max="5" value="1" style="width:60px"></label>
+      <button id="runSweep">Run Sweep</button>
+      <button id="stopSweep">Stop Sweep</button>
+    </div>
+    <div id="sweepResults" style="max-height:200px; overflow:auto"></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Model Coefficients & Diagnostics</strong>
+    <div id="coeffsBox">No model fitted yet.</div>
+  </div>
+</section>
+
+<script>
+// Minimal but feature-rich interactive demo for Overfitting
+// Random number generator (seeded)
+function mulberry32(a) {
+  return function() {
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+// Linear algebra helpers
+function transpose(A) {
+  var m=A.length, n=A[0].length, B=[];
+  for(var j=0;j<n;j++){B[j]=Array(m); for(var i=0;i<m;i++)B[j][i]=A[i][j];}
+  return B;
+}
+function matMul(A,B){
+  var m=A.length, p=B[0].length, n=B[0].length?B.length:0;
+  var C=[];
+  for(var i=0;i<m;i++){ C[i]=Array(p); for(var j=0;j<p;j++){ var s=0; for(var k=0;k<n;k++) s+=A[i][k]*B[k][j]; C[i][j]=s; } }
+  return C;
+}
+function matVecMul(A,v){
+  var m=A.length,n=A[0].length, r=Array(m);
+  for(var i=0;i<m;i++){ var s=0; for(var j=0;j<n;j++) s+=A[i][j]*v[j]; r[i]=s; }
+  return r;
+}
+function identity(n){
+  var I=[]; for(var i=0;i<n;i++){ I[i]=Array(n).fill(0); I[i][i]=1; } return I;
+}
+// Solve linear system A x = b using Gaussian elimination with partial pivoting
+function solveLinear(Aorig, borig) {
+  // clone
+  var n=Aorig.length;
+  var A=Array(n); for(var i=0;i<n;i++) A[i]=Aorig[i].slice();
+  var b=borig.slice();
+  for(var i=0;i<n;i++){
+    // pivot
+    var maxRow=i, maxVal=Math.abs(A[i][i]);
+    for(var r=i+1;r<n;r++){ if(Math.abs(A[r][i])>maxVal){ maxVal=Math.abs(A[r][i]); maxRow=r; } }
+    if(maxRow!==i){ var tmp=A[i]; A[i]=A[maxRow]; A[maxRow]=tmp; var tb=b[i]; b[i]=b[maxRow]; b[maxRow]=tb; }
+    var diag=A[i][i];
+    if(Math.abs(diag) < 1e-12) { // singular, fallback
+      diag = (diag === 0) ? 1e-12 : diag;
+    }
+    for(var j=i+1;j<n;j++){
+      var factor=A[j][i]/diag;
+      b[j]-=factor*b[i];
+      for(var k=i;k<n;k++) A[j][k]-=factor*A[i][k];
+    }
+  }
+  var x=Array(n).fill(0);
+  for(var i=n-1;i>=0;i--){
+    var s=b[i];
+    for(var j=i+1;j<n;j++) s-=A[i][j]*x[j];
+    x[i]=s / (A[i][i] || 1e-12);
+  }
+  return x;
+}
+
+// Polynomial basis: scale x to [-1,1] for stability
+function scaleX(x, xmin, xmax){
+  if(xmax===xmin) return 0;
+  return (2*(x - xmin)/(xmax - xmin) - 1);
+}
+
+function buildVandermonde(xs, degree){
+  var n=xs.length, X=Array(n);
+  var xmin=Math.min.apply(null, xs), xmax=Math.max.apply(null,xs);
+  for(var i=0;i<n;i++){
+    var xx=scaleX(xs[i], xmin, xmax);
+    var row=[];
+    var v=1;
+    for(var d=0;d<=degree;d++){ row.push(v); v*=xx; }
+    X[i]=row;
+  }
+  X._xmin=xmin; X._xmax=xmax;
+  return X;
+}
+
+function fitPoly(xs, ys, degree, lambda){
+  if(xs.length===0) return {coeffs:[], xmin:0, xmax:1};
+  var X = buildVandermonde(xs, degree);
+  var Xt = transpose(X);
+  // compute XtX and Xty
+  var XtX = Array(Xt.length);
+  for(var i=0;i<Xt.length;i++){
+    XtX[i]=Array(Xt.length).fill(0);
+    for(var j=0;j<Xt.length;j++){
+      var s=0;
+      for(var k=0;k<X.length;k++) s+=Xt[i][k]*X[k][j];
+      XtX[i][j]=s;
+    }
+  }
+  var Xty = Array(Xt.length).fill(0);
+  for(var i=0;i<Xt.length;i++){
+    var s=0;
+    for(var k=0;k<X.length;k++) s+=Xt[i][k]*ys[k];
+    Xty[i]=s;
+  }
+  // regularization
+  if(lambda && lambda>0){
+    for(var i=1;i<XtX.length;i++){ XtX[i][i] += lambda; }
+  }
+  // solve
+  var coeffs = solveLinear(XtX, Xty);
+  return {coeffs:coeffs, xmin:X._xmin, xmax:X._xmax, degree:degree};
+}
+
+function predict(model, x){
+  if(!model || !model.coeffs) return 0;
+  var xmin=model.xmin, xmax=model.xmax;
+  var xx=scaleX(x, xmin, xmax);
+  var v=1, s=0;
+  for(var i=0;i<model.coeffs.length;i++){ s += model.coeffs[i]*v; v*=xx; }
+  return s;
+}
+
+function mse(ytrue, ypred){
+  var n=ytrue.length, s=0;
+  for(var i=0;i<n;i++){ var d=ytrue[i]-ypred[i]; s+=d*d; }
+  return s/n;
+}
+
+// UI and state
+var stateStack = [], redoStack = [];
+var appState = {
+  points: [], // {x,y,set:'train'/'test'}
+  seed: 1,
+  numPoints: 30,
+  noise: 0.5,
+  trainPct: 70,
+  model: null,
+  lambda: 0,
+  degree: 3
+};
+
+function pushState() { stateStack.push(JSON.parse(JSON.stringify(appState))); if(stateStack.length>200) stateStack.shift(); redoStack=[]; }
+function undo(){ if(stateStack.length>1){ redoStack.push(stateStack.pop()); appState = JSON.parse(JSON.stringify(stateStack[stateStack.length-1])); renderAll(); } }
+function redo(){ if(redoStack.length){ var s=redoStack.pop(); stateStack.push(s); appState = JSON.parse(JSON.stringify(s)); renderAll(); } }
+
+var plot = document.getElementById('plot');
+var ctx = plot.getContext('2d');
+
+function generateData(){
+  var seedVal = parseInt(document.getElementById('seed').value) || 1;
+  var rng = mulberry32(seedVal);
+  var n = parseInt(document.getElementById('numPoints').value);
+  var noise = parseFloat(document.getElementById('noise').value);
+  var trainPct = parseInt(document.getElementById('trainPct').value);
+  var xs=[], ys=[];
+  // underlying function: mixture of sines and polynomial to be nontrivial
+  for(var i=0;i<n;i++){
+    var x = -3 + 6 * rng(); // range [-3,3]
+    var y = 0.5*Math.sin(1.5*x) + 0.3*x + 0.2*Math.cos(3*x) + 0.1*x*x;
+    y += (rng()*2-1) * noise;
+    xs.push(x); ys.push(y);
+  }
+  // assign train/test
+  var points=[];
+  for(var i=0;i<n;i++){
+    var set = (rng()*100 < trainPct) ? 'train' : 'test';
+    points.push({x: xs[i], y: ys[i], set: set});
+  }
+  appState.points = points;
+  appState.seed = seedVal;
+  appState.numPoints = n;
+  appState.noise = noise;
+  appState.trainPct = trainPct;
+  pushState();
+  renderAll();
+}
+
+function clearPoints(){
+  appState.points = [];
+  pushState();
+  renderAll();
+}
+
+function addRandomOutlier(){
+  var rng = mulberry32(appState.seed + Math.floor(Math.random()*10000));
+  var x = -3 + 6*rng();
+  var y = -10 + 20*rng();
+  var set = (Math.random()*100 < appState.trainPct) ? 'train' : 'test';
+  appState.points.push({x:x,y:y,set:set});
+  pushState();
+  renderAll();
+}
+
+function exportCSV(){
+  var rows = ['x,y,set'];
+  appState.points.forEach(p=>rows.push([p.x,p.y,p.set].join(',')));
+  document.getElementById('stateBox').value = rows.join('\n');
+}
+
+function importCSV(){
+  var txt = document.getElementById('stateBox').value.trim();
+  if(!txt) { alert('Paste CSV into the textarea first.'); return; }
+  var lines = txt.split(/\r?\n/);
+  var pts=[];
+  for(var i=1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    var parts = lines[i].split(',');
+    if(parts.length<2) continue;
+    var x=parseFloat(parts[0]), y=parseFloat(parts[1]), set=(parts[2]||'train');
+    pts.push({x:x,y:y,set:set});
+  }
+  appState.points = pts;
+  pushState();
+  renderAll();
+}
+
+function saveStateJSON(){
+  var s = JSON.stringify(appState, null, 2);
+  document.getElementById('stateBox').value = s;
+}
+
+function loadStateJSON(){
+  var txt = document.getElementById('stateBox').value.trim();
+  if(!txt) { alert('Paste JSON into the textarea first.'); return; }
+  try{
+    var obj = JSON.parse(txt);
+    // basic validation
+    if(!Array.isArray(obj.points)) throw 'Bad state';
+    appState = obj;
+    pushState();
+    renderAll();
+  } catch(e){ alert('Invalid JSON: ' + e); }
+}
+
+// Fitting and evaluation
+function splitPoints(){
+  var trainX=[], trainY=[], testX=[], testY=[];
+  appState.points.forEach(p=>{
+    if(p.set==='train'){ trainX.push(p.x); trainY.push(p.y); } else { testX.push(p.x); testY.push(p.y); }
+  });
+  return {trainX, trainY, testX, testY};
+}
+
+function fitCurrent(lambdaOverride){
+  var degree = parseInt(document.getElementById('degree').value);
+  var lambda = (typeof lambdaOverride==='number') ? lambdaOverride : parseFloat(document.getElementById('lambda').value) || 0;
+  var sp = splitPoints();
+  var model = fitPoly(sp.trainX, sp.trainY, degree, lambda);
+  appState.model = model;
+  appState.degree = degree;
+  appState.lambda = lambda;
+  // compute metrics
+  var predsTrain = sp.trainX.map(x=>predict(model,x));
+  var predsTest = sp.testX.map(x=>predict(model,x));
+  var trainMSE = sp.trainX.length ? mse(sp.trainY, predsTrain) : NaN;
+  var testMSE = sp.testX.length ? mse(sp.testY, predsTest) : NaN;
+  renderModelMetrics(trainMSE, testMSE, null, model);
+  pushState();
+  renderAll();
+}
+
+function renderModelMetrics(trainMSE, testMSE, cvMSE, model){
+  var s = 'Train MSE: ' + (isNaN(trainMSE)? '-' : trainMSE.toFixed(4)) + '<br>';
+  s += 'Test MSE: ' + (isNaN(testMSE)? '-' : testMSE.toFixed(4)) + '<br>';
+  s += 'CV MSE: ' + (cvMSE==null? '-' : (isNaN(cvMSE)? '-' : cvMSE.toFixed(4))) + '<br>';
+  if(model && model.coeffs){
+    s += 'Coefficients (a0..a' + (model.coeffs.length-1) + '): ' + model.coeffs.map(v=>v.toFixed(4)).join(', ') + '<br>';
+  } else s += 'Coeffs: -<br>';
+  document.getElementById('metrics').innerHTML = s;
+  var coeffsBox = document.getElementById('coeffsBox');
+  if(model && model.coeffs){
+    var html = '<table><tr><th>Index</th><th>Coeff</th></tr>';
+    for(var i=0;i<model.coeffs.length;i++){
+      html += '<tr><td>' + i + '</td><td><input data-idx="'+i+'" value="'+model.coeffs[i].toFixed(6)+'" style="width:120px"></td></tr>';
+    }
+    html += '</table>';
+    coeffsBox.innerHTML = html;
+    // enable editing coefficients
+    coeffsBox.querySelectorAll('input').forEach(inp=>{
+      inp.addEventListener('change', function(){
+        var idx = parseInt(this.getAttribute('data-idx'));
+        var val = parseFloat(this.value) || 0;
+        appState.model.coeffs[idx]=val;
+        pushState();
+        renderAll();
+      });
+    });
+  } else coeffsBox.innerHTML = 'No model fitted yet.';
+}
+
+// Cross-validation
+function runCV(k){
+  var sp = splitPoints();
+  var X = sp.trainX.slice(), Y = sp.trainY.slice();
+  if(X.length < k) { alert('Not enough training points for that many folds.'); return; }
+  // create folds
+  var idx = Array.from({length:X.length}, (_,i)=>i);
+  // shuffle deterministically based on seed
+  var rng = mulberry32(appState.seed || 1);
+  for(var i=idx.length-1;i>0;i--){ var j=Math.floor(rng()* (i+1)); var t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
+  var folds = [];
+  for(var i=0;i<k;i++) folds[i]=[];
+  for(var i=0;i<idx.length;i++) folds[i%k].push(idx[i]);
+  var degree = parseInt(document.getElementById('degree').value);
+  var lambda = parseFloat(document.getElementById('lambda').value) || 0;
+  var mses=[];
+  for(var f=0;f<k;f++){
+    var trainIdx = []; var valIdx = folds[f];
+    for(var i=0;i<idx.length;i++) if(!valIdx.includes(idx[i])) trainIdx.push(idx[i]);
+    var tX = trainIdx.map(i=>X[i]), tY = trainIdx.map(i=>Y[i]);
+    var vX = valIdx.map(i=>X[i]), vY = valIdx.map(i=>Y[i]);
+    var model = fitPoly(tX, tY, degree, lambda);
+    var preds = vX.map(x=>predict(model,x));
+    mses.push(mse(vY, preds));
+  }
+  var avg = mses.reduce((a,b)=>a+b,0)/mses.length;
+  renderModelMetrics(null,null,avg, appState.model);
+  document.getElementById('gridResults').innerHTML = 'CV MSE (k=' + k + '): ' + avg.toFixed(6);
+  return avg;
+}
+
+// Grid search over degree and lambda using CV on training set
+function runGridSearch(){
+  var k = parseInt(document.getElementById('kfolds').value) || 5;
+  var maxDeg = parseInt(document.getElementById('gridMaxDeg').value) || 6;
+  var lambdas = document.getElementById('gridLambdas').value.split(',').map(s=>parseFloat(s.trim())).filter(x=>!isNaN(x));
+  var sp = splitPoints();
+  var X = sp.trainX.slice(), Y = sp.trainY.slice();
+  if(X.length<2){ alert('Not enough training points.'); return; }
+  var results = [];
+  for(var deg=0; deg<=maxDeg; deg++){
+    for(var li=0; li<lambdas.length; li++){
+      var lambda = lambdas[li];
+      // k-fold CV
+      var idx = Array.from({length:X.length}, (_,i)=>i);
+      var rngi = mulberry32(appState.seed || 1);
+      for(var i=idx.length-1;i>0;i--){ var j=Math.floor(rngi()* (i+1)); var t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
+      var folds=[]; for(var i=0;i<k;i++) folds[i]=[];
+      for(var i=0;i<idx.length;i++) folds[i%k].push(idx[i]);
+      var mses=[];
+      for(var f=0; f<k; f++){
+        var valIdx = folds[f];
+        var trainIdx = idx.filter(i=>!valIdx.includes(i));
+        var tX=trainIdx.map(i=>X[i]), tY=trainIdx.map(i=>Y[i]);
+        var vX=valIdx.map(i=>X[i]), vY=valIdx.map(i=>Y[i]);
+        var model = fitPoly(tX,tY,deg,lambda);
+        var preds = vX.map(x=>predict(model,x));
+        mses.push(mse(vY,preds));
+      }
+      var avg = mses.reduce((a,b)=>a+b,0)/mses.length;
+      results.push({deg:deg,lambda:lambda,cv:avg});
+    }
+  }
+  results.sort((a,b)=>a.cv-b.cv);
+  var out = '<table><tr><th>Rank</th><th>Degree</th><th>Lambda</th><th>CV MSE</th></tr>';
+  for(var i=0;i<Math.min(20,results.length);i++){
+    out += '<tr><td>'+(i+1)+'</td><td>'+results[i].deg+'</td><td>'+results[i].lambda+'</td><td>'+results[i].cv.toFixed(6)+'</td></tr>';
+  }
+  out += '</table>';
+  document.getElementById('gridResults').innerHTML = out;
+  // auto-select best
+  var best = results[0];
+  document.getElementById('degree').value = best.deg;
+  document.getElementById('degreeVal').textContent = best.deg;
+  document.getElementById('lambda').value = best.lambda;
+  document.getElementById('lambdaVal').textContent = best.lambda;
+  fitCurrent(best.lambda);
+}
+
+// Sweep degrees, computing train/test MSEs
+var sweepRunning = false;
+async function runSweep(){
+  var from = parseInt(document.getElementById('sweepFrom').value) || 0;
+  var to = parseInt(document.getElementById('sweepTo').value) || 10;
+  var step = parseInt(document.getElementById('sweepStep').value) || 1;
+  var sp = splitPoints();
+  var Xtrain = sp.trainX, Ytrain = sp.trainY, Xtest=sp.testX, Ytest=sp.testY;
+  if(Xtrain.length===0){ alert('No training data'); return; }
+  sweepRunning = true;
+  document.getElementById('sweepResults').innerHTML = 'Running sweep...';
+  var lines = [];
+  for(var d=from; d<=to; d+=step){
+    if(!sweepRunning) break;
+    var model = fitPoly(Xtrain, Ytrain, d, parseFloat(document.getElementById('lambda').value)||0);
+    var trainPred = Xtrain.map(x=>predict(model,x));
+    var testPred = Xtest.map(x=>predict(model,x));
+    var tr = Xtrain.length?mse(Ytrain, trainPred):NaN;
+    var te = Xtest.length?mse(Ytest, testPred):NaN;
+    lines.push({deg:d,train:tr,test:te});
+    document.getElementById('sweepResults').innerHTML = JSON.stringify(lines, null, 2);
+    renderSweepPlot(lines);
+    await new Promise(r=>setTimeout(r,50));
+  }
+  sweepRunning = false;
+}
+
+// basic plot of sweep results (textual and mini-plot on main canvas)
+function renderSweepPlot(lines){
+  // small plot below metrics using the canvas right side area
+  // we'll draw a small overlay on the left of canvas to visualize the trend
+  // For minimal UI, just update text summary
+  var txt = 'Degree sweep results (deg, trainMSE, testMSE):\n';
+  lines.forEach(l=> txt += l.deg + ' , ' + (isNaN(l.train)? '-' : l.train.toFixed(4)) + ' , ' + (isNaN(l.test)? '-' : l.test.toFixed(4)) + '\n');
+  document.getElementById('sweepResults').innerText = txt;
+}
+
+// Bootstrap bias-variance
+function runBootstrap(){
+  var nBoot = parseInt(document.getElementById('nBoot').value) || 200;
+  var evalPts = parseInt(document.getElementById('evalPts').value) || 100;
+  var sp = splitPoints();
+  var Xtrain = sp.trainX, Ytrain = sp.trainY, Xtest = sp.testX, Ytest = sp.testY;
+  if(Xtrain.length===0){ alert('No training data'); return; }
+  // choose evaluation points across data range
+  var xmin = Math.min.apply(null, Xtrain.concat(Xtest)), xmax = Math.max.apply(null, Xtrain.concat(Xtest));
+  var evalXs = [];
+  for(var i=0;i<evalPts;i++) evalXs.push(xmin + (xmax-xmin)*(i/(evalPts-1)));
+  var degree = parseInt(document.getElementById('degree').value);
+  var lambda = parseFloat(document.getElementById('lambda').value) || 0;
+  var predsAll = evalXs.map(()=>[]);
+  var rng = mulberry32(appState.seed || 1);
+  for(var b=0;b<nBoot;b++){
+    // sample with replacement from training set
+    var bx=[], by=[];
+    for(var i=0;i<Xtrain.length;i++){ var j = Math.floor(rng()*Xtrain.length); bx.push(Xtrain[j]); by.push(Ytrain[j]); }
+    var model = fitPoly(bx, by, degree, lambda);
+    for(var i=0;i<evalXs.length;i++) predsAll[i].push(predict(model, evalXs[i]));
+  }
+  // compute bias^2 and variance; assume true function unknown: approximate by test true values nearest or use average of actual Ys?
+  // We'll estimate expected squared error = variance + bias^2 + noise (we approximate bias using mean prediction - actual if test exists near point)
+  var variances = [], biasesq = [], means=[];
+  for(var i=0;i<evalXs.length;i++){
+    var arr = predsAll[i];
+    var mean = arr.reduce((a,b)=>a+b,0)/arr.length;
+    means.push(mean);
+    var varr = arr.reduce((a,b)=>a+(b-mean)*(b-mean),0)/arr.length;
+    variances.push(varr);
+    // estimate bias^2 by difference to true underlying function approximated by nearest test point if available, else 0
+    var xi = evalXs[i];
+    var nearestIdx = -1, nd=Infinity;
+    for(var j=0;j<Xtest.length;j++){ var d=Math.abs(Xtest[j]-xi); if(d<nd){ nd=d; nearestIdx=j; } }
+    var bias2 = 0;
+    if(nearestIdx>=0 && nd < (xmax-xmin)/evalPts*2){
+      var truey = Ytest[nearestIdx];
+      bias2 = (mean - truey)*(mean - truey);
+    } else {
+      bias2 = (0); // unknown; we attach 0 as conservative placeholder
+    }
+    biasesq.push(bias2);
+  }
+  var avgVar = variances.reduce((a,b)=>a+b,0)/variances.length;
+  var avgBias2 = biasesq.reduce((a,b)=>a+b,0)/biasesq.length;
+  var out = 'Bootstrap results (approx):\nAverage Variance: ' + avgVar.toFixed(6) + '\nAverage Bias^2 (approx): ' + avgBias2.toFixed(6) + '\nAverage Var+Bias^2: ' + (avgVar+avgBias2).toFixed(6);
+  document.getElementById('bootstrapResults').innerText = out;
+}
+
+// Rendering points and model on canvas
+function renderAll(){
+  // update UI values
+  document.getElementById('numPointsVal').textContent = document.getElementById('numPoints').value;
+  document.getElementById('noiseVal').textContent = document.getElementById('noise').value;
+  document.getElementById('trainPctVal').textContent = document.getElementById('trainPct').value + '%';
+  document.getElementById('degreeVal').textContent = document.getElementById('degree').value;
+  document.getElementById('lambdaVal').textContent = document.getElementById('lambda').value;
+  // draw
+  ctx.clearRect(0,0,plot.width,plot.height);
+  // axes
+  ctx.beginPath();
+  ctx.moveTo(40,10); ctx.lineTo(40,plot.height-30); ctx.lineTo(plot.width-10,plot.height-30);
+  ctx.stroke();
+  // compute data bounds
+  var xs = appState.points.map(p=>p.x);
+  var ys = appState.points.map(p=>p.y);
+  var xmin = xs.length?Math.min.apply(null,xs):-3, xmax = xs.length?Math.max.apply(null,xs):3;
+  var ymin = ys.length?Math.min.apply(null,ys):-1, ymax = ys.length?Math.max.apply(null,ys):1;
+  if(xmin===xmax){ xmin-=1; xmax+=1; }
+  if(ymin===ymax){ ymin-=1; ymax+=1; }
+  // padding
+  var left = 40, top = 10, right = plot.width-10, bottom = plot.height-30;
+  function x2px(x){ return left + ( (x-xmin) / (xmax-xmin) ) * (right-left); }
+  function y2px(y){ return bottom - ( (y-ymin)/(ymax-ymin) ) * (bottom-top); }
+  // grid lines ticks minimal
+  for(var t=0;t<=4;t++){
+    var xv = xmin + (xmax-xmin)*(t/4);
+    ctx.fillText(xv.toFixed(2), left + (right-left)*(t/4)-10, bottom+15);
+  }
+  for(var t=0;t<=4;t++){
+    var yv = ymin + (ymax-ymin)*(t/4);
+    ctx.fillText(yv.toFixed(2), 4, bottom - (bottom-top)*(t/4)+4);
+  }
+  // draw predicted curve if model exists
+  if(appState.model && appState.model.coeffs){
+    var model = appState.model;
+    var steps = 400;
+    ctx.beginPath();
+    for(var i=0;i<=steps;i++){
+      var xx = xmin + (xmax-xmin)*(i/steps);
+      var yy = predict(model, xx);
+      var px = x2px(xx), py = y2px(yy);
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    // draw residual lines for train points
+    appState.points.forEach(p=>{
+      if(p.set==='train'){
+        var px = x2px(p.x), py = y2px(p.y);
+        var pyPred = y2px(predict(model, p.x));
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px,pyPred); ctx.stroke();
+      }
+    });
+  }
+  // draw points
+  appState.points.forEach(p=>{
+    var px = x2px(p.x), py = y2px(p.y);
+    ctx.beginPath();
+    ctx.arc(px,py,4,0,Math.PI*2);
+    if(p.set==='train'){
+      ctx.fill(); ctx.stroke();
+    } else {
+      ctx.stroke(); ctx.beginPath(); ctx.arc(px,py,6,0,Math.PI*2); ctx.stroke();
+    }
+  });
+}
+
+// Canvas interactions: dragging, adding, deleting
+var dragging = null;
+var dragOffset = {x:0,y:0};
+plot.addEventListener('mousedown', function(e){
+  var rect = plot.getBoundingClientRect();
+  var cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+  var hit = nearestPoint(cx,cy);
+  if(document.getElementById('addPointMode').checked){
+    // add new point
+    var p = canvasToData(cx,cy);
+    var set = (Math.random()*100 < document.getElementById('trainPct').value) ? 'train' : 'test';
+    appState.points.push({x:p.x,y:p.y,set:set});
+    pushState();
+    renderAll();
+    return;
+  }
+  if(hit && hit.dist < 10){
+    dragging = hit.idx;
+    dragOffset.x = hit.px - cx;
+    dragOffset.y = hit.py - cy;
+  }
+});
+plot.addEventListener('mousemove', function(e){
+  if(dragging===null) return;
+  var rect = plot.getBoundingClientRect();
+  var cx = e.clientX - rect.left + dragOffset.x, cy = e.clientY - rect.top + dragOffset.y;
+  var p = canvasToData(cx,cy);
+  if(appState.points[dragging]){
+    appState.points[dragging].x = p.x;
+    appState.points[dragging].y = p.y;
+    renderAll();
+  }
+});
+plot.addEventListener('mouseup', function(e){
+  if(dragging!==null){
+    pushState();
+  }
+  dragging = null;
+});
+plot.addEventListener('mouseleave', function(){ if(dragging!==null){ pushState(); dragging=null; } });
+
+function nearestPoint(cx,cy){
+  // find nearest canvas-space point
+  var xs = appState.points.map(p=>p.x);
+  var ys = appState.points.map(p=>p.y);
+  var xmin = xs.length?Math.min.apply(null,xs):-3, xmax = xs.length?Math.max.apply(null,xs):3;
+  var ymin = ys.length?Math.min.apply(null,ys):-1, ymax = ys.length?Math.max.apply(null,ys):1;
+  var left = 40, top = 10, right = plot.width-10, bottom = plot.height-30;
+  function x2px(x){ return left + ( (x-xmin) / (xmax-xmin) ) * (right-left); }
+  function y2px(y){ return bottom - ( (y-ymin)/(ymax-ymin) ) * (bottom-top); }
+  var minD = Infinity, idx=-1, px=0, py=0;
+  for(var i=0;i<appState.points.length;i++){
+    var p = appState.points[i];
+    var px0 = x2px(p.x), py0 = y2px(p.y);
+    var d = Math.hypot(px0-cx, py0-cy);
+    if(d<minD){ minD=d; idx=i; px=px0; py=py0; }
+  }
+  if(idx===-1) return null;
+  return {idx:idx, dist:minD, px:px, py:py};
+}
+function canvasToData(cx,cy){
+  var xs = appState.points.map(p=>p.x);
+  var ys = appState.points.map(p=>p.y);
+  var xmin = xs.length?Math.min.apply(null,xs):-3, xmax = xs.length?Math.max.apply(null,xs):3;
+  var ymin = ys.length?Math.min.apply(null,ys):-1, ymax = ys.length?Math.max.apply(null,ys):1;
+  if(xmin===xmax){ xmin -= 1; xmax += 1; }
+  if(ymin===ymax){ ymin -= 1; ymax += 1; }
+  var left = 40, top = 10, right = plot.width-10, bottom = plot.height-30;
+  var x = xmin + ( (cx - left) / (right-left) ) * (xmax-xmin);
+  var y = ymin + ( (bottom - cy) / (bottom-top) ) * (ymax-ymin);
+  return {x:x, y:y};
+}
+
+// delete nearest point to center click
+function deleteNearest(){
+  // delete nearest to center of canvas
+  var rect = plot.getBoundingClientRect();
+  var cx = rect.width/2, cy = rect.height/2;
+  // actually use mouse-free: pick nearest to center of axes
+  var hit = nearestPoint(cx,cy);
+  if(!hit) return;
+  appState.points.splice(hit.idx,1);
+  pushState();
+  renderAll();
+}
+
+// UI wiring
+document.getElementById('genData').addEventListener('click', generateData);
+document.getElementById('fitModel').addEventListener('click', function(){ fitCurrent(0); });
+document.getElementById('fitWithReg').addEventListener('click', function(){ fitCurrent(parseFloat(document.getElementById('lambda').value)||0); });
+document.getElementById('clearPoints').addEventListener('click', clearPoints);
+document.getElementById('addOutlier').addEventListener('click', addRandomOutlier);
+document.getElementById('undo').addEventListener('click', undo);
+document.getElementById('redo').addEventListener('click', redo);
+document.getElementById('saveState').addEventListener('click', saveStateJSON);
+document.getElementById('loadStateBtn').addEventListener('click', loadStateJSON);
+document.getElementById('exportCSV').addEventListener('click', exportCSV);
+document.getElementById('importCSVBtn').addEventListener('click', importCSV);
+document.getElementById('deleteNearest').addEventListener('click', function(){
+  // choose point nearest to last mouse position or to center if none
+  // we'll delete the globally nearest point to canvas center
+  var rect = plot.getBoundingClientRect();
+  var cx = rect.width/2, cy = rect.height/2;
+  var hit = nearestPoint(cx,cy);
+  if(hit) { appState.points.splice(hit.idx,1); pushState(); renderAll(); }
+});
+
+document.getElementById('numPoints').addEventListener('input', function(){ document.getElementById('numPointsVal').textContent = this.value; });
+document.getElementById('noise').addEventListener('input', function(){ document.getElementById('noiseVal').textContent = this.value; });
+document.getElementById('trainPct').addEventListener('input', function(){ document.getElementById('trainPctVal').textContent = this.value + '%'; });
+document.getElementById('degree').addEventListener('input', function(){ document.getElementById('degreeVal').textContent = this.value; });
+document.getElementById('lambda').addEventListener('input', function(){ document.getElementById('lambdaVal').textContent = this.value; });
+
+document.getElementById('runCV').addEventListener('click', function(){ runCV(parseInt(document.getElementById('kfolds').value)||5); });
+document.getElementById('runGrid').addEventListener('click', runGridSearch);
+document.getElementById('runSweep').addEventListener('click', runSweep);
+document.getElementById('stopSweep').addEventListener('click', function(){ sweepRunning=false; });
+document.getElementById('runBootstrap').addEventListener('click', runBootstrap);
+
+document.getElementById('stateBox').addEventListener('change', function(){ /* placeholder */ });
+
+document.getElementById('degree').value = appState.degree;
+document.getElementById('lambda').value = appState.lambda;
+
+// initial data
+pushState();
+generateData();
+
+// keyboard shortcuts for power users
+document.addEventListener('keydown', function(e){
+  if(e.key==='z' && (e.ctrlKey||e.metaKey)){ undo(); }
+  if(e.key==='y' && (e.ctrlKey||e.metaKey)){ redo(); }
+  if(e.key==='g'){ generateData(); }
+  if(e.key==='f'){ fitCurrent(); }
+});
+
+// allow saving/loading app state via JSON on the textarea using buttons
+// done above
+
+</script>
+
+</body>
+</html>

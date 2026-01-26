@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Runtime Environment Interactive Explorer</title>
+<style>
+  /* Minimal styling for layout only, no visual styling */
+  body {
+    margin: 1em;
+    font-family: monospace, monospace;
+  }
+  textarea, input, select, button {
+    font-family: monospace, monospace;
+    font-size: 1em;
+    margin-top: 0.2em;
+    margin-bottom: 0.5em;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  label {
+    margin-top: 0.8em;
+    display: block;
+  }
+  fieldset {
+    margin-top: 1em;
+  }
+  #log {
+    white-space: pre-wrap;
+    height: 150px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 0.2em;
+  }
+</style>
+</head>
+<body>
+<h1>Runtime Environment Interactive Explorer</h1>
+
+<p>
+This tool helps you explore and interact with a simulated Runtime Environment (RE), demonstrating concepts such as processes, memory, system calls, and other RE components. Use the controls below to create, manage, and inspect processes, manipulate environment variables, and explore advanced settings.
+</p>
+
+<div id="controls">
+
+  <fieldset>
+    <legend>Process Management</legend>
+
+    <label for="procName">Create New Process: Enter process name</label>
+    <input type="text" id="procName" placeholder="e.g. myProcess" autocomplete="off" />
+
+    <label for="procPriority">Select Priority (1 = Highest, 10 = Lowest)</label>
+    <input type="range" id="procPriority" min="1" max="10" value="5" />
+
+    <button id="createProc">Create Process</button>
+
+    <label for="selectProc">Select Existing Process</label>
+    <select id="selectProc" size="5" style="height:7em;"></select>
+
+    <button id="startProc">Start Process</button>
+    <button id="pauseProc">Pause Process</button>
+    <button id="killProc">Kill Process</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Process Operations</legend>
+
+    <label for="syscallSelect">Invoke System Call</label>
+    <select id="syscallSelect">
+      <option value="read">read()</option>
+      <option value="write">write()</option>
+      <option value="fork">fork()</option>
+      <option value="exec">exec()</option>
+      <option value="exit">exit()</option>
+      <option value="getenv">getenv()</option>
+      <option value="setenv">setenv()</option>
+    </select>
+
+    <label for="syscallArgs">System Call Arguments (comma-separated)</label>
+    <input type="text" id="syscallArgs" placeholder="e.g. filename.txt, 100" autocomplete="off" />
+
+    <button id="invokeSyscall">Invoke</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Environment Variables (Global)</legend>
+
+    <label for="envKey">Variable Name</label>
+    <input type="text" id="envKey" placeholder="e.g. PATH" autocomplete="off" />
+
+    <label for="envValue">Variable Value</label>
+    <input type="text" id="envValue" placeholder="e.g. /usr/bin" autocomplete="off" />
+
+    <button id="setEnv">Set Environment Variable</button>
+    <button id="unsetEnv">Unset Environment Variable</button>
+
+    <button id="listEnv">List Global Environment Variables</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Memory Management (per process)</legend>
+
+    <label for="memSize">Allocate Memory Size (KB)</label>
+    <input type="number" id="memSize" min="1" value="64" />
+
+    <button id="allocMem">Allocate Memory</button>
+    <button id="freeMem">Free All Memory</button>
+
+    <label>Process Memory Blocks</label>
+    <select id="memBlocks" size="4" style="height:6em;" disabled></select>
+
+    <button id="inspectMemBlock" disabled>Inspect Selected Memory Block</button>
+
+    <pre id="memBlockInfo" style="border: 1px solid black; min-height: 4em; white-space: pre-wrap;"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Runtime Environment Info & Logs</legend>
+    <button id="showREInfo">Show Runtime Environment Info</button>
+    <button id="clearLog">Clear Log</button>
+    <div id="log"></div>
+  </fieldset>
+
+</div>
+
+<script>
+(() => {
+
+// Data structures
+class Process {
+  constructor(name, priority) {
+    this.id = Process.nextId++;
+    this.name = name || ('Process'+this.id);
+    this.priority = priority || 5;
+    this.state = 'created'; // possible states: created, running, paused, killed, exited
+    this.env = Object.assign({}, RuntimeEnv.globalEnv); // process env copies global env at creation
+    this.memoryBlocks = []; // { id, sizeKB, details }
+    this.syscallHistory = []; // { syscall, args, timestamp, result }
+    this.children = []; // for forked children
+    this.parent = null;
+  }
+  toString() {
+    return `#${this.id} "${this.name}" [Priority:${this.priority}] State:${this.state}`;
+  }
+}
+Process.nextId = 1;
+
+const RuntimeEnv = {
+  globalEnv: {},
+
+  processes: [],
+
+  logBuffer: [],
+
+  maxLogEntries: 1000,
+
+  addLog(msg) {
+    const time = new Date().toLocaleTimeString();
+    const entry = `[${time}] ${msg}`;
+    this.logBuffer.push(entry);
+    if (this.logBuffer.length > this.maxLogEntries) {
+      this.logBuffer.shift();
+    }
+    updateLog();
+  },
+
+  getProcessById(id) {
+    return this.processes.find(p => p.id === id);
+  },
+
+  getProcessByName(name) {
+    return this.processes.find(p => p.name === name);
+  }
+};
+
+// UI elements
+const procNameInput = document.getElementById('procName');
+const procPriorityInput = document.getElementById('procPriority');
+const createProcBtn = document.getElementById('createProc');
+const selectProc = document.getElementById('selectProc');
+const startProcBtn = document.getElementById('startProc');
+const pauseProcBtn = document.getElementById('pauseProc');
+const killProcBtn = document.getElementById('killProc');
+
+const syscallSelect = document.getElementById('syscallSelect');
+const syscallArgsInput = document.getElementById('syscallArgs');
+const invokeSyscallBtn = document.getElementById('invokeSyscall');
+
+const envKeyInput = document.getElementById('envKey');
+const envValueInput = document.getElementById('envValue');
+const setEnvBtn = document.getElementById('setEnv');
+const unsetEnvBtn = document.getElementById('unsetEnv');
+const listEnvBtn = document.getElementById('listEnv');
+
+const memSizeInput = document.getElementById('memSize');
+const allocMemBtn = document.getElementById('allocMem');
+const freeMemBtn = document.getElementById('freeMem');
+const memBlocksSelect = document.getElementById('memBlocks');
+const inspectMemBlockBtn = document.getElementById('inspectMemBlock');
+const memBlockInfoPre = document.getElementById('memBlockInfo');
+
+const showREInfoBtn = document.getElementById('showREInfo');
+const clearLogBtn = document.getElementById('clearLog');
+const logDiv = document.getElementById('log');
+
+function updateProcessList() {
+  // Clear options
+  selectProc.innerHTML = '';
+  RuntimeEnv.processes.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.toString();
+    selectProc.appendChild(opt);
+  });
+  updateMemBlocksList();
+  updateProcessControlsState();
+}
+
+function updateMemBlocksList() {
+  memBlocksSelect.innerHTML = '';
+  const p = getSelectedProcess();
+  if (p && p.memoryBlocks.length > 0) {
+    memBlocksSelect.disabled = false;
+    inspectMemBlockBtn.disabled = false;
+    p.memoryBlocks.forEach(block => {
+      const opt = document.createElement('option');
+      opt.value = block.id;
+      opt.textContent = `Block #${block.id} - ${block.sizeKB}KB`;
+      memBlocksSelect.appendChild(opt);
+    });
+  } else {
+    memBlocksSelect.disabled = true;
+    inspectMemBlockBtn.disabled = true;
+  }
+}
+
+function updateProcessControlsState() {
+  const p = getSelectedProcess();
+  const runningState = p && p.state === 'running';
+  const pausedState = p && p.state === 'paused';
+  startProcBtn.disabled = !(p && (p.state === 'created' || p.state === 'paused'));
+  pauseProcBtn.disabled = !(p && runningState);
+  killProcBtn.disabled = !(p && (p.state !== 'killed' && p.state !== 'exited'));
+  invokeSyscallBtn.disabled = !p;
+  allocMemBtn.disabled = !(p && p.state === 'running');
+  freeMemBtn.disabled = !(p && p.memoryBlocks.length > 0);
+  memSizeInput.disabled = !(p && p.state === 'running');
+}
+
+function getSelectedProcess() {
+  const val = selectProc.value;
+  if (!val) return null;
+  const pid = parseInt(val,10);
+  return RuntimeEnv.getProcessById(pid);
+}
+
+function addMemoryBlockToProcess(p, sizeKB) {
+  const blockId = (p.memoryBlocks.length ? p.memoryBlocks[p.memoryBlocks.length-1].id + 1 : 1);
+  const details = `Dummy memory block of size ${sizeKB}KB. Simulated content: ${generateRandomHex(sizeKB*1024)}`;
+  const block = { id: blockId, sizeKB, details };
+  p.memoryBlocks.push(block);
+  RuntimeEnv.addLog(`Memory block #${block.id} allocated (${block.sizeKB}KB) in process #${p.id} "${p.name}"`);
+}
+
+function generateRandomHex(numBytes) {
+  // Generates a hex string roughly of numBytes length / 2 (bytes)
+  const length = Math.min(128, numBytes / 2); // limit for display
+  let s = '';
+  for (let i = 0; i < length; i++) {
+    const n = Math.floor(Math.random() * 256);
+    s += n.toString(16).padStart(2, '0');
+  }
+  return s + (length < numBytes/2 ? '...' : '');
+}
+
+// Process lifecycle functions
+function createProcess(name, priority) {
+  const normalizedName = name.trim();
+  if (normalizedName.length === 0) {
+    alert('Process name cannot be empty.');
+    return null;
+  }
+  if (RuntimeEnv.processes.some(p => p.name === normalizedName)) {
+    alert('Process name must be unique.');
+    return null;
+  }
+  const p = new Process(normalizedName, priority);
+  RuntimeEnv.processes.push(p);
+  RuntimeEnv.addLog(`Created process #${p.id} "${p.name}" with priority ${p.priority}`);
+  return p;
+}
+
+function changeProcessState(p, newState) {
+  if (!p) return;
+  const oldState = p.state;
+  if (oldState === 'killed' || oldState === 'exited') {
+    RuntimeEnv.addLog(`Cannot change state of process #${p.id} "${p.name}" because it is already ${oldState}`);
+    return;
+  }
+  if (oldState === newState) return;
+  p.state = newState;
+  RuntimeEnv.addLog(`Process #${p.id} "${p.name}" changed state: ${oldState} → ${newState}`);
+  updateProcessControlsState();
+  updateProcessList();
+}
+
+// System calls logic: simulate basic behaviors
+function invokeSyscall(p, syscall, args) {
+  if (!p) {
+    alert('No process selected');
+    return;
+  }
+  if (p.state !== 'running') {
+    alert(`Process must be running to invoke syscalls (current state: ${p.state})`);
+    return;
+  }
+  args = args.map(a => a.trim());
+
+  // syscall result and side effects
+  let result = null;
+  const timestamp = new Date();
+
+  switch (syscall) {
+    case 'read':
+      if (args.length < 1) {
+        alert('read(filename) requires at least 1 argument');
+        return;
+      }
+      // Simulate file read with dummy content
+      result = `Content of "${args[0]}" (simulated)`;
+      break;
+
+    case 'write':
+      if (args.length < 2) {
+        alert('write(filename, content) requires at least 2 arguments');
+        return;
+      }
+      result = `Wrote to "${args[0]}" content length ${args[1].length}`;
+      break;
+
+    case 'fork':
+      // create a child process as copy of current
+      const childName = `${p.name}_child${p.children.length + 1}`;
+      const child = new Process(childName, p.priority);
+      child.state = 'created';
+      child.env = Object.assign({}, p.env);
+      child.parent = p;
+      p.children.push(child);
+      RuntimeEnv.processes.push(child);
+      result = `Forked child process #${child.id} "${child.name}" from parent #${p.id}`;
+      updateProcessList();
+      break;
+
+    case 'exec':
+      if (args.length < 1) {
+        alert('exec(programName) requires at least 1 argument');
+        return;
+      }
+      result = `Process #${p.id} exec() replaced image by "${args[0]}" (simulated)`;
+      p.name = args[0];
+      updateProcessList();
+      break;
+
+    case 'exit':
+      changeProcessState(p, 'exited');
+      result = `Process #${p.id} has exited.`;
+      break;
+
+    case 'getenv':
+      if (args.length < 1) {
+        alert('getenv(variableName) requires at least 1 argument');
+        return;
+      }
+      const value = p.env[args[0]] === undefined ? '(unset)' : p.env[args[0]];
+      result = `getenv("${args[0]}") → "${value}"`;
+      break;
+
+    case 'setenv':
+      if (args.length < 2) {
+        alert('setenv(variableName, value) requires at least 2 arguments');
+        return;
+      }
+      p.env[args[0]] = args[1];
+      result = `setenv("${args[0]}") = "${args[1]}" for process #${p.id}`;
+      break;
+
+    default:
+      alert('Unknown syscall: ' + syscall);
+      return;
+  }
+
+  p.syscallHistory.push({ syscall, args, timestamp, result });
+  RuntimeEnv.addLog(`Process #${p.id} syscall: ${syscall}(${args.join(', ')}) → ${result}`);
+}
+
+// Environment Variables global management
+function setGlobalEnvVariable(key, value) {
+  if (!key) {
+    alert('Environment variable key cannot be empty.');
+    return;
+  }
+  RuntimeEnv.globalEnv[key] = value;
+  RuntimeEnv.addLog(`Global environment variable set: ${key} = ${value}`);
+}
+
+function unsetGlobalEnvVariable(key) {
+  if (!key) {
+    alert('Environment variable key cannot be empty.');
+    return;
+  }
+  if (RuntimeEnv.globalEnv.hasOwnProperty(key)) {
+    delete RuntimeEnv.globalEnv[key];
+    RuntimeEnv.addLog(`Global environment variable unset: ${key}`);
+  } else {
+    RuntimeEnv.addLog(`Global environment variable ${key} does not exist`);
+  }
+}
+
+function listGlobalEnvVariables() {
+  let entries = Object.entries(RuntimeEnv.globalEnv);
+  if (entries.length === 0) {
+    alert('No global environment variables set.');
+  } else {
+    let msg = 'Global Environment Variables:\n';
+    entries.forEach(([k,v]) => msg += `${k} = ${v}\n`);
+    alert(msg);
+  }
+}
+
+// Memory management for process
+function allocateMemoryForProcess(p, sizeKB) {
+  if (!p) return;
+  if (sizeKB <= 0) {
+    alert('Memory size must be positive');
+    return;
+  }
+  addMemoryBlockToProcess(p, sizeKB);
+  updateMemBlocksList();
+  updateProcessControlsState();
+}
+
+function freeAllMemoryForProcess(p) {
+  if (!p) return;
+  if (p.memoryBlocks.length === 0) return;
+  p.memoryBlocks.length = 0;
+  RuntimeEnv.addLog(`Freed all memory for process #${p.id} "${p.name}"`);
+  updateMemBlocksList();
+  updateProcessControlsState();
+}
+
+function inspectMemoryBlock(p, blockId) {
+  if (!p) return '';
+  const block = p.memoryBlocks.find(b => b.id === blockId);
+  if (!block) return 'Memory block not found.';
+  return `Memory Block #${block.id}\nSize: ${block.sizeKB} KB\nDetails:\n${block.details}`;
+}
+
+// Logs and Runtime Environment info
+function updateLog() {
+  logDiv.textContent = RuntimeEnv.logBuffer.join('\n');
+  logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+function clearLog() {
+  RuntimeEnv.logBuffer.length = 0;
+  updateLog();
+}
+
+function showRuntimeEnvInfo() {
+  let info = '=== Runtime Environment Info ===\n';
+  info += `Total processes: ${RuntimeEnv.processes.length}\n`;
+  const stateCounts = {
+    created: 0, running: 0, paused: 0, killed: 0, exited: 0
+  };
+  RuntimeEnv.processes.forEach(p => {
+    if (stateCounts.hasOwnProperty(p.state)) stateCounts[p.state]++;
+  });
+  for (const state in stateCounts) {
+    info += `Processes ${state}: ${stateCounts[state]}\n`;
+  }
+  info += `\nGlobal Environment Variables (${Object.keys(RuntimeEnv.globalEnv).length}):\n`;
+  for (const [k,v] of Object.entries(RuntimeEnv.globalEnv)) {
+    info += `  ${k} = ${v}\n`;
+  }
+  info += '\nProcesses detail:\n';
+  RuntimeEnv.processes.forEach(p => {
+    info += `#${p.id} "${p.name}": State=${p.state}, Priority=${p.priority}, MemoryBlocks=${p.memoryBlocks.length}, Syscalls invoked=${p.syscallHistory.length}\n`;
+  });
+  alert(info);
+}
+
+// Event handlers
+createProcBtn.addEventListener('click', () => {
+  const name = procNameInput.value;
+  const prio = parseInt(procPriorityInput.value, 10);
+  if (!name.trim()) {
+    alert('Enter a non-empty process name.');
+    return;
+  }
+  if (RuntimeEnv.getProcessByName(name.trim())) {
+    alert('Process name already exists, choose another name.');
+    return;
+  }
+  const proc = createProcess(name, prio);
+  if (proc) {
+    procNameInput.value = '';
+    updateProcessList();
+  }
+});
+
+selectProc.addEventListener('change', () => {
+  updateProcessControlsState();
+  updateMemBlocksList();
+  memBlockInfoPre.textContent = '';
+});
+
+startProcBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) {
+    alert('Select a process first.');
+    return;
+  }
+  if (p.state === 'running') {
+    alert('Process already running.');
+    return;
+  }
+  changeProcessState(p, 'running');
+});
+
+pauseProcBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) {
+    alert('Select a process first.');
+    return;
+  }
+  if (p.state !== 'running') {
+    alert('Process must be running to pause.');
+    return;
+  }
+  changeProcessState(p, 'paused');
+});
+
+killProcBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) {
+    alert('Select a process first.');
+    return;
+  }
+  if (p.state === 'killed' || p.state === 'exited') {
+    alert(`Process already ${p.state}.`);
+    return;
+  }
+  changeProcessState(p, 'killed');
+});
+
+invokeSyscallBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) {
+    alert('Select a process first.');
+    return;
+  }
+  const syscall = syscallSelect.value;
+  let argsStr = syscallArgsInput.value.trim();
+  let args = [];
+  if (argsStr) {
+    // Very simple CSV splitting allowing commas inside quotes
+    args = parseArgsCSV(argsStr);
+  }
+  invokeSyscall(p, syscall, args);
+  syscallArgsInput.value = '';
+  updateProcessList();
+});
+
+setEnvBtn.addEventListener('click', () => {
+  const k = envKeyInput.value.trim();
+  const v = envValueInput.value.trim();
+  if (!k) {
+    alert('Variable name cannot be empty.');
+    return;
+  }
+  setGlobalEnvVariable(k, v);
+});
+
+unsetEnvBtn.addEventListener('click', () => {
+  const k = envKeyInput.value.trim();
+  if (!k) {
+    alert('Variable name cannot be empty.');
+    return;
+  }
+  unsetGlobalEnvVariable(k);
+});
+
+listEnvBtn.addEventListener('click', () => {
+  listGlobalEnvVariables();
+});
+
+allocMemBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) {
+    alert('Select a process.');
+    return;
+  }
+  if (p.state !== 'running') {
+    alert('Process must be running to allocate memory.');
+    return;
+  }
+  const sizeKB = parseInt(memSizeInput.value, 10);
+  if (isNaN(sizeKB) || sizeKB <= 0) {
+    alert('Enter a valid positive memory size in KB.');
+    return;
+  }
+  allocateMemoryForProcess(p, sizeKB);
+});
+
+freeMemBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) return;
+  if (p.memoryBlocks.length === 0) {
+    alert('No memory blocks to free.');
+    return;
+  }
+  if (!confirm(`Free all ${p.memoryBlocks.length} memory blocks for process #${p.id} "${p.name}"?`)) return;
+  freeAllMemoryForProcess(p);
+});
+
+inspectMemBlockBtn.addEventListener('click', () => {
+  const p = getSelectedProcess();
+  if (!p) {
+    alert('Select a process.');
+    return;
+  }
+  const blockIdStr = memBlocksSelect.value;
+  if (!blockIdStr) {
+    alert('Select a memory block.');
+    return;
+  }
+  const blockId = parseInt(blockIdStr, 10);
+  memBlockInfoPre.textContent = inspectMemoryBlock(p, blockId);
+});
+
+showREInfoBtn.addEventListener('click', () => {
+  showRuntimeEnvInfo();
+});
+
+clearLogBtn.addEventListener('click', () => {
+  clearLog();
+});
+
+// Utility to parse simple CSV that supports quoted strings with commas:
+// e.g.  filename.txt, "some,complex,arg", 123
+function parseArgsCSV(str) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  if (current) result.push(current.trim());
+  // Strip quotes from args
+  return result.map(arg => {
+    if (arg.startsWith('"') && arg.endsWith('"') && arg.length >= 2) {
+      return arg.slice(1, -1);
+    }
+    return arg;
+  });
+}
+
+// Initialize some environment variables
+RuntimeEnv.globalEnv = {
+  PATH: '/usr/bin:/bin',
+  HOME: '/home/user',
+  LANG: 'en_US.UTF-8'
+};
+RuntimeEnv.addLog('Initialized global environment variables: PATH, HOME, LANG');
+
+// Focus on process name input for quick creation
+procNameInput.focus();
+
+updateProcessList();
+updateProcessControlsState();
+updateMemBlocksList();
+updateLog();
+
+})();
+</script>
+</body>
+</html>

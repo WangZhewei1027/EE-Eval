@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Backpropagation Interactive Lab</title>
+<style>
+/* Extremely minimal styling as requested */
+body { font-family: monospace; margin: 10px; background: white; color: black; }
+input, select, button, textarea { font-family: monospace; font-size: 12px; }
+.container { display: flex; gap: 12px; }
+.column { flex: 1; min-width: 300px; }
+.panel { border: 1px solid #000; padding: 8px; margin-bottom: 8px; }
+.small { font-size: 11px; }
+pre { white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow: auto; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid #000; padding: 2px 6px; }
+</style>
+</head>
+<body>
+<h1>Backpropagation Interactive Lab</h1>
+<div class="container">
+  <div class="column">
+    <div class="panel">
+      <strong>Network Topology</strong><br>
+      <div>
+        Layers (comma-separated neuron counts, include input and output):<br>
+        <input id="layersInput" type="text" value="2,2,1" style="width:100%"><br>
+        <button id="applyLayersBtn">Apply Topology</button>
+        <button id="addLayerBtn">Add Hidden Layer</button>
+        <button id="removeLayerBtn">Remove Last Hidden Layer</button>
+      </div>
+      <div style="margin-top:8px;">
+        Per-layer activation (comma-separated, same length as layers):<br>
+        <input id="activationsInput" type="text" value="linear,sigmoid,linear" style="width:100%"><br>
+        <small class="small">choices: linear, sigmoid, tanh, relu, softmax</small>
+      </div>
+      <div style="margin-top:8px;">
+        Weight init: 
+        <select id="initSelect">
+          <option value="random">Random [-1,1]</option>
+          <option value="xavier">Xavier</option>
+          <option value="zeros">Zeros</option>
+        </select>
+        <button id="initWeightsBtn">Initialize Weights</button>
+      </div>
+      <div style="margin-top:8px;">
+        Controls:<br>
+        <label>Learning rate <input id="lrInput" type="number" step="0.0001" value="0.5" style="width:80px"></label><br>
+        <label>Momentum <input id="momentumInput" type="number" step="0.01" value="0.0" style="width:80px"></label><br>
+        <label>L2 lambda <input id="l2Input" type="number" step="0.0001" value="0.0" style="width:80px"></label><br>
+        <label>Gradient clip (abs) <input id="clipInput" type="number" step="0.1" value="1000" style="width:80px"></label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Dataset</strong><br>
+      Presets:
+      <select id="datasetPreset">
+        <option value="xor">XOR (2->1)</option>
+        <option value="and">AND</option>
+        <option value="or">OR</option>
+        <option value="linear">Linear y = sum(x)</option>
+        <option value="circle">Circle classification</option>
+      </select>
+      <button id="loadPresetBtn">Load Preset</button>
+      <button id="clearDataBtn">Clear</button>
+      <div style="margin-top:8px;">
+        Add sample (comma-separated inputs and output):<br>
+        <input id="addSampleInput" type="text" value="0,0 -> 0" style="width:100%"><br>
+        <button id="addSampleBtn">Add Sample</button>
+      </div>
+      <div style="margin-top:8px;">
+        Bulk edit / paste CSV (each line: x1,x2,...,y1,y2,...):<br>
+        <textarea id="dataArea" rows="6" style="width:100%"></textarea><br>
+        <button id="applyDataBtn">Apply Data</button>
+      </div>
+      <div style="margin-top:8px;">
+        <strong>Samples</strong>
+        <pre id="samplesPre">[]</pre>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Training Controls</strong><br>
+      <label>Loss:
+        <select id="lossSelect">
+          <option value="mse">MSE</option>
+          <option value="crossentropy">Cross-Entropy (with softmax)</option>
+        </select>
+      </label><br>
+      <label>Batch size <input id="batchSizeInput" type="number" step="1" value="1" style="width:80px"></label><br>
+      <label>Shuffle <input id="shuffleCheckbox" type="checkbox" checked></label><br>
+      <label>Epochs <input id="epochsInput" type="number" step="1" value="1000" style="width:80px"></label><br>
+      <button id="trainBtn">Train (Run)</button>
+      <button id="trainStepBtn">Train Step (1 batch)</button>
+      <button id="stopBtn">Stop</button>
+      <div style="margin-top:8px;">
+        <button id="stepForwardBtn">Step Forward (single sample forward)</button>
+        <button id="stepBackwardBtn">Step Backprop (on last sample)</button>
+        <button id="resetStateBtn">Reset State (zero grads, zero cache)</button>
+      </div>
+      <div style="margin-top:8px;">
+        <small class="small">Epoch: <span id="epochLabel">0</span> Iter: <span id="iterLabel">0</span> Loss: <span id="lossLabel">N/A</span></small>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Utilities</strong><br>
+      <button id="saveJsonBtn">Save Network JSON</button>
+      <button id="loadJsonBtn">Load JSON</button>
+      <input id="jsonFileInput" type="file" accept=".json">
+      <button id="randomSeedBtn">Set Random Seed</button>
+      <div style="margin-top:8px;">
+        <button id="gradCheckBtn">Gradient Check (numeric vs analytic)</button>
+        <input id="gradEps" type="number" step="1e-6" value="1e-5" style="width:90px">
+        <input id="gradTol" type="number" step="1e-6" value="1e-4" style="width:90px">
+      </div>
+    </div>
+
+  </div>
+
+  <div class="column">
+    <div class="panel">
+      <strong>Network Viewer / Edit</strong>
+      <div id="networkView"></div>
+      <div style="margin-top:8px;">
+        <button id="toggleFreezeBtn">Toggle Freeze Selected Layer</button>
+        <button id="zeroWeightsBtn">Zero Selected Layer Weights</button>
+        <div>Selected layer index: <input id="selectedLayerIndex" type="number" value="1" style="width:60px"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Forward / Backprop Trace</strong>
+      <div>
+        Choose sample index: <input id="traceSampleIndex" type="number" value="0" style="width:60px">
+        <button id="showForwardBtn">Show Forward</button>
+        <button id="showBackwardBtn">Show Backprop</button>
+      </div>
+      <pre id="tracePre">No trace yet.</pre>
+    </div>
+
+    <div class="panel">
+      <strong>Training History & Logs</strong>
+      <div>
+        <button id="clearLogBtn">Clear Log</button>
+      </div>
+      <pre id="logPre">Ready.</pre>
+    </div>
+
+    <div class="panel">
+      <strong>Loss History</strong>
+      <pre id="lossHistoryPre">[]</pre>
+      <div>
+        Show last N <input id="historyN" type="number" value="50" style="width:60px">
+        <button id="showHistoryBtn">Show</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Backpropagation Interactive Lab
+// Plain UI, many controls, complex flows.
+
+// Utility functions
+function rand(seed=null) {
+  // seeded random if seed provided
+  if (seed === null) return Math.random();
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+function deepCopy(x) { return JSON.parse(JSON.stringify(x)); }
+function arr(n, v=0) { return Array.from({length:n}, ()=> typeof v === 'function' ? v() : v); }
+function zeros(n) { return arr(n,0); }
+function sum(arr) { return arr.reduce((a,b)=>a+b,0); }
+function add(a,b){ return a.map((v,i)=>v+b[i]); }
+function clamp(x,mi,ma){ return Math.max(mi, Math.min(ma, x)); }
+
+// Activation functions and derivatives
+const Activations = {
+  linear: {
+    f: x => x,
+    df: x => 1
+  },
+  sigmoid: {
+    f: x => 1 / (1 + Math.exp(-x)),
+    df: x => {
+      const s = 1 / (1 + Math.exp(-x));
+      return s*(1-s);
+    }
+  },
+  tanh: {
+    f: x => Math.tanh(x),
+    df: x => 1 - Math.tanh(x)**2
+  },
+  relu: {
+    f: x => x>0?x:0,
+    df: x => x>0?1:0
+  },
+  softmax: {
+    f: function(vec){
+      // numerically stable
+      const m = Math.max(...vec);
+      const ex = vec.map(v=>Math.exp(v-m));
+      const s = sum(ex);
+      return ex.map(v=>v/s);
+    },
+    df: null // handled differently (softmax combined with cross-entropy)
+  }
+};
+
+// Loss functions
+const Losses = {
+  mse: {
+    f: (yPred, yTrue) => {
+      // yPred, yTrue arrays
+      let s = 0;
+      for (let i=0;i<yPred.length;i++){
+        const d = yPred[i]-yTrue[i];
+        s += 0.5*d*d;
+      }
+      return s;
+    },
+    df: (yPred, yTrue) => yPred.map((v,i)=> v - yTrue[i]) // derivative w.r.t pre-activation for linear outputs
+  },
+  crossentropy: {
+    f: (yPred, yTrue) => {
+      // yPred are probabilities (softmax), yTrue is one-hot or distribution
+      let s = 0;
+      for (let i=0;i<yPred.length;i++){
+        const p = clamp(yPred[i], 1e-15, 1-1e-15);
+        s -= yTrue[i] * Math.log(p);
+      }
+      return s;
+    },
+    df: null // handled with softmax combined
+  }
+};
+
+// Network model
+class Network {
+  constructor(layerSizes=[2,2,1], activations=null){
+    this.layerSizes = layerSizes.slice();
+    this.L = layerSizes.length;
+    this.activations = activations || layerSizes.map((_,i)=> i===0 ? 'linear' : 'sigmoid');
+    this.weights = []; // weights[l][i][j] for layer l (1..L-1) neuron i, from prev j
+    this.biases = [];
+    this.initWeights('random');
+    this.resetState();
+    this.frozen = Array(this.L).fill(false);
+    this.velocities = this.layerSizes.map((n, idx)=>{
+      if (idx===0) return null;
+      return {w: arr(this.layerSizes[idx], ()=> arr(this.layerSizes[idx-1], ()=>0)), b: arr(this.layerSizes[idx], ()=>0)};
+    });
+  }
+  resetState(){
+    this.Z = []; // pre-activations per layer
+    this.A = []; // activations per layer
+    this.grads = null; // grads for weights and biases
+    this.lastInputs = null;
+  }
+  initWeights(mode='random'){
+    this.weights = [null];
+    this.biases = [null];
+    for (let l=1;l<this.L;l++){
+      const n = this.layerSizes[l];
+      const m = this.layerSizes[l-1];
+      let w = arr(n, ()=> arr(m, ()=>0));
+      let b = arr(n, ()=>0);
+      if (mode === 'random'){
+        for (let i=0;i<n;i++){
+          for (let j=0;j<m;j++){
+            w[i][j] = Math.random()*2 - 1;
+          }
+          b[i] = Math.random()*2 - 1;
+        }
+      } else if (mode === 'xavier'){
+        const range = Math.sqrt(6 / (n + m));
+        for (let i=0;i<n;i++){
+          for (let j=0;j<m;j++){
+            w[i][j] = (Math.random()*2 - 1) * range;
+          }
+          b[i] = 0;
+        }
+      } else if (mode === 'zeros'){
+        // already zeros
+      }
+      this.weights.push(w);
+      this.biases.push(b);
+    }
+    // reset velocities
+    this.velocities = this.layerSizes.map((s, idx)=>{
+      if (idx===0) return null;
+      return {w: arr(this.layerSizes[idx], ()=> arr(this.layerSizes[idx-1], ()=>0)), b: arr(this.layerSizes[idx], ()=>0)};
+    });
+    this.resetState();
+  }
+  forward(x){
+    // x: array length layerSizes[0]
+    this.A = [x.slice()];
+    this.Z = [null];
+    for (let l=1;l<this.L;l++){
+      const n = this.layerSizes[l];
+      const m = this.layerSizes[l-1];
+      const z = arr(n, ()=>0);
+      const aPrev = this.A[l-1];
+      for (let i=0;i<n;i++){
+        let s = this.biases[l][i];
+        for (let j=0;j<m;j++){
+          s += this.weights[l][i][j] * aPrev[j];
+        }
+        z[i] = s;
+      }
+      this.Z.push(z);
+      const actName = this.activations[l];
+      if (actName === 'softmax'){
+        this.A.push(Activations.softmax.f(z));
+      } else {
+        this.A.push(z.map(v=>Activations[actName].f(v)));
+      }
+    }
+    this.lastInputs = x.slice();
+    return this.A[this.A.length-1];
+  }
+  backprop(yTrue, lossName='mse', options={}){
+    // Compute gradients given last forward run (must call forward before)
+    if (!this.A || this.A.length===0) throw new Error("Call forward first");
+    const L = this.L;
+    const gradsW = [null];
+    const gradsB = [null];
+    let delta = null;
+    // Output layer
+    const outIdx = L-1;
+    const actOut = this.activations[outIdx];
+    const yPred = this.A[outIdx].slice();
+    if (lossName === 'crossentropy' && actOut === 'softmax'){
+      // special case: delta = yPred - yTrue
+      delta = yPred.map((p,i)=> p - yTrue[i]);
+    } else {
+      // general: delta = dLoss/dA * dA/dZ
+      const dLossdA = Losses[lossName].df(yPred, yTrue);
+      const z = this.Z[outIdx];
+      delta = arr(z.length, (i)=> dLossdA[i] * (Activations[actOut].df(z[i])));
+    }
+    // gradients for output layer
+    gradsW[outIdx] = arr(this.layerSizes[outIdx], ()=> arr(this.layerSizes[outIdx-1], ()=>0));
+    gradsB[outIdx] = arr(this.layerSizes[outIdx], ()=>0);
+    const aPrev = this.A[outIdx-1];
+    for (let i=0;i<this.layerSizes[outIdx];i++){
+      for (let j=0;j<aPrev.length;j++){
+        gradsW[outIdx][i][j] = delta[i] * aPrev[j];
+      }
+      gradsB[outIdx][i] = delta[i];
+    }
+    // backpropagate
+    for (let l=L-2; l>=1; l--){
+      const n = this.layerSizes[l];
+      const m = this.layerSizes[l+1];
+      const nextW = this.weights[l+1];
+      const nextDelta = delta;
+      const z = this.Z[l];
+      const act = this.activations[l];
+      const myDelta = arr(n, ()=>0);
+      for (let i=0;i<n;i++){
+        let s = 0;
+        for (let k=0;k<m;k++){
+          s += nextW[k][i] * nextDelta[k];
+        }
+        myDelta[i] = s * Activations[act].df(z[i]);
+      }
+      delta = myDelta;
+      // compute grads for this layer
+      gradsW[l] = arr(this.layerSizes[l], ()=> arr(this.layerSizes[l-1], ()=>0));
+      gradsB[l] = arr(this.layerSizes[l], ()=>0);
+      const aPrev2 = this.A[l-1];
+      for (let i=0;i<this.layerSizes[l];i++){
+        for (let j=0;j<aPrev2.length;j++){
+          gradsW[l][i][j] = delta[i] * aPrev2[j];
+        }
+        gradsB[l][i] = delta[i];
+      }
+    }
+    this.grads = {W: gradsW, B: gradsB};
+    return this.grads;
+  }
+  applyGradients(grads, lr=0.1, momentum=0.0, l2=0.0, clipAbs=1e9){
+    for (let l=1;l<this.L;l++){
+      if (this.frozen[l]) continue;
+      for (let i=0;i<this.layerSizes[l];i++){
+        for (let j=0;j<this.layerSizes[l-1];j++){
+          let g = grads.W[l][i][j];
+          if (l2) g += l2 * this.weights[l][i][j];
+          if (Math.abs(g) > clipAbs) g = Math.sign(g) * clipAbs;
+          // momentum update
+          this.velocities[l].w[i][j] = momentum*this.velocities[l].w[i][j] - lr * g;
+          this.weights[l][i][j] += this.velocities[l].w[i][j];
+        }
+        let gb = grads.B[l][i];
+        if (Math.abs(gb) > clipAbs) gb = Math.sign(gb) * clipAbs;
+        this.velocities[l].b[i] = momentum*this.velocities[l].b[i] - lr * gb;
+        this.biases[l][i] += this.velocities[l].b[i];
+      }
+    }
+  }
+
+  toJSON(){
+    return {
+      layerSizes: this.layerSizes,
+      activations: this.activations,
+      weights: this.weights,
+      biases: this.biases,
+      frozen: this.frozen
+    };
+  }
+  loadJSON(obj){
+    this.layerSizes = obj.layerSizes.slice();
+    this.L = this.layerSizes.length;
+    this.activations = obj.activations.slice();
+    this.weights = obj.weights.slice();
+    this.biases = obj.biases.slice();
+    this.frozen = obj.frozen || Array(this.L).fill(false);
+    this.velocities = this.layerSizes.map((s, idx)=>{
+      if (idx===0) return null;
+      return {w: arr(this.layerSizes[idx], ()=> arr(this.layerSizes[idx-1], ()=>0)), b: arr(this.layerSizes[idx], ()=>0)};
+    });
+    this.resetState();
+  }
+}
+
+// Global app state
+const App = {
+  net: new Network([2,2,1], ['linear','sigmoid','linear']),
+  samples: [], // {x:[], y:[]}
+  epoch: 0,
+  iter: 0,
+  running: false,
+  log: [],
+  lossHistory: [],
+  rngSeed: null
+};
+
+// DOM elements
+const layersInput = document.getElementById('layersInput');
+const activationsInput = document.getElementById('activationsInput');
+const applyLayersBtn = document.getElementById('applyLayersBtn');
+const addLayerBtn = document.getElementById('addLayerBtn');
+const removeLayerBtn = document.getElementById('removeLayerBtn');
+const initSelect = document.getElementById('initSelect');
+const initWeightsBtn = document.getElementById('initWeightsBtn');
+
+const lrInput = document.getElementById('lrInput');
+const momentumInput = document.getElementById('momentumInput');
+const l2Input = document.getElementById('l2Input');
+const clipInput = document.getElementById('clipInput');
+
+const datasetPreset = document.getElementById('datasetPreset');
+const loadPresetBtn = document.getElementById('loadPresetBtn');
+const clearDataBtn = document.getElementById('clearDataBtn');
+const addSampleInput = document.getElementById('addSampleInput');
+const addSampleBtn = document.getElementById('addSampleBtn');
+const dataArea = document.getElementById('dataArea');
+const applyDataBtn = document.getElementById('applyDataBtn');
+const samplesPre = document.getElementById('samplesPre');
+
+const trainBtn = document.getElementById('trainBtn');
+const trainStepBtn = document.getElementById('trainStepBtn');
+const stopBtn = document.getElementById('stopBtn');
+const stepForwardBtn = document.getElementById('stepForwardBtn');
+const stepBackwardBtn = document.getElementById('stepBackwardBtn');
+const resetStateBtn = document.getElementById('resetStateBtn');
+
+const lossSelect = document.getElementById('lossSelect');
+const batchSizeInput = document.getElementById('batchSizeInput');
+const shuffleCheckbox = document.getElementById('shuffleCheckbox');
+const epochsInput = document.getElementById('epochsInput');
+const epochLabel = document.getElementById('epochLabel');
+const iterLabel = document.getElementById('iterLabel');
+const lossLabel = document.getElementById('lossLabel');
+
+const saveJsonBtn = document.getElementById('saveJsonBtn');
+const loadJsonBtn = document.getElementById('loadJsonBtn');
+const jsonFileInput = document.getElementById('jsonFileInput');
+const randomSeedBtn = document.getElementById('randomSeedBtn');
+
+const gradCheckBtn = document.getElementById('gradCheckBtn');
+const gradEps = document.getElementById('gradEps');
+const gradTol = document.getElementById('gradTol');
+
+const networkView = document.getElementById('networkView');
+const toggleFreezeBtn = document.getElementById('toggleFreezeBtn');
+const zeroWeightsBtn = document.getElementById('zeroWeightsBtn');
+const selectedLayerIndex = document.getElementById('selectedLayerIndex');
+
+const traceSampleIndex = document.getElementById('traceSampleIndex');
+const showForwardBtn = document.getElementById('showForwardBtn');
+const showBackwardBtn = document.getElementById('showBackwardBtn');
+const tracePre = document.getElementById('tracePre');
+
+const logPre = document.getElementById('logPre');
+const clearLogBtn = document.getElementById('clearLogBtn');
+
+const lossHistoryPre = document.getElementById('lossHistoryPre');
+const historyN = document.getElementById('historyN');
+const showHistoryBtn = document.getElementById('showHistoryBtn');
+
+const gradCheckEpsInput = gradEps;
+const gradCheckTolInput = gradTol;
+
+// Helper functions
+function log(msg){
+  const time = new Date().toLocaleTimeString();
+  App.log.push(`[${time}] ${msg}`);
+  logPre.textContent = App.log.slice(-200).join('\n');
+}
+
+function updateNetworkView(){
+  // Render network weights and biases as editable table
+  const net = App.net;
+  const out = [];
+  out.push('Topology: ' + net.layerSizes.join(', '));
+  out.push('Activations: ' + net.activations.join(', '));
+  out.push('');
+  for (let l=1;l<net.L;l++){
+    out.push('Layer ' + l + ' (neurons: ' + net.layerSizes[l] + ') activation: ' + net.activations[l] + (net.frozen[l] ? ' [FROZEN]' : ''));
+    const rows = [];
+    rows.push('| neuron | bias | weights from prev |');
+    for (let i=0;i<net.layerSizes[l];i++){
+      rows.push('| ' + i + ' | ' + net.biases[l][i].toFixed(4) + ' | ' + net.weights[l][i].map(v=>v.toFixed(4)).join(', ') + ' |');
+    }
+    out.push(rows.join('\n'));
+    out.push('');
+  }
+  networkView.textContent = out.join('\n');
+}
+
+function updateSamplesView(){
+  samplesPre.textContent = JSON.stringify(App.samples, null, 2);
+}
+
+function parseLayers(text){
+  const parts = text.split(',').map(s=>s.trim()).filter(s=>s.length>0).map(Number);
+  if (parts.some(isNaN)) throw new Error('Invalid layers input');
+  if (parts.length < 2) throw new Error('Need at least input and output layers');
+  return parts;
+}
+
+function parseActivations(text){
+  const parts = text.split(',').map(s=>s.trim()).filter(s=>s.length>0);
+  return parts;
+}
+
+// Dataset management
+function loadPreset(name){
+  App.samples = [];
+  if (name === 'xor'){
+    App.samples.push({x:[0,0], y:[0]});
+    App.samples.push({x:[0,1], y:[1]});
+    App.samples.push({x:[1,0], y:[1]});
+    App.samples.push({x:[1,1], y:[0]});
+  } else if (name === 'and'){
+    App.samples.push({x:[0,0], y:[0]});
+    App.samples.push({x:[0,1], y:[0]});
+    App.samples.push({x:[1,0], y:[0]});
+    App.samples.push({x:[1,1], y:[1]});
+  } else if (name === 'or'){
+    App.samples.push({x:[0,0], y:[0]});
+    App.samples.push({x:[0,1], y:[1]});
+    App.samples.push({x:[1,0], y:[1]});
+    App.samples.push({x:[1,1], y:[1]});
+  } else if (name === 'linear'){
+    // simple linear 2D dataset
+    for (let i=0;i<10;i++){
+      const x1 = i/9;
+      const x2 = (9-i)/9;
+      App.samples.push({x:[x1,x2], y:[x1 + x2]});
+    }
+  } else if (name === 'circle'){
+    // classification inside circle radius 0.5
+    for (let i=0;i<200;i++){
+      const ang = Math.random()*Math.PI*2;
+      const r = Math.random();
+      const x = Math.cos(ang)*r;
+      const y = Math.sin(ang)*r;
+      const label = (x*x+y*y < 0.25) ? 1 : 0;
+      App.samples.push({x:[x,y], y:[label]});
+    }
+  }
+  updateSamplesView();
+  log('Loaded preset: ' + name + ' samples: ' + App.samples.length);
+}
+
+// Apply topology
+applyLayersBtn.addEventListener('click', ()=>{
+  try {
+    const layers = parseLayers(layersInput.value);
+    const acts = parseActivations(activationsInput.value);
+    if (acts.length !== layers.length) {
+      alert('Activations length must equal number of layers');
+      return;
+    }
+    App.net = new Network(layers, acts);
+    updateNetworkView();
+    log('Applied topology: ' + layers.join(', '));
+  } catch (e){
+    alert('Error: ' + e.message);
+  }
+});
+
+addLayerBtn.addEventListener('click', ()=>{
+  // add hidden layer of average size
+  const net = App.net;
+  const hiddenIndex = net.L - 1;
+  const avg = Math.max(1, Math.round((net.layerSizes[hiddenIndex] + net.layerSizes[0]) / 2));
+  net.layerSizes.splice(net.L-1, 0, avg);
+  // add activation default
+  net.activations.splice(net.L-1, 0, 'sigmoid');
+  net.L = net.layerSizes.length;
+  net.initWeights('random');
+  updateNetworkView();
+  layersInput.value = net.layerSizes.join(',');
+  activationsInput.value = net.activations.join(',');
+  log('Added hidden layer with ' + avg + ' neurons');
+});
+
+removeLayerBtn.addEventListener('click', ()=>{
+  const net = App.net;
+  if (net.L <= 2) {
+    alert('No hidden layers to remove');
+    return;
+  }
+  net.layerSizes.splice(net.L-2,1); // remove the last hidden layer
+  net.activations.splice(net.L-2,1);
+  net.L = net.layerSizes.length;
+  layersInput.value = net.layerSizes.join(',');
+  activationsInput.value = net.activations.join(',');
+  net.initWeights('random');
+  updateNetworkView();
+  log('Removed last hidden layer');
+});
+
+initWeightsBtn.addEventListener('click', ()=>{
+  const mode = initSelect.value;
+  App.net.initWeights(mode);
+  updateNetworkView();
+  log('Initialized weights: ' + mode);
+});
+
+// Dataset UI
+loadPresetBtn.addEventListener('click', ()=>{
+  loadPreset(datasetPreset.value);
+});
+clearDataBtn.addEventListener('click', ()=>{
+  App.samples = [];
+  updateSamplesView();
+  log('Cleared samples');
+});
+addSampleBtn.addEventListener('click', ()=>{
+  // parse input like "0,1 -> 1" or "0,1,0"
+  const txt = addSampleInput.value;
+  try {
+    if (txt.includes('->')){
+      const parts = txt.split('->');
+      const xin = parts[0].trim();
+      const yout = parts[1].trim();
+      const xs = xin.split(',').map(s=>Number(s.trim()));
+      const ys = yout.split(',').map(s=>Number(s.trim()));
+      App.samples.push({x: xs, y: ys});
+    } else {
+      const parts = txt.split(',').map(s=>s.trim()).map(Number);
+      if (parts.length < 2) throw new Error('Need at least one input and one output');
+      const half = Math.floor(parts.length/2);
+      // ambiguous: choose 1 output if otherwise
+      const xs = parts.slice(0, parts.length-1);
+      const ys = [parts[parts.length-1]];
+      App.samples.push({x: xs, y: ys});
+    }
+    updateSamplesView();
+    log('Added sample');
+  } catch(e){
+    alert('Error parsing sample: ' + e.message);
+  }
+});
+
+applyDataBtn.addEventListener('click', ()=>{
+  // each line: x1,x2,...,y1,y2,...
+  const lines = dataArea.value.split('\n').map(s=>s.trim()).filter(s=>s.length);
+  const newSamples = [];
+  for (const ln of lines){
+    const parts = ln.split(',').map(s=>Number(s.trim()));
+    if (parts.some(isNaN)) { alert('Bad number in line: ' + ln); return; }
+    // assume one output if ambiguous
+    if (parts.length < 2) { alert('line too short: ' + ln); return; }
+    const xs = parts.slice(0, parts.length - 1);
+    const ys = [parts[parts.length - 1]];
+    newSamples.push({x: xs, y: ys});
+  }
+  App.samples = newSamples;
+  updateSamplesView();
+  log('Applied dataset, samples: ' + App.samples.length);
+});
+
+// Training controls
+let trainingAbort = {stop:false};
+trainBtn.addEventListener('click', async ()=>{
+  if (App.samples.length === 0) { alert('No samples'); return; }
+  trainingAbort.stop = false;
+  App.running = true;
+  const epochs = Number(epochsInput.value);
+  const batchSize = Number(batchSizeInput.value) || 1;
+  const shuffle = shuffleCheckbox.checked;
+  const lr = Number(lrInput.value);
+  const momentum = Number(momentumInput.value);
+  const l2 = Number(l2Input.value);
+  const clip = Number(clipInput.value);
+  const lossName = lossSelect.value;
+  App.lossHistory = [];
+  App.epoch = 0;
+  App.iter = 0;
+  updateLabels();
+  log('Starting training for ' + epochs + ' epochs');
+  for (let e=0;e<epochs && !trainingAbort.stop;e++){
+    App.epoch = e+1;
+    let order = Array.from({length:App.samples.length}, (_,i)=>i);
+    if (shuffle) {
+      for (let i=order.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+    }
+    for (let bi=0; bi<order.length; bi+=batchSize){
+      const batchIdx = order.slice(bi, bi+batchSize);
+      // accumulate grads
+      let accumulated = null;
+      let totalLoss = 0;
+      for (const idx of batchIdx){
+        const s = App.samples[idx];
+        const yPred = App.net.forward(s.x);
+        totalLoss += (lossName === 'crossentropy' && App.net.activations[App.net.L-1] === 'softmax') ?
+          Losses.crossentropy.f(yPred, s.y) :
+          Losses[lossName].f(yPred, s.y);
+        const grads = App.net.backprop(s.y, lossName);
+        if (!accumulated){
+          accumulated = {W: grads.W.map(g=> g ? deepCopy(g) : null), B: grads.B.map(g=> g ? deepCopy(g) : null)};
+        } else {
+          // sum
+          for (let l=1;l<App.net.L;l++){
+            for (let i=0;i<App.net.layerSizes[l];i++){
+              for (let j=0;j<App.net.layerSizes[l-1];j++){
+                accumulated.W[l][i][j] += grads.W[l][i][j];
+              }
+              accumulated.B[l][i] += grads.B[l][i];
+            }
+          }
+        }
+      }
+      // average
+      const bs = batchIdx.length;
+      for (let l=1;l<App.net.L;l++){
+        for (let i=0;i<App.net.layerSizes[l];i++){
+          for (let j=0;j<App.net.layerSizes[l-1];j++){
+            accumulated.W[l][i][j] /= bs;
+          }
+          accumulated.B[l][i] /= bs;
+        }
+      }
+      App.net.applyGradients(accumulated, lr, momentum, l2, clip);
+      App.iter++;
+      const avgLoss = totalLoss / bs;
+      App.lossHistory.push(avgLoss);
+      updateLabels(avgLoss);
+      if (trainingAbort.stop) break;
+    }
+    // epoch end
+    if (e % Math.max(1, Math.floor(epochs/10)) === 0) log('Epoch ' + (e+1) + ' loss ' + App.lossHistory.slice(-1)[0]);
+  }
+  App.running = false;
+  trainingAbort.stop = false;
+  log('Training finished at epoch ' + App.epoch);
+  updateNetworkView();
+});
+
+trainStepBtn.addEventListener('click', ()=>{
+  if (App.samples.length === 0) { alert('No samples'); return; }
+  const batchSize = Number(batchSizeInput.value) || 1;
+  const lr = Number(lrInput.value);
+  const momentum = Number(momentumInput.value);
+  const l2 = Number(l2Input.value);
+  const clip = Number(clipInput.value);
+  const lossName = lossSelect.value;
+  const order = Array.from({length:App.samples.length}, (_,i)=>i);
+  const batchIdx = order.slice(0,batchSize);
+  let accumulated = null;
+  let totalLoss = 0;
+  for (const idx of batchIdx){
+    const s = App.samples[idx];
+    const yPred = App.net.forward(s.x);
+    totalLoss += (lossName === 'crossentropy' && App.net.activations[App.net.L-1] === 'softmax') ?
+      Losses.crossentropy.f(yPred, s.y) :
+      Losses[lossName].f(yPred, s.y);
+    const grads = App.net.backprop(s.y, lossName);
+    if (!accumulated){
+      accumulated = {W: grads.W.map(g=> g ? deepCopy(g) : null), B: grads.B.map(g=> g ? deepCopy(g) : null)};
+    } else {
+      for (let l=1;l<App.net.L;l++){
+        for (let i=0;i<App.net.layerSizes[l];i++){
+          for (let j=0;j<App.net.layerSizes[l-1];j++){
+            accumulated.W[l][i][j] += grads.W[l][i][j];
+          }
+          accumulated.B[l][i] += grads.B[l][i];
+        }
+      }
+    }
+  }
+  const bs = batchIdx.length;
+  for (let l=1;l<App.net.L;l++){
+    for (let i=0;i<App.net.layerSizes[l];i++){
+      for (let j=0;j<App.net.layerSizes[l-1];j++){
+        accumulated.W[l][i][j] /= bs;
+      }
+      accumulated.B[l][i] /= bs;
+    }
+  }
+  App.net.applyGradients(accumulated, lr, momentum, l2, clip);
+  App.iter++;
+  const avgLoss = totalLoss / bs;
+  App.lossHistory.push(avgLoss);
+  updateLabels(avgLoss);
+  log('Performed one training step, loss: ' + avgLoss.toFixed(6));
+  updateNetworkView();
+});
+
+stopBtn.addEventListener('click', ()=>{
+  trainingAbort.stop = true;
+  App.running = false;
+  log('Stop requested');
+});
+
+stepForwardBtn.addEventListener('click', ()=>{
+  const idx = Number(traceSampleIndex.value) || 0;
+  if (!App.samples[idx]) { alert('No such sample'); return; }
+  const y = App.net.forward(App.samples[idx].x);
+  tracePre.textContent = 'Forward for sample ' + idx + '\n' + JSON.stringify({x:App.samples[idx].x, z: App.net.Z, a: App.net.A}, null, 2);
+  updateNetworkView();
+  log('Stepped forward sample ' + idx);
+});
+
+stepBackwardBtn.addEventListener('click', ()=>{
+  const idx = Number(traceSampleIndex.value) || 0;
+  if (!App.samples[idx]) { alert('No such sample'); return; }
+  App.net.forward(App.samples[idx].x);
+  const grads = App.net.backprop(App.samples[idx].y, lossSelect.value);
+  tracePre.textContent = 'Backward for sample ' + idx + '\n' + JSON.stringify(grads, null, 2);
+  log('Computed backprop for sample ' + idx);
+});
+
+resetStateBtn.addEventListener('click', ()=>{
+  App.net.resetState();
+  log('Reset network state');
+});
+
+// Utilities
+saveJsonBtn.addEventListener('click', ()=>{
+  const data = JSON.stringify(App.net.toJSON());
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'network.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  log('Saved network JSON');
+});
+
+loadJsonBtn.addEventListener('click', ()=>{
+  jsonFileInput.click();
+});
+jsonFileInput.addEventListener('change', (ev)=>{
+  const f = ev.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const obj = JSON.parse(e.target.result);
+    App.net.loadJSON(obj);
+    updateNetworkView();
+    layersInput.value = App.net.layerSizes.join(',');
+    activationsInput.value = App.net.activations.join(',');
+    log('Loaded network JSON');
+  };
+  reader.readAsText(f);
+});
+
+randomSeedBtn.addEventListener('click', ()=>{
+  App.rngSeed = Math.floor(Math.random()*1000000);
+  log('Set random seed (not used globally) to ' + App.rngSeed);
+});
+
+// Network viewer actions
+toggleFreezeBtn.addEventListener('click', ()=>{
+  const idx = Number(selectedLayerIndex.value);
+  if (isNaN(idx) || idx <= 0 || idx >= App.net.L){ alert('Invalid layer index'); return; }
+  App.net.frozen[idx] = !App.net.frozen[idx];
+  updateNetworkView();
+  log('Toggled freeze for layer ' + idx + ' => ' + App.net.frozen[idx]);
+});
+zeroWeightsBtn.addEventListener('click', ()=>{
+  const idx = Number(selectedLayerIndex.value);
+  if (isNaN(idx) || idx <= 0 || idx >= App.net.L){ alert('Invalid layer index'); return; }
+  for (let i=0;i<App.net.layerSizes[idx];i++){
+    App.net.biases[idx][i] = 0;
+    for (let j=0;j<App.net.layerSizes[idx-1];j++){
+      App.net.weights[idx][i][j] = 0;
+    }
+  }
+  updateNetworkView();
+  log('Zeroed weights for layer ' + idx);
+});
+
+// Trace buttons
+showForwardBtn.addEventListener('click', ()=>{
+  const idx = Number(traceSampleIndex.value);
+  if (!App.samples[idx]) { alert('No such sample'); return; }
+  const y = App.net.forward(App.samples[idx].x);
+  const out = [];
+  out.push('Sample ' + idx);
+  out.push('Input: ' + JSON.stringify(App.samples[idx].x));
+  for (let l=1;l<App.net.L;l++){
+    out.push('Layer ' + l + ' pre-activations: ' + JSON.stringify(App.net.Z[l].map(v=>v.toFixed(6))));
+    out.push('Layer ' + l + ' activations: ' + JSON.stringify(App.net.A[l].map(v=>v.toFixed(6))));
+  }
+  out.push('Output: ' + JSON.stringify(y.map(v=>v.toFixed(6))));
+  tracePre.textContent = out.join('\n');
+});
+
+showBackwardBtn.addEventListener('click', ()=>{
+  const idx = Number(traceSampleIndex.value);
+  if (!App.samples[idx]) { alert('No such sample'); return; }
+  App.net.forward(App.samples[idx].x);
+  const grads = App.net.backprop(App.samples[idx].y, lossSelect.value);
+  const out = [];
+  out.push('Backprop for sample ' + idx);
+  for (let l=1;l<App.net.L;l++){
+    out.push('Layer ' + l + ' grad biases: ' + JSON.stringify(grads.B[l].map(v=>v.toFixed(8))));
+    out.push('Layer ' + l + ' grad weights: ');
+    for (let i=0;i<grads.W[l].length;i++){
+      out.push('  neuron ' + i + ': ' + JSON.stringify(grads.W[l][i].map(v=>v.toFixed(8))));
+    }
+  }
+  tracePre.textContent = out.join('\n');
+});
+
+// Logging
+clearLogBtn.addEventListener('click', ()=>{
+  App.log = [];
+  logPre.textContent = '';
+});
+
+// Loss history
+showHistoryBtn.addEventListener('click', ()=>{
+  const N = Number(historyN.value) || 50;
+  const h = App.lossHistory.slice(-N);
+  lossHistoryPre.textContent = JSON.stringify(h, null, 2);
+});
+
+// Gradient check
+gradCheckBtn.addEventListener('click', ()=>{
+  if (App.samples.length === 0) { alert('No samples'); return; }
+  const s = App.samples[0];
+  // pick one weight randomly to check
+  const eps = Number(gradEps.value) || 1e-5;
+  const tol = Number(gradTol.value) || 1e-4;
+  App.net.forward(s.x);
+  const grads = App.net.backprop(s.y, lossSelect.value);
+  // find a non-frozen layer and a non-zero weight to test
+  let chosen = null;
+  for (let l=1;l<App.net.L && !chosen;l++){
+    for (let i=0;i<App.net.layerSizes[l] && !chosen;i++){
+      for (let j=0;j<App.net.layerSizes[l-1] && !chosen;j++){
+        chosen = {l,i,j};
+      }
+    }
+  }
+  if (!chosen) { alert('No weights to check'); return; }
+  const {l,i,j} = chosen;
+  const orig = App.net.weights[l][i][j];
+  // approximate derivative by finite differences
+  App.net.weights[l][i][j] = orig + eps;
+  const y1 = App.net.forward(s.x);
+  const loss1 = (lossSelect.value === 'crossentropy' && App.net.activations[App.net.L-1] === 'softmax') ?
+    Losses.crossentropy.f(y1, s.y) : Losses[lossSelect.value].f(y1, s.y);
+  App.net.weights[l][i][j] = orig - eps;
+  const y2 = App.net.forward(s.x);
+  const loss2 = (lossSelect.value === 'crossentropy' && App.net.activations[App.net.L-1] === 'softmax') ?
+    Losses.crossentropy.f(y2, s.y) : Losses[lossSelect.value].f(y2, s.y);
+  const numeric = (loss1 - loss2) / (2*eps);
+  // restore
+  App.net.weights[l][i][j] = orig;
+  App.net.forward(s.x);
+  const analyticGrads = App.net.backprop(s.y, lossSelect.value);
+  const analytic = analyticGrads.W[l][i][j];
+  const diff = Math.abs(numeric - analytic);
+  const ok = diff < tol;
+  log('GradCheck weight w['+l+']['+i+']['+j+'] numeric=' + numeric.toExponential(6) + ' analytic=' + analytic.toExponential(6) + ' diff=' + diff.toExponential(6) + ' ok=' + ok);
+  alert('GradCheck result: numeric=' + numeric + ' analytic=' + analytic + ' diff=' + diff + ' ok=' + ok);
+});
+
+// Update labels
+function updateLabels(loss=null){
+  epochLabel.textContent = App.epoch;
+  iterLabel.textContent = App.iter;
+  lossLabel.textContent = (loss === null ? (App.lossHistory.length ? App.lossHistory.slice(-1)[0].toFixed(6) : 'N/A') : loss.toFixed(6));
+  updateNetworkView();
+  updateSamplesView();
+  lossHistoryPre.textContent = JSON.stringify(App.lossHistory.slice(-200), null, 2);
+}
+
+// Initial rendering
+updateNetworkView();
+updateSamplesView();
+log('Ready. Use controls to build network, load data, and run backpropagation experiments.');
+
+</script>
+</body>
+</html>

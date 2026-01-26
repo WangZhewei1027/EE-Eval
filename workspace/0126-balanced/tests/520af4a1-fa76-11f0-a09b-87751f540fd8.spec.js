@@ -1,0 +1,158 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/520af4a1-fa76-11f0-a09b-87751f540fd8.html';
+
+test.describe('FSM: REST API Demo (520af4a1-fa76-11f0-a09b-87751f540fd8)', () => {
+  // Collect console messages and page errors per test to make assertions about runtime failures.
+  test.beforeEach(async ({ page }) => {
+    // Prepare containers on the page object to collect events for later assertions.
+    (page as any)._consoleMessages = [];
+    (page as any)._pageErrors = [];
+
+    page.on('console', (msg) => {
+      // store console text and type for later inspection
+      (page as any)._consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+
+    page.on('pageerror', (err) => {
+      // store page errors (unhandled exceptions) reported by the page
+      (page as any)._pageErrors.push(err);
+    });
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Optional cleanup: remove listeners (Playwright tears down pages automatically, but clear arrays)
+    (page as any)._consoleMessages = [];
+    (page as any)._pageErrors = [];
+  });
+
+  test('Initial state (S0_Idle): page renders the Get Users button and #users container is present and empty', async ({ page }) => {
+    // This validates the "Idle" state's evidence: the Get Users button and the #users div.
+    await page.goto(APP_URL, { waitUntil: 'load' });
+
+    // Verify the button is present and has the expected label.
+    const button = page.locator('.button');
+    await expect(button).toHaveCount(1);
+    await expect(button).toHaveText('Get Users');
+
+    // Verify the users container is present and initially empty (no rendered users).
+    const usersDiv = page.locator('#users');
+    await expect(usersDiv).toHaveCount(1);
+    const usersText = (await usersDiv.textContent()) ?? '';
+    expect(usersText.trim()).toBe('', 'Expected #users to be empty in the Idle state.');
+
+    // The implementation includes server-side Node/Express code inside a browser script tag.
+    // That code uses `require(...)` which is not available in browsers and should cause a runtime ReferenceError.
+    // Assert that at least one page error referencing `require` (or a ReferenceError) is emitted on load.
+    // Wait briefly for pageerror to be emitted (if any).
+    const pageErrors = (page as any)._pageErrors as Error[];
+    if (pageErrors.length === 0) {
+      // If not yet captured, wait for a pageerror event or timeout.
+      try {
+        const err = await page.waitForEvent('pageerror', { timeout: 2000 });
+        expect(err.message).toMatch(/require is not defined|ReferenceError/i);
+      } catch {
+        // If no pageerror arrived, still check the collected console messages for an error log
+        const consoleMessages = (page as any)._consoleMessages as Array<{ type: string; text: string }>;
+        const hasErrorConsole = consoleMessages.some(m => /require is not defined|ReferenceError/i.test(m.text) || m.type === 'error');
+        expect(hasErrorConsole).toBeTruthy();
+      }
+    } else {
+      // If errors already captured synchronously, assert on them.
+      const found = pageErrors.some(e => /require is not defined|ReferenceError/i.test(e.message));
+      expect(found).toBeTruthy();
+    }
+  });
+
+  test('Event/Transition (GetUsers): clicking the Get Users button triggers a runtime error and does NOT populate #users', async ({ page }) => {
+    // This test validates the transition triggered by clicking the Get Users button.
+    // The FSM expects that clicking "Get Users" will fetch and display users (S0_Idle -> S1_UsersFetched).
+    // However, the provided JS is not usable in the browser (no getUsers or fetchUsers functions defined),
+    // so clicking should cause a ReferenceError for getUsers (or another error), and #users should remain empty.
+
+    await page.goto(APP_URL, { waitUntil: 'load' });
+
+    // Ensure the DOM elements exist before clicking.
+    const button = page.locator('.button');
+    await expect(button).toHaveCount(1);
+    const usersDiv = page.locator('#users');
+    await expect(usersDiv).toHaveCount(1);
+
+    // Click the button and simultaneously wait for a pageerror to be emitted by the page.
+    // The onclick attribute calls getUsers(), which is not defined because the script failed earlier.
+    // We expect a ReferenceError like "getUsers is not defined".
+    let pageError: Error | null = null;
+    const waitForErr = page.waitForEvent('pageerror').then(e => (pageError = e)).catch(() => { /* ignore */ });
+
+    await button.click();
+
+    // Wait briefly for the pageerror to be captured (if it occurs).
+    try {
+      await waitForErr;
+    } catch {
+      // ignore; we'll assert based on collected events below
+    }
+
+    // Assert that a page error was emitted and references getUsers or a ReferenceError
+    const collectedErrors = (page as any)._pageErrors as Error[];
+    // Combine found error(s)
+    const allErrors = [...(collectedErrors || [])];
+    if (pageError) allErrors.push(pageError);
+
+    // We require that at least one error mentions getUsers or is a ReferenceError about a missing function.
+    const hasGetUsersError = allErrors.some(e => /getUsers is not defined|getUsers is not a function|ReferenceError/i.test(e.message));
+    expect(hasGetUsersError).toBeTruthy();
+
+    // Confirm that the users DIV did not get populated as a result of the failed action.
+    const usersTextAfter = (await usersDiv.textContent()) ?? '';
+    expect(usersTextAfter.trim()).toBe('', 'After clicking Get Users (which errors), #users should remain empty because fetch/display did not run.');
+
+    // Also assert that there are error-level console messages captured.
+    const consoleMessages = (page as any)._consoleMessages as Array<{ type: string; text: string }>;
+    const hasConsoleError = consoleMessages.some(m => m.type === 'error' || /getUsers|require|ReferenceError|TypeError/i.test(m.text));
+    expect(hasConsoleError).toBeTruthy();
+  });
+
+  test('OnEnter/OnExit actions and function availability: renderPage, fetchUsers, displayUsers should NOT be defined in the browser context', async ({ page }) => {
+    // FSM entry/exit actions mention renderPage() and displayUsers() and transition actions mention fetchUsers().
+    // These functions are not defined because the included script is Node/Express server code.
+    // Verify they are undefined in the window context (edge-case check).
+    await page.goto(APP_URL, { waitUntil: 'load' });
+
+    const renderPageType = await page.evaluate(() => (window as any).renderPage === undefined ? 'undefined' : typeof (window as any).renderPage);
+    const displayUsersType = await page.evaluate(() => (window as any).displayUsers === undefined ? 'undefined' : typeof (window as any).displayUsers);
+    const fetchUsersType = await page.evaluate(() => (window as any).fetchUsers === undefined ? 'undefined' : typeof (window as any).fetchUsers);
+
+    expect(renderPageType).toBe('undefined');
+    expect(displayUsersType).toBe('undefined');
+    expect(fetchUsersType).toBe('undefined');
+  });
+
+  test('Edge case: confirm that client-side handlers are missing and server-like code produced runtime failures', async ({ page }) => {
+    // This test checks for multiple kinds of failures arising from embedding server-side code in the browser:
+    // - require(...) is not defined
+    // - attempts to reassign const variables (if executed) would produce TypeError or similar.
+    // We will not attempt to execute or patch the page; instead we assert that the page did report errors and that the expected DOM evidence for states exist.
+
+    await page.goto(APP_URL, { waitUntil: 'load' });
+
+    // Ensure Idle state evidence exists (button and users div)
+    await expect(page.locator('.button')).toHaveCount(1);
+    await expect(page.locator('#users')).toHaveCount(1);
+
+    // Assert that at least one page error or console error was captured indicating server-side code execution problems.
+    const consoleMessages = (page as any)._consoleMessages as Array<{ type: string; text: string }>;
+    const pageErrors = (page as any)._pageErrors as Error[];
+
+    const hasRequireError = (pageErrors || []).some(e => /require is not defined|ReferenceError/i.test(e.message))
+      || consoleMessages.some(m => /require is not defined|ReferenceError/i.test(m.text) || m.type === 'error');
+
+    // It's expected that "require is not defined" appears because Node API is used inside a browser script.
+    expect(hasRequireError).toBeTruthy();
+
+    // Additionally check for any console message that suggests server code attempted to run (e.g., "Server listening" would be printed by Node if it executed),
+    // but since Node didn't run, we assert that such messages are not present to emphasize the mismatch.
+    const hasServerListening = consoleMessages.some(m => /Server listening on port/i.test(m.text));
+    expect(hasServerListening).toBeFalsy();
+  });
+});

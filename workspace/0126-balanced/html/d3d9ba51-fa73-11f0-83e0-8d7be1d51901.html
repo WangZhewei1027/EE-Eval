@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Transaction Demo — ACID, Locks, Optimistic Concurrency</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1724;
+      --card: #0b1220;
+      --muted: #9aa5bd;
+      --accent: #7dd3fc;
+      --good: #10b981;
+      --bad: #ef4444;
+      --yellow: #f59e0b;
+      --glass: rgba(255,255,255,0.03);
+      --panel-pad: 12px;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071023 0%, #071a2a 100%);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
+    .wrap{max-width:1200px;margin:28px auto;padding:20px;color:#e6eef8}
+    h1{margin:0 0 6px;font-size:20px}
+    .subtitle{color:var(--muted);font-size:13px;margin-bottom:18px}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.03);border-radius:10px;padding:var(--panel-pad);box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    .accounts-table{width:100%;border-collapse:collapse;margin-top:8px}
+    .accounts-table th,.accounts-table td{padding:8px 6px;text-align:left;font-size:13px;color:#dfe9f8}
+    .accounts-table th{color:var(--muted);font-weight:600;font-size:12px}
+    .balance{font-weight:700}
+    .btn{display:inline-block;padding:8px 10px;border-radius:8px;background:var(--glass);border:1px solid rgba(255,255,255,0.03);color:var(--accent);cursor:pointer;margin:4px 6px 0 0;font-size:13px}
+    .btn:hover{filter:brightness(1.08)}
+    .btn.small{padding:6px 8px;font-size:12px;border-radius:7px}
+    .controls{margin-top:12px}
+    .tx-list{display:flex;flex-wrap:wrap;gap:10px}
+    .tx-card{background:linear-gradient(180deg, rgba(125,211,252,0.06), rgba(255,255,255,0.02));padding:10px;border-radius:8px;border:1px solid rgba(125,211,252,0.06);min-width:260px}
+    .tx-header{display:flex;justify-content:space-between;align-items:center}
+    .tx-id{font-weight:700}
+    .muted{color:var(--muted);font-size:13px}
+    .ops{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.03);font-size:13px}
+    .op-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+    .select, input[type="number"], input[type="text"]{padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:#e6eef8;font-size:13px}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    .log{max-height:240px;overflow:auto;margin-top:8px;padding:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.01));font-family:monospace;font-size:12px;color:#cbe9ff}
+    .status{font-size:12px;padding:6px 8px;border-radius:6px;display:inline-block;margin-left:6px}
+    .status.ok{background:rgba(16,185,129,0.12);color:var(--good);border:1px solid rgba(16,185,129,0.08)}
+    .status.bad{background:rgba(239,68,68,0.08);color:var(--bad);border:1px solid rgba(239,68,68,0.06)}
+    .status.warn{background:rgba(245,158,11,0.08);color:var(--yellow);border:1px solid rgba(245,158,11,0.06)}
+    .lite{color:var(--muted);font-size:13px}
+    .row{display:flex;gap:12px;align-items:center}
+    .small-muted{color:var(--muted);font-size:12px}
+    .preview{margin-top:8px;padding:8px;border-radius:8px;background:rgba(7,26,36,0.4);font-size:13px}
+    .locked{background:rgba(239,68,68,0.06);border-radius:6px;padding:4px;color:var(--bad);font-size:12px}
+    .success{color:var(--good);font-weight:700}
+    .danger{color:var(--bad);font-weight:700}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    .explain{font-size:13px;color:var(--muted);margin-top:10px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.01)}
+    .mode-select{display:flex;gap:8px;align-items:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Transaction Demonstration</h1>
+    <div class="subtitle">Interactive simulation of transactions (ACID): atomicity, consistency, isolation, durability. Try multiple transactions and see commits, rollbacks, locks and optimistic conflicts.</div>
+
+    <div class="grid">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700">Accounts</div>
+            <div class="small-muted">Balances reflect current committed state</div>
+          </div>
+          <div class="mode-select">
+            <label class="lite" style="margin-right:6px">Concurrency mode</label>
+            <select id="mode" class="select" title="Choose concurrency behavior">
+              <option value="pessimistic">Pessimistic (locks)</option>
+              <option value="optimistic">Optimistic (version checks)</option>
+              <option value="snapshot">Snapshot isolation (read-only snapshot + optimistic write)</option>
+            </select>
+          </div>
+        </div>
+
+        <table class="accounts-table" id="accountsTable" aria-live="polite">
+          <thead>
+            <tr><th>Account</th><th>Balance</th><th>Version</th></tr>
+          </thead>
+          <tbody id="accountsBody"></tbody>
+        </table>
+
+        <div class="controls">
+          <button class="btn" id="resetBtn">Reset Demo</button>
+          <button class="btn" id="persistBtn">Persist committed state (Durability)</button>
+          <button class="btn" id="clearPersistBtn">Clear persisted</button>
+        </div>
+
+        <div class="explain" id="explainBox">
+          <strong>How it works:</strong>
+          <ul style="margin:8px 0 0 18px;color:var(--muted)">
+            <li>Begin transactions on the right; add operations (deposit, withdraw, transfer).</li>
+            <li>In Pessimistic mode, write locks prevent concurrent writes.</li>
+            <li>In Optimistic mode, transactions check versions at commit and abort on conflict (you can retry).</li>
+            <li>Committed state is saved to localStorage with "Persist committed state". This demonstrates durability across reloads.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700">Transactions</div>
+            <div class="small-muted">Open multiple transactions to simulate concurrency</div>
+          </div>
+          <div>
+            <button class="btn small" id="newTxBtn">New Transaction</button>
+            <button class="btn small" id="scenarioBtn">Run 2-TX Scenario</button>
+          </div>
+        </div>
+
+        <div id="txContainer" style="margin-top:10px" class="tx-list"></div>
+
+        <div style="margin-top:10px">
+          <div style="font-weight:700">Log</div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Tip: create two transactions, make conflicting updates and commit in different orders to see locking or optimistic failures. This is a simplified educational model.
+    </footer>
+  </div>
+
+  <script>
+    // Simple in-memory database with persistence to localStorage for durability demonstration.
+    (function(){
+      // Utilities
+      const $ = id => document.getElementById(id);
+      const formatMoney = n => "$" + n.toFixed(2);
+      const randomId = () => Math.random().toString(36).slice(2,9);
+
+      // Local storage keys
+      const LS_ACCOUNTS = "tx-demo-accounts-v1";
+      const LS_LOG = "tx-demo-log-v1";
+
+      // Default accounts
+      const defaultAccounts = [
+        { id: "A", name: "Checking", balance: 1000.00, version: 1 },
+        { id: "B", name: "Savings", balance: 2500.00, version: 1 },
+        { id: "C", name: "Investment", balance: 5000.00, version: 1 }
+      ];
+
+      // Global state
+      let accounts = []; // committed state
+      let locks = {}; // accountId -> txId (pessimistic mode)
+      let txs = {}; // txId -> tx object
+      let logEntries = [];
+
+      // UI elements
+      const accountsBody = $("accountsBody");
+      const txContainer = $("txContainer");
+      const logDiv = $("log");
+      const modeSelect = $("mode");
+
+      // Initialize from persisted or default
+      function loadState() {
+        const stored = localStorage.getItem(LS_ACCOUNTS);
+        if (stored) {
+          try {
+            accounts = JSON.parse(stored);
+            appendLog("Loaded persisted committed state (durability).");
+          } catch(e) {
+            accounts = JSON.parse(JSON.stringify(defaultAccounts));
+          }
+        } else {
+          accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        }
+        const storedLog = localStorage.getItem(LS_LOG);
+        if (storedLog) {
+          try { logEntries = JSON.parse(storedLog); } catch(e){ logEntries = []; }
+        } else {
+          logEntries = [];
+        }
+      }
+
+      function persistState() {
+        localStorage.setItem(LS_ACCOUNTS, JSON.stringify(accounts));
+        localStorage.setItem(LS_LOG, JSON.stringify(logEntries));
+        appendLog("Persisted committed state to localStorage (Durability).");
+      }
+
+      // Reset demo to defaults (clears persisted)
+      function resetDemo() {
+        accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        locks = {};
+        txs = {};
+        logEntries = [];
+        localStorage.removeItem(LS_ACCOUNTS);
+        localStorage.removeItem(LS_LOG);
+        renderAll();
+        appendLog("Demo reset to defaults.");
+      }
+
+      // Logging
+      function appendLog(msg) {
+        const time = new Date().toLocaleTimeString();
+        logEntries.unshift(`[${time}] ${msg}`);
+        if (logEntries.length > 200) logEntries.length = 200;
+        renderLog();
+      }
+      function renderLog() {
+        logDiv.textContent = logEntries.join("\n");
+      }
+
+      // Account helpers
+      function findAccount(id) {
+        return accounts.find(a => a.id === id);
+      }
+
+      function renderAccounts() {
+        accountsBody.innerHTML = "";
+        accounts.forEach(a => {
+          const tr = document.createElement("tr");
+          const nameTd = document.createElement("td");
+          nameTd.innerHTML = `<strong>${a.name}</strong> <div class="small-muted">${a.id}</div>`;
+          const balTd = document.createElement("td");
+          balTd.innerHTML = `<span class="balance">${formatMoney(a.balance)}</span>`;
+          const verTd = document.createElement("td");
+          verTd.innerHTML = `<span class="small-muted">v${a.version}</span>`;
+          tr.appendChild(nameTd);
+          tr.appendChild(balTd);
+          tr.appendChild(verTd);
+          accountsBody.appendChild(tr);
+        });
+      }
+
+      // Transaction model
+      // Each transaction:
+      //  - id
+      //  - mode (reads snapshot versions at begin if snapshot or optimistic)
+      //  - ops: list of operations to apply at commit {type, from, to, amount}
+      //  - state: 'active'|'committed'|'aborted'
+      //  - tentativeBalances: computed preview when adding ops
+      //  - readVersions: snapshot of versions at begin (for optimistic/snapshot)
+      //  - acquiredLocks: set of accountIds locked (for pessimistic)
+      class Transaction {
+        constructor() {
+          this.id = randomId();
+          this.ops = [];
+          this.state = "active";
+          this.acquiredLocks = new Set();
+          this.readVersions = {};
+          this.createdAt = new Date();
+          // capture snapshot versions if mode requires
+          const mode = modeSelect.value;
+          if (mode === "optimistic" || mode === "snapshot") {
+            accounts.forEach(a => { this.readVersions[a.id] = a.version; });
+          }
+        }
+
+        addOp(op) {
+          if (this.state !== "active") throw new Error("Transaction not active");
+          this.ops.push(op);
+        }
+
+        // compute tentative balances by applying ops to committed accounts
+        computeTentative() {
+          const base = accounts.reduce((m,a)=>{ m[a.id]= {id:a.id,name:a.name,balance:a.balance,version:a.version}; return m; },{});
+          for (let op of this.ops) {
+            if (op.type === "deposit") {
+              base[op.to].balance += op.amount;
+            } else if (op.type === "withdraw") {
+              base[op.from].balance -= op.amount;
+            } else if (op.type === "transfer") {
+              base[op.from].balance -= op.amount;
+              base[op.to].balance += op.amount;
+            }
+          }
+          return base;
+        }
+
+        validateTentative() {
+          const tentative = this.computeTentative();
+          // check for negative balances
+          for (let id in tentative) {
+            if (tentative[id].balance < -0.0001) {
+              return { ok:false, reason: `Account ${tentative[id].name} would go negative (${formatMoney(tentative[id].balance)})` };
+            }
+          }
+          return { ok:true };
+        }
+
+        // Attempt commit according to mode
+        async commit() {
+          if (this.state !== "active") {
+            throw new Error("Can only commit active transaction");
+          }
+          const mode = modeSelect.value;
+          if (mode === "pessimistic") {
+            return this._commitPessimistic();
+          } else if (mode === "optimistic") {
+            return this._commitOptimistic();
+          } else if (mode === "snapshot") {
+            return this._commitSnapshot();
+          } else {
+            throw new Error("Unknown mode");
+          }
+        }
+
+        // Pessimistic: attempt to acquire locks for all accounts that will be written.
+        _accountsTouched() {
+          const set = new Set();
+          for (let op of this.ops) {
+            if (op.type === "deposit") set.add(op.to);
+            else if (op.type === "withdraw") set.add(op.from);
+            else if (op.type === "transfer") { set.add(op.from); set.add(op.to); }
+          }
+          return Array.from(set);
+        }
+
+        _acquireLocksForTouched() {
+          const touched = this._accountsTouched();
+          // Acquire if free; if any locked by different tx -> fail to acquire
+          for (let acc of touched) {
+            const owner = locks[acc];
+            if (owner && owner !== this.id) {
+              return { ok:false, conflictWith: owner, account: acc };
+            }
+          }
+          // Acquire
+          touched.forEach(a => { locks[a] = this.id; this.acquiredLocks.add(a); });
+          return { ok:true, touched };
+        }
+
+        _releaseLocks() {
+          this.acquiredLocks.forEach(a => { if (locks[a] === this.id) delete locks[a]; });
+          this.acquiredLocks.clear();
+        }
+
+        _applyOps() {
+          // Mutate committed accounts atomically in our single-threaded JS.
+          for (let op of this.ops) {
+            if (op.type === "deposit") {
+              const a = findAccount(op.to); a.balance += op.amount; a.version++;
+            } else if (op.type === "withdraw") {
+              const a = findAccount(op.from); a.balance -= op.amount; a.version++;
+            } else if (op.type === "transfer") {
+              const a1 = findAccount(op.from), a2 = findAccount(op.to);
+              a1.balance -= op.amount; a1.version++;
+              a2.balance += op.amount; a2.version++;
+            }
+          }
+        }
+
+        _commitPessimistic() {
+          // Try to acquire locks
+          const acq = this._acquireLocksForTouched();
+          if (!acq.ok) {
+            appendLog(`TX ${this.id}: cannot acquire lock on ${acq.account} (held by ${acq.conflictWith}). Commit blocked.`);
+            return { ok:false, reason:`Lock conflict on ${acq.account} with ${acq.conflictWith}` };
+          }
+          // Validate tentative
+          const v = this.validateTentative();
+          if (!v.ok) {
+            this._releaseLocks();
+            this.state = "aborted";
+            appendLog(`TX ${this.id}: aborted during validation: ${v.reason}`);
+            return { ok:false, reason:v.reason };
+          }
+          // Apply
+          this._applyOps();
+          this.state = "committed";
+          appendLog(`TX ${this.id}: committed (pessimistic).`);
+          // release locks after commit
+          this._releaseLocks();
+          renderAll();
+          return { ok:true };
+        }
+
+        _commitOptimistic() {
+          // Validate tentative first
+          const v = this.validateTentative();
+          if (!v.ok) {
+            this.state = "aborted";
+            appendLog(`TX ${this.id}: aborted during validation: ${v.reason}`);
+            return { ok:false, reason:v.reason };
+          }
+
+          // Check versions of all touched accounts are unchanged since transaction began
+          const touched = this._accountsTouched();
+          let conflicts = [];
+          for (let acc of touched) {
+            const current = findAccount(acc);
+            const readVersion = this.readVersions[acc] ?? 0;
+            if (current.version !== readVersion) {
+              conflicts.push({acc, expected:readVersion, actual:current.version});
+            }
+          }
+          if (conflicts.length) {
+            this.state = "aborted";
+            appendLog(`TX ${this.id}: optimistic conflict, aborting. Conflicts: ${conflicts.map(c=>c.acc).join(", ")}`);
+            return { ok:false, reason:"Optimistic conflict", conflicts };
+          }
+
+          // Apply
+          this._applyOps();
+          this.state = "committed";
+          appendLog(`TX ${this.id}: committed (optimistic).`);
+          renderAll();
+          return { ok:true };
+        }
+
+        _commitSnapshot() {
+          // Snapshot: reads are from snapshot taken at begin; writes use optimistic check on write-set
+          const v = this.validateTentative();
+          if (!v.ok) {
+            this.state = "aborted";
+            appendLog(`TX ${this.id}: aborted during validation: ${v.reason}`);
+            return { ok:false, reason:v.reason };
+          }
+          // Only check versions of accounts in write-set
+          const touched = this._accountsTouched();
+          let conflicts = [];
+          for (let acc of touched) {
+            const current = findAccount(acc);
+            const readVersion = this.readVersions[acc] ?? 0;
+            if (current.version !== readVersion) {
+              conflicts.push({acc, expected:readVersion, actual:current.version});
+            }
+          }
+          if (conflicts.length) {
+            this.state = "aborted";
+            appendLog(`TX ${this.id}: snapshot write conflict, aborting. ${conflicts.map(c=>c.acc).join(", ")}`);
+            return { ok:false, reason:"Snapshot conflict", conflicts };
+          }
+          // Apply
+          this._applyOps();
+          this.state = "committed";
+          appendLog(`TX ${this.id}: committed (snapshot).`);
+          renderAll();
+          return { ok:true };
+        }
+
+        rollback() {
+          if (this.state !== "active") {
+            appendLog(`TX ${this.id}: cannot rollback, state=${this.state}`);
+            return { ok:false };
+          }
+          // release any locks
+          this._releaseLocks();
+          this.state = "aborted";
+          appendLog(`TX ${this.id}: rolled back by user.`);
+          renderAll();
+          return { ok:true };
+        }
+      }
+
+      // UI: create transaction card
+      function createTxCard(tx) {
+        const card = document.createElement("div");
+        card.className = "tx-card";
+        card.id = "tx-" + tx.id;
+
+        const header = document.createElement("div");
+        header.className = "tx-header";
+        const title = document.createElement("div");
+        title.innerHTML = `<div class="tx-id">TX ${tx.id}</div><div class="small-muted">state: <span id="state-${tx.id}">${tx.state}</span></div>`;
+        header.appendChild(title);
+
+        const actions = document.createElement("div");
+        const commitBtn = document.createElement("button");
+        commitBtn.className = "btn small";
+        commitBtn.textContent = "Commit";
+        const rollbackBtn = document.createElement("button");
+        rollbackBtn.className = "btn small";
+        rollbackBtn.textContent = "Rollback";
+        const addOpBtn = document.createElement("button");
+        addOpBtn.className = "btn small";
+        addOpBtn.textContent = "Add Op";
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn small";
+        delBtn.textContent = "Close";
+        actions.appendChild(addOpBtn);
+        actions.appendChild(commitBtn);
+        actions.appendChild(rollbackBtn);
+        actions.appendChild(delBtn);
+        header.appendChild(actions);
+        card.appendChild(header);
+
+        // operations list
+        const opsDiv = document.createElement("div");
+        opsDiv.className = "ops";
+        opsDiv.id = "ops-" + tx.id;
+        card.appendChild(opsDiv);
+
+        // preview
+        const preview = document.createElement("div");
+        preview.className = "preview";
+        preview.id = "preview-" + tx.id;
+        card.appendChild(preview);
+
+        // op builder form (hidden until "Add Op")
+        function renderOpEditor() {
+          const form = document.createElement("div");
+          form.style.marginTop = "8px";
+          const typeSel = document.createElement("select");
+          typeSel.className = "select";
+          typeSel.innerHTML = `<option value="transfer">Transfer</option><option value="deposit">Deposit</option><option value="withdraw">Withdraw</option>`;
+          const fromSel = document.createElement("select");
+          fromSel.className = "select";
+          const toSel = document.createElement("select");
+          toSel.className = "select";
+          const amt = document.createElement("input");
+          amt.type = "number"; amt.step = "0.01"; amt.placeholder = "Amount"; amt.className = "select";
+          amt.style.width = "120px";
+          const addBtn = document.createElement("button");
+          addBtn.className = "btn small";
+          addBtn.textContent = "Add";
+          const cancelBtn = document.createElement("button");
+          cancelBtn.className = "btn small";
+          cancelBtn.textContent = "Cancel";
+
+          function fillAccs() {
+            fromSel.innerHTML = ""; toSel.innerHTML = "";
+            accounts.forEach(a => {
+              const o1 = document.createElement("option"); o1.value = a.id; o1.textContent = `${a.name} (${a.id})`;
+              const o2 = document.createElement("option"); o2.value = a.id; o2.textContent = `${a.name} (${a.id})`;
+              fromSel.appendChild(o1); toSel.appendChild(o2);
+            });
+          }
+          fillAccs();
+
+          form.appendChild(typeSel);
+          form.appendChild(fromSel);
+          form.appendChild(toSel);
+          form.appendChild(amt);
+          form.appendChild(addBtn);
+          form.appendChild(cancelBtn);
+          opsDiv.prepend(form);
+
+          function refreshEditor() {
+            const t = typeSel.value;
+            if (t === "transfer") { fromSel.style.display = ""; toSel.style.display = ""; }
+            if (t === "deposit") { fromSel.style.display = "none"; toSel.style.display = ""; }
+            if (t === "withdraw") { fromSel.style.display = ""; toSel.style.display = "none"; }
+          }
+          typeSel.addEventListener("change", refreshEditor);
+          cancelBtn.addEventListener("click", ()=>{ form.remove(); });
+          addBtn.addEventListener("click", ()=>{
+            const t = typeSel.value;
+            const amount = parseFloat(amt.value);
+            if (!amount || amount <= 0) { alert("Enter a positive amount"); return; }
+            let op;
+            if (t === "transfer") op = { type:"transfer", from: fromSel.value, to: toSel.value, amount };
+            else if (t === "deposit") op = { type:"deposit", to: toSel.value, amount };
+            else if (t === "withdraw") op = { type:"withdraw", from: fromSel.value, amount };
+            tx.addOp(op);
+            appendLog(`TX ${tx.id}: added op ${JSON.stringify(op)}`);
+            form.remove();
+            renderTxOps(tx);
+            renderPreview(tx);
+          });
+          refreshEditor();
+        }
+
+        function renderTxOps(tx) {
+          const opsEl = document.getElementById("ops-"+tx.id);
+          opsEl.innerHTML = "";
+          tx.ops.forEach((op, idx) => {
+            const row = document.createElement("div");
+            row.className = "op-row";
+            row.style.justifyContent = "space-between";
+            const left = document.createElement("div");
+            left.style.flex = "1";
+            const text = (() => {
+              if (op.type==="deposit") return `Deposit ${formatMoney(op.amount)} → ${op.to}`;
+              if (op.type==="withdraw") return `Withdraw ${formatMoney(op.amount)} ← ${op.from}`;
+              return `Transfer ${formatMoney(op.amount)} ${op.from} → ${op.to}`;
+            })();
+            left.innerHTML = text;
+            const right = document.createElement("div");
+            const rem = document.createElement("button");
+            rem.className = "btn small";
+            rem.textContent = "Remove";
+            rem.addEventListener("click", ()=>{ tx.ops.splice(idx,1); appendLog(`TX ${tx.id}: removed op`); renderTxOps(tx); renderPreview(tx); });
+            right.appendChild(rem);
+            row.appendChild(left); row.appendChild(right);
+            opsEl.appendChild(row);
+          });
+        }
+
+        function renderPreview(tx) {
+          const pre = document.getElementById("preview-" + tx.id);
+          if (tx.state !== "active") {
+            pre.innerHTML = `<div class="small-muted">Transaction ${tx.state}</div>`;
+            return;
+          }
+          const tentative = tx.computeTentative();
+          let html = `<div style="font-weight:700">Tentative balances</div><div class="small-muted">Preview based on committed state + ops</div><div style="margin-top:8px">`;
+          for (let id in tentative) {
+            const t = tentative[id];
+            const committed = findAccount(id);
+            let diff = t.balance - committed.balance;
+            let diffStr = diff >= 0 ? `+${formatMoney(diff)}` : `${formatMoney(diff)}`;
+            html += `<div style="display:flex;justify-content:space-between;padding:4px 0"><div>${t.name} (${t.id})</div><div>${formatMoney(t.balance)} <span class="small-muted">(${diffStr})</span></div></div>`;
+          }
+          html += `</div>`;
+          const validation = tx.validateTentative();
+          if (!validation.ok) {
+            html += `<div style="margin-top:8px" class="status bad">Invalid: ${validation.reason}</div>`;
+          } else {
+            html += `<div style="margin-top:8px" class="status ok">Valid (no negative balances)</div>`;
+          }
+          // show locks if any
+          const mode = modeSelect.value;
+          if (mode === "pessimistic") {
+            const touched = tx._accountsTouched();
+            const lockInfo = touched.map(a => {
+              const owner = locks[a];
+              if (owner && owner !== tx.id) return `<div class="locked">${a} locked by ${owner}</div>`;
+              if (owner === tx.id) return `<div style="color:var(--good)">Locked by this TX: ${a}</div>`;
+              return `<div style="color:var(--muted)">Not locked: ${a}</div>`;
+            }).join("");
+            html += `<div style="margin-top:8px">${lockInfo}</div>`;
+          } else if (mode === "optimistic" || mode === "snapshot") {
+            html += `<div style="margin-top:8px" class="small-muted">Snapshot versions captured at start: ${Object.keys(tx.readVersions).length ? 'yes' : 'no'}</div>`;
+          }
+          pre.innerHTML = html;
+        }
+
+        // Event handlers
+        addOpBtn.addEventListener("click", ()=> { renderOpEditor(); });
+        commitBtn.addEventListener("click", async () => {
+          commitBtn.disabled = true;
+          rollbackBtn.disabled = true;
+          try {
+            const res = await tx.commit();
+            if (res.ok) {
+              appendLog(`TX ${tx.id}: SUCCESS`);
+              renderTxState(tx);
+            } else {
+              appendLog(`TX ${tx.id}: COMMIT FAILED — ${res.reason || 'unknown'}`);
+              // For optimistic aborts, we may offer retry dialog — simplified: show message
+              renderTxState(tx);
+            }
+          } catch(e) {
+            appendLog(`TX ${tx.id}: error during commit: ${e.message}`);
+          } finally {
+            commitBtn.disabled = false;
+            rollbackBtn.disabled = false;
+          }
+        });
+        rollbackBtn.addEventListener("click", ()=> {
+          tx.rollback();
+          renderTxState(tx);
+        });
+        delBtn.addEventListener("click", ()=> {
+          if (tx.state === "active") {
+            if (!confirm("Transaction still active — rollback and close?")) return;
+            tx.rollback();
+          }
+          delete txs[tx.id];
+          card.remove();
+        });
+
+        function renderTxState(tx) {
+          const stateEl = document.getElementById("state-"+tx.id);
+          stateEl.textContent = tx.state;
+          if (tx.state !== "active") {
+            commitBtn.disabled = true;
+            addOpBtn.disabled = true;
+          }
+          renderTxOps(tx);
+          renderPreview(tx);
+          renderAccounts(); // committed state may have changed
+          renderLocks();
+          persistLogOnly(); // keep log in UI (not always persisted)
+        }
+
+        // initial render
+        txContainer.prepend(card);
+        renderTxOps(tx);
+        renderPreview(tx);
+        return card;
+      }
+
+      function persistLogOnly() {
+        localStorage.setItem(LS_LOG, JSON.stringify(logEntries));
+      }
+
+      // Render locks summary somewhere (we'll append to explainBox)
+      function renderLocks() {
+        const explainBox = $("explainBox");
+        // remove any existing locks display
+        const existing = explainBox.querySelector(".locks");
+        if (existing) existing.remove();
+        const div = document.createElement("div");
+        div.className = "locks";
+        div.style.marginTop = "8px";
+        let keys = Object.keys(locks);
+        if (!keys.length) {
+          div.innerHTML = `<div class="small-muted">No locks held</div>`;
+        } else {
+          div.innerHTML = `<div style="font-weight:700">Locks held</div>` + keys.map(k => {
+            return `<div class="small-muted">${k} → ${locks[k]}</div>`;
+          }).join("");
+        }
+        explainBox.appendChild(div);
+      }
+
+      // Rendering everything
+      function renderAll() {
+        renderAccounts();
+        renderLog();
+        renderLocks();
+      }
+
+      // UI actions
+      $("newTxBtn").addEventListener("click", ()=> {
+        const tx = new Transaction();
+        txs[tx.id] = tx;
+        createTxCard(tx);
+        appendLog(`TX ${tx.id}: created (mode=${modeSelect.value})`);
+      });
+
+      $("resetBtn").addEventListener("click", ()=> {
+        if (!confirm("Reset demo (this clears persisted state)?")) return;
+        resetDemo();
+      });
+
+      $("persistBtn").addEventListener("click", ()=> {
+        persistState();
+      });
+
+      $("clearPersistBtn").addEventListener("click", ()=> {
+        if (!confirm("Clear persisted committed state from localStorage?")) return;
+        localStorage.removeItem(LS_ACCOUNTS);
+        localStorage.removeItem(LS_LOG);
+        appendLog("Cleared persisted state.");
+      });
+
+      modeSelect.addEventListener("change", ()=> {
+        appendLog("Mode switched to: " + modeSelect.value);
+      });
+
+      // scenario: two transactions conflicting
+      $("scenarioBtn").addEventListener("click", async ()=> {
+        // Create two txs
+        const tx1 = new Transaction();
+        const tx2 = new Transaction();
+        txs[tx1.id] = tx1; txs[tx2.id] = tx2;
+        createTxCard(tx1); createTxCard(tx2);
+        // TX1: transfer $600 from Checking (A) to Savings (B)
+        tx1.addOp({type:"transfer", from:"A", to:"B", amount:600.00});
+        // TX2: withdraw $500 from Checking (A)
+        tx2.addOp({type:"withdraw", from:"A", amount:500.00});
+        renderAll();
+        appendLog(`Scenario created: TX ${tx1.id} (transfer $600 A→B), TX ${tx2.id} (withdraw $500 from A). Mode=${modeSelect.value}`);
+
+        // Now simulate committing in order: commit TX2 first, then TX1, to provoke conflict if optimistic
+        await new Promise(r=>setTimeout(r, 500));
+        appendLog(`Committing TX ${tx2.id} first...`);
+        const res2 = await tx2.commit();
+        if (!res2.ok) appendLog(`TX ${tx2.id} failed: ${res2.reason||'unknown'}`);
+        await new Promise(r=>setTimeout(r, 500));
+        appendLog(`Committing TX ${tx1.id} next...`);
+        const res1 = await tx1.commit();
+        if (!res1.ok) {
+          appendLog(`TX ${tx1.id} failed: ${res1.reason||'unknown'}`);
+        }
+        renderAll();
+      });
+
+      // Initial load
+      loadState();
+      renderAll();
+
+      // For convenience, create an initial transaction
+      (function createInitialTx(){
+        const tx = new Transaction();
+        txs[tx.id] = tx;
+        createTxCard(tx);
+        appendLog(`TX ${tx.id}: created (starter)`);
+      })();
+
+      // Expose reset for console for advanced tinkering
+      window.__txdemo = { accounts, txs, locks, appendLog, resetDemo, persistState };
+    })();
+  </script>
+</body>
+</html>

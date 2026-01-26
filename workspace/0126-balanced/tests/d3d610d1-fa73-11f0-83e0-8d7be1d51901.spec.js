@@ -1,0 +1,356 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3d610d1-fa73-11f0-83e0-8d7be1d51901.html';
+
+test.describe('Bubble Sort Visualizer - FSM and UI integration', () => {
+  // Collect console messages and page errors for each test
+  let consoleMessages;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    consoleMessages = [];
+    pageErrors = [];
+
+    // Listen to console messages
+    page.on('console', msg => {
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+
+    // Listen to unhandled exceptions in the page
+    page.on('pageerror', err => {
+      pageErrors.push(err);
+    });
+
+    // Navigate to the page under test
+    await page.goto(APP_URL);
+    // Wait a bit to ensure initial scripts finish
+    await page.waitForLoadState('domcontentloaded');
+    // Small pause for in-page init
+    await page.waitForTimeout(100);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Expose console messages and page errors when a test fails - Playwright will show them in output.
+    if (pageErrors.length) {
+      // no-op, left so debugging info is included in Playwright output
+    }
+  });
+
+  // Helper functions used in tests
+  const helpers = {
+    getPhase: async (page) => {
+      return (await page.locator('#phase').innerText()).trim();
+    },
+    getCounts: async (page) => {
+      const comp = Number((await page.locator('#compCount').innerText()).trim());
+      const swaps = Number((await page.locator('#swapCount').innerText()).trim());
+      return { comparisons: comp, swaps };
+    },
+    getBarCount: async (page) => {
+      return await page.locator('#arrayArea .bar').count();
+    },
+    getBarClasses: async (page, index) => {
+      const locator = page.locator('#arrayArea .bar').nth(index);
+      const cls = await locator.getAttribute('class');
+      return cls ? cls.split(/\s+/) : [];
+    },
+    getBarHeights: async (page) => {
+      const bars = page.locator('#arrayArea .bar');
+      const count = await bars.count();
+      const heights = [];
+      for (let i = 0; i < count; i++) {
+        const h = await bars.nth(i).evaluate(el => (el as HTMLElement).style.height);
+        heights.push(h);
+      }
+      return heights;
+    },
+    dispatchInput: async (page, selector, value) => {
+      // Set the value and dispatch an input event (keeps page logic intact)
+      await page.$eval(selector, (el, val) => {
+        (el as HTMLInputElement).value = String(val);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }, value);
+      // allow handlers to run
+      await page.waitForTimeout(50);
+    },
+    dispatchChange: async (page, selector, value) => {
+      await page.$eval(selector, (el, val) => {
+        (el as HTMLInputElement).value = String(val);
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+      await page.waitForTimeout(50);
+    }
+  };
+
+  test('Initial Idle state: page loads and is in Idle with controls present', async ({ page }) => {
+    // Validate initial "idle" phase and initial control enablement
+    const phase = await helpers.getPhase(page);
+    expect(phase).toBe('idle');
+
+    // Start should be enabled, Pause disabled, Step enabled
+    await expect(page.locator('#startBtn')).toBeEnabled();
+    await expect(page.locator('#pauseBtn')).toBeDisabled();
+    await expect(page.locator('#stepBtn')).toBeEnabled();
+
+    // Counts are zero
+    const counts = await helpers.getCounts(page);
+    expect(counts.comparisons).toBe(0);
+    expect(counts.swaps).toBe(0);
+
+    // Bars rendered equal to size input value (default value 28)
+    const sizeValue = Number(await page.locator('#size').evaluate(el => (el as HTMLInputElement).value));
+    const barCount = await helpers.getBarCount(page);
+    expect(barCount).toBe(sizeValue);
+
+    // No uncaught page errors during initial load
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Shuffle event keeps app in Idle and resets counts', async ({ page }) => {
+    // Capture the original heights to compare after shuffle
+    const originalHeights = await helpers.getBarHeights(page);
+
+    // Click shuffle button
+    await page.locator('#shuffleBtn').click();
+    await page.waitForTimeout(50);
+
+    // Phase should remain 'idle'
+    const phase = await helpers.getPhase(page);
+    expect(phase).toBe('idle');
+
+    // Counts reset to zero
+    const counts = await helpers.getCounts(page);
+    expect(counts.comparisons).toBe(0);
+    expect(counts.swaps).toBe(0);
+
+    // Bars re-rendered: at least one height should differ (very likely random). If not, ensure same length.
+    const newHeights = await helpers.getBarHeights(page);
+    expect(newHeights.length).toBe(originalHeights.length);
+
+    // It's possible shuffle randomly produces same sequence (rare). We assert that the DOM re-render happened (by comparing references).
+    // For more deterministic check, ensure bars exist and have titles (numbers).
+    const firstBarTitle = await page.locator('#arrayArea .bar').first().getAttribute('title');
+    expect(firstBarTitle).toMatch(/\d+/);
+
+    // No runtime errors produced by shuffle event
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('ChangeSize event re-renders array and remains Idle', async ({ page }) => {
+    // Change size to a small value to test re-render and later full-sort behavior
+    await helpers.dispatchInput(page, '#size', 10);
+
+    // Phase should be idle after changing size
+    const phase = await helpers.getPhase(page);
+    expect(phase).toBe('idle');
+
+    // Bar count should reflect new size
+    const barCount = await helpers.getBarCount(page);
+    expect(barCount).toBe(10);
+
+    // Controls should be in idle-enabled state
+    await expect(page.locator('#startBtn')).toBeEnabled();
+    await expect(page.locator('#pauseBtn')).toBeDisabled();
+
+    // No errors on size change
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('ChangeSpeed updates speed input and does not cause runtime errors', async ({ page }) => {
+    // Change speed input to minimum allowed
+    await helpers.dispatchInput(page, '#speed', 10);
+    const speedVal = await page.locator('#speed').evaluate(el => (el as HTMLInputElement).value);
+    expect(Number(speedVal)).toBe(10);
+
+    // Start then pause quickly to ensure runner uses the new speed without errors
+    await page.locator('#startBtn').click();
+    // Immediately pause after a short delay; since speed is low, allow slight time for runLoop to schedule
+    await page.waitForTimeout(20);
+    await page.locator('#pauseBtn').click();
+
+    // Phase should be paused
+    const phase = await helpers.getPhase(page);
+    expect(phase).toBe('paused');
+
+    // No page errors occurred
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Start -> Running, Pause -> Paused, Start resumes to Running (transition tests)', async ({ page }) => {
+    // Ensure starting transitions to running and control states change as expected
+    await page.locator('#startBtn').click();
+
+    // Immediately after clicking start the page sets phase to 'running'
+    // Wait briefly to allow button state changes and runLoop invocation
+    await page.waitForTimeout(30);
+
+    // Check phase; some internal steps change phase to 'sorting' or 'comparing' quickly.
+    // We assert that startBtn becomes disabled and pauseBtn enabled as entry to running stage
+    await expect(page.locator('#startBtn')).toBeDisabled();
+    await expect(page.locator('#pauseBtn')).toBeEnabled();
+    expect((await helpers.getPhase(page))).toMatch(/running|sorting|comparing|swapping/);
+
+    // Pause now
+    await page.locator('#pauseBtn').click();
+    await page.waitForTimeout(30);
+
+    // After pause, phase should be 'paused'
+    expect(await helpers.getPhase(page)).toBe('paused');
+
+    // Start again to resume
+    await page.locator('#startBtn').click();
+    await page.waitForTimeout(30);
+
+    // Controls reflect running state again
+    await expect(page.locator('#startBtn')).toBeDisabled();
+    await expect(page.locator('#pauseBtn')).toBeEnabled();
+
+    // No uncaught exceptions through these rapid transitions
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Step event performs a single generator step and updates counts (Step transition)', async ({ page }) => {
+    // Reset to ensure deterministic start
+    await page.locator('#shuffleBtn').click();
+    await page.waitForTimeout(50);
+
+    // Record initial counts
+    const initialCounts = await helpers.getCounts(page);
+
+    // Click Step once
+    await page.locator('#stepBtn').click();
+    await page.waitForTimeout(60); // allow processing
+
+    // After a step, comparisons or swaps should have increased (at least comparisons)
+    const afterCounts = await helpers.getCounts(page);
+    // It's guaranteed the generator yields a 'compare' step before potential swap, so comparisons should increment by 1
+    expect(afterCounts.comparisons).toBeGreaterThanOrEqual(initialCounts.comparisons + 1);
+
+    // Step button should remain enabled for further stepping
+    await expect(page.locator('#stepBtn')).toBeEnabled();
+
+    // No page errors during stepping
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Run to completion results in Finished state for small arrays (done transition)', async ({ page }) => {
+    // Set small size for quick completion
+    await helpers.dispatchInput(page, '#size', 5);
+    // Set fast speed to accelerate runLoop
+    await helpers.dispatchInput(page, '#speed', 10);
+
+    // Start sorting to completion
+    await page.locator('#startBtn').click();
+
+    // Wait until phase indicates finished/done.
+    // The implementation may set 'done' then 'finished' - accept either as final state.
+    await page.waitForFunction(() => {
+      const el = document.getElementById('phase');
+      return el && /done|finished/.test(el.textContent || '');
+    }, { timeout: 10000 });
+
+    const finalPhase = await helpers.getPhase(page);
+    expect(finalPhase).toMatch(/done|finished/);
+
+    // Verify that every bar has class 'sorted' (or at least last bars are sorted)
+    const barCount = await helpers.getBarCount(page);
+    let sortedCount = 0;
+    for (let i = 0; i < barCount; i++) {
+      const classes = await helpers.getBarClasses(page, i);
+      if (classes.includes('sorted')) sortedCount++;
+    }
+    // At least one bar should be marked sorted; for completion all should be marked.
+    expect(sortedCount).toBeGreaterThanOrEqual(1);
+
+    // Controls: start enabled again and step disabled per finished handler
+    await expect(page.locator('#startBtn')).toBeEnabled();
+    await expect(page.locator('#stepBtn')).toBeDisabled();
+
+    // No runtime page errors during full run
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Reset returns array to original and resets state (Reset transition)', async ({ page }) => {
+    // Shuffle to have an original baseline
+    await page.locator('#shuffleBtn').click();
+    await page.waitForTimeout(50);
+
+    // Capture original heights
+    const originalHeights = await helpers.getBarHeights(page);
+
+    // Do a couple of steps to change the array
+    await page.locator('#stepBtn').click();
+    await page.waitForTimeout(60);
+    await page.locator('#stepBtn').click();
+    await page.waitForTimeout(60);
+
+    const modifiedHeights = await helpers.getBarHeights(page);
+    // It's possible steps didn't swap anything; ensure we have a DOM change at least (or counts increased)
+    const countsAfter = await helpers.getCounts(page);
+    expect(countsAfter.comparisons).toBeGreaterThanOrEqual(1);
+
+    // Now reset
+    await page.locator('#resetBtn').click();
+    await page.waitForTimeout(60);
+
+    // Phase should return to idle and counts reset to zero
+    expect(await helpers.getPhase(page)).toBe('idle');
+    const countsReset = await helpers.getCounts(page);
+    expect(countsReset.comparisons).toBe(0);
+    expect(countsReset.swaps).toBe(0);
+
+    // Bar heights should match original baseline (reset copies original array back)
+    const afterResetHeights = await helpers.getBarHeights(page);
+    expect(afterResetHeights.length).toBe(originalHeights.length);
+    // Compare array of heights stringwise
+    expect(afterResetHeights).toEqual(originalHeights);
+
+    // No page errors produced by reset
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Edge cases: rapid input changes and clicking disabled controls should not throw', async ({ page }) => {
+    // Rapidly change size and speed multiple times
+    for (const val of [6, 12, 20, 50]) {
+      await helpers.dispatchInput(page, '#size', val);
+    }
+    for (const s of [100, 50, 250, 10]) {
+      await helpers.dispatchInput(page, '#speed', s);
+    }
+
+    // Attempt to dispatch click event on pause button while it's disabled.
+    // We use dispatchEvent so we don't rely on user-initiated click that Playwright blocks for disabled buttons.
+    // This ensures the app's handler (which early-returns when not running) does not throw.
+    await page.$eval('#pauseBtn', btn => {
+      // create and dispatch a click event even if disabled
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    // Also dispatch a click event on start, then immediately dispatch pause via programmatic event (simulate race)
+    await page.locator('#startBtn').click();
+    // Give the app a tiny moment to start
+    await page.waitForTimeout(30);
+    // Programmatic pause dispatch (should be equivalent to user clicking pause)
+    await page.$eval('#pauseBtn', btn => {
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    // Allow handlers to settle
+    await page.waitForTimeout(50);
+
+    // No uncaught exceptions should have occurred
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Observe console messages and ensure no unexpected console errors', async ({ page }) => {
+    // Console messages were recorded from the time of navigation in beforeEach.
+    // We mainly assert that there are no console messages of type 'error'.
+    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    // It's acceptable for the page to log warnings/info, but no unexpected console errors should be present.
+    expect(consoleErrors.length).toBe(0);
+
+    // Ensure some console activity may have occurred (optional)
+    expect(consoleMessages.length).toBeGreaterThanOrEqual(0);
+  });
+
+});

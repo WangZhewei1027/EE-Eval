@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Unit Testing Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  button, input, select {
+    font: inherit;
+    margin: 0.2em 0.5em 0.2em 0;
+  }
+  #tests {
+    margin-top: 1em;
+    border-collapse: collapse;
+    width: 100%;
+  }
+  #tests th, #tests td {
+    border: 1px solid black;
+    padding: 0.2em 0.4em;
+  }
+  #log {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    height: 10em;
+    overflow-y: scroll;
+    margin-top: 1em;
+    padding: 0.3em;
+  }
+  fieldset {
+    border: 1px solid black;
+    margin-bottom: 1em;
+    padding: 0.5em;
+  }
+  legend {
+    font-weight: bold;
+  }
+  label {
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<h1>Unit Testing Interactive Demo</h1>
+<p>This interactive tool allows you to define, control, and explore unit tests for simple functions. You can create tests, run them, manipulate inputs, expected values, and assertions. Supports complex workflows and deep exploration of test states.</p>
+
+<fieldset id="func-def">
+<legend>Step 1: Define the Function to Test</legend>
+<label for="func-selection">Choose a function:</label>
+<select id="func-selection" aria-label="Function selection">
+  <option value="add">add(a,b) = a + b</option>
+  <option value="subtract">subtract(a,b) = a - b</option>
+  <option value="multiply">multiply(a,b) = a * b</option>
+  <option value="divide">divide(a,b) = a / b (returns NaN if b=0)</option>
+  <option value="isPrime">isPrime(n) = true if n is prime, else false</option>
+  <option value="factorial">factorial(n) = n! (only for n ≥ 0 integer)</option>
+</select>
+<button id="load-tests">Load Sample Tests</button>
+</fieldset>
+
+<fieldset id="tests-def" aria-live="polite" aria-atomic="true" style="display:none">
+<legend>Step 2: Manage Tests</legend>
+<button id="add-test-btn">Add New Test</button>
+<table id="tests" aria-label="Defined tests">
+  <thead>
+    <tr>
+      <th>Test Name</th>
+      <th>Inputs</th>
+      <th>Expected</th>
+      <th>Assertion Type</th>
+      <th>Run Result</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Dynamically filled -->
+  </tbody>
+</table>
+</fieldset>
+
+<fieldset id="test-control" style="display:none">
+<legend>Step 3: Interactive Test Runner & Exploration</legend>
+
+<p><strong>Select a test:</strong>
+<select id="selected-test" aria-label="Select test to run"></select></p>
+
+<div id="input-editor" aria-live="polite" aria-atomic="true" style="margin-bottom:1em;">
+<!-- Dynamically generated inputs -->
+</div>
+
+<p>
+<label for="expected-value">Expected Value: </label>
+<input id="expected-value" type="text" aria-label="Expected value" />
+<select id="assertion-type" aria-label="Select assertion type">
+  <option value="equal">Equal (===)</option>
+  <option value="notEqual">Not Equal (!==)</option>
+  <option value="deepEqual">Deep Equal (JSON)</option>
+  <option value="throws">Throws (expect an error)</option>
+  <option value="truthy">Truthy</option>
+  <option value="falsy">Falsy</option>
+</select>
+</p>
+
+<p>
+<button id="run-test-btn">Run Test</button>
+<button id="reset-test-btn">Reset Inputs</button>
+<button id="edit-assertion-btn">Update Assertion</button>
+<button id="delete-test-btn">Delete Test</button>
+</p>
+
+<div aria-label="Test output and log" id="log" tabindex="0" role="region" aria-live="polite"></div>
+</fieldset>
+
+<fieldset id="deep-exploration" style="display:none">
+<legend>Step 4: Deep Exploration Controls</legend>
+
+<p>Adjust inputs dynamically and rerun tests to explore different paths.</p>
+
+<p>
+<button id="clone-test-btn">Clone Current Test</button>
+<button id="randomize-inputs-btn">Randomize Inputs</button>
+<button id="batch-run-btn">Batch Run All Tests</button>
+<button id="export-tests-btn">Export All Tests (JSON)</button>
+<button id="import-tests-btn">Import Tests (paste JSON below)</button>
+</p>
+<textarea id="import-area" rows="5" style="width:100%" aria-label="Paste JSON test data for import"></textarea>
+</fieldset>
+
+<script>
+(() => {
+  // Function Implementations
+  const funcImplementations = {
+    add: (a,b) => a + b,
+    subtract: (a,b) => a - b,
+    multiply: (a,b) => a * b,
+    divide: (a,b) => {
+      if(b === 0) throw new Error('Division by zero');
+      return a / b;
+    },
+    isPrime: (n) => {
+      if(typeof n !== 'number' || n % 1 !== 0 || n < 2) return false;
+      for(let i=2; i<=Math.sqrt(n); i++) {
+        if(n % i === 0) return false;
+      }
+      return true;
+    },
+    factorial: (n) => {
+      if(typeof n !== 'number' || n % 1 !== 0 || n < 0) throw new Error('Factorial input must be a non-negative integer');
+      let res = 1;
+      for(let i=2;i<=n;i++) res *= i;
+      return res;
+    }
+  };
+
+  // Describe function arguments for sample purposes and input generation
+  const funcArgsDesc = {
+    add: ['a','b'],
+    subtract: ['a','b'],
+    multiply: ['a','b'],
+    divide: ['a','b'],
+    isPrime: ['n'],
+    factorial: ['n']
+  };
+
+  // Parse string input to primitive: number if possible, else string
+  function parseInput(str) {
+    str = str.trim();
+    if(str.toLowerCase() === 'null') return null;
+    if(str.toLowerCase() === 'undefined') return undefined;
+    if(str.toLowerCase() === 'true') return true;
+    if(str.toLowerCase() === 'false') return false;
+    if(!isNaN(Number(str)) && str !== '') return Number(str);
+    try {
+      return JSON.parse(str);
+    } catch(e) {
+      return str;
+    }
+  }
+
+  // Deep comparison (simple)
+  function deepEqual(a, b) {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
+    }
+  }
+
+  // Serialize input for display
+  function serialize(val) {
+    if(val === undefined) return 'undefined';
+    if(val === null) return 'null';
+    if(typeof val === 'string') return `"${val}"`;
+    if(typeof val === 'function') return '[Function]';
+    if(typeof val === 'object') return JSON.stringify(val);
+    return String(val);
+  }
+
+  // Test internal storage
+  let tests = [];
+  let selectedFunc = 'add';
+
+  // Elements
+  const funcSelection = document.getElementById('func-selection');
+  const loadTestsBtn = document.getElementById('load-tests');
+  const testsDefFieldset = document.getElementById('tests-def');
+  const testsTableBody = document.querySelector('#tests tbody');
+  const addTestBtn = document.getElementById('add-test-btn');
+  const testControlFieldset = document.getElementById('test-control');
+  const selectedTestSelect = document.getElementById('selected-test');
+  const inputEditorDiv = document.getElementById('input-editor');
+  const expectedValueInput = document.getElementById('expected-value');
+  const assertionTypeSelect = document.getElementById('assertion-type');
+  const runTestBtn = document.getElementById('run-test-btn');
+  const resetTestBtn = document.getElementById('reset-test-btn');
+  const editAssertionBtn = document.getElementById('edit-assertion-btn');
+  const deleteTestBtn = document.getElementById('delete-test-btn');
+  const logDiv = document.getElementById('log');
+  const deepExplorationFieldset = document.getElementById('deep-exploration');
+  const cloneTestBtn = document.getElementById('clone-test-btn');
+  const randomizeInputsBtn = document.getElementById('randomize-inputs-btn');
+  const batchRunBtn = document.getElementById('batch-run-btn');
+  const exportTestsBtn = document.getElementById('export-tests-btn');
+  const importTestsBtn = document.getElementById('import-tests-btn');
+  const importArea = document.getElementById('import-area');
+
+  // State
+  let selectedTestId = null; // store test id
+
+  // Util: generate unique id
+  function genId() {
+    return 't' + Math.random().toString(36).substring(2,10);
+  }
+
+  // Sample tests per function
+  const sampleTestsByFunc = {
+    add: [
+      {name:'Add positive', inputs:{a:1,b:2}, expected:3, assertion:'equal'},
+      {name:'Add zero', inputs:{a:0,b:0}, expected:0, assertion:'equal'},
+      {name:'Add negative', inputs:{a:-1,b:-5}, expected:-6, assertion:'equal'}
+    ],
+    subtract:[
+      {name:'Subtract basic', inputs:{a:5,b:3}, expected:2, assertion:'equal'},
+      {name:'Subtract to negative', inputs:{a:2,b:4}, expected:-2, assertion:'equal'}
+    ],
+    multiply:[
+      {name:'Multiply basic', inputs:{a:3,b:4}, expected:12, assertion:'equal'},
+      {name:'Multiply zero', inputs:{a:3,b:0}, expected:0, assertion:'equal'}
+    ],
+    divide:[
+      {name:'Divide basic', inputs:{a:10,b:2}, expected:5, assertion:'equal'},
+      {name:'Divide by zero', inputs:{a:10,b:0}, expected:'error', assertion:'throws'}
+    ],
+    isPrime:[
+      {name:'Prime test 2', inputs:{n:2}, expected:true, assertion:'equal'},
+      {name:'Prime test 9', inputs:{n:9}, expected:false, assertion:'equal'}
+    ],
+    factorial:[
+      {name:'Factorial 0', inputs:{n:0}, expected:1, assertion:'equal'},
+      {name:'Factorial 5', inputs:{n:5}, expected:120, assertion:'equal'},
+      {name:'Factorial negative', inputs:{n:-1}, expected:'error', assertion:'throws'}
+    ]
+  };
+
+  // Initialize tests for selected function
+  function loadSampleTests() {
+    tests = sampleTestsByFunc[selectedFunc].map((t,i) => {
+      return {
+        id: genId(),
+        name: t.name,
+        inputs: {...t.inputs},
+        initialInputs: {...t.inputs},
+        expected: t.expected,
+        assertion: t.assertion,
+        lastResult: null, // pass/fail/error
+        lastMsg: ''
+      };
+    });
+    if(tests.length) selectedTestId = tests[0].id;
+  }
+
+  // Render all tests in table
+  function renderTestsTable() {
+    testsTableBody.textContent = '';
+    if(tests.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.textContent = 'No tests defined.';
+      tr.appendChild(td);
+      testsTableBody.appendChild(tr);
+      selectedTestSelect.innerHTML = '';
+      selectedTestId = null;
+      inputEditorDiv.textContent = '';
+      expectedValueInput.value = '';
+      assertionTypeSelect.value = 'equal';
+      testControlFieldset.style.display = 'none';
+      deepExplorationFieldset.style.display = 'none';
+      return;
+    }
+
+    for(let t of tests) {
+      const tr = document.createElement('tr');
+      // Name
+      const tdName = document.createElement('td');
+      tdName.textContent = t.name;
+      tdName.title = t.name;
+      tr.appendChild(tdName);
+      // Inputs summary
+      const tdInputs = document.createElement('td');
+      tdInputs.textContent = Object.entries(t.inputs).map(([k,v])=>k+': '+serialize(v)).join(', ');
+      tr.appendChild(tdInputs);
+      // Expected
+      const tdExpected = document.createElement('td');
+      tdExpected.textContent = serialize(t.expected);
+      tr.appendChild(tdExpected);
+      // Assertion
+      const tdAssert = document.createElement('td');
+      tdAssert.textContent = t.assertion;
+      tr.appendChild(tdAssert);
+      // Run result
+      const tdResult = document.createElement('td');
+      if(t.lastResult === 'pass') {
+        tdResult.textContent = 'PASS';
+      } else if(t.lastResult === 'fail') {
+        tdResult.textContent = 'FAIL';
+      } else if(t.lastResult === 'error') {
+        tdResult.textContent = 'ERROR';
+      } else {
+        tdResult.textContent = '';
+      }
+      tr.appendChild(tdResult);
+      // Actions buttons
+      const tdActions = document.createElement('td');
+      // Select button
+      const selectBtn = document.createElement('button');
+      selectBtn.textContent = 'Select';
+      selectBtn.type = 'button';
+      selectBtn.dataset.testid = t.id;
+      selectBtn.addEventListener('click', () => {
+        selectTest(t.id);
+      });
+      tdActions.appendChild(selectBtn);
+      tr.appendChild(tdActions);
+      testsTableBody.appendChild(tr);
+    }
+
+    renderTestSelectOptions();
+    // If selectedTestId no longer exists, reset to first test
+    if(!tests.find(t => t.id === selectedTestId)) {
+      selectedTestId = tests[0].id;
+    }
+    selectTest(selectedTestId);
+  }
+
+  // Render the dropdown to select test
+  function renderTestSelectOptions() {
+    selectedTestSelect.innerHTML = '';
+    for(let t of tests) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      if(t.id === selectedTestId) opt.selected = true;
+      selectedTestSelect.appendChild(opt);
+    }
+  }
+
+  // Select test programatically
+  function selectTest(id) {
+    const test = tests.find(t => t.id === id);
+    if(!test) return;
+    selectedTestId = id;
+    renderTestSelectOptions();
+    // Show test control panel
+    testControlFieldset.style.display = '';
+    deepExplorationFieldset.style.display = '';
+    // Clear previous log
+    logDiv.textContent = '';
+    // Render inputs editors
+    renderInputEditors(test);
+    // Update expected and assertion fields
+    expectedValueInput.value = serialize(test.expected);
+    assertionTypeSelect.value = test.assertion;
+  }
+
+  // Render input editors for one test
+  function renderInputEditors(test) {
+    inputEditorDiv.textContent = '';
+
+    const args = funcArgsDesc[selectedFunc];
+    const testInputs = test.inputs;
+    const fragment = document.createDocumentFragment();
+
+    args.forEach(argName => {
+      const label = document.createElement('label');
+      label.textContent = argName + ': ';
+      label.setAttribute('for', 'input-'+argName);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'input-'+argName;
+      input.setAttribute('aria-label', 'Input for '+argName);
+      input.value = serialize(testInputs[argName]);
+      input.dataset.argName = argName;
+
+      // On change update test inputs state live
+      input.addEventListener('input', (e) => {
+        test.inputs[argName] = parseInput(e.target.value);
+        logDiv.textContent = '[Input updated] ' + argName + '=' + serialize(test.inputs[argName]);
+      });
+
+      label.appendChild(input);
+      fragment.appendChild(label);
+    });
+
+    inputEditorDiv.appendChild(fragment);
+  }
+
+  // Run the selected test and display output
+  function runSelectedTest() {
+    if(!selectedTestId) return;
+    const test = tests.find(t => t.id === selectedTestId);
+    if(!test) return;
+    logDiv.textContent = '';
+    let result, errorOccurred = false, errorMsg = '';
+    try {
+      const f = funcImplementations[selectedFunc];
+      // Gather inputs in arg order
+      const argsOrder = funcArgsDesc[selectedFunc];
+      const argsVals = argsOrder.map(arg => test.inputs[arg]);
+      result = f(...argsVals);
+    } catch(err) {
+      errorOccurred = true;
+      errorMsg = err.message;
+    }
+
+    // Test assertion evaluation
+    let passed = false;
+    if(test.assertion === 'throws') {
+      passed = errorOccurred === true;
+    } else if(errorOccurred) {
+      passed = false; // unexpected error
+    } else {
+      // Evaluate expected vs result
+      try {
+        switch(test.assertion) {
+          case 'equal':
+            passed = result === test.expected;
+            break;
+          case 'notEqual':
+            passed = result !== test.expected;
+            break;
+          case 'deepEqual':
+            passed = deepEqual(result, test.expected);
+            break;
+          case 'truthy':
+            passed = !!result === true;
+            break;
+          case 'falsy':
+            passed = !!result === false;
+            break;
+          default:
+            passed = result === test.expected;
+        }
+      } catch(e) {
+        passed = false;
+      }
+    }
+
+    if(errorOccurred) {
+      test.lastResult = 'error';
+      test.lastMsg = '[Error thrown] ' + errorMsg;
+      logDiv.textContent = `Test: ${test.name}\nError thrown: ${errorMsg}\nResult: FAILED`;
+    } else if(passed) {
+      test.lastResult = 'pass';
+      test.lastMsg = 'Expected and actual matched.';
+      logDiv.textContent = `Test: ${test.name}\nResult: PASS\nValue: ${serialize(result)}`;
+    } else {
+      test.lastResult = 'fail';
+      test.lastMsg = `Expected: ${serialize(test.expected)}\nReceived: ${serialize(result)}`;
+      logDiv.textContent = `Test: ${test.name}\nResult: FAIL\nExpected: ${serialize(test.expected)}\nReceived: ${serialize(result)}`;
+    }
+
+    renderTestsTable();
+  }
+
+  // Reset inputs for the selected test to initial
+  function resetSelectedTestInputs() {
+    if(!selectedTestId) return;
+    const test = tests.find(t => t.id === selectedTestId);
+    if(!test) return;
+    // Reset inputs to initialInputs
+    test.inputs = {...test.initialInputs};
+    renderInputEditors(test);
+    logDiv.textContent = '[Inputs reset to initial values]';
+  }
+
+  // Update assertion (expected + assertion type) for selected test
+  function updateSelectedTestAssertion() {
+    if(!selectedTestId) return;
+    const test = tests.find(t => t.id === selectedTestId);
+    if(!test) return;
+    try {
+      const val = parseInput(expectedValueInput.value);
+      test.expected = val;
+      test.assertion = assertionTypeSelect.value;
+      test.lastResult = null;
+      test.lastMsg = '';
+      logDiv.textContent = '[Test assertion updated]';
+      renderTestsTable();
+    } catch(e) {
+      logDiv.textContent = '[Failed to update expected value]';
+    }
+  }
+
+  // Add new blank test
+  function addNewTest() {
+    if(!selectedFunc) return;
+    const args = funcArgsDesc[selectedFunc];
+    const newInputs = {};
+    args.forEach(a => newInputs[a] = 0);
+    const newTest = {
+      id: genId(),
+      name: 'New Test ' + (tests.length+1),
+      inputs: {...newInputs},
+      initialInputs: {...newInputs},
+      expected: 0,
+      assertion: 'equal',
+      lastResult: null,
+      lastMsg: ''
+    };
+    tests.push(newTest);
+    renderTestsTable();
+    selectTest(newTest.id);
+  }
+
+  // Delete currently selected test
+  function deleteSelectedTest() {
+    if(!selectedTestId) return;
+    const idx = tests.findIndex(t => t.id === selectedTestId);
+    if(idx===-1) return;
+    const confirmDelete = confirm('Delete test "' + tests[idx].name + '"?');
+    if(!confirmDelete) return;
+    tests.splice(idx, 1);
+    if(tests.length) {
+      selectedTestId = tests[0].id;
+    } else {
+      selectedTestId = null;
+    }
+    renderTestsTable();
+  }
+
+  // Clone current test with suffix " - clone"
+  function cloneCurrentTest() {
+    if(!selectedTestId) return;
+    const test = tests.find(t => t.id === selectedTestId);
+    if(!test) return;
+    const newTest = {
+      id: genId(),
+      name: test.name + ' - clone',
+      inputs: {...test.inputs},
+      initialInputs: {...test.initialInputs},
+      expected: test.expected,
+      assertion: test.assertion,
+      lastResult: null,
+      lastMsg: ''
+    };
+    tests.push(newTest);
+    renderTestsTable();
+    selectTest(newTest.id);
+  }
+
+  // Randomize inputs of selected test (numbers between -10 and 10, bools toggled, strings 'foo'/'bar')
+  function randomizeInputs() {
+    if(!selectedTestId) return;
+    const test = tests.find(t => t.id === selectedTestId);
+    if(!test) return;
+    const args = funcArgsDesc[selectedFunc];
+    args.forEach(arg => {
+      const currentVal = test.inputs[arg];
+      if(typeof currentVal === 'number') {
+        // Random integer between -10 and 10
+        test.inputs[arg] = Math.floor(Math.random()*21)-10;
+      } else if(typeof currentVal === 'boolean') {
+        test.inputs[arg] = !currentVal;
+      } else if(typeof currentVal === 'string') {
+        test.inputs[arg] = (currentVal === 'foo' ? 'bar' : 'foo');
+      } else {
+        test.inputs[arg] = 0;
+      }
+    });
+    renderInputEditors(test);
+    logDiv.textContent = '[Inputs randomized]';
+  }
+
+  // Batch run all tests of current func, update their states and show summary
+  function batchRunAll() {
+    if(tests.length === 0) {
+      logDiv.textContent = 'No tests to run.';
+      return;
+    }
+    let passedCount = 0, failCount = 0, errorCount = 0;
+    for(let test of tests) {
+      try {
+        const f = funcImplementations[selectedFunc];
+        const argsOrder = funcArgsDesc[selectedFunc];
+        const argsVals = argsOrder.map(arg => test.inputs[arg]);
+        let result = f(...argsVals);
+
+        let passed;
+        if(test.assertion === 'throws') {
+          // expected throw but none thrown -> fail
+          passed = false;
+        } else {
+          switch(test.assertion) {
+            case 'equal':
+              passed = result === test.expected;
+              break;
+            case 'notEqual':
+              passed = result !== test.expected;
+              break;
+            case 'deepEqual':
+              passed = deepEqual(result, test.expected);
+              break;
+            case 'truthy':
+              passed = !!result === true;
+              break;
+            case 'falsy':
+              passed = !!result === false;
+              break;
+            default:
+              passed = result === test.expected;
+          }
+        }
+        if(passed) {
+          test.lastResult = 'pass';
+          test.lastMsg = 'Test passed.';
+          passedCount++;
+        } else {
+          test.lastResult = 'fail';
+          test.lastMsg = 'Expected: ' + serialize(test.expected) + '; Received: ' + serialize(result);
+          failCount++;
+        }
+      } catch(e) {
+        if(test.assertion === 'throws') {
+          test.lastResult = 'pass';
+          test.lastMsg = '[Expected error thrown] ' + e.message;
+          passedCount++;
+        } else {
+          test.lastResult = 'error';
+          test.lastMsg = '[Unexpected error thrown] ' + e.message;
+          errorCount++;
+        }
+      }
+    }
+    renderTestsTable();
+    logDiv.textContent = `Batch run summary:\nPassed: ${passedCount}\nFailed: ${failCount}\nErrors: ${errorCount}`;
+  }
+
+  // Export all tests as JSON
+  function exportTests() {
+    if(tests.length === 0) {
+      logDiv.textContent = 'No tests to export.';
+      return;
+    }
+    const exportData = { func: selectedFunc, tests: tests };
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    // Copy to clipboard
+    try {
+      navigator.clipboard.writeText(jsonStr).then(() => {
+        logDiv.textContent = 'Exported tests JSON copied to clipboard.';
+      }, () => {
+        logDiv.textContent = 'Export: Copy to clipboard failed. JSON shown below:\n'+jsonStr;
+      });
+    } catch(e) {
+      logDiv.textContent = 'Export: Exception during copy. JSON shown below:\n'+jsonStr;
+    }
+  }
+
+  // Import tests JSON from textarea
+  function importTests() {
+    const val = importArea.value.trim();
+    if(!val) {
+      logDiv.textContent = 'Import area is empty.';
+      return;
+    }
+    let imported;
+    try {
+      imported = JSON.parse(val);
+    } catch(e) {
+      logDiv.textContent = 'Import failed: invalid JSON.';
+      return;
+    }
+    if(!imported.tests || !Array.isArray(imported.tests) || typeof imported.func !== 'string') {
+      logDiv.textContent = 'Import failed: invalid format.';
+      return;
+    }
+    if(!(imported.func in funcImplementations)) {
+      logDiv.textContent = 'Import failed: unknown function "'+imported.func+'".';
+      return;
+    }
+    selectedFunc = imported.func;
+    funcSelection.value = selectedFunc;
+
+    // Validate and fix test entries minimally
+    const fixedTests = [];
+    for(let t of imported.tests) {
+      if(typeof t.name !== 'string' || typeof t.inputs !== 'object' || !t.inputs) continue;
+      if(!('expected' in t)) continue;
+      if(typeof t.assertion !== 'string') t.assertion = 'equal';
+      fixedTests.push({
+        id: genId(),
+        name: t.name,
+        inputs: {...t.inputs},
+        initialInputs: {...t.inputs},
+        expected: t.expected,
+        assertion: t.assertion,
+        lastResult: null,
+        lastMsg: ''
+      });
+    }
+    if(fixedTests.length === 0) {
+      logDiv.textContent = 'Import failed: no valid tests found.';
+      return;
+    }
+    tests = fixedTests;
+    selectedTestId = tests[0].id;
+    renderTestsTable();
+    logDiv.textContent = `Imported ${tests.length} tests for function "${selectedFunc}"`;
+    importArea.value = '';
+  }
+
+  // Handle function selection change
+  funcSelection.addEventListener('change', () => {
+    selectedFunc = funcSelection.value;
+    loadSampleTests();
+    testsDefFieldset.style.display = '';
+    renderTestsTable();
+  });
+
+  loadTestsBtn.addEventListener('click', () => {
+    loadSampleTests();
+    testsDefFieldset.style.display = '';
+    renderTestsTable();
+  });
+
+  addTestBtn.addEventListener('click', addNewTest);
+
+  selectedTestSelect.addEventListener('change', (e) => {
+    selectTest(e.target.value);
+  });
+
+  runTestBtn.addEventListener('click', runSelectedTest);
+
+  resetTestBtn.addEventListener('click', resetSelectedTestInputs);
+
+  editAssertionBtn.addEventListener('click', updateSelectedTestAssertion);
+
+  deleteTestBtn.addEventListener('click', deleteSelectedTest);
+
+  cloneTestBtn.addEventListener('click', cloneCurrentTest);
+
+  randomizeInputsBtn.addEventListener('click', randomizeInputs);
+
+  batchRunBtn.addEventListener('click', batchRunAll);
+
+  exportTestsBtn.addEventListener('click', exportTests);
+
+  importTestsBtn.addEventListener('click', importTests);
+
+  // Initial setup: load default function tests
+  selectedFunc = funcSelection.value;
+  loadSampleTests();
+  testsDefFieldset.style.display = '';
+  renderTestsTable();
+
+})();
+</script>
+</body>
+</html>

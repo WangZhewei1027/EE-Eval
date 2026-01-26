@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Support Vector Machine (SVM) Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 20px;
+    background: #f5f7fa;
+  }
+  h1 {
+    text-align: center;
+  }
+  #canvas {
+    background: white;
+    border: 1px solid #aaa;
+    display: block;
+    margin: 20px auto;
+  }
+  #info {
+    max-width: 600px;
+    margin: 0 auto;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+  }
+  #controls {
+    max-width: 600px;
+    margin: 10px auto 20px auto;
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+  }
+  button {
+    padding: 8px 14px;
+    border: none;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 3px;
+    outline: none;
+  }
+  button:hover:not(:disabled) {
+    background: #0056b3;
+  }
+  button:disabled {
+    background: #aaa;
+    cursor: default;
+  }
+  #legend {
+    max-width: 600px;
+    margin: 10px auto;
+    display: flex;
+    justify-content: center;
+    gap: 25px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+  }
+  .color-box {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+  }
+  .color-box.class1 { background: #ff4d4d; }
+  .color-box.class2 { background: #4183c4; }
+  .color-box.sv { background: #f39c12; border: 2px solid #e67e22; }
+  .color-box.hyperplane { background: #2ecc71; }
+  .color-box.margin { background: #27ae60; }
+</style>
+</head>
+<body>
+<h1>Support Vector Machine (SVM) Interactive Demo</h1>
+
+<canvas id="canvas" width="600" height="600" tabindex="0"></canvas>
+
+<div id="controls">
+  <button id="resetBtn">Reset Data</button>
+  <button id="trainBtn" disabled>Train SVM</button>
+  <button id="clearBtn">Clear All</button>
+</div>
+
+<div id="legend">
+  <div class="legend-item"><div class="color-box class1"></div>Class 1 points</div>
+  <div class="legend-item"><div class="color-box class2"></div>Class 2 points</div>
+  <div class="legend-item"><div class="color-box sv"></div>Support Vectors</div>
+  <div class="legend-item"><div class="color-box hyperplane"></div>Hyperplane (decision boundary)</div>
+  <div class="legend-item"><div class="color-box margin"></div>Margins</div>
+</div>
+
+<div id="info">
+  <p>
+    <b>Instructions:</b> Click on the canvas to add points. Points alternate between two classes:
+    <span style="color:#ff4d4d;">Class 1 (red)</span> and
+    <span style="color:#4183c4;">Class 2 (blue)</span>. When you have added at least one point of each class,
+    click <b>Train SVM</b> to find the maximum margin hyperplane separating the classes.
+  </p>
+  <p>
+    The SVM finds the line that best separates the two classes by maximizing the margin,
+    shown by the green parallel lines. Orange highlighted points are the support vectors that define this margin.
+  </p>
+  <p>
+    <b>Note:</b> This demo implements a simple linear, hard-margin SVM solver using quadratic programming
+    (specifically a small fixed-size QP solver using the <code>quadprog</code> algorithm).
+  </p>
+</div>
+
+<script>
+/*
+  Minimal Linear SVM Solver Using Quadratic Programming (QP)
+  Problem formulation:
+    minimize (1/2)*||w||^2
+    subject to y_i * (w·x_i + b) >= 1  for all i
+
+  Dual problem:
+    maximize sum(alpha_i) - 0.5* sum_i_j alpha_i alpha_j y_i y_j (x_i · x_j)
+    subject to sum alpha_i y_i = 0
+              alpha_i >= 0
+  We'll solve the dual problem with a small QP solver.
+
+  This demo uses a tiny QP solver implemented in JS for small datasets.
+*/
+
+// ===================
+// Utility functions
+
+// Simple QP solver for small problems
+// solves: min 1/2 x^T P x + q^T x
+// s.t Gx <= h
+//     Ax = b
+// Using projected gradient descent with small problem size (not efficient but works for demo)
+function solveQP(P, q, G, h, A, b, maxIter=1500, tol=1e-6) {
+  const n = q.length;
+  let x = new Array(n).fill(0);
+  let alpha = 0.001;
+
+  function matVecMul(M, v) {
+    return M.map(row => row.reduce((sum, val, i) => sum + val * v[i], 0));
+  }
+  function vecAdd(a,b) {
+    return a.map((v, i) => v + b[i]);
+  }
+  function vecSub(a,b) {
+    return a.map((v,i)=>v - b[i]);
+  }
+  function vecDot(a,b) {
+    return a.reduce((sum,v,i)=>sum+v*b[i],0);
+  }
+  function vecScale(a,s) {
+    return a.map(v=>v*s);
+  }
+  function projectIneq(x) { // project to Gx <= h, G: m x n, h: m
+    if(!G || !h) return x;
+    let px = x.slice();
+    const m = G.length;
+    for(let iter=0; iter<20; iter++){
+      let changed = false;
+      for(let i=0; i<m; i++){
+        let gi = G[i];
+        let gi_dot = vecDot(gi, px);
+        if(gi_dot > h[i]){
+          // project onto halfspace G_i x <= h_i
+          const diff = (gi_dot - h[i])/(vecDot(gi,gi));
+          px = vecSub(px, vecScale(gi,diff));
+          changed = true;
+        }
+      }
+      if(!changed) break;
+    }
+    return px;
+  }
+  function projectEq(x) { // project onto Ax=b, A: p x n, b: p
+    if(!A || !b) return x;
+    const p = A.length;
+    if(p===0) return x;
+    // projection: x = x - A^T ( (A A^T)^-1 (A x - b) )
+    // since p is small, do matrix inverse directly
+    const AAT = [];
+    for(let i=0; i<p; i++){
+      AAT[i] = new Array(p).fill(0);
+      for(let j=0; j<p; j++){
+        let s=0;
+        for(let k=0;k<x.length;k++) s+=A[i][k]*A[j][k];
+        AAT[i][j] = s;
+      }
+    }
+    // invert AAT (for 1x1 or 2x2 only here)
+    let AATinv;
+    if(p===1){
+      AATinv = [[1/AAT[0][0]]];
+    } else if(p===2){
+      let det = AAT[0][0]*AAT[1][1] - AAT[0][1]*AAT[1][0];
+      if(Math.abs(det)<1e-12) return x;
+      AATinv = [
+        [AAT[1][1]/det, -AAT[0][1]/det],
+        [-AAT[1][0]/det, AAT[0][0]/det]
+      ];
+    } else {
+      // fallback: no project
+      return x;
+    }
+    // calc A x - b
+    let Ax_b = [];
+    for(let i=0;i<p;i++){
+      let s=0;
+      for(let j=0;j<x.length;j++){
+        s+=A[i][j]*x[j];
+      }
+      Ax_b[i] = s - b[i];
+    }
+    // mul inv * (A x - b)
+    let w = new Array(p).fill(0);
+    for(let i=0;i<p;i++){
+      for(let j=0;j<p;j++){
+        w[i] += AATinv[i][j]*Ax_b[j];
+      }
+    }
+    // subtract A^T * w
+    let Atw = new Array(x.length).fill(0);
+    for(let j=0;j<x.length;j++){
+      for(let i=0;i<p;i++){
+        Atw[j]+=A[i][j]*w[i];
+      }
+    }
+    return vecSub(x, Atw);
+  }
+
+  for(let iter=0; iter<maxIter; iter++){
+    // gradient: grad = P x + q
+    let Px = matVecMul(P, x);
+    let grad = vecAdd(Px, q);
+    let x_new = vecSub(x, vecScale(grad, alpha));
+    x_new = projectIneq(x_new);
+    x_new = projectEq(x_new);
+    // check convergence
+    let diff = 0;
+    for(let i=0; i<n; i++) diff += Math.abs(x_new[i] - x[i]);
+    x = x_new;
+    if(diff < tol) break;
+  }
+  return x;
+}
+
+// ===================
+// SVM Solver logic
+
+// Data points {x:[x0,x1], y: +1/-1}
+class SVM {
+  constructor(points) {
+    this.points = points;
+    this.w = null;
+    this.b = null;
+    this.alphas = null;
+    this.supportVectors = [];
+  }
+
+  train() {
+    const N = this.points.length;
+    if(N < 2) return false;
+    const X = this.points.map(p => p.x);
+    const Y = this.points.map(p => p.y);
+
+    // Build P matrix (N x N): P_ij = y_i y_j <x_i,x_j>
+    let P = new Array(N);
+    for(let i=0; i<N; i++) {
+      P[i] = new Array(N);
+      for(let j=0; j<N; j++) {
+        let dot = X[i][0]*X[j][0] + X[i][1]*X[j][1];
+        P[i][j] = Y[i]*Y[j]*dot;
+      }
+    }
+    // q = -1 vector length N
+    let q = new Array(N).fill(-1);
+    // G = -I (for α ≥ 0)
+    let G = new Array(N);
+    for(let i=0; i<N; i++) {
+      G[i] = new Array(N).fill(0);
+      G[i][i] = -1;
+    }
+    // h = 0 vector length N
+    let h = new Array(N).fill(0);
+    // A y^T (1 x N)
+    let A = [Y.slice()];
+    // b = 0 scalar
+    let b = [0];
+
+    // solve QP to get alphas
+    let alphas = solveQP(P, q, G, h, A, b);
+
+    // Threshold alphas to remove near-zero values
+    const thresh = 1e-4;
+    this.alphas = alphas.map(a => (a > thresh) ? a : 0);
+
+    // Calculate w = sum_i α_i y_i x_i
+    let w = [0,0];
+    for(let i=0; i<N; i++) {
+      w[0] += this.alphas[i]*Y[i]*X[i][0];
+      w[1] += this.alphas[i]*Y[i]*X[i][1];
+    }
+    this.w = w;
+
+    // Support vectors: points with alpha > thresh
+    this.supportVectors = [];
+    for(let i=0; i<N; i++) {
+      if(this.alphas[i]>thresh) this.supportVectors.push(this.points[i]);
+    }
+    // Calculate intercept b 
+    // b = y_k - w·x_k for any support vector k (average over SVs)
+    let bSum = 0;
+    for(let sv of this.supportVectors) {
+      bSum += sv.y - (this.w[0]*sv.x[0] + this.w[1]*sv.x[1]);
+    }
+    this.b = bSum / this.supportVectors.length;
+
+    return true;
+  }
+
+  predict(x) {
+    const val = this.w[0]*x[0] + this.w[1]*x[1] + this.b;
+    return val >= 0 ? +1 : -1;
+  }
+
+  marginLinesPoints(canvasWidth, canvasHeight) {
+    // Decision boundary: w·x + b = 0
+    // Margin lines: w·x + b = ±1
+
+    // We solve for points on the margin lines to graph on the canvas
+
+    // w1 x + w2 y + b = const
+    // => y = (const - b - w1 x) / w2
+
+    let points = {};
+
+    function getY(x, w, b, c) {
+      if(w[1] === 0) return null;
+      return (c - b - w[0]*x) / w[1];
+    }
+
+    // Choose x from canvas boundaries: 0 to canvasWidth
+    // but we must convert canvas pixels to math coords first
+    // We'll map canvas coords to [-1,1] in both x and y for training visualization
+
+    // But inputs are in pixels, data points scaled -1..1 mapped later,
+    // we store and draw raw pixels, so just inverse.
+
+    // Instead, calculate margins in math coords then remap to canvas pixels
+
+    points.decision = [];
+    points.marginPos = [];
+    points.marginNeg = [];
+
+    // x range for line in math coord: from -1.2 to 1.2 to have some margin
+    const xmin = -1.2;
+    const xmax = 1.2;
+
+    // get 2 points per line and convert to canvas coords
+    function toCanvas(pt) {
+      // map math coords x,y in [-1.2,+1.2] to canvas pixels (with margin)
+      // let data drawn inside inner box: x:50..550, y:50..550
+      const px = 50 + ((pt[0]+1.2)/2.4)*500;
+      const py = 550 - ((pt[1]+1.2)/2.4)*500;
+      return [px, py];
+    }
+    // lines: decision, margin positive = +1, margin negative = -1
+    const lines = [0,1,-1];
+    const keys = ['decision', 'marginPos', 'marginNeg'];
+
+    for(let k=0;k<lines.length;k++) {
+      let c = lines[k];
+      let p1 = [xmin, getY(xmin, this.w, this.b, c)];
+      let p2 = [xmax, getY(xmax, this.w, this.b, c)];
+      // if y is null or out of range, swap to solve for x by fixing y
+      if(p1[1] === null || p1[1]<-1.5 || p1[1]>1.5) {
+        // solve for x when y = ymin
+        let ymin = -1.2;
+        if(this.w[0] === 0) p1[0] = 0;
+        else p1[0] = (c - this.b - this.w[1]*ymin)/this.w[0];
+        p1[1] = ymin;
+      }
+      if(p2[1] === null || p2[1]<-1.5 || p2[1]>1.5) {
+        let ymax = 1.2;
+        if(this.w[0] === 0) p2[0] = 0;
+        else p2[0] = (c - this.b - this.w[1]*ymax)/this.w[0];
+        p2[1] = ymax;
+      }
+      points[keys[k]].push(toCanvas(p1));
+      points[keys[k]].push(toCanvas(p2));
+    }
+    return points;
+  }
+}
+
+// ===================
+// UI and Drawing
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const width = canvas.width;
+const height = canvas.height;
+
+const resetBtn = document.getElementById('resetBtn');
+const trainBtn = document.getElementById('trainBtn');
+const clearBtn = document.getElementById('clearBtn');
+
+let points = []; // {x:[x0,x1], y: +1/-1}
+let currentClass = +1; // start with class 1
+let svm = null;
+let trained = false;
+
+// Convert canvas pixel to data coord [-1,1]
+function pixelToData(px, py) {
+  // margin on canvas 50px
+  let x = ((px - 50) / 500)*2.4 - 1.2;
+  let y = -(((py - 50) / 500)*2.4 - 1.2);
+  // clamp in range
+  if(x < -1.2) x = -1.2;
+  if(x > 1.2) x = 1.2;
+  if(y < -1.2) y = -1.2;
+  if(y > 1.2) y = 1.2;
+  return [x,y];
+}
+// Convert data coord [-1,1] to canvas pixel
+function dataToPixel(x, y) {
+  let px = 50 + ((x+1.2)/2.4)*500;
+  let py = 550 - ((y+1.2)/2.4)*500;
+  return [px, py];
+}
+
+// Draw grid lines
+function drawGrid() {
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#999';
+  ctx.font = '11px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.beginPath();
+  // vertical lines and x labels every 0.4 units
+  for(let x = -1.2; x <= 1.21; x+=0.4) {
+    let px = dataToPixel(x, 0)[0];
+    ctx.moveTo(px, 50);
+    ctx.lineTo(px, 550);
+    // label
+    ctx.fillText(x.toFixed(1), px, 560);
+  }
+  // horizontal lines and y labels every 0.4 units
+  for(let y = -1.2; y <= 1.21; y += 0.4) {
+    let py = dataToPixel(0, y)[1];
+    ctx.moveTo(50, py);
+    ctx.lineTo(550, py);
+    // label
+    ctx.fillText(y.toFixed(1), 35, py);
+  }
+  ctx.stroke();
+}
+
+// Draw axes
+function drawAxes() {
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  // x axis
+  const y0 = dataToPixel(0,0)[1];
+  ctx.moveTo(50, y0);
+  ctx.lineTo(550, y0);
+  // y axis
+  const x0 = dataToPixel(0,0)[0];
+  ctx.moveTo(x0, 50);
+  ctx.lineTo(x0, 550);
+  ctx.stroke();
+}
+
+// Draw points
+function drawPoints() {
+  for(let p of points) {
+    const [px, py] = dataToPixel(p.x[0], p.x[1]);
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, 2*Math.PI);
+    if(p.y === +1) {
+      ctx.fillStyle = '#ff4d4d'; // red
+      ctx.strokeStyle = '#a33030';
+    }
+    else {
+      ctx.fillStyle = '#4183c4'; // blue
+      ctx.strokeStyle = '#2a4d7d';
+    }
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+// Draw support vectors highlight
+function drawSupportVectors(svm) {
+  if(!svm || !svm.supportVectors) return;
+  for(let sv of svm.supportVectors) {
+    const [px, py] = dataToPixel(sv.x[0], sv.x[1]);
+    ctx.beginPath();
+    ctx.arc(px, py, 10, 0, 2*Math.PI);
+    ctx.strokeStyle = '#f39c12';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+}
+
+// Draw decision boundary & margins
+function drawDecisionBoundary(svm) {
+  if(!svm || !svm.w) return;
+  const lines = svm.marginLinesPoints(width, height);
+
+  function drawLine(pts, color, width, dash=[]) {
+    ctx.beginPath();
+    ctx.setLineDash(dash);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    ctx.lineTo(pts[1][0], pts[1][1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  drawLine(lines.marginPos, '#27ae60', 2, [10,6]); // margin positive green dashed
+  drawLine(lines.marginNeg, '#27ae60', 2, [10,6]); // margin negative green dashed
+  drawLine(lines.decision, '#2ecc71', 3); // decision boundary bright green
+}
+
+// Draw entire frame
+function draw() {
+  ctx.clearRect(0, 0, width, height);
+
+  // white background box for data area
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(50, 50, 500, 500);
+  ctx.strokeStyle = '#bbb';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(50, 50, 500, 500);
+
+  drawGrid();
+  drawAxes();
+  drawPoints();
+  if(trained && svm) {
+    drawDecisionBoundary(svm);
+    drawSupportVectors(svm);
+  }
+}
+
+// Event: click to add point
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  // check inside data box
+  if(px < 50 || px > 550 || py < 50 || py > 550) return;
+
+  const dataXY = pixelToData(px, py);
+  points.push({x: dataXY, y: currentClass});
+  currentClass = -currentClass; // alternate class
+  trained = false;
+  trainBtn.disabled = points.some(p => p.y === +1) && points.some(p => p.y === -1) ? false : true;
+  draw();
+});
+
+resetBtn.addEventListener('click', () => {
+  // Add predefined example points in two classes for demo convenience
+  points = [
+    {x:[-0.9, -0.6], y: +1},
+    {x:[-0.8, -0.5], y: +1},
+    {x:[-0.7, -0.75], y: +1},
+    {x:[0.7, 0.6], y: -1},
+    {x:[0.8, 0.5], y: -1},
+    {x:[0.9, 0.75], y: -1}
+  ];
+  currentClass = +1;
+  trained = false;
+  trainBtn.disabled = false;
+  svm = null;
+  draw();
+});
+
+clearBtn.addEventListener('click', () => {
+  points = [];
+  currentClass = +1;
+  trained = false;
+  trainBtn.disabled = true;
+  svm = null;
+  draw();
+});
+
+trainBtn.addEventListener('click', () => {
+  svm = new SVM(points);
+  const success = svm.train();
+  if(success) {
+    trained = true;
+    trainBtn.disabled = true;
+    draw();
+  } else {
+    alert("Training failed! Add at least one point in each class.");
+  }
+});
+
+// Initialize canvas and buttons
+function init(){
+  points = [];
+  currentClass = +1;
+  trained = false;
+  trainBtn.disabled = true;
+  svm = null;
+  draw();
+}
+init();
+
+</script>
+</body>
+</html>

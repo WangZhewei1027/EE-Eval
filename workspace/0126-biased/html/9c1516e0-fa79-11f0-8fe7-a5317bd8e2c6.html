@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Space Complexity Explorer</title>
+  <style>
+    /* Extremely minimal styling: default colors, plain layout */
+    body { font-family: Arial, sans-serif; margin: 12px; color: black; background: white; }
+    h1 { font-size: 18px; margin: 0 0 8px 0; }
+    section { margin: 10px 0; padding: 6px 0; border-top: 1px solid #000; }
+    label, select, input, button, textarea { font-size: 13px; }
+    input[type="number"], input[type="text"], select { width: 120px; }
+    textarea { width: 100%; height: 120px; font-family: monospace; font-size: 12px; }
+    pre { font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .col { display: flex; flex-direction: column; gap: 4px; }
+    .small { font-size: 12px; }
+    .controls { margin: 6px 0; }
+    .memory-list { max-height: 200px; overflow: auto; border: 1px solid #000; padding: 6px; }
+    button { padding: 4px 8px; }
+    input[type=range] { width: 220px; }
+    .tiny { font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>Space Complexity Explorer</h1>
+  <div class="small">An interactive sandbox to explore space complexity: simulate allocations, recursion, auxiliary structures, and custom scenarios. Interface is intentionally plain.</div>
+
+  <section>
+    <div class="row controls">
+      <div class="col">
+        <label for="algo">Choose algorithm / scenario:</label>
+        <select id="algo">
+          <option value="iterative_sum">Iterative Sum (O(1) extra)</option>
+          <option value="copy_array">Copy Array (O(n) extra)</option>
+          <option value="merge_sort">Merge Sort (O(n) extra)</option>
+          <option value="quicksort_inplace">Quicksort (in-place) (O(log n) stack avg)</option>
+          <option value="quicksort_worst">Quicksort Worst-case (O(n) stack)</option>
+          <option value="naive_fib">Naive Fibonacci (exponential recursion tree)</option>
+          <option value="binary_tree_rec">Binary Tree Recursion (O(n) stack? depending)</option>
+          <option value="graph_dfs">Graph DFS (stack + adjacency)</option>
+          <option value="dynamic_prog">Dynamic Programming (DP table O(n) or O(n^2))</option>
+          <option value="custom_script">Custom Script (from editor)</option>
+        </select>
+      </div>
+
+      <div class="col">
+        <label>Language preset / sizes:</label>
+        <select id="langPreset">
+          <option value="python">Python (object-heavy)</option>
+          <option value="java">Java (objects + pointers)</option>
+          <option value="c">C (primitive-focused)</option>
+        </select>
+      </div>
+
+      <div class="col">
+        <label>Element size (bytes):</label>
+        <input id="elemSize" type="number" min="1" value="8">
+      </div>
+
+      <div class="col">
+        <label>Pointer/reference size (bytes):</label>
+        <input id="ptrSize" type="number" min="1" value="8">
+      </div>
+
+      <div class="col">
+        <label>Object overhead (bytes):</label>
+        <input id="objOverhead" type="number" min="0" value="16">
+      </div>
+
+    </div>
+
+    <div class="row controls">
+      <div class="col">
+        <label>Input size n:</label>
+        <input id="nVal" type="number" min="0" value="16">
+      </div>
+
+      <div class="col">
+        <label>n slider:</label>
+        <input id="nSlider" type="range" min="1" max="200" value="16">
+      </div>
+
+      <div class="col">
+        <label><input id="countInput" type="checkbox" checked> Count input memory</label>
+        <label><input id="countStack" type="checkbox" checked> Count stack frames</label>
+        <label><input id="countAux" type="checkbox" checked> Count auxiliary/allocation</label>
+      </div>
+
+      <div class="col">
+        <label><input id="includePtrs" type="checkbox" checked> Include pointer memory</label>
+        <label><input id="simulateGC" type="checkbox"> Simulate simple GC</label>
+      </div>
+
+    </div>
+
+    <div class="row controls">
+      <button id="generateBtn">Generate Events</button>
+      <button id="runBtn">Run</button>
+      <button id="stepBtn">Step</button>
+      <button id="backBtn">Step Back</button>
+      <button id="playBtn">Play</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="resetBtn">Reset</button>
+      <button id="randomizeBtn">Randomize Params</button>
+    </div>
+
+    <div class="row controls">
+      <label>Playback speed (ms per step):</label>
+      <input id="speed" type="range" min="50" max="2000" value="400">
+      <label class="tiny">GC frequency (steps):</label>
+      <input id="gcFreq" type="number" min="1" value="8">
+    </div>
+  </section>
+
+  <section>
+    <div class="row">
+      <div style="flex:1;">
+        <h2 style="font-size:14px;margin:4px 0;">Simulation Controls & Manual Allocations</h2>
+        <div class="row">
+          <div class="col">
+            <label>Manual allocate size (elements count):</label>
+            <input id="manualCount" type="number" min="1" value="4">
+          </div>
+          <div class="col">
+            <label>Region:</label>
+            <select id="manualRegion">
+              <option value="heap">heap</option>
+              <option value="stack">stack</option>
+              <option value="aux">aux</option>
+            </select>
+          </div>
+          <div class="col">
+            <label>Description:</label>
+            <input id="manualDesc" type="text" value="manual">
+          </div>
+          <div class="col">
+            <button id="manualAllocBtn">Allocate</button>
+            <button id="manualFreeBtn">Free Last</button>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:6px;">
+          <div class="col" style="flex:1;">
+            <label>Custom script (command per line):</label>
+            <textarea id="scriptArea">
+# Commands:
+# ALLOC id kind count       - allocate "count" elements under kind: heap/stack/aux
+# FREE id                  - free by id
+# CALL f id size           - push stack frame id (size elements)
+# RETURN id                - pop frame id
+# REF src dest             - create a reference from src -> dest (for GC)
+# UNREF src dest           - remove reference
+# WAIT k                   - advance k steps
+# EXAMPLE:
+ALLOC A heap 16
+CALL f1 frame 1
+WAIT 1
+ALLOC B aux 8
+REF A B
+RETURN f1
+WAIT 1
+FREE B
+# End
+            </textarea>
+            <div class="row">
+              <button id="loadScriptBtn">Load Script</button>
+              <button id="runScriptBtn">Run Script</button>
+              <button id="stepScriptBtn">Step Script</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:360px;">
+        <h2 style="font-size:14px;margin:4px 0;">State / Memory</h2>
+        <div class="small">Totals, breakdowns, and allocation table (textual bars indicate relative sizes).</div>
+        <div style="margin-top:6px;">
+          <div>Total memory: <span id="totalMem">0</span> bytes</div>
+          <div>Heap: <span id="heapMem">0</span> bytes | Stack: <span id="stackMem">0</span> bytes | Aux: <span id="auxMem">0</span> bytes</div>
+          <div>Peak memory observed: <span id="peakMem">0</span> bytes</div>
+        </div>
+        <div class="memory-list" id="allocList" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 style="font-size:14px;margin:4px 0;">Event Timeline</h2>
+    <div class="row">
+      <label>Step: <span id="stepCounter">0</span> / <span id="maxStep">0</span></label>
+      <input id="timelineSlider" type="range" min="0" max="0" value="0" style="flex:1;">
+      <button id="inspectBtn">Inspect Step</button>
+    </div>
+    <pre id="eventsLog"></pre>
+  </section>
+
+  <section>
+    <h2 style="font-size:14px;margin:4px 0;">Space Complexity Estimator</h2>
+    <div class="row">
+      <div class="col">
+        <label>Formula selection:</label>
+        <select id="formulaSelect">
+          <option value="O(1)">O(1)</option>
+          <option value="O(log n)">O(log n)</option>
+          <option value="O(n)">O(n)</option>
+          <option value="O(n log n)">O(n log n)</option>
+          <option value="O(n^2)">O(n^2)</option>
+          <option value="Custom">Custom expression (use n)</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Custom expression:</label>
+        <input id="customExpr" type="text" value="n*8 + 16">
+      </div>
+      <div class="col">
+        <button id="estimateBtn">Estimate Table</button>
+      </div>
+    </div>
+    <pre id="estTable"></pre>
+  </section>
+
+  <section>
+    <h2 style="font-size:14px;margin:4px 0;">Explanation & Notes</h2>
+    <pre id="explain">Select an algorithm and parameters, then Generate Events. Use Step / Play to see allocations and frees over time. Use the custom script for advanced patterns (allocate/free/ref). The memory listing shows live allocations and a simple textual size bar. The estimator computes numeric sizes for chosen complexity.</pre>
+  </section>
+
+<script>
+(function(){
+  // Basic simulation engine
+  const state = {
+    params: {},
+    events: [], // each event: {desc, allocs:[{id,size,region,desc}], frees:[id], refs:[], unrefs:[], step}
+    live: {}, // id -> allocation {id, bytes, region, desc, refs:set}
+    timeline: [], // snapshot per step
+    step: 0,
+    peak: 0,
+    running: false,
+    interval: null,
+    scriptMode: false
+  };
+
+  // DOM refs
+  const elems = {
+    algo: document.getElementById('algo'),
+    lang: document.getElementById('langPreset'),
+    elemSize: document.getElementById('elemSize'),
+    ptrSize: document.getElementById('ptrSize'),
+    objOverhead: document.getElementById('objOverhead'),
+    nVal: document.getElementById('nVal'),
+    nSlider: document.getElementById('nSlider'),
+    countInput: document.getElementById('countInput'),
+    countStack: document.getElementById('countStack'),
+    countAux: document.getElementById('countAux'),
+    includePtrs: document.getElementById('includePtrs'),
+    simulateGC: document.getElementById('simulateGC'),
+    gcFreq: document.getElementById('gcFreq'),
+    generateBtn: document.getElementById('generateBtn'),
+    runBtn: document.getElementById('runBtn'),
+    stepBtn: document.getElementById('stepBtn'),
+    backBtn: document.getElementById('backBtn'),
+    playBtn: document.getElementById('playBtn'),
+    pauseBtn: document.getElementById('pauseBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    randomizeBtn: document.getElementById('randomizeBtn'),
+    speed: document.getElementById('speed'),
+    manualAllocBtn: document.getElementById('manualAllocBtn'),
+    manualFreeBtn: document.getElementById('manualFreeBtn'),
+    manualCount: document.getElementById('manualCount'),
+    manualRegion: document.getElementById('manualRegion'),
+    manualDesc: document.getElementById('manualDesc'),
+    scriptArea: document.getElementById('scriptArea'),
+    loadScriptBtn: document.getElementById('loadScriptBtn'),
+    runScriptBtn: document.getElementById('runScriptBtn'),
+    stepScriptBtn: document.getElementById('stepScriptBtn'),
+    allocList: document.getElementById('allocList'),
+    totalMem: document.getElementById('totalMem'),
+    heapMem: document.getElementById('heapMem'),
+    stackMem: document.getElementById('stackMem'),
+    auxMem: document.getElementById('auxMem'),
+    peakMem: document.getElementById('peakMem'),
+    eventsLog: document.getElementById('eventsLog'),
+    stepCounter: document.getElementById('stepCounter'),
+    maxStep: document.getElementById('maxStep'),
+    timelineSlider: document.getElementById('timelineSlider'),
+    inspectBtn: document.getElementById('inspectBtn'),
+    formulaSelect: document.getElementById('formulaSelect'),
+    customExpr: document.getElementById('customExpr'),
+    estimateBtn: document.getElementById('estimateBtn'),
+    estTable: document.getElementById('estTable'),
+    explain: document.getElementById('explain')
+  };
+
+  // Utilities
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function bytesForElements(count) {
+    const el = parseInt(elems.elemSize.value,10) || 8;
+    return count * el;
+  }
+  function ptrBytes(count) {
+    return (parseInt(elems.ptrSize.value,10)||8) * count;
+  }
+  function objOverheadBytes(count) {
+    return (parseInt(elems.objOverhead.value,10)||0) * count;
+  }
+
+  function resetState(){
+    state.events = [];
+    state.live = {};
+    state.timeline = [];
+    state.step = 0;
+    state.peak = 0;
+    state.running = false;
+    clearInterval(state.interval);
+    state.interval = null;
+    state.scriptMode = false;
+    updateUI();
+  }
+
+  function pushEvent(ev){
+    ev.step = state.events.length;
+    state.events.push(ev);
+    elems.maxStep.textContent = state.events.length;
+    elems.timelineSlider.max = Math.max(0, state.events.length);
+    updateEventsLog();
+  }
+
+  function updateEventsLog(){
+    const lines = state.events.map((e,i)=> `${i}: ${e.desc} | allocs:${(e.allocs||[]).map(a=>a.id+'('+a.count+')').join(', ')} frees:${(e.frees||[]).join(', ')} refs:${(e.refs||[]).map(r=>r[0]+'->'+r[1]).join(',')}`);
+    elems.eventsLog.textContent = lines.join('\n');
+    elems.maxStep.textContent = state.events.length;
+    elems.timelineSlider.max = Math.max(0, state.events.length);
+  }
+
+  function applyEvent(ev, forward=true){
+    // forward: apply allocations and refs; backward: reverse
+    if(forward){
+      if(ev.allocs) ev.allocs.forEach(a=>{
+        const id = a.id || ('A'+Math.random().toString(36).slice(2,8));
+        const count = a.count || 1;
+        const bytes = bytesForElements(count) + (elems.includePtrs.checked ? ptrBytes(a.ptrs||0) : 0) + objOverheadBytes(a.objects||0);
+        const region = a.region || 'heap';
+        state.live[id] = { id, bytes, region, desc: a.desc||('alloc '+id), count, refs: new Set(), createdStep: ev.step };
+      });
+      if(ev.calls) ev.calls.forEach(c=>{
+        const id = c.id || ('F'+Math.random().toString(36).slice(2,8));
+        const size = (c.size || 1);
+        const bytes = bytesForElements(size);
+        state.live[id] = { id, bytes, region: 'stack', desc: c.desc || 'frame '+id, count:size, refs: new Set(), createdStep: ev.step };
+      });
+      if(ev.frees) ev.frees.forEach(fid=>{
+        delete state.live[fid];
+      });
+      if(ev.refs) ev.refs.forEach(r=>{
+        const [src,dst] = r;
+        if(state.live[src]) state.live[src].refs.add(dst);
+      });
+      if(ev.unrefs) ev.unrefs.forEach(r=>{
+        const [src,dst] = r;
+        if(state.live[src]) state.live[src].refs.delete(dst);
+      });
+    } else {
+      // reverse: recreate from snapshot? Simpler: rebuild from scratch up to desired step outside.
+      rebuildUpToStep(ev.step - 1);
+    }
+    computeTotals();
+  }
+
+  function computeTotals(){
+    let total=0, heap=0, stack=0, aux=0;
+    Object.values(state.live).forEach(a=>{
+      total += a.bytes;
+      if(a.region === 'heap') heap += a.bytes;
+      else if(a.region === 'stack') stack += a.bytes;
+      else aux += a.bytes;
+    });
+    if(total > state.peak) state.peak = total;
+    elems.totalMem.textContent = total;
+    elems.heapMem.textContent = heap;
+    elems.stackMem.textContent = stack;
+    elems.auxMem.textContent = aux;
+    elems.peakMem.textContent = state.peak;
+    renderAllocList();
+  }
+
+  function renderAllocList(){
+    const lines = Object.values(state.live).map(a=>{
+      const bar = repeatChar('|', Math.min(60, Math.max(1, Math.floor(a.bytes/Math.max(1, Math.round((parseInt(elems.elemSize.value,10)||8)))))));
+      return `${a.id} [${a.region}] ${a.bytes} bytes ${a.desc} ${bar}`;
+    });
+    elems.allocList.textContent = lines.join('\n') || '(no live allocations)';
+  }
+
+  function repeatChar(ch, n){ return new Array(n+1).join(ch); }
+
+  function rebuildUpToStep(step){
+    state.live = {};
+    for(let i=0;i<=step && i<state.events.length;i++){
+      const ev = state.events[i];
+      // apply without recursion (direct)
+      if(ev.allocs) ev.allocs.forEach(a=>{
+        const id = a.id || ('A'+Math.random().toString(36).slice(2,8));
+        const count = a.count || 1;
+        const bytes = bytesForElements(count) + (elems.includePtrs.checked ? ptrBytes(a.ptrs||0) : 0) + objOverheadBytes(a.objects||0);
+        const region = a.region || 'heap';
+        state.live[id] = { id, bytes, region, desc: a.desc||('alloc '+id), count, refs: new Set(), createdStep: ev.step };
+      });
+      if(ev.calls) ev.calls.forEach(c=>{
+        const id = c.id || ('F'+Math.random().toString(36).slice(2,8));
+        const size = (c.size || 1);
+        const bytes = bytesForElements(size);
+        state.live[id] = { id, bytes, region: 'stack', desc: c.desc || 'frame '+id, count:size, refs: new Set(), createdStep: ev.step };
+      });
+      if(ev.frees) ev.frees.forEach(fid=>{
+        delete state.live[fid];
+      });
+      if(ev.refs) ev.refs.forEach(r=>{
+        const [src,dst] = r;
+        if(state.live[src]) state.live[src].refs.add(dst);
+      });
+      if(ev.unrefs) ev.unrefs.forEach(r=>{
+        const [src,dst] = r;
+        if(state.live[src]) state.live[src].refs.delete(dst);
+      });
+    }
+    computeTotals();
+  }
+
+  // Algorithm event generators
+  function generateEventsForAlgorithm(algo){
+    state.events = [];
+    state.peak = 0;
+    const n = parseInt(elems.nVal.value,10) || 0;
+    const events = [];
+
+    function push(desc, opts){
+      const ev = Object.assign({desc}, opts || {});
+      pushEvent(ev);
+    }
+
+    // Common helper: allocate input array
+    if(algo === 'iterative_sum'){
+      if(elems.countInput.checked){
+        push(`allocate input array n=${n}`, {allocs:[{id:'INP', count:n, region:'heap', desc:'input array'}]});
+      }
+      push('init accumulator', {allocs:[{id:'acc', count:1, region:'stack', desc:'accumulator'}]});
+      // algorithm steps: iterate but constant extra
+      for(let i=0;i<Math.min(8, n);i++){
+        push(`iterate i=${i}`, {});
+      }
+      push('end, free stack', {frees:['acc']});
+    }
+
+    else if(algo === 'copy_array'){
+      if(elems.countInput.checked){
+        push(`allocate input array n=${n}`, {allocs:[{id:'INP', count:n, region:'heap', desc:'input array'}]});
+      }
+      push('allocate copy array', {allocs:[{id:'COPY', count:n, region:'heap', desc:'copy'}]});
+      push('use copy, then free copy', {frees:['COPY']});
+    }
+
+    else if(algo === 'merge_sort'){
+      if(elems.countInput.checked){
+        push(`allocate input array n=${n}`, {allocs:[{id:'INP', count:n, region:'heap', desc:'input array'}]});
+      }
+      // simulate recursive merges: allocate temp at each merge level, but overall O(n) extra
+      const levels = Math.max(1, Math.ceil(Math.log2(Math.max(1,n))));
+      for(let lvl=0; lvl<levels; lvl++){
+        push(`merge level ${lvl}`, {allocs:[{id:'TMP_L'+lvl, count: Math.ceil(n/Math.pow(2,lvl)), region:'aux', desc:'temp buffer'}]});
+        push(`free temp level ${lvl}`, {frees:['TMP_L'+lvl]});
+      }
+    }
+
+    else if(algo === 'quicksort_inplace'){
+      if(elems.countInput.checked){
+        push('allocate input array', {allocs:[{id:'INP', count:n, region:'heap', desc:'array'}]});
+      }
+      // push stack frames representing recursion, O(log n) average depth
+      const depth = Math.max(1, Math.floor(Math.log2(Math.max(1,n))));
+      for(let d=0; d<depth; d++){
+        push(`call depth ${d}`, {calls:[{id:'F'+d, size:1, desc:'stack frame'}]});
+      }
+      for(let d=depth-1; d>=0; d--){
+        push(`return depth ${d}`, {frees:[ 'F'+d ]});
+      }
+    }
+
+    else if(algo === 'quicksort_worst'){
+      if(elems.countInput.checked) push('allocate input array', {allocs:[{id:'INP', count:n, region:'heap', desc:'array'}]});
+      // worst-case stack depth ~ n
+      for(let d=0; d<Math.min(n,200); d++){
+        push(`call depth ${d}`, {calls:[{id:'F'+d, size:1, desc:'stack frame'}]});
+      }
+      for(let d=Math.min(n,200)-1; d>=0; d--){
+        push(`return depth ${d}`, {frees:[ 'F'+d ]});
+      }
+    }
+
+    else if(algo === 'naive_fib'){
+      if(elems.countInput.checked) push('no big input array for naive fib (counts n)', {});
+      // simulate exponential recursion by creating many short-lived frames
+      let counter = 0;
+      function fibSim(k){
+        const id = 'F'+(counter++);
+        push(`call fib(${k}) frame ${id}`, {calls:[{id:id, size:1, desc:'fib frame'}]});
+        if(k<=1){
+          push(`return fib(${k}) frame ${id}`, {frees:[id]});
+          return;
+        }
+        // left
+        fibSim(k-1);
+        // right
+        fibSim(k-2);
+        push(`return fib(${k}) frame ${id}`, {frees:[id]});
+      }
+      const depth = Math.min(10, n); // cap to avoid explosion
+      fibSim(depth);
+    }
+
+    else if(algo === 'binary_tree_rec'){
+      if(elems.countInput.checked){
+        // simulate tree with n nodes stored in heap
+        push(`allocate tree nodes n=${n}`, {allocs:[{id:'TREE', count:n, region:'heap', desc:'tree nodes', ptrs: n*2}]});
+      }
+      // recursion depth ~ log n if balanced
+      const depth = Math.max(1, Math.floor(Math.log2(Math.max(1,n))));
+      for(let d=0; d<depth; d++){
+        push(`call depth ${d}`, {calls:[{id:'F'+d, size:1, desc:'rec frame'}]});
+      }
+      for(let d=depth-1; d>=0; d--){
+        push(`return depth ${d}`, {frees:['F'+d]});
+      }
+    }
+
+    else if(algo === 'graph_dfs'){
+      if(elems.countInput.checked){
+        // adjacency list cost approx n + edges*ptrsize
+        const edges = Math.floor(n * 1.5);
+        push('allocate adjacency list', {allocs:[{id:'ADJ', count:n, region:'heap', desc:'adj-list nodes', ptrs: edges}]});
+      }
+      // DFS stack up to n
+      const depth = Math.min(n, 100);
+      for(let d=0; d<depth; d++){
+        push(`push node ${d}`, {calls:[{id:'S'+d, size:1, desc:'dfs stack frame'}]});
+      }
+      for(let d=depth-1; d>=0; d--){
+        push(`pop node ${d}`, {frees:['S'+d]});
+      }
+    }
+
+    else if(algo === 'dynamic_prog'){
+      // choose table size based on n: 1D or 2D depending on a toggle? We'll simulate both options
+      push('allocate dp table 1D', {allocs:[{id:'DP1', count:n, region:'heap', desc:'1D table'}]});
+      push('allocate dp table 2D', {allocs:[{id:'DP2', count: Math.min(1000,n*n), region:'heap', desc:'2D table (capped)'}]});
+      push('free 2D partial', {frees:['DP2']});
+    }
+
+    else if(algo === 'custom_script'){
+      // will be loaded from scriptArea when user presses Load Script
+      state.scriptMode = true;
+      // placeholder event
+      push('custom script loaded (use Load Script to populate timeline)', {});
+    }
+
+    // finished: update UI
+    computeTotals();
+    updateEventsLog();
+  }
+
+  // Playback controls
+  function stepForward(){
+    if(state.step >= state.events.length) return;
+    const ev = state.events[state.step];
+    applyEvent(ev, true);
+    state.step++;
+    elems.stepCounter.textContent = state.step;
+    elems.timelineSlider.value = state.step;
+  }
+
+  function stepBack(){
+    if(state.step <= 0) return;
+    state.step--;
+    rebuildUpToStep(state.step - 1);
+    elems.stepCounter.textContent = state.step;
+    elems.timelineSlider.value = state.step;
+  }
+
+  function play(){
+    if(state.running) return;
+    const ms = parseInt(elems.speed.value,10) || 400;
+    state.running = true;
+    state.interval = setInterval(()=>{
+      if(state.step >= state.events.length){
+        pause();
+        return;
+      }
+      stepForward();
+      // GC simulation
+      if(elems.simulateGC.checked){
+        const freq = parseInt(elems.gcFreq.value,10) || 8;
+        if(state.step % freq === 0){
+          runGC();
+        }
+      }
+    }, ms);
+  }
+
+  function pause(){
+    state.running = false;
+    clearInterval(state.interval);
+    state.interval = null;
+  }
+
+  function reset(){
+    pause();
+    resetState();
+    elems.eventsLog.textContent = '';
+    elems.allocList.textContent = '(no live allocations)';
+    elems.stepCounter.textContent = '0';
+    elems.timelineSlider.value = 0;
+  }
+
+  function runAll(){
+    // run to end in batch (non-play)
+    while(state.step < state.events.length){
+      stepForward();
+      if(elems.simulateGC.checked){
+        const freq = parseInt(elems.gcFreq.value,10) || 8;
+        if(state.step % freq === 0){
+          runGC();
+        }
+      }
+    }
+  }
+
+  // Manual allocation/free
+  let manualStack = [];
+  function manualAlloc(){
+    const count = parseInt(elems.manualCount.value,10) || 1;
+    const region = elems.manualRegion.value || 'heap';
+    const desc = elems.manualDesc.value || 'manual';
+    const id = 'M'+Math.random().toString(36).slice(2,8);
+    const ev = {desc:'manual alloc '+id, allocs:[{id:id, count:count, region:region, desc:desc}]};
+    pushEvent(ev);
+    // auto-apply
+    applyEvent(ev, true);
+    manualStack.push(id);
+    state.step = state.events.length;
+    elems.stepCounter.textContent = state.step;
+  }
+  function manualFreeLast(){
+    if(manualStack.length===0) return;
+    const id = manualStack.pop();
+    const ev = {desc:'manual free '+id, frees:[id]};
+    pushEvent(ev);
+    applyEvent(ev,true);
+    state.step = state.events.length;
+    elems.stepCounter.textContent = state.step;
+  }
+
+  // Garbage collector (very simple): mark from roots (items referenced by special root set: INP, or stack frames)
+  function runGC(){
+    // roots: all stack frames and special marked roots (INP)
+    const roots = new Set();
+    Object.values(state.live).forEach(a=>{
+      if(a.region === 'stack') roots.add(a.id);
+    });
+    if(state.live['INP']) roots.add('INP'); // treat input as root
+    // BFS mark
+    const marked = new Set();
+    const stack = [...roots];
+    while(stack.length){
+      const id = stack.pop();
+      if(marked.has(id)) continue;
+      marked.add(id);
+      const a = state.live[id];
+      if(a){
+        a.refs.forEach(r=>{
+          if(!marked.has(r)) stack.push(r);
+        });
+      }
+    }
+    // free unmarked heap/aux objects that are not roots
+    const toFree = Object.values(state.live).filter(a=>!marked.has(a.id) && (a.region === 'heap' || a.region === 'aux'));
+    if(toFree.length){
+      const frees = toFree.map(x=>x.id);
+      const ev = {desc:'GC freed '+frees.join(','), frees:frees};
+      pushEvent(ev);
+      applyEvent(ev,true);
+    }
+  }
+
+  // Script interpreter
+  function parseScript(text){
+    const lines = text.split('\n').map(l=>l.trim()).filter(l=>l && !l.startsWith('#'));
+    const events = [];
+    let currentStep = {desc:'script start', allocs:[], frees:[], refs:[], unrefs:[], calls:[]};
+    function flush(){
+      if(currentStep && (currentStep.allocs.length || currentStep.frees.length || currentStep.refs.length || currentStep.calls.length || currentStep.unrefs.length || currentStep.desc)){
+        // clone
+        events.push(JSON.parse(JSON.stringify(currentStep)));
+        currentStep = {desc:'script step', allocs:[], frees:[], refs:[], unrefs:[], calls:[]};
+      }
+    }
+    for(let raw of lines){
+      const parts = raw.split(/\s+/);
+      const cmd = parts[0].toUpperCase();
+      if(cmd === 'ALLOC'){
+        const id = parts[1] || ('S'+Math.random().toString(36).slice(2,6));
+        const region = parts[2] || 'heap';
+        const count = parseInt(parts[3],10) || 1;
+        currentStep.allocs.push({id:id, region:region, count:count, desc:'script"});
+      } else if(cmd === 'FREE'){
+        const id = parts[1];
+        if(id) currentStep.frees.push(id);
+      } else if(cmd === 'CALL'){
+        const id = parts[1] || ('C'+Math.random().toString(36).slice(2,6));
+        const size = parseInt(parts[3],10) || 1;
+        currentStep.calls.push({id:id, size:size, desc:'frame'});
+      } else if(cmd === 'RETURN'){
+        const id = parts[1];
+        if(id) currentStep.frees.push(id);
+      } else if(cmd === 'REF'){
+        const s = parts[1], d = parts[2];
+        if(s && d) currentStep.refs.push([s,d]);
+      } else if(cmd === 'UNREF'){
+        const s = parts[1], d = parts[2];
+        if(s && d) currentStep.unrefs.push([s,d]);
+      } else if(cmd === 'WAIT'){
+        const k = parseInt(parts[1],10) || 1;
+        // flush current, then add k empty steps
+        flush();
+        for(let i=0;i<k;i++) events.push({desc:'wait', allocs:[], frees:[], refs:[], unrefs:[], calls:[]});
+        currentStep = {desc:'script step', allocs:[], frees:[], refs:[], unrefs:[], calls:[]};
+      } else {
+        // unknown, treat as note
+        currentStep.desc = raw;
+      }
+    }
+    flush();
+    return events;
+  }
+
+  // Load script into events
+  function loadScript(){
+    const txt = elems.scriptArea.value;
+    const evs = parseScript(txt);
+    state.events = evs;
+    state.step = 0;
+    state.live = {};
+    state.peak = 0;
+    updateEventsLog();
+    elems.stepCounter.textContent = state.step;
+    elems.timelineSlider.value = state.step;
+  }
+
+  function runScript(){
+    loadScript();
+    play();
+  }
+
+  function stepScript(){
+    if(state.events.length === 0) loadScript();
+    stepForward();
+  }
+
+  // Estimator
+  function estimate(){
+    const formula = elems.formulaSelect.value;
+    const out = [];
+    out.push('n\testimated bytes');
+    for(let n=1; n<=Math.min(200, Math.max(10, parseInt(elems.nVal.value,10)||10)); n+= Math.max(1, Math.floor((Math.max(10, parseInt(elems.nVal.value,10)||10))/20))){
+      let val = 0;
+      if(formula === 'Custom'){
+        try {
+          const fn = new Function('n', 'return '+elems.customExpr.value+';');
+          val = Number(fn(n));
+        } catch(e){
+          val = NaN;
+        }
+      } else {
+        if(formula === 'O(1)') val = 64;
+        if(formula === 'O(log n)') val = Math.ceil(Math.log2(n+1))*8 + 16;
+        if(formula === 'O(n)') val = n * (parseInt(elems.elemSize.value,10)||8);
+        if(formula === 'O(n log n)') val = n * Math.ceil(Math.log2(n+1)) * (parseInt(elems.elemSize.value,10)||8);
+        if(formula === 'O(n^2)') val = n*n*(parseInt(elems.elemSize.value,10)||1);
+      }
+      out.push(`${n}\t${Math.round(val)}`);
+    }
+    elems.estTable.textContent = out.join('\n');
+  }
+
+  // UI wiring
+  elems.nSlider.addEventListener('input', ()=>{ elems.nVal.value = elems.nSlider.value; });
+  elems.nVal.addEventListener('input', ()=>{ elems.nSlider.value = elems.nVal.value; });
+
+  elems.generateBtn.addEventListener('click', ()=>{ resetState(); generateEventsForAlgorithm(elems.algo.value); });
+  elems.stepBtn.addEventListener('click', ()=>{ stepForward(); });
+  elems.backBtn.addEventListener('click', ()=>{ stepBack(); });
+  elems.playBtn.addEventListener('click', ()=>{ play(); });
+  elems.pauseBtn.addEventListener('click', ()=>{ pause(); });
+  elems.resetBtn.addEventListener('click', ()=>{ reset(); });
+  elems.runBtn.addEventListener('click', ()=>{ runAll(); });
+  elems.randomizeBtn.addEventListener('click', ()=>{
+    elems.nVal.value = Math.floor(Math.random()*120)+1;
+    elems.nSlider.value = elems.nVal.value;
+    elems.elemSize.value = [4,8,16][Math.floor(Math.random()*3)];
+    elems.ptrSize.value = [4,8][Math.floor(Math.random()*2)];
+    elems.objOverhead.value = [8,12,16][Math.floor(Math.random()*3)];
+  });
+
+  elems.manualAllocBtn.addEventListener('click', manualAlloc);
+  elems.manualFreeBtn.addEventListener('click', manualFreeLast);
+
+  elems.loadScriptBtn.addEventListener('click', loadScript);
+  elems.runScriptBtn.addEventListener('click', runScript);
+  elems.stepScriptBtn.addEventListener('click', stepScript);
+
+  elems.inspectBtn.addEventListener('click', ()=>{
+    const s = parseInt(elems.timelineSlider.value,10) || 0;
+    rebuildUpToStep(s-1);
+    state.step = s;
+    elems.stepCounter.textContent = state.step;
+    elems.timelineSlider.value = state.step;
+  });
+
+  elems.timelineSlider.addEventListener('input', ()=>{
+    const s = parseInt(elems.timelineSlider.value,10) || 0;
+    rebuildUpToStep(s-1);
+    state.step = s;
+    elems.stepCounter.textContent = state.step;
+  });
+
+  elems.estimateBtn.addEventListener('click', estimate);
+
+  // initial reset
+  resetState();
+
+  // populate initial algorithm events
+  generateEventsForAlgorithm(elems.algo.value);
+
+  elems.algo.addEventListener('change', ()=>{ resetState(); generateEventsForAlgorithm(elems.algo.value); });
+
+  // expose some debug functions to window for power users (console)
+  window.SpaceSim = {
+    state, applyEvent, rebuildUpToStep, runGC, pushEvent, parseScript
+  };
+
+  // Final update UI
+  updateEventsLog();
+  computeTotals();
+
+})();
+</script>
+</body>
+</html>

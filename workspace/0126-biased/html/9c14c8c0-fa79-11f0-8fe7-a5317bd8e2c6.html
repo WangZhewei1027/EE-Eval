@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Dynamic Programming Interactive Playground</title>
+<style>
+/* Intentionally minimal: keep plain black text on white background, minimal spacing */
+body { margin: 10px; font-family: Arial, Helvetica, sans-serif; color: black; background: white; }
+section { margin-bottom: 12px; }
+label { margin-right: 6px; }
+input[type="text"], textarea { width: 100%; box-sizing: border-box; }
+textarea { height: 80px; }
+button { margin-right: 6px; margin-top: 6px; }
+.small { width: 60px; display: inline-block; }
+.code { font-family: monospace; white-space: pre-wrap; background: #fff; border: 1px solid #ddd; padding: 6px; }
+.table-wrap { overflow:auto; max-height:300px; border: 1px solid #ddd; padding: 6px; }
+.log { max-height: 150px; overflow:auto; border: 1px solid #ddd; padding: 6px; background: #fff; }
+.stack { max-height: 150px; overflow:auto; border: 1px solid #ddd; padding: 6px; background: #fff; }
+.controls { margin-bottom:8px; }
+.small-input { width: 140px; display:inline-block; }
+.inline { display:inline-block; vertical-align: middle; margin-right:8px; }
+.candidate-btn { margin-right:4px; margin-top:4px; display:inline-block; }
+.notice { font-size: 0.9em; color: black; }
+</style>
+</head>
+<body>
+
+<h2>Dynamic Programming Interactive Playground</h2>
+
+<section>
+  <div class="controls">
+    <label for="algo">Algorithm:</label>
+    <select id="algo">
+      <option value="knapsack">0/1 Knapsack (bottom-up)</option>
+      <option value="edit">Edit Distance (bottom-up)</option>
+      <option value="lis">Longest Increasing Subsequence (O(n^2) bottom-up)</option>
+      <option value="coin">Coin Change (min coins, bottom-up)</option>
+      <option value="fib">Fibonacci (top-down memoized)</option>
+    </select>
+
+    <label for="mode">Mode:</label>
+    <select id="mode">
+      <option value="bottom-up">bottom-up</option>
+      <option value="top-down">top-down (where available)</option>
+    </select>
+
+    <label for="manualChoice">Manual choices:</label>
+    <input type="checkbox" id="manualChoice" checked>
+
+    <label for="showRec">Show recursion tree:</label>
+    <input type="checkbox" id="showRec">
+
+    <label for="autoBack">Auto backtrack after fill:</label>
+    <input type="checkbox" id="autoBack">
+  </div>
+
+  <div id="inputArea">
+    <!-- dynamic inputs per algorithm -->
+  </div>
+
+  <div style="margin-top:6px;">
+    <button id="initBtn">Initialize</button>
+    <button id="stepBtn">Step</button>
+    <button id="runBtn">Run</button>
+    <button id="pauseBtn" disabled>Pause</button>
+    <button id="resetBtn">Reset</button>
+    <button id="randomBtn">Randomize</button>
+    <label>Speed(ms):</label>
+    <input type="range" id="speed" min="50" max="2000" value="400">
+    <span id="speedVal">400</span>
+  </div>
+
+  <div style="margin-top:8px;">
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+    <button id="saveBtn">Export State</button>
+    <button id="loadBtn">Load State</button>
+    <button id="exportJSON">Export Snapshot JSON</button>
+  </div>
+
+</section>
+
+<section>
+  <div>
+    <strong>Problem / Input</strong>
+    <div id="problemDisplay" class="code"></div>
+  </div>
+</section>
+
+<section>
+  <div style="display:flex; gap:12px; align-items:flex-start;">
+    <div style="flex:1;">
+      <strong>DP Table / Memo</strong>
+      <div id="tablePane" class="table-wrap"></div>
+    </div>
+
+    <div style="width:320px;">
+      <div><strong>Recursion Stack</strong></div>
+      <div id="stackPane" class="stack"></div>
+
+      <div style="margin-top:8px;"><strong>Memoization Map / Aux</strong></div>
+      <div id="memoPane" class="table-wrap" style="max-height:150px;"></div>
+
+      <div style="margin-top:8px;"><strong>Backtracking Controls</strong></div>
+      <div>
+        <button id="startBackBtn">Start Backtracking</button>
+        <button id="backStepBtn">Backtrack Step</button>
+        <button id="endBackBtn">End Backtracking</button>
+        <div id="backInfo" class="notice"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Operation / Explanation</strong>
+    <div id="opInfo" class="code"></div>
+  </div>
+  <div style="margin-top:6px;">
+    <strong>Candidates (when a choice is possible)</strong>
+    <div id="candidates"></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Logs (click to jump to snapshot)</strong>
+    <div id="logPane" class="log"></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Complexity / Analysis</strong>
+    <div id="analysis" class="code"></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <strong>Save/Load Text</strong>
+    <textarea id="saveLoadArea" placeholder="Saved JSON will appear here or paste JSON to load"></textarea>
+  </div>
+</section>
+
+<script>
+(function(){
+  // Minimal styling used, heavy interactivity below.
+  // State and utilities
+  const state = {
+    algorithm: 'knapsack',
+    mode: 'bottom-up',
+    manualChoice: true,
+    showRecursion: false,
+    autoBack: true,
+    input: {},
+    dp: null,
+    dpMeta: null, // metadata for visualization depending on algo
+    memo: {},
+    stack: [],
+    operations: [], // queue for bottom-up or list to step through
+    opIndex: 0,
+    running: false,
+    runInterval: null,
+    speed: 400,
+    history: [], // snapshots
+    historyIndex: -1,
+    logs: [],
+    backtrack: {active:false, path:[], pos:null}
+  };
+
+  // DOM
+  const algoEl = document.getElementById('algo');
+  const modeEl = document.getElementById('mode');
+  const manualChoiceEl = document.getElementById('manualChoice');
+  const showRecEl = document.getElementById('showRec');
+  const autoBackEl = document.getElementById('autoBack');
+  const inputArea = document.getElementById('inputArea');
+  const initBtn = document.getElementById('initBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const runBtn = document.getElementById('runBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const randomBtn = document.getElementById('randomBtn');
+  const speedEl = document.getElementById('speed');
+  const speedVal = document.getElementById('speedVal');
+  const tablePane = document.getElementById('tablePane');
+  const memoPane = document.getElementById('memoPane');
+  const stackPane = document.getElementById('stackPane');
+  const opInfo = document.getElementById('opInfo');
+  const candidatesPane = document.getElementById('candidates');
+  const logPane = document.getElementById('logPane');
+  const problemDisplay = document.getElementById('problemDisplay');
+  const undoBtn = document.getElementById('undoBtn');
+  const redoBtn = document.getElementById('redoBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const loadBtn = document.getElementById('loadBtn');
+  const saveLoadArea = document.getElementById('saveLoadArea');
+  const exportJSON = document.getElementById('exportJSON');
+  const backStartBtn = document.getElementById('startBackBtn');
+  const backStepBtn = document.getElementById('backStepBtn');
+  const backEndBtn = document.getElementById('endBackBtn');
+  const backInfo = document.getElementById('backInfo');
+  const analysis = document.getElementById('analysis');
+
+  // Dynamic input elements
+  function renderInputArea() {
+    const algo = algoEl.value;
+    inputArea.innerHTML = '';
+    let html = '';
+    if (algo === 'knapsack') {
+      html = `
+        <div>
+          <label>Weights (comma separated):</label>
+          <input id="weights" type="text" value="2,3,4,5">
+          <label>Values (comma separated):</label>
+          <input id="values" type="text" value="3,4,5,6">
+          <label>Capacity:</label>
+          <input id="capacity" type="number" value="8" class="small-input">
+        </div>
+      `;
+    } else if (algo === 'edit') {
+      html = `
+        <div>
+          <label>String A:</label>
+          <input id="s1" type="text" value="kitten">
+          <label>String B:</label>
+          <input id="s2" type="text" value="sitting">
+        </div>
+      `;
+    } else if (algo === 'lis') {
+      html = `
+        <div>
+          <label>Sequence (comma separated):</label>
+          <input id="seq" type="text" value="3,10,2,1,20">
+        </div>
+      `;
+    } else if (algo === 'coin') {
+      html = `
+        <div>
+          <label>Coins (comma separated):</label>
+          <input id="coins" type="text" value="1,3,4">
+          <label>Target:</label>
+          <input id="target" type="number" value="6" class="small-input">
+        </div>
+      `;
+    } else if (algo === 'fib') {
+      html = `
+        <div>
+          <label>n (integer):</label>
+          <input id="nval" type="number" value="10" class="small-input">
+        </div>
+      `;
+    }
+    inputArea.innerHTML = html;
+    // Adjust mode availability (some algorithms only bottom-up or top-down)
+    if (algo === 'fib') {
+      modeEl.value = 'top-down';
+      modeEl.querySelector('option[value="bottom-up"]') && (modeEl.querySelector('option[value="bottom-up"]').disabled = true);
+      modeEl.querySelector('option[value="top-down"]').disabled = false;
+    } else {
+      modeEl.querySelector('option[value="bottom-up"]') && (modeEl.querySelector('option[value="bottom-up"]').disabled = false);
+      modeEl.querySelector('option[value="top-down"]') && (modeEl.querySelector('option[value="top-down"]').disabled = false);
+    }
+    updateAnalysis();
+  }
+
+  function updateAnalysis() {
+    const algo = algoEl.value;
+    let text = '';
+    if (algo === 'knapsack') {
+      const weights = (document.getElementById('weights') && document.getElementById('weights').value) || '';
+      const vals = (document.getElementById('values') && document.getElementById('values').value) || '';
+      const cap = (document.getElementById('capacity') && +document.getElementById('capacity').value) || 0;
+      const n = weights ? weights.split(',').filter(s=>s.trim()!=='').length : '?';
+      text = `0/1 Knapsack - bottom-up DP with table size (n+1) x (W+1). Typical time O(n * W), space O(n * W).\nn = ${n}, W = ${cap}\nEstimated operations: ~${n} * ${cap}`;
+    } else if (algo === 'edit') {
+      const s1 = document.getElementById('s1') && document.getElementById('s1').value || '';
+      const s2 = document.getElementById('s2') && document.getElementById('s2').value || '';
+      const m = s1.length, n = s2.length;
+      text = `Edit Distance - bottom-up DP filling (m+1) x (n+1) table. Time O(m * n), space O(m * n).\nm = ${m}, n = ${n}\nEstimated operations: ~${m * n}`;
+    } else if (algo === 'lis') {
+      const seq = document.getElementById('seq') && document.getElementById('seq').value || '';
+      const n = seq ? seq.split(',').filter(s=>s.trim()!=='').length : '?';
+      text = `Longest Increasing Subsequence (O(n^2) DP) - dp[i] = 1 + max(dp[j]) over j<i. Time O(n^2), space O(n).\nn = ${n}\nEstimated operations: ~n^2`;
+    } else if (algo === 'coin') {
+      const coins = document.getElementById('coins') && document.getElementById('coins').value || '';
+      const target = document.getElementById('target') && +document.getElementById('target').value || '?';
+      text = `Coin Change (min coins) - bottom-up dp over amounts 0..target. Time O(target * numCoins), space O(target).\nTarget = ${target}, coins = ${coins}\nEstimated operations: ~${target} * numCoins`;
+    } else if (algo === 'fib') {
+      const n = document.getElementById('nval') && +document.getElementById('nval').value || '?';
+      text = `Fibonacci - top-down memoized. Without memo would be exponential, with memo O(n) time and O(n) space.\nn = ${n}\nEstimated operations: ~n (with memo)`;
+    }
+    analysis.textContent = text;
+  }
+
+  algoEl.addEventListener('change', ()=>{ renderInputArea(); saveSnapshot('algorithm change'); });
+  modeEl.addEventListener('change', ()=>{ state.mode = modeEl.value; saveSnapshot('mode change'); });
+  manualChoiceEl.addEventListener('change', ()=>{ state.manualChoice = manualChoiceEl.checked; saveSnapshot('manualChoice change'); });
+  showRecEl.addEventListener('change', ()=>{ state.showRecursion = showRecEl.checked; renderStack(); });
+  autoBackEl.addEventListener('change', ()=>{ state.autoBack = autoBackEl.checked; saveSnapshot('autoBack change'); });
+  speedEl.addEventListener('input', ()=>{ state.speed = +speedEl.value; speedVal.textContent = speedEl.value; });
+  inputArea.addEventListener('input', updateAnalysis);
+  // Initialize defaults
+  renderInputArea();
+
+  // Utility: deep copy state for snapshots
+  function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function pushOp(op) {
+    state.operations.push(op);
+  }
+
+  // Snapshotting and history
+  function snapshot(label) {
+    const s = {
+      label: label || ('step ' + state.opIndex),
+      state: {
+        algorithm: state.algorithm,
+        mode: state.mode,
+        input: clone(state.input),
+        dp: clone(state.dp),
+        dpMeta: clone(state.dpMeta),
+        memo: clone(state.memo),
+        stack: clone(state.stack),
+        operations: clone(state.operations),
+        opIndex: state.opIndex,
+        backtrack: clone(state.backtrack)
+      }
+    };
+    return s;
+  }
+
+  function saveSnapshot(reason) {
+    // Trim redo history
+    if (state.historyIndex < state.history.length - 1) {
+      state.history = state.history.slice(0, state.historyIndex + 1);
+    }
+    const s = snapshot(reason);
+    state.history.push(s);
+    state.historyIndex = state.history.length - 1;
+    addLog(reason || 'snapshot');
+    renderLogs();
+  }
+
+  function restoreSnapshot(index) {
+    if (index < 0 || index >= state.history.length) return;
+    const s = state.history[index].state;
+    state.algorithm = s.algorithm;
+    state.mode = s.mode;
+    state.input = clone(s.input);
+    state.dp = clone(s.dp);
+    state.dpMeta = clone(s.dpMeta);
+    state.memo = clone(s.memo);
+    state.stack = clone(s.stack);
+    state.operations = clone(s.operations);
+    state.opIndex = s.opIndex;
+    state.backtrack = clone(s.backtrack);
+    state.historyIndex = index;
+    renderAll();
+  }
+
+  function addLog(msg) {
+    const idx = state.historyIndex;
+    const stamp = new Date().toLocaleTimeString();
+    const label = `${stamp} - ${msg} (snapshot ${idx})`;
+    state.logs.push({msg: label, idx});
+    if (state.logs.length > 500) state.logs.shift();
+  }
+
+  function renderLogs() {
+    logPane.innerHTML = '';
+    state.logs.slice().reverse().forEach(l => {
+      const btn = document.createElement('div');
+      btn.textContent = l.msg;
+      btn.style.cursor = 'pointer';
+      btn.addEventListener('click', ()=>{ restoreSnapshot(l.idx); });
+      logPane.appendChild(btn);
+    });
+  }
+
+  // Renderers
+  function renderProblemDisplay() {
+    const algo = state.algorithm;
+    let txt = '';
+    if (algo === 'knapsack') {
+      txt = `Knapsack\nWeights: ${state.input.weights}\nValues: ${state.input.values}\nCapacity: ${state.input.capacity}`;
+    } else if (algo === 'edit') {
+      txt = `Edit Distance\nA: "${state.input.s1}"\nB: "${state.input.s2}"`;
+    } else if (algo === 'lis') {
+      txt = `LIS\nSequence: [${state.input.seq}]`;
+    } else if (algo === 'coin') {
+      txt = `Coin Change\nCoins: [${state.input.coins}]\nTarget: ${state.input.target}`;
+    } else if (algo === 'fib') {
+      txt = `Fibonacci\nn = ${state.input.n}`;
+    }
+    problemDisplay.textContent = txt;
+  }
+
+  function renderTable() {
+    tablePane.innerHTML = '';
+    if (!state.dp) return;
+    const algo = state.algorithm;
+    if (algo === 'knapsack' || algo === 'edit') {
+      // 2D table
+      const rows = state.dp.length, cols = state.dp[0].length;
+      const table = document.createElement('table');
+      table.border = 1;
+      table.cellPadding = 6;
+      for (let i=0;i<rows;i++) {
+        const tr = document.createElement('tr');
+        for (let j=0;j<cols;j++) {
+          const td = document.createElement('td');
+          td.textContent = state.dp[i][j] === null ? '' : state.dp[i][j];
+          td.style.cursor = 'pointer';
+          td.addEventListener('click', ()=>{ editCell(i,j); });
+          // highlight current op target
+          const currentOp = state.operations[state.opIndex];
+          if (currentOp && currentOp.type === 'computeCell' && currentOp.i === i && currentOp.j === j) {
+            td.style.fontWeight = 'bold';
+          }
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      tablePane.appendChild(table);
+    } else if (algo === 'lis' || algo === 'coin') {
+      // 1D dp shown as table of cells
+      const table = document.createElement('table');
+      table.border = 1;
+      table.cellPadding = 6;
+      const tr = document.createElement('tr');
+      if (algo === 'coin') {
+        for (let a=0;a<state.dp.length;a++) {
+          const td = document.createElement('td');
+          td.textContent = state.dp[a] === null ? '∞' : state.dp[a];
+          td.style.cursor = 'pointer';
+          td.addEventListener('click', ()=>{ editCell(a, null); });
+          const currentOp = state.operations[state.opIndex];
+          if (currentOp && currentOp.type === 'computeCell' && currentOp.i === a) td.style.fontWeight='bold';
+          tr.appendChild(td);
+        }
+      } else { // lis
+        for (let i=0;i<state.dp.length;i++) {
+          const td = document.createElement('td');
+          td.textContent = state.dp[i] === null ? '' : state.dp[i];
+          td.style.cursor = 'pointer';
+          td.addEventListener('click', ()=>{ editCell(i, null); });
+          const currentOp = state.operations[state.opIndex];
+          if (currentOp && currentOp.type === 'computeCell' && currentOp.i === i) td.style.fontWeight='bold';
+          tr.appendChild(td);
+        }
+      }
+      table.appendChild(tr);
+      tablePane.appendChild(table);
+      // For lis show original sequence below
+      const meta = document.createElement('div');
+      meta.textContent = 'Sequence: [' + state.dpMeta.seq.join(', ') + ']';
+      tablePane.appendChild(meta);
+    } else if (algo === 'fib') {
+      // show memo map only
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(state.memo, null, 2);
+      tablePane.appendChild(pre);
+    }
+  }
+
+  function renderMemo() {
+    memoPane.innerHTML = '';
+    if (!state.memo || Object.keys(state.memo).length === 0) {
+      memoPane.textContent = '(empty)';
+    } else {
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(state.memo, null, 2);
+      memoPane.appendChild(pre);
+    }
+  }
+
+  function renderStack() {
+    stackPane.innerHTML = '';
+    if (state.showRecursion && state.stack && state.stack.length>0) {
+      state.stack.slice().reverse().forEach((frame, idx) => {
+        const div = document.createElement('div');
+        div.textContent = JSON.stringify(frame);
+        stackPane.appendChild(div);
+      });
+    } else {
+      stackPane.textContent = '(not shown)';
+    }
+  }
+
+  function renderOpInfo(op) {
+    if (!op) { opInfo.textContent = '(no current operation)'; return; }
+    let s = 'Operation: ' + op.type + '\n';
+    if (op.type === 'computeCell') {
+      s += `Computing cell: ${opLabel(op)}\n`;
+      if (op.candidates) {
+        s += `Candidates:\n` + op.candidates.map(c=>` - ${c.label}: ${c.value}`).join('\n');
+      }
+    } else if (op.type === 'call') {
+      s += `Function call: ${op.func}(${op.args.join(',')})\n`;
+      s += `Stack depth: ${state.stack.length}\n`;
+    } else if (op.type === 'memoHit') {
+      s += `Memo hit for key ${op.key}: value=${op.value}\n`;
+    } else if (op.type === 'memoStore') {
+      s += `Memo store ${op.key} = ${op.value}\n`;
+    }
+    opInfo.textContent = s;
+  }
+
+  function opLabel(op) {
+    const algo = state.algorithm;
+    if (algo === 'knapsack' || algo === 'edit') return `(${op.i}, ${op.j})`;
+    if (algo === 'lis') return `(${op.i})`;
+    if (algo === 'coin') return `(amount ${op.i})`;
+    return JSON.stringify(op);
+  }
+
+  // Edit cell manually
+  function editCell(i, j) {
+    const algo = state.algorithm;
+    const promptVal = prompt('Enter new value (use blank for null/∞):', (j===null ? state.dp[i] : state.dp[i][j]));
+    if (promptVal === null) return;
+    let val = promptVal.trim();
+    if (val === '') {
+      if (j===null) state.dp[i] = null; else state.dp[i][j] = null;
+    } else {
+      const num = Number(val);
+      if (!isNaN(num)) {
+        if (j===null) state.dp[i] = num; else state.dp[i][j] = num;
+      } else {
+        // keep as string
+        if (j===null) state.dp[i] = val; else state.dp[i][j] = val;
+      }
+    }
+    saveSnapshot('manual edit cell');
+    renderAll();
+  }
+
+  // Core: initialize operations based on algorithm and inputs
+  function initEngine() {
+    state.algorithm = algoEl.value;
+    state.mode = modeEl.value;
+    state.manualChoice = manualChoiceEl.checked;
+    state.showRecursion = showRecEl.checked;
+    state.autoBack = autoBackEl.checked;
+
+    // parse inputs per algorithm
+    if (state.algorithm === 'knapsack') {
+      const wRaw = document.getElementById('weights').value;
+      const vRaw = document.getElementById('values').value;
+      const cap = +document.getElementById('capacity').value;
+      const weights = wRaw.split(',').map(s=>+s.trim()).filter(n=>!isNaN(n));
+      const values = vRaw.split(',').map(s=>+s.trim()).filter(n=>!isNaN(n));
+      state.input = {weights, values, capacity: cap};
+      // dp (n+1) x (W+1) initialized 0
+      const n = weights.length;
+      state.dp = Array.from({length:n+1}, ()=>Array.from({length:cap+1}, ()=>0));
+      state.dpMeta = {n, W: cap};
+      state.memo = {};
+      state.stack = [];
+      state.operations = [];
+      // bottom-up operations: compute cells for i=1..n, w=0..W
+      for (let i=1;i<=n;i++) {
+        for (let w=0;w<=cap;w++) {
+          state.operations.push({type:'computeCell', i:i, j:w});
+        }
+      }
+    } else if (state.algorithm === 'edit') {
+      const s1 = document.getElementById('s1').value || '';
+      const s2 = document.getElementById('s2').value || '';
+      state.input = {s1, s2};
+      const m = s1.length, n = s2.length;
+      state.dp = Array.from({length:m+1}, ()=>Array.from({length:n+1}, ()=>null));
+      // base cases will be set by operations: dp[i][0] = i and dp[0][j] = j
+      state.dpMeta = {m, n};
+      state.memo = {};
+      state.stack = [];
+      state.operations = [];
+      // push base row and col first
+      for (let i=0;i<=m;i++) state.operations.push({type:'computeCell', i:i, j:0});
+      for (let j=1;j<=n;j++) state.operations.push({type:'computeCell', i:0, j:j});
+      for (let i=1;i<=m;i++) {
+        for (let j=1;j<=n;j++) state.operations.push({type:'computeCell', i:i, j:j});
+      }
+    } else if (state.algorithm === 'lis') {
+      const seq = (document.getElementById('seq').value || '').split(',').map(s=>+s.trim()).filter(n=>!isNaN(n));
+      state.input = {seq};
+      state.dp = Array.from({length:seq.length}, ()=>null);
+      state.dpMeta = {seq};
+      state.memo = {};
+      state.stack = [];
+      state.operations = [];
+      // dp[0]..dp[n-1]
+      for (let i=0;i<seq.length;i++) {
+        state.operations.push({type:'computeCell', i:i});
+      }
+    } else if (state.algorithm === 'coin') {
+      const coins = (document.getElementById('coins').value || '').split(',').map(s=>+s.trim()).filter(n=>!isNaN(n));
+      const target = +document.getElementById('target').value;
+      state.input = {coins, target};
+      state.dp = Array.from({length: target+1}, ()=>null);
+      state.dp[0] = 0;
+      state.dpMeta = {coins, target};
+      state.memo = {};
+      state.stack = [];
+      state.operations = [];
+      for (let a=1;a<=target;a++) state.operations.push({type:'computeCell', i:a});
+    } else if (state.algorithm === 'fib') {
+      const n = +document.getElementById('nval').value;
+      state.input = {n};
+      state.memo = {};
+      state.stack = [];
+      state.operations = [];
+      state.dp = null;
+      state.dpMeta = {};
+      // top-down: initial call
+      state.operations.push({type:'call', func:'fib', args:[n], id:uniqueId()});
+    }
+
+    state.opIndex = 0;
+    state.running = false;
+    clearInterval(state.runInterval);
+    pauseBtn.disabled = true;
+    runBtn.disabled = false;
+    // push initial snapshot
+    saveSnapshot('initialize');
+    renderAll();
+  }
+
+  // Step processing
+  function step() {
+    if (state.opIndex >= state.operations.length) {
+      // finished
+      state.running = false;
+      clearInterval(state.runInterval);
+      pauseBtn.disabled = true;
+      runBtn.disabled = false;
+      renderOpInfo(null);
+      if (state.autoBack) {
+        startBacktrackingIfApplicable();
+      }
+      return;
+    }
+    const op = state.operations[state.opIndex];
+    // Handle op types
+    if (op.type === 'computeCell') {
+      handleComputeCell(op);
+    } else if (op.type === 'call') {
+      handleCall(op);
+    } else if (op.type === 'memoHit' || op.type === 'memoStore') {
+      // immediate effect
+      handleSimpleOp(op);
+    } else {
+      // unknown
+    }
+    // After processing, advance unless paused by manualChoice
+    renderAll();
+  }
+
+  function handleSimpleOp(op) {
+    if (op.type === 'memoStore') {
+      state.memo[op.key] = op.value;
+      addLog(`memo store ${op.key}=${op.value}`);
+    } else if (op.type === 'memoHit') {
+      // nothing to do
+    }
+    state.opIndex++;
+    saveSnapshot(op.type);
+  }
+
+  function handleCall(op) {
+    // top-down fibonacci supported
+    if (state.algorithm === 'fib') {
+      const n = op.args[0];
+      // if memo
+      if (n in state.memo) {
+        // memo hit
+        addLog(`memo hit fib(${n})=${state.memo[n]}`);
+        state.operations.splice(state.opIndex, 1, {type:'memoHit', key:n, value:state.memo[n]});
+        // next step will process memoHit
+        return;
+      }
+      // push frame to stack
+      state.stack.push({func:'fib', n, status:'entered'});
+      renderStack();
+      if (n <= 1) {
+        // return directly; store memo and produce memoStore op
+        state.operations.splice(state.opIndex, 1, {type:'memoStore', key:n, value:n});
+        return;
+      } else {
+        // replace current call by a sequence: call(n-1), call(n-2), store result (we will compute after children)
+        const storeId = uniqueId();
+        const newOps = [
+          {type:'call', func:'fib', args:[n-1], id:storeId},
+          {type:'call', func:'fib', args:[n-2], id:storeId},
+          {type:'computeFibStore', n:n, id:storeId} // will sum children and store in memo
+        ];
+        state.operations.splice(state.opIndex, 1, ...newOps);
+        return;
+      }
+    } else {
+      // unsupported call, skip
+      state.opIndex++;
+    }
+  }
+
+  function handleComputeCell(op) {
+    const algo = state.algorithm;
+    if (algo === 'knapsack') {
+      const i = op.i, w = op.j;
+      const weights = state.input.weights, values = state.input.values, cap = state.input.capacity;
+      // compute candidates from current dp
+      const exclude = state.dp[i-1][w];
+      const candidates = [{label:'exclude', value:exclude, meta:{from:'i-1,w'}}];
+      if (weights[i-1] <= w) {
+        const include = state.dp[i-1][w-weights[i-1]] + values[i-1];
+        candidates.push({label:`include item ${i-1}`, value: include, meta:{from:'i-1,w-wi'}})
+      }
+      op.candidates = candidates;
+      // if manualChoice: present choices and wait for user to pick
+      if (state.manualChoice) {
+        renderCandidates(op);
+        renderOpInfo(op);
+        // do not advance opIndex until user chooses
+        return;
+      } else {
+        // auto choose max
+        let best = candidates[0];
+        candidates.forEach(c=>{ if (c.value > best.value) best = c; });
+        state.dp[i][w] = best.value;
+        addLog(`computed dp[${i}][${w}] = ${best.value}`);
+        state.opIndex++;
+        saveSnapshot('computeCell auto');
+        return;
+      }
+    } else if (algo === 'edit') {
+      const i = op.i, j = op.j;
+      const s1 = state.input.s1, s2 = state.input.s2;
+      if (i === 0) {
+        state.dp[0][j] = j;
+        state.opIndex++;
+        saveSnapshot('base row');
+        return;
+      }
+      if (j === 0) {
+        state.dp[i][0] = i;
+        state.opIndex++;
+        saveSnapshot('base col');
+        return;
+      }
+      // candidates: if s1[i-1] === s2[j-1] -> dp[i-1][j-1], else min(replace, insert, delete)+1
+      const candidates = [];
+      if (s1[i-1] === s2[j-1]) {
+        candidates.push({label:'match', value: state.dp[i-1][j-1], meta:{type:'match'}});
+      } else {
+        // ensure neighbors exist (they should by ordering)
+        const replace = state.dp[i-1][j-1] + 1;
+        const insert = state.dp[i][j-1] + 1;
+        const remove = state.dp[i-1][j] + 1;
+        candidates.push({label:'replace', value: replace});
+        candidates.push({label:'insert', value: insert});
+        candidates.push({label:'delete', value: remove});
+      }
+      op.candidates = candidates;
+      if (state.manualChoice) {
+        renderCandidates(op);
+        renderOpInfo(op);
+        return;
+      } else {
+        // auto choose min
+        let best = candidates[0];
+        candidates.forEach(c=>{ if (c.value < best.value) best = c; });
+        state.dp[i][j] = best.value;
+        addLog(`dp[${i}][${j}] = ${best.value}`);
+        state.opIndex++;
+        saveSnapshot('compute edit auto');
+        return;
+      }
+    } else if (algo === 'lis') {
+      const i = op.i;
+      const seq = state.dpMeta.seq;
+      if (i === 0) {
+        state.dp[0] = 1;
+        state.opIndex++;
+        saveSnapshot('lis base');
+        return;
+      }
+      const candidates = [];
+      // default candidate: 1
+      let bestVal = 1;
+      candidates.push({label:'start', value:1});
+      for (let j=0;j<i;j++) {
+        if (seq[j] < seq[i]) {
+          const val = (state.dp[j] || 0) + 1;
+          candidates.push({label:`extend from ${j}`, value: val, meta:{from:j}});
+        }
+      }
+      op.candidates = candidates;
+      if (state.manualChoice) {
+        renderCandidates(op);
+        renderOpInfo(op);
+        return;
+      } else {
+        let best = candidates[0];
+        candidates.forEach(c=>{ if (c.value > best.value) best = c; });
+        state.dp[i] = best.value;
+        addLog(`dp[${i}] = ${best.value}`);
+        state.opIndex++;
+        saveSnapshot('lis auto');
+        return;
+      }
+    } else if (algo === 'coin') {
+      const a = op.i;
+      const coins = state.input.coins;
+      const candidates = [];
+      coins.forEach(c => {
+        if (a - c >= 0 && state.dp[a-c] != null) {
+          candidates.push({label:`use coin ${c}`, value: state.dp[a-c] + 1});
+        }
+      });
+      if (candidates.length === 0) {
+        state.dp[a] = null; // unreachable
+        state.opIndex++;
+        saveSnapshot('coin no candidates');
+        return;
+      }
+      op.candidates = candidates;
+      if (state.manualChoice) {
+        renderCandidates(op);
+        renderOpInfo(op);
+        return;
+      } else {
+        // auto choose min
+        let best = candidates[0];
+        candidates.forEach(c=>{ if (c.value < best.value) best = c; });
+        state.dp[a] = best.value;
+        addLog(`dp[${a}] = ${best.value}`);
+        state.opIndex++;
+        saveSnapshot('coin auto');
+        return;
+      }
+    } else {
+      state.opIndex++;
+    }
+  }
+
+  function renderCandidates(op) {
+    candidatesPane.innerHTML = '';
+    const algo = state.algorithm;
+    if (!op || !op.candidates) return;
+    op.candidates.forEach((c, idx) => {
+      const btn = document.createElement('button');
+      btn.textContent = `${c.label} => ${c.value}`;
+      btn.className = 'candidate-btn';
+      btn.addEventListener('click', ()=>{
+        applyCandidate(op, idx);
+      });
+      candidatesPane.appendChild(btn);
+    });
+    // also allow auto-select best
+    const autoBtn = document.createElement('button');
+    autoBtn.textContent = 'Auto-select best';
+    autoBtn.addEventListener('click', ()=>{ autoSelect(op); });
+    candidatesPane.appendChild(autoBtn);
+  }
+
+  function autoSelect(op) {
+    const algo = state.algorithm;
+    let bestIdx = 0;
+    if (algo === 'knapsack' || algo === 'lis') {
+      // maximize
+      for (let i=1;i<op.candidates.length;i++){
+        if (op.candidates[i].value > op.candidates[bestIdx].value) bestIdx = i;
+      }
+    } else {
+      // minimize (edit, coin)
+      for (let i=1;i<op.candidates.length;i++){
+        if (op.candidates[i].value < op.candidates[bestIdx].value) bestIdx = i;
+      }
+    }
+    applyCandidate(op, bestIdx);
+  }
+
+  function applyCandidate(op, idx) {
+    const c = op.candidates[idx];
+    const algo = state.algorithm;
+    if (algo === 'knapsack') {
+      state.dp[op.i][op.j] = c.value;
+    } else if (algo === 'edit') {
+      state.dp[op.i][op.j] = c.value;
+    } else if (algo === 'lis') {
+      state.dp[op.i] = c.value;
+    } else if (algo === 'coin') {
+      state.dp[op.i] = c.value;
+    }
+    addLog(`choice applied at ${opLabel(op)} => ${c.label} (${c.value})`);
+    state.opIndex++;
+    saveSnapshot('user choice');
+    candidatesPane.innerHTML = '';
+    // after applying, if the table is fully filled and autoBack enabled, start backtracking
+    if (state.opIndex >= state.operations.length) {
+      if (state.autoBack) startBacktrackingIfApplicable();
+    }
+    renderAll();
+  }
+
+  // Top-down fib compute store op handler
+  function handleComputeFibStore(op) {
+    const n = op.n;
+    // find the two memo values from previous calls (should be stored by memoStore)
+    const a = state.memo[n-1];
+    const b = state.memo[n-2];
+    if (typeof a === 'undefined' || typeof b === 'undefined') {
+      // not ready? This situation shouldn't happen with our op sequencing, but we'll handle by re-queueing
+      state.operations.push({type:'call', func:'fib', args:[n-1], id:op.id});
+      state.operations.push({type:'call', func:'fib', args:[n-2], id:op.id});
+      return;
+    }
+    const val = a + b;
+    // store in memo
+    state.memo[n] = val;
+    addLog(`fib(${n}) computed = ${val}`);
+    // remove the corresponding frames from stack if present
+    state.stack = state.stack.filter(f => !(f.func==='fib' && f.n===n && f.status==='entered'));
+    state.opIndex++;
+    saveSnapshot('fib store');
+  }
+
+  // Since computeFibStore is a custom type, integrate into step dispatcher
+  function dispatchStep() {
+    if (state.opIndex >= state.operations.length) {
+      // finished
+      state.running = false;
+      clearInterval(state.runInterval);
+      pauseBtn.disabled = true;
+      runBtn.disabled = false;
+      renderOpInfo(null);
+      if (state.autoBack) startBacktrackingIfApplicable();
+      return;
+    }
+    const op = state.operations[state.opIndex];
+    if (!op) return;
+    if (op.type === 'computeCell') {
+      handleComputeCell(op);
+    } else if (op.type === 'call') {
+      handleCall(op);
+    } else if (op.type === 'memoStore' || op.type === 'memoHit') {
+      handleSimpleOp(op);
+    } else if (op.type === 'computeFibStore') {
+      handleComputeFibStore(op);
+    } else {
+      // unknown
+      state.opIndex++;
+    }
+    renderAll();
+  }
+
+  // Exposed step function connected to button
+  stepBtn.addEventListener('click', ()=>{ dispatchStep(); });
+
+  // Run / Pause
+  runBtn.addEventListener('click', ()=>{ 
+    state.running = true;
+    runBtn.disabled = true;
+    pauseBtn.disabled = false;
+    state.runInterval = setInterval(()=> {
+      if (!state.running) return;
+      dispatchStep();
+      if (state.opIndex >= state.operations.length) { clearInterval(state.runInterval); state.running=false; runBtn.disabled=false; pauseBtn.disabled=true; }
+    }, state.speed);
+  });
+
+  pauseBtn.addEventListener('click', ()=>{ 
+    state.running = false;
+    clearInterval(state.runInterval);
+    runBtn.disabled = false;
+    pauseBtn.disabled = true;
+  });
+
+  // Initialize button
+  initBtn.addEventListener('click', ()=>{ initEngine(); });
+
+  // Reset
+  resetBtn.addEventListener('click', ()=>{ 
+    // clear everything
+    state.dp = null;
+    state.operations = [];
+    state.opIndex = 0;
+    state.memo = {};
+    state.stack = [];
+    state.running = false;
+    clearInterval(state.runInterval);
+    saveSnapshot('reset');
+    renderAll();
+  });
+
+  // Randomize
+  randomBtn.addEventListener('click', ()=>{ randomizeInput(); });
+
+  function randomizeInput() {
+    const algo = algoEl.value;
+    if (algo === 'knapsack') {
+      const n = Math.floor(Math.random()*6)+3;
+      const weights = Array.from({length:n}, ()=>Math.floor(Math.random()*8)+1);
+      const values = Array.from({length:n}, ()=>Math.floor(Math.random()*10)+1);
+      const cap = Math.max(5, Math.floor(weights.reduce((a,b)=>a+b,0)/2));
+      document.getElementById('weights').value = weights.join(',');
+      document.getElementById('values').value = values.join(',');
+      document.getElementById('capacity').value = cap;
+    } else if (algo === 'edit') {
+      const presets = [['kitten','sitting'], ['intention','execution'], ['horse','ros']];
+      const p = presets[Math.floor(Math.random()*presets.length)];
+      document.getElementById('s1').value = p[0];
+      document.getElementById('s2').value = p[1];
+    } else if (algo === 'lis') {
+      const n = Math.floor(Math.random()*8)+5;
+      const seq = Array.from({length:n}, ()=>Math.floor(Math.random()*20));
+      document.getElementById('seq').value = seq.join(',');
+    } else if (algo === 'coin') {
+      const coins = [1,3,4];
+      document.getElementById('coins').value = coins.join(',');
+      document.getElementById('target').value = Math.floor(Math.random()*10)+5;
+    } else if (algo === 'fib') {
+      document.getElementById('nval').value = Math.floor(Math.random()*16)+2;
+    }
+    updateAnalysis();
+    saveSnapshot('randomize input');
+  }
+
+  // Undo / Redo
+  undoBtn.addEventListener('click', ()=>{ if (state.historyIndex > 0) restoreSnapshot(state.historyIndex-1); });
+  redoBtn.addEventListener('click', ()=>{ if (state.historyIndex < state.history.length - 1) restoreSnapshot(state.historyIndex+1); });
+
+  // Save / Load
+  saveBtn.addEventListener('click', ()=>{ 
+    const s = state.history[state.historyIndex];
+    if (!s) { alert('No snapshot to export'); return; }
+    saveLoadArea.value = JSON.stringify(s);
+  });
+
+  loadBtn.addEventListener('click', ()=>{ 
+    try {
+      const s = JSON.parse(saveLoadArea.value);
+      if (s && s.state) {
+        // push loaded as new snapshot
+        state.history.push(s);
+        state.historyIndex = state.history.length - 1;
+        restoreSnapshot(state.historyIndex);
+        addLog('loaded snapshot from text');
+        renderLogs();
+      } else {
+        alert('Invalid format (expected snapshot object with state)'). 
+        toString();
+      }
+    } catch (e) {
+      alert('Failed to parse JSON: ' + e.message);
+    }
+  });
+
+  exportJSON.addEventListener('click', ()=> {
+    const s = state.history[state.historyIndex];
+    if (!s) { alert('No snapshot'); return; }
+    const data = JSON.stringify(s.state);
+    const blob = new Blob([data], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'dp_snapshot.json'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // Backtracking
+  backStartBtn.addEventListener('click', ()=>{ startBacktrackingIfApplicable(true); });
+  backStepBtn.addEventListener('click', ()=>{ backtrackStep(); });
+  backEndBtn.addEventListener('click', ()=>{ endBacktracking(); });
+
+  function startBacktrackingIfApplicable(force) {
+    // create backtracking path depending on algorithm
+    if (state.backtrack.active && !force) return;
+    const algo = state.algorithm;
+    state.backtrack = {active:true, path:[], pos:0};
+    if (algo === 'knapsack') {
+      const n = state.dpMeta.n, W = state.dpMeta.W;
+      let i = n, w = W;
+      const path = [];
+      while (i>0) {
+        const val = state.dp[i][w];
+        if (val === state.dp[i-1][w]) {
+          path.push({i, w, take:false});
+          i = i-1;
+        } else {
+          path.push({i, w, take:true});
+          w = w - state.input.weights[i-1];
+          i = i-1;
+        }
+      }
+      state.backtrack.path = path;
+      state.backtrack.pos = 0;
+      backInfo.textContent = `Backtracking prepared: ${path.length} steps.`;
+      renderAll();
+    } else if (algo === 'edit') {
+      // reconstruct one possible alignment by walking from bottom-right
+      const m = state.dpMeta.m, n = state.dpMeta.n;
+      let i = m, j = n;
+      const path = [];
+      while (i>0 || j>0) {
+        if (i>0 && j>0 && state.input.s1[i-1] === state.input.s2[j-1]) {
+          path.push({i,j,action:'match'});
+          i--; j--;
+        } else {
+          // choose minimal neighbor
+          const options = [];
+          if (i>0 && j>0) options.push({act:'replace', val:state.dp[i-1][j-1]});
+          if (j>0) options.push({act:'insert', val:state.dp[i][j-1]});
+          if (i>0) options.push({act:'delete', val:state.dp[i-1][j]});
+          options.sort((a,b)=>a.val - b.val);
+          const choice = options[0].act;
+          path.push({i,j,action:choice});
+          if (choice === 'replace') { i--; j--; }
+          else if (choice === 'insert') { j--; }
+          else { i--; }
+        }
+      }
+      state.backtrack.path = path;
+      state.backtrack.pos = 0;
+      backInfo.textContent = `Backtracking prepared: ${path.length} steps.`;
+    } else if (algo === 'lis') {
+      // find index of max dp
+      let bestIdx = 0, bestVal = -Infinity;
+      for (let i=0;i<state.dp.length;i++) {
+        if ((state.dp[i] || 0) > bestVal) { bestVal = state.dp[i] || 0; bestIdx = i; }
+      }
+      const seq = state.dpMeta.seq;
+      // naive backtracking: find j<i with dp[j] = dp[i]-1 and seq[j] < seq[i]
+      const path = [];
+      let i = bestIdx;
+      let curVal = state.dp[i];
+      while (i >= 0 && curVal > 0) {
+        path.push({i, val:curVal});
+        // find previous
+        let found = false;
+        for (let j = i-1; j>=0; j--) {
+          if ((state.dp[j] || 0) === curVal - 1 && seq[j] < seq[i]) {
+            i = j; curVal = state.dp[j]; found = true; break;
+          }
+        }
+        if (!found) break;
+      }
+      state.backtrack.path = path;
+      state.backtrack.pos = 0;
+      backInfo.textContent = `Backtracking prepared: ${path.length} steps.`;
+    } else if (algo === 'coin') {
+      // reconstruct coins used for target
+      let a = state.input.target;
+      const path = [];
+      while (a > 0) {
+        let found = false;
+        for (let c of state.input.coins) {
+          if (a-c >= 0 && state.dp[a-c] != null && state.dp[a] === state.dp[a-c] + 1) {
+            path.push({amount:a, coin:c});
+            a = a-c;
+            found = true;
+            break;
+          }
+        }
+        if (!found) break;
+      }
+      state.backtrack.path = path;
+      state.backtrack.pos = 0;
+      backInfo.textContent = `Backtracking prepared: ${path.length} steps.`;
+    } else if (algo === 'fib') {
+      backInfo.textContent = `Fibonacci memo keys: ${Object.keys(state.memo).join(', ')}`;
+      state.backtrack = {active:true, path: Object.keys(state.memo).map(k=>({k, v: state.memo[k]})), pos:0};
+    } else {
+      backInfo.textContent = 'Backtracking not available for this algorithm.';
+      state.backtrack.active = false;
+    }
+    renderAll();
+  }
+
+  function backtrackStep() {
+    if (!state.backtrack.active || !state.backtrack.path) { backInfo.textContent = 'No backtracking prepared.'; return; }
+    const pos = state.backtrack.pos;
+    if (pos >= state.backtrack.path.length) { backInfo.textContent = 'Backtracking complete.'; return; }
+    const step = state.backtrack.path[pos];
+    // show highlight in opInfo and log
+    addLog('backtrack step: ' + JSON.stringify(step));
+    state.backtrack.pos++;
+    backInfo.textContent = `Backtracking step ${state.backtrack.pos}/${state.backtrack.path.length}`;
+    saveSnapshot('backtrack step');
+    renderAll();
+  }
+
+  function endBacktracking() {
+    state.backtrack = {active:false, path:[], pos:0};
+    backInfo.textContent = '';
+    saveSnapshot('end backtrack');
+    renderAll();
+  }
+
+  // Helpers
+  function uniqueId() { return Math.random().toString(36).slice(2,10); }
+
+  // Render everything
+  function renderAll() {
+    // update controls to reflect state
+    algoEl.value = state.algorithm;
+    modeEl.value = state.mode;
+    manualChoiceEl.checked = state.manualChoice;
+    showRecEl.checked = state.showRecursion;
+    autoBackEl.checked = state.autoBack;
+    speedEl.value = state.speed;
+    speedVal.textContent = state.speed;
+    renderProblemDisplay();
+    renderTable();
+    renderMemo();
+    renderStack();
+    renderOpInfo(state.operations[state.opIndex]);
+    renderLogs();
+  }
+
+  // Start by initializing default engine
+  initEngine();
+
+  // Hook into some internal op types for dispatch
+  // We will intercept op types in the main dispatcher; ensure computeFibStore is handled
+  // For clarity, modify dispatchStep to call handleComputeFibStore for that type; already coded
+
+  // Expose some global functions for debugging (not necessary)
+  window.__dp_state = state;
+  window.__renderAll = renderAll;
+
+  // Extra: allow clicking table logs to restore snapshots already handled
+  // Finalize initial render
+  renderAll();
+
+  // Integrate special handling for computeFibStore in dispatchStep by injecting into operations array
+  // Modify operations to include computeFibStore type when created inside handleCall
+  // All set.
+
+})();
+</script>
+
+</body>
+</html>

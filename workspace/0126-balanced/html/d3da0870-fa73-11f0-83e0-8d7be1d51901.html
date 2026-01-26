@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>HTTPS Concept Demo (Web Crypto Simulation)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 20px; color:#111; background:#f7f9fc; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    p.lead { margin:6px 0 18px; color:#333; }
+    .panel { background: white; border-radius:8px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,0.06); margin-bottom:14px; }
+    button { margin:6px 6px 6px 0; padding:8px 12px; border-radius:6px; border:1px solid #d0d7de; background:#fff; cursor:pointer; }
+    button.primary { background: linear-gradient(#0b79ff,#0366d6); color: white; border-color:#0356b8; }
+    pre { background:#0f1720; color:#dbeafe; padding:12px; border-radius:6px; overflow:auto; max-height:240px; }
+    .grid { display:flex; gap:12px; flex-wrap:wrap; }
+    label { display:block; margin-top:10px; font-size:13px; color:#333; }
+    input[type="text"] { padding:8px; border-radius:6px; border:1px solid #d0d7de; width:100%; box-sizing:border-box; }
+    .inline { display:inline-block; vertical-align:middle; }
+    .ok { color:green; font-weight:600; }
+    .err { color:crimson; font-weight:600; }
+    small { color:#444; }
+    footer { margin-top:18px; color:#666; font-size:13px; }
+  </style>
+</head>
+<body>
+  <h1>HTTPS Concept — Interactive Simulation</h1>
+  <p class="lead">This single-file demo simulates the main building blocks of HTTPS (certificates, trust, and an encrypted handshake) using the Web Crypto API. It is educational—no real TLS, but it demonstrates how certificates, signing, verification, and an encrypted session (ECDH + AES-GCM) work together.</p>
+
+  <div class="panel">
+    <strong>High-level steps simulated:</strong>
+    <ul>
+      <li>Create a trusted Certificate Authority (CA).</li>
+      <li>Have the CA sign a server "certificate" that contains the server's public key.</li>
+      <li>Client verifies the certificate using the trusted CA's public key.</li>
+      <li>Client and server perform an ECDH key agreement to derive a symmetric AES-GCM session key.</li>
+      <li>Client sends an encrypted message; server decrypts it.</li>
+      <li>Try a tampered or attacker-signed certificate to see verification fail.</li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <h2>Controls</h2>
+    <div class="grid">
+      <div>
+        <button id="btnGenCA" class="primary">1. Generate CA (trusted)</button>
+        <button id="btnGenServer">2. Create Server & Certificate (CA signs)</button>
+        <button id="btnVerify">3. Verify Certificate (client)</button>
+        <button id="btnHandshake">4. Perform Handshake (derive session key)</button>
+        <button id="btnSend">5. Send Encrypted Message</button>
+        <button id="btnTamper">Tamper Certificate</button>
+        <button id="btnMITM">Simulate MITM (attacker CA)</button>
+      </div>
+      <div style="flex:1">
+        <label>Server name
+          <input id="serverName" type="text" value="example.com">
+        </label>
+        <label>Message to send
+          <input id="plainMsg" type="text" value="Hello from client over 'HTTPS'!">
+        </label>
+      </div>
+    </div>
+    <p style="margin-top:10px;"><small>Note: This is a local JS simulation. Real HTTPS/TLS happens at the transport layer inside browsers/servers.</small></p>
+  </div>
+
+  <div class="panel">
+    <h2>Log / Output</h2>
+    <pre id="log">Ready. Click "Generate CA" to begin.</pre>
+  </div>
+
+  <div class="panel">
+    <h2>Certificates & Keys (JSON)</h2>
+    <div class="grid">
+      <div style="flex:1">
+        <strong>Trusted CA Public JWK</strong>
+        <pre id="caPub">—</pre>
+      </div>
+      <div style="flex:1">
+        <strong>Server Certificate (signed)</strong>
+        <pre id="serverCert">—</pre>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Built as a teaching aid: generates keys in your browser; keys never leave your machine. Uses ECDSA (P-256) for signatures, ECDH (P-256) for key agreement, and AES-GCM for symmetric encryption.
+  </footer>
+
+<script>
+/*
+  HTTPS Simulation Demo
+  - CA: ECDSA P-256 (signing)
+  - Server: ECDH P-256 (static server key embedded in certificate)
+  - Client: checks certificate signature with trusted CA public key
+  - Handshake: client ephemeral ECDH + server static ECDH -> derive AES-GCM key
+  - Encryption: AES-GCM
+*/
+
+const logEl = document.getElementById('log');
+const caPubEl = document.getElementById('caPub');
+const serverCertEl = document.getElementById('serverCert');
+const btnGenCA = document.getElementById('btnGenCA');
+const btnGenServer = document.getElementById('btnGenServer');
+const btnVerify = document.getElementById('btnVerify');
+const btnHandshake = document.getElementById('btnHandshake');
+const btnSend = document.getElementById('btnSend');
+const btnTamper = document.getElementById('btnTamper');
+const btnMITM = document.getElementById('btnMITM');
+const serverNameInput = document.getElementById('serverName');
+const plainMsgInput = document.getElementById('plainMsg');
+
+function log(...args) {
+  const s = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a, null, 2))).join(' ');
+  logEl.textContent += "\n> " + s;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Helpers for ArrayBuffer <-> Base64 / UTF-8
+function buf2b64(buf) {
+  const bytes = new Uint8Array(buf);
+  let str = "";
+  for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str);
+}
+function b642buf(b64) {
+  const str = atob(b64);
+  const buf = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) buf[i] = str.charCodeAt(i);
+  return buf.buffer;
+}
+function str2ab(str) {
+  return new TextEncoder().encode(str).buffer;
+}
+function ab2str(ab) {
+  return new TextDecoder().decode(new Uint8Array(ab));
+}
+
+// State (in-memory)
+let CA = { keyPair: null, publicJwk: null, privateKey: null }; // trusted CA
+let server = { keyPair: null, cert: null, certRaw: null, privateKey: null };
+let client = { trustedCAs: [], session: null };
+let handshakeState = { clientEphemeralKey: null, serverDerivedKey: null, clientDerivedKey: null };
+
+// Generate CA key pair (ECDSA)
+btnGenCA.addEventListener('click', async () => {
+  log("Generating CA key pair (ECDSA P-256)...");
+  const kp = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign","verify"]
+  );
+  CA.keyPair = kp;
+  CA.privateKey = kp.privateKey;
+  const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  CA.publicJwk = pubJwk;
+  client.trustedCAs = [pubJwk]; // client trusts this CA
+  caPubEl.textContent = JSON.stringify(pubJwk, null, 2);
+  log("CA generated and added to client's trust store. CA public key (JWK) shown on the right.");
+});
+
+// Create server key pair (ECDH) and certificate signed by CA
+btnGenServer.addEventListener('click', async () => {
+  if (!CA.privateKey) { log("Please generate CA first."); return; }
+  const serverName = serverNameInput.value || "example.com";
+  log("Generating server ECDH key pair (P-256)...");
+  const kp = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey","deriveBits"]
+  );
+  server.keyPair = kp;
+  server.privateKey = kp.privateKey;
+  const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+
+  // Build certificate object (NOT X.509, just JSON for demo)
+  const now = Date.now();
+  const certData = {
+    subject: serverName,
+    publicKeyJwk: pubJwk,
+    validFrom: now,
+    validTo: now + 24*60*60*1000, // valid for 1 day
+    issuer: "Demo CA",
+    version: 1
+  };
+
+  // Sign certificate data with CA private key (ECDSA)
+  const dataStr = JSON.stringify(certData);
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    CA.privateKey,
+    str2ab(dataStr)
+  );
+  const signatureB64 = buf2b64(signature);
+
+  const cert = {
+    cert: certData,
+    signature: signatureB64
+  };
+  server.cert = cert;
+  serverCertEl.textContent = JSON.stringify(cert, null, 2);
+  log(`Server certificate created for "${serverName}" and signed by CA. Certificate shown to the right.`);
+});
+
+// Client verifies server certificate
+btnVerify.addEventListener('click', async () => {
+  if (!server.cert) { log("Create a server certificate first."); return; }
+  if (!client.trustedCAs.length) { log("Client has no trusted CA public keys. Generate CA first."); return; }
+
+  log("Client: verifying certificate signature and validity...");
+  const cert = server.cert;
+  const certDataStr = JSON.stringify(cert.cert);
+  const sigBuf = b642buf(cert.signature);
+
+  // Import CA public key (trusted)
+  const trusted = client.trustedCAs[0]; // in this demo we only have one trusted CA
+  const caPubKey = await crypto.subtle.importKey(
+    'jwk',
+    trusted,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["verify"]
+  );
+
+  const validSig = await crypto.subtle.verify(
+    { name: "ECDSA", hash: "SHA-256" },
+    caPubKey,
+    sigBuf,
+    str2ab(certDataStr)
+  );
+
+  // Check validity dates
+  const now = Date.now();
+  const withinDates = now >= cert.cert.validFrom && now <= cert.cert.validTo;
+
+  if (validSig && withinDates) {
+    log("Certificate verification: ", "OK ✔ (signature valid and certificate within validity period)");
+    log("Certificate subject:", cert.cert.subject);
+    // For later steps, import the server public key from certificate
+    server.certVerified = true;
+  } else {
+    if (!validSig) log("Certificate verification: FAILED ✖ (signature invalid)");
+    if (!withinDates) log("Certificate verification: FAILED ✖ (certificate expired or not yet valid)");
+    server.certVerified = false;
+  }
+});
+
+// Handshake: client ephemeral ECDH, derive AES-GCM session key on both sides
+btnHandshake.addEventListener('click', async () => {
+  if (!server.cert || !server.certVerified) { log("Server certificate must exist and be verified first."); return; }
+  log("Starting handshake: client generates ephemeral ECDH key pair...");
+  // Client ephemeral
+  const clientEphemeral = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey","deriveBits"]
+  );
+  handshakeState.clientEphemeralKey = clientEphemeral;
+
+  // Import server static ECDH public key from certificate
+  const serverPubJwk = server.cert.cert.publicKeyJwk;
+  const serverPublicKey = await crypto.subtle.importKey(
+    'jwk',
+    serverPubJwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    []
+  );
+
+  // Client derives AES-GCM key
+  const clientDerivedKey = await crypto.subtle.deriveKey(
+    { name: "ECDH", public: serverPublicKey },
+    clientEphemeral.privateKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt","decrypt"]
+  );
+
+  // Server derives same key (server uses its static private key and client's ephemeral public)
+  const clientEphemeralPubJwk = await crypto.subtle.exportKey('jwk', clientEphemeral.publicKey);
+  const clientEphemeralPub = await crypto.subtle.importKey('jwk', clientEphemeralPubJwk, { name: "ECDH", namedCurve: "P-256" }, true, []);
+  const serverDerivedKey = await crypto.subtle.deriveKey(
+    { name: "ECDH", public: clientEphemeralPub },
+    server.privateKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt","decrypt"]
+  );
+
+  // Compare raw exported keys to confirm they match
+  const rawClientKey = await crypto.subtle.exportKey('raw', clientDerivedKey);
+  const rawServerKey = await crypto.subtle.exportKey('raw', serverDerivedKey);
+  const same = buf2b64(rawClientKey) === buf2b64(rawServerKey);
+
+  handshakeState.clientDerivedKey = clientDerivedKey;
+  handshakeState.serverDerivedKey = serverDerivedKey;
+
+  if (same) {
+    log("Handshake successful — both sides derived the same AES-GCM session key. (Simulated ECDH)");
+  } else {
+    log("Handshake failure — derived keys do not match.");
+  }
+});
+
+// Client encrypts a message with session key; server decrypts
+btnSend.addEventListener('click', async () => {
+  if (!handshakeState.clientDerivedKey || !handshakeState.serverDerivedKey) { log("Perform handshake first."); return; }
+  const msg = plainMsgInput.value || "Hi";
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder().encode(msg);
+  log("Client: encrypting message with AES-GCM session key...");
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    handshakeState.clientDerivedKey,
+    enc
+  );
+  log(`Client -> Server (ciphertext, iv shown b64)`, buf2b64(ciphertext), buf2b64(iv.buffer));
+
+  // Server decrypts
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv },
+      handshakeState.serverDerivedKey,
+      ciphertext
+    );
+    const plain = new TextDecoder().decode(decrypted);
+    log("Server: decrypted message:", plain);
+  } catch (e) {
+    log("Server: failed to decrypt message.", e.toString());
+  }
+});
+
+// Tamper with certificate after signing to show verification failure
+btnTamper.addEventListener('click', async () => {
+  if (!server.cert) { log("No server certificate to tamper with."); return; }
+  // Modify the subject (or public key) in the certificate
+  server.cert.cert.subject = server.cert.cert.subject + " (tampered)";
+  serverCertEl.textContent = JSON.stringify(server.cert, null, 2);
+  server.certVerified = false;
+  log("Certificate was tampered with (subject modified). Verification will now fail until reissued.");
+});
+
+// Simulate MITM: attacker creates a CA and signs a fake server cert
+btnMITM.addEventListener('click', async () => {
+  if (!server.cert) { log("Create a legitimate server certificate first so we can compare."); return; }
+  log("Attacker: generating malicious CA and signing a fake certificate...");
+
+  // Attacker CA
+  const atkCAkp = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign","verify"]
+  );
+  const atkPubJwk = await crypto.subtle.exportKey('jwk', atkCAkp.publicKey);
+
+  // Attacker server key (pretends to be server)
+  const atkSrvKp = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey","deriveBits"]
+  );
+  const atkSrvPubJwk = await crypto.subtle.exportKey('jwk', atkSrvKp.publicKey);
+
+  const fakeCertData = {
+    subject: server.cert.cert.subject, // pretend same host
+    publicKeyJwk: atkSrvPubJwk,
+    validFrom: Date.now(),
+    validTo: Date.now() + 24*60*60*1000,
+    issuer: "Attacker CA",
+    version: 1
+  };
+  const fakeDataStr = JSON.stringify(fakeCertData);
+  const fakeSig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    atkCAkp.privateKey,
+    str2ab(fakeDataStr)
+  );
+  const fakeCert = { cert: fakeCertData, signature: buf2b64(fakeSig) };
+  log("Attacker: issued fake certificate (signed by attacker's CA).");
+
+  // Client attempts to verify fake certificate against its trusted CA list
+  log("Client: attempting to verify attacker's certificate using trusted CA (should fail)...");
+  const trusted = client.trustedCAs[0];
+  const trustedCAkey = await crypto.subtle.importKey('jwk', trusted, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  const isValid = await crypto.subtle.verify(
+    { name: "ECDSA", hash: "SHA-256" },
+    trustedCAkey,
+    b642buf(fakeCert.signature),
+    str2ab(JSON.stringify(fakeCert.cert))
+  );
+  if (isValid) {
+    log("Client incorrectly accepted attacker's certificate (this should not happen).");
+  } else {
+    log("Client correctly rejected the attacker's certificate ✖ (signature not from a trusted CA).");
+  }
+
+  // Show attacker's cert on right so user can inspect
+  serverCertEl.textContent = JSON.stringify(fakeCert, null, 2);
+  log("Note: the client trusts only the original CA; attacker CA is untrusted -> certificate rejected.");
+});
+
+/* Initialization note */
+(function init(){
+  log("Demo initialized. Steps: 1) Generate CA → 2) Create Server & Certificate → 3) Verify → 4) Handshake → 5) Send Message. Try tampering and MITM tests.");
+})();
+</script>
+</body>
+</html>

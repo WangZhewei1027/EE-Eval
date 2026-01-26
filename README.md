@@ -27,8 +27,49 @@ node batch-workflow.mjs -c 100 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt
 node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
 
 
-# ----
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "batch-1210-2" -q "./question-list-short.json"
+
+# --- 0126-balanced ----
+
+node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+
+
+# --- 0126-biased ---- 生成3轮
+
+node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
+
+node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
+
+
+
+# ---- test question list
+node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "batch-1210-2" -q "./question-list-test.json"
+
+node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test" -q "./question-list-test.json"
+
+node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test-2" -q "./question-list-test.json"
+
+node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test-2" -q "./question-list-test.json"
+
+
+
 
 
 

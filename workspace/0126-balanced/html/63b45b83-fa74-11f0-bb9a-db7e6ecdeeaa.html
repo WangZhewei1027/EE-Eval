@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>K-Means Clustering Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f9f9f9;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+  }
+  #canvas {
+    border: 1px solid #ccc;
+    background: #fff;
+    display: block;
+    margin: 0 auto 20px auto;
+  }
+  #controls {
+    max-width: 600px;
+    margin: 0 auto 10px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  label {
+    font-weight: bold;
+    margin-right: 4px;
+  }
+  input[type=number] {
+    width: 60px;
+  }
+  button {
+    cursor: pointer;
+    background: #007bff;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    font-size: 14px;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+  }
+  button:hover:not(:disabled) {
+    background: #0056b3;
+  }
+  button:disabled {
+    background: #999;
+    cursor: not-allowed;
+  }
+  #info {
+    max-width: 600px;
+    margin: 0 auto;
+    font-size: 14px;
+    line-height: 1.4;
+    background: #eee;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  #legend {
+    max-width: 600px;
+    margin: 10px auto;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 14px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .color-box {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<h1>K-Means Clustering Visualization</h1>
+
+<canvas id="canvas" width="600" height="450"></canvas>
+
+<div id="controls">
+  <label for="clusters">Clusters (k):</label>
+  <input type="number" id="clusters" min="1" max="10" value="3" />
+  <label for="points">Points:</label>
+  <input type="number" id="points" min="10" max="1000" value="150" />
+  <button id="generateBtn">Generate Points</button>
+  <button id="stepBtn" disabled>Next Step</button>
+  <button id="runBtn" disabled>Run to End</button>
+  <button id="resetBtn" disabled>Reset</button>
+</div>
+
+<div id="info">
+  <strong>Instructions:</strong> <br/>
+  - Set the number of clusters (k) and points, then "Generate Points".<br/>
+  - Click "Next Step" to perform one iteration of the k-means algorithm:<br/>
+    &nbsp;&nbsp;1. Assign points to nearest cluster.<br/>
+    &nbsp;&nbsp;2. Update cluster centroids.<br/>
+  - "Run to End" finishes clustering automatically.<br/>
+  - "Reset" to clear and start over.
+</div>
+
+<div id="legend"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const clustersInput = document.getElementById('clusters');
+  const pointsInput = document.getElementById('points');
+  const generateBtn = document.getElementById('generateBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const legend = document.getElementById('legend');
+
+  let k = 3;            // Number of clusters
+  let numPoints = 150;  // Number of points
+  let points = [];      // Array of {x, y, cluster}
+  let centroids = [];   // Array of {x, y}
+  let finished = false;
+
+  // Colors for clusters - cycle if more than colors.length clusters
+  const colors = [
+    '#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0','#f032e6','#bcf60c','#fabebe'
+  ];
+
+  // Utility: distance squared between two points
+  function distSq(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx * dx + dy * dy;
+  }
+
+  // Initialize points randomly inside canvas
+  function generatePoints() {
+    points = [];
+    for (let i = 0; i < numPoints; i++) {
+      points.push({
+        x: Math.random() * width * 0.9 + width * 0.05,
+        y: Math.random() * height * 0.9 + height * 0.05,
+        cluster: -1
+      });
+    }
+  }
+
+  // Initialize centroids by picking k random points
+  function initializeCentroids() {
+    centroids = [];
+    // To ensure distinct centroids, shuffle points and pick the first k
+    let shuffled = points.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      let j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    for (let i = 0; i < k; i++) {
+      let p = shuffled[i];
+      centroids.push({x: p.x, y: p.y});
+    }
+  }
+
+  // Assign points to nearest cluster
+  // Returns true if any point changed cluster, else false
+  function assignPoints() {
+    let changed = false;
+    for (let p of points) {
+      let minDist = Infinity;
+      let bestCluster = -1;
+      for (let c = 0; c < k; c++) {
+        let d = distSq(p, centroids[c]);
+        if (d < minDist) {
+          minDist = d;
+          bestCluster = c;
+        }
+      }
+      if (p.cluster !== bestCluster) {
+        changed = true;
+        p.cluster = bestCluster;
+      }
+    }
+    return changed;
+  }
+
+  // Update centroids as mean of assigned points
+  // Returns true if any centroid moved significantly (threshold), else false
+  function updateCentroids() {
+    const newCentroids = new Array(k).fill(0).map(() => ({x:0, y:0, count:0}));
+    for (let p of points) {
+      if (p.cluster === -1) continue;
+      newCentroids[p.cluster].x += p.x;
+      newCentroids[p.cluster].y += p.y;
+      newCentroids[p.cluster].count++;
+    }
+    let moved = false;
+    for (let c = 0; c < k; c++) {
+      if (newCentroids[c].count === 0) {
+        // No points assigned to cluster, keep centroid in place
+        continue;
+      }
+      const newX = newCentroids[c].x / newCentroids[c].count;
+      const newY = newCentroids[c].y / newCentroids[c].count;
+      if (Math.abs(centroids[c].x - newX) > 1e-3 || Math.abs(centroids[c].y - newY) > 1e-3) {
+        moved = true;
+      }
+      centroids[c].x = newX;
+      centroids[c].y = newY;
+    }
+    return moved;
+  }
+
+  // Run one iteration: assign points then update centroids
+  // Return true if changed, else false means converged
+  function step() {
+    const assignmentsChanged = assignPoints();
+    const centroidsMoved = updateCentroids();
+    draw();
+    return assignmentsChanged || centroidsMoved;
+  }
+
+  // Draw points and centroids
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw points
+    for (let p of points) {
+      if (p.cluster === -1) {
+        // Unassigned points: draw as gray small circles
+        ctx.fillStyle = '#bbb';
+      } else {
+        ctx.fillStyle = colors[p.cluster % colors.length];
+      }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Draw centroids
+    for (let c = 0; c < centroids.length; c++) {
+      const cent = centroids[c];
+      ctx.fillStyle = colors[c % colors.length];
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cent.x, cent.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw centroid marker (cross)
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cent.x - 6, cent.y);
+      ctx.lineTo(cent.x + 6, cent.y);
+      ctx.moveTo(cent.x, cent.y - 6);
+      ctx.lineTo(cent.x, cent.y + 6);
+      ctx.stroke();
+    }
+  }
+
+  // Create legend below canvas
+  function updateLegend() {
+    legend.innerHTML = '';
+    for(let i = 0; i < k; i++) {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      const box = document.createElement('div');
+      box.className = 'color-box';
+      box.style.backgroundColor = colors[i % colors.length];
+      item.appendChild(box);
+      item.appendChild(document.createTextNode(`Cluster ${i + 1}`));
+      legend.appendChild(item);
+    }
+  }
+
+  // Button event handlers
+  generateBtn.addEventListener('click', () => {
+    k = parseInt(clustersInput.value);
+    numPoints = parseInt(pointsInput.value);
+    if (isNaN(k) || k < 1 || k > 10) {
+      alert('Clusters (k) must be a number between 1 and 10.');
+      return;
+    }
+    if (isNaN(numPoints) || numPoints < 10 || numPoints > 1000) {
+      alert('Points must be a number between 10 and 1000.');
+      return;
+    }
+
+    generatePoints();
+    initializeCentroids();
+    // Initially assign points to cluster -1 (unassigned)
+    for(let p of points) {
+      p.cluster = -1;
+    }
+    finished = false;
+    stepBtn.disabled = false;
+    runBtn.disabled = false;
+    resetBtn.disabled = false;
+    draw();
+    updateLegend();
+  });
+
+  stepBtn.addEventListener('click', () => {
+    if (finished) return;
+    const changed = step();
+    if (!changed) {
+      finished = true;
+      stepBtn.disabled = true;
+      runBtn.disabled = true;
+      alert('Clustering converged!');
+    }
+  });
+
+  runBtn.addEventListener('click', () => {
+    if (finished) return;
+    let changed = true;
+    while (changed) {
+      changed = step();
+    }
+    finished = true;
+    stepBtn.disabled = true;
+    runBtn.disabled = true;
+    alert('Clustering converged!');
+  });
+
+  resetBtn.addEventListener('click', () => {
+    points = [];
+    centroids = [];
+    finished = false;
+    stepBtn.disabled = true;
+    runBtn.disabled = true;
+    resetBtn.disabled = true;
+    ctx.clearRect(0, 0, width, height);
+    legend.innerHTML = '';
+  });
+
+  // Draw axes and border to guide perspective (optional)
+  function drawAxes() {
+    ctx.save();
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 1;
+    // Vertical grid lines
+    for(let x = 50; x < width; x += 50) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    // Horizontal grid lines
+    for(let y = 50; y < height; y += 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Override draw to include background grid
+  const originalDraw = draw;
+  draw = () => {
+    ctx.clearRect(0, 0, width, height);
+    drawAxes();
+    originalDraw();
+  };
+
+  // Initial canvas state
+  ctx.font = "16px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+  ctx.fillStyle = '#666';
+  ctx.textAlign = 'center';
+  ctx.fillText('Set parameters and click "Generate Points" to start', width/2, height/2);
+})();
+</script>
+
+</body>
+</html>

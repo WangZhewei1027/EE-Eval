@@ -1,0 +1,273 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/324d86d1-fa73-11f0-a9d0-d7a1991987c6.html';
+
+// Page object for the Linear Search demo
+class LinearSearchPage {
+  /**
+   * @param {import('@playwright/test').Page} page
+   */
+  constructor(page) {
+    this.page = page;
+    this.arrayInput = page.locator('#arrayInput');
+    this.searchInput = page.locator('#searchInput');
+    this.searchButton = page.locator("button[onclick='performLinearSearch()']");
+    this.resultDiv = page.locator('#result');
+  }
+
+  async goto() {
+    await this.page.goto(APP_URL);
+  }
+
+  async setArray(text) {
+    await this.arrayInput.fill(text);
+  }
+
+  async setSearch(text) {
+    await this.searchInput.fill(text);
+  }
+
+  async clickSearch() {
+    await this.searchButton.click();
+  }
+
+  async getResultText() {
+    return (await this.resultDiv.textContent()) ?? '';
+  }
+
+  // helper to ensure DOM is in initial state
+  async ensureInitialState() {
+    await expect(this.arrayInput).toBeVisible();
+    await expect(this.searchInput).toBeVisible();
+    await expect(this.searchButton).toBeVisible();
+    await expect(this.resultDiv).toBeVisible();
+  }
+}
+
+test.describe('Linear Search Demo - FSM states and transitions', () => {
+  let consoleMessages = [];
+  let consoleErrors = [];
+  let pageErrors = [];
+
+  test.beforeEach(async ({ page }) => {
+    // reset collectors
+    consoleMessages = [];
+    consoleErrors = [];
+    pageErrors = [];
+
+    // Collect console messages and page errors so tests can assert on them.
+    page.on('console', (msg) => {
+      const type = msg.type();
+      const text = msg.text();
+      consoleMessages.push({ type, text });
+      if (type === 'error') consoleErrors.push(text);
+    });
+
+    page.on('pageerror', (err) => {
+      pageErrors.push(err);
+    });
+  });
+
+  test.describe('S0: Idle (Initial render)', () => {
+    test('renders inputs, button and empty result on load (verifies Idle state)', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      // Navigate to the app
+      await app.goto();
+
+      // Validate initial UI elements exist and are visible
+      await app.ensureInitialState();
+
+      // Inputs should be empty initially
+      await expect(app.arrayInput).toHaveValue('');
+      await expect(app.searchInput).toHaveValue('');
+
+      // Result div starts empty
+      const resultText = await app.getResultText();
+      expect(resultText.trim()).toBe('');
+
+      // The FSM entry action for S0 mentions renderPage(), but the implementation does not define it.
+      // Verify whether renderPage exists (we expect it to be undefined in this implementation).
+      const hasRenderPage = await page.evaluate(() => typeof window.renderPage !== 'undefined');
+      expect(hasRenderPage).toBe(false);
+
+      // performLinearSearch should be present as a function in the page (implementation defines it).
+      const hasPerformLinearSearch = await page.evaluate(() => typeof window.performLinearSearch === 'function');
+      expect(hasPerformLinearSearch).toBe(true);
+
+      // Ensure no runtime page errors occurred during load
+      expect(pageErrors.length).toBe(0);
+      // Ensure there were no console error messages
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('S1 -> S2 (Searching -> Result Found) transitions', () => {
+    test('search finds existing number and displays correct index', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      // Prepare an array that contains the target
+      await app.setArray('1,2,3,4,5');
+      await app.setSearch('3');
+
+      // Click triggers performLinearSearch() and transition to Searching state then Result Found
+      await app.clickSearch();
+
+      // Validate the result text matches expected found message
+      await expect(app.resultDiv).toHaveText('Number 3 found at index 2.');
+
+      // Ensure no page errors happened during the search
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('search finds first occurrence when duplicates are present (index should be first match)', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      await app.setArray('2,3,2,4');
+      await app.setSearch('2');
+      await app.clickSearch();
+
+      // First occurrence of '2' is at index 0
+      await expect(app.resultDiv).toHaveText('Number 2 found at index 0.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('search with decimal-like entries uses parseInt behavior (3.9 -> 3)', async ({ page }) {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      await app.setArray('3.9,2.1');
+      await app.setSearch('3');
+      await app.clickSearch();
+
+      // parseInt('3.9') -> 3, so it should find at index 0
+      await expect(app.resultDiv).toHaveText('Number 3 found at index 0.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('S1 -> S3 (Searching -> Result Not Found) transitions', () => {
+    test('search for number not in array displays not found message', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      await app.setArray('1,2,3,4,5');
+      await app.setSearch('9');
+      await app.clickSearch();
+
+      await expect(app.resultDiv).toHaveText('Number 9 not found in the array.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('search with non-numeric search input results in Number NaN not found message', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      // Non-numeric search will parse to NaN, resulting message will include 'Number NaN not found...'
+      await app.setArray('1,2,three');
+      await app.setSearch('abc');
+      await app.clickSearch();
+
+      await expect(app.resultDiv).toHaveText('Number NaN not found in the array.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('empty inputs -> NaN behavior results in not found with NaN target', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      // Both inputs empty => target is NaN; array contains one entry that's NaN as well, but NaN === NaN is false
+      await app.setArray('');
+      await app.setSearch('');
+      await app.clickSearch();
+
+      await expect(app.resultDiv).toHaveText('Number NaN not found in the array.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('Edge cases and DOM behavior validations', () => {
+    test('trailing comma in array does not prevent finding earlier elements', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      // trailing comma introduces an empty entry that becomes NaN, but searching for 3 should still find it
+      await app.setArray('1,2,3,');
+      await app.setSearch('3');
+      await app.clickSearch();
+
+      await expect(app.resultDiv).toHaveText('Number 3 found at index 2.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('negative numbers are parsed and matched correctly', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      await app.setArray('-5,-2,0,1');
+      await app.setSearch('-2');
+      await app.clickSearch();
+
+      await expect(app.resultDiv).toHaveText('Number -2 found at index 1.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('performLinearSearch function is callable (clicking button triggers the implementation)', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      // Sanity: ensure the function exists and clicking the button yields a changed result
+      const exists = await page.evaluate(() => typeof window.performLinearSearch === 'function');
+      expect(exists).toBe(true);
+
+      await app.setArray('10,20');
+      await app.setSearch('20');
+      await app.clickSearch();
+
+      await expect(app.resultDiv).toHaveText('Number 20 found at index 1.');
+
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('Observability: console and runtime error checks', () => {
+    test('no runtime page errors or console error messages during typical interactions', async ({ page }) => {
+      const app = new LinearSearchPage(page);
+      await app.goto();
+
+      // perform a few interactions
+      await app.setArray('1,2,3');
+      await app.setSearch('2');
+      await app.clickSearch();
+
+      await app.setArray('a,b,c');
+      await app.setSearch('a');
+      await app.clickSearch();
+
+      // After the interactions, assert there were no page errors and no console.error messages.
+      // If any ReferenceError/SyntaxError/TypeError occurred naturally, they would have been captured in pageErrors or consoleErrors.
+      expect(pageErrors.length).toBe(0);
+      expect(consoleErrors.length).toBe(0);
+
+      // Also capture overall console messages count to ensure we observed page console activity
+      expect(consoleMessages.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+});

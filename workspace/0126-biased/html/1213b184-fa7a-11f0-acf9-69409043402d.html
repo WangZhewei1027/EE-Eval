@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quick Sort Interactive Explorer</title>
+<style>
+  /* Extremely minimal styling: just monospace font for clarity */
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    background: white;
+    color: black;
+  }
+  button, input[type=number], input[type=text], select {
+    font-family: monospace;
+    font-size: 14px;
+    margin: 2px 4px 2px 0;
+  }
+  label {
+    user-select: none;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14px;
+    margin-top: 6px;
+  }
+  hr {
+    margin: 10px 0;
+  }
+  fieldset {
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Quick Sort Interactive Explorer</h1>
+
+<fieldset>
+  <legend>Array Input and Controls</legend>
+
+  <label for="arrayInput">Enter array (comma or space separated integers):</label><br />
+  <input type="text" id="arrayInput" size="50" value="5,2,9,1,5,6" />
+  <button id="loadArrayBtn" title="Load array & prepare for sorting">Load Array</button>
+  <button id="randomArrayBtn" title="Generate random array">Random Array</button>
+  <label for="randomSize" title="Size for random array">Size:</label>
+  <input type="number" id="randomSize" min="1" max="100" value="10" style="width:50px;" />
+  <label for="randomMax" title="Max value for random array">Max:</label>
+  <input type="number" id="randomMax" min="1" max="1000" value="50" style="width:60px;" />
+
+  <br /><br />
+  <label for="pivotStrategy">Pivot Selection Strategy:</label>
+  <select id="pivotStrategy" title="Choose pivot selection method">
+    <option value="last">Last element</option>
+    <option value="first">First element</option>
+    <option value="middle">Middle element</option>
+    <option value="random">Random element</option>
+    <option value="medianOfThree">Median of three</option>
+  </select>
+</fieldset>
+
+<fieldset>
+  <legend>Sorting Controls</legend>
+  <button id="stepBtn" title="Perform one algorithm step">Step</button>
+  <button id="autoRunBtn" title="Automatic running">Auto Run</button>
+  <button id="pauseBtn" title="Pause Auto Run">Pause</button>
+  <button id="resetBtn" title="Reset to original array">Reset</button>
+  <label for="speedRange" title="Adjust auto-run speed (ms)">Speed (ms):</label>
+  <input type="range" id="speedRange" min="50" max="2000" value="500" step="10" />
+  <span id="speedDisplay">500</span>
+</fieldset>
+
+<fieldset>
+  <legend>Controls for Exploration</legend>
+  <button id="undoBtn" title="Undo last step">Undo</button>
+  <button id="redoBtn" title="Redo last undone step">Redo</button>
+  <label for="jumpToStepInput" title="Jump directly to a step index">Jump to step:</label>
+  <input type="number" id="jumpToStepInput" min="0" value="0" style="width: 60px;" />
+  <button id="jumpToStepBtn" title="Jump to selected step">Go</button>
+  <button id="showCallStackBtn" title="Toggle call stack display">Toggle Call Stack</button>
+  <button id="showSubarraysBtn" title="Toggle subarrays overview display">Toggle Subarrays View</button>
+</fieldset>
+
+<hr />
+
+<div id="statusArea" aria-live="polite" style="font-weight:bold;"></div>
+
+<h2>Array State</h2>
+<pre id="arrayState">[]</pre>
+
+<h2>Algorithm Description</h2>
+<pre id="algorithmText">
+// Will show explanation of current step
+</pre>
+
+<h2>Partition Pointers</h2>
+<pre id="pointersDisplay">
+// Shows current pointers: low, high, pivot index, i, j, etc.
+</pre>
+
+<h2>Call Stack</h2>
+<pre id="callStackDisplay" style="display:none; max-height:200px; overflow-y:auto;"></pre>
+
+<h2>Subarrays Overview</h2>
+<pre id="subarraysDisplay" style="display:none; max-height:200px; overflow-y:auto;"></pre>
+
+<script>
+(() => {
+  // State of the Quick Sort algorithm for visualization
+  // Using stepwise, manual control
+
+  /*********************
+   * DATA STRUCTURES
+   *********************/
+  // The input array - original and working copies
+  let originalArray = [];
+  let workingArray = [];
+
+  // The stack of recursion frames for quicksort simulation
+  // Each frame: { left, right, stage: "start" | "partition" | "done", pivotIndex, i, j }
+  // stage indicates what sub-step the frame is currently at
+  // i and j are pointers used in partition
+
+  let callStack = [];
+
+  // History stack for undo/redo (stores { workingArray copy, callStack deep copy })
+  let history = [];
+  let historyIndex = -1;
+
+  // Auto run interval
+  let autoRunInterval = null;
+
+  // Pivot strategy function references
+  const pivotStrategies = {
+    last: function(arr, left, right) { return right; },
+    first: function(arr, left, right) { return left; },
+    middle: function(arr, left, right) { return Math.floor((left+right)/2); },
+    random: function(arr, left, right) { return left + Math.floor(Math.random()*(right-left+1)); },
+    medianOfThree: function(arr, left, right) {
+      let mid = Math.floor((left+right)/2); 
+      let trio = [
+        {val: arr[left], idx:left},
+        {val: arr[mid], idx:mid},
+        {val: arr[right], idx:right}
+      ];
+      trio.sort((a,b) => a.val - b.val);
+      return trio[1].idx;
+    }
+  };
+
+  // Current pivot strategy key
+  let currentPivotStrategyKey = "last";
+
+  /***********************
+   * UTILITY FUNCTIONS
+   ***********************/
+  // Deep copy call stack frames (safe for primitives)
+  function deepCopyCallStack(cs) {
+    return cs.map(frame => Object.assign({}, frame));
+  }
+
+  // Deep copy entire state snapshot for history
+  function makeSnapshot() {
+    return {
+      workingArray: workingArray.slice(),
+      callStack: deepCopyCallStack(callStack)
+    };
+  }
+
+  // Restore from snapshot
+  function restoreSnapshot(snapshot) {
+    workingArray = snapshot.workingArray.slice();
+    callStack = deepCopyCallStack(snapshot.callStack);
+  }
+
+  // Push current state to history
+  function pushHistory() {
+    // Discard any redo history
+    if(historyIndex < history.length-1) {
+      history = history.slice(0, historyIndex+1);
+    }
+    history.push(makeSnapshot());
+    historyIndex++;
+    updateUndoRedoButtons();
+  }
+
+  // Update Undo/Redo buttons status
+  function updateUndoRedoButtons() {
+    undoBtn.disabled = (historyIndex <= 0);
+    redoBtn.disabled = (historyIndex >= history.length-1);
+  }
+
+  // Check if array is fully sorted (for status)
+  function isSorted(arr) {
+    for(let i=1; i<arr.length; i++) {
+      if(arr[i-1] > arr[i]) return false;
+    }
+    return true;
+  }
+
+  /***********************
+   * ALGORITHM IMPLEMENTATION
+   ***********************/
+
+  // Initialize quicksort call stack with full range
+  function initializeQuickSort() {
+    callStack = [];
+    if(workingArray.length > 1) {
+      callStack.push({left:0, right:workingArray.length-1, stage:"start", pivotIndex:-1, i:-1, j:-1});
+    }
+    // else no sorting needed
+  }
+
+  // Perform one step of quicksort visualization.
+  // Returns true if progressed, false if done.
+  function quickSortStep() {
+    if(callStack.length === 0) {
+      return false; // sorting done
+    }
+
+    let frame = callStack[callStack.length-1];
+
+    // stages: start, partition, done
+
+    if(frame.stage === "start") {
+      // Select pivot index by chosen strategy within [left,right]
+      frame.pivotIndex = pivotStrategies[currentPivotStrategyKey](workingArray, frame.left, frame.right);
+      // Swap pivot to right for partitioning (common approach)
+      swap(workingArray, frame.pivotIndex, frame.right);
+      frame.pivotIndex = frame.right;
+
+      frame.i = frame.left-1; // index of smaller element
+      frame.j = frame.left;
+
+      frame.stage = "partition";
+      return true;
+    }
+
+    if(frame.stage === "partition") {
+      if(frame.j < frame.right) {
+        // Compare current element with pivot
+
+        if(workingArray[frame.j] <= workingArray[frame.pivotIndex]) {
+          frame.i++;
+          swap(workingArray, frame.i, frame.j);
+        }
+        frame.j++;
+        return true;
+      } else {
+        // End partitioning: place pivot after last smaller element
+        frame.i++;
+        swap(workingArray, frame.i, frame.pivotIndex);
+        const pivotFinalPos = frame.i;
+
+        // Pop current frame from stack
+        callStack.pop();
+
+        // Push right side frame if needed
+        if(pivotFinalPos+1 < frame.right) {
+          callStack.push({
+            left: pivotFinalPos+1,
+            right: frame.right,
+            stage: "start",
+            pivotIndex: -1,
+            i:-1, j:-1
+          });
+        }
+        // Push left side frame if needed
+        if(frame.left < pivotFinalPos-1) {
+          callStack.push({
+            left: frame.left,
+            right: pivotFinalPos-1,
+            stage: "start",
+            pivotIndex: -1,
+            i:-1, j:-1
+          });
+        }
+
+        return true;
+      }
+    }
+
+    return false; // Should not reach here
+  }
+
+  function swap(arr, a, b) {
+    let tmp = arr[a];
+    arr[a] = arr[b];
+    arr[b] = tmp;
+  }
+
+  /******************************
+   * UI UPDATE FUNCTIONS
+   ******************************/
+
+  const arrayStatePre = document.getElementById("arrayState");
+  const algorithmTextPre = document.getElementById("algorithmText");
+  const pointersPre = document.getElementById("pointersDisplay");
+  const callStackPre = document.getElementById("callStackDisplay");
+  const subarraysPre = document.getElementById("subarraysDisplay");
+  const statusArea = document.getElementById("statusArea");
+
+  // Update the array display
+  function updateArrayDisplay() {
+    // Show array with indexes below, highlight pivot index if any active frame
+    let arr = workingArray.slice();
+    let pivots = new Set();
+    if(callStack.length > 0) {
+      let frame = callStack[callStack.length-1];
+      if(frame.pivotIndex >=0) pivots.add(frame.pivotIndex);
+    }
+    let line1 = arr.map(x => x.toString().padStart(2," ")).join(" ");
+    let line2 = arr.map((_,i) => indicesHighlight(i, pivots.has(i))).join(" ");
+
+    function indicesHighlight(i, isPivot) {
+      return (i).toString().padStart(2," ");
+    }
+
+    arrayStatePre.textContent = line1 + "\n" + line2;
+  }
+
+  // Update algorithm explanation text depending on current frame and step
+  function updateAlgorithmDescription() {
+    if(callStack.length === 0) {
+      algorithmTextPre.textContent = "// Sorting is complete!\n";
+      statusArea.textContent = "Array is sorted. No frames on call stack.";
+      return;
+    }
+
+    let frame = callStack[callStack.length-1];
+    let left = frame.left, right = frame.right;
+
+    let text = "// Quick Sort: sorting subarray indices [" + left + " .. " + right + "]\n";
+    switch(frame.stage) {
+      case "start":
+        text +=
+`Select pivot element using strategy '${currentPivotStrategyKey}'.\n` +
+`Swap chosen pivot to end of subarray.\n` +
+`Initialize pointers:\n` +
+` i (smaller element index) = ${frame.left - 1};\n` +
+` j (current element index) = ${frame.left};`;
+        statusArea.textContent = "Pivot is being selected and pointers initialized.";
+        break;
+      case "partition":
+        if(frame.j < frame.right) {
+          text +=
+`Partitioning: comparing array[j] with pivot.\n` +
+` j = ${frame.j}, i = ${frame.i}\n` +
+`If array[j] <= pivot, increment i and swap elements at i and j.\n` +
+`Current array[j] = ${workingArray[frame.j]}, pivot = ${workingArray[frame.pivotIndex]}`;
+          statusArea.textContent = "Partitioning in progress...";
+        } else {
+          text +=
+`Partition complete.\n` +
+`Place pivot after the last smaller element.\n` +
+`Then recursively quicksort the two subarrays.`;
+          statusArea.textContent = "Partitioning done for current frame.";
+        }
+        break;
+      case "done":
+        text += "// Frame marked done (should not be visible).";
+        statusArea.textContent = "";
+        break;
+      default:
+        text += "// Unknown stage";
+        statusArea.textContent = "";
+    }
+    algorithmTextPre.textContent = text;
+  }
+
+  // Update pointers display in partition step
+  function updatePointersDisplay() {
+    if(callStack.length === 0) {
+      pointersPre.textContent = "// No active partition frame";
+      return;
+    }
+    let frame = callStack[callStack.length-1];
+    let lines = [];
+    lines.push("left (start index): " + frame.left);
+    lines.push("right (end index)  : " + frame.right);
+    if(frame.pivotIndex >=0) lines.push("pivot index       : " + frame.pivotIndex + " (value: " + workingArray[frame.pivotIndex] + ")");
+    if(frame.stage === "partition") {
+      lines.push("i (smaller element pointer): " + frame.i);
+      lines.push("j (current element pointer): " + frame.j);
+    }
+    pointersPre.textContent = lines.join("\n");
+  }
+
+  // Update call stack display
+  function updateCallStackDisplay() {
+    if(callStackPre.style.display === "none") return;
+    if(callStack.length === 0) {
+      callStackPre.textContent = "Call stack is empty.";
+      return;
+    }
+    let lines = [];
+    let index = callStack.length-1;
+    for(let frame of callStack.slice().reverse()) {
+      lines.push(`Frame #${index--}: subarray [${frame.left} .. ${frame.right}], stage: ${frame.stage}`);
+    }
+    callStackPre.textContent = lines.join("\n");
+  }
+
+  // Update subarrays overview - shows all current frames and their subranges
+  function updateSubarraysDisplay() {
+    if(subarraysPre.style.display === "none") return;
+    if(callStack.length === 0) {
+      subarraysPre.textContent = "No subarrays sorting - array sorted.";
+      return;
+    }
+    let lines = [];
+    for(let frame of callStack) {
+      let partInfo = `Subarray [${frame.left} .. ${frame.right}]`;
+      if(frame.pivotIndex >=0) {
+        partInfo += `, pivot at ${frame.pivotIndex} (val ${workingArray[frame.pivotIndex]})`;
+      }
+      partInfo += `, stage: ${frame.stage}`;
+      lines.push(partInfo);
+    }
+    subarraysPre.textContent = lines.join("\n");
+  }
+
+  // Update the jumpToStepInput max & clear if needed (we track by history length)
+  function updateJumpToStepInputMax() {
+    jumpToStepInput.max = history.length-1;
+    if(+jumpToStepInput.value > history.length-1) jumpToStepInput.value = history.length-1;
+  }
+
+  // Repaint all on state changes
+  function repaintAll() {
+    updateArrayDisplay();
+    updateAlgorithmDescription();
+    updatePointersDisplay();
+    updateCallStackDisplay();
+    updateSubarraysDisplay();
+    updateUndoRedoButtons();
+    updateJumpToStepInputMax();
+  }
+
+  /*********************************
+   * EVENT HANDLERS AND UI BINDINGS
+   *********************************/
+
+  // Elements references
+  const arrayInput = document.getElementById("arrayInput");
+  const loadArrayBtn = document.getElementById("loadArrayBtn");
+  const randomArrayBtn = document.getElementById("randomArrayBtn");
+  const randomSizeInput = document.getElementById("randomSize");
+  const randomMaxInput = document.getElementById("randomMax");
+  const pivotStrategySelect = document.getElementById("pivotStrategy");
+
+  const stepBtn = document.getElementById("stepBtn");
+  const autoRunBtn = document.getElementById("autoRunBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const speedRange = document.getElementById("speedRange");
+  const speedDisplay = document.getElementById("speedDisplay");
+
+  const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
+  const jumpToStepInput = document.getElementById("jumpToStepInput");
+  const jumpToStepBtn = document.getElementById("jumpToStepBtn");
+  const showCallStackBtn = document.getElementById("showCallStackBtn");
+  const showSubarraysBtn = document.getElementById("showSubarraysBtn");
+
+  // Parse array from input string
+  function parseArrayInput(str) {
+    // split by comma or space, filter only integers
+    let parts = str.split(/[\s,]+/).filter(x=>x.length>0);
+    let nums = [];
+    for(let p of parts) {
+      let n = parseInt(p,10);
+      if(isNaN(n)) return null;
+      nums.push(n);
+    }
+    return nums;
+  }
+
+  // Load array from input (reset state)
+  loadArrayBtn.addEventListener("click", () => {
+    let arr = parseArrayInput(arrayInput.value);
+    if(arr === null) {
+      alert("Invalid input array. Only integers and separators (comma, space) allowed.");
+      return;
+    }
+    if(arr.length > 1000) {
+      if(!confirm("Large array length (" + arr.length + ") may slow down the UI. Continue?")) return;
+    }
+    originalArray = arr.slice();
+    workingArray = arr.slice();
+    initializeQuickSort();
+    pushHistory();
+    repaintAll();
+    statusArea.textContent = "Loaded array and ready to sort.";
+    stopAutoRun();
+  });
+
+  // Generate random array
+  randomArrayBtn.addEventListener("click", () => {
+    let size = parseInt(randomSizeInput.value,10);
+    let maxv = parseInt(randomMaxInput.value,10);
+    if(isNaN(size)||size < 1) size=10;
+    if(isNaN(maxv)||maxv<1) maxv=50;
+    if(size>1000) {
+      if(!confirm("Large array size (" + size + ") may slow down the UI. Continue?")) return;
+    }
+    let arr = [];
+    for(let i=0; i<size; i++) {
+      arr.push(Math.floor(Math.random()*maxv));
+    }
+    originalArray = arr;
+    workingArray = arr.slice();
+    arrayInput.value = arr.join(", ");
+    initializeQuickSort();
+    pushHistory();
+    repaintAll();
+    statusArea.textContent = "Random array generated and ready.";
+    stopAutoRun();
+  });
+
+  // Pivot strategy selector
+  pivotStrategySelect.addEventListener("change", () => {
+    currentPivotStrategyKey = pivotStrategySelect.value;
+    // Reset current sorting to apply new strategy
+    workingArray = originalArray.slice();
+    initializeQuickSort();
+    pushHistory();
+    repaintAll();
+    statusArea.textContent = "Pivot strategy changed to '"+currentPivotStrategyKey+"'. Reset and ready.";
+    stopAutoRun();
+  });
+
+  // Step one quicksort step
+  stepBtn.addEventListener("click", () => {
+    stopAutoRun();
+    let prog = quickSortStep();
+    if(!prog) {
+      statusArea.textContent = "Sorting complete.";
+    } else {
+      statusArea.textContent = "Step executed.";
+    }
+    pushHistory();
+    repaintAll();
+  });
+
+  // Auto run logic
+  function startAutoRun() {
+    if(autoRunInterval !== null) return; // already running
+    autoRunInterval = setInterval(() => {
+      let prog = quickSortStep();
+      if(!prog) {
+        statusArea.textContent = "Sorting complete (auto-run).";
+        stopAutoRun();
+      } else {
+        pushHistory();
+      }
+      repaintAll();
+    }, +speedRange.value);
+    statusArea.textContent = "Auto run started.";
+  }
+  function stopAutoRun() {
+    if(autoRunInterval !== null) {
+      clearInterval(autoRunInterval);
+      autoRunInterval = null;
+      statusArea.textContent = "Auto run paused.";
+    }
+  }
+
+  autoRunBtn.addEventListener("click", () => {
+    startAutoRun();
+  });
+  pauseBtn.addEventListener("click", () => {
+    stopAutoRun();
+  });
+
+  // Reset to original array and start new
+  resetBtn.addEventListener("click", () => {
+    stopAutoRun();
+    workingArray = originalArray.slice();
+    initializeQuickSort();
+    pushHistory();
+    repaintAll();
+    statusArea.textContent = "Reset to original array.";
+  });
+
+  // Speed slider updates interval speed if auto run active
+  speedRange.addEventListener("input", () => {
+    speedDisplay.textContent = speedRange.value;
+    if(autoRunInterval !== null) {
+      stopAutoRun();
+      startAutoRun();
+    }
+  });
+
+  // Undo/Redo handling
+  undoBtn.addEventListener("click", () => {
+    if(historyIndex > 0) {
+      historyIndex--;
+      restoreSnapshot(history[historyIndex]);
+      repaintAll();
+      statusArea.textContent = "Undo to step " + historyIndex;
+      stopAutoRun();
+    }
+  });
+  redoBtn.addEventListener("click", () => {
+    if(historyIndex < history.length-1) {
+      historyIndex++;
+      restoreSnapshot(history[historyIndex]);
+      repaintAll();
+      statusArea.textContent = "Redo to step " + historyIndex;
+      stopAutoRun();
+    }
+  });
+
+  // Jump to step
+  jumpToStepBtn.addEventListener("click", () => {
+    let val = parseInt(jumpToStepInput.value,10);
+    if(isNaN(val) || val < 0 || val >= history.length) {
+      alert("Invalid step index");
+      return;
+    }
+    historyIndex = val;
+    restoreSnapshot(history[historyIndex]);
+    repaintAll();
+    statusArea.textContent = "Jumped to step " + val;
+    stopAutoRun();
+  });
+
+  // Toggle call stack view
+  showCallStackBtn.addEventListener("click", () => {
+    if(callStackPre.style.display === "none") {
+      callStackPre.style.display = "block";
+      showCallStackBtn.textContent = "Hide Call Stack";
+    } else {
+      callStackPre.style.display = "none";
+      showCallStackBtn.textContent = "Show Call Stack";
+    }
+    repaintAll();
+  });
+
+  // Toggle subarrays view
+  showSubarraysBtn.addEventListener("click", () => {
+    if(subarraysPre.style.display === "none") {
+      subarraysPre.style.display = "block";
+      showSubarraysBtn.textContent = "Hide Subarrays View";
+    } else {
+      subarraysPre.style.display = "none";
+      showSubarraysBtn.textContent = "Show Subarrays View";
+    }
+    repaintAll();
+  });
+
+  // Initial load - initialize array from input field
+  function init() {
+    let arr = parseArrayInput(arrayInput.value);
+    if(arr === null || arr.length === 0) {
+      arr = [5,2,9,1,5,6];
+      arrayInput.value = arr.join(", ");
+    }
+    originalArray = arr.slice();
+    workingArray = arr.slice();
+    initializeQuickSort();
+    pushHistory();
+    repaintAll();
+    statusArea.textContent = "Ready to sort. Loaded initial array.";
+  }
+
+  init();
+
+  // Keyboard shortcuts for power users
+  document.addEventListener("keydown", (ev) => {
+    if(ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT" || ev.target.isContentEditable) return;
+
+    if(ev.key === "ArrowRight") {
+      ev.preventDefault();
+      stepBtn.click();
+    } else if(ev.key === " ") {
+      ev.preventDefault();
+      if(autoRunInterval) {
+        pauseBtn.click();
+      } else {
+        autoRunBtn.click();
+      }
+    } else if(ev.key === "ArrowLeft") {
+      ev.preventDefault();
+      undoBtn.click();
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>

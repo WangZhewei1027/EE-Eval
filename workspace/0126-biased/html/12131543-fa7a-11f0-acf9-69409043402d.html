@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Interactive B-Tree Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+  }
+  textarea, input[type=number] {
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  #output {
+    white-space: pre;
+    font-family: monospace, monospace;
+    border: 1px solid black;
+    padding: 5px;
+    max-height: 300px;
+    overflow: auto;
+  }
+  .section {
+    margin-bottom: 15px;
+  }
+  .inline {
+    display: inline-block;
+    margin-right: 10px;
+  }
+  label {
+    user-select:none;
+  }
+</style>
+</head>
+<body>
+
+<h1>B-Tree Interactive Explorer</h1>
+
+<div class="section">
+  <label for="degreeInput">Set B-Tree Minimum Degree (t): </label>
+  <input type="number" id="degreeInput" value="2" min="2" max="20" step="1" /> 
+  <button id="resetTree">Create New Empty Tree</button>
+  <br>
+  <small>Minimum degree t ≥ 2 defines: every node except root has at least t-1 keys and max 2t-1 keys.</small>
+</div>
+
+<div class="section" id="insertSection">
+  <label for="insertValue">Insert Key(s) (comma separated integers): </label>
+  <input type="text" id="insertValue" size="30" />
+  <button id="insertBtn">Insert</button>
+</div>
+
+<div class="section" id="deleteSection">
+  <label for="deleteValue">Delete Key(s) (comma separated integers): </label>
+  <input type="text" id="deleteValue" size="30" />
+  <button id="deleteBtn">Delete</button>
+</div>
+
+<div class="section" id="searchSection">
+  <label for="searchValue">Search Key: </label>
+  <input type="number" id="searchValue" />
+  <button id="searchBtn">Search</button>
+</div>
+
+<div class="section">
+  <button id="printInorder">Print In-Order Traversal</button>
+  <button id="printLevelOrder">Print Level-Order Traversal</button>
+</div>
+
+<div class="section">
+  <label for="stepByStepCheckbox"><input type="checkbox" id="stepByStepCheckbox" /> Enable Step-by-Step Visualization Mode (For Insert/Delete/Search)</label>
+</div>
+
+<div class="section" id="visualizationSection" style="display:none;">
+  <div><b>Step-by-Step Visualization</b></div>
+  <div id="stepInfo" style="white-space: pre; font-family: monospace;"></div>
+  <button id="stepBackBtn" disabled>Step Back</button>
+  <button id="stepNextBtn" disabled>Step Next</button>
+  <button id="stepEndBtn" disabled>Run to End</button>
+</div>
+
+<div class="section">
+  <label><input type="checkbox" id="showNodesInfo" /> Show Node Details</label><br>
+  <label><input type="checkbox" id="showKeysCount" /> Show Key Counts per Node</label><br>
+  <label><input type="checkbox" id="showChildrenCount" /> Show Children Counts per Node</label><br>
+</div>
+
+<hr />
+
+<h2>Current B-Tree Structure</h2>
+<div id="output"></div>
+
+<hr />
+<h2>Logs & Messages</h2>
+<div id="log" style="white-space: pre; font-family: monospace; border:1px solid black; padding:5px; max-height: 200px; overflow:auto;"></div>
+
+<script>
+// B-Tree Implementation with step-by-step visualization
+
+class BTreeNode {
+  constructor(t, leaf) {
+    this.t = t; // Minimum degree
+    this.leaf = leaf; // Is leaf node
+    this.keys = [];  // keys array
+    this.children = []; // children array
+  }
+
+  // A utility function that returns the index of the first key that is greater or equal to k
+  findKey(k) {
+    let idx = 0;
+    while (idx < this.keys.length && this.keys[idx] < k) {
+      idx++;
+    }
+    return idx;
+  }
+
+  // Step function wrappers will call internal functions with visualization callbacks
+
+  // Insert a key in this node (non-full node)
+  insertNonFull(k, viz) {
+    let i = this.keys.length - 1;
+
+    if (this.leaf) {
+      // Insert key into this leaf node in the correct position
+      while (i >= 0 && this.keys[i] > k) {
+        i--;
+      }
+      this.keys.splice(i + 1, 0, k);
+
+      if (viz) viz.logStep(`Inserted key ${k} at position ${i+1} in leaf node with keys: [${this.keys.join(", ")}]`);
+      return;
+    } else {
+      // Find the child which is going to have the new key
+      while (i >= 0 && this.keys[i] > k) {
+        i--;
+      }
+      i++;
+      if (viz) viz.logStep(`Descending to child index ${i} with keys: [${this.children[i].keys.join(", ")}]`);
+
+      // If the found child is full, split it
+      if (this.children[i].keys.length === 2 * this.t - 1) {
+        if (viz) viz.logStep(`Child ${i} full, splitting...`);
+        this.splitChild(i, viz);
+
+        // After split, the middle key moves up and child's keys split
+        if (this.keys[i] < k) {
+          i++;
+        }
+        if (viz) viz.logStep(`After split, descending to child index ${i}`);
+      }
+      this.children[i].insertNonFull(k, viz);
+    }
+  }
+
+  // Split child y of this node. i is index of y in children array
+  splitChild(i, viz) {
+    let y = this.children[i];
+    let z = new BTreeNode(y.t, y.leaf);
+    let t = y.t;
+
+    // Copy last (t-1) keys of y to z
+    for (let j = 0; j < t - 1; j++) {
+      z.keys[j] = y.keys[j + t];
+    }
+
+    // If y is not leaf, copy last t children to z
+    if (!y.leaf) {
+      for (let j = 0; j < t; j++) {
+        z.children[j] = y.children[j + t];
+      }
+    }
+
+    // Reduce size of y
+    y.keys.length = t - 1;
+    y.children.length = y.leaf ? 0 : t;
+
+    // Insert z as child after y
+    this.children.splice(i + 1, 0, z);
+
+    // Move middle key of y up to this node
+    this.keys.splice(i, 0, y.keys[t - 1]);
+    y.keys.splice(t - 1, 1);
+
+    if (viz) {
+      viz.logStep(`Split child node at index ${i}:`);
+      viz.logStep(` - Left node keys after split: [${y.keys.join(", ")}]`);
+      viz.logStep(` - Right node keys after split: [${z.keys.join(", ")}]`);
+      viz.logStep(` - Moved up key: ${this.keys[i]}`);
+    }
+  }
+
+  // Delete key k from subtree rooted with this node
+  delete(k, viz) {
+    // Find the key location or child for deletion
+    let idx = this.findKey(k);
+
+    if (idx < this.keys.length && this.keys[idx] === k) {
+      if (this.leaf) {
+        // Case 1: key is in leaf node
+        this.keys.splice(idx,1);
+        if (viz) viz.logStep(`Deleted key ${k} from leaf node: [${this.keys.join(", ")}]`);
+      } else {
+        // Case 2: key is in internal node
+        if (viz) viz.logStep(`Deleting key ${k} from internal node...`);
+        this.deleteFromNonLeaf(idx, viz);
+      }
+    } else {
+      if (this.leaf) {
+        // Key not found in tree
+        if (viz) viz.logStep(`Key ${k} not found in leaf node.`);
+        return;
+      }
+
+      // Flag to indicate if the key is present in subtree rooted with last child
+      let flag = (idx === this.keys.length);
+
+      if (this.children[idx].keys.length < this.t) {
+        if (viz) viz.logStep(`Child ${idx} has less than t keys, filling...`);
+        this.fill(idx, viz);
+      }
+      // After fill, if last child has been merged, recurse on (idx-1)th child
+      if (flag && idx > this.keys.length) {
+        this.children[idx - 1].delete(k, viz);
+      } else {
+        this.children[idx].delete(k, viz);
+      }
+    }
+  }
+
+  deleteFromNonLeaf(idx, viz) {
+    let k = this.keys[idx];
+    if (this.children[idx].keys.length >= this.t) {
+      // Case 2a: predecessor key
+      let pred = this.getPredecessor(idx);
+      if (viz) viz.logStep(`Replace key ${k} with predecessor ${pred}`);
+      this.keys[idx] = pred;
+      this.children[idx].delete(pred, viz);
+    } else if (this.children[idx+1].keys.length >= this.t) {
+      // Case 2b: successor key
+      let succ = this.getSuccessor(idx);
+      if (viz) viz.logStep(`Replace key ${k} with successor ${succ}`);
+      this.keys[idx] = succ;
+      this.children[idx+1].delete(succ, viz);
+    } else {
+      // Case 2c: merge children[idx] and children[idx+1] and delete k from merged node
+      if (viz) viz.logStep(`Merging children at index ${idx} and ${idx+1}...`);
+      this.merge(idx, viz);
+      this.children[idx].delete(k, viz);
+    }
+  }
+
+  getPredecessor(idx) {
+    let cur = this.children[idx];
+    while (!cur.leaf) {
+      cur = cur.children[cur.keys.length];
+    }
+    return cur.keys[cur.keys.length - 1];
+  }
+
+  getSuccessor(idx) {
+    let cur = this.children[idx + 1];
+    while (!cur.leaf) {
+      cur = cur.children[0];
+    }
+    return cur.keys[0];
+  }
+
+  fill(idx, viz) {
+    if (idx !== 0 && this.children[idx-1].keys.length >= this.t) {
+      if (viz) viz.logStep(`Borrowing from previous sibling at index ${idx-1}`);
+      this.borrowFromPrev(idx, viz);
+    } else if (idx !== this.keys.length && this.children[idx+1].keys.length >= this.t) {
+      if (viz) viz.logStep(`Borrowing from next sibling at index ${idx+1}`);
+      this.borrowFromNext(idx, viz);
+    } else {
+      if (idx !== this.keys.length) {
+        if (viz) viz.logStep(`Merging child at index ${idx} with next sibling at index ${idx+1}`);
+        this.merge(idx, viz);
+      } else {
+        if (viz) viz.logStep(`Merging child at index ${idx-1} with current child at index ${idx}`);
+        this.merge(idx - 1, viz);
+      }
+    }
+  }
+
+  borrowFromPrev(idx, viz) {
+    let child = this.children[idx];
+    let sibling = this.children[idx-1];
+
+    child.keys.unshift(this.keys[idx-1]);
+
+    if (!child.leaf) {
+      child.children.unshift(sibling.children.pop());
+    }
+
+    this.keys[idx-1] = sibling.keys.pop();
+
+    if (viz) {
+      viz.logStep(`Borrowed key from previous sibling.`);
+      viz.logStep(` - Updated child keys: [${child.keys.join(", ")}]`);
+      viz.logStep(` - Updated sibling keys: [${sibling.keys.join(", ")}]`);
+      viz.logStep(` - Parent keys: [${this.keys.join(", ")}]`);
+    }
+  }
+
+  borrowFromNext(idx, viz) {
+    let child = this.children[idx];
+    let sibling = this.children[idx+1];
+
+    child.keys.push(this.keys[idx]);
+
+    if (!child.leaf) {
+      child.children.push(sibling.children.shift());
+    }
+
+    this.keys[idx] = sibling.keys.shift();
+
+    if (viz) {
+      viz.logStep(`Borrowed key from next sibling.`);
+      viz.logStep(` - Updated child keys: [${child.keys.join(", ")}]`);
+      viz.logStep(` - Updated sibling keys: [${sibling.keys.join(", ")}]`);
+      viz.logStep(` - Parent keys: [${this.keys.join(", ")}]`);
+    }
+  }
+
+  merge(idx, viz) {
+    let child = this.children[idx];
+    let sibling = this.children[idx+1];
+
+    child.keys.push(this.keys[idx]);
+
+    for (let i=0;i<sibling.keys.length;i++) {
+      child.keys.push(sibling.keys[i]);
+    }
+
+    if (!child.leaf) {
+      for (let i=0;i<=sibling.keys.length;i++) {
+        child.children.push(sibling.children[i]);
+      }
+    }
+
+    this.keys.splice(idx,1);
+    this.children.splice(idx+1,1);
+
+    if (viz) {
+      viz.logStep(`Merged child at index ${idx} and sibling at index ${idx+1}`);
+      viz.logStep(` - New child keys: [${child.keys.join(", ")}]`);
+      viz.logStep(` - Parent keys after merge: [${this.keys.join(", ")}]`);
+    }
+  }
+
+  // Search key k starting from this node, return { node, index } or null
+  search(k, viz) {
+    let i = 0;
+    while (i < this.keys.length && k > this.keys[i]) {
+      i++;
+    }
+    if (viz) viz.logStep(`At node with keys [${this.keys.join(", ")}], searching for key ${k}, next child index: ${i}`);
+
+    if (i < this.keys.length && this.keys[i] === k) {
+      if (viz) viz.logStep(`Found key ${k} at index ${i} of node.`);
+      return {node: this, index: i};
+    }
+    if (this.leaf) {
+      if (viz) viz.logStep(`Reached leaf node, key ${k} not found.`);
+      return null;
+    }
+    return this.children[i].search(k, viz);
+  }
+
+  // Traverse the tree in order and return keys as array
+  traverse() {
+    let result = [];
+    let i;
+    for (i=0;i<this.keys.length;i++) {
+      if (!this.leaf) {
+        result = result.concat(this.children[i].traverse());
+      }
+      result.push(this.keys[i]);
+    }
+    if (!this.leaf) {
+      result = result.concat(this.children[i].traverse());
+    }
+    return result;
+  }
+
+  // Traverse the tree in level order (BFS) and return array of arrays of keys per level
+  levelOrder() {
+    let result = [];
+    let queue = [{node:this, level:0}];
+    while(queue.length > 0) {
+      let {node, level} = queue.shift();
+      if (!result[level]) result[level] = [];
+      result[level].push(node);
+      if (!node.leaf) {
+        for(let child of node.children) {
+          queue.push({node:child, level:level+1});
+        }
+      }
+    }
+    return result;
+  }
+}
+
+class BTree {
+  constructor(t) {
+    this.t = t;
+    this.root = new BTreeNode(t, true);
+  }
+
+  insert(k, viz) {
+    if (this.root.keys.length === 2 * this.t - 1) {
+      if (viz) viz.logStep(`Root node full, need to split root.`);
+      let s = new BTreeNode(this.t, false);
+      s.children[0] = this.root;
+      this.root = s;
+      s.splitChild(0, viz);
+      s.insertNonFull(k, viz);
+    } else {
+      this.root.insertNonFull(k, viz);
+    }
+  }
+
+  search(k, viz) {
+    return this.root.search(k, viz);
+  }
+
+  delete(k, viz) {
+    if (!this.root) {
+      if (viz) viz.logStep(`Tree is empty.`);
+      return;
+    }
+    this.root.delete(k, viz);
+    if (this.root.keys.length === 0) {
+      if (!this.root.leaf) {
+        this.root = this.root.children[0];
+      } else {
+        // Tree is empty now
+        this.root = new BTreeNode(this.t, true);
+      }
+      if (viz) viz.logStep(`Updated root after deletion.`);
+    }
+  }
+
+  traverse() {
+    return this.root ? this.root.traverse() : [];
+  }
+
+  levelOrder() {
+    return this.root ? this.root.levelOrder() : [];
+  }
+}
+
+// Visualization State Machine to enable step-by-step interaction
+
+class VisualizationController {
+  constructor(btree) {
+    this.btree = btree;
+    this.steps = [];
+    this.current = -1;
+    this.activeOperation = null;
+  }
+
+  clear() {
+    this.steps = [];
+    this.current = -1;
+    this.activeOperation = null;
+  }
+
+  // Append a step message
+  logStep(message) {
+    this.steps.push(message);
+  }
+
+  // Add wrapper: Will execute given function and collect logs
+  runInsert(keys, onComplete) {
+    this.clear();
+    this.activeOperation = 'insert';
+    for(let k of keys) {
+      this.logStep(`--- Insert key ${k} ---`);
+      this.btree.insert(k, this);
+    }
+    this.logStep(`Insertion completed.`);
+    if (onComplete) onComplete();
+  }
+
+  runDelete(keys, onComplete) {
+    this.clear();
+    this.activeOperation = 'delete';
+    for(let k of keys) {
+      this.logStep(`--- Delete key ${k} ---`);
+      this.btree.delete(k, this);
+    }
+    this.logStep(`Deletion completed.`);
+    if (onComplete) onComplete();
+  }
+
+  runSearch(key, onComplete) {
+    this.clear();
+    this.activeOperation = 'search';
+    this.logStep(`--- Search for key ${key} ---`);
+    let res = this.btree.search(key, this);
+    if (res) {
+      this.logStep(`Result: Key ${key} FOUND at node keys [${res.node.keys.join(", ")}] index ${res.index}`);
+    } else {
+      this.logStep(`Result: Key ${key} NOT found in tree.`);
+    }
+    this.logStep(`Search completed.`);
+    if (onComplete) onComplete();
+  }
+
+  canStepNext() {
+    return this.current + 1 < this.steps.length;
+  }
+
+  canStepBack() {
+    return this.current - 1 >= 0;
+  }
+
+  stepNext() {
+    if (this.canStepNext()) this.current++;
+    return this.getCurrentStep();
+  }
+
+  stepBack() {
+    if (this.canStepBack()) this.current--;
+    return this.getCurrentStep();
+  }
+
+  stepEnd() {
+    this.current = this.steps.length - 1;
+    return this.getCurrentStep();
+  }
+
+  getCurrentStep() {
+    if (this.current < 0 || this.current >= this.steps.length) return "";
+    return this.steps[this.current];
+  }
+}
+
+// UI and interaction
+(function() {
+  let btree = new BTree(2);
+  let viz = new VisualizationController(btree);
+
+  // DOM refs
+  const degreeInput = document.getElementById("degreeInput");
+  const resetTree = document.getElementById("resetTree");
+  const insertValue = document.getElementById("insertValue");
+  const insertBtn = document.getElementById("insertBtn");
+  const deleteValue = document.getElementById("deleteValue");
+  const deleteBtn = document.getElementById("deleteBtn");
+  const searchValue = document.getElementById("searchValue");
+  const searchBtn = document.getElementById("searchBtn");
+  const output = document.getElementById("output");
+  const log = document.getElementById("log");
+
+  const printInorderBtn = document.getElementById("printInorder");
+  const printLevelOrderBtn = document.getElementById("printLevelOrder");
+
+  const stepByStepCheckbox = document.getElementById("stepByStepCheckbox");
+  const visualizationSection = document.getElementById("visualizationSection");
+  const stepInfo = document.getElementById("stepInfo");
+  const stepBackBtn = document.getElementById("stepBackBtn");
+  const stepNextBtn = document.getElementById("stepNextBtn");
+  const stepEndBtn = document.getElementById("stepEndBtn");
+
+  const showNodesInfo = document.getElementById("showNodesInfo");
+  const showKeysCount = document.getElementById("showKeysCount");
+  const showChildrenCount = document.getElementById("showChildrenCount");
+
+  // Helpers
+  function logMessage(msg, append=true) {
+    if (append) {
+      log.textContent += msg + "\n";
+      log.scrollTop = log.scrollHeight;
+    } else {
+      log.textContent = msg + "\n";
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+
+  function clearLog() {
+    log.textContent = "";
+  }
+
+  // Parse input keys separated by commas
+  function parseKeys(str) {
+    if (!str.trim()) return [];
+    let arr = str.split(",").map(s => s.trim()).filter(s=>s!=="");
+    let output = [];
+    for(let a of arr) {
+      if (/^-?\d+$/.test(a)) {
+        output.push(parseInt(a));
+      }
+    }
+    return output;
+  }
+
+  function renderNodeDetails(node) {
+    let parts = [];
+    parts.push("[");
+    for (let i=0; i<node.keys.length; i++) {
+      parts.push(node.keys[i]);
+      if (showKeysCount.checked) {
+        parts.push(`(keys:${node.keys.length})`);
+      }
+      if (showChildrenCount.checked) {
+        parts.push(`(children:${node.children.length})`);
+      }
+      if (i < node.keys.length-1) parts.push(", ");
+    }
+    parts.push("]");
+    if (showNodesInfo.checked) {
+      parts.push(node.leaf ? " (leaf)" : " (internal)");
+    }
+    return parts.join("");
+  }
+
+  // Render the tree textually with options
+  function renderTree() {
+    if (!btree.root) {
+      output.textContent = "(empty tree)";
+      return;
+    }
+    let lines = [];
+
+    // Level order printing with node details optionally
+    let levels = btree.levelOrder();
+    for (let l=0;l<levels.length;l++) {
+      let lineParts = [];
+      for (let node of levels[l]) {
+        lineParts.push(renderNodeDetails(node));
+      }
+      lines.push(`Level ${l}: ${lineParts.join("   ")}`);
+    }
+    output.textContent = lines.join("\n");
+  }
+
+  // UI State updates for step controls
+  function updateStepControls() {
+    stepBackBtn.disabled = !viz.canStepBack();
+    stepNextBtn.disabled = !viz.canStepNext();
+    stepEndBtn.disabled = !viz.canStepNext();
+  }
+
+  // Run step visualization for insert
+  function runInsertVisualization(keys) {
+    clearLog();
+    viz.runInsert(keys, () => {
+      if (viz.steps.length === 0) {
+        stepInfo.textContent = "No steps recorded.";
+      } else {
+        viz.current = -1;
+        stepInfo.textContent = "";
+        stepNextBtn.disabled = false;
+        stepBackBtn.disabled = true;
+        stepEndBtn.disabled = false;
+      }
+      renderTree();
+      updateStepControls();
+    });
+  }
+
+  // Run step visualization for delete
+  function runDeleteVisualization(keys) {
+    clearLog();
+    viz.runDelete(keys, () => {
+      if (viz.steps.length === 0) {
+        stepInfo.textContent = "No steps recorded.";
+      } else {
+        viz.current = -1;
+        stepInfo.textContent = "";
+        stepNextBtn.disabled = false;
+        stepBackBtn.disabled = true;
+        stepEndBtn.disabled = false;
+      }
+      renderTree();
+      updateStepControls();
+    });
+  }
+
+  // Run step visualization for search
+  function runSearchVisualization(key) {
+    clearLog();
+    viz.runSearch(key, () => {
+      if (viz.steps.length === 0) {
+        stepInfo.textContent = "No steps recorded.";
+      } else {
+        viz.current = -1;
+        stepInfo.textContent = "";
+        stepNextBtn.disabled = false;
+        stepBackBtn.disabled = true;
+        stepEndBtn.disabled = false;
+      }
+      renderTree();
+      updateStepControls();
+    });
+  }
+
+  // Handlers for buttons
+  resetTree.addEventListener("click", function() {
+    let t = parseInt(degreeInput.value);
+    if (isNaN(t) || t < 2) {
+      alert("Please enter a valid minimum degree (t ≥ 2).");
+      return;
+    }
+    btree = new BTree(t);
+    viz = new VisualizationController(btree);
+    clearLog();
+    stepInfo.textContent = "";
+    renderTree();
+    if (stepByStepCheckbox.checked) {
+      visualizationSection.style.display = "block";
+      stepBackBtn.disabled = true;
+      stepNextBtn.disabled = true;
+      stepEndBtn.disabled = true;
+    } else {
+      visualizationSection.style.display = "none";
+    }
+  });
+
+  insertBtn.addEventListener("click", function() {
+    let keys = parseKeys(insertValue.value);
+    if (keys.length === 0) {
+      alert("Please enter at least one valid integer key to insert.");
+      return;
+    }
+    if (stepByStepCheckbox.checked) {
+      runInsertVisualization(keys);
+    } else {
+      clearLog();
+      for (let k of keys) {
+        btree.insert(k);
+        logMessage(`Inserted key ${k}`);
+      }
+      renderTree();
+    }
+  });
+
+  deleteBtn.addEventListener("click", function() {
+    let keys = parseKeys(deleteValue.value);
+    if (keys.length === 0) {
+      alert("Please enter at least one valid integer key to delete.");
+      return;
+    }
+    if (stepByStepCheckbox.checked) {
+      runDeleteVisualization(keys);
+    } else {
+      clearLog();
+      for(let k of keys) {
+        btree.delete(k);
+        logMessage(`Deleted key ${k}`);
+      }
+      renderTree();
+    }
+  });
+
+  searchBtn.addEventListener("click", function() {
+    let k = parseInt(searchValue.value);
+    if (isNaN(k)) {
+      alert("Please enter a valid integer key to search.");
+      return;
+    }
+    if (stepByStepCheckbox.checked) {
+      runSearchVisualization(k);
+    } else {
+      clearLog();
+      let res = btree.search(k);
+      if (res) {
+        logMessage(`Key ${k} found in node with keys [${res.node.keys.join(", ")}] at index ${res.index}`);
+      } else {
+        logMessage(`Key ${k} not found in B-Tree.`);
+      }
+      renderTree();
+    }
+  });
+
+  printInorderBtn.addEventListener("click", function() {
+    clearLog();
+    let keys = btree.traverse();
+    logMessage("In-order traversal:");
+    logMessage(keys.join(", "));
+  });
+
+  printLevelOrderBtn.addEventListener("click", function() {
+    clearLog();
+    let levels = btree.levelOrder();
+    logMessage("Level-order traversal:");
+    for(let i=0;i<levels.length;i++) {
+      let line = "Level "+i+": ";
+      let nodes = levels[i].map(n => `[${n.keys.join(", ")}]`);
+      logMessage(line + nodes.join("  "));
+    }
+  });
+
+  stepByStepCheckbox.addEventListener("change", function() {
+    if (stepByStepCheckbox.checked) {
+      visualizationSection.style.display = "block";
+    } else {
+      visualizationSection.style.display = "none";
+      viz.clear();
+      stepInfo.textContent = "";
+      stepBackBtn.disabled = true;
+      stepNextBtn.disabled = true;
+      stepEndBtn.disabled = true;
+    }
+  });
+
+  stepNextBtn.addEventListener("click", function() {
+    let msg = viz.stepNext();
+    if (msg !== null) {
+      stepInfo.textContent = msg;
+      logMessage(msg);
+    }
+    updateStepControls();
+    if (!viz.canStepNext()) renderTree();
+  });
+
+  stepBackBtn.addEventListener("click", function() {
+    let msg = viz.stepBack();
+    if (msg !== null) {
+      stepInfo.textContent = msg;
+      // On step back remove last log line if equals step, else do not append again
+      let loglines = log.textContent.trim().split("\n");
+      if (loglines.length>0 && loglines[loglines.length-1]===msg) {
+        loglines.pop();
+        log.textContent = loglines.join("\n") + "\n";
+      }
+    }
+    updateStepControls();
+  });
+
+  stepEndBtn.addEventListener("click", function() {
+    let msg = viz.stepEnd();
+    if (msg !== null) {
+      stepInfo.textContent = msg;
+      for(let i = viz.current+1; i<viz.steps.length; i++) {
+        logMessage(viz.steps[i]);
+      }
+    }
+    updateStepControls();
+    renderTree();
+  });
+
+  showNodesInfo.addEventListener("change", renderTree);
+  showKeysCount.addEventListener("change", renderTree);
+  showChildrenCount.addEventListener("change", renderTree);
+
+  // Initialize tree and render
+  renderTree();
+
+})();
+
+</script>
+
+</body>
+</html>

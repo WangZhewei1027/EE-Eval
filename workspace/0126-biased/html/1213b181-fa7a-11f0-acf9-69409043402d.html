@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Selection Sort Interactive Explorer</title>
+<style>
+  body {
+    background: white;
+    color: black;
+    font-family: monospace, monospace;
+    margin: 1rem;
+  }
+  button, input[type=number], input[type=text], label, select {
+    font-family: monospace, monospace;
+    font-size: 1rem;
+    margin: 0.2rem 0.5rem 0.2rem 0;
+  }
+  #array-container {
+    margin: 1rem 0 1rem 0;
+  }
+  .array-element {
+    display: inline-block;
+    width: 3rem;
+    text-align: center;
+    border: 1px solid black;
+    padding: 0.2rem 0;
+    margin: 0 0.1rem;
+    user-select: none;
+  }
+  .current-index {
+    border-bottom: 3px solid black;
+  }
+  .min-index {
+    border-bottom: 3px double black;
+  }
+  .selected-sorted {
+    border-bottom: 3px dotted black;
+  }
+  #log {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+  #controls {
+    margin-top: 1rem;
+  }
+  #slider-controls label, #manual-controls label {
+    font-weight: bold;
+    user-select: none;
+  }
+  fieldset {
+    margin-top: 1rem;
+    padding: 0.5rem;
+  }
+</style>
+</head>
+<body>
+<h1>Selection Sort Interactive Explorer</h1>
+
+<p>
+  This demo allows you to deeply explore the Selection Sort algorithm with full manual control, automatic and step-by-step execution, and customization of the data set.
+</p>
+
+<div id="array-container" aria-label="Array to sort" role="list" tabindex="0"></div>
+
+<div id="info" aria-live="polite" style="margin-bottom: 1rem;">
+  Status: <span id="status-text">Array not initialized.</span>
+</div>
+
+<div id="controls">
+
+  <fieldset>
+    <legend>Array Setup and Input</legend>
+    <label for="array-input">Enter array (comma separated integers):</label><br />
+    <input type="text" id="array-input" aria-describedby="array-input-desc" size="40" placeholder="e.g. 5,3,8,1,9" />
+    <button id="load-array">Load Array</button>
+    <span id="array-input-desc" style="font-size:0.8rem;">Only integer values supported. Max length 30.</span><br /><br />
+
+    <label for="random-size">Generate Random Array Size:</label>
+    <input type="number" id="random-size" min="2" max="30" value="10" aria-describedby="random-size-desc" />
+    <button id="generate-random">Generate Random Array</button>
+    <span id="random-size-desc" style="font-size:0.8rem;">Between 2 and 30 elements.</span><br /><br />
+
+    <label for="random-min">Min Value:</label>
+    <input type="number" id="random-min" value="0" aria-describedby="random-range-desc" />
+    <label for="random-max">Max Value:</label>
+    <input type="number" id="random-max" value="100" aria-describedby="random-range-desc" />
+    <span id="random-range-desc" style="font-size:0.8rem;">Min &le; Max.</span>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step Controls</legend>
+    <button id="step-forward" disabled>Step Forward</button>
+    <button id="step-backward" disabled>Step Backward</button>
+    <button id="run-auto" disabled>Run Auto</button>
+    <button id="pause-auto" disabled>Pause Auto</button>
+    <button id="reset" disabled>Reset</button>
+    <label for="auto-interval">Speed (ms per step):</label>
+    <input type="number" id="auto-interval" value="800" min="100" max="5000" step="100" />
+  </fieldset>
+
+  <fieldset>
+    <legend>Visualization Options</legend>
+    <label for="highlight-current">Highlight Current Index</label>
+    <input type="checkbox" id="highlight-current" checked />
+    <label for="highlight-min">Highlight Min Index</label>
+    <input type="checkbox" id="highlight-min" checked />
+    <label for="highlight-sorted">Highlight Sorted Section</label>
+    <input type="checkbox" id="highlight-sorted" checked />
+  </fieldset>
+
+</div>
+
+<fieldset style="margin-top:1rem;">
+  <legend>Sort Log and Exploration</legend>
+  <button id="clear-log">Clear Log</button>
+  <p style="font-size:0.9rem; margin:0.5rem 0;">You can click on any element below to jump to the step in which that element was last modified (swapped or considered minimum).</p>
+  <div id="log" tabindex="0" aria-label="Sort operation log"></div>
+</fieldset>
+
+<script>
+(function(){
+  "use strict";
+
+  // State variables
+  let array = [];
+  let originalArray = [];
+  let stepHistory = [];
+  let currentStepIndex = -1; // -1 = before first step, 0..n = steps
+  let isAutoRunning = false;
+  let autoTimer = null;
+
+  // Selection sort internal state per step:
+  // Each step object:
+  // {
+  //  i: current index (outer loop)
+  //  j: current index (inner loop)
+  //  minIndex: index of current minimum
+  //  array: snapshot array at this step
+  //  action: string describing step action ("init", "findMin", "swap", "done")
+  //  description: human readable description
+  // }
+
+  // Cached DOM Elements
+  const arrayContainer = document.getElementById("array-container");
+  const statusText = document.getElementById("status-text");
+  const stepForwardBtn = document.getElementById("step-forward");
+  const stepBackwardBtn = document.getElementById("step-backward");
+  const runAutoBtn = document.getElementById("run-auto");
+  const pauseAutoBtn = document.getElementById("pause-auto");
+  const resetBtn = document.getElementById("reset");
+  const autoIntervalInput = document.getElementById("auto-interval");
+  const clearLogBtn = document.getElementById("clear-log");
+
+  const highlightCurrentCheckbox = document.getElementById("highlight-current");
+  const highlightMinCheckbox = document.getElementById("highlight-min");
+  const highlightSortedCheckbox = document.getElementById("highlight-sorted");
+
+  const loadArrayBtn = document.getElementById("load-array");
+  const arrayInput = document.getElementById("array-input");
+  const generateRandomBtn = document.getElementById("generate-random");
+  const randomSizeInput = document.getElementById("random-size");
+  const randomMinInput = document.getElementById("random-min");
+  const randomMaxInput = document.getElementById("random-max");
+
+  const logContainer = document.getElementById("log");
+
+  // Utility functions
+  function cloneArray(arr){
+    return arr.slice();
+  }
+
+  function safeParseArray(text){
+    // Parse comma separated integers, ignore empty
+    try {
+      let parts = text.split(",").map(s=>s.trim()).filter(s=>s.length>0);
+      let vals = parts.map(s=>{
+        let v = Number(s);
+        if (!Number.isInteger(v)) throw new Error("Non-integer detected");
+        return v;
+      });
+      if(vals.length === 0) throw new Error("Input is empty");
+      if(vals.length > 30) throw new Error("Max length 30 exceeded");
+      return vals;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function generateRandomArray(size,min,max){
+    let arr = [];
+    for(let i=0;i<size;i++){
+      let val = Math.floor(Math.random()*(max-min+1)) + min;
+      arr.push(val);
+    }
+    return arr;
+  }
+
+  // Log management
+  function pushLogStep(step){
+    stepHistory.push(step);
+  }
+
+  function setStatus(str){
+    statusText.textContent = str;
+  }
+
+  function clearAllStates(){
+    array = [];
+    originalArray = [];
+    stepHistory = [];
+    currentStepIndex = -1;
+    isAutoRunning = false;
+    clearInterval(autoTimer);
+    autoTimer = null;
+  }
+
+  // Build the entire stepHistory for the full selection sort of originalArray
+  function buildSelectionSortSteps(arr){
+    let stateSteps = [];
+
+    let a = cloneArray(arr);
+    let n = a.length;
+
+    // Initial step: before sorting
+    stateSteps.push({
+      i: -1,
+      j: -1,
+      minIndex: -1,
+      array: cloneArray(a),
+      action: "init",
+      description: "Initial array state before sorting."
+    });
+
+    for(let i=0;i<n-1;i++){
+      let minIdx = i;
+      // Log the start of searching min for position i
+      stateSteps.push({
+        i:i,
+        j: i,
+        minIndex: minIdx,
+        array: cloneArray(a),
+        action: "startOuterLoop",
+        description: `Selecting index ${i} as initial minimum.`
+      });
+
+      for(let j=i+1;j<n;j++){
+        // Log checking element j against minIdx
+        stateSteps.push({
+          i:i,
+          j:j,
+          minIndex:minIdx,
+          array: cloneArray(a),
+          action: "checkComparison",
+          description: `Comparing element at index ${j} (${a[j]}) with current min at index ${minIdx} (${a[minIdx]}).`
+        });
+        if(a[j] < a[minIdx]){
+          minIdx = j;
+          // Log minIdx updated
+          stateSteps.push({
+            i:i,
+            j:j,
+            minIndex:minIdx,
+            array: cloneArray(a),
+            action: "updateMin",
+            description: `New minimum found at index ${minIdx} (${a[minIdx]}).`
+          });
+        }
+      }
+
+      if(minIdx !== i){
+        // Log swap about to happen
+        stateSteps.push({
+          i:i,
+          j:-1,
+          minIndex:minIdx,
+          array: cloneArray(a),
+          action: "swapStart",
+          description: `Swapping element at index ${i} (${a[i]}) with minimum at index ${minIdx} (${a[minIdx]}).`
+        });
+        // Swap
+        [a[i], a[minIdx]] = [a[minIdx], a[i]];
+
+        // Log array after swap
+        stateSteps.push({
+          i:i,
+          j:-1,
+          minIndex:minIdx,
+          array: cloneArray(a),
+          action: "swapDone",
+          description: `Swap completed: element at index ${i} is now ${a[i]}, minimum placed at index ${minIdx}.`
+        });
+      } else {
+        // Log no swap needed
+        stateSteps.push({
+          i:i,
+          j:-1,
+          minIndex:minIdx,
+          array: cloneArray(a),
+          action: "noSwap",
+          description: `No swap needed for index ${i}, current minimum is already in place.`
+        });
+      }
+    }
+
+    // Final step: sorted array
+    stateSteps.push({
+      i:-1,
+      j:-1,
+      minIndex:-1,
+      array: cloneArray(a),
+      action: "done",
+      description: "Array sorted, selection sort complete."
+    });
+
+    return stateSteps;
+  }
+
+  // Render the array with highlights depending on step and user settings
+  function renderArray(step){
+    arrayContainer.innerHTML = "";
+    if(!step) return;
+
+    const arr = step.array;
+    const currentI = (typeof step.i === "number")?step.i:-1;
+    const currentJ = (typeof step.j === "number")?step.j:-1;
+    const minIdx = (typeof step.minIndex === "number")?step.minIndex:-1;
+
+    // Sorted section = indices < currentI (if currentI >= 0)
+    // For step "done", whole array sorted
+
+    const highlightCurrent = highlightCurrentCheckbox.checked;
+    const highlightMin = highlightMinCheckbox.checked;
+    const highlightSorted = highlightSortedCheckbox.checked;
+
+    const n = arr.length;
+
+    for(let k=0;k<n;k++){
+      const el = document.createElement("div");
+      el.className = "array-element";
+      el.textContent = arr[k];
+      el.tabIndex = 0;
+      el.setAttribute("role", "listitem");
+      el.setAttribute("aria-label", `Element ${k} with value ${arr[k]}`);
+
+      // Mark current i
+      if(highlightCurrent && k === currentI && currentI >=0){
+        el.classList.add("current-index");
+        el.setAttribute("aria-current", "step");
+      }
+
+      // Mark minIndex
+      if(highlightMin && k === minIdx && minIdx >=0){
+        el.classList.add("min-index");
+      }
+
+      // Mark sorted section
+      if(highlightSorted && currentI>=0 && k < currentI){
+        el.classList.add("selected-sorted");
+      }
+
+      // For finished state - mark all sorted
+      if(step.action === "done"){
+        el.classList.add("selected-sorted");
+      }
+
+      arrayContainer.appendChild(el);
+    }
+  }
+
+  // Render the log and enable clicking on entries to jump to that step
+  function renderLog(){
+    logContainer.innerHTML = "";
+    for(let i=0;i<stepHistory.length;i++){
+      let s = stepHistory[i];
+      let line = document.createElement("div");
+      line.textContent = `Step ${i}: ${s.description}`;
+      line.tabIndex = 0;
+      line.setAttribute("role", "button");
+      line.setAttribute("aria-pressed", (i === currentStepIndex) ? "true" : "false");
+      if(i === currentStepIndex){
+        line.style.fontWeight = "bold";
+      }
+      // Attach click to jump to step i
+      line.addEventListener("click", function(){
+        gotoStep(i);
+      });
+      // Keyboard accessibility explicit handling
+      line.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" || ev.key === " "){
+          ev.preventDefault();
+          gotoStep(i);
+        }
+      });
+      logContainer.appendChild(line);
+    }
+    // Scroll log to show current step
+    if(currentStepIndex >= 0){
+      let children = logContainer.children;
+      if(children.length > currentStepIndex){
+        children[currentStepIndex].scrollIntoView({block:"nearest"});
+      }
+    }
+  }
+
+  // Update UI controls status
+  function updateControls(){
+    const canStepForward = currentStepIndex < stepHistory.length -1 && currentStepIndex >=0;
+    const canStepBackward = currentStepIndex > 0;
+
+    stepForwardBtn.disabled = !canStepForward;
+    stepBackwardBtn.disabled = !canStepBackward;
+    runAutoBtn.disabled = !canStepForward || isAutoRunning;
+    pauseAutoBtn.disabled = !isAutoRunning;
+    resetBtn.disabled = (currentStepIndex < 0);
+  }
+
+  // Go to a step index, update visuals and status
+  function gotoStep(index){
+    if(index < 0 || index >= stepHistory.length){
+      return;
+    }
+    currentStepIndex = index;
+    let step = stepHistory[currentStepIndex];
+    renderArray(step);
+    renderLog();
+    setStatus(`Step ${currentStepIndex}: ${step.description}`);
+    updateControls();
+  }
+
+  // Step forward handler
+  function stepForward(){
+    if(currentStepIndex < stepHistory.length -1){
+      gotoStep(currentStepIndex+1);
+    }
+  }
+
+  // Step backward handler
+  function stepBackward(){
+    if(currentStepIndex > 0){
+      gotoStep(currentStepIndex-1);
+    }
+  }
+
+  // Auto run start
+  function startAutoRun(){
+    if(isAutoRunning) return;
+    isAutoRunning = true;
+    updateControls();
+    let interval = parseInt(autoIntervalInput.value,10);
+    if(isNaN(interval) || interval < 100) interval = 800;
+    autoTimer = setInterval(()=>{
+      if(currentStepIndex >= stepHistory.length-1){
+        stopAutoRun();
+      } else {
+        stepForward();
+      }
+    }, interval);
+  }
+
+  // Auto run stop
+  function stopAutoRun(){
+    if(!isAutoRunning) return;
+    isAutoRunning = false;
+    clearInterval(autoTimer);
+    autoTimer = null;
+    updateControls();
+  }
+
+  // Reset entire state to original unsorted array first step
+  function resetSorting(){
+    if(originalArray.length === 0) return;
+    stepHistory = buildSelectionSortSteps(originalArray);
+    currentStepIndex = 0;
+    renderArray(stepHistory[0]);
+    renderLog();
+    setStatus(`Reset to initial state at step 0.`);
+    updateControls();
+  }
+
+  // Initialize sorting from a loaded array (valid int array)
+  function initializeWithArray(arr){
+    clearAllStates();
+    originalArray = cloneArray(arr);
+    stepHistory = buildSelectionSortSteps(originalArray);
+    currentStepIndex = 0;
+    renderArray(stepHistory[0]);
+    renderLog();
+    setStatus(`Array loaded with length ${arr.length}. Ready to start.`);
+    updateControls();
+  }
+
+  function logError(msg){
+    alert("Input error: "+msg);
+  }
+
+  // Event Listeners
+  loadArrayBtn.addEventListener("click", function(){
+    const arr = safeParseArray(arrayInput.value);
+    if(arr === null){
+      logError("Invalid input array. Make sure to enter a comma-separated list of integers with max 30 elements.");
+      return;
+    }
+    initializeWithArray(arr);
+  });
+
+  generateRandomBtn.addEventListener("click", function(){
+    const size = parseInt(randomSizeInput.value,10);
+    if(isNaN(size) || size < 2 || size > 30){
+      logError("Random array size must be between 2 and 30.");
+      return;
+    }
+    let minVal = parseInt(randomMinInput.value,10);
+    let maxVal = parseInt(randomMaxInput.value,10);
+    if(isNaN(minVal)) minVal = 0;
+    if(isNaN(maxVal)) maxVal = 100;
+    if(minVal > maxVal){
+      logError("Min value cannot be greater than Max value.");
+      return;
+    }
+    const arr = generateRandomArray(size,minVal,maxVal);
+    arrayInput.value = arr.join(", ");
+    initializeWithArray(arr);
+  });
+
+  stepForwardBtn.addEventListener("click", function(){
+    stepForward();
+    stopAutoRun();
+  });
+
+  stepBackwardBtn.addEventListener("click", function(){
+    stepBackward();
+    stopAutoRun();
+  });
+
+  runAutoBtn.addEventListener("click", function(){
+    startAutoRun();
+  });
+
+  pauseAutoBtn.addEventListener("click", function(){
+    stopAutoRun();
+  });
+
+  resetBtn.addEventListener("click", function(){
+    stopAutoRun();
+    resetSorting();
+  });
+
+  clearLogBtn.addEventListener("click", function(){
+    logContainer.innerHTML = "";
+  });
+
+  // If user changes the interval during auto run, reset timer
+  autoIntervalInput.addEventListener("change", function(){
+    if(isAutoRunning){
+      stopAutoRun();
+      startAutoRun();
+    }
+  });
+
+  // Highlight option changed - rerender current step
+  [highlightCurrentCheckbox, highlightMinCheckbox, highlightSortedCheckbox].forEach(chk=>{
+    chk.addEventListener("change", function(){
+      if(currentStepIndex >= 0){
+        renderArray(stepHistory[currentStepIndex]);
+      }
+    });
+  });
+
+  // Keyboard shortcuts for convenience
+  window.addEventListener("keydown", function(e){
+    if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return; // ignore inputs
+
+    switch(e.key){
+      case "ArrowRight":
+      case "n": // next
+        if(!stepForwardBtn.disabled){
+          stepForward();
+          stopAutoRun();
+        }
+        break;
+      case "ArrowLeft":
+      case "p": // previous
+        if(!stepBackwardBtn.disabled){
+          stepBackward();
+          stopAutoRun();
+        }
+        break;
+      case "r": // run auto
+        if(!runAutoBtn.disabled){
+          startAutoRun();
+        }
+        break;
+      case "s": // stop auto
+        if(!pauseAutoBtn.disabled){
+          stopAutoRun();
+        }
+        break;
+      case "0": // reset
+        if(!resetBtn.disabled){
+          stopAutoRun();
+          resetSorting();
+        }
+        break;
+    }
+  });
+
+  // On page load: no array loaded
+  setStatus("Please input or generate an array to start sorting.");
+
+})();
+</script>
+</body>
+</html>

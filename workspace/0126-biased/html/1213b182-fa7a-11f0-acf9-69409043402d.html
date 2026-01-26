@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Insertion Sort Interactive Explorer</title>
+<style>
+  /* Minimal styling for layout only */
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+  }
+  #arrayInput, #stepControls, #autoControls, #info, #customStep {
+    margin-top: 10px;
+  }
+  button, input[type=number], input[type=text], select {
+    margin-right: 5px;
+    margin-bottom: 5px;
+    font-size: 1em;
+  }
+  #arrayDisplay {
+    white-space: pre;
+    font-size: 1.1em;
+  }
+  #log {
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 5px;
+    font-size: 0.9em;
+  }
+  #statesList {
+    max-height: 120px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 3px;
+    font-size: 0.9em;
+  }
+  label {
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+
+<h2>Insertion Sort Interactive Explorer</h2>
+
+<div id="arrayInput">
+  <label for="inputArray">Enter array (comma/space separated):</label><br/>
+  <input type="text" id="inputArray" size="50" aria-label="Input array" value="5 3 8 6 2 9 1" />
+  <button id="loadArrayBtn">Load Array</button>
+</div>
+
+<div id="arrayDisplay" aria-live="polite" aria-atomic="true"></div>
+
+<div id="stepControls" aria-label="Step Controls" role="group">
+  <button id="prevStep" disabled>&lt; Prev Step</button>
+  <button id="nextStep" disabled>Next Step &gt;</button>
+  <button id="firstStep" disabled>|&lt; First</button>
+  <button id="lastStep" disabled>&gt;| Last</button>
+</div>
+
+<div id="autoControls" aria-label="Automatic Controls" role="group">
+  <label for="autoSpeed">Auto speed (ms per step):</label>
+  <input type="number" id="autoSpeed" value="1000" min="100" max="5000" step="100" aria-describedby="autoSpeedDesc" />
+  <span id="autoSpeedDesc">(100 to 5000)</span>
+  <button id="startAuto" disabled>Start Auto</button>
+  <button id="stopAuto" disabled>Stop Auto</button>
+</div>
+
+<div id="customStep" aria-label="Custom Step Navigation" role="group">
+  <label for="goToStepInput">Go to step (#):</label>
+  <input type="number" id="goToStepInput" value="0" min="0" aria-describedby="stepCountDesc"/>
+  <button id="goToStepBtn" disabled>Go</button>
+  <span id="stepCountDesc">(0 based, max 0)</span>
+</div>
+
+<div id="info" aria-live="polite" aria-atomic="true" style="white-space: pre-wrap; margin-top:10px;">
+</div>
+
+<h3>State Timeline (Click step to jump)</h3>
+<div id="statesList" role="listbox" tabindex="0" aria-label="List of algorithm states">
+</div>
+
+<h3>Operation Log</h3>
+<div id="log" aria-live="polite" aria-atomic="false" tabindex="0"></div>
+
+<h3>Explore More</h3>
+<div id="exploreControls" aria-label="Exploration Controls" role="group">
+  <label for="insertValue">Insert value:</label>
+  <input type="number" id="insertValue" aria-describedby="insertValueDesc" />
+  <button id="insertBtn" disabled>Insert</button>
+  <span id="insertValueDesc">Insert a number into the sorted part at current step</span>
+  <button id="removeBtn" disabled>Remove selected index</button>
+  <label for="removeIndex">Index:</label>
+  <input type="number" id="removeIndex" min="0" />
+  <br/>
+  <label for="replaceIndex">Replace at index:</label>
+  <input type="number" id="replaceIndex" min="0" />
+  <label for="replaceValue">With value:</label>
+  <input type="number" id="replaceValue" />
+  <button id="replaceBtn" disabled>Replace</button>
+  <br/>
+  <button id="resetBtn">Reset to loaded array</button>
+</div>
+
+<script>
+(function(){
+  // Core data structures
+  // Each state records:
+  // - array snapshot (array of numbers)
+  // - current i (insertion index in the main algorithm)
+  // - j index (pointer moving backward)
+  // - description string for this step
+  // We'll generate these states by simulating insertion sort with fine-grained steps.
+
+  // For maximum interactivity, states can be explored and even modified.
+  // User can jump to any state, step forward/backward.
+  // Users can insert or remove elements at the current state to explore.
+
+  // Globals:
+  let states = []; // array of states
+  let currentStep = 0;
+
+  // State structure example:
+  // {
+  //   array: [...],
+  //   i: number|null,
+  //   j: number|null,
+  //   phase: string, // "start", "compare", "shift", "insert", "done" etc.
+  //   description: string
+  // }
+
+  // DOM elements
+  const inputArrayEl = document.getElementById('inputArray');
+  const loadArrayBtn = document.getElementById('loadArrayBtn');
+  const arrayDisplayEl = document.getElementById('arrayDisplay');
+  const prevStepBtn = document.getElementById('prevStep');
+  const nextStepBtn = document.getElementById('nextStep');
+  const firstStepBtn = document.getElementById('firstStep');
+  const lastStepBtn = document.getElementById('lastStep');
+  const autoSpeedInput = document.getElementById('autoSpeed');
+  const startAutoBtn = document.getElementById('startAuto');
+  const stopAutoBtn = document.getElementById('stopAuto');
+  const goToStepInput = document.getElementById('goToStepInput');
+  const goToStepBtn = document.getElementById('goToStepBtn');
+  const stepCountDescSpan = document.getElementById('stepCountDesc');
+  const infoEl = document.getElementById('info');
+  const statesListEl = document.getElementById('statesList');
+  const logEl = document.getElementById('log');
+  const insertValueInput = document.getElementById('insertValue');
+  const insertBtn = document.getElementById('insertBtn');
+  const removeBtn = document.getElementById('removeBtn');
+  const removeIndexInput = document.getElementById('removeIndex');
+  const replaceIndexInput = document.getElementById('replaceIndex');
+  const replaceValueInput = document.getElementById('replaceValue');
+  const replaceBtn = document.getElementById('replaceBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  // For auto play
+  let autoIntervalID = null;
+
+  function parseInputArray(str) {
+    // Parse by splitting on comma or space, filter out empty and NaN
+    let rawItems = str.split(/[\s,]+/);
+    let arr = [];
+    for(let item of rawItems) {
+      if(item.trim() === '') continue;
+      let n = Number(item);
+      if(!Number.isNaN(n)) arr.push(n);
+    }
+    return arr;
+  }
+
+  // Clear all states and reset
+  function resetStates() {
+    states = [];
+    currentStep = 0;
+    updateStepControls();
+    updateGoToControls();
+    renderState();
+    renderStatesList();
+    clearLog();
+    stopAuto();
+    insertBtn.disabled = true;
+    removeBtn.disabled = true;
+    replaceBtn.disabled = true;
+  }
+
+  // Generate detailed insertion sort states for given array
+  // States show very fine-grained steps: start of iteration, comparisons, shifts, insertion of key
+  function generateInsertionSortStates(arr) {
+    let s = [];
+    let array = arr.slice();
+    // Initial state
+    s.push({
+      array: array.slice(),
+      i: null,
+      j: null,
+      phase: "start",
+      description: "Initial array before sorting"
+    });
+
+    let n = array.length;
+
+    for(let i=1; i<n; i++) {
+      let key = array[i];
+      let j = i-1;
+      // State: Start iteration with key at i
+      s.push({
+        array: array.slice(),
+        i: i,
+        j: null,
+        phase: "iteration_start",
+        description: `Start iteration with i=${i}, key=${key}`
+      });
+
+      // Compare and shift elements greater than key
+      while(j>=0 && array[j] > key) {
+        // State before compare
+        s.push({
+          array: array.slice(),
+          i: i,
+          j: j,
+          phase: "compare",
+          description: `Compare key=${key} with array[${j}]=${array[j]} (key < array[j]) - shift needed`
+        });
+        // Shift element right
+        array[j+1] = array[j];
+        s.push({
+          array: array.slice(),
+          i: i,
+          j: j,
+          phase: "shift",
+          description: `Shift array[${j}]=${array[j]} to position ${j+1}`
+        });
+        j--;
+      }
+      if(j>=0) {
+        s.push({
+          array: array.slice(),
+          i: i,
+          j: j,
+          phase: "compare",
+          description: `Compare key=${key} with array[${j}]=${array[j]} (key >= array[j]) - no shift`
+        });
+      } else {
+        s.push({
+          array: array.slice(),
+          i: i,
+          j: j,
+          phase: "compare",
+          description: `Compare key=${key} with array[${j}]=undefined (start of array) - stop shifting`
+        });
+      }
+      array[j+1] = key;
+      s.push({
+        array: array.slice(),
+        i: i,
+        j: j,
+        phase: "insert",
+        description: `Insert key=${key} at position ${j+1}`
+      });
+    }
+
+    s.push({
+      array: array.slice(),
+      i: null,
+      j: null,
+      phase: "done",
+      description: "Array is fully sorted"
+    });
+
+    return s;
+  }
+
+  // Render the current state information and array
+  function renderState() {
+    if(states.length===0) {
+      arrayDisplayEl.textContent = "No array loaded.";
+      infoEl.textContent = "";
+      return;
+    }
+    let state = states[currentStep];
+    let arr = state.array;
+    
+    // Show array with markers
+    // Mark i and j indexes visually with ^ in line below numbers
+    // We'll print indexes on top, then array values, then marker line with i/j indicators
+
+    let indexesLine = "";
+    for(let idx=0; idx<arr.length; idx++) {
+      let sidx = String(idx);
+      while(sidx.length<3) sidx += " ";
+      if(idx < arr.length-1) sidx += " ";
+      indexesLine += sidx;
+    }
+    let valuesLine = "";
+    for(let val of arr) {
+      let sval = String(val);
+      while(sval.length<3) sval += " ";
+      sval += " ";
+      valuesLine += sval;
+    }
+    let markerLine = "";
+    for(let idx=0; idx<arr.length; idx++) {
+      if(state.j===idx && state.i===idx) {
+        markerLine += "ij ".padEnd(4," ");
+      } else if(state.i === idx) {
+        markerLine += " i ".padEnd(4," ");
+      } else if(state.j === idx) {
+        markerLine += " j ".padEnd(4," ");
+      } else {
+        markerLine += "   ".padEnd(4," ");
+      }
+    }
+
+    arrayDisplayEl.textContent = indexesLine.trimEnd() + "\n" + valuesLine.trimEnd() + "\n" + markerLine.trimEnd();
+
+    infoEl.textContent = "Step "+currentStep+"/"+(states.length-1)+" - " + state.phase.toUpperCase() + "\n" + state.description;
+
+    goToStepInput.max = states.length - 1;
+    stepCountDescSpan.textContent = `(0 to ${states.length -1})`;
+
+    // Enable or disable navigation buttons
+    updateStepControls();
+
+    // Update go to step controls
+    updateGoToControls();
+
+    // Highlight current step in statesList
+    highlightCurrentStateInList();
+
+    // Enable explore controls except insert/remove/replace only if state not done
+    if(state.phase === "done" || states.length===0) {
+      insertBtn.disabled = true;
+      removeBtn.disabled = true;
+      replaceBtn.disabled = true;
+    } else {
+      insertBtn.disabled = false;
+      removeBtn.disabled = false;
+      replaceBtn.disabled = false;
+    }
+  }
+
+  // Update the Next/Prev/First/Last buttons states
+  function updateStepControls() {
+    prevStepBtn.disabled = (currentStep <= 0);
+    firstStepBtn.disabled = (currentStep <= 0);
+    nextStepBtn.disabled = (currentStep >= states.length-1);
+    lastStepBtn.disabled = (currentStep >= states.length-1);
+    startAutoBtn.disabled = (states.length === 0 || currentStep === states.length -1);
+    stopAutoBtn.disabled = true;
+    goToStepBtn.disabled = (states.length === 0);
+  }
+
+  // Update Go To step button disabled or not & max input
+  function updateGoToControls() {
+    goToStepInput.max = (states.length > 0) ? states.length - 1 : 0;
+    let val = Number(goToStepInput.value);
+    if(Number.isNaN(val) || val < 0) goToStepInput.value = 0;
+    if(val > goToStepInput.max) goToStepInput.value = goToStepInput.max;
+    goToStepBtn.disabled = (states.length === 0);
+  }
+
+  // Navigation button handlers
+  prevStepBtn.addEventListener('click', () => {
+    if(currentStep > 0) {
+      currentStep--;
+      renderState();
+    }
+  });
+  
+  nextStepBtn.addEventListener('click', () => {
+    if(currentStep < states.length - 1) {
+      currentStep++;
+      renderState();
+    }
+  });
+
+  firstStepBtn.addEventListener('click', () => {
+    currentStep = 0;
+    renderState();
+  });
+
+  lastStepBtn.addEventListener('click', () => {
+    currentStep = states.length - 1;
+    renderState();
+  });
+
+  // Auto play setup
+  startAutoBtn.addEventListener('click', () => {
+    if(autoIntervalID !== null) return;
+    startAutoBtn.disabled = true;
+    stopAutoBtn.disabled = false;
+
+    let speed = Number(autoSpeedInput.value);
+    if(Number.isNaN(speed) || speed < 100) speed = 100;
+    if(speed > 5000) speed = 5000;
+    autoSpeedInput.value = speed;
+
+    autoIntervalID = setInterval(() => {
+      if(currentStep < states.length - 1) {
+        currentStep++;
+        renderState();
+      } else {
+        stopAuto();
+      }
+    }, speed);
+  });
+
+  stopAutoBtn.addEventListener('click', () => {
+    stopAuto();
+  });
+
+  function stopAuto() {
+    if(autoIntervalID !== null) {
+      clearInterval(autoIntervalID);
+      autoIntervalID = null;
+    }
+    startAutoBtn.disabled = (states.length === 0 || currentStep === states.length - 1);
+    stopAutoBtn.disabled = true;
+  }
+
+  // Go to step button
+  goToStepBtn.addEventListener('click', () => {
+    let val = Number(goToStepInput.value);
+    if(!Number.isInteger(val) || val < 0) val = 0;
+    if(val > states.length - 1) val = states.length - 1;
+    currentStep = val;
+    renderState();
+  });
+
+  // Load array button - parse input and create states
+  loadArrayBtn.addEventListener('click', () => {
+    let arr = parseInputArray(inputArrayEl.value);
+    if(arr.length === 0) {
+      alert("Please enter a valid array with numbers separated by commas or spaces.");
+      return;
+    }
+    states = generateInsertionSortStates(arr);
+    currentStep = 0;
+    renderState();
+    renderStatesList();
+    clearLog();
+    log("Loaded new array: [" + arr.join(", ") + "]");
+  });
+
+  // Log helper
+  function log(msg) {
+    let now = new Date();
+    let timestamp = now.toLocaleTimeString();
+    let line = `[${timestamp}] ${msg}\n`;
+    logEl.textContent += line;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clearLog() {
+    logEl.textContent = "";
+  }
+
+  // States list rendering
+  function renderStatesList() {
+    statesListEl.innerHTML = "";
+    if(states.length === 0) {
+      let emptyMsg = document.createElement('div');
+      emptyMsg.textContent = "No states to display.";
+      statesListEl.appendChild(emptyMsg);
+      return;
+    }
+    for(let i=0; i<states.length; i++) {
+      let div = document.createElement('div');
+      div.setAttribute('role', 'option');
+      div.tabIndex = 0;
+      div.dataset.step = i;
+      div.textContent = `${i}: ${states[i].phase} - ${states[i].description}`;
+      div.style.cursor = "pointer";
+
+      // Keyboard accessible: Enter or Space selects step
+      div.addEventListener('keydown', (e) => {
+        if(e.key === "Enter" || e.key === " "){
+          e.preventDefault();
+          jumpToStepFromList(i);
+        }
+      });
+
+      div.addEventListener('click', () => {
+        jumpToStepFromList(i);
+      });
+
+      statesListEl.appendChild(div);
+    }
+    highlightCurrentStateInList();
+  }
+
+  // Highlight the current step in the states list
+  function highlightCurrentStateInList() {
+    let children = statesListEl.children;
+    for(let i = 0; i < children.length; i++) {
+      if(children[i].dataset.step == currentStep) {
+        children[i].style.backgroundColor = "#ddd";
+        children[i].setAttribute('aria-selected', 'true');
+        children[i].scrollIntoView({block:"nearest", inline:"nearest"});
+      } else {
+        children[i].style.backgroundColor = "";
+        children[i].setAttribute('aria-selected', 'false');
+      }
+    }
+  }
+
+  function jumpToStepFromList(step) {
+    if(step >= 0 && step < states.length) {
+      currentStep = step;
+      renderState();
+    }
+  }
+
+  // Exploration features: insert/remove/replace elements dynamically at current state
+  // These manipulations create a new branch/fork of states from this step,
+  // re-running insertion sort from this modified array starting from step 0.
+
+  insertValueInput.addEventListener('input', () => {
+    // Enable insert button only if valid number
+    let val = insertValueInput.value.trim();
+    insertBtn.disabled = val === "" || Number.isNaN(Number(val)) || states.length === 0;
+  });
+  insertBtn.addEventListener('click', () => {
+    if(states.length === 0) return;
+    let val = Number(insertValueInput.value);
+    if(Number.isNaN(val)) return;
+
+    let state = states[currentStep];
+    let arr = state.array.slice();
+
+    // For maximum exploration, insert at the sorted portion (0..i)
+    // Current i indicates sorted portion end; if i null, set to zero (start)
+    let insertIndex = state.i !== null ? state.i : 0;
+
+    arr.splice(insertIndex, 0, val);
+    states = generateInsertionSortStates(arr);
+    currentStep = 0;
+    renderState();
+    renderStatesList();
+    clearLog();
+    log(`Inserted value ${val} at sorted region index ${insertIndex} and reset states.`);
+  });
+
+  removeIndexInput.addEventListener('input', () => {
+    removeBtn.disabled = states.length === 0 || removeIndexInput.value === "" || Number.isNaN(Number(removeIndexInput.value));
+  });
+  removeBtn.addEventListener('click', () => {
+    if(states.length === 0) return;
+    let idx = Number(removeIndexInput.value);
+    let state = states[currentStep];
+    let arr = state.array.slice();
+    if (idx < 0 || idx >= arr.length) {
+      alert("Remove index out of range.");
+      return;
+    }
+    let val = arr[idx];
+    arr.splice(idx,1);
+    states = generateInsertionSortStates(arr);
+    currentStep = 0;
+    renderState();
+    renderStatesList();
+    clearLog();
+    log(`Removed element at index ${idx} (value=${val}) and reset states.`);
+  });
+
+  replaceIndexInput.addEventListener('input', () => {
+    checkReplaceBtnEnabled();
+  });
+  replaceValueInput.addEventListener('input', () => {
+    checkReplaceBtnEnabled();
+  });
+
+  function checkReplaceBtnEnabled() {
+    let idxVal = replaceIndexInput.value.trim();
+    let newVal = replaceValueInput.value.trim();
+    replaceBtn.disabled = (
+      states.length === 0 ||
+      idxVal === "" || newVal === "" ||
+      Number.isNaN(Number(idxVal)) ||
+      Number.isNaN(Number(newVal))
+    );
+  }
+
+  replaceBtn.addEventListener('click', () => {
+    if(states.length === 0) return;
+    let idx = Number(replaceIndexInput.value);
+    let val = Number(replaceValueInput.value);
+    let state = states[currentStep];
+    let arr = state.array.slice();
+    if (idx < 0 || idx >= arr.length) {
+      alert("Replace index out of range.");
+      return;
+    }
+    let oldVal = arr[idx];
+    arr[idx] = val;
+    states = generateInsertionSortStates(arr);
+    currentStep = 0;
+    renderState();
+    renderStatesList();
+    clearLog();
+    log(`Replaced element at index ${idx} from ${oldVal} to ${val} and reset states.`);
+  });
+
+  // Reset button resets to loaded array (initial input)
+  resetBtn.addEventListener('click', () => {
+    loadArrayBtn.click();
+    log("Reset to loaded array.");
+  });
+
+  // On page load, load default input array and generate states
+  loadArrayBtn.click();
+
+  // Accessibility note:
+  // - statesList is keyboard focusable and each step clickable/selectable
+  // - buttons and inputs have labels and aria attributes for screen readers
+
+})();
+</script>
+
+</body>
+</html>

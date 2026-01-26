@@ -78,10 +78,29 @@ export async function runWorkflow(config, options = {}) {
       console.log(`需求: ${question}\n`);
     }
 
-    htmlContent = await generateHTML(htmlModel, question, systemPrompt, {
-      showProgress,
-      taskId: taskId ? `${taskId}-HTML` : "HTML",
-    });
+    const defaultSystemPrompt = `Generate a single, self-contained HTML file with embedded CSS and JavaScript that explains the concept ${question} through COMPREHENSIVE TEXTUAL EXPLANATIONS and educational content. Focus on:
+
+- Detailed written explanations of the concept, theory, and algorithms
+- Step-by-step textual descriptions and educational narrative
+- Rich pedagogical content with definitions, examples, and explanations
+- Thorough documentation as the PRIMARY goal
+
+IMPORTANT: Keep interactivity EXTREMELY LIMITED - the page should be mostly STATIC with extensive text content. Include at most 1 button that triggers a simple demonstration, but the emphasis should be on reading and understanding through text rather than hands-on manipulation.
+
+Only respond with the complete HTML file.
+`;
+
+    const effectiveSystemPrompt = systemPrompt || defaultSystemPrompt;
+
+    htmlContent = await generateHTML(
+      htmlModel,
+      question,
+      effectiveSystemPrompt,
+      {
+        showProgress,
+        taskId: taskId ? `${taskId}-HTML` : "HTML",
+      },
+    );
 
     // 构建消息记录
     assistantMessage = {
@@ -91,11 +110,12 @@ export async function runWorkflow(config, options = {}) {
     messages = [
       {
         role: "system",
-        content:
-          systemPrompt ||
-          "Generate a single HTML file with JavaScript demonstrating the user-given concept. Only respond in a single HTML file.",
+        content: effectiveSystemPrompt,
       },
-      { role: "user", content: question },
+      {
+        role: "user",
+        content: question,
+      },
     ];
 
     if (showProgress) {
@@ -159,7 +179,7 @@ CRITICAL REQUIREMENTS:
         if (showProgress) {
           console.log(`${"=".repeat(70)}`);
           console.log(
-            `${taskId ? `[${taskId}] ` : ""}阶段 3/3: Playwright 测试生成`
+            `${taskId ? `[${taskId}] ` : ""}阶段 3/3: Playwright 测试生成`,
           );
           console.log(`${"=".repeat(70)}`);
           console.log(`模型: ${playwrightModel}\n`);
@@ -204,7 +224,7 @@ Generate the complete test file now:`;
               showProgress,
               taskId: taskId ? `${taskId}-TEST` : "TEST",
               temperature: 0.3,
-            }
+            },
           );
 
           if (showProgress) {
@@ -259,16 +279,16 @@ Generate the complete test file now:`;
       console.log(`${"=".repeat(70)}`);
       console.log(`📋 生成摘要:`);
       console.log(
-        `   - HTML 文件: workspace/${workspace}/html/${resultId}.html`
+        `   - HTML 文件: workspace/${workspace}/html/${resultId}.html`,
       );
       if (fsmData) {
         console.log(
-          `   - FSM 文件: workspace/${workspace}/fsm/${resultId}.json`
+          `   - FSM 文件: workspace/${workspace}/fsm/${resultId}.json`,
         );
       }
       if (testCode) {
         console.log(
-          `   - 测试文件: workspace/${workspace}/tests/${testFileName}`
+          `   - 测试文件: workspace/${workspace}/tests/${testFileName}`,
         );
       }
       console.log(`\n🌐 查看地址: ${htmlUrl}`);
@@ -359,7 +379,7 @@ async function saveWorkflowResults(params) {
 
     if (showProgress) {
       console.log(
-        `${taskId ? `[${taskId}] ` : ""}✓ HTML 文件已保存: ${htmlFilePath}`
+        `${taskId ? `[${taskId}] ` : ""}✓ HTML 文件已保存: ${htmlFilePath}`,
       );
     }
   }
@@ -374,7 +394,7 @@ async function saveWorkflowResults(params) {
 
     if (showProgress) {
       console.log(
-        `${taskId ? `[${taskId}] ` : ""}✓ FSM 文件已保存: ${fsmFilePath}`
+        `${taskId ? `[${taskId}] ` : ""}✓ FSM 文件已保存: ${fsmFilePath}`,
       );
     }
   }
@@ -389,7 +409,7 @@ async function saveWorkflowResults(params) {
 
     if (showProgress) {
       console.log(
-        `${taskId ? `[${taskId}] ` : ""}✓ 测试文件已保存: ${testFilePath}`
+        `${taskId ? `[${taskId}] ` : ""}✓ 测试文件已保存: ${testFilePath}`,
       );
     }
   }
@@ -417,12 +437,12 @@ async function saveWorkflowResults(params) {
     await fs.mkdir(dataDir, { recursive: true });
     await fileWriter.writeFile(
       dataFilePath,
-      JSON.stringify(dataEntry, null, 2)
+      JSON.stringify(dataEntry, null, 2),
     );
 
     if (showProgress) {
       console.log(
-        `${taskId ? `[${taskId}] ` : ""}✓ 元数据已保存: ${dataFilePath}`
+        `${taskId ? `[${taskId}] ` : ""}✓ 元数据已保存: ${dataFilePath}`,
       );
     }
   }

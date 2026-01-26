@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Undirected Graph</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        canvas { border: 1px solid black; margin: 10px 0; }
+        .control-panel { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .control-group { margin: 10px 0; }
+        button, input, select { margin: 5px; }
+        table { border-collapse: collapse; margin: 10px 0; }
+        td, th { border: 1px solid #ccc; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Undirected Graph Explorer</h1>
+    
+    <div class="control-panel">
+        <div class="control-group">
+            <button id="addNode">Add Node</button>
+            <button id="nodeName" value="Node">Node Label</button>
+            <button id="removeNode">Remove Node</button>
+            <button id="clearGraph">Clear Graph</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="addEdge">Add Edge</button>
+            <button id="removeEdge">Remove Edge</button>
+            <span>Weight: <input type="number" id="edgeWeight" value="1" min="1" max="100"></span>
+        </div>
+        
+        <div class="control-group">
+            <button id="randomGraph">Generate Random Graph</button>
+            Nodes: <input type="number" id="randomNodes" value="5" min="2" max="20">
+            Edges: <input type="number" id="randomEdges" value="7" min="1" max="50">
+        </div>
+        
+        <div class="control-group">
+            <button id="findPath">Find Path</button>
+            From: <select id="pathFrom"></select>
+            To: <select id="pathTo"></select>
+            Algorithm: 
+            <select id="pathAlgorithm">
+                <option value="bfs">Breadth-First</option>
+                <option value="dfs">Depth-First</option>
+                <option value="dijkstra">Dijkstra's</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <button id="detectCycle">Detect Cycle</button>
+            <button id="findConnected">Find Connected Components</button>
+            <button id="findMST">Find Minimum Spanning Tree</button>
+        </div>
+    </div>
+    
+    <canvas id="graphCanvas" width="800" height="500"></canvas>
+    
+    <div class="control-panel">
+        <h3>Graph Information</h3>
+        <div id="graphInfo">
+            Nodes: 0, Edges: 0, Connected: No, Cyclic: No
+        </div>
+        
+        <h3>Adjacency List</h3>
+        <table id="adjacencyList">
+            <thead>
+                <tr><th>Node</th><th>Connections</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    
+    <div id="status"></div>
+    
+    <script>
+        // Graph data structure
+        const graph = {
+            nodes: [],
+            edges: [],
+            nextId: 1,
+            
+            addNode: function(label) {
+                const node = {
+                    id: this.nextId++,
+                    label: label || `Node ${this.nextId-1}`,
+                    x: Math.random() * 700 + 50,
+                    y: Math.random() * 400 + 50
+                };
+                this.nodes.push(node);
+                return node;
+            },
+            
+            removeNode: function(nodeId) {
+                this.nodes = this.nodes.filter(n => n.id !== nodeId);
+                this.edges = this.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
+            },
+            
+            addEdge: function(from, to, weight) {
+                if (from === to) return null; // no self-loops
+                
+                // Check if edge already exists
+                const exists = this.edges.some(e => 
+                    (e.from === from && e.to === to) || (e.from === to && e.to === from));
+                if (exists) return null;
+                
+                const edge = { from, to, weight: weight || 1 };
+                this.edges.push(edge);
+                return edge;
+            },
+            
+            removeEdge: function(from, to) {
+                this.edges = this.edges.filter(e => 
+                    !((e.from === from && e.to === to) || (e.from === to && e.to === from)));
+            },
+            
+            getNode: function(id) {
+                return this.nodes.find(n => n.id === id);
+            },
+            
+            getNeighbors: function(nodeId) {
+                return this.edges
+                    .filter(e => e.from === nodeId || e.to === nodeId)
+                    .map(e => e.from === nodeId ? e.to : e.from);
+            },
+            
+            isConnected: function() {
+                if (this.nodes.length === 0) return false;
+                const visited = new Set();
+                const queue = [this.nodes[0].id];
+                
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    visited.add(current);
+                    
+                    for (const neighbor of this.getNeighbors(current)) {
+                        if (!visited.has(neighbor)) {
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+                
+                return visited.size === this.nodes.length;
+            },
+            
+            hasCycle: function() {
+                const visited = new Set();
+                
+                for (const node of this.nodes) {
+                    if (!visited.has(node.id) && this.hasCycleDFS(node.id, -1, visited)) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            
+            hasCycleDFS: function(nodeId, parentId, visited) {
+                visited.add(nodeId);
+                
+                for (const neighbor of this.getNeighbors(nodeId)) {
+                    if (!visited.has(neighbor)) {
+                        if (this.hasCycleDFS(neighbor, nodeId, visited)) {
+                            return true;
+                        }
+                    } else if (neighbor !== parentId) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            
+            findPath: function(from, to, algorithm) {
+                if (from === to) return [from];
+                
+                if (algorithm === 'bfs') {
+                    return this.bfs(from, to);
+                } else if (algorithm === 'dfs') {
+                    return this.dfs(from, to);
+                } else if (algorithm === 'dijkstra') {
+                    return this.dijkstra(from, to);
+                }
+                return [];
+            },
+            
+            bfs: function(start, end) {
+                const queue = [[start]];
+                const visited = new Set([start]);
+                
+                while (queue.length > 0) {
+                    const path = queue.shift();
+                    const node = path[path.length - 1];
+                    
+                    if (node === end) return path;
+                    
+                    for (const neighbor of this.getNeighbors(node)) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push([...path, neighbor]);
+                        }
+                    }
+                }
+                return [];
+            },
+            
+            dfs: function(start, end, visited = new Set(), path = []) {
+                visited.add(start);
+                path.push(start);
+                
+                if (start === end) return path;
+                
+                for (const neighbor of this.getNeighbors(start)) {
+                    if (!visited.has(neighbor)) {
+                        const result = this.dfs(neighbor, end, visited, path);
+                        if (result.length > 0) return result;
+                        path.pop();
+                    }
+                }
+                return [];
+            },
+            
+            dijkstra: function(start, end) {
+                const distances = {};
+                const previous = {};
+                const nodes = new Set(this.nodes.map(n => n.id));
+                const path = [];
+                
+                for (const node of nodes) {
+                    distances[node] = Infinity;
+                    previous[node] = null;
+                }
+                distances[start] = 0;
+                
+                while (nodes.size > 0) {
+                    let smallest = null;
+                    for (const node of nodes) {
+                        if (smallest === null || distances[node] < distances[smallest]) {
+                            smallest = node;
+                        }
+                    }
+                    
+                    if (smallest === end) {
+                        while (previous[smallest]) {
+                            path.push(smallest);
+                            smallest = previous[smallest];
+                        }
+                        path.push(start);
+                        return path.reverse();
+                    }
+                    
+                    nodes.delete(smallest);
+                    
+                    for (const neighbor of this.getNeighbors(smallest)) {
+                        const edge = this.edges.find(e => 
+                            (e.from === smallest && e.to === neighbor) || 
+                            (e.from === neighbor && e.to === smallest));
+                        const alt = distances[smallest] + (edge ? edge.weight : 1);
+                        
+                        if (alt < distances[neighbor]) {
+                            distances[neighbor] = alt;
+                            previous[neighbor] = smallest;
+                        }
+                    }
+                }
+                return [];
+            },
+            
+            findConnectedComponents: function() {
+                const visited = new Set();
+                const components = [];
+                
+                for (const node of this.nodes) {
+                    if (!visited.has(node.id)) {
+                        const component = [];
+                        const queue = [node.id];
+                        
+                        while (queue.length > 0) {
+                            const current = queue.shift();
+                            if (visited.has(current)) continue;
+                            
+                            visited.add(current);
+                            component.push(current);
+                            
+                            for (const neighbor of this.getNeighbors(current)) {
+                                if (!visited.has(neighbor)) {
+                                    queue.push(neighbor);
+                                }
+                            }
+                        }
+                        components.push(component);
+                    }
+                }
+                return components;
+            },
+            
+            findMST: function() {
+                // Kruskal's algorithm
+                if (this.nodes.length === 0) return [];
+                
+                const mst = [];
+                const parent = {};
+                const rank = {};
+                
+                // Initialize each node as its own parent
+                for (const node of this.nodes) {
+                    parent[node.id] = node.id;
+                    rank[node.id] = 0;
+                }
+                
+                // Sort edges by weight
+                const sortedEdges = [...this.edges].sort((a, b) => a.weight - b.weight);
+                
+                for (const edge of sortedEdges) {
+                    const root1 = this.find(edge.from, parent);
+                    const root2 = this.find(edge.to, parent);
+                    
+                    if (root1 !== root2) {
+                        mst.push(edge);
+                        this.union(root1, root2, parent, rank);
+                    }
+                }
+                
+                return mst;
+            },
+            
+            find: function(node, parent) {
+                if (parent[node] !== node) {
+                    parent[node] = this.find(parent[node], parent);
+                }
+                return parent[node];
+            },
+            
+            union: function(a, b, parent, rank) {
+                const rootA = this.find(a, parent);
+                const rootB = this.find(b, parent);
+                
+                if (rootA === rootB) return;
+                
+                if (rank[rootA] < rank[rootB]) {
+                    parent[rootA] = rootB;
+                } else if (rank[rootA] > rank[rootB]) {
+                    parent[rootB] = rootA;
+                } else {
+                    parent[rootB] = rootA;
+                    rank[rootA]++;
+                }
+            }
+        };
+        
+        // UI State
+        const state = {
+            selectedNode: null,
+            selectedEdge: null,
+            mode: 'select', // 'select', 'addNode', 'addEdge', 'removeNode', 'removeEdge'
+            highlightedPath: [],
+            highlightedEdges: [],
+            mst: [],
+            connectedComponents: []
+        };
+        
+        // Canvas setup
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const statusDiv = document.getElementById('status');
+        const graphInfoDiv = document.getElementById('graphInfo');
+        const adjacencyList = document.getElementById('adjacencyList').querySelector('tbody');
+        
+        // Event Listeners
+        document.getElementById('addNode').addEventListener('click', () => {
+            state.mode = 'addNode';
+            updateStatus('Click on canvas to add a new node');
+        });
+        
+        document.getElementById('nodeName').addEventListener('click', () => {
+            const newName = prompt('Enter new default node name:', document.getElementById('nodeName').value);
+            if (newName !== null) {
+                document.getElementById('nodeName').value = newName;
+            }
+        });
+        
+        document.getElementById('removeNode').addEventListener('click', () => {
+            state.mode = 'removeNode';
+            updateStatus('Click on a node to remove it');
+        });
+        
+        document.getElementById('clearGraph').addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear the graph?')) {
+                graph.nodes = [];
+                graph.edges = [];
+                state.highlightedPath = [];
+                state.highlightedEdges = [];
+                state.mst = [];
+                state.connectedComponents = [];
+                updateGraph();
+            }
+        });
+        
+        document.getElementById('addEdge').addEventListener('click', () => {
+            state.mode = 'addEdge';
+            state.selectedNode = null;
+            updateStatus('Click on first node, then second node to add edge');
+        });
+        
+        document.getElementById('removeEdge').addEventListener('click', () => {
+            state.mode = 'removeEdge';
+            updateStatus('Click on an edge to remove it');
+        });
+        
+        document.getElementById('randomGraph').addEventListener('click', () => {
+            const nodeCount = parseInt(document.getElementById('randomNodes').value);
+            const edgeCount = parseInt(document.getElementById('randomEdges').value);
+            
+            if (nodeCount < 2 || edgeCount < 1) {
+                alert('Invalid parameters for random graph');
+                return;
+            }
+            
+            if (edgeCount > nodeCount * (nodeCount - 1) / 2) {
+                alert('Too many edges for the number of nodes');
+                return;
+            }
+            
+            // Clear existing graph
+            graph.nodes = [];
+            graph.edges = [];
+            graph.nextId = 1;
+            
+            // Add nodes
+            for (let i = 0; i < nodeCount; i++) {
+                graph.addNode(`Node ${i+1}`);
+            }
+            
+            // Add edges
+            const possibleEdges = [];
+            for (let i = 0; i < nodeCount; i++) {
+                for (let j = i + 1; j < nodeCount; j++) {
+                    possibleEdges.push([i+1, j+1]);
+                }
+            }
+            
+            // Shuffle possible edges
+            for (let i = possibleEdges.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [possibleEdges[i], possibleEdges[j]] = [possibleEdges[j], possibleEdges[i]];
+            }
+            
+            // Take the required number of edges
+            for (let i = 0; i < edgeCount; i < possibleEdges.length; i++) {
+                const [from, to] = possibleEdges[i];
+                graph.addEdge(from, to, Math.floor(Math.random() * 10) + 1);
+            }
+            
+            updateGraph();
+            updateStatus(`Generated random graph with ${nodeCount} nodes and ${edgeCount} edges`);
+        });
+        
+        document.getElementById('findPath').addEventListener('click', () => {
+            const from = parseInt(document.getElementById('pathFrom').value);
+            const to = parseInt(document.getElementById('pathTo').value);
+            const algorithm = document.getElementById('pathAlgorithm').value;
+            
+            if (!from || !to) {
+                alert('Please select both source and destination nodes');
+                return;
+            }
+            
+            const path = graph.findPath(from, to, algorithm);
+            
+            if (path.length === 0) {
+                updateStatus(`No path found from ${graph.getNode(from).label} to ${graph.getNode(to).label}`);
+                state.highlightedPath = [];
+            } else {
+                state.highlightedPath = path;
+                
+                // Highlight edges in the path
+                state.highlightedEdges = [];
+                for (let i = 0; i < path.length - 1; i++) {
+                    const edge = graph.edges.find(e => 
+                        (e.from === path[i] && e.to === path[i+1]) || 
+                        (e.from === path[i+1] && e.to === path[i]));
+                    if (edge) state.highlightedEdges.push(edge);
+                }
+                
+                updateStatus(`Path found (${algorithm}): ${path.map(id => graph.getNode(id).label).join(' → ')}`);
+            }
+            
+            drawGraph();
+        });
+        
+        document.getElementById('detectCycle').addEventListener('click', () => {
+            const hasCycle = graph.hasCycle();
+            if (hasCycle) {
+                updateStatus('Graph contains at least one cycle');
+            } else {
+                updateStatus('Graph is acyclic (no cycles)');
+            }
+        });
+        
+        document.getElementById('findConnected').addEventListener('click', () => {
+            state.connectedComponents = graph.findConnectedComponents();
+            
+            if (state.connectedComponents.length === 1) {
+                updateStatus('Graph is fully connected');
+            } else {
+                updateStatus(`Graph has ${state.connectedComponents.length} connected components`);
+            }
+            
+            drawGraph();
+        });
+        
+        document.getElementById('findMST').addEventListener('click', () => {
+            if (!graph.isConnected()) {
+                alert('Graph must be connected to find MST');
+                return;
+            }
+            
+            state.mst = graph.findMST();
+            updateStatus(`Found Minimum Spanning Tree with ${state.mst.length} edges`);
+            drawGraph();
+        });
+        
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.mode === 'addNode') {
+                const label = document.getElementById('nodeName').value || `Node ${graph.nextId}`;
+                graph.addNode(label);
+                updateGraph();
+                updateStatus(`Added node ${label}`);
+            } 
+            else if (state.mode === 'removeNode') {
+                const node = findNodeAt(x, y);
+                if (node) {
+                    graph.removeNode(node.id);
+                    updateGraph();
+                    updateStatus(`Removed node ${node.label}`);
+                }
+            }
+            else if (state.mode === 'addEdge') {
+                const node = findNodeAt(x, y);
+                if (node) {
+                    if (!state.selectedNode) {
+                        state.selectedNode = node;
+                        updateStatus(`Selected ${node.label}, now click destination node`);
+                    } else if (state.selectedNode.id !== node.id) {
+                        const weight = parseInt(document.getElementById('edgeWeight').value) || 1;
+                        const edge = graph.addEdge(state.selectedNode.id, node.id, weight);
+                        if (edge) {
+                            updateStatus(`Added edge between ${state.selectedNode.label} and ${node.label} (weight: ${weight})`);
+                        } else {
+                            updateStatus('Edge already exists');
+                        }
+                        state.selectedNode = null;
+                        updateGraph();
+                    }
+                }
+            }
+            else if (state.mode === 'removeEdge') {
+                const edge = findEdgeAt(x, y);
+                if (edge) {
+                    const fromNode = graph.getNode(edge.from);
+                    const toNode = graph.getNode(edge.to);
+                    graph.removeEdge(edge.from, edge.to);
+                    updateGraph();
+                    updateStatus(`Removed edge between ${fromNode.label} and ${toNode.label}`);
+                }
+            }
+            else { // select mode
+                const node = findNodeAt(x, y);
+                if (node) {
+                    updateStatus(`Selected node ${node.label}`);
+                }
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (state.mode === 'select') {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const node = findNodeAt(x, y);
+                if (node) {
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    const edge = findEdgeAt(x, y);
+                    canvas.style.cursor = edge ? 'pointer' : 'default';
+                }
+            } else {
+                canvas.style.cursor = 'crosshair';
+            }
+        });
+        
+        // Helper functions
+        function findNodeAt(x, y) {
+            for (let i = graph.nodes.length - 1; i >= 0; i--) {
+                const node = graph.nodes[i];
+                const dx = node.x - x;
+                const dy = node.y - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= 20) {
+                    return node;
+                }
+            }
+            return null;
+        }
+        
+        function findEdgeAt(x, y) {
+            for (const edge of graph.edges) {
+                const fromNode = graph.getNode(edge.from);
+                const toNode = graph.getNode(edge.to);
+                
+                if (!fromNode || !toNode) continue;
+                
+                // Simple line-to-point distance check
+                const A = { x: fromNode.x, y: fromNode.y };
+                const B = { x: toNode.x, y: toNode.y };
+                const P = { x, y };
+                
+                const AB = Math.sqrt((B.x-A.x)*(B.x-A.x) + (B.y-A.y)*(B.y-A.y));
+                const AP = (P.x-A.x)*(B.x-A.x) + (P.y-A.y)*(B.y-A.y);
+                const t = AP / (AB*AB);
+                
+                if (t < 0 || t > 1) continue;
+                
+                const projection = {
+                    x: A.x + t*(B.x-A.x),
+                    y: A.y + t*(B.y-A.y)
+                };
+                
+                const distance = Math.sqrt((P.x-projection.x)*(P.x-projection.x) + (P.y-projection.y)*(P.y-projection.y));
+                
+                if (distance <= 5) {
+                    return edge;
+                }
+            }
+            return null;
+        }
+        
+        function updateStatus(message) {
+            statusDiv.textContent = message;
+        }
+        
+        function updateGraph() {
+            // Update node lists in path finder
+            const pathFrom = document.getElementById('pathFrom');
+            const pathTo = document.getElementById('pathTo');
+            
+            pathFrom.innerHTML = '';
+            pathTo.innerHTML = '';
+            
+            graph.nodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = node.label;
+                pathFrom.appendChild(option.cloneNode(true));
+                pathTo.appendChild(option);
+            });
+            
+            // Update graph info
+            const isConnected = graph.isConnected();
+            const hasCycle = graph.hasCycle();
+            graphInfoDiv.textContent = `Nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}, Connected: ${isConnected ? 'Yes' : 'No'}, Cyclic: ${hasCycle ? 'Yes' : 'No'}`;
+            
+            // Update adjacency list
+            adjacencyList.innerHTML = '';
+            graph.nodes.forEach(node => {
+                const row = document.createElement('tr');
+                const cell1 = document.createElement('td');
+                const cell2 = document.createElement('td');
+                
+                cell1.textContent = node.label;
+                
+                const neighbors = graph.getNeighbors(node.id);
+                if (neighbors.length > 0) {
+                    cell2.textContent = neighbors.map(id => {
+                        const neighbor = graph.getNode(id);
+                        const edge = graph.edges.find(e => 
+                            (e.from === node.id && e.to === id) || 
+                            (e.from === id && e.to === node.id));
+                        return `${neighbor.label} (${edge ? edge.weight : '1'})`;
+                    }).join(', ');
+                } else {
+                    cell2.textContent = 'None';
+                }
+                
+                row.appendChild(cell1);
+                row.appendChild(cell2);
+                adjacencyList.appendChild(row);
+            });
+            
+            drawGraph();
+        }
+        
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw edges
+            for (const edge of graph.edges) {
+                const fromNode = graph.getNode(edge.from);
+                const toNode = graph.getNode(edge.to);
+                
+                if (!fromNode || !toNode) continue;
+                
+                // Highlight path edges
+                const isPathEdge = state.highlightedEdges.some(e => 
+                    (e.from === edge.from && e.to === edge.to) || 
+                    (e.from === edge.to && e.to === edge.from));
+                
+                // Highlight MST edges
+                const isMSTEdge = state.mst.some(e => 
+                    (e.from === edge.from && e.to === edge.to) || 
+                    (e.from === edge.to && e.to === edge.from));
+                
+                // Highlight connected component edges
+                let isComponentEdge = false;
+                for (const component of state.connectedComponents) {
+                    if (component.includes(edge.from) && component.includes(edge.to)) {
+                        isComponentEdge = true;
+                        break;
+                    }
+                }
+                
+                ctx.beginPath();
+                ctx.moveTo(fromNode.x, fromNode.y);
+                ctx.lineTo(toNode.x, toNode.y);
+                
+                if (isPathEdge) {
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 3;
+                } else if (isMSTEdge) {
+                    ctx.strokeStyle = 'green';
+                    ctx.lineWidth = 3;
+                } else if (isComponentEdge && state.connectedComponents.length > 0) {
+                    ctx.strokeStyle = 'blue';
+                    ctx.lineWidth = 2;
+                } else {
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 1;
+                }
+                
+                ctx.stroke();
+                
+                // Draw edge weight
+                if (edge.weight !== 1) {
+                    const midX = (fromNode.x + toNode.x) / 2;
+                    const midY = (fromNode.y + toNode.y) / 2;
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(midX - 10, midY - 10, 20, 20);
+                    
+                    ctx.fillStyle = 'black';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(edge.weight.toString(), midX, midY);
+                }
+            }
+            
+            // Draw nodes
+            for (const node of graph.nodes) {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+                
+                // Highlight path nodes
+                const isPathNode = state.highlightedPath.includes(node.id);
+                
+                // Highlight connected component nodes
+                let isComponentNode = false;
+                for (const component of state.connectedComponents) {
+                    if (component.includes(node.id)) {
+                        isComponentNode = true;
+                        break;
+                    }
+                }
+                
+                if (isPathNode) {
+                    ctx.fillStyle = 'red';
+                } else if (isComponentNode && state.connectedComponents.length > 0) {
+                    ctx.fillStyle = 'blue';
+                } else {
+                    ctx.fillStyle = 'lightgray';
+                }
+                
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Draw node label
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.label, node.x, node.y);
+            }
+        }
+        
+        // Initialize
+        updateGraph();
+    </script>
+</body>
+</html>

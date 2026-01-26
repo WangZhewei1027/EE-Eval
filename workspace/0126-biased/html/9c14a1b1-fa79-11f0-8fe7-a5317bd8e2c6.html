@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Interactive PageRank Explorer</title>
+  <style>
+    /* Extremely minimal styling: plain black text on white background */
+    html,body { margin:8px; padding:0; font-family: Arial, Helvetica, sans-serif; color: black; background: white; }
+    .row { display:flex; gap:12px; align-items:flex-start; }
+    .panel { min-width:320px; max-width:420px; }
+    .controls { border:1px solid #000; padding:8px; }
+    label { display:block; margin-top:6px; font-size:13px; }
+    input[type="number"], input[type="text"], select, textarea { width:100%; box-sizing:border-box; }
+    button { margin-top:6px; display:inline-block; }
+    canvas { border:1px solid #000; cursor:crosshair; background: white; }
+    pre { white-space:pre-wrap; max-height:240px; overflow:auto; border:1px solid #000; padding:6px; }
+    small { color: #000; }
+  </style>
+</head>
+<body>
+  <h2>PageRank Explorer (Interactive)</h2>
+  <div class="row">
+    <div class="panel controls" id="controlPanel">
+      <div>
+        <strong>Graph Construction</strong>
+      </div>
+      <label>
+        Node Label:
+        <input type="text" id="nodeLabel" placeholder="optional label (auto if blank)">
+      </label>
+      <button id="addNodeBtn">Add Node (random position)</button>
+      <button id="addNodeAtCenterBtn">Add Node (center)</button>
+      <label>
+        Add Edge Mode:
+        <select id="edgeMode">
+          <option value="click">Click nodes (source then target)</option>
+          <option value="select">Select from lists</option>
+        </select>
+      </label>
+      <div id="edgeSelectControls" style="display:none;">
+        <label>Source:
+          <select id="edgeSource"></select>
+        </label>
+        <label>Target:
+          <select id="edgeTarget"></select>
+      </label>
+      </div>
+      <label>
+        Edge Weight:
+        <input type="number" id="edgeWeight" value="1" step="0.1">
+      </label>
+      <label>
+        Directed:
+        <input type="checkbox" id="directedToggle" checked>
+      </label>
+      <div>
+        <button id="startAddEdgeBtn">Start Add Edge</button>
+        <button id="finishAddEdgeBtn">Cancel Edge</button>
+        <button id="delSelectedBtn">Delete Selected Node</button>
+        <label>
+          Selected Node:
+          <select id="selectedNode"></select>
+        </label>
+      </div>
+
+      <hr>
+      <div><strong>Random Graph Generator</strong></div>
+      <label>Nodes:
+        <input type="number" id="randNodes" value="10" min="1" max="200">
+      </label>
+      <label>Edge Probability (0-1):
+        <input type="number" id="randProb" value="0.2" min="0" max="1" step="0.01">
+      </label>
+      <label>Weight Range:
+        <input type="text" id="weightRange" value="1,1" placeholder="min,max">
+      </label>
+      <label>Seed (optional, integer):
+        <input type="number" id="randSeed" placeholder="optional">
+      </label>
+      <button id="genRandBtn">Generate Random Graph (clears current)</button>
+
+      <hr>
+      <div><strong>PageRank Controls</strong></div>
+      <label>Damping factor (d):
+        <input type="number" id="damping" value="0.85" step="0.01" min="0" max="0.999">
+      </label>
+      <label>Personalization vector:
+        <select id="persMode">
+          <option value="uniform">Uniform</option>
+          <option value="selected">Give selected node higher weight</option>
+          <option value="custom">Custom vector (JSON)</option>
+        </select>
+      </label>
+      <div id="persCustom" style="display:none;">
+        <label>Custom personalization JSON (array length = nodes):
+          <textarea id="persJSON" rows="3">[]</textarea>
+        </label>
+      </div>
+      <label>Tolerance (convergence L1) :
+        <input type="number" id="tol" value="1e-6" step="1e-6">
+      </label>
+      <label>Max iterations:
+        <input type="number" id="maxIter" value="1000" min="1">
+      </label>
+      <label>Normalize by:
+        <select id="normMode">
+          <option value="column">Column-stochastic (standard PageRank)</option>
+          <option value="row">Row-stochastic (alternate)</option>
+        </select>
+      </label>
+      <div style="margin-top:6px;">
+        <button id="initPRBtn">Initialize PageRank</button>
+        <button id="stepPRBtn">Step</button>
+        <button id="runPRBtn">Run</button>
+        <button id="pausePRBtn">Pause</button>
+        <button id="resetPRBtn">Reset</button>
+        <label style="display:inline-block;margin-left:8px;">
+          Iter/sec:
+          <input type="number" id="itersPerSec" value="4" min="1" max="200">
+        </label>
+      </div>
+      <label>Auto-stop on convergence:
+        <input type="checkbox" id="autoStop" checked>
+      </label>
+      <label>Sink handling:
+        <select id="sinkMode">
+          <option value="teleport">Teleport to personalization vector (standard)</option>
+          <option value="uniform">Teleport to uniform</option>
+          <option value="selfloop">Add self-loop</option>
+        </select>
+      </label>
+
+      <hr>
+      <div><strong>Advanced & Export</strong></div>
+      <button id="showMatrixBtn">Toggle Matrices/View</button>
+      <button id="exportJSONBtn">Export Graph + Settings (JSON)</button>
+      <button id="importJSONBtn">Import JSON</button>
+      <input type="file" id="importFile" style="display:none;">
+      <div style="margin-top:6px;">
+        <label>Log / History (clearing will not affect current run):</label>
+        <button id="clearLogBtn">Clear Log</button>
+      </div>
+      <div style="margin-top:6px;">
+        <label>Extra Tools:</label>
+        <button id="rankSortBtn">Sort Nodes by Rank Desc</button>
+        <button id="rescaleBtn">Rescale Node Positions to Canvas</button>
+      </div>
+    </div>
+
+    <div style="flex:1">
+      <div>
+        <canvas id="graphCanvas" width="800" height="520"></canvas>
+      </div>
+      <div style="margin-top:8px;">
+        <strong>Status/History</strong>
+        <div>
+          Iteration: <span id="iterCount">0</span>
+          &nbsp; Last L1 change: <span id="lastChange">-</span>
+          &nbsp; Running: <span id="runningFlag">false</span>
+        </div>
+        <pre id="logArea"></pre>
+      </div>
+
+      <div id="matrixView" style="display:none; margin-top:8px;">
+        <strong>Matrices & Details</strong>
+        <div>
+          <label>Adjacency list (from → to : weight)</label>
+          <pre id="adjListPre"></pre>
+        </div>
+        <div>
+          <label>Stochastic transition matrix (columns sum = 1 if column-stochastic)</label>
+          <pre id="stochPre"></pre>
+        </div>
+        <div>
+          <label>PageRank vector (current)</label>
+          <pre id="prPre"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+ PageRank Explorer - fully client-side single-file app
+ - Minimal visual design
+ - Rich interactivity: graph construction, random generation, step/run PageRank,
+   personalization, sink handling, matrices, export/import, draggable nodes, etc.
+*/
+
+// Utility: seeded PRNG (xorshift32)
+function makeSeededRandom(seed) {
+  let x = seed ? seed >>> 0 : Math.floor(Math.random()*0xFFFFFFFF);
+  if (x === 0) x = 123456789;
+  return function() {
+    // xorshift32
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    return (x >>> 0) / 0xFFFFFFFF;
+  };
+}
+
+// Graph model
+let G = {
+  nodes: [], // {id: string, label: string, x,y}
+  edges: [], // {from: id, to: id, weight: number}
+  directed: true
+};
+
+let state = {
+  // PageRank state
+  pr: [], // array aligned to nodes indices
+  prevPr: [],
+  personalization: [],
+  damping: 0.85,
+  tol: 1e-6,
+  maxIter: 1000,
+  iter: 0,
+  running: false,
+  intervalId: null,
+  itersPerSec: 4,
+  normMode: 'column',
+  sinkMode: 'teleport',
+  persMode: 'uniform'
+};
+
+const canvas = document.getElementById('graphCanvas');
+const ctx = canvas.getContext('2d');
+
+function idForIndex(i){ return (G.nodes[i] && G.nodes[i].id) || String(i); }
+function indexOfId(id){ return G.nodes.findIndex(n=>n.id===id); }
+
+// UI elements
+const addNodeBtn = document.getElementById('addNodeBtn');
+const addNodeAtCenterBtn = document.getElementById('addNodeAtCenterBtn');
+const nodeLabelInput = document.getElementById('nodeLabel');
+const edgeModeSelect = document.getElementById('edgeMode');
+const startAddEdgeBtn = document.getElementById('startAddEdgeBtn');
+const finishAddEdgeBtn = document.getElementById('finishAddEdgeBtn');
+const edgeSourceSelect = document.getElementById('edgeSource');
+const edgeTargetSelect = document.getElementById('edgeTarget');
+const edgeSelectControls = document.getElementById('edgeSelectControls');
+const edgeWeightInput = document.getElementById('edgeWeight');
+const directedToggle = document.getElementById('directedToggle');
+const addNodeCenterBtn = document.getElementById('addNodeAtCenterBtn');
+const delSelectedBtn = document.getElementById('delSelectedBtn');
+const selectedNodeSelect = document.getElementById('selectedNode');
+const randNodesInput = document.getElementById('randNodes');
+const randProbInput = document.getElementById('randProb');
+const weightRangeInput = document.getElementById('weightRange');
+const randSeedInput = document.getElementById('randSeed');
+const genRandBtn = document.getElementById('genRandBtn');
+const dampingInput = document.getElementById('damping');
+const persModeSelect = document.getElementById('persMode');
+const persCustomDiv = document.getElementById('persCustom');
+const persJSONInput = document.getElementById('persJSON');
+const tolInput = document.getElementById('tol');
+const maxIterInput = document.getElementById('maxIter');
+const normModeSelect = document.getElementById('normMode');
+const initPRBtn = document.getElementById('initPRBtn');
+const stepPRBtn = document.getElementById('stepPRBtn');
+const runPRBtn = document.getElementById('runPRBtn');
+const pausePRBtn = document.getElementById('pausePRBtn');
+const resetPRBtn = document.getElementById('resetPRBtn');
+const itersPerSecInput = document.getElementById('itersPerSec');
+const autoStopCheckbox = document.getElementById('autoStop');
+const sinkModeSelect = document.getElementById('sinkMode');
+const showMatrixBtn = document.getElementById('showMatrixBtn');
+const matrixView = document.getElementById('matrixView');
+const adjListPre = document.getElementById('adjListPre');
+const stochPre = document.getElementById('stochPre');
+const prPre = document.getElementById('prPre');
+const logArea = document.getElementById('logArea');
+const iterCountSpan = document.getElementById('iterCount');
+const lastChangeSpan = document.getElementById('lastChange');
+const runningFlagSpan = document.getElementById('runningFlag');
+const exportJSONBtn = document.getElementById('exportJSONBtn');
+const importJSONBtn = document.getElementById('importJSONBtn');
+const importFileInput = document.getElementById('importFile');
+const clearLogBtn = document.getElementById('clearLogBtn');
+const rankSortBtn = document.getElementById('rankSortBtn');
+const rescaleBtn = document.getElementById('rescaleBtn');
+const showMatrixToggleBtn = document.getElementById('showMatrixBtn');
+
+// Variables for interactive edge-adding
+let addEdgeModeActive = false;
+let pendingEdgeSourceId = null;
+
+// Canvas interaction
+let draggingNode = null;
+let dragOffset = {x:0,y:0};
+let lastClickedNode = null;
+
+// Helpers to update selects
+function refreshNodeSelects(){
+  const lists = [edgeSourceSelect, edgeTargetSelect, selectedNodeSelect];
+  lists.forEach(sel=>{
+    sel.innerHTML = '';
+    const ph = document.createElement('option'); ph.value=''; ph.text = '(none)'; sel.appendChild(ph);
+    G.nodes.forEach(n=>{
+      const opt = document.createElement('option');
+      opt.value = n.id; opt.text = n.label || n.id;
+      sel.appendChild(opt);
+    });
+  });
+  updateEdgeListDisplay();
+}
+
+function updateEdgeListDisplay(){
+  // adjacency list text
+  let text = '';
+  G.edges.forEach(e=>{
+    text += `${e.from} → ${e.to} : ${e.weight}\n`;
+    if (!G.directed){
+      // for undirected we still store edges; display both directions if necessary
+    }
+  });
+  adjListPre.textContent = text || '(no edges)';
+}
+
+// Node management
+function addNodeAt(x,y,label){
+  let idBase = label && label.trim()!= '' ? label.trim() : 'n';
+  let id = idBase;
+  let suffix = 0;
+  while (G.nodes.find(n=>n.id === id)) { suffix++; id = idBase + suffix; }
+  const node = {id: id, label: label && label.trim() !== '' ? label.trim() : id, x: x, y: y};
+  G.nodes.push(node);
+  refreshNodeSelects();
+  draw();
+  log(`Added node ${node.id}`);
+  return node;
+}
+
+function removeNodeById(id){
+  const idx = indexOfId(id);
+  if (idx === -1) return;
+  G.nodes.splice(idx,1);
+  // remove edges to/from
+  G.edges = G.edges.filter(e=> e.from !== id && e.to !== id);
+  refreshNodeSelects();
+  draw();
+  log(`Removed node ${id}`);
+}
+
+function addEdge(fromId, toId, w){
+  if (!fromId || !toId) return false;
+  if (!G.nodes.find(n=>n.id===fromId) || !G.nodes.find(n=>n.id===toId)) return false;
+  // allow parallel edges: accumulate weight if identical
+  const existing = G.edges.find(e=> e.from===fromId && e.to===toId);
+  if (existing){
+    existing.weight += w;
+  } else {
+    G.edges.push({from: fromId, to: toId, weight: w});
+  }
+  if (!G.directed){
+    // for undirected, also add reverse if not present
+    const rev = G.edges.find(e=> e.from===toId && e.to===fromId);
+    if (!rev) G.edges.push({from: toId, to: fromId, weight: w});
+  }
+  updateEdgeListDisplay();
+  draw();
+  log(`Added edge ${fromId} → ${toId} (w=${w})`);
+  return true;
+}
+
+// Random graph generator
+function generateRandomGraph(numNodes, p, weightRange, seedVal, directed){
+  const rand = makeSeededRandom(seedVal || Math.floor(Math.random()*0xFFFFFFFF));
+  G.nodes = [];
+  G.edges = [];
+  for (let i=0;i<numNodes;i++){
+    const x = 50 + (canvas.width - 100) * rand();
+    const y = 50 + (canvas.height - 100) * rand();
+    G.nodes.push({id: 'n'+i, label: 'n'+i, x:x, y:y});
+  }
+  for (let i=0;i<numNodes;i++){
+    for (let j=0;j<numNodes;j++){
+      if (i===j) continue;
+      if (rand() < p){
+        const w = weightRange[0] + (weightRange[1]-weightRange[0]) * rand();
+        G.edges.push({from: G.nodes[i].id, to: G.nodes[j].id, weight: w});
+      }
+    }
+  }
+  if (!directed){
+    // ensure symmetry: add reverse edges for each
+    const newEdges = [];
+    const seen = new Set();
+    G.edges.forEach(e=>{
+      const key = e.from + '|' + e.to;
+      const rkey = e.to + '|' + e.from;
+      if (!seen.has(key) && !seen.has(rkey)){
+        newEdges.push(e);
+        newEdges.push({from:e.to, to:e.from, weight:e.weight});
+        seen.add(key); seen.add(rkey);
+      }
+    });
+    G.edges = newEdges;
+  }
+  refreshNodeSelects();
+  updateEdgeListDisplay();
+  draw();
+  log(`Generated random graph with ${numNodes} nodes, p=${p}`);
+}
+
+
+// Drawing
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // draw edges
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'black';
+  G.edges.forEach(e=>{
+    const i1 = indexOfId(e.from), i2 = indexOfId(e.to);
+    if (i1 === -1 || i2 === -1) return;
+    const n1 = G.nodes[i1], n2 = G.nodes[i2];
+    drawArrow(n1.x,n1.y,n2.x,n2.y);
+    // draw weight near midpoint
+    const mx = (n1.x + n2.x)/2;
+    const my = (n1.y + n2.y)/2;
+    ctx.font = "11px sans-serif";
+    ctx.fillStyle = 'black';
+    ctx.fillText(formatNumber(e.weight), mx+4, my+4);
+  });
+  // draw nodes
+  const prArr = state.pr && state.pr.length === G.nodes.length ? state.pr : null;
+  let maxPr = 0;
+  if (prArr) maxPr = Math.max(...prArr);
+  G.nodes.forEach((n,idx)=>{
+    const x = n.x, y = n.y;
+    let radius = 14;
+    if (prArr){
+      // scale radius between 8 and 28 based on rank
+      const rel = maxPr > 0 ? (prArr[idx] / maxPr) : 0;
+      radius = 8 + Math.round(rel * 20);
+    }
+    // circle
+    ctx.beginPath();
+    ctx.arc(x,y,radius,0,Math.PI*2);
+    ctx.stroke();
+    ctx.closePath();
+    // label and id
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = 'black';
+    const label = n.label || n.id;
+    ctx.fillText(label, x - radius + 4, y - radius - 2);
+    // rank value
+    if (prArr){
+      ctx.fillText(formatNumber(prArr[idx]), x - radius + 4, y + radius + 12);
+    }
+  });
+}
+
+function drawArrow(x1,y1,x2,y2){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+  // draw simple arrowhead for directed edges
+  if (G.directed){
+    const dx = x2-x1, dy = y2-y1;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    if (len > 0){
+      const ux = dx/len, uy = dy/len;
+      const hx = x2 - ux*10, hy = y2 - uy*10;
+      ctx.beginPath();
+      ctx.moveTo(x2,y2);
+      ctx.lineTo(hx - uy*4, hy + ux*4);
+      ctx.lineTo(hx + uy*4, hy - ux*4);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = 'black';
+      ctx.fill();
+    }
+  }
+}
+
+// Format number
+function formatNumber(x){
+  if (x === undefined || isNaN(x)) return 'NaN';
+  if (Math.abs(x) < 1e-6) return '0';
+  return (Math.round(x*1e6)/1e6).toString();
+}
+
+// Canvas interactions
+canvas.addEventListener('mousedown', (ev)=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = ev.clientY - rect.top;
+  const hit = G.nodes.find(n=> Math.hypot(n.x-x, n.y-y) <= 16 );
+  if (hit){
+    // select node
+    lastClickedNode = hit;
+    // set select element
+    selectedNodeSelect.value = hit.id;
+    // start drag
+    draggingNode = hit;
+    dragOffset.x = x - hit.x;
+    dragOffset.y = y - hit.y;
+    draw();
+    if (addEdgeModeActive){
+      if (!pendingEdgeSourceId){
+        pendingEdgeSourceId = hit.id;
+        log(`Edge source selected: ${hit.id}. Click target node.`);
+      } else {
+        // create edge from pendingEdgeSourceId to hit.id
+        const w = parseFloat(edgeWeightInput.value) || 1;
+        addEdge(pendingEdgeSourceId, hit.id, w);
+        pendingEdgeSourceId = null;
+        if (!startAddEdgeBtn) {}
+      }
+    }
+  } else {
+    // not clicked a node -> maybe add node at click if ctrl pressed
+    if (ev.ctrlKey){
+      addNodeAt(x,y, nodeLabelInput.value);
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', (ev)=>{
+  if (!draggingNode) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = ev.clientY - rect.top;
+  draggingNode.x = x - dragOffset.x;
+  draggingNode.y = y - dragOffset.y;
+  draw();
+});
+
+canvas.addEventListener('mouseup', (ev)=>{
+  draggingNode = null;
+});
+
+// Buttons and controls
+addNodeBtn.addEventListener('click', ()=> {
+  const x = 40 + Math.random() * (canvas.width - 80);
+  const y = 40 + Math.random() * (canvas.height - 80);
+  addNodeAt(x,y,nodeLabelInput.value);
+});
+
+addNodeAtCenterBtn.addEventListener('click', ()=> {
+  addNodeAt(canvas.width/2, canvas.height/2, nodeLabelInput.value);
+});
+
+edgeModeSelect.addEventListener('change', ()=>{
+  const val = edgeModeSelect.value;
+  edgeSelectControls.style.display = val === 'select' ? 'block' : 'none';
+});
+
+startAddEdgeBtn.addEventListener('click', ()=>{
+  addEdgeModeActive = true;
+  pendingEdgeSourceId = null;
+  log('Add Edge mode ON. Click source node (then target). Or use select lists in select mode.');
+});
+
+finishAddEdgeBtn.addEventListener('click', ()=>{
+  addEdgeModeActive = false;
+  pendingEdgeSourceId = null;
+  log('Add Edge mode cancelled.');
+});
+
+document.getElementById('edgeSource').addEventListener('change', ()=>{
+  // when select mode, do nothing until add edge pressed
+});
+
+document.getElementById('edgeTarget').addEventListener('change', ()=>{ });
+
+document.getElementById('edgeSelectControls').addEventListener('click', ()=>{});
+
+document.getElementById('edgeSource').addEventListener('input', ()=>{});
+document.getElementById('edgeTarget').addEventListener('input', ()=>{});
+
+document.getElementById('edgeMode').addEventListener('change', ()=>{
+  if (edgeModeSelect.value === 'select'){
+    edgeSelectControls.style.display = 'block';
+  } else edgeSelectControls.style.display = 'none';
+});
+
+document.getElementById('edgeSource').addEventListener('change', ()=>{});
+document.getElementById('edgeTarget').addEventListener('change', ()=>{});
+
+// Add edge via select + button
+const addEdgeSelectBtn = document.createElement('button');
+addEdgeSelectBtn.textContent = 'Add Edge (from selects)';
+addEdgeSelectBtn.addEventListener('click', ()=>{
+  const from = edgeSourceSelect.value;
+  const to = edgeTargetSelect.value;
+  const w = parseFloat(edgeWeightInput.value) || 1;
+  if (!from || !to){ alert('Choose both source and target'); return; }
+  addEdge(from,to,w);
+});
+document.getElementById('edgeSelectControls').appendChild(addEdgeSelectBtn);
+
+// Delete selected node
+delSelectedBtn.addEventListener('click', ()=>{
+  const id = selectedNodeSelect.value;
+  if (!id){ alert('Select a node to delete'); return; }
+  removeNodeById(id);
+});
+
+// Directed toggle
+directedToggle.addEventListener('change', ()=>{
+  G.directed = directedToggle.checked;
+  // If switching to undirected, ensure symmetric edges exist
+  if (!G.directed){
+    const newEdges = [];
+    const seen = new Set();
+    G.edges.forEach(e=>{
+      const k1 = e.from + '|' + e.to, k2 = e.to + '|' + e.from;
+      if (!seen.has(k1) && !seen.has(k2)){
+        newEdges.push({from:e.from,to:e.to,weight:e.weight});
+        newEdges.push({from:e.to,to:e.from,weight:e.weight});
+        seen.add(k1); seen.add(k2);
+      }
+    });
+    G.edges = newEdges;
+  }
+  refreshNodeSelects();
+  draw();
+});
+
+// Random graph generation
+genRandBtn.addEventListener('click', ()=>{
+  const n = parseInt(randNodesInput.value) || 10;
+  const p = Math.min(1, Math.max(0, parseFloat(randProbInput.value) || 0.2));
+  const wr = (weightRangeInput.value || '1,1').split(',').map(s=>parseFloat(s.trim())||0);
+  const seed = parseInt(randSeedInput.value) || undefined;
+  generateRandomGraph(n,p, [Math.min(wr[0],wr[1]||wr[0]), Math.max(wr[0],wr[1]||wr[0])], seed, directedToggle.checked);
+});
+
+// Pers mode toggle
+persModeSelect.addEventListener('change', ()=>{
+  state.persMode = persModeSelect.value;
+  persCustomDiv.style.display = state.persMode === 'custom' ? 'block' : 'none';
+});
+
+// Initialize PageRank
+initPRBtn.addEventListener('click', ()=>{
+  initializePageRank();
+});
+
+// Step PageRank
+stepPRBtn.addEventListener('click', ()=>{
+  stepPageRank();
+});
+
+// Run PageRank
+runPRBtn.addEventListener('click', ()=>{
+  if (state.running) return;
+  const itersPerSec = Math.max(1, parseInt(itersPerSecInput.value) || 4);
+  state.itersPerSec = itersPerSec;
+  const intervalMs = Math.round(1000 / itersPerSec);
+  state.running = true;
+  runningFlagSpan.textContent = 'true';
+  state.intervalId = setInterval(()=>{
+    stepPageRank();
+  }, intervalMs);
+  log('Started running PageRank');
+});
+
+// Pause
+pausePRBtn.addEventListener('click', ()=>{
+  if (state.intervalId) clearInterval(state.intervalId);
+  state.intervalId = null;
+  state.running = false;
+  runningFlagSpan.textContent = 'false';
+  log('Paused PageRank run');
+});
+
+// Reset
+resetPRBtn.addEventListener('click', ()=>{
+  state.pr = [];
+  state.prevPr = [];
+  state.iter = 0;
+  iterCountSpan.textContent = '0';
+  lastChangeSpan.textContent = '-';
+  if (state.intervalId) { clearInterval(state.intervalId); state.intervalId = null; }
+  state.running = false;
+  runningFlagSpan.textContent = 'false';
+  draw();
+  log('PageRank reset');
+});
+
+// Show/hide matrix view
+showMatrixBtn.addEventListener('click', ()=>{
+  matrixView.style.display = (matrixView.style.display === 'none') ? 'block' : 'none';
+  if (matrixView.style.display === 'block') updateMatricesDisplay();
+});
+
+// Export JSON
+exportJSONBtn.addEventListener('click', ()=>{
+  const dump = {
+    graph: G,
+    settings: {
+      damping: parseFloat(dampingInput.value),
+      tol: parseFloat(tolInput.value),
+      maxIter: parseInt(maxIterInput.value),
+      normMode: normModeSelect.value,
+      sinkMode: sinkModeSelect.value,
+      persMode: persModeSelect.value,
+      personalization: persJSONInput.value ? JSON.parse(persJSONInput.value||'[]') : []
+    }
+  };
+  const blob = new Blob([JSON.stringify(dump, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'pagerank_graph.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  log('Exported graph and settings to JSON');
+});
+
+// Import JSON
+importJSONBtn.addEventListener('click', ()=> importFileInput.click());
+importFileInput.addEventListener('change', (ev)=>{
+  const f = ev.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const obj = JSON.parse(e.target.result);
+      if (obj.graph){
+        G = obj.graph;
+        // ensure nodes have x,y; otherwise place them
+        G.nodes.forEach((n,i)=>{
+          if (n.x === undefined || n.y === undefined) { n.x = 50 + (i*37) % (canvas.width-100); n.y = 50 + ((i*13) % (canvas.height-100)); }
+        });
+        directedToggle.checked = !!G.directed;
+        refreshNodeSelects();
+        updateEdgeListDisplay();
+        draw();
+        log('Imported graph from JSON');
+      }
+      if (obj.settings){
+        dampingInput.value = obj.settings.damping || dampingInput.value;
+        tolInput.value = obj.settings.tol || tolInput.value;
+        maxIterInput.value = obj.settings.maxIter || maxIterInput.value;
+        normModeSelect.value = obj.settings.normMode || normModeSelect.value;
+        sinkModeSelect.value = obj.settings.sinkMode || sinkModeSelect.value;
+        persModeSelect.value = obj.settings.persMode || persModeSelect.value;
+        persJSONInput.value = JSON.stringify(obj.settings.personalization || []);
+        persModeSelect.dispatchEvent(new Event('change'));
+      }
+    } catch (err){
+      alert('Failed to import: ' + err);
+    }
+  };
+  reader.readAsText(f);
+});
+
+// Clear log
+clearLogBtn.addEventListener('click', ()=> { logArea.textContent = ''; });
+
+// Rank sort
+rankSortBtn.addEventListener('click', ()=>{
+  if (!state.pr || state.pr.length !== G.nodes.length) { alert('Initialize PageRank first'); return; }
+  // sort nodes by descending rank but keep positions
+  G.nodes.sort((a,b)=> {
+    const ia = indexOfId(a.id);
+    const ib = indexOfId(b.id);
+    return state.pr[ib] - state.pr[ia]; // descending
+  });
+  refreshNodeSelects();
+  draw();
+  log('Sorted nodes by current PageRank (descending)');
+});
+
+// Rescale positions to canvas
+rescaleBtn.addEventListener('click', ()=>{
+  if (G.nodes.length === 0) return;
+  const margin = 40;
+  const xs = G.nodes.map(n=>n.x), ys = G.nodes.map(n=>n.y);
+  let minx = Math.min(...xs), maxx = Math.max(...xs);
+  let miny = Math.min(...ys), maxy = Math.max(...ys);
+  const spanx = maxx - minx || 1; const spany = maxy - miny || 1;
+  G.nodes.forEach(n=>{
+    n.x = margin + ((n.x - minx) / spanx) * (canvas.width - margin*2);
+    n.y = margin + ((n.y - miny) / spany) * (canvas.height - margin*2);
+  });
+  draw();
+  log('Rescaled node positions to canvas');
+});
+
+// Logging
+function log(msg){
+  const t = new Date().toLocaleTimeString();
+  logArea.textContent = `[${t}] ${msg}\n` + logArea.textContent;
+}
+
+// PageRank core
+function initializePageRank(){
+  state.damping = Math.max(0, Math.min(0.9999, parseFloat(dampingInput.value) || 0.85));
+  state.tol = Math.max(1e-12, parseFloat(tolInput.value) || 1e-6);
+  state.maxIter = Math.max(1, parseInt(maxIterInput.value) || 1000);
+  state.normMode = normModeSelect.value;
+  state.sinkMode = sinkModeSelect.value;
+  state.persMode = persModeSelect.value;
+  state.iter = 0;
+  // init pr vector
+  const n = G.nodes.length;
+  state.pr = new Array(n).fill(1/n);
+  state.prevPr = new Array(n).fill(0);
+  // personalization vector
+  state.personalization = computePersonalizationVector();
+  iterCountSpan.textContent = '0';
+  lastChangeSpan.textContent = '-';
+  draw();
+  updateMatricesDisplay();
+  log('Initialized PageRank (power iteration starting vector uniform)');
+}
+
+// Compute personalization vector based on mode
+function computePersonalizationVector(){
+  const n = G.nodes.length;
+  const vec = new Array(n).fill(0);
+  if (state.persMode === 'uniform' || n === 0){
+    for (let i=0;i<n;i++) vec[i] = 1/n;
+    return vec;
+  } else if (state.persMode === 'selected'){
+    const sel = selectedNodeSelect.value;
+    if (!sel){
+      for (let i=0;i<n;i++) vec[i] = 1/n;
+      return vec;
+    }
+    const idx = indexOfId(sel);
+    for (let i=0;i<n;i++) vec[i] = 0;
+    vec[idx] = 1;
+    // smooth to avoid zero everywhere: distribute small epsilon?
+    // Normalize:
+    const s = vec.reduce((a,b)=>a+b,0);
+    if (s === 0){ for (let i=0;i<n;i++) vec[i]=1/n; } else for (let i=0;i<n;i++) vec[i] /= s;
+    return vec;
+  } else if (state.persMode === 'custom'){
+    try {
+      const arr = JSON.parse(persJSONInput.value || '[]');
+      if (!Array.isArray(arr) || arr.length !== n){
+        alert('Custom personalization must be an array with length equal to number of nodes');
+        // fallback to uniform
+        for (let i=0;i<n;i++) vec[i]=1/n;
+        return vec;
+      }
+      let s = arr.reduce((a,b)=>a+(isFinite(b)?b:0),0);
+      if (s <= 0){ for (let i=0;i<n;i++) vec[i]=1/n; }
+      else for (let i=0;i<n;i++) vec[i] = arr[i]/s;
+      return vec;
+    } catch (e){
+      alert('Invalid JSON for personalization vector');
+      for (let i=0;i<n;i++) vec[i]=1/n;
+      return vec;
+    }
+  } else {
+    // default uniform
+    for (let i=0;i<n;i++) vec[i] = 1/n;
+    return vec;
+  }
+}
+
+// Build transition matrix M as column-stochastic matrix represented as array of columns (each column is array length n)
+function buildTransitionMatrix(){
+  const n = G.nodes.length;
+  const M = Array.from({length:n}, ()=> new Array(n).fill(0));
+  // outgoing sums for each node (out-degree weighted)
+  const outSums = new Array(n).fill(0);
+  G.edges.forEach(e=>{
+    const i = indexOfId(e.from), j = indexOfId(e.to);
+    if (i === -1 || j === -1) return;
+    outSums[i] += e.weight;
+  });
+  // fill M so that M[i][j] = prob from j -> i (column j)
+  for (let j=0;j<n;j++){
+    if (outSums[j] > 0){
+      // collect all edges from node j
+      G.edges.forEach(e=>{
+        if (e.from === G.nodes[j].id){
+          const i = indexOfId(e.to);
+          M[i][j] += e.weight / outSums[j];
+        }
+      });
+    } else {
+      // dangling node handling: column all zeros (will be handled in iteration)
+    }
+  }
+  return {M, outSums};
+}
+
+// Step iteration
+function stepPageRank(){
+  if (!state.pr || state.pr.length !== G.nodes.length) initializePageRank();
+  const n = G.nodes.length;
+  if (n === 0) return;
+  const damping = Math.max(0, Math.min(0.9999, parseFloat(dampingInput.value) || 0.85));
+  const pers = computePersonalizationVector();
+  state.damping = damping;
+  state.personalization = pers;
+  const {M, outSums} = buildTransitionMatrix();
+  // Compute dangling mass (nodes with no outlinks)
+  let danglingMass = 0;
+  for (let j=0;j<n;j++){
+    if (outSums[j] === 0){
+      danglingMass += state.pr[j];
+    }
+  }
+  // compute new pr: r_new = (1-d)*pers + d*M*r + d*danglingMass*sinkVec
+  const newPr = new Array(n).fill(0);
+  // M*r: column multiplication
+  for (let i=0;i<n;i++){
+    let s = 0;
+    for (let j=0;j<n;j++){
+      s += M[i][j] * state.pr[j];
+    }
+    newPr[i] = damping * s;
+  }
+  // dangling handling
+  if (state.sinkMode === 'teleport'){
+    // dangling mass redistributed to personalization vector
+    for (let i=0;i<n;i++){
+      newPr[i] += damping * danglingMass * pers[i];
+    }
+  } else if (state.sinkMode === 'uniform'){
+    for (let i=0;i<n;i++){
+      newPr[i] += damping * danglingMass * (1/n);
+    }
+  } else if (state.sinkMode === 'selfloop'){
+    // treat dangling as self-loop: add mass to same node
+    // but that was already zero in M; we add mass to those nodes proportional to their previous pr
+    for (let i=0;i<n;i++){
+      if (outSums[i] === 0) newPr[i] += damping * state.pr[i];
+    }
+  }
+  // teleportation (1-d)*pers
+  for (let i=0;i<n;i++){
+    newPr[i] += (1 - damping) * pers[i];
+  }
+  // Normalize to sum to 1 (numerical safety)
+  let sum = newPr.reduce((a,b)=>a+b,0);
+  if (sum <= 0) {
+    for (let i=0;i<n;i++) newPr[i] = 1/n;
+  } else {
+    for (let i=0;i<n;i++) newPr[i] /= sum;
+  }
+
+  // compute L1 change
+  let l1 = 0;
+  for (let i=0;i<n;i++) l1 += Math.abs(newPr[i] - state.pr[i]);
+  state.prevPr = state.pr.slice();
+  state.pr = newPr;
+  state.iter += 1;
+  iterCountSpan.textContent = state.iter;
+  lastChangeSpan.textContent = l1.toExponential(3);
+  draw();
+  updateMatricesDisplay();
+  log(`Iteration ${state.iter}: L1 change ${l1.toExponential(3)}`);
+
+  // convergence check
+  if (autoStopCheckbox.checked && l1 < state.tol){
+    if (state.intervalId) { clearInterval(state.intervalId); state.intervalId = null; }
+    state.running = false;
+    runningFlagSpan.textContent = 'false';
+    log(`Converged at iteration ${state.iter}, L1=${l1}`);
+  }
+  if (state.iter >= state.maxIter){
+    if (state.intervalId) { clearInterval(state.intervalId); state.intervalId = null; }
+    state.running = false;
+    runningFlagSpan.textContent = 'false';
+    log(`Stopped: reached max iterations ${state.maxIter}`);
+  }
+}
+
+// Update matrices display
+function updateMatricesDisplay(){
+  const n = G.nodes.length;
+  // adjacency info
+  let adj = '';
+  for (let i=0;i<n;i++){
+    const id = G.nodes[i].id;
+    const outs = G.edges.filter(e=>e.from === id).map(e=> `${e.to}:${formatNumber(e.weight)}`).join(', ');
+    adj += `${id} -> [${outs}]\n`;
+  }
+  adjListPre.textContent = adj || '(empty)';
+  // stochastic matrix print
+  const {M, outSums} = buildTransitionMatrix();
+  let st = '';
+  if (n === 0) st = '(empty)';
+  else {
+    // header
+    st += '\t' + G.nodes.map(n0=>n0.id).join('\t') + '\n';
+    for (let i=0;i<n;i++){
+      st += G.nodes[i].id + '\t';
+      for (let j=0;j<n;j++){
+        st += (M[i][j] ? formatNumber(M[i][j]) : '0') + '\t';
+      }
+      st += '\n';
+    }
+  }
+  stochPre.textContent = st;
+  // pr vector
+  let prtext = '';
+  if (state.pr && state.pr.length === n){
+    for (let i=0;i<n;i++){
+      prtext += `${G.nodes[i].id}: ${formatNumber(state.pr[i])}\n`;
+    }
+  } else prtext = '(not initialized)';
+  prPre.textContent = prtext;
+}
+
+// Utility: sort nodes by rank and list in log
+function listSortedRanks(){
+  if (!state.pr || state.pr.length !== G.nodes.length) {
+    log('PageRank not initialized.');
+    return;
+  }
+  const arr = G.nodes.map((n,i)=>({id:n.id, label:n.label, pr:state.pr[i]}));
+  arr.sort((a,b)=>b.pr - a.pr);
+  let s = 'Ranks (desc):\n';
+  arr.forEach(a=> s += `${a.id} (${a.label}): ${formatNumber(a.pr)}\n`);
+  log(s);
+}
+
+// Format and update selects on start
+refreshNodeSelects();
+
+// Additional UI: a small button to add edge from selects was appended earlier;
+// ensure we show it now in case of initial state
+edgeModeSelect.dispatchEvent(new Event('change'));
+
+// Allow adding edge via explicit button created earlier (edgeSelectControls)
+addEdgeSelectBtn.style.marginTop = '6px';
+
+// Initial draw
+draw();
+
+</script>
+</body>
+</html>

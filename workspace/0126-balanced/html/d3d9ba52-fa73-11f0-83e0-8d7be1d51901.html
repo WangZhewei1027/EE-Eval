@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Query Optimization Explorer — Interactive Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 16px; color:#111; background: #f7f9fc; }
+  header { display:flex; align-items:center; gap:12px; }
+  h1 { margin:0; font-size:1.25rem; }
+  .wrap { display:flex; gap:18px; margin-top:16px; }
+  .panel { background:#fff; border:1px solid #e3e8ef; border-radius:8px; padding:12px; box-shadow: 0 1px 2px rgba(11,22,39,0.04); flex:1; min-width:300px; }
+  label { display:block; margin-top:8px; font-size:0.9rem; color:#333; }
+  input[type="range"] { width:100%; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .row > * { margin:0; }
+  button { background:#0366d6; color:white; border:0; padding:8px 12px; border-radius:6px; cursor:pointer; }
+  button:disabled { background:#9bb9e9; cursor:not-allowed; }
+  select, input[type="number"], input[type="checkbox"] { margin-left:6px; }
+  .small { font-size:0.85rem; color:#555; }
+  pre { background:#0f1724; color:#dbeafe; padding:12px; border-radius:6px; overflow:auto; max-height:260px; }
+  .bars { display:flex; gap:8px; margin-top:12px; align-items:end; }
+  .bar { flex:1; height:80px; background:linear-gradient(180deg,#dbeafe,#93c5fd); border-radius:6px; display:flex; align-items:flex-end; justify-content:center; color:#03396c; font-weight:600; padding:4px; }
+  .explain { font-family:monospace; background:#fff; border-radius:6px; padding:8px; border:1px dashed #e2e8f0; }
+  .footer { font-size:0.85rem; color:#444; margin-top:12px; }
+  .muted { color:#666; font-size:0.9rem; }
+  .big { font-weight:700; font-size:1.1rem; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .note { font-size:0.85rem; color:#5b6b80; margin-top:8px; }
+  .explain-step { margin:6px 0; padding:8px; background:#f1f5f9; border-radius:6px; border:1px solid #e6eef8; font-family:monospace; }
+  .legend { display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .dot { width:12px; height:12px; border-radius:50%; }
+  .dot.scan { background:#ffd166; }
+  .dot.index { background:#06d6a0; }
+  .dot.hash { background:#118ab2; }
+  footer { margin-top:14px; color:#6b7280; font-size:0.9rem; }
+  @media (max-width:880px){ .wrap { flex-direction:column; } .grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Query Optimization Explorer</h1>
+  <div class="small muted">Interactive demo: compare query strategies (scans, indexes, joins, predicate pushdown)</div>
+</header>
+
+<div class="wrap">
+  <div class="panel" style="max-width:420px">
+    <strong>Data & Query</strong>
+    <div class="note">Two tables: Customers and Orders. Query: join them and apply an Orders filter (amount &gt; threshold). Try different join algorithms, enable/disable an index, and toggle predicate pushdown.</div>
+
+    <label>Customers (rows)
+      <input id="customersCount" type="range" min="100" max="20000" step="100" value="5000"/>
+      <div class="row"><output id="customersCountOut">5000</output></div>
+    </label>
+
+    <label>Orders (rows)
+      <input id="ordersCount" type="range" min="500" max="100000" step="500" value="20000"/>
+      <div class="row"><output id="ordersCountOut">20000</output></div>
+    </label>
+
+    <label>Orders filter: % of Orders that pass (selectivity)
+      <input id="selectivity" type="range" min="1" max="100" step="1" value="20"/>
+      <div class="row"><output id="selectivityOut">20%</output></div>
+    </label>
+
+    <label>Join key
+      <select id="joinKey">
+        <option value="customerId">orders.customerId = customers.id</option>
+      </select>
+    </label>
+
+    <label class="row"><input id="indexOnOrders" type="checkbox" checked/> Index on orders.customerId (simulates lookup map)</label>
+    <label class="row"><input id="predicatePushdown" type="checkbox" checked/> Predicate pushdown (apply filter to Orders before join)</label>
+
+    <label>Join algorithm
+      <select id="algorithm">
+        <option value="nested">Nested Loop Join</option>
+        <option value="indexed">Indexed Nested Loop (uses index)</option>
+        <option value="hash">Hash Join (build hash on smaller side)</option>
+      </select>
+    </label>
+
+    <div style="margin-top:12px">
+      <button id="runBtn">Run Query</button>
+      <button id="explainBtn" style="margin-left:8px">Show Explain</button>
+    </div>
+
+    <div class="legend">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="dot scan"></span><span class="small">Scan cost</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="dot index"></span><span class="small">Index lookup</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="dot hash"></span><span class="small">Hash build/probe</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <strong>Plan & Results</strong>
+    <div class="grid" style="margin-top:8px">
+      <div>
+        <div class="small muted">Explain Plan</div>
+        <div id="explain" class="explain" style="min-height:110px">Press "Show Explain" to see the planner decision and cost estimates.</div>
+      </div>
+      <div>
+        <div class="small muted">Execution Output</div>
+        <pre id="output" aria-live="polite">Ready — configure the query and click "Run Query".</pre>
+      </div>
+    </div>
+
+    <div style="margin-top:10px">
+      <div class="small muted">Estimated vs Actual (time & rows read)</div>
+      <div class="bars" style="margin-top:8px">
+        <div style="flex:1">
+          <div class="small">Estimated "work" (relative)</div>
+          <div id="estBar" class="bar" style="height:40px">—</div>
+        </div>
+        <div style="flex:1">
+          <div class="small">Measured time (ms)</div>
+          <div id="actBar" class="bar" style="height:40px;background:linear-gradient(180deg,#fde68a,#fca311);">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="metrics" style="margin-top:10px" class="muted">Metrics will appear here after running.</div>
+
+  </div>
+</div>
+
+<footer class="panel">
+  <strong>Key concepts demonstrated</strong>
+  <ul>
+    <li>Full table scan — examining every row costs O(N).</li>
+    <li>Indexes — lookup maps reduce cost to O(1) per probe (amortized), avoiding scanning the whole table.</li>
+    <li>Nested loop join — simple, but O(N*M) when naive.</li>
+    <li>Hash join — builds a hash table on the smaller input, yielding roughly O(N+M) work.</li>
+    <li>Predicate pushdown — filtering as early as possible reduces the amount of data operated on downstream.</li>
+  </ul>
+  <div class="muted">This is a simulation to illustrate how planners choose algorithms and how choices affect cost and runtime.</div>
+</footer>
+
+<script>
+(function(){
+  // Utility: seeded RNG for reproducible demo runs
+  function createRNG(seed = 123456) {
+    let s = seed >>> 0;
+    return function() {
+      // xorshift32
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      return ((s >>> 0) / 4294967295);
+    };
+  }
+
+  // Elements
+  const customersCount = document.getElementById('customersCount');
+  const customersCountOut = document.getElementById('customersCountOut');
+  const ordersCount = document.getElementById('ordersCount');
+  const ordersCountOut = document.getElementById('ordersCountOut');
+  const selectivity = document.getElementById('selectivity');
+  const selectivityOut = document.getElementById('selectivityOut');
+  const indexOnOrders = document.getElementById('indexOnOrders');
+  const predicatePushdown = document.getElementById('predicatePushdown');
+  const algorithm = document.getElementById('algorithm');
+  const runBtn = document.getElementById('runBtn');
+  const explainBtn = document.getElementById('explainBtn');
+  const explainDiv = document.getElementById('explain');
+  const output = document.getElementById('output');
+  const estBar = document.getElementById('estBar');
+  const actBar = document.getElementById('actBar');
+  const metrics = document.getElementById('metrics');
+
+  // Sync outputs
+  function sync() {
+    customersCountOut.value = customersCount.value;
+    ordersCountOut.value = ordersCount.value;
+    selectivityOut.value = selectivity.value + '%';
+  }
+  customersCount.addEventListener('input', sync);
+  ordersCount.addEventListener('input', sync);
+  selectivity.addEventListener('input', sync);
+  sync();
+
+  // Data generator: customers and orders
+  function generateData(Ncust, Nord, selectPct, seedBase=Date.now()) {
+    const rng = createRNG(seedBase);
+    const customers = new Array(Ncust);
+    for (let i=0;i<Ncust;i++){
+      customers[i] = { id: i+1, name: 'C'+(i+1), region: (i % 5 === 0) ? 'North' : 'South' };
+    }
+    const orders = new Array(Nord);
+    // To control selectivity, we'll set amount > threshold for exact percentage
+    // We'll set amount randomly 1..100, and threshold such that roughly selectPct pass.
+    const threshold = Math.ceil(100 * (1 - selectPct/100));
+    for (let j=0;j<Nord;j++){
+      // Assign customerId in uniform distribution 1..Ncust
+      const cid = Math.floor(rng() * Ncust) + 1;
+      // Create amount with rng - uniform 1..100
+      const amount = Math.floor(rng() * 100) + 1;
+      orders[j] = { id: j+1, customerId: cid, amount: amount };
+    }
+    // Note: true selectivity may deviate a bit due to randomness; we will filter accordingly.
+    return { customers, orders, threshold };
+  }
+
+  // Cost model helpers
+  function estimateCost(params) {
+    // Rough, relative units:
+    // scan cost unit per row scanned = 1
+    // index lookup cost per probe = 0.1
+    // hash build cost ~ 1 per row
+    // hash probe cost per probe ~ 0.1
+    const scanUnit = 1;
+    const lookupUnit = 0.15;
+    const hashBuildUnit = 1;
+    const hashProbeUnit = 0.15;
+
+    const N = params.customers;
+    const M = params.orders;
+    const selectivity = params.selectivity; // fraction 0..1
+    const filteredOrders = params.pushdown ? M * selectivity : M;
+    let cost = 0;
+    let planDesc = [];
+
+    if (params.algorithm === 'nested') {
+      // nested loops: customer outer, orders inner
+      cost = N * filteredOrders * scanUnit;
+      planDesc.push(`Nested Loop: N_customers (${N}) × orders_scanned (${Math.round(filteredOrders)})`);
+      if (!params.pushdown) planDesc.push('No predicate pushdown ⇒ filter applied after join');
+    } else if (params.algorithm === 'indexed') {
+      // indexed nested loop: for each customer, use index lookup: cost = N * (lookup + matchedRows*scanUnit)
+      const avgMatchesPerCustomer = (M / N) * (params.selectivity);
+      cost = N * (lookupUnit + Math.max(1, avgMatchesPerCustomer) * scanUnit);
+      planDesc.push(`Indexed Lookup: N_customers (${N}) × (index_lookup + #matches)`);
+      if (!params.index) {
+        planDesc.push('NOTE: index disabled — planner may fall back to scan (higher cost)');
+        // fallback to nested loop estimate
+        cost = N * filteredOrders * scanUnit;
+      }
+    } else if (params.algorithm === 'hash') {
+      // build hash on smaller side
+      if (M <= N) {
+        // build on orders (maybe after pushdown)
+        const buildRows = filteredOrders;
+        cost = buildRows * hashBuildUnit + N * hashProbeUnit;
+        planDesc.push(`Hash Join: build hash on Orders (${Math.round(buildRows)}) + probe Customers (${N})`);
+      } else {
+        const buildRows = N;
+        cost = buildRows * hashBuildUnit + M * hashProbeUnit;
+        planDesc.push(`Hash Join: build hash on Customers (${buildRows}) + probe Orders (${M})`);
+      }
+      if (params.pushdown) planDesc.push('Predicate pushdown applied before building hash');
+    }
+    return { cost: cost || 1, planDesc };
+  }
+
+  // Execution primitives with measurement
+  function buildIndex(table, key) {
+    const map = new Map();
+    for (let r of table) {
+      const k = r[key];
+      let arr = map.get(k);
+      if (!arr) { arr = []; map.set(k, arr); }
+      arr.push(r);
+    }
+    return map;
+  }
+
+  // Join implementations return matched row pairs
+  function nestedLoopJoin(customers, orders, predicateFn, pushdown) {
+    const start = performance.now();
+    let ordersToScan = orders;
+    if (pushdown) ordersToScan = orders.filter(predicateFn); // reduces inner loops
+    let countScannedOrders = 0;
+    const matches = [];
+    for (let c of customers) {
+      for (let o of ordersToScan) {
+        countScannedOrders++;
+        if (o.customerId === c.id) {
+          // If predicate wasn't pushed, ensure we apply it now
+          if (!pushdown && !predicateFn(o)) continue;
+          matches.push([c,o]);
+        }
+      }
+    }
+    const time = performance.now() - start;
+    return { matches, time, scannedOrders: countScannedOrders, scannedCustomers: customers.length };
+  }
+
+  function indexedNestedLoopJoin(customers, orders, predicateFn, index, pushdown) {
+    const start = performance.now();
+    let scannedOrders = 0;
+    const matches = [];
+    for (let c of customers) {
+      const list = index.get(c.id);
+      if (!list) continue;
+      // If pushdown: pre-filter the indexed list
+      for (let o of list) {
+        scannedOrders++;
+        if (pushdown && !predicateFn(o)) continue;
+        if (!pushdown && !predicateFn(o)) continue; // still need predicate
+        matches.push([c,o]);
+      }
+    }
+    const time = performance.now() - start;
+    return { matches, time, scannedOrders, scannedCustomers: customers.length };
+  }
+
+  function hashJoin(customers, orders, predicateFn, pushdown) {
+    const start = performance.now();
+    let left = customers, right = orders;
+    // We'll build hash on smaller side (after applying pushdown if it targets right)
+    // In our demo, predicate targets orders, so pushdown reduces right before build.
+    let rightSide = right;
+    if (pushdown) rightSide = right.filter(predicateFn);
+    let leftSide = left;
+    let scannedRowsBuild = 0, scannedRowsProbe = 0;
+    const matches = [];
+
+    // Decide which side to build based on sizes
+    if (rightSide.length <= leftSide.length) {
+      // build on rightSide keyed by customerId
+      const map = new Map();
+      for (let r of rightSide) {
+        scannedRowsBuild++;
+        const key = r.customerId;
+        const arr = map.get(key) || [];
+        arr.push(r);
+        map.set(key, arr);
+      }
+      for (let l of leftSide) {
+        scannedRowsProbe++;
+        const arr = map.get(l.id);
+        if (arr) {
+          for (let r of arr) {
+            matches.push([l,r]);
+          }
+        }
+      }
+    } else {
+      // build on leftSide keyed by id
+      const map = new Map();
+      for (let l of leftSide) {
+        scannedRowsBuild++;
+        map.set(l.id, l);
+      }
+      for (let r of rightSide) {
+        scannedRowsProbe++;
+        const l = map.get(r.customerId);
+        if (l) matches.push([l,r]);
+      }
+    }
+    const time = performance.now() - start;
+    return { matches, time, scannedOrders: scannedRowsBuild + scannedRowsProbe, scannedCustomers: leftSide.length };
+  }
+
+  // Planner / Explain generation — chooses plan description & estimate
+  function generateExplain(params) {
+    const est = estimateCost(params);
+    const rows = {
+      customers: params.customers,
+      orders: params.orders,
+      selectivityPct: Math.round(params.selectivity*100),
+      filteredOrders: Math.round(params.orders * (params.pushdown ? params.selectivity : 1))
+    };
+    // Build textual explanation
+    let lines = [];
+    lines.push(`Query: SELECT * FROM Customers JOIN Orders ON orders.customerId = customers.id`);
+    lines.push(`Filter: orders.amount > threshold (selectivity ≈ ${Math.round(params.selectivity*100)}%)`);
+    lines.push('');
+    lines.push('Planner choices:');
+    if (params.algorithm === 'nested') {
+      lines.push('- Join algorithm: Nested Loop Join (no index probe)');
+    } else if (params.algorithm === 'indexed') {
+      if (params.index) lines.push('- Join algorithm: Indexed Nested Loop (use index on orders.customerId)');
+      else lines.push('- Join algorithm: Indexed Nested Loop requested, but index is DISABLED. Planner will fall back to nested loop scan.');
+    } else if (params.algorithm === 'hash') {
+      lines.push('- Join algorithm: Hash Join (build hash on smaller input)');
+    }
+    lines.push(params.pushdown ? '- Predicate pushdown: ENABLED (apply orders filter early)' : '- Predicate pushdown: DISABLED (filter after join)');
+    lines.push('');
+    lines.push('Cost estimate (relative units):');
+    lines.push(`- Estimated work: ${Math.round(est.cost).toLocaleString()}`);
+    lines.push('');
+    lines.push('Estimator detail:');
+    est.planDesc.forEach(x => lines.push('- '+x));
+    lines.push('');
+    lines.push('Row counts:');
+    lines.push(`- Customers: ${rows.customers}`);
+    lines.push(`- Orders: ${rows.orders}`);
+    if (params.pushdown) lines.push(`- Orders after filter: ${rows.filteredOrders}`);
+    return lines.join('\n');
+  }
+
+  // Run query (generate data each run for fairness)
+  async function runQuery() {
+    // read config
+    const Nc = parseInt(customersCount.value,10);
+    const No = parseInt(ordersCount.value,10);
+    const selPct = parseInt(selectivity.value,10)/100;
+    const alg = algorithm.value;
+    const idx = indexOnOrders.checked;
+    const pushdown = predicatePushdown.checked;
+
+    // disable UI while running
+    runBtn.disabled = true;
+    explainBtn.disabled = true;
+    output.textContent = 'Generating data...';
+    estBar.textContent = '—';
+    actBar.textContent = '—';
+    metrics.textContent = '';
+
+    // generate data with deterministic seed for reproducibility
+    const data = generateData(Nc, No, selectivity.value, 98765);
+
+    // create predicate function
+    const threshold = data.threshold;
+    const predicateFn = (o) => o.amount > threshold;
+
+    // Build index if requested and available
+    let index = null;
+    if (idx) {
+      output.textContent = 'Building index on orders.customerId...';
+      // build index on orders (full)
+      index = buildIndex(data.orders, 'customerId');
+    }
+
+    // Show estimated plan quickly
+    const params = { customers: Nc, orders: No, selectivity: selPct, algorithm: alg, index: idx, pushdown: pushdown };
+    explainDiv.textContent = generateExplain(params);
+
+    // Execute selected algorithm and measure time & scanned rows
+    output.textContent = 'Executing query... (measuring performance)';
+    await new Promise(r => setTimeout(r,50)); // let UI update
+
+    let result, scannedOrders=0, scannedCustomers=0, execTime=0;
+    try {
+      if (alg === 'nested') {
+        result = nestedLoopJoin(data.customers, data.orders, predicateFn, pushdown);
+        scannedOrders = result.scannedOrders;
+        scannedCustomers = result.scannedCustomers;
+        execTime = result.time;
+      } else if (alg === 'indexed') {
+        if (!idx) {
+          // no index present — fallback to nested loop with scan
+          result = nestedLoopJoin(data.customers, data.orders, predicateFn, pushdown);
+        } else {
+          result = indexedNestedLoopJoin(data.customers, data.orders, predicateFn, index, pushdown);
+        }
+        scannedOrders = result.scannedOrders;
+        scannedCustomers = result.scannedCustomers;
+        execTime = result.time;
+      } else if (alg === 'hash') {
+        result = hashJoin(data.customers, data.orders, predicateFn, pushdown);
+        scannedOrders = result.scannedOrders;
+        scannedCustomers = result.scannedCustomers;
+        execTime = result.time;
+      }
+    } catch (e) {
+      output.textContent = 'Error during execution: ' + e.message;
+      runBtn.disabled = false;
+      explainBtn.disabled = false;
+      return;
+    }
+
+    // collect metrics
+    const matchedRows = result.matches.length;
+    const est = estimateCost(params);
+    // Update UI: textual output
+    const outLines = [];
+    outLines.push(`Execution finished.`);
+    outLines.push(`- Algorithm: ${alg}`);
+    outLines.push(`- Index on orders.customerId: ${idx ? 'YES' : 'NO'}`);
+    outLines.push(`- Predicate pushdown: ${pushdown ? 'YES' : 'NO'}`);
+    outLines.push('');
+    outLines.push(`Rows matched (join result): ${matchedRows}`);
+    outLines.push(`Rows scanned (orders): ${scannedOrders}`);
+    outLines.push(`Rows scanned (customers): ${scannedCustomers}`);
+    outLines.push(`Execution time (measured): ${execTime.toFixed(3)} ms`);
+    outLines.push('');
+    outLines.push('Sample of result rows (up to 8):');
+    for (let i=0;i<Math.min(8, result.matches.length); i++){
+      const [c,o] = result.matches[i];
+      outLines.push(`- Customer ${c.id} / Order ${o.id} (amount=${o.amount})`);
+    }
+    if (result.matches.length === 0) outLines.push('- (no matching rows)');
+    output.textContent = outLines.join('\n');
+
+    // Update bars (visualization): scale relative to estimate and time
+    const estVal = Math.max(1, Math.round(est.cost));
+    const actVal = Math.max(0.01, execTime);
+    // For presentation, normalize heights between 30 and 180 px
+    const estMax = 2000000; // large sentinel for heavy synthetic cost
+    const estH = 40 + Math.min(140, Math.round((estVal / (estVal + 10000)) * 140));
+    const actH = 40 + Math.min(140, Math.round((Math.log(1+actVal) / Math.log(1+1000)) * 140));
+    estBar.style.height = estH + 'px';
+    actBar.style.height = actH + 'px';
+    estBar.textContent = estVal.toLocaleString();
+    actBar.textContent = execTime.toFixed(3) + 'ms';
+
+    metrics.innerHTML = `Estimated work: <strong>${Math.round(estVal).toLocaleString()}</strong> units — actual measured time: <strong>${execTime.toFixed(3)} ms</strong>.`;
+
+    // Re-enable UI
+    runBtn.disabled = false;
+    explainBtn.disabled = false;
+  }
+
+  // Wire buttons
+  runBtn.addEventListener('click', () => {
+    runQuery();
+  });
+
+  explainBtn.addEventListener('click', () => {
+    const Nc = parseInt(customersCount.value,10);
+    const No = parseInt(ordersCount.value,10);
+    const selPct = parseInt(selectivity.value,10)/100;
+    const alg = algorithm.value;
+    const idx = indexOnOrders.checked;
+    const pushdown = predicatePushdown.checked;
+    const params = { customers: Nc, orders: No, selectivity: selPct, algorithm: alg, index: idx, pushdown: pushdown };
+    explainDiv.textContent = generateExplain(params);
+  });
+
+  // Initial explain
+  explainBtn.click();
+
+  // A short tip log in console (for curiosity)
+  console.log('Query Optimization Explorer loaded. Use the controls to compare nested-loop, indexed and hash joins, and predicate pushdown.');
+})();
+</script>
+</body>
+</html>

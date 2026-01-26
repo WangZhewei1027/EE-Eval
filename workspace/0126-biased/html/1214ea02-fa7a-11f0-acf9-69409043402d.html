@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Branch and Bound Interactive Demo</title>
+<style>
+  /* Extremely minimal styling */
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    background: white;
+    color: black;
+  }
+  textarea {
+    width: 100%;
+    height: 80px;
+    font-family: monospace;
+    resize: vertical;
+  }
+  input[type=number] {
+    width: 60px;
+  }
+  input[type=text] {
+    width: 150px;
+  }
+  select {
+    width: 100px;
+  }
+  .section {
+    margin-bottom: 15px;
+  }
+  label {
+    user-select:none;
+  }
+  button {
+    margin-right: 5px;
+  }
+  hr {
+    margin-top: 15px;
+    margin-bottom: 15px;
+  }
+</style>
+</head>
+<body>
+<h1>Branch and Bound Interactive Demo</h1>
+
+<div class="section">
+  <strong>Problem Setup:</strong><br />
+  Define variables and objective function (maximize):<br />
+  <label>Number of variables (1-6): <input type="number" id="varCount" min="1" max="6" value="3" /></label>
+  <button id="setupProblemBtn">Setup Problem</button><br />
+  <div id="varCoeffInputs" style="margin-top:5px;"></div>
+  Objective function format example: Maximize z = 3x1 + 5x2 + 2x3<br />
+  <small>All variables assumed integer and ≥ 0, no explicit constraints beyond branching variable bounds.</small>
+</div>
+
+<hr />
+
+<div class="section" id="branchBoundControls" style="display:none;">
+  <strong>Branch and Bound Controls:</strong><br />
+  <button id="initBtn">Initialize Algorithm</button>
+  <button id="stepBtn" disabled>Next Step</button>
+  <button id="autoRunBtn" disabled>Auto Run</button>
+  <button id="pauseBtn" disabled>Pause Auto Run</button>
+  <button id="resetBtn">Reset</button> 
+  <button id="addNodeBtn" disabled>Add Custom Node</button> (Add a node manually to the live node list)
+  <br /><br />
+  <label>Speed (steps/sec):
+    <input type="range" id="speedRange" min="0.1" max="5" value="1" step="0.1" />
+  </label>
+</div>
+
+<hr />
+
+<div class="section" id="manualAddNodeSection" style="display:none;">
+  <strong>Manual Node Addition</strong><br />
+  <label>Node ID: <input type="text" id="manualNodeId" placeholder="unique id" /></label><br />
+  <label>Variable bounds (JSON, e.g. {"x1":[0,10],"x2":[1,5]}): <br />
+    <textarea id="manualNodeBounds" placeholder='e.g. {"x1":[0,10],"x2":[0,5]}'> </textarea>
+  </label><br />
+  <label>Objective bound (upper bound estimate): <input type="number" id="manualNodeBound" /></label><br />
+  <label>Parent Node ID (optional): <input type="text" id="manualParentId" placeholder="parent id or empty" /></label><br />
+  <button id="addManualNodeConfirmBtn">Add Node</button>
+  <button id="cancelManualNodeBtn">Cancel</button>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Current State:</strong><br />
+  <div id="stateSummary" style="white-space:pre-wrap; font-family: monospace;"></div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Live Node List:</strong> (Nodes waiting to branch)<br />
+  <div id="liveNodeList" style="max-height:180px; overflow-y:auto; font-family: monospace; white-space:pre-wrap; border: 1px solid #000; padding:5px;"></div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Explored Nodes / Solutions:</strong><br />
+  <div id="exploredNodesList" style="max-height:180px; overflow-y:auto; font-family: monospace; white-space:pre-wrap; border: 1px solid #000; padding:5px;"></div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Logs / Messages:</strong><br />
+  <textarea id="logOutput" readonly></textarea><br />
+  <button id="clearLogBtn">Clear Log</button>
+</div>
+
+<script>
+(function(){
+  // === Variables and State ===
+  let varCount = 3;
+  let variables = []; // ['x1', 'x2', ...]
+  let objectiveCoeffs = []; // length varCount
+  /*
+    Nodes structure:
+    {
+      id: string,
+      bounds: { x1: [min,max], x2: [min,max], ... } integer ranges,
+      parent: string|null,
+      ub: number, // upper bound estimate,
+      lbSol: null | {solution: {x1: int,...}, value:number} // if feasible solution found,
+      status: 'live' | 'fathomed' | 'branched' | 'pruned'
+    }
+  */
+  let nodes = {}; // Dictionary by id
+  let liveNodes = []; // IDs of live nodes (waiting to branch)
+  let exploredNodes = new Set(); // IDs of nodes already processed
+  let bestSolution = null; // {solution:{...}, value:number}
+  let running = false;
+  let autoRunTimer = null;
+  let autoRunInterval = 1000;
+  let stepCount = 0;
+
+  // UI refs
+  const varCoeffInputsDiv = document.getElementById('varCoeffInputs');
+  const setupProblemBtn = document.getElementById('setupProblemBtn');
+  const varCountInput = document.getElementById('varCount');
+  const branchBoundControls = document.getElementById('branchBoundControls');
+  const initBtn = document.getElementById('initBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const autoRunBtn = document.getElementById('autoRunBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const addNodeBtn = document.getElementById('addNodeBtn');
+  const manualAddNodeSection = document.getElementById('manualAddNodeSection');
+  const manualNodeIdInput = document.getElementById('manualNodeId');
+  const manualNodeBoundsInput = document.getElementById('manualNodeBounds');
+  const manualNodeBoundInput = document.getElementById('manualNodeBound');
+  const manualParentIdInput = document.getElementById('manualParentId');
+  const addManualNodeConfirmBtn = document.getElementById('addManualNodeConfirmBtn');
+  const cancelManualNodeBtn = document.getElementById('cancelManualNodeBtn');
+  const stateSummaryDiv = document.getElementById('stateSummary');
+  const liveNodeListDiv = document.getElementById('liveNodeList');
+  const exploredNodesListDiv = document.getElementById('exploredNodesList');
+  const logOutput = document.getElementById('logOutput');
+  const clearLogBtn = document.getElementById('clearLogBtn');
+  const speedRange = document.getElementById('speedRange');
+
+  // --- Utility functions ---
+
+  // Log message with timestamp
+  function log(msg){
+    const now = new Date().toLocaleTimeString();
+    logOutput.value += `[${now}] ${msg}\n`;
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  // Clear log
+  clearLogBtn.onclick = () => logOutput.value = '';
+
+  // Generate variable names x1,x2,... up to varCount
+  function genVarNames(count){
+    let res = [];
+    for(let i=1;i<=count;i++) res.push('x'+i);
+    return res;
+  }
+
+  // Render coefficient input fields for objective function
+  function renderCoeffInputs(){
+    varCoeffInputsDiv.innerHTML = '';
+    variables = genVarNames(varCount);
+    objectiveCoeffs = [];
+    variables.forEach(v=>{
+      const label = document.createElement('label');
+      label.textContent = `${v} coeff: `;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.value = '1';
+      input.min = '-1000';
+      input.max = '1000';
+      input.step = '1';
+      input.style.width = '40px';
+      input.dataset.varname = v;
+      label.appendChild(input);
+      varCoeffInputsDiv.appendChild(label);
+      varCoeffInputsDiv.appendChild(document.createTextNode(' '));
+    });
+  }
+
+  // Read current coefficients from inputs
+  function readCoeffs(){
+    objectiveCoeffs = [];
+    const inputs = varCoeffInputsDiv.querySelectorAll('input[type=number]');
+    for(let i=0;i<varCount;i++){
+      const val = parseInt(inputs[i].value,10);
+      if(isNaN(val)) return null;
+      objectiveCoeffs.push(val);
+    }
+    return objectiveCoeffs;
+  }
+
+  // Evaluate objective function for solution {x1:int,...}
+  function evalObjective(sol){
+    let val = 0;
+    for(let i=0;i<varCount;i++){
+      const v = variables[i];
+      val += (sol[v]||0)*objectiveCoeffs[i];
+    }
+    return val;
+  }
+
+  // Check if a solution respects node bounds
+  function respectsBounds(sol, bounds){
+    for(const v of variables){
+      const val = sol[v]||0;
+      const b = bounds[v];
+      if(!b) return false; // if bound missing for a var, no respect
+      if(val < b[0] || val > b[1]) return false;
+    }
+    return true;
+  }
+
+  // Solve LP relaxation to get upper bound for a node
+  // Since variables integer ≥0 and bounded, just assign each var max bound to maximize
+  // and objective coeff positive or negative? We maximize objective.
+  // So for each variable, if coeff positive, take variable upper bound,
+  // if coeff negative, take variable lower bound, because it reduces objective.
+  // This is a rough relaxation for demo.
+  function computeUpperBound(node){
+    let val = 0;
+    for(let i=0;i<varCount;i++){
+      const v = variables[i];
+      const c = objectiveCoeffs[i];
+      if(c >= 0){
+        val += c*(node.bounds[v][1]);
+      } else {
+        val += c*(node.bounds[v][0]);
+      }
+    }
+    return val;
+  }
+
+  // Find a feasible integer solution at the node (naive, tries to round down upper bounds, check respects)
+  function findFeasibleSolution(node){
+    // Try integer solution with all vars at lower bound
+    // then try upper bound, then mid-point floor, then try some randomized attempts
+    const b = node.bounds;
+    let candidate = {};
+    variables.forEach(v=>{
+      candidate[v] = b[v][0];
+    });
+    if(respectsBounds(candidate,b)) return candidate;
+
+    // Try upper bounds
+    candidate = {};
+    variables.forEach(v=>{
+      candidate[v] = b[v][1];
+    });
+    if(respectsBounds(candidate,b)) return candidate;
+
+    // Mid points floor
+    candidate = {};
+    variables.forEach(v=>{
+      candidate[v] = Math.floor((b[v][0] + b[v][1])/2);
+    });
+    if(respectsBounds(candidate,b)) return candidate;
+
+    // Random attempts (up to 20)
+    for(let attempt=0;attempt<20;attempt++){
+      candidate = {};
+      variables.forEach(v=>{
+        const minb = b[v][0];
+        const maxb = b[v][1];
+        candidate[v] = minb + Math.floor(Math.random()*(maxb - minb +1));
+      });
+      if(respectsBounds(candidate,b)) return candidate;
+    }
+    return null;
+  }
+
+  // Select variable to branch on
+  // Heuristic: Find variable with largest range and fractional midpoint for branching variable (to simulate fractional LP solution)
+  function selectBranchVariable(node){
+    // Simulated LP solution: midpoint of bounds float (not integer necessarily)
+    // We pretend fractional solution here to demonstrate branching
+    // We'll pick variable with largest fractional gap midpoint - floor(midpoint)
+    let bestVar = null;
+    let bestFrac = -1;
+    variables.forEach(v=>{
+      const [minb,maxb] = node.bounds[v];
+      if(minb === maxb) return; // fixed var, skip
+      const mid = (minb + maxb)/2;
+      const frac = mid - Math.floor(mid);
+      if(frac > bestFrac) {
+        bestFrac = frac;
+        bestVar = v;
+      }
+    });
+    // If none fractional, pick variable with largest range
+    if(!bestVar){
+      let maxRange = -1;
+      variables.forEach(v=>{
+        const [minb,maxb] = node.bounds[v];
+        if(minb !== maxb && (maxb - minb) > maxRange){
+          maxRange = maxb - minb;
+          bestVar = v;
+        }
+      });
+    }
+    return bestVar;
+  }
+
+  // Branch node on variable v at mid floor(midpoint) value:
+  // Create two child nodes:
+  // left child: var ≤ midFloor
+  // right child: var ≥ midFloor+1
+  function branchNode(node, v){
+    const [minb,maxb] = node.bounds[v];
+    if(minb === maxb) return []; // no actual branch possible
+    const mid = (minb + maxb)/2;
+    const midFloor = Math.floor(mid);
+    if(midFloor < minb || midFloor >= maxb) return [];
+
+    // Left child bounds copy with var max bound updated
+    let leftBounds = {};
+    for(const varName of variables){
+      leftBounds[varName] = [...node.bounds[varName]];
+    }
+    leftBounds[v][1] = midFloor;
+
+    // Right child bounds copy with var min bound updated
+    let rightBounds = {};
+    for(const varName of variables){
+      rightBounds[varName] = [...node.bounds[varName]];
+    }
+    rightBounds[v][0] = midFloor + 1;
+
+    // Generate unique ids for children
+    const leftId = node.id + 'L';
+    const rightId = node.id + 'R';
+
+    let leftNode = {
+      id: leftId,
+      bounds: leftBounds,
+      parent: node.id,
+      ub: computeUpperBound({bounds:leftBounds}),
+      lbSol: null,
+      status: 'live'
+    };
+    let rightNode = {
+      id: rightId,
+      bounds: rightBounds,
+      parent: node.id,
+      ub: computeUpperBound({bounds:rightBounds}),
+      lbSol: null,
+      status: 'live'
+    };
+    return [leftNode, rightNode];
+  }
+
+  // Update UI functions
+
+  function updateStateSummary(){
+    let s = '';
+    s += `Variables (${varCount}): ${variables.join(', ')}\n`;
+    s += `Objective coefficients: ${objectiveCoeffs.join(', ')}\n`;
+    s += `Step count: ${stepCount}\n`;
+    s += `Best solution found:\n`;
+    if(bestSolution){
+      s += `  Value = ${bestSolution.value}\n  Solution: `;
+      const sol = bestSolution.solution;
+      s += variables.map(v=>`${v}=${sol[v]||0}`).join(', ') + '\n';
+    } else {
+      s += '  None\n';
+    }
+    s += `Live nodes count: ${liveNodes.length}\n`;
+    s += `Explored nodes count: ${exploredNodes.size}\n`;
+    stateSummaryDiv.textContent = s;
+  }
+
+  function formatNodeBrief(node){
+    let solStr = 'none';
+    if(node.lbSol) {
+      solStr = `val=${node.lbSol.value}, sol: ` + variables.map(v=>`${v}=${node.lbSol.solution[v]||0}`).join(',');
+    }
+    return `${node.id}: UB=${node.ub}, status=${node.status}, parent=${node.parent || 'none'}, feasibleSol [${solStr}]`;
+  }
+
+  function refreshLiveNodeList(){
+    let lines = [];
+    liveNodes.forEach(id=>{
+      if(nodes[id]){
+        lines.push(formatNodeBrief(nodes[id]));
+      }
+    });
+    liveNodeListDiv.textContent = lines.join('\n');
+  }
+
+  function refreshExploredNodesList(){
+    let lines = [];
+    Array.from(exploredNodes).forEach(id=>{
+      const n = nodes[id];
+      if(n){
+        lines.push(formatNodeBrief(n));
+      }
+    });
+    exploredNodesListDiv.textContent = lines.join('\n');
+  }
+
+  // === Controls wiring and logic ===
+
+  // Setup problem - generate coefficients inputs
+  setupProblemBtn.onclick = () => {
+    let c = parseInt(varCountInput.value,10);
+    if(isNaN(c) || c <1 || c >6){
+      alert('Variable count must be between 1 and 6');
+      return;
+    }
+    varCount = c;
+    renderCoeffInputs();
+    branchBoundControls.style.display = 'none';
+    manualAddNodeSection.style.display = 'none';
+    // Reset any prior state
+    resetAll();
+  };
+
+  function resetAll(){
+    variables = genVarNames(varCount);
+    objectiveCoeffs = readCoeffs() || objectiveCoeffs.fill(1);
+    nodes = {};
+    liveNodes = [];
+    exploredNodes.clear();
+    bestSolution = null;
+    running = false;
+    if(autoRunTimer){
+      clearInterval(autoRunTimer);
+      autoRunTimer = null;
+    }
+    stepCount = 0;
+    stepBtn.disabled = true;
+    autoRunBtn.disabled = true;
+    pauseBtn.disabled = true;
+    addNodeBtn.disabled = true;
+    stateSummaryDiv.textContent = '';
+    liveNodeListDiv.textContent = '';
+    exploredNodesListDiv.textContent = '';
+    log('State reset.');
+  }
+
+  resetBtn.onclick = () => {
+    resetAll();
+    branchBoundControls.style.display = 'none';
+    manualAddNodeSection.style.display = 'none';
+  };
+
+  // Initialize algorithm creates root node
+  initBtn.onclick = () => {
+    const coeffs = readCoeffs();
+    if(!coeffs){
+      alert('Invalid objective coefficients!');
+      return;
+    }
+    objectiveCoeffs = coeffs;
+    nodes = {};
+    liveNodes = [];
+    exploredNodes.clear();
+    bestSolution = null;
+    running = false;
+    if(autoRunTimer){
+      clearInterval(autoRunTimer);
+      autoRunTimer = null;
+    }
+    stepCount = 0;
+    // Root node bounds: all variables [0,100] by default
+    let rootBounds = {};
+    variables.forEach(v=>{
+      rootBounds[v]=[0,100];
+    });
+    const rootUb = computeUpperBound({bounds:rootBounds});
+    let rootNode = {
+      id: "root",
+      bounds: rootBounds,
+      parent: null,
+      ub: rootUb,
+      lbSol: null,
+      status: 'live'
+    };
+    nodes[rootNode.id] = rootNode;
+    liveNodes = [rootNode.id];
+    exploredNodes.clear();
+    bestSolution = null;
+    stepCount = 0;
+
+    stepBtn.disabled = false;
+    autoRunBtn.disabled = false;
+    pauseBtn.disabled = true;
+    addNodeBtn.disabled = false;
+
+    branchBoundControls.style.display = 'block';
+    manualAddNodeSection.style.display = 'none';
+
+    updateStateSummary();
+    refreshLiveNodeList();
+    refreshExploredNodesList();
+    log('Initialized with root node.');
+  };
+
+  // Core algorithm logic step
+
+  // Choose next node to branch: best first search (max UB node)
+  function pickNextNode(){
+    if(liveNodes.length === 0) return null;
+    let bestNode = null;
+    let bestUb = -Infinity;
+    liveNodes.forEach(id=>{
+      let n = nodes[id];
+      if(n.ub > bestUb) {
+        bestUb = n.ub;
+        bestNode = n;
+      }
+    });
+    return bestNode;
+  }
+
+  // Prune nodes with UB ≤ current best solution value
+  function pruneNodes(){
+    if(bestSolution == null) return;
+    let bestVal = bestSolution.value;
+    let newLiveNodes = [];
+    liveNodes.forEach(id=>{
+      let n = nodes[id];
+      if(n.ub <= bestVal) {
+        n.status = 'pruned';
+        log(`Pruned node ${id} with UB=${n.ub} ≤ best solution value =${bestVal}`);
+        exploredNodes.add(id);
+      } else {
+        newLiveNodes.push(id);
+      }
+    });
+    liveNodes = newLiveNodes;
+  }
+
+  // Perform one branch and bound step:
+  // 1) Pick next node with highest UB among live nodes
+  // 2) If no live nodes, done
+  // 3) Try find feasible solution in node, update best if improves
+  // 4) If UB ≤ best, fathom/prune node
+  // 5) Otherwise branch node on a variable, add children as live nodes, mark parent branched.
+  // 6) Update states and UI
+  function doStep(){
+    if(running) return; // prevent re-entrant
+
+    if(liveNodes.length === 0){
+      log('No live nodes left, algorithm finished.');
+      stepBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      pauseBtn.disabled = true;
+      addNodeBtn.disabled = true;
+      running = false;
+      return;
+    }
+    stepCount++;
+
+    pruneNodes();
+    if(liveNodes.length === 0){
+      log('All nodes pruned or fathomed after pruning. Finished.');
+      stepBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      pauseBtn.disabled = true;
+      addNodeBtn.disabled = true;
+      running = false;
+      updateStateSummary();
+      refreshLiveNodeList();
+      refreshExploredNodesList();
+      return;
+    }
+
+    let node = pickNextNode();
+    if(!node){
+      log('No suitable node to branch. Finished.');
+      stepBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      pauseBtn.disabled = true;
+      addNodeBtn.disabled = true;
+      running = false;
+      return;
+    }
+    
+    log(`Branching on node ${node.id} with UB=${node.ub}`);
+
+    // Try find feasible solution at node if none
+    if(!node.lbSol){
+      let feasibleSol = findFeasibleSolution(node);
+      if(feasibleSol){
+        let val = evalObjective(feasibleSol);
+        node.lbSol = {solution: feasibleSol, value: val};
+        log(`Found feasible solution at node ${node.id} with value=${val}`);
+        if(!bestSolution || val > bestSolution.value) {
+          bestSolution = {solution: feasibleSol, value: val};
+          log(`Best solution updated with value=${val} at node ${node.id}`);
+        }
+      }
+    }
+    // Fathom/prune if cannot improve best
+    if(bestSolution && node.ub <= bestSolution.value) {
+      node.status = 'pruned';
+      log(`Fathomed node ${node.id} with UB=${node.ub} ≤ best solution =${bestSolution.value}`);
+      // Remove node from live nodes and add to explored
+      liveNodes = liveNodes.filter(id => id !== node.id);
+      exploredNodes.add(node.id);
+      updateStateSummary();
+      refreshLiveNodeList();
+      refreshExploredNodesList();
+      return;
+    }
+
+    // If node bounds are all fixed (min=max for all vars), node is a leaf (integer solution fixed)
+    let fixedAll = variables.every(v=>{
+      let [minb,maxb] = node.bounds[v];
+      return minb === maxb;
+    });
+    if(fixedAll){
+      node.status = 'fathomed';
+      log(`Node ${node.id} is a leaf with fixed vars, fathomed.`);
+      // If no feasible sol yet, assign solution of bounds fixed
+      if(!node.lbSol){
+        let sol = {};
+        variables.forEach(v=>{
+          sol[v] = node.bounds[v][0];
+        });
+        let val = evalObjective(sol);
+        node.lbSol = {solution: sol, value: val};
+        if(!bestSolution || val > bestSolution.value) {
+          bestSolution = {solution: sol, value: val};
+          log(`Best solution updated with leaf node value=${val}`);
+        }
+      }
+      // Remove node from live, add to explored
+      liveNodes = liveNodes.filter(id=>id !== node.id);
+      exploredNodes.add(node.id);
+
+      updateStateSummary();
+      refreshLiveNodeList();
+      refreshExploredNodesList();
+      return;
+    }
+
+    // Otherwise branch
+    let branchVar = selectBranchVariable(node);
+    if(!branchVar) {
+      log(`No variable to branch on node ${node.id}, fathomed.`);
+      node.status = 'fathomed';
+      liveNodes = liveNodes.filter(id=>id !== node.id);
+      exploredNodes.add(node.id);
+      updateStateSummary();
+      refreshLiveNodeList();
+      refreshExploredNodesList();
+      return;
+    }
+
+    // Branch and create children
+    let children = branchNode(node,branchVar);
+    if(children.length === 0){
+      log(`No children generated when branching on variable ${branchVar} at node ${node.id}, fathomed.`);
+      node.status = 'fathomed';
+      liveNodes = liveNodes.filter(id=>id !== node.id);
+      exploredNodes.add(node.id);
+      updateStateSummary();
+      refreshLiveNodeList();
+      refreshExploredNodesList();
+      return;
+    }
+
+    log(`Branching node ${node.id} on variable ${branchVar} into ${children.map(c=>c.id).join(', ')}`);
+
+    // Add children and mark parent branched
+    children.forEach(c=>{
+      // If child's UB ≤ best known, prune immediately
+      if(bestSolution && c.ub <= bestSolution.value){
+        c.status = 'pruned';
+        log(`Pruned child node ${c.id} immediately (UB ≤ best solution)`);
+        exploredNodes.add(c.id);
+      } else {
+        nodes[c.id] = c;
+        liveNodes.push(c.id);
+      }
+    });
+
+    node.status = 'branched';
+    liveNodes = liveNodes.filter(id=>id !== node.id);
+    exploredNodes.add(node.id);
+
+    updateStateSummary();
+    refreshLiveNodeList();
+    refreshExploredNodesList();
+  }
+
+  // Step button
+  stepBtn.onclick = () => {
+    doStep();
+  };
+
+  // Auto run controls
+  autoRunBtn.onclick = () => {
+    if(running) return;
+    running = true;
+    stepBtn.disabled = true;
+    autoRunBtn.disabled = true;
+    pauseBtn.disabled = false;
+    addNodeBtn.disabled = true;
+    log('Starting auto run.');
+    autoRunInterval = 1000 / parseFloat(speedRange.value);
+    autoRunTimer = setInterval(()=>{
+      doStep();
+      if(liveNodes.length === 0){
+        clearInterval(autoRunTimer);
+        running = false;
+        stepBtn.disabled = true;
+        autoRunBtn.disabled = true;
+        pauseBtn.disabled = true;
+        addNodeBtn.disabled = true;
+        log('Auto run finished.');
+      }
+    }, autoRunInterval);
+  };
+
+  pauseBtn.onclick = () => {
+    if(autoRunTimer){
+      clearInterval(autoRunTimer);
+      autoRunTimer = null;
+      running = false;
+      stepBtn.disabled = false;
+      autoRunBtn.disabled = false;
+      pauseBtn.disabled = true;
+      addNodeBtn.disabled = false;
+      log('Auto run paused.');
+    }
+  };
+
+  speedRange.oninput = () => {
+    if(running){
+      clearInterval(autoRunTimer);
+      autoRunInterval = 1000 / parseFloat(speedRange.value);
+      autoRunTimer = setInterval(()=>{
+        doStep();
+        if(liveNodes.length === 0){
+          clearInterval(autoRunTimer);
+          running = false;
+          stepBtn.disabled = true;
+          autoRunBtn.disabled = true;
+          pauseBtn.disabled = true;
+          addNodeBtn.disabled = true;
+          log('Auto run finished.');
+        }
+      }, autoRunInterval);
+    }
+  };
+
+  // Add node button to open manual node addition UI
+  addNodeBtn.onclick = () => {
+    manualAddNodeSection.style.display = 'block';
+    manualNodeIdInput.value = '';
+    manualNodeBoundsInput.value = JSON.stringify(
+      variables.reduce((acc,v)=>{
+        acc[v] = [0,100];
+        return acc;
+      }, {})
+    , null, 2);
+    manualNodeBoundInput.value = '';
+    manualParentIdInput.value = '';
+  };
+
+  cancelManualNodeBtn.onclick = () => {
+    manualAddNodeSection.style.display = 'none';
+  };
+
+  addManualNodeConfirmBtn.onclick = () => {
+    let id = manualNodeIdInput.value.trim();
+    if(!id){
+      alert('Node ID required');
+      return;
+    }
+    if(nodes[id]){
+      alert('Node ID must be unique');
+      return;
+    }
+    let boundsStr = manualNodeBoundsInput.value.trim();
+    if(!boundsStr){
+      alert('Bounds required');
+      return;
+    }
+    let boundsObj;
+    try {
+      boundsObj = JSON.parse(boundsStr);
+    } catch(e){
+      alert('Invalid JSON for bounds');
+      return;
+    }
+    // Validate bounds keys and values
+    for(let v of variables){
+      if(!boundsObj[v]){
+        alert(`Bounds missing variable ${v}`);
+        return;
+      }
+      let b = boundsObj[v];
+      if(!Array.isArray(b) || b.length !== 2) {
+        alert(`Bounds for variable ${v} must be an array of two integers`);
+        return;
+      }
+      if(!Number.isInteger(b[0]) || !Number.isInteger(b[1])){
+        alert(`Bounds for variable ${v} must be integers`);
+        return;
+      }
+      if(b[0] > b[1]){
+        alert(`Lower bound > upper bound for variable ${v}`);
+        return;
+      }
+    }
+    let ub = parseFloat(manualNodeBoundInput.value);
+    if(isNaN(ub)){
+      alert('Objective bound (UB) required and must be a number');
+      return;
+    }
+    let parentId = manualParentIdInput.value.trim();
+    if(parentId && !nodes[parentId]){
+      alert('Parent node ID does not exist');
+      return;
+    }
+
+    let newNode = {
+      id: id,
+      bounds: boundsObj,
+      parent: parentId || null,
+      ub: ub,
+      lbSol: null,
+      status: 'live'
+    };
+    nodes[id] = newNode;
+    liveNodes.push(id);
+    manualAddNodeSection.style.display = 'none';
+    addNodeBtn.disabled = false;
+    log(`Manual node ${id} added.`);
+    updateStateSummary();
+    refreshLiveNodeList();
+    refreshExploredNodesList();
+  };
+
+  // Initial setup on load:
+  renderCoeffInputs();
+
+})();
+</script>
+</body>
+</html>

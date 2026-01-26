@@ -1,0 +1,239 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3da0871-fa73-11f0-83e0-8d7be1d51901.html';
+
+// Helper: wait for packet view to show something other than the initial placeholder
+async function waitForPacketPopulated(page, timeout = 10000) {
+  await page.waitForFunction(() => {
+    const pf = document.getElementById('packetFields');
+    if(!pf) return false;
+    return !/No packet yet/i.test(pf.textContent || '');
+  }, { timeout });
+}
+
+test.describe('Interactive DNS Concept Demonstration - FSM and UI validation', () => {
+  let consoleMessages;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    // Collect console messages and page errors for assertions
+    consoleMessages = [];
+    pageErrors = [];
+
+    page.on('console', msg => {
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+    page.on('pageerror', err => {
+      pageErrors.push(err);
+    });
+
+    // Load the app exactly as-is
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    // Ensure initial DOM painted
+    await page.waitForSelector('#domain');
+  });
+
+  test.afterEach(async () => {
+    // No-op cleanup; listeners are automatically removed with page context
+  });
+
+  test.describe('Initial state (S0_Idle) validations', () => {
+    test('S0_Idle: page shows initial log entry, cache UI updated and default controls', async ({ page }) => {
+      // Verify visible defaults that correspond to S0_Idle entry actions:
+      // - updateCacheUI() -> cache info text present
+      // - appendLog('Simulation ready. Enter a domain and click Resolve.')
+      const cacheInfo = await page.locator('#cacheInfo').textContent();
+      expect(cacheInfo).toBeTruthy();
+      expect(cacheInfo).toContain('cache');
+
+      // The packet view should show the idle placeholder
+      const packetFields = await page.locator('#packetFields').textContent();
+      expect(packetFields).toMatch(/No packet yet\. Click Resolve\./i);
+
+      // The rcode element should be the placeholder '—'
+      const rcode = await page.locator('#rcode').textContent();
+      expect(rcode).toBe('—');
+
+      // The log should contain the "Simulation ready" message as an entry (inserted by appendLog)
+      const logHtml = await page.locator('#log').innerHTML();
+      expect(logHtml).toMatch(/Simulation ready\. Enter a domain and click Resolve\./);
+
+      // Default cache toggle should be checked (per HTML attribute)
+      const cacheChecked = await page.locator('#cacheToggle').isChecked();
+      expect(cacheChecked).toBe(true);
+
+      // No uncaught page errors occurred during load
+      expect(pageErrors.length).toBe(0);
+      // No console error messages
+      const consoleErrors = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('Resolve flow and S1_Resolving validations', () => {
+    test('ResolveClick triggers resolution, updates badges, packet view and caches answer (default A record)', async ({ page }) => {
+      // Ensure inputs are in default state
+      await expect(page.locator('#domain')).toHaveValue('www.example.com');
+      await expect(page.locator('#rtype')).toHaveValue('A');
+
+      // Click Resolve and wait for packet view to populate (simulateResolution runs with timeouts)
+      await page.click('#resolveBtn');
+
+      // Wait for packetFields to be populated (final packet shown)
+      await waitForPacketPopulated(page, 10000);
+
+      // Verify transport/mode/step/cache badges updated (transport comes from #transport element default 'udp')
+      const transportBadge = await page.locator('#transportBadge').textContent();
+      expect(transportBadge.toUpperCase()).toContain('UDP');
+
+      const modeBadge = await page.locator('#modeBadge').textContent();
+      expect(modeBadge).toMatch(/Recursive|Iterative/);
+
+      const cacheBadge = await page.locator('#cacheBadge').textContent();
+      expect(cacheBadge).toMatch(/Enabled|Disabled/);
+
+      // Verify rcode indicates success 'NOERROR'
+      const rcode = await page.locator('#rcode').textContent();
+      expect(rcode).toMatch(/NOERROR/);
+
+      // Packet fields should include ID and Answers/ANC (ancount)
+      const packetFieldsText = await page.locator('#packetFields').textContent();
+      expect(packetFieldsText).toMatch(/ID:/);
+      expect(packetFieldsText).toMatch(/Answers:/);
+
+      // Cache UI should now contain at least one entry (resolver cached answer)
+      const cacheListHtml = await page.locator('#cacheList').innerHTML();
+      expect(cacheListHtml).not.toMatch(/Cache is empty/i);
+
+      // Log contains sequence of resolver interactions - at least the starting message should be present
+      const logText = await page.locator('#log').textContent();
+      expect(logText).toMatch(/Starting .* lookup for/);
+
+      // No unexpected runtime errors happened
+      expect(pageErrors.length).toBe(0);
+      const consoleErrors = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+      expect(consoleErrors.length).toBe(0);
+    });
+
+    test('S1_Resolving -> S0_Idle via ClearClick during resolution: immediate clearing of UI', async ({ page }) => {
+      // Start a resolution that takes time
+      await page.fill('#domain', 'mail.example.com');
+      await page.selectOption('#rtype', 'A');
+
+      // Begin resolution
+      await page.click('#resolveBtn');
+
+      // Immediately click Clear to exercise transition from resolving to cleared/idle
+      await page.click('#clearBtn');
+
+      // Immediately assert that the log was cleared and packetview reset
+      const packetTextAfterClear = await page.locator('#packetFields').textContent();
+      expect(packetTextAfterClear).toMatch(/No packet yet\. Click Resolve\./i);
+
+      const rcodeAfterClear = await page.locator('#rcode').textContent();
+      expect(rcodeAfterClear).toBe('—');
+
+      const logHtmlAfterClear = await page.locator('#log').innerHTML();
+      // clearBtn sets innerHTML='' — we expect empty string or whitespace
+      expect(logHtmlAfterClear.trim()).toBe('');
+
+      // Note: simulateResolution continues in background and may append further logs after
+      // We assert the immediate effect of ClearClick (as per FSM exit actions).
+      expect(pageErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('Toggles: cache and step-by-step behavior', () => {
+    test('CacheToggleChange updates UI and affects caching behavior', async ({ page }) => {
+      // Disable cache
+      const cacheToggle = page.locator('#cacheToggle');
+      await cacheToggle.uncheck();
+      // The UI should reflect cache disabled immediately
+      await expect(page.locator('#cacheBadge')).toHaveText(/Disabled/);
+      await expect(page.locator('#resolverState')).toHaveText(/Cache disabled/);
+
+      // Trigger a resolve and ensure cache is not written (cacheList should stay empty or show no new entries after process)
+      await page.fill('#domain', 'alias-some.example.com');
+      await page.selectOption('#rtype', 'A');
+
+      await page.click('#resolveBtn');
+
+      // Wait for packet/result to appear
+      await waitForPacketPopulated(page, 10000);
+
+      // Since cache was disabled, cacheList should still show "Cache is empty." or no entries
+      const cacheListHtml = await page.locator('#cacheList').innerHTML();
+      // It may contain entries from previous tests, but we disabled before resolving — check that cacheBadge shows Disabled
+      expect(await page.locator('#cacheBadge').textContent()).toMatch(/Disabled/);
+
+      // Now enable cache and perform another lookup, then verify cache gets populated
+      await page.locator('#cacheToggle').check();
+      expect(await page.locator('#cacheBadge').textContent()).toMatch(/Enabled/);
+
+      // Do a resolve that should cache
+      await page.fill('#domain', 'cachable.example.com');
+      await page.selectOption('#rtype', 'A');
+      await page.click('#resolveBtn');
+      await waitForPacketPopulated(page, 10000);
+
+      // Now cacheList should not be empty
+      const cacheListHtmlAfter = await page.locator('#cacheList').innerHTML();
+      expect(cacheListHtmlAfter).not.toMatch(/Cache is empty/i);
+
+      expect(pageErrors.length).toBe(0);
+    });
+
+    test('StepToggleChange enables step-by-step and the UI shows Next buttons during resolution', async ({ page }) => {
+      // Enable step-by-step
+      await page.locator('#stepToggle').check();
+      await expect(page.locator('#stepBadge')).toHaveText(/On/);
+
+      // Start a resolution that will create Next buttons and require manual stepping
+      await page.fill('#domain', 'www.example.com');
+      await page.selectOption('#rtype', 'A');
+      await page.click('#resolveBtn');
+
+      // The simulation places "Next" buttons on the page for each step.
+      // Click Next repeatedly until result appears or timeout.
+      const nextButtonLocator = () => page.locator('button', { hasText: 'Next' });
+      const maxClicks = 12;
+      let clicks = 0;
+
+      // Wait for at least one Next button to appear, then proceed
+      await page.waitForSelector('button:has-text("Next")', { timeout: 8000 });
+
+      // Keep clicking Next until packetFields populated or we exceed maxClicks
+      while (clicks < maxClicks) {
+        // If final packet displayed, break
+        const pfText = await page.locator('#packetFields').textContent();
+        if (pfText && !/No packet yet/i.test(pfText)) break;
+
+        const nxtVisible = await nextButtonLocator().count();
+        if (nxtVisible) {
+          await nextButtonLocator().first().click();
+        } else {
+          // If Next not present, wait briefly
+          await page.waitForTimeout(300);
+        }
+        clicks++;
+      }
+
+      // Ensure the resolution completed and packet view populated
+      await waitForPacketPopulated(page, 5000);
+
+      // After stepping, Next button should not be permanently stuck (either gone or not blocking)
+      const remainingNexts = await nextButtonLocator().count();
+      expect(remainingNexts).toBeLessThanOrEqual(1);
+
+      // Confirm the stepBadge still indicates On (control remained)
+      expect(await page.locator('#stepBadge').textContent()).toMatch(/On/);
+
+      expect(pageErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('Edge cases and specific response behaviors', () => {
+    test('Unknown TLD leads to NXDOMAIN as per root server behavior', async ({ page }) => {
+      // Use an unknown TLD to trigger the NXDOMAIN branch from the root server
+      await page.fill('#domain', 'host.unknown_tld_abc');
+      await

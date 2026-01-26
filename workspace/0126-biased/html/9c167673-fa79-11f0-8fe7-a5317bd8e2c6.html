@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Static Typing Interactive Demo</title>
+<style>
+/* Extremely minimal styling: keep defaults, only tiny layout nudges */
+body { margin: 12px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #000; background: #fff; }
+section { margin-bottom: 12px; }
+textarea, input[type="text"], select { width: 100%; box-sizing: border-box; }
+.row { display: flex; gap: 12px; }
+.col { flex: 1; min-width: 0; }
+small { display: block; margin-top: 6px; }
+pre { white-space: pre-wrap; background: #fff; border: 1px solid #ccc; padding: 8px; max-height: 280px; overflow: auto; }
+button, input[type="range"] { margin-top: 6px; }
+label { display: block; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Static Typing — Interactive Playground</h1>
+
+<section>
+  <strong>Overview</strong>
+  <div>Explore static typing concepts: define types, create variables, run checks, simulate inference, refactor types, and see detailed step-by-step diagnostics. Visuals kept intentionally plain.</div>
+</section>
+
+<section>
+  <div class="row">
+    <div class="col">
+      <strong>Type Definitions (DSL)</strong>
+      <textarea id="typeDefs" rows="10">
+# Examples:
+type Person = { name: string, age: number }
+type Admin = Person & { role: string }
+type ID = string
+nominal UserId = ID
+type Maybe<T> = T | null
+type Pair<T,U> = { first: T, second: U }
+type NumArray = number[]
+      </textarea>
+      <div>
+        <button id="btnParse">Parse Types</button>
+        <button id="btnResetTypes">Reset Types</button>
+      </div>
+      <small>Use "type Name = <expr>" or "nominal Name = <expr>". Expressions: primitives: number,string,boolean,any,unknown,null,undefined. Object: {a: number, b: string}. Union with |. Intersection with &. Arrays with T[]. Generics: Name&lt;T&gt;.</small>
+      <label>Parsed Types:</label>
+      <pre id="typesList">(no types parsed yet)</pre>
+    </div>
+
+    <div class="col">
+      <strong>Variables</strong>
+      <label>New variable name</label>
+      <input type="text" id="varName" placeholder="e.g. alice">
+      <label>Declared type (optional)</label>
+      <select id="varDeclaredType">
+        <option value="">(none)</option>
+      </select>
+      <label>Value (literal, JSON, function or hint)</label>
+      <input type="text" id="varValue" placeholder='e.g. {"name":"A","age":30}  or  42  or  ["x","y"] or fn(x:number):number'>
+      <label>Value type hint (helps inference, optional)</label>
+      <input type="text" id="varValueHint" placeholder="e.g. Person or number[]">
+      <div>
+        <button id="btnAddVar">Add Variable</button>
+        <button id="btnClearVars">Clear Variables</button>
+      </div>
+
+      <label>Existing Variables:</label>
+      <pre id="varsList">(none)</pre>
+    </div>
+
+    <div class="col">
+      <strong>Typing Mode & Controls</strong>
+      <label>Typing Mode
+        <select id="typingMode">
+          <option value="static">Static</option>
+          <option value="gradual">Gradual</option>
+          <option value="dynamic">Dynamic</option>
+        </select>
+      </label>
+
+      <label>Strictness (gradual mode favors lower strictness)</label>
+      <input type="range" id="strictness" min="0" max="100" value="100">
+      <div id="strictnessValue">100</div>
+
+      <label><input type="checkbox" id="structural" checked> Structural matching (uncheck for nominal)</label>
+      <label><input type="checkbox" id="enableInference" checked> Enable inference when requested</label>
+      <label><input type="checkbox" id="runtimeChecks"> Simulate runtime checks</label>
+
+      <div style="margin-top:8px;">
+        <button id="btnInferAll">Infer All</button>
+        <button id="btnCheckAll">Check All Assignments</button>
+        <button id="btnAutoFix">Auto-fix Suggestions</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>Workflows</label>
+        <div>
+          <button id="btnRefactorRename">Refactor: Rename property</button>
+          <button id="btnUnionize">Unionize Selected Types</button>
+          <button id="btnIntersect">Intersectionize Selected Types</button>
+        </div>
+        <small>Pick types from the list below when prompted.</small>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="row">
+    <div class="col">
+      <strong>Type Graph / Details</strong>
+      <label>Choose type for details:</label>
+      <select id="typeDetailSelect"></select>
+      <pre id="typeDetail">(choose a type)</pre>
+    </div>
+
+    <div class="col">
+      <strong>Variable Inspector</strong>
+      <label>Choose variable:</label>
+      <select id="varDetailSelect"></select>
+      <pre id="varDetail">(choose a variable)</pre>
+      <div>
+        <button id="btnInferVar">Infer Variable</button>
+        <button id="btnAssignToVar">Assign expression to variable</button>
+        <input type="text" id="assignExpr" placeholder='right-hand expression or var name'>
+        <small>Use JSON-like literals or another variable name to assign from.</small>
+      </div>
+    </div>
+
+    <div class="col">
+      <strong>History & Replay</strong>
+      <div>
+        <button id="btnPrevHist">Prev</button>
+        <button id="btnNextHist">Next</button>
+        <button id="btnShowHistory">Show History</button>
+        <button id="btnClearHistory">Clear History</button>
+      </div>
+      <label>Recent Actions:</label>
+      <pre id="historyLog">(no actions yet)</pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <strong>Diagnostics / Log</strong>
+  <pre id="log">Ready. Parse types to begin.</pre>
+</section>
+
+<script>
+/*
+  Interactive static typing simulation.
+  Very functional, minimal UI. The type system is simplified but supports
+  primitives, objects, arrays, unions, intersections, generics (basic aliasing),
+  nominal aliases, and basic structural vs nominal compatibility checking.
+*/
+
+// Utilities
+function cloneDeep(obj) { return JSON.parse(JSON.stringify(obj)); }
+function safeJsonParse(str) {
+  try { return JSON.parse(str); } catch (e) { return null; }
+}
+function trimLines(s) { return s.replace(/^\\s+|\\s+$/g,''); }
+function logPush(text) { logs.push(text); renderLogs(); }
+function now() { return new Date().toISOString().slice(11,23); }
+
+// Global state
+let types = {}; // name -> typeObj
+let variables = []; // array of {name, declared: typeName|null, valueRaw, valueHint, inferredType}
+let history = []; // snapshots
+let historyIndex = -1;
+let logs = [];
+let lastActionId = 0;
+
+const ui = {
+  typeDefs: document.getElementById('typeDefs'),
+  btnParse: document.getElementById('btnParse'),
+  btnResetTypes: document.getElementById('btnResetTypes'),
+  typesList: document.getElementById('typesList'),
+  varName: document.getElementById('varName'),
+  varDeclaredType: document.getElementById('varDeclaredType'),
+  varValue: document.getElementById('varValue'),
+  varValueHint: document.getElementById('varValueHint'),
+  btnAddVar: document.getElementById('btnAddVar'),
+  btnClearVars: document.getElementById('btnClearVars'),
+  varsList: document.getElementById('varsList'),
+  typingMode: document.getElementById('typingMode'),
+  strictness: document.getElementById('strictness'),
+  strictnessValue: document.getElementById('strictnessValue'),
+  structural: document.getElementById('structural'),
+  enableInference: document.getElementById('enableInference'),
+  runtimeChecks: document.getElementById('runtimeChecks'),
+  btnInferAll: document.getElementById('btnInferAll'),
+  btnCheckAll: document.getElementById('btnCheckAll'),
+  btnAutoFix: document.getElementById('btnAutoFix'),
+  btnRefactorRename: document.getElementById('btnRefactorRename'),
+  btnUnionize: document.getElementById('btnUnionize'),
+  btnIntersect: document.getElementById('btnIntersect'),
+  typesDetailSelect: document.getElementById('typeDetailSelect'),
+  typeDetail: document.getElementById('typeDetail'),
+  varDetailSelect: document.getElementById('varDetailSelect'),
+  varDetail: document.getElementById('varDetail'),
+  btnInferVar: document.getElementById('btnInferVar'),
+  btnAssignToVar: document.getElementById('btnAssignToVar'),
+  assignExpr: document.getElementById('assignExpr'),
+  btnPrevHist: document.getElementById('btnPrevHist'),
+  btnNextHist: document.getElementById('btnNextHist'),
+  btnShowHistory: document.getElementById('btnShowHistory'),
+  btnClearHistory: document.getElementById('btnClearHistory'),
+  historyLog: document.getElementById('historyLog'),
+  log: document.getElementById('log'),
+};
+
+// Type representation helpers
+function makePrimitive(name) { return { kind: 'primitive', name }; }
+function makeObject(props) { return { kind: 'object', props }; }
+function makeUnion(members) { return { kind: 'union', members }; }
+function makeIntersection(members) { return { kind: 'intersection', members }; }
+function makeArray(elem) { return { kind: 'array', elem }; }
+function makeAlias(name, target, params, nominal=false) { return { kind: 'alias', name, target, params: params||[], nominal: !!nominal }; }
+function makeGenericInstance(name, args) { return { kind:'genericInstance', name, args }; }
+function makeFunction(pars, ret) { return { kind: 'function', params: pars, returnType: ret }; }
+
+// Parser: small recursive descent for type expressions
+function parseTypeDefinitions(text) {
+  const lines = text.split('\\n').map(l=>l.trim()).filter(l=>l && !l.startsWith('#'));
+  const localTypes = {};
+  const errors = [];
+  for (let line of lines) {
+    // accept "type Name = expr" or "nominal Name = expr"
+    let m = line.match(/^(type|nominal)\\s+([A-Za-z0-9_]+)(<[^>]+>)?\\s*=\\s*(.+)$/);
+    if (!m) { errors.push('Unrecognized line: ' + line); continue; }
+    let [, kind, name, typeParams, expr] = m;
+    let params = null;
+    if (typeParams) {
+      // parse <T,U>
+      params = typeParams.slice(1,-1).split(',').map(p=>p.trim()).filter(Boolean);
+    }
+    try {
+      const parsed = parseTypeExpr(expr, name);
+      if (kind === 'nominal') {
+        localTypes[name] = makeAlias(name, parsed, params, true);
+      } else {
+        localTypes[name] = makeAlias(name, parsed, params, false);
+      }
+    } catch (e) {
+      errors.push('Parse error in "'+line+'": '+e.message);
+    }
+  }
+  return { types: localTypes, errors };
+}
+
+// Tokenizer for type expr
+function tokenizeTypeExpr(s) {
+  const tokens = [];
+  const re = /\\s*([A-Za-z0-9_]+|\\{|\\}|\\(|\\)|\\[|\\]|<|>|:|,|\\||&|\\.|=>|->|\\?|=|\\*|\\+|\\-|\\+|\\[\\]|\\[|\\]|\\[\\]|\\[|\\]|\\[\\]|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\[|\\]|\\S)\\s*/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    tokens.push(m[1]);
+  }
+  return tokens;
+}
+
+// Improved tokenizer simpler:
+function lex(s) {
+  const out = [];
+  let i=0;
+  while (i<s.length) {
+    let c = s[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[,:\\{\\}\\(\\)\\[\\]\\|&<>]/.test(c)) { out.push(c); i++; continue; }
+    // identifier or string
+    if (/[A-Za-z0-9_]/.test(c)) {
+      let j=i; while (j<s.length && /[A-Za-z0-9_]/.test(s[j])) j++;
+      out.push(s.slice(i,j)); i=j; continue;
+    }
+    // others
+    out.push(c); i++;
+  }
+  return out;
+}
+
+function parseTypeExpr(expr, contextName) {
+  const tokens = lex(expr);
+  let pos = 0;
+  function peek() { return tokens[pos]; }
+  function consume(t) {
+    if (t && peek() !== t) throw new Error('Expected "'+t+'", got "'+peek()+'" in "'+expr+'"');
+    const v = tokens[pos++];
+    return v;
+  }
+  function parsePrimary() {
+    let tk = peek();
+    if (!tk) throw new Error('Unexpected end while parsing "'+expr+'"');
+    if (tk === '{') {
+      consume('{');
+      const props = {};
+      while (peek() && peek() !== '}') {
+        const key = consume(); if (!key.match(/^[A-Za-z0-9_]+$/)) throw new Error('Invalid prop name: '+key);
+        consume(':');
+        const val = parseUnion();
+        props[key] = val;
+        if (peek() === ',') consume(',');
+      }
+      consume('}');
+      return makeObject(props);
+    }
+    if (tk === '(') {
+      consume('(');
+      const inside = parseUnion();
+      consume(')');
+      return inside;
+    }
+    // identifier or primitive
+    if (tk.match(/^[A-Za-z0-9_]+$/)) {
+      let id = consume();
+      // generics: < ... >
+      if (peek() === '<') {
+        consume('<');
+        const args = [];
+        while (peek() && peek() !== '>') {
+          args.push(parseUnion());
+          if (peek() === ',') consume(',');
+        }
+        consume('>');
+        // if id looks like built-in maybe treat specially; else generic instance reference
+        return makeGenericInstance(id, args);
+      }
+      // arrays like T []
+      if (peek() === '[' && tokens[pos+1] === ']') {
+        consume('['); consume(']');
+        let base = id;
+        // create type for array of id
+        // Represent as array whose element may be alias if id refers to alias later
+        return makeArray({ kind: 'aliasRef', name: id });
+      }
+      // primitives
+      if (['number','string','boolean','any','unknown','null','undefined','void'].includes(id)) {
+        return makePrimitive(id);
+      }
+      // bare alias reference
+      return { kind: 'aliasRef', name: id };
+    }
+    throw new Error('Unexpected token "'+tk+'" in "'+expr+'"');
+  }
+
+  function parseIntersection() {
+    let left = parsePrimary();
+    while (peek() === '&') {
+      consume('&');
+      let right = parsePrimary();
+      left = makeIntersection([left, right]);
+    }
+    return left;
+  }
+
+  function parseUnion() {
+    let left = parseIntersection();
+    while (peek() === '|') {
+      consume('|');
+      let right = parseIntersection();
+      left = makeUnion([left, right]);
+    }
+    return left;
+  }
+
+  const parsed = parseUnion();
+  if (pos < tokens.length) {
+    // trailing array '[]' handling like number[] or aliasRef handled above; if leftover tokens, complain
+    // But allow repeated [] tokens
+    while (peek() === '[' && tokens[pos+1] === ']') {
+      consume('['); consume(']');
+      parsed = makeArray(parsed);
+    }
+    if (pos < tokens.length) throw new Error('Unexpected token "'+peek()+'" in "'+expr+'"');
+  }
+  return parsed;
+}
+
+// Resolve alias references into actual types (deferred until needed)
+function resolveType(t, depth=0) {
+  if (!t || depth>200) return { kind:'unknown' };
+  if (t.kind === 'aliasRef') {
+    const def = types[t.name];
+    if (!def) {
+      // unresolved alias -> unknown
+      return { kind: 'unknown', name: t.name };
+    }
+    // create instance of alias.target; shallow clone and mark alias name
+    // If alias has params and this reference included generics not resolved, we leave as alias instance
+    if (def.params && def.params.length>0) {
+      // We don't have concrete args here, so produce a paramized alias instance
+      return { kind: 'aliasInstance', name: def.name, target: def.target, params: def.params, nominal: def.nominal };
+    }
+    // resolve the target recursively
+    const resolvedTarget = resolveType(def.target, depth+1);
+    // keep alias wrapper with nominal flag
+    return { kind: 'aliasWrap', name: def.name, target: resolvedTarget, nominal: def.nominal };
+  } else if (t.kind === 'alias') {
+    // immediate alias object from parse; resolve its inner target
+    const resolved = resolveType(t.target, depth+1);
+    return { kind: 'aliasWrap', name: t.name, target: resolved, nominal: t.nominal || false };
+  } else if (t.kind === 'genericInstance') {
+    // Attempt to instantiate generic by inlining args if the generic alias is known.
+    const def = types[t.name];
+    if (!def) return { kind: 'unknown', name: t.name };
+    if (!def.params || def.params.length !== t.args.length) {
+      // mismatched generics; keep as instance
+      return { kind: 'genericInstance', name: t.name, args: t.args.map(a=>resolveType(a, depth+1)) };
+    }
+    // Simple substitution: replace param occurrences inside def.target with provided args
+    const subst = (node) => {
+      if (!node) return node;
+      if (node.kind === 'aliasRef') {
+        const idx = def.params.indexOf(node.name);
+        if (idx >= 0) return resolveType(t.args[idx], depth+1);
+        return resolveType(node, depth+1);
+      } else if (node.kind === 'object') {
+        const p = {};
+        for (let k in node.props) p[k] = subst(node.props[k]);
+        return makeObject(p);
+      } else if (node.kind === 'union') {
+        return makeUnion(node.members.map(subst));
+      } else if (node.kind === 'intersection') {
+        return makeIntersection(node.members.map(subst));
+      } else if (node.kind === 'array') {
+        return makeArray(subst(node.elem));
+      } else if (node.kind === 'genericInstance') {
+        return { kind: 'genericInstance', name: node.name, args: node.args.map(subst) };
+      } else if (node.kind === 'alias') {
+        // nested alias with own params: leave as is
+        return { kind:'aliasWrap', name: node.name, target: subst(node.target), nominal: node.nominal };
+      } else {
+        return node;
+      }
+    };
+    const body = subst(def.target);
+    return resolveType(body, depth+1);
+  } else if (t.kind === 'object') {
+    const p = {};
+    for (let k in t.props) p[k] = resolveType(t.props[k], depth+1);
+    return makeObject(p);
+  } else if (t.kind === 'union') {
+    return makeUnion(t.members.map(m=>resolveType(m, depth+1)));
+  } else if (t.kind === 'intersection') {
+    return makeIntersection(t.members.map(m=>resolveType(m, depth+1)));
+  } else if (t.kind === 'array') {
+    return makeArray(resolveType(t.elem, depth+1));
+  } else {
+    return t;
+  }
+}
+
+// Type rendering for display
+function renderType(t) {
+  if (!t) return 'unknown';
+  if (t.kind === 'primitive') return t.name;
+  if (t.kind === 'object') {
+    const keys = Object.keys(t.props).map(k=>k+': '+renderType(t.props[k]));
+    return '{ ' + keys.join(', ') + ' }';
+  }
+  if (t.kind === 'union') return t.members.map(renderType).join(' | ');
+  if (t.kind === 'intersection') return t.members.map(renderType).join(' & ');
+  if (t.kind === 'array') return renderType(t.elem) + '[]';
+  if (t.kind === 'alias') return t.name + ' (alias)';
+  if (t.kind === 'aliasWrap') return t.name + ' = ' + renderType(t.target) + (t.nominal ? ' (nominal)' : '');
+  if (t.kind === 'aliasRef') return t.name;
+  if (t.kind === 'aliasInstance') return t.name + ' (instance)';
+  if (t.kind === 'genericInstance') return t.name + '<' + t.args.map(renderType).join(',') + '>';
+  if (t.kind === 'unknown') return 'unknown' + (t.name ? '('+t.name+')':'' );
+  if (t.kind === 'function') return '(' + t.params.map((p,i)=>('p'+i+':'+renderType(p))).join(',') + ') => ' + renderType(t.returnType);
+  return JSON.stringify(t);
+}
+
+// Compatibility / assignability check
+function isAssignable(from, to, ctx={structural:true, trace:[], depth:0}) {
+  // ctx: {structural: bool, trace: []}
+  if (ctx.depth > 200) { ctx.trace.push('Recursion limit'); return false; }
+  ctx.depth++;
+  function note(msg) { ctx.trace.push(msg); }
+  // Resolve aliases for better comparison except when nominal
+  const resolveForCheck = (x) => {
+    if (!x) return x;
+    if (x.kind === 'aliasWrap') {
+      // If target is nominal and other is not same alias, then keep alias
+      return x;
+    }
+    return resolveType(x);
+  };
+  let A = from, B = to;
+  // If B is aliasWrap (named type), and B.nominal true and ctx.structural false => require same alias name
+  if (B && B.kind === 'aliasWrap' && B.nominal && !ctx.structural) {
+    // match only if A is aliasWrap of same name or aliasRef of same name
+    if ((A && A.kind === 'aliasWrap' && A.name === B.name) || (A && A.kind === 'aliasRef' && A.name === B.name)) {
+      note('Nominal match by name ' + B.name);
+      ctx.depth--; return true;
+    } else {
+      note('Nominal mismatch: target requires ' + B.name);
+      ctx.depth--; return false;
+    }
+  }
+
+  // For aliasWraps treat as underlying target for structural comparison
+  if (A && A.kind === 'aliasWrap') A = A.target;
+  if (B && B.kind === 'aliasWrap') B = B.target;
+
+  if (!A || !B) { note('One side unknown -> not assignable'); ctx.depth--; return false; }
+
+  if (B.kind === 'primitive') {
+    if (A.kind === 'primitive' && (A.name === B.name || B.name === 'any' || A.name === 'any' || B.name === 'unknown')) { note('primitive match ' + A.name + ' -> ' + B.name); ctx.depth--; return true; }
+    // Allow numeric coercion option? for demo treat number<->string as incompatible
+    note('primitive mismatch: ' + (A.name||A.kind) + ' -> ' + B.name);
+    ctx.depth--; return false;
+  }
+
+  if (B.kind === 'unknown' || B.kind === 'primitive' && B.name === 'any') { note('target is any/unknown: allow'); ctx.depth--; return true; }
+
+  if (B.kind === 'union') {
+    // from assignable to any member
+    for (let m of B.members) {
+      const localTrace = [];
+      const subctx = {structural: ctx.structural, trace: localTrace, depth: ctx.depth+1};
+      if (isAssignable(A, m, subctx)) { note('matches union member: ' + renderType(m)); ctx.depth--; return true; }
+    }
+    note('no union member matched');
+    ctx.depth--; return false;
+  }
+
+  if (B.kind === 'intersection') {
+    // from must satisfy all members
+    for (let m of B.members) {
+      const localTrace = [];
+      const subctx = {structural: ctx.structural, trace: localTrace, depth: ctx.depth+1};
+      if (!isAssignable(A, m, subctx)) { note('fails intersection member: ' + renderType(m)); ctx.depth--; return false; }
+    }
+    note('satisfies intersection');
+    ctx.depth--; return true;
+  }
+
+  if (B.kind === 'array') {
+    if (A.kind === 'array') {
+      const ok = isAssignable(A.elem, B.elem, ctx);
+      note('array element assignable: ' + ok);
+      ctx.depth--; return ok;
+    } else {
+      note('not array -> cannot assign');
+      ctx.depth--; return false;
+    }
+  }
+
+  if (B.kind === 'object') {
+    if (A.kind !== 'object') { note('source not object'); ctx.depth--; return false; }
+    // For each property in B, ensure A has compatible prop
+    for (let k in B.props) {
+      if (!(k in A.props)) { note('missing property ' + k); ctx.depth--; return false; }
+      const ok = isAssignable(A.props[k], B.props[k], ctx);
+      if (!ok) { note('property ' + k + ' incompatible'); ctx.depth--; return false; }
+    }
+    note('object structural match');
+    ctx.depth--; return true;
+  }
+
+  if (B.kind === 'function') {
+    if (A.kind !== 'function') { note('source not function'); ctx.depth--; return false; }
+    // contravariant parameters, covariant returns (simple check)
+    if (A.params.length !== B.params.length) { note('function arity mismatch'); ctx.depth--; return false; }
+    for (let i=0;i<B.params.length;i++) {
+      // target param must be assignable from source param? for contravariant: B.param <= A.param (A param should accept more)
+      const ok = isAssignable(B.params[i], A.params[i], ctx);
+      if (!ok) { note('param ' + i + ' incompatible'); ctx.depth--; return false; }
+    }
+    const retOk = isAssignable(A.returnType, B.returnType, ctx);
+    if (!retOk) { note('return type incompatible'); ctx.depth--; return false; }
+    note('function match');
+    ctx.depth--; return true;
+  }
+
+  // fallback
+  note('unhandled type comparison: ' + B.kind + ' vs ' + A.kind);
+  ctx.depth--; return false;
+}
+
+// Inference from value string
+function inferTypeFromValue(valueRaw, hint) {
+  const s = (valueRaw||'').trim();
+  if (!s) return null;
+  // If hint provided, try parse hint as type name or expr
+  if (hint) {
+    // if hint matches existing type name
+    if (types[hint]) return resolveType(types[hint]);
+    try { return parseTypeExpr(hint); } catch (e) { /* ignore */ }
+  }
+  // try JSON
+  try {
+    const parsed = JSON.parse(s);
+    return inferTypeFromJsValue(parsed);
+  } catch (e) {
+    // not JSON - try simple numeric/boolean/literal forms
+    if (/^\\d+(\\.\\d+)?$/.test(s)) return makePrimitive('number');
+    if (s === 'true' || s === 'false') return makePrimitive('boolean');
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) return makePrimitive('string');
+    // function hint: fn(x:number):number
+    const fm = s.match(/^fn\\s*\\(([^)]*)\\)\\s*:\\s*([A-Za-z0-9_\\[\\]\\<\\>\\s\\,\\{\\}:|&]+)$/);
+    if (fm) {
+      const params = fm[1].split(',').map(x=>x.trim()).filter(Boolean);
+      const ptypes = params.map(p=>{
+        const m = p.split(':');
+        if (m.length===2) return parseTypeExpr(m[1].trim());
+        return makePrimitive('any');
+      });
+      const ret = parseTypeExpr(fm[2].trim());
+      return makeFunction(ptypes, ret);
+    }
+    // try arrow like "(x:number)=>number"
+    const arrMatch = s.match(/\\((.*)\\)\\s*=>\\s*([^\\s]+)/);
+    if (arrMatch) {
+      const params = arrMatch[1].split(',').map(x=>x.trim()).filter(Boolean);
+      const ptypes = params.map(p=>{
+        const m = p.split(':');
+        if (m.length===2) return parseTypeExpr(m[1].trim());
+        return makePrimitive('any');
+      });
+      const retTypeName = arrMatch[2];
+      let retType = makePrimitive('any');
+      try { retType = parseTypeExpr(retTypeName); } catch(e){}
+      return makeFunction(ptypes, retType);
+    }
+    // fallback to string
+    return makePrimitive('string');
+  }
+
+  function inferTypeFromJsValue(v) {
+    if (v === null) return makePrimitive('null');
+    if (Array.isArray(v)) {
+      if (v.length === 0) return makeArray(makePrimitive('any'));
+      // infer element type union
+      let elemTypes = v.map(inferTypeFromJsValue);
+      // reduce to common type if equal, else union
+      if (elemTypes.every((et)=>renderType(et) === renderType(elemTypes[0]))) {
+        return makeArray(elemTypes[0]);
+      } else {
+        return makeArray(makeUnion(elemTypes));
+      }
+    }
+    if (typeof v === 'number') return makePrimitive('number');
+    if (typeof v === 'string') return makePrimitive('string');
+    if (typeof v === 'boolean') return makePrimitive('boolean');
+    if (typeof v === 'object') {
+      const props = {};
+      for (let k in v) props[k] = inferTypeFromJsValue(v[k]);
+      return makeObject(props);
+    }
+    return makePrimitive('unknown');
+  }
+}
+
+// Rendering functions
+function renderTypesList() {
+  const lines = [];
+  for (let name in types) {
+    const t = types[name];
+    lines.push(name + (t.params && t.params.length ? '<' + t.params.join(',') + '>' : '') + (t.nominal ? ' (nominal)' : '') + ' = ' + renderType(t.target));
+  }
+  ui.typesList.textContent = lines.length ? lines.join('\\n') : '(no types defined)';
+  // populate selects
+  const sel = ui.varDeclaredType;
+  sel.innerHTML = '<option value="">(none)</option>';
+  const sel2 = ui.typeDetailSelect;
+  sel2.innerHTML = '<option value="">(choose)</option>';
+  for (let n in types) {
+    const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+    const p = document.createElement('option'); p.value = n; p.textContent = n; sel2.appendChild(p);
+  }
+}
+
+// Variable list rendering
+function renderVarsList() {
+  const lines = [];
+  for (let v of variables) {
+    const declared = v.declared || '(none)';
+    const inferredText = v.inferredType ? renderType(v.inferredType) : '(not inferred)';
+    lines.push(v.name + ' : declared=' + declared + ' ; inferred=' + inferredText + ' ; value=' + (v.valueRaw||''));
+  }
+  ui.varsList.textContent = lines.length ? lines.join('\\n') : '(none)';
+  const sel = ui.varDetailSelect;
+  sel.innerHTML = '<option value="">(choose)</option>';
+  for (let v of variables) {
+    const o = document.createElement('option'); o.value = v.name; o.textContent = v.name; sel.appendChild(o);
+  }
+}
+
+// History
+function pushHistory(actionDescription) {
+  const snapshot = {
+    types: cloneDeep(types),
+    variables: cloneDeep(variables),
+    action: actionDescription,
+    time: now(),
+    id: ++lastActionId
+  };
+  // truncate future if navigated
+  if (historyIndex < history.length-1) history = history.slice(0, historyIndex+1);
+  history.push(snapshot);
+  historyIndex = history.length - 1;
+  renderHistory();
+}
+
+function renderHistory() {
+  ui.historyLog.textContent = history.map((h,i)=> (i===historyIndex?'* ':'  ') + '['+h.time+'] '+h.action).reverse().join('\\n');
+}
+
+function applyHistoryIndex(i) {
+  if (i < 0 || i >= history.length) return;
+  const snap = history[i];
+  types = cloneDeep(snap.types);
+  variables = cloneDeep(snap.variables);
+  historyIndex = i;
+  renderTypesList(); renderVarsList(); renderHistory(); logPush('Rewound to: '+snap.action);
+}
+
+// Checks and inference operations
+function inferAll() {
+  const enabled = ui.enableInference.checked;
+  if (!enabled) { logPush('Inference disabled in settings.'); return; }
+  for (let v of variables) {
+    const inferred = inferTypeFromValue(v.valueRaw, v.valueHint);
+    v.inferredType = inferred ? resolveType(inferred) : null;
+  }
+  pushHistory('Infer All types');
+  renderVarsList();
+  logPush('All variables inferred (where possible).');
+}
+
+function checkAllAssignments() {
+  const structural = ui.structural.checked;
+  const mode = ui.typingMode.value;
+  logs = []; // reset for detailed build
+  for (let v of variables) {
+    const declared = v.declared ? resolveType(types[v.declared]) : null;
+    let fromType = v.inferredType;
+    if (!fromType) {
+      fromType = inferTypeFromValue(v.valueRaw, v.valueHint);
+      if (fromType) fromType = resolveType(fromType);
+    }
+    if (!declared) {
+      // no declared type, in strict static mode warn
+      if (mode === 'static') {
+        logPush('Variable ' + v.name + ' has no declared type. In static mode this is a potential issue.');
+      } else {
+        logPush('Variable ' + v.name + ' unchecked (no declared type in ' + mode + ' mode).');
+      }
+      continue;
+    }
+    const ctx = {structural: structural, trace: []};
+    const ok = isAssignable(fromType, declared, ctx);
+    let msg = 'Check: ' + v.name + ' <- declared ' + v.declared + ' : ';
+    if (ok) msg += 'OK';
+    else msg += 'TYPE ERROR';
+    logPush(msg);
+    for (let t of ctx.trace) logPush('  - ' + t);
+  }
+  pushHistory('Check All Assignments');
+}
+
+// Auto-fix suggestions: simple heuristics
+function autoFix() {
+  // For each variable with declared type but not assignable, try to propose changes:
+  const structural = ui.structural.checked;
+  const suggestions = [];
+  for (let v of variables) {
+    if (!v.declared) continue;
+    const declared = resolveType(types[v.declared]);
+    const fromType = v.inferredType || resolveType(inferTypeFromValue(v.valueRaw, v.valueHint));
+    const ctx = {structural: structural, trace: []};
+    const ok = isAssignable(fromType, declared, ctx);
+    if (!ok) {
+      // Suggest casting to a union with declared type or widening declared to any/object
+      if (declared.kind === 'object' && fromType && fromType.kind === 'object') {
+        // propose adding missing properties to declared type
+        const missing = [];
+        for (let k in fromType.props) if (!(k in declared.props)) missing.push(k);
+        if (missing.length) {
+          suggestions.push('Suggest adding properties ' + missing.join(', ') + ' to declared type ' + v.declared + ' to match ' + v.name);
+        } else {
+          suggestions.push('Unable to auto-fix ' + v.name + ' -> ' + v.declared + ', mismatched shapes.');
+        }
+      } else {
+        suggestions.push('Suggest changing declared type of ' + v.name + ' to a union including ' + renderType(fromType));
+      }
+    }
+  }
+  if (!suggestions.length) suggestions.push('No fixes proposed.');
+  for (let s of suggestions) logPush(s);
+  pushHistory('Auto-fix suggestions generated');
+}
+
+// Refactor: rename property across types
+function refactorRenameProperty() {
+  const typeNames = Object.keys(types);
+  if (!typeNames.length) { logPush('No types to refactor'); return; }
+  const name = prompt('Type to refactor (name):\\nAvailable: ' + typeNames.join(', '));
+  if (!name || !types[name]) { logPush('Canceled or unknown type'); return; }
+  const from = prompt('Property to rename (in ' + name + '):');
+  if (!from) { logPush('Canceled'); return; }
+  const to = prompt('New property name:');
+  if (!to) { logPush('Canceled'); return; }
+  // apply rename to any type that references property with that name (structural)
+  for (let n in types) {
+    const t = types[n];
+    const resolved = t.target;
+    // simple recursive rename in object shapes only for def targets
+    function renameIn(node) {
+      if (!node) return;
+      if (node.kind === 'object') {
+        if (node.props && node.props[from]) {
+          node.props[to] = node.props[from];
+          delete node.props[from];
+          logPush('Renamed property in type ' + n);
+        }
+        for (let k in node.props) renameIn(node.props[k]);
+      } else if (node.kind === 'union' || node.kind === 'intersection') {
+        for (let m of node.members) renameIn(m);
+      } else if (node.kind === 'array') renameIn(node.elem);
+      else if (node.kind === 'alias') renameIn(node.target);
+    }
+    renameIn(t.target);
+  }
+  pushHistory('Refactor rename ' + from + ' -> ' + to + ' in type ' + name);
+  renderTypesList();
+  logPush('Refactor complete: ' + from + ' renamed to ' + to);
+}
+
+// Unionize selected types: merge names into a new union alias
+function unionizeTypes() {
+  const names = prompt('Comma-separated type names to unionize:');
+  if (!names) return;
+  const arr = names.split(',').map(s=>s.trim()).filter(Boolean);
+  const newName = prompt('New type name for union:');
+  if (!newName) return;
+  const members = arr.map(n => ({ kind: 'aliasRef', name: n }));
+  types[newName] = makeAlias(newName, makeUnion(members), null, false);
+  pushHistory('Unionize into ' + newName);
+  renderTypesList();
+  logPush('Created union type ' + newName + ' = ' + arr.join(' | '));
+}
+
+function intersectTypes() {
+  const names = prompt('Comma-separated type names to intersect:');
+  if (!names) return;
+  const arr = names.split(',').map(s=>s.trim()).filter(Boolean);
+  const newName = prompt('New type name for intersection:');
+  if (!newName) return;
+  const members = arr.map(n => ({ kind: 'aliasRef', name: n }));
+  types[newName] = makeAlias(newName, makeIntersection(members), null, false);
+  pushHistory('Intersect into ' + newName);
+  renderTypesList();
+  logPush('Created intersection type ' + newName + ' = ' + arr.join(' & '));
+}
+
+// Assign expression to a variable (simulate assignment + check)
+function assignExprToVar(varName, expr) {
+  const v = variables.find(x=>x.name===varName);
+  if (!v) { logPush('Unknown variable'); return; }
+  // If expr refers to another variable name, take its inferred type and valueRaw
+  const other = variables.find(x=>x.name===expr);
+  let rightType = null;
+  let rightValueRaw = expr;
+  if (other) {
+    rightType = other.inferredType || inferTypeFromValue(other.valueRaw, other.valueHint);
+    rightValueRaw = other.valueRaw;
+  } else {
+    // try to infer rightType from literal/JSON
+    rightType = inferTypeFromValue(expr, null);
+  }
+  // perform assignability check
+  const declared = v.declared ? resolveType(types[v.declared]) : null;
+  const structural = ui.structural.checked;
+  const ctx = { structural: structural, trace: [] };
+  if (!declared) {
+    // In static mode, assignment without declared type is a potential problem
+    if (ui.typingMode.value === 'static') {
+      logPush('Assignment to ' + varName + ' has no declared type; consider adding one. Value inferred as: ' + renderType(rightType));
+      v.valueRaw = rightValueRaw;
+      v.inferredType = resolveType(rightType);
+      pushHistory('Assign expression to ' + varName + ' (no declared type)');
+      renderVarsList();
+      return;
+    } else {
+      v.valueRaw = rightValueRaw;
+      v.inferredType = resolveType(rightType);
+      pushHistory('Assign expression to ' + varName);
+      renderVarsList();
+      logPush('Assigned (no declared type) ' + varName + ' = ' + expr);
+      return;
+    }
+  }
+  const ok = isAssignable(rightType, declared, ctx);
+  if (ok) {
+    v.valueRaw = rightValueRaw;
+    v.inferredType = resolveType(rightType);
+    logPush('Assignment OK: ' + varName + ' = ' + expr);
+    for (let t of ctx.trace) logPush('  - ' + t);
+    pushHistory('Assign expression to ' + varName + ' (ok)');
+  } else {
+    logPush('Type ERROR on assignment to ' + varName + ':');
+    for (let t of ctx.trace) logPush('  - ' + t);
+    if (ui.runtimeChecks.checked) {
+      // simulate runtime guard
+      const accept = confirm('Runtime checks enabled. Perform runtime guard (wrap check) to allow assignment at runtime?');
+      if (accept) {
+        v.valueRaw = rightValueRaw;
+        v.inferredType = resolveType(rightType);
+        pushHistory('Assign with runtime guard to ' + varName);
+        logPush('Assigned under runtime guard. Static mismatch remains.');
+      } else {
+        logPush('Assignment aborted.');
+      }
+    } else {
+      logPush('Assignment rejected (static mode).');
+    }
+  }
+  renderVarsList();
+}
+
+// UI event wiring
+ui.btnParse.addEventListener('click', ()=> {
+  const txt = ui.typeDefs.value;
+  const res = parseTypeDefinitions(txt);
+  if (res.errors.length) {
+    for (let e of res.errors) logPush('Parse error: ' + e);
+  }
+  // merge parsed types into types map
+  for (let k in res.types) types[k] = res.types[k];
+  renderTypesList();
+  pushHistory('Parsed types');
+  logPush('Types parsed.');
+});
+
+ui.btnResetTypes.addEventListener('click', ()=> {
+  const confirmed = confirm('Reset all parsed types? This will clear types and may break variables.');
+  if (!confirmed) return;
+  types = {};
+  renderTypesList();
+  pushHistory('Reset types');
+  logPush('Types cleared.');
+});
+
+ui.btnAddVar.addEventListener('click', ()=> {
+  const name = (ui.varName.value||'').trim();
+  if (!name) { alert('Enter variable name'); return; }
+  if (variables.find(v=>v.name===name)) { alert('Variable already exists'); return; }
+  const declared = ui.varDeclaredType.value || null;
+  const valueRaw = ui.varValue.value || '';
+  const valueHint = ui.varValueHint.value || '';
+  const inferred = (ui.enableInference.checked) ? resolveType(inferTypeFromValue(valueRaw, valueHint)) : null;
+  variables.push({ name, declared, valueRaw, valueHint, inferredType: inferred });
+  ui.varName.value=''; ui.varValue.value=''; ui.varValueHint.value='';
+  renderVarsList();
+  pushHistory('Add variable ' + name);
+  logPush('Added variable ' + name + ' declared=' + (declared||'(none)') );
+});
+
+ui.btnClearVars.addEventListener('click', ()=> {
+  if (!confirm('Clear all variables?')) return;
+  variables = [];
+  renderVarsList();
+  pushHistory('Clear variables');
+  logPush('Variables cleared.');
+});
+
+ui.strictness.addEventListener('input', ()=> {
+  ui.strictnessValue.textContent = ui.strictness.value;
+});
+
+ui.btnInferAll.addEventListener('click', ()=> {
+  inferAll();
+});
+
+ui.btnCheckAll.addEventListener('click', ()=> {
+  checkAllAssignments();
+});
+
+ui.btnAutoFix.addEventListener('click', ()=> {
+  autoFix();
+});
+
+ui.btnRefactorRename.addEventListener('click', ()=> {
+  refactorRenameProperty();
+});
+
+ui.btnUnionize.addEventListener('click', ()=> {
+  unionizeTypes();
+});
+
+ui.btnIntersect.addEventListener('click', ()=> {
+  intersectTypes();
+});
+
+ui.typesDetailSelect.addEventListener('change', ()=> {
+  const name = ui.typesDetailSelect.value;
+  if (!name) { ui.typeDetail.textContent='(choose a type)'; return; }
+  const t = types[name];
+  ui.typeDetail.textContent = name + (t.params && t.params.length ? '<' + t.params.join(',') + '>' : '') + (t.nominal ? ' (nominal)' : '') + ' = ' + renderType(resolveType(t.target));
+});
+
+ui.varDetailSelect.addEventListener('change', ()=> {
+  const n = ui.varDetailSelect.value;
+  if (!n) { ui.varDetail.textContent='(choose a variable)'; return; }
+  const v = variables.find(x=>x.name===n);
+  const lines = [];
+  lines.push('name: ' + v.name);
+  lines.push('declared: ' + (v.declared||'(none)'));
+  lines.push('valueRaw: ' + v.valueRaw);
+  lines.push('valueHint: ' + v.valueHint);
+  lines.push('inferred: ' + (v.inferredType ? renderType(v.inferredType) : '(none)'));
+  ui.varDetail.textContent = lines.join('\\n');
+});
+
+ui.btnInferVar.addEventListener('click', ()=> {
+  const n = ui.varDetailSelect.value;
+  if (!n) { alert('Pick a variable'); return; }
+  const v = variables.find(x=>x.name===n);
+  const t = inferTypeFromValue(v.valueRaw, v.valueHint);
+  v.inferredType = t ? resolveType(t) : null;
+  renderVarsList(); ui.varDetailSelect.dispatchEvent(new Event('change'));
+  pushHistory('Infer variable ' + n);
+  logPush('Inferred ' + n + ' as ' + (v.inferredType ? renderType(v.inferredType) : '(unknown)'));
+});
+
+ui.btnAssignToVar.addEventListener('click', ()=> {
+  const n = ui.varDetailSelect.value;
+  if (!n) { alert('Pick a variable'); return; }
+  const expr = ui.assignExpr.value || '';
+  if (!expr) { alert('Enter expression or variable name to assign from'); return; }
+  assignExprToVar(n, expr);
+  ui.varDetailSelect.dispatchEvent(new Event('change'));
+});
+
+ui.btnPrevHist.addEventListener('click', ()=> {
+  if (historyIndex > 0) applyHistoryIndex(historyIndex-1);
+});
+
+ui.btnNextHist.addEventListener('click', ()=> {
+  if (historyIndex < history.length-1) applyHistoryIndex(historyIndex+1);
+});
+
+ui.btnShowHistory.addEventListener('click', ()=> {
+  renderHistory();
+  alert('History shown in the right panel.');
+});
+
+ui.btnClearHistory.addEventListener('click', ()=> {
+  if (!confirm('Clear history?')) return;
+  history = []; historyIndex = -1;
+  renderHistory(); logPush('History cleared.');
+});
+
+// Initial small demo setup
+(function initDemo() {
+  // pre-parse initial defs
+  ui.btnParse.click();
+  // add a couple demo variables
+  variables.push({ name: 'a', declared: 'Person', valueRaw: '{"name":"Anna","age":28}', valueHint:'', inferredType: null });
+  variables.push({ name: 'b', declared: 'Admin', valueRaw: '{"name":"Bob","age":40,"role":"ops"}', valueHint:'', inferredType: null });
+  variables.push({ name: 'id', declared: 'UserId', valueRaw: '"abc123"', valueHint:'', inferredType: null });
+  renderVarsList();
+  pushHistory('Initial demo state');
+  logPush('Demo initialized with sample variables. Use controls to explore.');
+})();
+
+// Render logs
+function renderLogs() {
+  ui.log.textContent = logs.join('\\n') || '(no messages)';
+}
+
+// initial render
+renderTypesList();
+renderVarsList();
+renderHistory();
+renderLogs();
+</script>
+
+</body>
+</html>

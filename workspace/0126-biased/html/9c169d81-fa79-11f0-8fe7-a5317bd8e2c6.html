@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Runtime Environment Simulator</title>
+  <style>
+    /* Minimal layout styling only to make controls usable; visual design kept plain */
+    body { font-family: monospace; margin: 8px; }
+    .row { display: flex; gap: 8px; }
+    .col { flex: 1; min-width: 220px; }
+    .pane { border: 1px solid #000; padding: 6px; }
+    label { display: block; margin-top: 6px; }
+    input[type="text"], input[type="number"], textarea, select { width: 100%; box-sizing: border-box; }
+    textarea { height: 80px; }
+    .small { font-size: 12px; }
+    button { margin: 2px 0; display: inline-block; }
+    .log { height: 220px; overflow: auto; white-space: pre-wrap; background: #fff; }
+    .tiny { font-size: 12px; }
+    .controls { display:flex; flex-wrap:wrap; gap:4px; }
+  </style>
+</head>
+<body>
+  <h3>Runtime Environment Simulator</h3>
+  <div class="row">
+    <div class="col pane" id="instancesPane">
+      <strong>Instances</strong>
+      <div>
+        <label>Name: <input type="text" id="newName" value="env-1"></label>
+        <label>Type:
+          <select id="newType">
+            <option>container</option>
+            <option>vm</option>
+            <option>function</option>
+          </select>
+        </label>
+        <div>
+          <button id="createBtn">Create</button>
+          <button id="cloneBtn">Clone Selected</button>
+          <button id="deleteBtn">Delete Selected</button>
+        </div>
+      </div>
+      <label>Instances List:</label>
+      <select id="instancesList" size="8" style="width:100%"></select>
+      <div class="tiny">
+        Selected: <span id="selectedId">none</span><br>
+        Quick actions: <button id="startQuick">Start</button><button id="stopQuick">Stop</button><button id="snapshotQuick">Snap</button>
+      </div>
+    </div>
+
+    <div class="col pane" id="configPane">
+      <strong>Configuration & Resources</strong>
+      <label>CPU (cores): <input type="range" id="cpuSlider" min="0.1" max="8" step="0.1" value="1"> <span id="cpuVal">1</span></label>
+      <label>Memory (MB): <input type="range" id="memSlider" min="128" max="16384" step="64" value="512"> <span id="memVal">512</span></label>
+      <label>Port: <input type="number" id="portInput" value="8080"></label>
+      <label>Environment Variables (key=value, one per line):</label>
+      <textarea id="envText">PATH=/usr/bin
+DEBUG=false</textarea>
+      <label>Mounts (host:container, one per line):</label>
+      <textarea id="mountsText"></textarea>
+      <label>Startup command:</label>
+      <input type="text" id="cmdInput" value="run.sh">
+      <div style="margin-top:6px;">
+        <button id="applyConfig">Apply to Selected</button>
+        <button id="resetConfig">Reset to Instance</button>
+      </div>
+      <div class="tiny">You can edit config and Apply; use Clone to copy instance including runtime state.</div>
+    </div>
+
+    <div class="col pane" id="controlPane">
+      <strong>Controls & Workflow</strong>
+      <div class="controls">
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resumeBtn">Resume</button>
+        <button id="stopBtn">Stop</button>
+        <button id="crashBtn">Crash</button>
+        <button id="killBtn">Kill</button>
+      </div>
+      <div style="margin-top:6px;">
+        <button id="snapshotBtn">Snapshot</button>
+        <button id="restoreBtn">Restore</button>
+        <button id="rollbackBtn">Rollback</button>
+      </div>
+
+      <label>Autoscale: <input type="checkbox" id="autoscaleChk"></label>
+      <label>Load (simulated): <input type="range" id="loadSlider" min="0" max="100" value="0"> <span id="loadVal">0%</span></label>
+      <label>Fault injection:
+        <select id="faultSelect">
+          <option value="">none</option>
+          <option value="disk">Disk Full</option>
+          <option value="net">Network Partition</option>
+          <option value="memLeak">Memory Leak</option>
+          <option value="highCpu">High CPU</option>
+        </select>
+      </label>
+      <div style="margin-top:6px;">
+        <button id="injectFaultBtn">Inject Fault</button>
+        <button id="resolveFaultBtn">Resolve Fault</button>
+      </div>
+
+      <hr>
+      <strong>Tasks & Triggers</strong>
+      <label>Task command: <input type="text" id="taskCmd" value="backup"></label>
+      <label>Delay (sec): <input type="number" id="taskDelay" value="0" min="0"></label>
+      <div>
+        <button id="queueTaskBtn">Queue Task</button>
+        <button id="runTaskNowBtn">Run Now</button>
+      </div>
+      <label>Trigger (example: cpu>70, mem>2048, load>50):</label>
+      <input type="text" id="triggerExpr" placeholder="cpu>70">
+      <div>
+        <button id="addTriggerBtn">Add Trigger</button>
+        <button id="removeTriggersBtn">Remove All Triggers</button>
+      </div>
+
+      <hr>
+      <strong>CLI</strong>
+      <textarea id="cliInput" placeholder="type commands: start, stop, status, env set KEY VAL, exec echo hi"></textarea>
+      <div><button id="cliRunBtn">Run CLI</button></div>
+      <div class="tiny">Commands affect selected instance.</div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:8px;">
+    <div class="col pane">
+      <strong>State & Metrics</strong>
+      <div id="stateDisplay">No instance selected.</div>
+      <label>State timeline (events):</label>
+      <div id="events" class="log"></div>
+      <label>Metrics (live):</label>
+      <div id="metrics" class="log tiny"></div>
+    </div>
+
+    <div class="col pane">
+      <strong>Snapshots & History</strong>
+      <div>
+        <label>Snapshot name: <input type="text" id="snapName" value="snap-1"></label>
+        <button id="createSnapBtn">Create Snapshot</button>
+        <button id="listSnapsBtn">List Snapshots</button>
+      </div>
+      <label>Snapshots:</label>
+      <select id="snapList" size="6" style="width:100%"></select>
+      <div style="margin-top:6px;">
+        <button id="restoreSelectedSnap">Restore Selected</button>
+        <button id="deleteSnapBtn">Delete Snapshot</button>
+      </div>
+      <hr>
+      <strong>Export / Import</strong>
+      <div>
+        <button id="exportBtn">Export Selected (JSON)</button>
+        <button id="importBtn">Import JSON</button>
+      </div>
+      <textarea id="exportArea" placeholder="Exported JSON appears here"></textarea>
+      <div><input type="file" id="importFile"></div>
+    </div>
+
+    <div class="col pane">
+      <strong>Logs & Debug</strong>
+      <div>
+        <label>Filter text: <input type="text" id="logFilter"></label>
+        <button id="clearLogBtn">Clear Logs</button>
+      </div>
+      <div id="logConsole" class="log"></div>
+      <div style="margin-top:6px;">
+        <button id="replayEventsBtn">Replay Events (selected instance)</button>
+        <button id="undoBtn">Undo Last Config</button>
+        <button id="redoBtn">Redo</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  Runtime Environment Simulator
+  - Multiple instances
+  - Config editable
+  - Start/Stop/Pause/Crash/Resume etc.
+  - Tasks, Triggers, Fault injection, Snapshots
+  - CLI and export/import
+  - Minimal visual styling; focus on interactivity and complexity
+*/
+
+(function(){
+  // Utility
+  function id() { return 'i'+Math.random().toString(36).slice(2,9); }
+  function now() { return new Date().toISOString().replace('T',' ').slice(0,19); }
+  function logGlobal(msg){ appendLog('GLOBAL', msg); }
+  function appendLog(src, msg){
+    const el = document.getElementById('logConsole');
+    el.textContent += '['+now()+'] ['+src+'] ' + msg + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+  function appendEvent(instance, msg){
+    const el = document.getElementById('events');
+    el.textContent += '['+now()+'] ['+instance.name+'] ' + msg + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // State stores
+  const store = {
+    instances: {}, // id -> instance
+    selectedId: null,
+    history: [], // for undo/redo of configs
+    future: []
+  };
+
+  // Instance model factory
+  function createInstance(opts){
+    const instance = {
+      id: id(),
+      name: opts.name || ('env-'+Math.floor(Math.random()*1000)),
+      type: opts.type || 'container',
+      config: {
+        cpu: parseFloat(opts.cpu || 1),
+        mem: parseInt(opts.mem || 512),
+        port: opts.port || 8080,
+        env: opts.env || { PATH: '/usr/bin', DEBUG: 'false' },
+        mounts: opts.mounts || [],
+        cmd: opts.cmd || 'run',
+      },
+      state: 'stopped', // stopped, initializing, running, paused, crashed, terminating, killed
+      metrics: {
+        cpuUsage: 0.0, // percent
+        memUsage: 0, // MB
+        load: 0 // 0-100
+      },
+      tasks: [], // queued tasks: {id, cmd, delay, status}
+      triggers: [], // trigger expressions
+      snapshots: {},
+      events: [],
+      fault: null,
+      createdAt: Date.now(),
+      lastStart: null,
+      scale: 1
+    };
+    return instance;
+  }
+
+  // UI binds
+  const instancesList = document.getElementById('instancesList');
+  const selectedIdSpan = document.getElementById('selectedId');
+  const stateDisplay = document.getElementById('stateDisplay');
+  const metricsDisplay = document.getElementById('metrics');
+  const eventsDisplay = document.getElementById('events');
+  const logConsole = document.getElementById('logConsole');
+
+  // Init with one instance
+  function init(){
+    const base = createInstance({name:'env-1', type:'container'});
+    store.instances[base.id] = base;
+    selectInstance(base.id);
+    refreshInstancesList();
+    renderSelected();
+    appendLog('SYSTEM','Simulator initialized');
+    globalTick(); // start engine
+  }
+
+  // Rendering functions
+  function refreshInstancesList(){
+    instancesList.innerHTML = '';
+    Object.values(store.instances).forEach(inst=>{
+      const opt = document.createElement('option');
+      opt.value = inst.id;
+      opt.text = inst.name + ' ('+inst.type+') ['+inst.state+']';
+      instancesList.appendChild(opt);
+    });
+    // keep selection
+    if(store.selectedId){
+      instancesList.value = store.selectedId;
+    }
+  }
+
+  function selectInstance(idVal){
+    if(!idVal) return;
+    if(!store.instances[idVal]) return;
+    store.selectedId = idVal;
+    instancesList.value = idVal;
+    selectedIdSpan.textContent = store.instances[idVal].name + ' / ' + idVal;
+    renderSelected();
+  }
+
+  instancesList.addEventListener('change', function(){
+    selectInstance(this.value);
+  });
+
+  function renderSelected(){
+    const inst = store.instances[store.selectedId];
+    if(!inst){
+      stateDisplay.textContent = 'No instance selected.';
+      metricsDisplay.textContent = '';
+      return;
+    }
+    // state display
+    stateDisplay.textContent = 'Name: '+inst.name + '\nType: '+inst.type + '\nState: '+inst.state + '\nFault: '+(inst.fault||'none') + '\nScale: '+inst.scale;
+    // metrics
+    metricsDisplay.textContent =
+      'cpuUsage: '+inst.metrics.cpuUsage.toFixed(1)+'%  memUsage: '+inst.metrics.memUsage.toFixed(0)+'MB  load: '+inst.metrics.load+'%\n' +
+      'Configured CPU: '+inst.config.cpu+' cores  Mem: '+inst.config.mem+'MB  Port: '+inst.config.port + '\n' +
+      'Tasks queued: '+inst.tasks.length + '  Triggers: '+inst.triggers.length;
+    // populate config fields
+    document.getElementById('cpuSlider').value = inst.config.cpu;
+    document.getElementById('cpuVal').textContent = inst.config.cpu;
+    document.getElementById('memSlider').value = inst.config.mem;
+    document.getElementById('memVal').textContent = inst.config.mem;
+    document.getElementById('portInput').value = inst.config.port;
+    document.getElementById('envText').value = Object.entries(inst.config.env).map(e=>e.join('=')).join('\n');
+    document.getElementById('mountsText').value = inst.config.mounts.join('\n');
+    document.getElementById('cmdInput').value = inst.config.cmd;
+    // snapshots
+    const snapList = document.getElementById('snapList');
+    snapList.innerHTML = '';
+    Object.keys(inst.snapshots).forEach(k=>{
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.text = k + ' @ ' + inst.snapshots[k].time;
+      snapList.appendChild(opt);
+    });
+    // events
+    eventsDisplay.textContent = inst.events.join('\n');
+    refreshInstancesList();
+  }
+
+  function saveHistory(inst){
+    // Save a deep copy of config for undo
+    try{
+      const snapshot = JSON.parse(JSON.stringify({id: inst.id, config: inst.config}));
+      store.history.push(snapshot);
+      if(store.history.length>50) store.history.shift();
+      store.future = [];
+    } catch(e){}
+  }
+
+  // Control handlers
+  document.getElementById('createBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newName').value || 'env';
+    const type = document.getElementById('newType').value;
+    const inst = createInstance({name, type});
+    store.instances[inst.id] = inst;
+    appendLog('SYSTEM','Created instance '+inst.name+' ('+inst.id+')');
+    selectInstance(inst.id);
+    refreshInstancesList();
+    renderSelected();
+  });
+
+  document.getElementById('cloneBtn').addEventListener('click', ()=>{
+    const sel = store.selectedId;
+    if(!sel) return alert('Select instance');
+    const src = store.instances[sel];
+    const clone = createInstance({
+      name: src.name + '-clone',
+      type: src.type
+    });
+    // deep copy
+    clone.config = JSON.parse(JSON.stringify(src.config));
+    clone.state = src.state;
+    clone.metrics = JSON.parse(JSON.stringify(src.metrics));
+    clone.tasks = JSON.parse(JSON.stringify(src.tasks));
+    clone.triggers = JSON.parse(JSON.stringify(src.triggers));
+    clone.fault = src.fault;
+    clone.scale = src.scale;
+    store.instances[clone.id] = clone;
+    appendLog('SYSTEM','Cloned '+src.name+' to '+clone.name);
+    selectInstance(clone.id);
+    refreshInstancesList();
+    renderSelected();
+  });
+
+  document.getElementById('deleteBtn').addEventListener('click', ()=>{
+    const sel = store.selectedId;
+    if(!sel) return alert('Select instance');
+    if(!confirm('Delete '+store.instances[sel].name+' ?')) return;
+    appendLog('SYSTEM','Deleted '+store.instances[sel].name);
+    delete store.instances[sel];
+    store.selectedId = Object.keys(store.instances)[0] || null;
+    refreshInstancesList();
+    if(store.selectedId) selectInstance(store.selectedId);
+    else renderSelected();
+  });
+
+  // Quick actions
+  document.getElementById('startQuick').addEventListener('click', ()=>triggerAction('start'));
+  document.getElementById('stopQuick').addEventListener('click', ()=>triggerAction('stop'));
+  document.getElementById('snapshotQuick').addEventListener('click', ()=>createSnapshot());
+
+  // Core actions
+  function triggerAction(action){
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    saveHistory(inst);
+    if(action==='start'){
+      if(inst.state==='running' || inst.state==='initializing') { appendEvent(inst,'start requested but already running/initializing'); return; }
+      inst.state = 'initializing';
+      inst.events.push(now()+' initializing');
+      appendEvent(inst,'initializing');
+      setTimeout(()=> {
+        if(inst.state==='initializing'){
+          inst.state = 'running';
+          inst.lastStart = Date.now();
+          inst.events.push(now()+' running');
+          appendEvent(inst,'running');
+        }
+        renderSelected();
+      }, 800);
+    } else if(action==='pause'){
+      if(inst.state==='running') { inst.state='paused'; inst.events.push(now()+' paused'); appendEvent(inst,'paused'); }
+      else appendEvent(inst,'pause requested but not running');
+    } else if(action==='resume'){
+      if(inst.state==='paused') { inst.state='running'; inst.events.push(now()+' resumed'); appendEvent(inst,'resumed'); }
+      else appendEvent(inst,'resume requested but not paused');
+    } else if(action==='stop'){
+      if(inst.state==='running' || inst.state==='paused' || inst.state==='initializing'){
+        inst.state = 'terminating';
+        inst.events.push(now()+' terminating');
+        appendEvent(inst,'terminating');
+        setTimeout(()=> { inst.state='stopped'; inst.events.push(now()+' stopped'); appendEvent(inst,'stopped'); renderSelected(); }, 600);
+      } else { inst.state='stopped'; appendEvent(inst,'stop requested'); }
+    } else if(action==='crash'){
+      inst.state='crashed'; inst.events.push(now()+' crashed'); appendEvent(inst,'crashed'); inst.fault='injected crash';
+    } else if(action==='kill'){
+      inst.state='killed'; inst.events.push(now()+' killed'); appendEvent(inst,'killed'); inst.fault='killed';
+    }
+    renderSelected();
+  }
+
+  document.getElementById('startBtn').addEventListener('click', ()=>triggerAction('start'));
+  document.getElementById('pauseBtn').addEventListener('click', ()=>triggerAction('pause'));
+  document.getElementById('resumeBtn').addEventListener('click', ()=>triggerAction('resume'));
+  document.getElementById('stopBtn').addEventListener('click', ()=>triggerAction('stop'));
+  document.getElementById('crashBtn').addEventListener('click', ()=>triggerAction('crash'));
+  document.getElementById('killBtn').addEventListener('click', ()=>triggerAction('kill'));
+
+  // snapshot / restore
+  function createSnapshot(name){
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const snapName = name || document.getElementById('snapName').value || ('snap-'+Date.now());
+    inst.snapshots[snapName] = {
+      time: now(),
+      state: inst.state,
+      config: JSON.parse(JSON.stringify(inst.config)),
+      metrics: JSON.parse(JSON.stringify(inst.metrics)),
+      tasks: JSON.parse(JSON.stringify(inst.tasks)),
+      fault: inst.fault,
+      events: inst.events.slice()
+    };
+    appendLog('SNAP', 'Created snapshot '+snapName+' for '+inst.name);
+    renderSelected();
+  }
+  document.getElementById('createSnapBtn').addEventListener('click', ()=>createSnapshot());
+
+  document.getElementById('listSnapsBtn').addEventListener('click', ()=> {
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const keys = Object.keys(inst.snapshots);
+    alert('Snapshots:\n' + keys.map(k=>k+' @ '+inst.snapshots[k].time).join('\n'));
+  });
+
+  document.getElementById('restoreSelectedSnap').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    const sel = document.getElementById('snapList').value;
+    if(!inst || !sel) return alert('Select snapshot');
+    const snap = inst.snapshots[sel];
+    if(!snap) return alert('No such snapshot');
+    saveHistory(inst);
+    inst.config = JSON.parse(JSON.stringify(snap.config));
+    inst.metrics = JSON.parse(JSON.stringify(snap.metrics));
+    inst.tasks = JSON.parse(JSON.stringify(snap.tasks));
+    inst.state = snap.state;
+    inst.fault = snap.fault;
+    inst.events.push(now()+' restored snapshot '+sel);
+    appendLog('SNAP','Restored '+sel+' on '+inst.name);
+    renderSelected();
+  });
+
+  document.getElementById('deleteSnapBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    const sel = document.getElementById('snapList').value;
+    if(!inst || !sel) return alert('Select snapshot');
+    delete inst.snapshots[sel];
+    appendLog('SNAP','Deleted snapshot '+sel);
+    renderSelected();
+  });
+
+  // export/import
+  document.getElementById('exportBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const json = JSON.stringify(inst, null, 2);
+    document.getElementById('exportArea').value = json;
+    appendLog('EXPORT','Exported '+inst.name);
+  });
+
+  document.getElementById('importBtn').addEventListener('click', ()=>{
+    const txt = document.getElementById('exportArea').value;
+    if(!txt) return alert('Paste JSON into export area');
+    try {
+      const obj = JSON.parse(txt);
+      const newId = id();
+      obj.id = newId;
+      obj.name = obj.name || ('import-'+newId);
+      store.instances[newId] = obj;
+      appendLog('IMPORT','Imported '+obj.name);
+      selectInstance(newId);
+      refreshInstancesList();
+      renderSelected();
+    } catch(e){ alert('Invalid JSON'); }
+  });
+
+  document.getElementById('importFile').addEventListener('change', function(e){
+    const f = e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = function(){ try {
+      const obj = JSON.parse(r.result);
+      const newId = id(); obj.id=newId; obj.name = obj.name || ('import-'+newId);
+      store.instances[newId] = obj;
+      appendLog('IMPORT','Imported file '+f.name+' as '+obj.name);
+      selectInstance(newId); refreshInstancesList(); renderSelected();
+    } catch(e){ alert('Invalid JSON'); } };
+    r.readAsText(f);
+  });
+
+  // config apply/reset
+  document.getElementById('applyConfig').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    saveHistory(inst);
+    inst.config.cpu = parseFloat(document.getElementById('cpuSlider').value);
+    inst.config.mem = parseInt(document.getElementById('memSlider').value);
+    inst.config.port = parseInt(document.getElementById('portInput').value);
+    inst.config.env = {};
+    const ev = document.getElementById('envText').value.split(/\n/).map(s=>s.trim()).filter(Boolean);
+    ev.forEach(line=>{
+      const m = line.split('=');
+      inst.config.env[m[0]] = m.slice(1).join('=') || '';
+    });
+    inst.config.mounts = document.getElementById('mountsText').value.split(/\n/).map(s=>s.trim()).filter(Boolean);
+    inst.config.cmd = document.getElementById('cmdInput').value;
+    appendLog('CONFIG','Applied config to '+inst.name);
+    inst.events.push(now()+' config applied');
+    renderSelected();
+  });
+
+  document.getElementById('resetConfig').addEventListener('click', ()=>{
+    renderSelected();
+  });
+
+  // sliders sync
+  document.getElementById('cpuSlider').addEventListener('input', function(){ document.getElementById('cpuVal').textContent = this.value; });
+  document.getElementById('memSlider').addEventListener('input', function(){ document.getElementById('memVal').textContent = this.value; });
+
+  // tasks & triggers
+  document.getElementById('queueTaskBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const cmd = document.getElementById('taskCmd').value || 'task';
+    const delay = Math.max(0, parseInt(document.getElementById('taskDelay').value) || 0);
+    const t = { id: id(), cmd, delay, status: 'queued', queuedAt: Date.now() };
+    inst.tasks.push(t);
+    appendLog('TASK','Queued '+cmd+' on '+inst.name+' (delay '+delay+'s)');
+    inst.events.push(now()+' queued task '+cmd);
+    renderSelected();
+  });
+
+  document.getElementById('runTaskNowBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const cmd = document.getElementById('taskCmd').value || 'task';
+    runTask(inst, {id:id(), cmd, delay:0, status:'queued', queuedAt:Date.now()});
+  });
+
+  function runTask(inst, task){
+    task.status = 'running';
+    appendLog('TASK','Running '+task.cmd+' on '+inst.name);
+    inst.events.push(now()+' running task '+task.cmd);
+    renderSelected();
+    setTimeout(()=> {
+      task.status = 'done';
+      appendLog('TASK','Completed '+task.cmd+' on '+inst.name);
+      inst.events.push(now()+' completed task '+task.cmd);
+      // apply effect: sample: if backup, reduce load; if leak cause mem usage
+      if(task.cmd.toLowerCase().includes('backup')) inst.metrics.load = Math.max(0, inst.metrics.load - 15);
+      if(task.cmd.toLowerCase().includes('restart')) { inst.state='running'; inst.events.push(now()+' restart finished'); }
+      renderSelected();
+    }, 1000 + Math.random()*2000);
+  }
+
+  document.getElementById('addTriggerBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const expr = document.getElementById('triggerExpr').value.trim();
+    if(!expr) return alert('Enter trigger expression');
+    inst.triggers.push(expr);
+    appendLog('TRIG','Added trigger "'+expr+'" to '+inst.name);
+    inst.events.push(now()+' added trigger '+expr);
+    renderSelected();
+  });
+
+  document.getElementById('removeTriggersBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    inst.triggers = [];
+    appendLog('TRIG','Removed all triggers from '+inst.name);
+    inst.events.push(now()+' removed triggers');
+    renderSelected();
+  });
+
+  // fault injection
+  document.getElementById('injectFaultBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const fault = document.getElementById('faultSelect').value;
+    if(!fault) return alert('Select a fault to inject');
+    inst.fault = fault;
+    if(fault==='disk') inst.metrics.load += 10;
+    if(fault==='net') inst.metrics.load += 5;
+    if(fault==='memLeak') inst.metrics.memUsage += 300;
+    if(fault==='highCpu') inst.metrics.cpuUsage += 40;
+    inst.state = 'running';
+    appendLog('FAULT','Injected '+fault+' into '+inst.name);
+    inst.events.push(now()+' injected fault '+fault);
+    renderSelected();
+  });
+
+  document.getElementById('resolveFaultBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    inst.fault = null;
+    appendLog('FAULT','Resolved faults on '+inst.name);
+    inst.events.push(now()+' resolved faults');
+    renderSelected();
+  });
+
+  // CLI
+  document.getElementById('cliRunBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    const txt = document.getElementById('cliInput').value.trim();
+    if(!inst) return alert('Select instance');
+    if(!txt) return alert('Type CLI command(s)');
+    const lines = txt.split('\n').map(s=>s.trim()).filter(Boolean);
+    lines.forEach(line => execCLI(inst, line));
+    document.getElementById('cliInput').value = '';
+    renderSelected();
+  });
+
+  function execCLI(inst, line){
+    appendLog('CLI','['+inst.name+'] $ '+line);
+    const parts = line.split(' ').filter(Boolean);
+    const cmd = parts[0];
+    if(cmd==='start') triggerAction('start');
+    else if(cmd==='stop') triggerAction('stop');
+    else if(cmd==='status') appendLog('CLI', JSON.stringify({state:inst.state,metrics:inst.metrics},null,0));
+    else if(cmd==='env' && parts[1]==='set'){
+      const k = parts[2], v = parts.slice(3).join(' ') || '';
+      inst.config.env[k] = v;
+      appendLog('CLI','Set env '+k+'='+v);
+    } else if(cmd==='exec'){
+      const program = parts.slice(1).join(' ');
+      inst.events.push(now()+' exec:'+program);
+      appendLog('CLI','Executed "'+program+'" on '+inst.name);
+    } else if(cmd==='snapshot'){
+      createSnapshot('cli-snap-'+Date.now());
+    } else if(cmd==='scale'){
+      const s = parseInt(parts[1]||1);
+      inst.scale = s;
+      appendLog('CLI','Scaled '+inst.name+' to '+s);
+    } else {
+      appendLog('CLI','Unknown CLI command: '+line);
+    }
+  }
+
+  // Undo/Redo simple for configs
+  document.getElementById('undoBtn').addEventListener('click', ()=>{
+    const last = store.history.pop();
+    if(!last) { appendLog('UNDO', 'Nothing to undo'); return; }
+    const inst = store.instances[last.id];
+    if(inst){
+      store.future.push(JSON.parse(JSON.stringify({id:inst.id, config:inst.config})));
+      inst.config = last.config;
+      appendLog('UNDO','Undid config on '+inst.name);
+      renderSelected();
+    }
+  });
+
+  document.getElementById('redoBtn').addEventListener('click', ()=>{
+    const f = store.future.pop();
+    if(!f) { appendLog('UNDO','Nothing to redo'); return; }
+    const inst = store.instances[f.id];
+    if(inst){
+      store.history.push(JSON.parse(JSON.stringify({id:inst.id, config:inst.config})));
+      inst.config = f.config;
+      appendLog('UNDO','Redid config on '+inst.name);
+      renderSelected();
+    }
+  });
+
+  // Logs and replay
+  document.getElementById('clearLogBtn').addEventListener('click', ()=>{
+    logConsole.textContent = '';
+  });
+
+  document.getElementById('replayEventsBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    alert('Replaying events:\n' + inst.events.join('\n'));
+  });
+
+  // Undo for config apply already saved above.
+
+  // Auto engine tick for metrics, triggers, tasks
+  let engineInterval = null;
+  function globalTick(){
+    if(engineInterval) clearInterval(engineInterval);
+    engineInterval = setInterval(()=> {
+      // Update each instance
+      Object.values(store.instances).forEach(inst=>{
+        // Passive decay of metrics
+        inst.metrics.cpuUsage = Math.max(0, inst.metrics.cpuUsage - 0.5);
+        inst.metrics.memUsage = Math.max(128, inst.metrics.memUsage - 1);
+        // Load slider from UI influences selected instance only:
+        const loadVal = parseInt(document.getElementById('loadSlider').value);
+        if(inst.id === store.selectedId){
+          inst.metrics.load = loadVal;
+        } else {
+          // other instances drift randomly
+          inst.metrics.load = Math.max(0, Math.min(100, inst.metrics.load + (Math.random()-0.5)*4));
+        }
+        // Fault effects
+        if(inst.fault === 'highCpu') inst.metrics.cpuUsage = Math.min(100, inst.metrics.cpuUsage + 5);
+        if(inst.fault === 'memLeak') inst.metrics.memUsage = Math.min(inst.config.mem*2, inst.metrics.memUsage + 20);
+        if(inst.fault === 'disk') inst.metrics.load = Math.min(100, inst.metrics.load + 3);
+        // Autoscale: increase scale if load high
+        const autos = document.getElementById('autoscaleChk').checked;
+        if(autos && inst.metrics.load > 70) {
+          inst.scale = Math.min(10, inst.scale + 1);
+          appendEvent(inst, 'autoscale up to '+inst.scale);
+        } else if(autos && inst.metrics.load < 30 && inst.scale>1) {
+          inst.scale = Math.max(1, inst.scale - 1);
+          appendEvent(inst, 'autoscale down to '+inst.scale);
+        }
+        // CPU and memory usage interplay with scale and config
+        inst.metrics.cpuUsage = Math.min(100, inst.metrics.cpuUsage + inst.metrics.load * 0.02 * inst.scale);
+        inst.metrics.memUsage = Math.min(inst.config.mem * Math.max(1,inst.scale), Math.max(inst.metrics.memUsage, inst.metrics.load*inst.config.mem/100));
+
+        // Execute due tasks
+        for(let i=0;i<inst.tasks.length;i++){
+          const t = inst.tasks[i];
+          if(t.status==='queued'){
+            const age = (Date.now() - t.queuedAt)/1000;
+            if(age >= t.delay){
+              runTask(inst, t);
+            }
+          }
+        }
+        // Remove done tasks older than 10s
+        inst.tasks = inst.tasks.filter(t => !(t.status==='done' && ((Date.now()-t.queuedAt)/1000 > 10)));
+
+        // Check triggers
+        inst.triggers.forEach(expr=>{
+          try {
+            const local = {
+              cpu: inst.metrics.cpuUsage,
+              mem: inst.metrics.memUsage,
+              load: inst.metrics.load,
+              state: inst.state
+            };
+            // create a safe evaluator for simple comparisons: cpu>70, mem>2048, load<20, state==running
+            const safe = expr.replace(/([a-zA-Z_][a-zA-Z0-9_]*)/g, function(m){
+              if(['cpu','mem','load','state'].indexOf(m)>=0) return 'local.'+m;
+              return m;
+            });
+            // disallow letters other than allowed words and operators
+            // eslint-disable-next-line no-eval
+            const result = eval(safe); // intentionally using eval for flexible triggers - controlled
+            if(result){
+              appendEvent(inst, 'trigger fired: '+expr);
+              // default action: queue a task named trigger:<expr>
+              const t = {id:id(), cmd:'trigger:'+expr, delay:0, status:'queued', queuedAt: Date.now()};
+              inst.tasks.push(t);
+              // remove trigger by default to avoid flooding
+              const idx = inst.triggers.indexOf(expr);
+              if(idx>=0) inst.triggers.splice(idx,1);
+            }
+          } catch(e){}
+        });
+
+        // If crashed and no fault set, maybe auto-restart if policy
+        if(inst.state==='crashed'){
+          // try auto-restart after some time
+          if(Math.random() < 0.05){
+            inst.state='initializing';
+            appendEvent(inst, 'auto-restart triggered');
+            setTimeout(()=>{ if(inst.state==='initializing'){ inst.state='running'; appendEvent(inst,'auto-restarted'); renderSelected(); }}, 500);
+          }
+        }
+      });
+
+      // Update displays for selected instance
+      renderSelected();
+    }, 1000);
+  }
+
+  // Snapshot via button reference
+  document.getElementById('snapshotBtn').addEventListener('click', ()=>createSnapshot());
+
+  document.getElementById('restoreBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    const keys = Object.keys(inst.snapshots);
+    if(keys.length===0) return alert('No snapshots available');
+    const choice = keys[0];
+    inst.config = JSON.parse(JSON.stringify(inst.snapshots[choice].config));
+    inst.state = inst.snapshots[choice].state;
+    appendLog('SNAP','Restored '+choice+' on '+inst.name);
+    renderSelected();
+  });
+
+  document.getElementById('rollbackBtn').addEventListener('click', ()=>{
+    const inst = store.instances[store.selectedId];
+    if(!inst) return alert('Select instance');
+    // simple rollback: restore last snapshot if exists
+    const keys = Object.keys(inst.snapshots);
+    if(keys.length===0) return alert('No snapshots');
+    const choice = keys[keys.length-1];
+    inst.config = JSON.parse(JSON.stringify(inst.snapshots[choice].config));
+    appendLog('SNAP','Rolled back to '+choice+' on '+inst.name);
+    renderSelected();
+  });
+
+  // Quick start/stop Buttons in Instances pane
+  document.getElementById('startQuick').addEventListener('click', ()=>triggerAction('start'));
+  document.getElementById('stopQuick').addEventListener('click', ()=>triggerAction('stop'));
+
+  // Quick snapshot
+  document.getElementById('snapshotQuick').addEventListener('click', ()=>createSnapshot('quick-'+Date.now()));
+
+  // Load slider display
+  document.getElementById('loadSlider').addEventListener('input', function(){ document.getElementById('loadVal').textContent = this.value+'%'; });
+
+  // Clear events
+  document.getElementById('clearLogBtn').addEventListener('click', ()=>{ document.getElementById('logConsole').value=''; });
+
+  // Initialize
+  init();
+
+  // Expose minimal debugging globally (not necessary but handy)
+  window._sim = { store, createInstance, triggerAction, appendLog };
+
+})();
+</script>
+</body>
+</html>

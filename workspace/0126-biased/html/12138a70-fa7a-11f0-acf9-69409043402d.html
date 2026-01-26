@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Suffix Tree Explorer</title>
+<style>
+  body { font-family: monospace, monospace; background: white; color: black; margin: 10px; }
+  textarea { width: 100%; height: 60px; font-family: monospace; font-size: 14px; }
+  input, button, select { font-family: monospace; font-size: 14px; margin: 2px 0; }
+  #treeDisplay { white-space: pre; font-family: monospace; font-size: 14px; border: 1px solid black; padding: 5px; max-height: 360px; overflow-y: auto; }
+  #log { white-space: pre-wrap; max-height: 120px; overflow-y: auto; border: 1px solid black; padding: 5px; margin-top: 6px; font-family: monospace; font-size: 13px; }
+  label { display: block; margin-top: 10px; }
+  #exploreControls > * { margin-right: 5px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h2>Interactive Suffix Tree Explorer</h2>
+
+<label for="inputStr">Input String <small>(append '$' if not present)</small>:</label>
+<textarea id="inputStr" placeholder="Enter a string (max 150 chars)"></textarea>
+<button id="buildTreeBtn">Build Suffix Tree</button>
+<button id="resetBtn">Reset</button>
+
+<div id="status" style="margin-top:4px;"></div>
+
+<hr />
+
+<label>Suffix Tree View Mode:</label>
+<select id="viewModeSelect" title="Choose how to view the tree representation">
+  <option value="edges">Edges (Compact)</option>
+  <option value="nodes">Nodes & Edges (Explicit Labels)</option>
+  <option value="paths">All Suffix Paths</option>
+</select>
+
+<label>Searched Substring (to highlight or find in tree):</label>
+<input type="text" id="searchSubstring" size="20" placeholder="Enter substring" autocomplete="off" />
+<button id="searchBtn">Search Substring in Tree</button>
+<button id="clearSearchBtn">Clear Search</button>
+
+<div style="margin-top:10px;">
+  <label>Explore Suffix Tree Stepwise Construction (Ukkonen's Algorithm):</label><br/>
+  <button id="stepNext">Next Step</button>
+  <button id="stepPrev">Previous Step</button>
+  <button id="autoPlay">Auto Play</button>
+  <button id="pausePlay" disabled>Pause</button>
+  <button id="resetSteps">Reset Steps</button>
+
+  <label>
+    Auto-play Delay (ms):
+    <input type="number" id="autoDelay" value="1000" min="100" max="10000" step="100" />
+  </label>
+</div>
+
+<hr />
+
+<label>Tree Display:</label>
+<pre id="treeDisplay"></pre>
+
+<hr />
+
+<label>Suffix Tree Internal State Log (Latest messages below):</label>
+<div id="log"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ============== Data Structures ==============
+
+  // Edge labeled suffix tree node for Ukkonen's suffix tree
+  // Using an explicit tree build method with suffix links
+  // Node structure:
+  // {
+  //   edges: Map<char, Edge>
+  //   suffixLink: Node | null
+  //   id: number
+  // }
+  // Edge structure:
+  // {
+  //   start: number (index in input)
+  //   end: { value: number } (Reference for end index for leaves)
+  //   node: Node (destination node)
+  // }
+
+  // Global unique node ID generator (for display)
+  let globalNodeId = 0;
+
+  class Node {
+    constructor() {
+      this.edges = new Map();
+      this.suffixLink = null;
+      this.id = globalNodeId++;
+    }
+  }
+
+  // Active Point for Ukkonen's algorithm
+  class ActivePoint {
+    constructor(root) {
+      this.node = root;      // Active node
+      this.edge = null;      // Active edge char
+      this.length = 0;       // Active length
+    }
+  }
+
+  // State of suffix tree for stepwise building
+  class SuffixTreeState {
+    constructor(input) {
+      this.input = input;
+      this.root = new Node();
+      this.root.suffixLink = this.root; // suffix link of root is root itself by convention
+      this.active = new ActivePoint(this.root);
+
+      this.remainingSuffixCount = 0;
+      this.leafEnd = { value: -1 };
+      this.size = input.length;
+
+      this.lastNewNode = null;
+
+      this.currentPhase = 0; // next character index to add
+      this.currentExtension = 0; // extension being processed in phase
+
+      // Track edges added or updated in step for logging
+      this.stepLog = [];
+
+      // Array tracking the state snapshot after each atomic extension step
+      this.states = [];
+
+      // Build to completion or stepwise
+      this.built = false;
+
+      this.log = [];
+
+      this.saveStateSnapshot();
+    }
+
+    edgeLength(edge) {
+      return edge.end.value - edge.start + 1;
+    }
+
+    nextChar(pos) {
+      return this.input[pos];
+    }
+
+    walkDown(edge) {
+      if (this.active.length >= this.edgeLength(edge)) {
+        this.active.edge = this.nextChar(edge.end.value + 1) || null;
+        this.active.length -= this.edgeLength(edge);
+        this.active.node = edge.node;
+        return true;
+      }
+      return false;
+    }
+
+    // Try to extend the suffix tree at current phase and extension
+    extendPhase() {
+      if (this.currentPhase >= this.size) {
+        this.built = true;
+        return false;
+      }
+
+      this.leafEnd.value = this.currentPhase;
+
+      this.remainingSuffixCount++;
+      this.lastNewNode = null;
+
+      while(this.remainingSuffixCount > 0) {
+
+        if (this.active.length === 0) {
+          this.active.edge = this.nextChar(this.currentPhase);
+        }
+        let edge = this.active.node.edges.get(this.active.edge);
+
+        if (!edge) {
+          // No edge starting with active.edge from active.node, create new leaf edge here
+          const leaf = new Node();
+          this.active.node.edges.set(this.active.edge, {
+            start: this.currentPhase,
+            end: this.leafEnd,
+            node: leaf
+          });
+          this.log.push(`Created leaf edge for '${this.active.edge}' at pos ${this.currentPhase} from node${this.active.node.id}`);
+
+          if (this.lastNewNode) {
+            this.lastNewNode.suffixLink = this.active.node;
+            this.log.push(`Suffix link from node${this.lastNewNode.id} to node${this.active.node.id}`);
+            this.lastNewNode = null;
+          }
+        } else {
+          // Edge exists, need to walk down or check next char on edge
+          let edgeLength = edge.end.value - edge.start + 1;
+          if (this.active.length >= edgeLength) {
+            this.active.edge = this.nextChar(edge.end.value + 1) || null;
+            this.active.length -= edgeLength;
+            this.active.node = edge.node;
+            continue;
+          }
+          // Next char to compare on edge
+          const nextCharOnEdge = this.input[edge.start + this.active.length];
+          if (nextCharOnEdge === this.input[this.currentPhase]) {
+            // Character already on edge, increment active length and break extension
+            this.active.length++;
+            if (this.lastNewNode) {
+              this.lastNewNode.suffixLink = this.active.node;
+              this.log.push(`Suffix link from node${this.lastNewNode.id} to node${this.active.node.id}`);
+              this.lastNewNode = null;
+            }
+            this.log.push(`Character '${this.input[this.currentPhase]}' is already on edge, incremented active length to ${this.active.length}`);
+            break;
+          }
+
+          // Need to split edge
+          const splitNode = new Node();
+          this.log.push(`Split edge at node${this.active.node.id} for char '${this.active.edge}'`);
+          const oldEdgeStart = edge.start;
+          const oldEdgeEnd = edge.end;
+
+          // Edge from splitNode with remainder from old edge
+          splitNode.edges.set(this.input[oldEdgeStart + this.active.length], {
+            start: oldEdgeStart + this.active.length,
+            end: oldEdgeEnd,
+            node: edge.node
+          });
+
+          // Update old edge to end at split point
+          edge.end = { value: oldEdgeStart + this.active.length - 1 };
+
+          // Update edge to point to splitNode
+          edge.node = splitNode;
+
+          // Create new leaf edge from splitNode for new char
+          const leaf = new Node();
+          splitNode.edges.set(this.input[this.currentPhase], {
+            start: this.currentPhase,
+            end: this.leafEnd,
+            node: leaf
+          });
+
+          this.log.push(`Created node${splitNode.id} by splitting; created leaf from split node for '${this.input[this.currentPhase]}'`);
+
+          if (this.lastNewNode) {
+            this.lastNewNode.suffixLink = splitNode;
+            this.log.push(`Suffix link from node${this.lastNewNode.id} to node${splitNode.id}`);
+          }
+          this.lastNewNode = splitNode;
+        }
+        this.remainingSuffixCount--;
+
+        if (this.active.node === this.root && this.active.length > 0) {
+          this.active.length--;
+          this.active.edge = this.input[this.currentPhase - this.remainingSuffixCount + 1];
+        } else if (this.active.node !== this.root) {
+          this.active.node = this.active.node.suffixLink || this.root;
+        }
+      }
+
+      this.currentPhase++;
+      this.saveStateSnapshot();
+      if (this.currentPhase === this.size) {
+        this.built = true;
+      }
+      return true;
+    }
+
+    saveStateSnapshot() {
+      // Deep clone the suffix tree structure for display and stepping back
+      // We will clone structure IDs and edges (start,end), suffix links by id
+      // active point also recorded
+
+      function cloneNode(node, clones = new Map()) {
+        if(clones.has(node.id)) return clones.get(node.id);
+        const cnode = {
+          id: node.id,
+          edges: new Map(),
+          suffixLinkId: node.suffixLink ? node.suffixLink.id : null
+        };
+        clones.set(node.id, cnode);
+        for(const [ch, edge] of node.edges.entries()) {
+          cnode.edges.set(ch, {
+            start: edge.start,
+            endValue: edge.end.value,
+            toId: edge.node.id
+          });
+          if (!clones.has(edge.node.id)) {
+            cloneNode(edge.node, clones);
+          }
+        }
+        return cnode;
+      }
+
+      // Active point snapshot
+      const activeSnapshot = {
+        nodeId: this.active.node.id,
+        edgeChar: this.active.edge,
+        length: this.active.length
+      };
+
+      // Prepare edges data
+      const rootCloned = cloneNode(this.root);
+      // We only keep a flat map nodeId -> node snapshot to reconstruct graph on display
+      let nodesMap = new Map();
+      function traverseToMap(cnode) {
+        if(nodesMap.has(cnode.id)) return;
+        nodesMap.set(cnode.id, cnode);
+        for(const edge of cnode.edges.values()) {
+          if(nodesMap.has(edge.toId)) continue;
+          traverseToMap(clones.get(edge.toId));
+        }
+      }
+      const clones = new Map();
+      cloneNode(this.root, clones);
+      // clones Map is nodeId->snapshot but clones are disconnected, gather all:
+      for(const cnode of clones.values()) nodesMap.set(cnode.id, cnode);
+
+      // Build suffix links (id->id) map for reference
+      const suffixLinks = {};
+      for(const node of nodesMap.values()) {
+        suffixLinks[node.id] = node.suffixLinkId;
+      }
+
+      // State snapshot object
+      const snap = {
+        currentPhase: this.currentPhase,
+        active: {...activeSnapshot},
+        remainingSuffixCount: this.remainingSuffixCount,
+        leafEndValue: this.leafEnd.value,
+        nodes: nodesMap,
+        suffixLinks: suffixLinks,
+        log: [...this.log]
+      };
+
+      // Push snapshot onto states stack
+      this.states.push(snap);
+      this.log = [];
+    }
+
+    resetStepwise() {
+      this.active = new ActivePoint(this.root);
+      this.remainingSuffixCount = 0;
+      this.leafEnd.value = -1;
+      this.currentPhase = 0;
+      this.built = false;
+      this.lastNewNode = null;
+      this.states = [];
+      this.log = [];
+      this.saveStateSnapshot();
+    }
+
+    // Build entire tree at once (without stepwise logs)
+    buildFullTree() {
+      while(!this.built) {
+        this.extendPhase();
+      }
+    }
+  }
+
+  // ============== DOM Elements ==============
+  const inputStrEl = document.getElementById('inputStr');
+  const buildTreeBtn = document.getElementById('buildTreeBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const treeDisplayEl = document.getElementById('treeDisplay');
+  const logEl = document.getElementById('log');
+  const viewModeSelect = document.getElementById('viewModeSelect');
+  const searchSubstringInput = document.getElementById('searchSubstring');
+  const searchBtn = document.getElementById('searchBtn');
+  const clearSearchBtn = document.getElementById('clearSearchBtn');
+  const stepNextBtn = document.getElementById('stepNext');
+  const stepPrevBtn = document.getElementById('stepPrev');
+  const autoPlayBtn = document.getElementById('autoPlay');
+  const pausePlayBtn = document.getElementById('pausePlay');
+  const resetStepsBtn = document.getElementById('resetSteps');
+  const autoDelayInput = document.getElementById('autoDelay');
+
+  // ============== Variables ==============
+  let currentSuffixTree = null;
+  let currentStepIndex = 0;
+  let autoplayHandle = null;
+
+  // ============== Helper Functions ==============
+
+  // Sanitize and validate input string (max 150 chars, all ascii or extended)
+  function sanitizeInput(str) {
+    let s = str.trim();
+    if (s.length === 0) return null;
+    if (s.length > 150) s = s.substring(0, 150);
+    return s;
+  }
+
+  // Check if string ends in unique terminal char, add '$' if not present
+  function ensureTerminalChar(str) {
+    if(str.length === 0) return '$';
+    let lastChar = str[str.length - 1];
+    // We use '$' as unique char, so append if missing or not unique
+    if (lastChar !== '$' && !str.includes('$')) {
+      return str + '$';
+    }
+    return str;
+  }
+
+  // Display tree recursively (compact edge-based)
+  // mode: "edges", "nodes", "paths"
+  // highlightSubstring: optional substring to highlight found positions
+
+  // We need to map node IDs to nodes for fast access
+  // nodesMap: Map<id, node snapshot object>
+  // suffixLinks: map id->id
+
+  // For edges mode: display each edge label with start-end indices and substring
+
+  function displayTreeCompact(statesnap, searchStr) {
+    // Show root and its edges, then recurse
+    let result = [];
+
+    const nodes = statesnap.nodes;
+    const input = currentSuffixTree.input;
+    function edgeLabel(edge) {
+      return input.substring(edge.start, edge.endValue + 1);
+    }
+
+    function indent(level) { return ' '.repeat(level * 2); }
+
+    function walk(nodeId, level) {
+      const node = nodes.get(nodeId);
+      if (!node) return;
+      for (const [ch, edge] of node.edges) {
+        const label = edgeLabel(edge);
+        const displayLabel = label;
+        result.push(indent(level) + `- '${ch}': [${edge.start},${edge.endValue}] "${displayLabel}" -> node${edge.toId}`);
+        walk(edge.toId, level + 1);
+      }
+    }
+    result.push(`Suffix Tree (Edges) for: "${input}"`);
+    result.push(`Root node${statesnap.currentPhase === 0 ? "" : " (Phase: "+statesnap.currentPhase+")"}`);
+    walk(0,1);
+    return result.join('\n');
+  }
+
+  // Display tree nodes with suffix links visible and edges as explicit labels
+  // This will show nodes and edges distinctly.
+  function displayTreeNodesEdges(statesnap) {
+    let result = [];
+    const nodes = statesnap.nodes;
+    const input = currentSuffixTree.input;
+
+    function indent(level) { return ' '.repeat(level * 2); }
+
+    function edgeLabel(edge) {
+      return input.substring(edge.start, edge.endValue + 1);
+    }
+
+    for (const [id, node] of nodes) {
+      result.push(`node${id} (suffixLink: node${node.suffixLinkId !== null ? node.suffixLinkId : 'none'})`);
+      for (const [ch, edge] of node.edges) {
+        const label = edgeLabel(edge);
+        result.push(indent(1) + `edge '${ch}' to node${edge.toId} with label [${edge.start},${edge.endValue}]: "${label}"`);
+      }
+    }
+    return result.join('\n');
+  }
+
+  // Display all suffix paths from root to leaves, one line per suffix
+  // Each suffix path: sequence of edge labels concatenated = suffix string
+  // We limit maximum 100 suffix paths to avoid browser freeze on huge input
+
+  function displayTreeSuffixPaths(statesnap) {
+    let result = [];
+    const nodes = statesnap.nodes;
+    const input = currentSuffixTree.input;
+
+    let suffixPaths = [];
+
+    function walk(nodeId, pathSoFar) {
+      const node = nodes.get(nodeId);
+      if (!node) return;
+      if (node.edges.size === 0) {
+        suffixPaths.push(pathSoFar);
+        return;
+      }
+      for (const edge of node.edges.values()) {
+        const label = input.substring(edge.start, edge.endValue+1);
+        walk(edge.toId, pathSoFar + label);
+      }
+    }
+
+    walk(0, '');
+    let displayCount = Math.min(suffixPaths.length, 100);
+    result.push(`All suffix paths (up to 100 shown): Total suffixes: ${suffixPaths.length}`);
+    for(let i=0; i<displayCount; i++) {
+      result.push(`Suffix ${i}: "${suffixPaths[i]}"`);
+    }
+    if (suffixPaths.length > 100) {
+      result.push(`...and ${suffixPaths.length - 100} more paths`);
+    }
+    return result.join('\n');
+  }
+
+  // Display active point status from step state snapshot
+  function activePointToString(active) {
+    return `Active Point: Node${active.nodeId}, Edge: '${active.edgeChar || "-"}', Length: ${active.length}`;
+  }
+
+  // Display internal log from step state snapshot
+  function displayLog(logArr) {
+    if (!logArr || logArr.length === 0) return '(No recent log messages)';
+    if (logArr.length > 3000) return logArr.slice(-3000).join('\n');
+    return logArr.join('\n');
+  }
+
+  // Helper: get a node snapshot by id from snapshot
+  function getNode(statesnap, nodeId) {
+    return statesnap.nodes.get(nodeId) || null;
+  }
+
+  // Search substring in tree:
+  // Returns list of suffix positions where substring occurs (based on leaves' suffix indices)
+  // Because we do not store explicit suffix indices, we can find first node/edge matching substring and collect leaves in subtree.
+
+  // We need to reconstruct suffix indices by DFS leaves:
+  // A leaf edge's start index correspond to suffix beginning.
+
+  // Returns array of positions, or empty [] if not found.
+
+  function searchSubstringInTree(statesnap, substring) {
+    if (!substring || substring.length === 0) return [];
+    const input = currentSuffixTree.input;
+    const nodes = statesnap.nodes;
+
+    // DFS matching substring on edges starting from root
+    function dfsMatch(nodeId, strIndex) {
+      if (strIndex === substring.length) return [nodeId];
+      const node = nodes.get(nodeId);
+      if (!node) return [];
+
+      const ch = substring[strIndex];
+      const edge = node.edges.get(ch);
+      if (!edge) return [];
+
+      // Match as much as possible on edge label
+      const edgeLabel = input.substring(edge.start, edge.endValue+1);
+      let i=0;
+      while(i < edgeLabel.length && strIndex < substring.length) {
+        if(substring[strIndex] !== edgeLabel[i]) return [];
+        i++; strIndex++;
+      }
+      if(strIndex === substring.length) return [edge.toId];
+      return dfsMatch(edge.toId, strIndex);
+    }
+
+    // Collect all leaves under node Id
+    function collectLeaves(nodeId, acc) {
+      const node = nodes.get(nodeId);
+      if (!node) return;
+      if (node.edges.size === 0) {
+        // Leaf node - suffix index is start of leaf edge from parent, but we don't store parent in snapshot.
+        // We can approximate by scanning all edges in entire tree to find leaf edge with toId = nodeId and record start index.
+        // To avoid O(n^2), we map leaf starts from edges on demand once:
+
+        // We'll implement leaf start map once
+        if(!searchSubstringInTree.leafStartMap) {
+          searchSubstringInTree.leafStartMap = new Map();
+          for(const nd of nodes.values()) {
+            for(const edge of nd.edges.values()) {
+              if(nodes.get(edge.toId).edges.size === 0) {
+                searchSubstringInTree.leafStartMap.set(edge.toId, edge.start);
+              }
+            }
+          }
+        }
+        const suffixStart = searchSubstringInTree.leafStartMap.get(nodeId);
+        if (typeof suffixStart === "number") {
+          acc.push(suffixStart);
+        }
+        return;
+      }
+      for(const edge of node.edges.values()) {
+        collectLeaves(edge.toId, acc);
+      }
+    }
+
+    let matchedNodes = dfsMatch(0, 0);
+    if (matchedNodes.length === 0) return [];
+    let foundPositions = [];
+    for(const nid of matchedNodes) {
+      collectLeaves(nid, foundPositions);
+    }
+    foundPositions.sort((a,b)=>a-b);
+    return foundPositions;
+  }
+
+  // ============== UI Update Functions ==============
+
+  function displayCurrentStep() {
+    if(!currentSuffixTree || currentSuffixTree.states.length === 0) return;
+
+    const snap = currentSuffixTree.states[currentStepIndex];
+    if(!snap) return;
+
+    let treeText;
+    const mode = viewModeSelect.value;
+    switch(mode) {
+      case "edges": treeText = displayTreeCompact(snap); break;
+      case "nodes": treeText = displayTreeNodesEdges(snap); break;
+      case "paths": treeText = displayTreeSuffixPaths(snap); break;
+      default: treeText = displayTreeCompact(snap); break;
+    }
+    treeDisplayEl.textContent = treeText + "\n\n" + activePointToString(snap.active);
+
+    // Show log from last step
+    logEl.textContent = displayLog(snap.log);
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status').textContent = msg;
+  }
+
+  function clearSearchHighlight() {
+    searchSubstringInput.value = "";
+  }
+
+  // ============== Event Handlers ==============
+
+  buildTreeBtn.addEventListener('click', function() {
+    let s = sanitizeInput(inputStrEl.value);
+    if (s === null) {
+      setStatus('Error: Input string is empty.');
+      return;
+    }
+    s = ensureTerminalChar(s);
+    if (s.length > 150) {
+      setStatus('Warning: input truncated to 150 characters.');
+    }
+    inputStrEl.value = s;
+
+    resetSteps();
+
+    setStatus('Building suffix tree for input: "' + s + '" ...');
+    try {
+      currentSuffixTree = new SuffixTreeState(s);
+      // build full tree directly (for instant display, preserve stepwise for exploration)
+      currentSuffixTree.buildFullTree();
+      // reset stepwise interface for controlling detailed step builds
+      currentSuffixTree.resetStepwise();
+
+      currentStepIndex = 0;
+      displayCurrentStep();
+
+      setStatus('Suffix tree initialized. Use step explorer to explore construction.');
+    } catch(e) {
+      setStatus('Error during suffix tree construction: ' + e.message);
+    }
+  });
+
+  resetBtn.addEventListener('click', function() {
+    inputStrEl.value = '';
+    currentSuffixTree = null;
+    treeDisplayEl.textContent = '';
+    logEl.textContent = '';
+    setStatus('Reset done.');
+    currentStepIndex = 0;
+    clearSearchHighlight();
+    stopAutoplay();
+  });
+
+  viewModeSelect.addEventListener('change', function() {
+    displayCurrentStep();
+  });
+
+  // Stepwise controls:
+
+  function stepNext() {
+    if(!currentSuffixTree) {
+      setStatus('Build suffix tree first.');
+      return;
+    }
+    if(currentStepIndex < currentSuffixTree.states.length -1) {
+      currentStepIndex++;
+      displayCurrentStep();
+      setStatus(`Moved to step ${currentStepIndex} / ${currentSuffixTree.states.length - 1}`);
+    } else {
+      // Try to extend one step if not built fully yet
+      if(!currentSuffixTree.built) {
+        const ok = currentSuffixTree.extendPhase();
+        if(ok) {
+          currentStepIndex = currentSuffixTree.states.length - 1;
+          displayCurrentStep();
+          setStatus(`Extended phase to ${currentSuffixTree.currentPhase}`);
+        } else {
+          setStatus('Suffix tree build complete. No more steps.');
+        }
+      } else {
+        setStatus('Already at last step of suffix tree.');
+      }
+    }
+  }
+
+  function stepPrev() {
+    if(!currentSuffixTree) {
+      setStatus('Build suffix tree first.');
+      return;
+    }
+    if(currentStepIndex > 0) {
+      currentStepIndex--;
+      displayCurrentStep();
+      setStatus(`Moved back to step ${currentStepIndex} / ${currentSuffixTree.states.length - 1}`);
+    } else {
+      setStatus('Already at first step.');
+    }
+  }
+
+  stepNextBtn.addEventListener('click', stepNext);
+  stepPrevBtn.addEventListener('click', stepPrev);
+
+  resetStepsBtn.addEventListener('click', function() {
+    if(!currentSuffixTree) {
+      setStatus('Build suffix tree first.');
+      return;
+    }
+    currentSuffixTree.resetStepwise();
+    currentStepIndex = 0;
+    displayCurrentStep();
+    setStatus('Stepwise build reset to initial state.');
+    stopAutoplay();
+  });
+
+  // Autoplay stepwise building:
+
+  autoPlayBtn.addEventListener('click', function() {
+    if(!currentSuffixTree) {
+      setStatus('Build suffix tree first.');
+      return;
+    }
+    if(autoplayHandle !== null) return; // already playing
+    autoPlayBtn.disabled = true;
+    pausePlayBtn.disabled = false;
+    stepNextBtn.disabled = true;
+    stepPrevBtn.disabled = true;
+    resetStepsBtn.disabled = true;
+
+    let delay = Number(autoDelayInput.value);
+    if(isNaN(delay) || delay < 100) delay = 100;
+
+    autoplayHandle = setInterval(() => {
+      if(currentStepIndex >= currentSuffixTree.states.length - 1) {
+        if(!currentSuffixTree.built) {
+          currentSuffixTree.extendPhase();
+        }
+        currentStepIndex = currentSuffixTree.states.length - 1;
+        displayCurrentStep();
+        if(currentSuffixTree.built && currentStepIndex === currentSuffixTree.states.length - 1) {
+          setStatus('Autoplay finished at final step.');
+          stopAutoplay();
+        }
+      } else {
+        currentStepIndex++;
+        displayCurrentStep();
+        setStatus(`Autoplay: step ${currentStepIndex} / ${currentSuffixTree.states.length - 1}`);
+      }
+    }, delay);
+  });
+
+  pausePlayBtn.addEventListener('click', stopAutoplay);
+
+  function stopAutoplay() {
+    if(autoplayHandle !== null) {
+      clearInterval(autoplayHandle);
+      autoplayHandle = null;
+      autoPlayBtn.disabled = false;
+      pausePlayBtn.disabled = true;
+      stepNextBtn.disabled = false;
+      stepPrevBtn.disabled = false;
+      resetStepsBtn.disabled = false;
+      setStatus('Autoplay paused.');
+    }
+  }
+
+  // Search substring actions
+  searchBtn.addEventListener('click', function(){
+    if(!currentSuffixTree) {
+      setStatus('Build suffix tree first.');
+      return;
+    }
+    const toSearch = searchSubstringInput.value.trim();
+    if(toSearch.length === 0) {
+      setStatus('Enter a substring to search.');
+      return;
+    }
+    const positions = searchSubstringInTree(currentSuffixTree.states[currentStepIndex], toSearch);
+    if(positions.length === 0) {
+      setStatus(`Substring "${toSearch}" not found in the tree.`);
+    } else {
+      setStatus(`Substring "${toSearch}" found at suffix indices: ${positions.join(', ')}`);
+    }
+  });
+
+  clearSearchBtn.addEventListener('click', function(){
+    clearSearchHighlight();
+    setStatus('Search cleared.');
+  });
+
+  // Prevent form submit on Enter in input fields
+  searchSubstringInput.addEventListener('keydown', function(ev){
+    if(ev.key === 'Enter') {
+      ev.preventDefault();
+      searchBtn.click();
+    }
+  });
+
+  inputStrEl.addEventListener('keydown', function(ev){
+    // Do nothing special, no submit
+  });
+
+  // Warn user when they close/refresh page with unsaved progress
+  window.addEventListener("beforeunload", function (e) {
+    if(currentSuffixTree && !currentSuffixTree.built) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // ============== Initialization ==============
+
+  setStatus('Enter a string and press "Build Suffix Tree" to start.');
+
+})();
+</script>
+</body>
+</html>

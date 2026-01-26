@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Interactive Congestion Control Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 0; padding: 0; background: #f5f7fb; color: #111; }
+    header { background: linear-gradient(90deg,#0ea5a4,#3b82f6); color: white; padding: 14px 20px; }
+    header h1 { margin: 0; font-size: 18px; }
+    main { display: flex; gap: 16px; padding: 16px; }
+    .left, .right { background: white; border-radius: 8px; padding: 12px; box-shadow: 0 8px 20px rgba(20,30,60,0.06); }
+    .left { flex: 1 1 720px; min-width: 360px; }
+    .right { width: 360px; }
+    .panel { margin-bottom: 12px; }
+    label { display: block; font-size: 12px; color: #334155; margin-bottom: 6px; }
+    input[type=range] { width: 100%; }
+    .controls { display:flex; gap:8px; margin-top:8px; }
+    button { background:#2563eb; color:white; border: none; padding:8px 10px; border-radius:6px; cursor:pointer; }
+    button.secondary { background:#64748b; }
+    button.warn { background:#ef4444; }
+    .stats { display:flex; gap:8px; flex-wrap:wrap; }
+    .stat { flex:1 1 45%; background:#f8fafc; padding:8px; border-radius:6px; font-size:13px; }
+    canvas { width:100%; height:220px; display:block; border-radius:6px; background:linear-gradient(180deg,#ffffff,#f8fafc); }
+    .linkCanvas { height:160px; background:linear-gradient(180deg,#ffffff,#f8fafc); margin-top:8px; border-radius:6px; display:block; width:100%; }
+    footer { padding:12px 16px; font-size:13px; color:#374151; background:#fff; border-top:1px solid #e6eef8; text-align:left; }
+    .legend { display:flex; gap:8px; align-items:center; margin-top:8px; font-size:13px; color:#475569; }
+    .dot { width:12px; height:12px; border-radius:3px; display:inline-block; margin-right:6px; }
+    .muted { color:#64748b; }
+    a.inline { color:#2563eb; text-decoration:none; }
+    small.hint { color:#64748b; display:block; margin-top:6px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Interactive Congestion Control Demonstration (TCP-like)</h1>
+  </header>
+  <main>
+    <div class="left">
+      <div class="panel">
+        <label>Congestion Window (cwnd) and ssthresh over time</label>
+        <canvas id="graph" width="1200" height="220"></canvas>
+        <div class="legend">
+          <div><span class="dot" style="background:#10b981"></span>cwnd</div>
+          <div><span class="dot" style="background:#f97316"></span>ssthresh</div>
+          <div><span class="dot" style="background:#3b82f6"></span>bandwidth (packets/s)</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Packets on the bottleneck link (left → right)</label>
+        <canvas id="link" class="linkCanvas" width="1200" height="160"></canvas>
+        <small class="hint">Green = in-flight / delivered, red = dropped, orange = retransmission</small>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button id="start">Start</button>
+          <button id="pause" class="secondary">Pause</button>
+          <button id="reset" class="secondary">Reset</button>
+          <button id="forceLoss" class="warn">Force Drop (simulate congestion)</button>
+        </div>
+        <small class="hint">Press Start to run the simulation. Force Drop instantly drops a few packets at the bottleneck.</small>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <label>Network Parameters</label>
+        <div>
+          <label>Bandwidth (packets / sec): <span id="bandTxt">20</span></label>
+          <input id="band" type="range" min="1" max="120" value="20">
+        </div>
+        <div>
+          <label>Buffer size (packets): <span id="bufTxt">20</span></label>
+          <input id="buf" type="range" min="0" max="200" value="20">
+        </div>
+        <div>
+          <label>Round-Trip Time (ms): <span id="rttTxt">200</span></label>
+          <input id="rtt" type="range" min="20" max="1000" value="200">
+        </div>
+        <div>
+          <label>Random loss rate (per pkt): <span id="lossTxt">0.005</span></label>
+          <input id="loss" type="range" min="0" max="100" value="0.5">
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Sender / ACK behavior</label>
+        <div>
+          <label>Time scale (slower → faster): <span id="speedTxt">1.0x</span></label>
+          <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1">
+        </div>
+        <div style="margin-top:8px;">
+          <label><input id="fastRecovery" type="checkbox" checked> Enable Fast Retransmit & Fast Recovery</label>
+          <small class="hint">When enabled, 3 duplicate ACKs trigger fast retransmit and recovery.</small>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Live Statistics</label>
+        <div class="stats">
+          <div class="stat">cwnd: <b id="cwndVal">1.0</b></div>
+          <div class="stat">ssthresh: <b id="sstVal">16</b></div>
+          <div class="stat">in flight: <b id="flightVal">0</b></div>
+          <div class="stat">rtt: <b id="rttVal">200 ms</b></div>
+          <div class="stat">rto: <b id="rtoVal">600 ms</b></div>
+          <div class="stat">loss rate: <b id="lossVal">0.5%</b></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label>Explanation (brief)</label>
+        <div style="font-size:13px; color:#374151; line-height:1.3;">
+          - Sender increases cwnd exponentially (Slow Start) until cwnd &gt;= ssthresh. <br>
+          - After that it increases linearly (Congestion Avoidance). <br>
+          - On packet loss: timeout reduces cwnd to 1 and ssthresh = cwnd/2 (Slow Start restart). <br>
+          - 3 duplicate ACKs can trigger Fast Retransmit/Fast Recovery to avoid slow start. <br>
+          Try changing bandwidth, buffer and loss to see how cwnd reacts.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Interactive simulation — educational only. This model is simplified to illustrate the dynamics of TCP-like congestion control (Slow Start, Congestion Avoidance, Timeout, Fast Retransmit/Recovery).
+  </footer>
+
+<script>
+/*
+  Simplified TCP-like congestion control simulation.
+  - Discrete-event-ish simulation running at step dt (s).
+  - Packets are integer-sequence segments.
+  - Sender maintains cwnd (float), ssthresh (int).
+  - Link: bandwidth (pkt/s), finite buffer; packets beyond buffer are dropped.
+  - Random loss applied when entering queue.
+  - RTT modeled as propagation + queueing: packets leaving queue take rtt/2 to reach receiver; ACKs take rtt/2 back.
+  - Duplicate ACK count triggers fast retransmit (if enabled).
+  - Timeout triggers retransmit and cwnd reset.
+*/
+
+// Canvas and UI elements
+const graph = document.getElementById('graph');
+const gctx = graph.getContext('2d');
+const linkCanvas = document.getElementById('link');
+const lctx = linkCanvas.getContext('2d');
+
+const band = document.getElementById('band');
+const buf = document.getElementById('buf');
+const rttInput = document.getElementById('rtt');
+const lossInput = document.getElementById('loss');
+const speedInput = document.getElementById('speed');
+const fastRecovery = document.getElementById('fastRecovery');
+
+const bandTxt = document.getElementById('bandTxt');
+const bufTxt = document.getElementById('bufTxt');
+const rttTxt = document.getElementById('rttTxt');
+const lossTxt = document.getElementById('lossTxt');
+const speedTxt = document.getElementById('speedTxt');
+
+const startBtn = document.getElementById('start');
+const pauseBtn = document.getElementById('pause');
+const resetBtn = document.getElementById('reset');
+const forceLossBtn = document.getElementById('forceLoss');
+
+const cwndVal = document.getElementById('cwndVal');
+const sstVal = document.getElementById('sstVal');
+const flightVal = document.getElementById('flightVal');
+const rttVal = document.getElementById('rttVal');
+const rtoVal = document.getElementById('rtoVal');
+const lossVal = document.getElementById('lossVal');
+
+let running = false;
+let stepInterval = null;
+
+// Simulation parameters (initial)
+let params = {
+  bandwidth: +band.value,     // packets per second
+  bufferSize: +buf.value,     // packets
+  rtt: +rttInput.value / 1000, // seconds
+  lossProb: +lossInput.value / 10000, // normalized (input 0..100 maps to 0..0.01)
+  dt: 0.05,                   // base step (s)
+  speed: +speedInput.value,
+  fastRecovery: fastRecovery.checked
+};
+
+// Sender state
+let state = {
+  cwnd: 1.0,        // congestion window (in segments)
+  ssthresh: 16,     // slow start threshold
+  nextSeq: 1,       // next sequence number to use
+  lastAck: 0,       // highest in-order acked seq
+  inflight: new Map(), // seq -> {sendTime, retransmitted:boolean}
+  dupAckCount: 0,
+  lastAckSeen: 0,
+  rto: null,
+  time: 0
+};
+
+// Link and buffers
+let link = {
+  queue: [],  // packets waiting to be transmitted by link (arriving at sender side)
+  inFlightToReceiver: [], // {pkt, timeLeft}
+  inFlightToSender: [],   // ACKs: {ackNum, timeLeft}
+  bandwidth: params.bandwidth
+};
+
+// history for graph
+let history = {
+  t: [],
+  cwnd: [],
+  ssthresh: []
+};
+
+// visual packets for rendering path
+let visualPackets = []; // {seq, x, state: 'inflight'|'delivered'|'dropped'|'retrans', progress}
+
+function resetSimulation() {
+  // reset state to initial
+  params.bandwidth = +band.value;
+  params.bufferSize = +buf.value;
+  params.rtt = +rttInput.value / 1000;
+  params.lossProb = +lossInput.value / 10000;
+  params.speed = +speedInput.value;
+  params.fastRecovery = fastRecovery.checked;
+
+  state = {
+    cwnd: 1.0,
+    ssthresh: 16,
+    nextSeq: 1,
+    lastAck: 0,
+    inflight: new Map(),
+    dupAckCount: 0,
+    lastAckSeen: 0,
+    rto: params.rtt * 3,
+    time: 0
+  };
+  link = {
+    queue: [],
+    inFlightToReceiver: [],
+    inFlightToSender: [],
+    bandwidth: params.bandwidth
+  };
+  history = { t: [], cwnd: [], ssthresh: [] };
+  visualPackets = [];
+  updateUI();
+  clearCanvas();
+  drawGraph(); // blank
+  drawLink();
+}
+
+// UI update
+function updateUI() {
+  bandTxt.textContent = params.bandwidth;
+  bufTxt.textContent = params.bufferSize;
+  rttTxt.textContent = Math.round(params.rtt * 1000);
+  lossTxt.textContent = (params.lossProb*100).toFixed(3);
+  speedTxt.textContent = params.speed + 'x';
+
+  cwndVal.textContent = state.cwnd.toFixed(2);
+  sstVal.textContent = state.ssthresh;
+  flightVal.textContent = state.inflight.size;
+  rttVal.textContent = Math.round(params.rtt*1000) + ' ms';
+  rtoVal.textContent = Math.round((state.rto||params.rtt*3)*1000) + ' ms';
+  lossVal.textContent = (params.lossProb*100).toFixed(3) + '%';
+}
+
+// clear canvases
+function clearCanvas() {
+  gctx.clearRect(0,0,graph.width,graph.height);
+  lctx.clearRect(0,0,linkCanvas.width,linkCanvas.height);
+}
+
+// drawing graph of cwnd & ssthresh
+function drawGraph() {
+  const ctx = gctx;
+  ctx.clearRect(0,0,graph.width,graph.height);
+  // axis
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '12px system-ui';
+  ctx.fillStyle = '#64748b';
+  // compute max cwnd for scaling
+  const maxCwnd = Math.max(10, ...history.cwnd, state.cwnd, state.ssthresh) * 1.2;
+  const leftPad = 40;
+  const rightPad = 10;
+  const topPad = 10;
+  const bottomPad = 26;
+  const w = graph.width - leftPad - rightPad;
+  const h = graph.height - topPad - bottomPad;
+
+  // draw grid horizontal lines
+  ctx.strokeStyle = '#eef2ff';
+  ctx.lineWidth = 1;
+  for (let i=0;i<=5;i++) {
+    const y = topPad + i*(h/5);
+    ctx.beginPath(); ctx.moveTo(leftPad,y); ctx.lineTo(leftPad+w,y); ctx.stroke();
+  }
+  // y-axis ticks
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'right';
+  for (let i=0;i<=5;i++) {
+    const val = Math.round(maxCwnd*(1 - i/5));
+    const y = topPad + i*(h/5) + 4;
+    ctx.fillText(val, leftPad-6, y);
+  }
+
+  // draw ssthresh (orange) and cwnd (green)
+  const tlen = Math.max(history.t.length,1);
+  const px = (i)=> leftPad + (i / (tlen-1 || 1)) * w;
+
+  // ssthresh
+  ctx.beginPath();
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 2;
+  for (let i=0;i<history.ssthresh.length;i++) {
+    const v = history.ssthresh[i];
+    const x = px(i);
+    const y = topPad + (1 - (v/maxCwnd)) * h;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  // add current ssthresh at end
+  const xcur = leftPad + w;
+  const ycur = topPad + (1 - (state.ssthresh/maxCwnd)) * h;
+  ctx.lineTo(xcur,ycur);
+  ctx.stroke();
+
+  // cwnd
+  ctx.beginPath();
+  ctx.strokeStyle = '#10b981';
+  ctx.lineWidth = 2;
+  for (let i=0;i<history.cwnd.length;i++) {
+    const v = history.cwnd[i];
+    const x = px(i);
+    const y = topPad + (1 - (v/maxCwnd)) * h;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  const ycur2 = topPad + (1 - (state.cwnd/maxCwnd)) * h;
+  ctx.lineTo(xcur,ycur2);
+  ctx.stroke();
+
+  // small label with current values
+  ctx.fillStyle = '#0f172a';
+  ctx.textAlign = 'left';
+  ctx.fillText(`cwnd=${state.cwnd.toFixed(2)}  ssthresh=${state.ssthresh}`, leftPad+8, graph.height-6);
+  ctx.fillText(`bandwidth=${params.bandwidth} pkt/s  buffer=${params.bufferSize} pkts`, leftPad+220, graph.height-6);
+}
+
+// draw link and moving packets
+function drawLink() {
+  const ctx = lctx;
+  ctx.clearRect(0,0,linkCanvas.width,linkCanvas.height);
+  const W = linkCanvas.width;
+  const H = linkCanvas.height;
+  // draw link line
+  ctx.fillStyle = '#e6eef8';
+  ctx.fillRect(0, H/2 - 18, W, 36);
+  ctx.strokeStyle = '#c7d2fe';
+  ctx.strokeRect(0, H/2 - 18, W, 36);
+
+  // draw buffer occupancy indicator at link start
+  const q = link.queue.length;
+  const qcap = Math.max(1, params.bufferSize);
+  const qw = Math.min(W*0.25, (q/qcap) * (W*0.25));
+  ctx.fillStyle = '#93c5fd';
+  ctx.fillRect(6, H/2 - 14, qw, 28);
+  ctx.fillStyle = '#475569';
+  ctx.font = '12px system-ui';
+  ctx.fillText(`queue ${q}/${params.bufferSize}`, 10, H/2 - 20);
+
+  // draw packets traveling to receiver
+  for (let p of visualPackets) {
+    const x = Math.max(0, Math.min(W, p.progress * W));
+    let color = '#10b981'; // delivered/inflight
+    if (p.state === 'dropped') color = '#ef4444';
+    else if (p.state === 'retrans') color = '#f59e0b';
+    else if (p.state === 'acked') color = '#0ea5a4';
+    ctx.fillStyle = color;
+    ctx.fillRect(x-6, H/2 - 6 + (p.row*14) - 14, 12, 10);
+    // seq text small
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '8px system-ui';
+    ctx.fillText(p.seq % 1000, x-6, H/2 - 2 + (p.row*14) - 14);
+  }
+}
+
+// schedule ACK arrival (put into link.inFlightToSender)
+function scheduleAck(ackNum, delay) {
+  link.inFlightToSender.push({ackNum, timeLeft: delay});
+}
+
+// schedule packet arrival to receiver (after delay)
+function scheduleToReceiver(pkt, delay) {
+  link.inFlightToReceiver.push({pkt, timeLeft: delay});
+}
+
+// attempt to send new packets according to cwnd
+function sendNewPackets(dt) {
+  // number we can send now
+  const allowed = Math.max(0, state.cwnd - state.inflight.size);
+  let toSend = Math.floor(allowed);
+  // send integer number of new packets
+  for (let i=0;i<toSend;i++) {
+    const seq = state.nextSeq++;
+    const pkt = { seq, sendTime: state.time, retransmitted: false };
+    // attempt to enqueue at link (enter queue)
+    enqueuePacket(pkt);
+    state.inflight.set(seq, pkt);
+    // visual
+    visualPackets.push({seq, progress: 0, state: 'inflight', row: (state.inflight.size % 8)});
+  }
+}
+
+// when a packet arrives to link's queue (from sender)
+function enqueuePacket(pkt) {
+  // random loss (wire loss) check
+  if (Math.random() < params.lossProb) {
+    // immediately drop
+    pkt.dropped = true;
+    visualMarkDropped(pkt.seq);
+    return;
+  }
+  // buffer overflow?
+  if (link.queue.length >= params.bufferSize) {
+    pkt.dropped = true;
+    visualMarkDropped(pkt.seq);
+    return;
+  }
+  // otherwise push into queue
+  link.queue.push(pkt);
+}
+
+// visual mark drop
+function visualMarkDropped(seq) {
+  for (let p of visualPackets) {
+    if (p.seq === seq) { p.state = 'dropped'; p.progress = 0.5; break; }
+  }
+}
+
+// simulate link forwarding: move up to bandwidth*dt packets from queue to inFlightToReceiver
+function processLink(dt) {
+  const capacity = Math.max(1, params.bandwidth * dt);
+  let sent = 0;
+  while (sent < capacity && link.queue.length > 0) {
+    const pkt = link.queue.shift();
+    // if packet was earlier marked dropped, just notify sender lost later by not scheduling ack
+    if (pkt.dropped) {
+      // mark visual drop (already done)
+      sent += 1;
+      continue;
+    }
+    // queueing/propagation delay modeled: half RTT to receiver
+    const delay = params.rtt / 2;
+    scheduleToReceiver(pkt, delay);
+    // find visual packet and set progress to start of transit
+    for (let p of visualPackets) {
+      if (p.seq === pkt.seq) { p.progress = 0.05; p.state = 'inflight'; break; }
+    }
+    sent += 1;
+  }
+
+  // advance inFlightToReceiver timers
+  for (let i = link.inFlightToReceiver.length - 1; i >= 0; i--) {
+    const obj = link.inFlightToReceiver[i];
+    obj.timeLeft -= dt;
+    const pkt = obj.pkt;
+    // update visual progress (progress along link from 0 to 0.5 -> receiver, then ack travels)
+    for (let p of visualPackets) {
+      if (p.seq === pkt.seq && p.state !== 'dropped') {
+        // progress scales with remaining time: earlier sent -> higher progress
+        const total = params.rtt / 2;
+        const elapsed = Math.max(0, total - obj.timeLeft);
+        p.progress = Math.min(1, elapsed / total * 0.5 + 0.0);
+      }
+    }
+    if (obj.timeLeft <= 0) {
+      // packet arrived at receiver => receiver immediately sends ACK back (for simplicity cumulative ACK)
+      // receiver sends ACK for pkt.seq (we model each packet triggers ack for all up to max contiguous)
+      scheduleAck(pkt.seq, params.rtt / 2); // ack returns in rtt/2
+      // mark visual as heading back (we'll set progress >0.5)
+      for (let p of visualPackets) {
+        if (p.seq === pkt.seq && !p.dropped) p.progress = 0.6;
+      }
+      // remove from inFlightToReceiver
+      link.inFlightToReceiver.splice(i, 1);
+    }
+  }
+
+  // advance inFlightToSender (ACKs)
+  for (let i = link.inFlightToSender.length - 1; i >= 0; i--) {
+    const obj = link.inFlightToSender[i];
+    obj.timeLeft -= dt;
+    if (obj.timeLeft <= 0) {
+      // ACK arrives at sender
+      handleAck(obj.ackNum);
+      link.inFlightToSender.splice(i, 1);
+    }
+  }
+
+  // update visual packets progress for ack path
+  for (let p of visualPackets) {
+    if (p.state === 'inflight') {
+      // progress increases slowly until >0.6 then ack
+      p.progress = Math.min(0.6, p.progress + dt * params.bandwidth * 0.02);
+    } else if (p.state === 'acked') {
+      p.progress = Math.min(1.0, p.progress + dt * params.bandwidth * 0.03);
+    } else if (p.state === 'retrans') {
+      p.progress = Math.min(1.0, p.progress + dt * params.bandwidth * 0.03);
+    } else if (p.state === 'dropped') {
+      // stays in place
+    }
+  }
+  // cull old visuals
+  if (visualPackets.length > 1000) visualPackets.splice(0, visualPackets.length - 1000);
+}
+
+// called when an ACK arrives at sender
+function handleAck(ackNum) {
+  // cumulative ack: ackNum acknowledges everything up to ackNum
+  if (ackNum > state.lastAck) {
+    // new ack
+    state.lastAck = ackNum;
+    // remove inflight entries up to ackNum
+    for (let seq of Array.from(state.inflight.keys())) {
+      if (seq <= ackNum) {
+        state.inflight.delete(seq);
+        // mark visual acked
+        for (let p of visualPackets) {
+          if (p.seq === seq) { p.state = 'acked'; break; }
+        }
+      }
+    }
+    // reset duplicate ack count
+    state.dupAckCount = 0;
+    state.lastAckSeen = ackNum;
+
+    // update cwnd depending on phase
+    if (state.cwnd < state.ssthresh) {
+      // slow start: increase by 1 segment per ACK
+      state.cwnd += 1;
+    } else {
+      // congestion avoidance: additive increase ~ +1 per RTT -> approximate +1/cwnd per ACK
+      state.cwnd += (1.0 / Math.max(1, Math.floor(state.cwnd)));
+    }
+
+  } else if (ackNum === state.lastAck) {
+    // duplicate ACK
+    state.dupAckCount += 1;
+    // if 3 duplicate acks -> fast retransmit
+    if (state.dupAckCount >= 3 && params.fastRecovery) {
+      // fast retransmit & recover
+      const oldCwnd = state.cwnd;
+      state.ssthresh = Math.max(2, Math.floor(state.cwnd / 2));
+      state.cwnd = state.ssthresh + 3;
+      // retransmit next expected packet (lastAck+1)
+      retransmitPacket(state.lastAck + 1, true);
+      // reset dup ack to avoid repeated triggering
+      state.dupAckCount = 0;
+      // mark visuals near retransmit
+      for (let p of visualPackets) {
+        if (p.seq === state.lastAck + 1) { p.state = 'retrans'; p.progress = 0; }
+      }
+    }
+  }
+
+  // update RTO estimate simple model: keep rto as 3*rtt
+  state.rto = params.rtt * 3;
+  updateUI();
+}
+
+// retransmit a packet (put into queue and mark retransmitted)
+function retransmitPacket(seq, isFast=false) {
+  const pkt = {seq, sendTime: state.time, retransmitted: true};
+  enqueuePacket(pkt);
+  state.inflight.set(seq, pkt);
+  // add visual packet for retransmission
+  visualPackets.push({seq, progress:0, state: 'retrans', row: (state.inflight.size % 8)});
+}
+
+// check for timeouts (packets that have been outstanding > rto)
+function checkTimeouts() {
+  const now = state.time;
+  for (let [seq, pkt] of state.inflight) {
+    if ((now - pkt.sendTime) > (state.rto || params.rtt*3)) {
+      // timeout triggers cwnd reduction
+      state.ssthresh = Math.max(2, Math.floor(state.cwnd / 2));
+      state.cwnd = 1.0;
+      // retransmit missing (lastAck+1)
+      retransmitPacket(state.lastAck + 1, false);
+      // clear inflight except retransmitted one to avoid double-scheduling
+      // Note: keep inflight entries (they'll be removed when acked or time out)
+      state.dupAckCount = 0;
+      break;
+    }
+  }
+}
+
+// visual removal of very old visualPackets
+function pruneVisuals() {
+  visualPackets = visualPackets.filter(p => !(p.state==='acked' && p.progress >= 1) && !(p.state==='dropped'));
+}
+
+// main simulation step
+function step(dt) {
+  state.time += dt;
+  // sender sends new packets
+  sendNewPackets(dt);
+  // link processes queue & moves packets/acks
+  processLink(dt);
+
+  // detect if some packets were dropped in queue: for any inflight seq where pkt.dropped true and pkt.sendTime older than something,
+  // we don't schedule ack so that either timeout occurs or duplicate acks not triggered. We mark drop visuals earlier.
+
+  // check for timeouts
+  checkTimeouts();
+
+  // record history
+  history.t.push(state.time);
+  history.cwnd.push(state.cwnd);
+  history.ssthresh.push(state.ssthresh);
+  if (history.t.length > 600) { history.t.shift(); history.cwnd.shift(); history.ssthresh.shift(); }
+
+  // update ui and draw
+  updateUI();
+  drawGraph();
+  drawLink();
+  pruneVisuals();
+}
+
+// event handlers and controls
+band.addEventListener('input', ()=>{
+  params.bandwidth = +band.value;
+  bandTxt.textContent = params.bandwidth;
+  updateUI();
+});
+buf.addEventListener('input', ()=>{
+  params.bufferSize = +buf.value;
+  bufTxt.textContent = params.bufferSize;
+  updateUI();
+});
+rttInput.addEventListener('input', ()=>{
+  params.rtt = +rttInput.value / 1000;
+  rttTxt.textContent = Math.round(params.rtt*1000);
+  updateUI();
+});
+lossInput.addEventListener('input', ()=>{
+  params.lossProb = +lossInput.value / 10000;
+  lossTxt.textContent = params.lossProb.toFixed(5);
+  updateUI();
+});
+speedInput.addEventListener('input', ()=>{
+  params.speed = +speedInput.value;
+  speedTxt.textContent = params.speed + 'x';
+});
+fastRecovery.addEventListener('change', ()=>{
+  params.fastRecovery = fastRecovery.checked;
+});
+
+startBtn.addEventListener('click', ()=>{
+  if (running) return;
+  running = true;
+  if (!stepInterval) {
+    const baseDt = 0.05;
+    stepInterval = setInterval(()=> {
+      // each tick, run several logical steps based on speed to accelerate
+      const logicalDt = baseDt * (params.speed || 1);
+      step(logicalDt);
+    }, 50);
+  }
+});
+
+pauseBtn.addEventListener('click', ()=>{
+  running = false;
+  if (stepInterval) { clearInterval(stepInterval); stepInterval = null; }
+});
+
+resetBtn.addEventListener('click', ()=>{
+  running = false;
+  if (stepInterval) { clearInterval(stepInterval); stepInterval = null; }
+  resetSimulation();
+});
+
+forceLossBtn.addEventListener('click', ()=>{
+  // drop multiple packets in the link queue to simulate a sudden congestion event
+  const dropn = Math.min(6, link.queue.length);
+  for (let i=0;i<dropn;i++) {
+    const pkt = link.queue.shift();
+    if (pkt) {
+      pkt.dropped = true;
+      visualMarkDropped(pkt.seq);
+      // remove it from inflight map (sender will eventually timeout)
+      // keep inflight so that loss detection works via ack absence
+    }
+  }
+});
+
+// initialize
+resetSimulation();
+drawGraph();
+drawLink();
+
+// small warm-up: draw once per second even if paused to keep visuals responsive
+setInterval(()=>{
+  drawGraph();
+  drawLink();
+}, 1000);
+
+</script>
+</body>
+</html>

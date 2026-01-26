@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A* Search Interactive Demo</title>
+<style>
+  /* Extremely minimal styling */
+  body { font-family: monospace; background: white; color: black; margin: 10px; }
+  input, button, select, textarea { font-family: monospace; font-size: 14px; margin: 2px 0; }
+  button:disabled { color: gray; }
+  #gridcontainer { overflow: auto; max-height: 400px; max-width: 100%; }
+  table { border-collapse: collapse; }
+  td {
+    border: 1px solid black;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 0;
+  }
+  td.start { background: #ddd; }
+  td.end { background: #bbb; }
+  td.wall { background: black; }
+  td.open { background: #d0f0d0; }
+  td.closed { background: #f0d0d0; }
+  td.path { background: #a0a0ff; }
+  #logs { width: 100%; height: 150px; white-space: pre-wrap; overflow-y: auto; font-size: 12px; }
+  label { display: block; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h2>A* Search Interactive Demo (Minimal UI)</h2>
+
+<div>
+  <label for="gridwidth">Grid width (cols): <input type="number" id="gridwidth" min="5" max="50" value="20" /></label>
+  <label for="gridheight">Grid height (rows): <input type="number" id="gridheight" min="5" max="50" value="15" /></label>
+  <button id="generategrid">Generate Grid</button>
+</div>
+
+<div>
+  <label>Choose tile placement mode:
+    <select id="placemode">
+      <option value="wall">Wall Toggle</option>
+      <option value="start">Set Start Point</option>
+      <option value="end">Set End Point</option>
+    </select>
+  </label>
+</div>
+
+<div>
+  <button id="clearwalls">Clear All Walls</button>
+  <button id="clearpath">Clear Path/Algorithm State</button>
+  <button id="resetall">Reset All (Start & End & Walls)</button>
+</div>
+
+<div>
+  <label for="diagmovechk"><input type="checkbox" id="diagmovechk" /> Allow diagonal moves</label>
+</div>
+
+<div>
+  <label for="heuristicselect">Heuristic:
+    <select id="heuristicselect">
+      <option value="manhattan">Manhattan</option>
+      <option value="euclidean">Euclidean</option>
+      <option value="chebyshev">Chebyshev</option>
+      <option value="zero">Zero (Dijkstra)</option>
+    </select>
+  </label>
+</div>
+
+<div>
+  <label for="speedrange">Step Delay (ms): <input type="number" id="stepdelay" min="0" max="2000" step="50" value="250" /></label>
+</div>
+
+<div>
+  <button id="startsearch" disabled>Start Search</button>
+  <button id="stepsearch" disabled>Step Search</button>
+  <button id="runsearch" disabled>Run Continuously</button>
+  <button id="pausesearch" disabled>Pause</button>
+  <button id="resetsearch" disabled>Reset Search</button>
+</div>
+
+<div>
+  <label>Grid (click cells to modify):</label>
+  <div id="gridcontainer" tabindex="0"></div>
+</div>
+
+<div>
+  <label>Search Logs / Status:</label>
+  <textarea readonly id="logs"></textarea>
+</div>
+
+<script>
+// A* Search Interactive Demo - minimal but rich controls + deep exploration
+
+(function(){
+  // State variables
+  let grid = [];
+  let rows = 15, cols = 20;
+  let startNode = null;
+  let endNode = null;
+  let mode = 'wall'; // wall / start / end
+  let allowDiagonal = false;
+  let heuristic = 'manhattan';
+  let searching = false;
+  let searchPaused = false;
+  let intervalId = null;
+  let stepDelay = 250;
+
+  // Used for A* search
+  let openSet = [];
+  let closedSet = new Set();
+  let cameFrom = new Map();
+  let gScore = new Map();
+  let fScore = new Map();
+
+  // HTML elements
+  const gridwidthInput = document.getElementById('gridwidth');
+  const gridheightInput = document.getElementById('gridheight');
+  const generateGridBtn = document.getElementById('generategrid');
+  const placeModeSelect = document.getElementById('placemode');
+  const clearWallsBtn = document.getElementById('clearwalls');
+  const clearPathBtn = document.getElementById('clearpath');
+  const resetAllBtn = document.getElementById('resetall');
+  const diagMoveChk = document.getElementById('diagmovechk');
+  const heuristicSelect = document.getElementById('heuristicselect');
+  const startSearchBtn = document.getElementById('startsearch');
+  const stepSearchBtn = document.getElementById('stepsearch');
+  const runSearchBtn = document.getElementById('runsearch');
+  const pauseSearchBtn = document.getElementById('pausesearch');
+  const resetSearchBtn = document.getElementById('resetsearch');
+  const gridContainer = document.getElementById('gridcontainer');
+  const logsArea = document.getElementById('logs');
+  const stepDelayInput = document.getElementById('stepdelay');
+
+  // Directions for neighbors
+  const DIRS_4 = [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1]
+  ];
+  const DIRS_8 = [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
+    [-1,-1],
+    [-1,1],
+    [1,-1],
+    [1,1]
+  ];
+
+  // Initialize grid data structure
+  function initGrid(r, c) {
+    grid = [];
+    for(let i=0;i<r;i++){
+      let row = [];
+      for(let j=0;j<c;j++){
+        row.push({
+          row:i,
+          col:j,
+          wall:false,
+          start:false,
+          end:false,
+          open:false,
+          closed:false,
+          path:false
+        });
+      }
+      grid.push(row);
+    }
+  }
+
+  // Render grid and bind events
+  function renderGrid(){
+    gridContainer.innerHTML = '';
+    const table = document.createElement('table');
+    table.setAttribute('tabindex','0');
+    for(let i=0;i<rows;i++){
+      const tr = document.createElement('tr');
+      for(let j=0;j<cols;j++){
+        const td = document.createElement('td');
+        const cell = grid[i][j];
+        td.dataset.r = i;
+        td.dataset.c = j;
+        updateCellClass(cell, td);
+        td.title = `(${i},${j})`;
+
+        td.addEventListener('click',()=>{
+          if(searching) return;
+          applyModeToCell(cell);
+          updateAllCells();
+          updateControls();
+          log(`Modified cell at (${i},${j}) with mode ${mode}`);
+        });
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    gridContainer.appendChild(table);
+  }
+
+  // Update all cells to correspond to state
+  function updateAllCells(){
+    const tds = gridContainer.querySelectorAll('td');
+    tds.forEach(td => {
+      const r = Number(td.dataset.r);
+      const c = Number(td.dataset.c);
+      const cell = grid[r][c];
+      updateCellClass(cell, td);
+    });
+  }
+
+  // Update a single cell className
+  function updateCellClass(cell, td){
+    td.className = '';
+    if(cell.start) td.classList.add('start');
+    else if(cell.end) td.classList.add('end');
+    else if(cell.wall) td.classList.add('wall');
+    else if(cell.path) td.classList.add('path');
+    else if(cell.closed) td.classList.add('closed');
+    else if(cell.open) td.classList.add('open');
+  }
+
+  // Apply current mode to given cell
+  function applyModeToCell(cell){
+    switch(mode){
+      case 'wall':
+        if(cell.start || cell.end) return; // can't toggle walls on start/end
+        cell.wall = !cell.wall;
+        break;
+      case 'start':
+        if(cell.wall || cell.end) return;
+        if(startNode) startNode.start = false;
+        cell.start = true;
+        startNode = cell;
+        break;
+      case 'end':
+        if(cell.wall || cell.start) return;
+        if(endNode) endNode.end = false;
+        cell.end = true;
+        endNode = cell;
+        break;
+    }
+  }
+
+  // Clear all walls
+  function clearWalls(){
+    if(searching) return;
+    for(let i=0; i<rows; i++){
+      for(let j=0; j<cols; j++){
+        grid[i][j].wall = false;
+      }
+    }
+    updateAllCells();
+    log('Cleared all walls');
+  }
+
+  // Clear path and search states
+  function clearPathStates(){
+    if(searching) return;
+    for(let i=0; i<rows; i++){
+      for(let j=0; j<cols; j++){
+        let cell = grid[i][j];
+        cell.open = false;
+        cell.closed = false;
+        cell.path = false;
+      }
+    }
+    openSet = [];
+    closedSet.clear();
+    cameFrom.clear();
+    gScore.clear();
+    fScore.clear();
+    updateAllCells();
+    log('Cleared path and search state');
+  }
+
+  // Reset all (walls, start, end, path)
+  function resetAll(){
+    if(searching) return;
+    for(let i=0; i<rows; i++){
+      for(let j=0; j<cols; j++){
+        let cell = grid[i][j];
+        cell.wall = false;
+        cell.start = false;
+        cell.end = false;
+        cell.open = false;
+        cell.closed = false;
+        cell.path = false;
+      }
+    }
+    startNode = null;
+    endNode = null;
+    openSet = [];
+    closedSet.clear();
+    cameFrom.clear();
+    gScore.clear();
+    fScore.clear();
+    updateAllCells();
+    updateControls();
+    log('Reset all grid data');
+  }
+
+  // Logging helper
+  function log(text){
+    logsArea.value += text+"\n";
+    logsArea.scrollTop = logsArea.scrollHeight;
+  }
+  function clearLog(){
+    logsArea.value = '';
+  }
+
+  // Priority queue helper for open set (min fScore)
+  function openSetPush(node){
+    openSet.push(node);
+  }
+  function openSetPop(){
+    if(openSet.length === 0) return null;
+    // find node with lowest fScore
+    let lowestIndex = 0;
+    let lowestF = fScore.get(openSet[0]) ?? Infinity;
+    for(let i=1; i<openSet.length; i++){
+      let f = fScore.get(openSet[i]) ?? Infinity;
+      if(f < lowestF){
+        lowestF = f;
+        lowestIndex = i;
+      }
+    }
+    return openSet.splice(lowestIndex,1)[0];
+  }
+  function openSetRemove(node){
+    let idx = openSet.indexOf(node);
+    if(idx !== -1) openSet.splice(idx,1);
+  }
+  function openSetHas(node){
+    return openSet.includes(node);
+  }
+
+  // Helper: stringify cell for Map keys
+  function cellKey(cell){
+    return cell.row+','+cell.col;
+  }
+
+  // Heuristic functions
+  function heuristicFunc(a,b){
+    switch(heuristic){
+      case 'manhattan':
+        return Math.abs(a.row-b.row)+Math.abs(a.col-b.col);
+      case 'euclidean':
+        return Math.hypot(a.row-b.row,a.col-b.col);
+      case 'chebyshev':
+        return Math.max(Math.abs(a.row-b.row), Math.abs(a.col-b.col));
+      case 'zero':
+        return 0;
+      default:
+        return 0;
+    }
+  }
+
+  // Get neighbors (consider walls and grid boundaries)
+  function neighbors(cell){
+    const directions = allowDiagonal ? DIRS_8 : DIRS_4;
+    const result = [];
+    for(let d of directions){
+      const nr = cell.row + d[0];
+      const nc = cell.col + d[1];
+      if(nr<0 || nr>=rows || nc<0 || nc>=cols) continue;
+      const nCell = grid[nr][nc];
+      if(nCell.wall) continue;
+      result.push(nCell);
+    }
+    return result;
+  }
+
+  // Reconstruct path from cameFrom map
+  function reconstructPath(current){
+    // Clear previous paths
+    for(let i=0; i<rows; i++){
+      for(let j=0; j<cols; j++){
+        grid[i][j].path = false;
+      }
+    }
+    let totalPath = [current];
+    while(cameFrom.has(current)){
+      current = cameFrom.get(current);
+      totalPath.push(current);
+    }
+    // Mark path cells except start and end
+    for(let i=1; i<totalPath.length-1; i++){
+      totalPath[i].path = true;
+    }
+    updateAllCells();
+  }
+
+  // Initialize search state
+  function initSearch(){
+    if(!startNode || !endNode) return false;
+    clearPathStates();
+
+    openSet = [];
+    closedSet = new Set();
+    cameFrom = new Map();
+    gScore = new Map();
+    fScore = new Map();
+
+    gScore.set(startNode,0);
+    fScore.set(startNode, heuristicFunc(startNode,endNode));
+
+    openSetPush(startNode);
+    startNode.open = true;
+
+    updateAllCells();
+
+    searching = true;
+    searchPaused = false;
+    updateControls();
+
+    log('Search initialized.');
+    return true;
+  }
+
+  // Perform one search step - returns true if search finished, false if to continue, null if fail
+  function searchStep(){
+    if(openSet.length === 0){
+      log("Search failed: no path found.");
+      searching = false;
+      updateControls();
+      return null;
+    }
+    let current = openSetPop();
+    current.open = false;
+    current.closed = true;
+    closedSet.add(current);
+
+    updateAllCells();
+
+    if(current === endNode){
+      log("Path found!");
+      reconstructPath(current);
+      searching = false;
+      updateControls();
+      return true;
+    }
+
+    for(let neighbor of neighbors(current)){
+      if(closedSet.has(neighbor)) continue;
+      let tentative_gScore = (gScore.get(current) ?? Infinity) + distBetween(current, neighbor);
+      if(!openSetHas(neighbor)){
+        openSetPush(neighbor);
+        neighbor.open = true;
+      } else if(tentative_gScore >= (gScore.get(neighbor) ?? Infinity)){
+        // Not a better path
+        continue;
+      }
+      // This path is better
+      cameFrom.set(neighbor, current);
+      gScore.set(neighbor, tentative_gScore);
+      fScore.set(neighbor, tentative_gScore + heuristicFunc(neighbor,endNode));
+    }
+
+    updateAllCells();
+    return false;
+  }
+
+  // Distance between neighbors for gScore. When diagonal allowed, diagonal cost = 1.4142, else 1.
+  function distBetween(a,b){
+    if(a.row !== b.row && a.col !== b.col){
+      return allowDiagonal ? Math.SQRT2 : 2;
+    }
+    return 1;
+  }
+
+  // Run continuous search with interval
+  function runContinuousSearch(){
+    if(!searching || searchPaused) return;
+    let res = searchStep();
+    if(res === true || res === null){
+      stopContinuousSearch();
+    } else {
+      intervalId = setTimeout(runContinuousSearch, stepDelay);
+    }
+  }
+
+  // Stop continuous search interval
+  function stopContinuousSearch(){
+    clearTimeout(intervalId);
+    intervalId = null;
+    searchPaused = false;
+    updateControls();
+  }
+
+  // Update all controls enabled/disable according to states
+  function updateControls(){
+    const hasStartEnd = (startNode !== null && endNode !== null);
+    generateGridBtn.disabled = searching;
+    gridwidthInput.disabled = searching;
+    gridheightInput.disabled = searching;
+
+    startSearchBtn.disabled = searching || !hasStartEnd;
+    stepSearchBtn.disabled = searching || !hasStartEnd;
+    runSearchBtn.disabled = searching || !hasStartEnd;
+    pauseSearchBtn.disabled = !searching || !intervalId;
+    resetSearchBtn.disabled = !searching;
+
+    clearWallsBtn.disabled = searching;
+    clearPathBtn.disabled = searching;
+    resetAllBtn.disabled = searching;
+
+    placeModeSelect.disabled = searching;
+    diagMoveChk.disabled = searching;
+    heuristicSelect.disabled = searching;
+    stepDelayInput.disabled = searching;
+
+    // Grid cells: disable if searching
+    let tds = gridContainer.querySelectorAll('td');
+    tds.forEach(td => {
+      td.style.pointerEvents = searching ? 'none' : '';
+    });
+  }
+
+  // Event handlers
+  generateGridBtn.addEventListener('click', ()=>{
+    if(searching) return;
+    let w = Number(gridwidthInput.value);
+    let h = Number(gridheightInput.value);
+    if(isNaN(w) || isNaN(h) || w<5 || h<5 || w>50 || h>50){
+      alert("Grid size must be between 5 and 50.");
+      return;
+    }
+    cols = w;
+    rows = h;
+    initGrid(rows, cols);
+    startNode = null; endNode = null;
+    clearLog();
+    log(`Generated grid ${rows} rows x ${cols} cols.`);
+    renderGrid();
+    updateControls();
+  });
+
+  placeModeSelect.addEventListener('change', ()=>{
+    mode = placeModeSelect.value;
+    log(`Placement mode changed to: ${mode}`);
+  });
+
+  clearWallsBtn.addEventListener('click', clearWalls);
+  clearPathBtn.addEventListener('click', clearPathStates);
+  resetAllBtn.addEventListener('click', resetAll);
+
+  diagMoveChk.addEventListener('change', ()=>{
+    allowDiagonal = diagMoveChk.checked;
+    log("Diagonal movement " + (allowDiagonal ? "enabled" : "disabled"));
+  });
+
+  heuristicSelect.addEventListener('change', ()=>{
+    heuristic = heuristicSelect.value;
+    log("Heuristic changed to: " + heuristic);
+  });
+
+  stepDelayInput.addEventListener('change', ()=>{
+    let val = Number(stepDelayInput.value);
+    if(val < 0) val = 0;
+    else if(val > 2000) val = 2000;
+    stepDelay = val;
+    stepDelayInput.value = val;
+    log("Step delay set to: " + stepDelay + " ms");
+  });
+
+  startSearchBtn.addEventListener('click', () => {
+    if(searching) return;
+    if(!initSearch()) {
+      alert('Set start and end nodes before searching.');
+      return;
+    }
+    log('Search started.');
+    updateControls();
+  });
+
+  stepSearchBtn.addEventListener('click', () => {
+    if(!searching){
+      if(!initSearch()) {
+        alert('Set start and end nodes before searching.');
+        return;
+      }
+    }
+    let res = searchStep();
+    if(res === true || res === null){
+      searching = false;
+      updateControls();
+    }
+  });
+
+  runSearchBtn.addEventListener('click', () => {
+    if(!searching){
+      if(!initSearch()) {
+        alert('Set start and end nodes before searching.');
+        return;
+      }
+    }
+    if(intervalId !== null) return; // already running
+    searchPaused = false;
+    runContinuousSearch();
+    updateControls();
+    log("Continuous run started.");
+  });
+
+  pauseSearchBtn.addEventListener('click', () => {
+    if(intervalId !== null){
+      clearTimeout(intervalId);
+      intervalId = null;
+      searchPaused = true;
+      updateControls();
+      log("Search paused.");
+    }
+  });
+
+  resetSearchBtn.addEventListener('click', () => {
+    if(!searching) return;
+    searching = false;
+    searchPaused = false;
+    clearTimeout(intervalId);
+    intervalId = null;
+    clearPathStates();
+    updateControls();
+    log("Search reset.");
+  });
+
+  // Init on load
+  initGrid(rows, cols);
+  renderGrid();
+  updateControls();
+  log("Welcome to the A* Search interactive demo.");
+  log("Set start and end points, place walls, then start search or step through.");
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Monitor (Concurrency) Demo — Producer/Consumer with a Monitor</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; color: #111; }
+    h1 { margin: 0 0 8px 0; }
+    p.lead { margin-top: 6px; color: #333; max-width: 860px; }
+    .controls { margin-top: 14px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    label { font-size: 13px; color: #222; }
+    input[type="number"] { width: 70px; padding: 6px; }
+    button { padding: 8px 12px; border-radius: 6px; border: 1px solid #cfcfcf; background: #fafafa; cursor: pointer; }
+    button.primary { background: #0b84ff; color: white; border-color: #0b84ff; }
+    .layout { display: flex; gap: 18px; margin-top: 18px; align-items: flex-start; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; padding: 12px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+    .left { width: 520px; }
+    .buffer { display: flex; gap: 6px; margin-top: 12px; align-items: center; }
+    .slot { width: 44px; height: 44px; border-radius: 6px; background: #f3f4f6; border: 1px dashed #d1d5db; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #6b7280; }
+    .filled { background: linear-gradient(180deg,#34d399,#10b981); color: white; border: 1px solid rgba(0,0,0,0.06); }
+    .workers { margin-top: 12px; display: grid; gap: 8px; }
+    .worker { display:flex; gap:8px; align-items:center; border-radius:6px; padding:8px; background:#fbfbfd; border:1px solid #eef2ff; }
+    .badge { font-size:12px; padding:6px 8px; background:#111827; color:white; border-radius:6px; }
+    .logs { max-height: 420px; overflow:auto; margin-top: 12px; background:#0f172a; color:#e6eef8; padding:10px; border-radius:6px; font-family: monospace; font-size:13px; }
+    .small { font-size:13px; color:#445; }
+    .stat { display:inline-block; margin-right:10px; font-weight:600; }
+    .worker button { margin-left:auto; }
+    .footer { margin-top:10px; font-size:13px; color:#444; max-width: 860px; }
+    a { color: #0b84ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Monitor (Concurrency) — Bounded Buffer Demo</h1>
+  <p class="lead">
+    This page demonstrates the "Monitor" concurrency abstraction: a mutual exclusion lock combined with condition variables (wait/notify).
+    The demo runs multiple producers and consumers operating on a bounded buffer protected by a Monitor implementation.
+    The Monitor ensures only one thread/method executes its critical section at a time and enables threads to wait for conditions (e.g. "notFull"/"notEmpty").
+  </p>
+
+  <div class="controls">
+    <label>Buffer capacity:
+      <input id="capacityInput" type="number" min="1" value="5" />
+    </label>
+    <button id="applyCapacityBtn">Apply</button>
+    <button id="addProducerBtn" class="primary">Add Producer</button>
+    <button id="addConsumerBtn" class="primary">Add Consumer</button>
+    <button id="stopAllBtn">Stop All</button>
+    <span class="small" style="margin-left: auto;">Producers: <span id="prodCount">0</span> | Consumers: <span id="consCount">0</span></span>
+  </div>
+
+  <div class="layout">
+    <div class="panel left">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div class="stat">Buffer size: <span id="bufferSize">0</span></div>
+          <div class="stat">Capacity: <span id="bufferCap">5</span></div>
+        </div>
+        <div style="text-align:right;">
+          <div class="small">Produced total: <span id="producedTotal">0</span></div>
+          <div class="small">Consumed total: <span id="consumedTotal">0</span></div>
+        </div>
+      </div>
+
+      <div class="buffer" id="bufferSlots" aria-live="polite" style="margin-top:12px;"></div>
+
+      <div class="workers" id="workersArea">
+        <!-- Worker controls appear here -->
+      </div>
+    </div>
+
+    <div class="panel" style="flex:1; min-width:300px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong>Logs (most recent first)</strong>
+        </div>
+        <div class="small">Monitor: mutual exclusion + condition variables</div>
+      </div>
+      <div class="logs" id="logs" aria-live="polite"></div>
+      <div style="margin-top:10px;">
+        <button id="clearLogsBtn">Clear Logs</button>
+      </div>
+      <div class="footer">
+        Notes:
+        <ul>
+          <li>This implementation models a "Mesa-style" monitor: notify wakes a waiting thread but does not transfer the lock directly. A notified thread re-enters the entry queue and must re-acquire the lock.</li>
+          <li>The Monitor class implemented here offers simple enter/exit (mutex) and wait/notify(condition) primitives built on Promises.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ---------- Monitor implementation ----------
+  // Provides enter() / exit() (mutex) and wait(cond) / notify(cond) / notifyAll(cond).
+  class Monitor {
+    constructor() {
+      this.locked = false;            // is someone inside?
+      this.entryQueue = [];          // queue of functions to call to grant lock
+      this.conds = new Map();        // condName -> array of resume functions for waiters
+    }
+
+    // Acquire the monitor (mutex). Returns a promise that resolves when acquired.
+    enter() {
+      if (!this.locked) {
+        this.locked = true;
+        return Promise.resolve();
+      }
+      return new Promise(resolve => {
+        // push a function that sets locked and resolves the waiting enter promise
+        this.entryQueue.push(() => { this.locked = true; resolve(); });
+      });
+    }
+
+    // Release the monitor; if someone is waiting to enter, pass the lock to them.
+    exit() {
+      if (this.entryQueue.length > 0) {
+        const grantFn = this.entryQueue.shift();
+        // pass the lock to the next waiter
+        grantFn();
+      } else {
+        this.locked = false;
+      }
+    }
+
+    // Wait on a named condition variable: atomically release the monitor and suspend.
+    async wait(condName = '') {
+      if (!this.conds.has(condName)) this.conds.set(condName, []);
+      let resume;
+      const p = new Promise(resolve => resume = resolve);
+      this.conds.get(condName).push(resume);
+      // Release the monitor and suspend until signaled
+      this.exit();
+      await p;
+      // When resumed, re-acquire the monitor before returning
+      await this.enter();
+    }
+
+    // Wake one waiter waiting on condName (if any).
+    notify(condName = '') {
+      const q = this.conds.get(condName);
+      if (q && q.length > 0) {
+        const resume = q.shift();
+        resume();
+      }
+    }
+
+    // Wake all waiters on condName.
+    notifyAll(condName = '') {
+      const q = this.conds.get(condName);
+      if (q) {
+        while (q.length) {
+          const r = q.shift();
+          r();
+        }
+      }
+    }
+  }
+
+  // ---------- Bounded buffer protected by a Monitor ----------
+  class BoundedBuffer {
+    constructor(capacity) {
+      this.capacity = capacity;
+      this.buffer = [];
+      this.mon = new Monitor();
+    }
+
+    async put(item) {
+      await this.mon.enter();
+      try {
+        while (this.buffer.length >= this.capacity) {
+          // wait until there's space
+          await this.mon.wait('notFull');
+        }
+        this.buffer.push(item);
+        // signal that buffer is not empty
+        this.mon.notify('notEmpty');
+      } finally {
+        this.mon.exit();
+      }
+    }
+
+    async get() {
+      await this.mon.enter();
+      try {
+        while (this.buffer.length === 0) {
+          // wait until an item is available
+          await this.mon.wait('notEmpty');
+        }
+        const item = this.buffer.shift();
+        // signal that there's space
+        this.mon.notify('notFull');
+        return item;
+      } finally {
+        this.mon.exit();
+      }
+    }
+
+    size() { return this.buffer.length; }
+    setCapacity(n) { this.capacity = n; }
+    snapshot() { return this.buffer.slice(); }
+  }
+
+  // ---------- Demo orchestration ----------
+  const bufferSlots = document.getElementById('bufferSlots');
+  const bufferSizeEl = document.getElementById('bufferSize');
+  const bufferCapEl = document.getElementById('bufferCap');
+  const capacityInput = document.getElementById('capacityInput');
+  const applyCapacityBtn = document.getElementById('applyCapacityBtn');
+  const addProducerBtn = document.getElementById('addProducerBtn');
+  const addConsumerBtn = document.getElementById('addConsumerBtn');
+  const stopAllBtn = document.getElementById('stopAllBtn');
+  const workersArea = document.getElementById('workersArea');
+  const logsEl = document.getElementById('logs');
+  const producedTotalEl = document.getElementById('producedTotal');
+  const consumedTotalEl = document.getElementById('consumedTotal');
+  const prodCountEl = document.getElementById('prodCount');
+  const consCountEl = document.getElementById('consCount');
+  const clearLogsBtn = document.getElementById('clearLogsBtn');
+
+  let producedTotal = 0, consumedTotal = 0;
+  let nextItemId = 1;
+  let workerIdCounter = 1;
+
+  // create buffer
+  let buf = new BoundedBuffer(parseInt(capacityInput.value, 10) || 5);
+  bufferCapEl.textContent = buf.capacity;
+  renderBuffer();
+
+  function log(msg) {
+    const ts = new Date().toLocaleTimeString();
+    const line = `[${ts}] ${msg}`;
+    const div = document.createElement('div');
+    div.textContent = line;
+    logsEl.prepend(div);
+    // limit logs
+    while (logsEl.childNodes.length > 400) logsEl.removeChild(logsEl.lastChild);
+  }
+
+  function renderBuffer() {
+    bufferSlots.innerHTML = '';
+    const cap = buf.capacity;
+    const snapshot = buf.snapshot();
+    for (let i = 0; i < cap; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      if (i < snapshot.length) {
+        slot.classList.add('filled');
+        slot.textContent = snapshot[i].toString();
+      } else {
+        slot.textContent = '';
+      }
+      bufferSlots.appendChild(slot);
+    }
+    bufferSizeEl.textContent = buf.size();
+    bufferCapEl.textContent = buf.capacity;
+  }
+
+  // simple sleep
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  // Worker management
+  const workers = new Map(); // id -> {id,type, running, speedMs, element}
+
+  function updateCounts() {
+    const prod = Array.from(workers.values()).filter(w => w.type === 'producer').length;
+    const cons = Array.from(workers.values()).filter(w => w.type === 'consumer').length;
+    prodCountEl.textContent = prod;
+    consCountEl.textContent = cons;
+    producedTotalEl.textContent = producedTotal;
+    consumedTotalEl.textContent = consumedTotal;
+  }
+
+  // Create and start a producer worker
+  function addProducer(speed = 800) {
+    const id = workerIdCounter++;
+    const el = createWorkerElement(id, 'producer', speed);
+    workersArea.appendChild(el);
+    const worker = { id, type: 'producer', running: true, speedMs: speed, element: el };
+    workers.set(id, worker);
+    updateCounts();
+    producerLoop(worker).catch(e => log('Producer error: ' + e));
+  }
+
+  // Create and start a consumer worker
+  function addConsumer(speed = 1000) {
+    const id = workerIdCounter++;
+    const el = createWorkerElement(id, 'consumer', speed);
+    workersArea.appendChild(el);
+    const worker = { id, type: 'consumer', running: true, speedMs: speed, element: el };
+    workers.set(id, worker);
+    updateCounts();
+    consumerLoop(worker).catch(e => log('Consumer error: ' + e));
+  }
+
+  // Stop all workers
+  function stopAll() {
+    for (const w of workers.values()) { w.running = false; }
+    workers.clear();
+    workersArea.innerHTML = '';
+    updateCounts();
+    log('All workers stopped.');
+  }
+
+  // Create worker DOM
+  function createWorkerElement(id, type, speedMs) {
+    const container = document.createElement('div');
+    container.className = 'worker';
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = `${type.toUpperCase()} #${id}`;
+    const speedLabel = document.createElement('div');
+    speedLabel.textContent = `delay: ${speedMs}ms`;
+    speedLabel.style.minWidth = '84px';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '100'; slider.max = '2000'; slider.value = String(speedMs);
+    slider.style.width = '190px';
+    slider.addEventListener('input', () => {
+      speedLabel.textContent = `delay: ${slider.value}ms`;
+      const w = workers.get(id);
+      if (w) w.speedMs = parseInt(slider.value, 10);
+    });
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', () => {
+      const w = workers.get(id);
+      if (w) {
+        w.running = false;
+        workers.delete(id);
+        workersArea.removeChild(container);
+        log(`${type} #${id} removed`);
+        updateCounts();
+      }
+    });
+
+    container.appendChild(badge);
+    container.appendChild(speedLabel);
+    container.appendChild(slider);
+    container.appendChild(removeBtn);
+    return container;
+  }
+
+  // Producer loop: keeps producing items and calling put(item)
+  async function producerLoop(worker) {
+    log(`Producer #${worker.id} started`);
+    while (worker.running) {
+      const itemId = nextItemId++;
+      try {
+        await buf.put(itemId);
+        producedTotal++;
+        log(`Producer #${worker.id} PUT item ${itemId} (buffer=${buf.size()}/${buf.capacity})`);
+        renderBuffer();
+      } catch (err) {
+        log(`Producer #${worker.id} error: ${err}`);
+      }
+      updateCounts();
+      await sleep(worker.speedMs);
+    }
+    log(`Producer #${worker.id} stopped`);
+  }
+
+  // Consumer loop: keeps calling get() to retrieve items
+  async function consumerLoop(worker) {
+    log(`Consumer #${worker.id} started`);
+    while (worker.running) {
+      try {
+        const item = await buf.get();
+        consumedTotal++;
+        log(`Consumer #${worker.id} GOT item ${item} (buffer=${buf.size()}/${buf.capacity})`);
+        renderBuffer();
+      } catch (err) {
+        log(`Consumer #${worker.id} error: ${err}`);
+      }
+      updateCounts();
+      await sleep(worker.speedMs);
+    }
+    log(`Consumer #${worker.id} stopped`);
+  }
+
+  // Buttons
+  addProducerBtn.addEventListener('click', () => addProducer(800));
+  addConsumerBtn.addEventListener('click', () => addConsumer(1000));
+  stopAllBtn.addEventListener('click', stopAll);
+  clearLogsBtn.addEventListener('click', () => { logsEl.innerHTML = ''; });
+
+  applyCapacityBtn.addEventListener('click', () => {
+    const v = parseInt(capacityInput.value, 10);
+    if (!isNaN(v) && v >= 1) {
+      // Changing capacity on the fly
+      buf.setCapacity(v);
+      // If capacity decreased and buffer currently larger, items remain but UI shows only capacity slots.
+      renderBuffer();
+      log(`Buffer capacity set to ${v}`);
+    }
+  });
+
+  // Initialize demo with a couple of workers
+  addProducer(600);
+  addProducer(900);
+  addConsumer(1100);
+  addConsumer(700);
+
+  // Make sure UI shows initial state
+  updateCounts();
+  renderBuffer();
+  log('Demo started: Monitor-protected bounded buffer with producers & consumers.');
+
+  // Expose for debugging (not necessary)
+  window._demo = { buf, addProducer, addConsumer, stopAll, workers, Monitor, BoundedBuffer };
+
+  </script>
+</body>
+</html>

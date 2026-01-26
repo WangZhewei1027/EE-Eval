@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Integration Testing Playground</title>
+  <style>
+    /* Minimal plain layout. No colors, no animations. */
+    html,body { height:100%; margin:0; font-family: Arial, sans-serif; font-size:13px; color:black; background:white; }
+    .app { display:flex; height:100vh; gap:8px; padding:8px; box-sizing:border-box; }
+    .pane { border:1px solid #ccc; padding:8px; box-sizing:border-box; overflow:auto; }
+    .left { width:260px; flex-shrink:0; }
+    .center { flex:1 1 520px; }
+    .right { width:420px; flex-shrink:0; }
+    h1 { font-size:16px; margin:0 0 8px 0; }
+    label { display:block; margin-top:6px; }
+    input[type="text"], input[type="number"], select, textarea { width:100%; box-sizing:border-box; padding:4px; margin-top:4px; }
+    textarea { height:120px; resize:vertical; font-family:monospace; }
+    .steps { margin-top:8px; }
+    .step { border-top:1px dashed #ddd; padding:6px 0; }
+    .controls { margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    button { padding:6px 10px; }
+    .small { padding:4px 8px; font-size:12px; }
+    .muted { font-size:12px; color:#666; }
+    pre.log { height:240px; overflow:auto; background:transparent; border:1px solid #ddd; padding:6px; white-space:pre-wrap; font-family:monospace; }
+    .kv { font-family:monospace; background:transparent; border:1px solid #ddd; padding:6px; min-height:120px; white-space:pre-wrap; }
+    .row { display:flex; gap:6px; align-items:center; }
+    .row > * { margin:0; }
+    .split { display:flex; gap:6px; }
+    .flexcol { display:flex; flex-direction:column; gap:6px; }
+    .step-actions { display:flex; gap:4px; margin-top:6px; }
+    .checkbox-inline { display:inline-flex; align-items:center; gap:6px; margin-left:6px; }
+    .inline { display:inline-block; }
+    .wide { width:100%; }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Integration Testing Playground">
+    <div class="pane left" aria-label="Suite and Test Manager">
+      <h1>Integration Testing</h1>
+      <div>
+        <label>Suites
+          <select id="suiteSelect"></select>
+        </label>
+        <div class="controls">
+          <button id="newSuiteBtn">New Suite</button>
+          <button id="deleteSuiteBtn" class="small">Delete</button>
+        </div>
+        <label>Tests
+          <select id="testSelect"></select>
+        </label>
+        <div class="controls">
+          <button id="newTestBtn">New Test</button>
+          <button id="deleteTestBtn" class="small">Delete</button>
+        </div>
+        <label>Quick Actions</label>
+        <div class="controls">
+          <button id="importBtn">Import JSON</button>
+          <button id="exportBtn">Export JSON</button>
+          <button id="loadSampleBtn">Load Sample</button>
+        </div>
+        <label>Fuzzer / Randomizer</label>
+        <div class="controls">
+          <label class="inline">Seed <input id="seedInput" type="number" value="1" style="width:90px"></label>
+          <label class="inline">Paths <input id="fuzzPaths" type="number" value="10" style="width:80px"></label>
+          <button id="runFuzzerBtn">Run Fuzzer</button>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <label>Parallel Runs
+          <input id="parallelRuns" type="number" min="1" value="1" />
+        </label>
+        <label>Worker Speed (ms)
+          <input id="workerSpeed" type="number" min="0" value="200" />
+        </label>
+        <label>Auto-reset state before run
+          <input id="autoReset" type="checkbox" checked />
+        </label>
+      </div>
+      <div style="margin-top:10px;">
+        <label>Persist / Sharing</label>
+        <div class="controls">
+          <button id="copyJson">Copy JSON</button>
+          <button id="downloadJson">Download</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane center" aria-label="Test Builder and Editor">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <label>Suite Name
+            <input id="suiteName" type="text">
+          </label>
+          <label>Test Name
+            <input id="testName" type="text">
+          </label>
+        </div>
+        <div style="text-align:right;">
+          <label>Run Controls</label>
+          <div class="controls">
+            <button id="runBtn">Run</button>
+            <button id="stepBtn">Step</button>
+            <button id="pauseBtn">Pause</button>
+            <button id="stopBtn">Stop</button>
+            <button id="rewindBtn">Rewind</button>
+          </div>
+          <div class="controls" style="margin-top:4px;">
+            <label class="inline">Speed <input id="speed" type="range" min="0" max="1000" value="200" style="width:140px"></label>
+            <label class="inline">Breakpoint <input id="breakpointToggle" type="checkbox"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls" style="margin-top:8px;">
+        <button id="addStepBtn">Add Step</button>
+        <button id="insertStepBtn">Insert Step at Cursor</button>
+        <button id="duplicateStepBtn">Duplicate Step</button>
+        <button id="clearStepsBtn">Clear Steps</button>
+      </div>
+
+      <div class="steps" id="stepsContainer" aria-live="polite"></div>
+
+      <div style="margin-top:10px;">
+        <label>Test-level Variables (initial state as JSON)</label>
+        <textarea id="initialVars" placeholder='{"count":0,"status":"idle"}'></textarea>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Notes / Description</label>
+        <textarea id="testNotes" placeholder="Test description..."></textarea>
+      </div>
+    </div>
+
+    <div class="pane right" aria-label="Execution and State">
+      <h2 style="font-size:14px;margin:0 0 8px 0;">Execution</h2>
+
+      <div class="controls">
+        <label>Worker Count
+          <input id="workers" type="number" min="1" value="1" />
+        </label>
+        <label>Run Until Breakpoint
+          <input id="runToBreakpoint" type="checkbox" />
+        </label>
+        <button id="stopAllBtn">Stop All</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>Live Log</label>
+        <pre id="log" class="log"></pre>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>State (current)</label>
+        <pre id="stateView" class="kv"></pre>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>History Snapshots</label>
+        <div id="snapshots" style="max-height:140px; overflow:auto; border:1px solid #ddd; padding:6px; font-family:monospace;"></div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>Assertions Summary</label>
+        <div id="assertSummary" class="muted">No runs yet</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // Integration Testing Playground - heavy interactivity, plain visuals.
+
+    // Utility: deep clone
+    function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
+
+    // Simple seeded RNG (mulberry32)
+    function makeRNG(seed){
+      let t = seed >>> 0;
+      return function(){
+        t += 0x6D2B79F5;
+        let r = Math.imul(t ^ t >>> 15, 1 | t);
+        r ^= r + Math.imul(r ^ r >>> 7, 61 | r);
+        return ((r ^ r >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    // Model
+    let model = {
+      suites: [],
+      activeSuiteIndex: -1,
+      activeTestIndex: -1
+    };
+
+    // Execution engine supports parallel workers
+    let engine = {
+      running: false,
+      paused: false,
+      workers: [],
+      runIdSeq: 1
+    };
+
+    // DOM refs
+    const suiteSelect = document.getElementById('suiteSelect');
+    const testSelect = document.getElementById('testSelect');
+    const suiteName = document.getElementById('suiteName');
+    const testName = document.getElementById('testName');
+    const stepsContainer = document.getElementById('stepsContainer');
+    const initialVarsInput = document.getElementById('initialVars');
+    const testNotes = document.getElementById('testNotes');
+    const logEl = document.getElementById('log');
+    const stateView = document.getElementById('stateView');
+    const snapshotsEl = document.getElementById('snapshots');
+    const assertSummary = document.getElementById('assertSummary');
+    const speedInput = document.getElementById('speed');
+    const runBtn = document.getElementById('runBtn');
+    const stepBtn = document.getElementById('stepBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const rewindBtn = document.getElementById('rewindBtn');
+    const addStepBtn = document.getElementById('addStepBtn');
+    const insertStepBtn = document.getElementById('insertStepBtn');
+    const duplicateStepBtn = document.getElementById('duplicateStepBtn');
+    const clearStepsBtn = document.getElementById('clearStepsBtn');
+    const seedInput = document.getElementById('seedInput');
+    const fuzzPaths = document.getElementById('fuzzPaths');
+    const runFuzzerBtn = document.getElementById('runFuzzerBtn');
+    const parallelRuns = document.getElementById('parallelRuns');
+    const workerSpeed = document.getElementById('workerSpeed');
+    const autoReset = document.getElementById('autoReset');
+    const newSuiteBtn = document.getElementById('newSuiteBtn');
+    const deleteSuiteBtn = document.getElementById('deleteSuiteBtn');
+    const newTestBtn = document.getElementById('newTestBtn');
+    const deleteTestBtn = document.getElementById('deleteTestBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const loadSampleBtn = document.getElementById('loadSampleBtn');
+    const copyJsonBtn = document.getElementById('copyJson');
+    const downloadJsonBtn = document.getElementById('downloadJson');
+    const workersInput = document.getElementById('workers');
+    const stopAllBtn = document.getElementById('stopAllBtn');
+    const breakpointToggle = document.getElementById('breakpointToggle');
+    const runToBreakpoint = document.getElementById('runToBreakpoint');
+
+    // Helpers
+    function log(msg){
+      const time = new Date().toISOString().slice(11,23);
+      logEl.textContent += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function resetLog(){
+      logEl.textContent = '';
+    }
+
+    function updateSuiteTestSelectors(){
+      // update suite select
+      suiteSelect.innerHTML = '';
+      model.suites.forEach((s,i)=>{
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = s.name || `Suite ${i+1}`;
+        suiteSelect.appendChild(opt);
+      });
+      if(model.activeSuiteIndex >= model.suites.length) model.activeSuiteIndex = model.suites.length - 1;
+      suiteSelect.value = model.activeSuiteIndex >=0 ? model.activeSuiteIndex : '';
+      // update tests
+      refreshActiveSelections();
+    }
+
+    function refreshActiveSelections(){
+      testSelect.innerHTML = '';
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite){
+        suiteName.value = '';
+        testName.value = '';
+        stepsContainer.innerHTML = '';
+        initialVarsInput.value = '{}';
+        testNotes.value = '';
+        return;
+      }
+      suiteName.value = suite.name || '';
+      suite.tests.forEach((t,ti)=>{
+        const opt = document.createElement('option');
+        opt.value = ti;
+        opt.textContent = t.name || `Test ${ti+1}`;
+        testSelect.appendChild(opt);
+      });
+      if(model.activeTestIndex >= suite.tests.length) model.activeTestIndex = suite.tests.length - 1;
+      testSelect.value = model.activeTestIndex >=0 ? model.activeTestIndex : '';
+      renderTestEditor();
+    }
+
+    function renderTestEditor(){
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite || model.activeTestIndex < 0){ stepsContainer.innerHTML=''; initialVarsInput.value='{}'; testName.value=''; testNotes.value=''; return; }
+      const test = suite.tests[model.activeTestIndex];
+      testName.value = test.name || '';
+      initialVarsInput.value = JSON.stringify(test.initialVars || {}, null, 2);
+      testNotes.value = test.notes || '';
+      // Render steps
+      stepsContainer.innerHTML = '';
+      test.steps.forEach((step, idx) => {
+        const div = document.createElement('div');
+        div.className = 'step';
+        div.dataset.index = idx;
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.innerHTML = `<div><strong>#${idx+1}</strong> <span class="muted">${step.type}</span> - <span class="muted">${step.title||''}</span></div>`;
+        const actions = document.createElement('div');
+        actions.innerHTML = `
+          <button class="small editBtn">Edit</button>
+          <button class="small upBtn">↑</button>
+          <button class="small downBtn">↓</button>
+          <button class="small dupBtn">Dup</button>
+          <button class="small delBtn">Del</button>
+          <label class="checkbox-inline small">BP <input type="checkbox" class="bpChk"></label>
+        `;
+        header.appendChild(actions);
+        div.appendChild(header);
+
+        const details = document.createElement('div');
+        details.style.marginTop='6px';
+        details.innerHTML = `<div><em class="muted">${step.description || ''}</em></div>`;
+        div.appendChild(details);
+
+        stepsContainer.appendChild(div);
+
+        // wire buttons
+        const editBtn = div.querySelector('.editBtn');
+        const upBtn = div.querySelector('.upBtn');
+        const downBtn = div.querySelector('.downBtn');
+        const delBtn = div.querySelector('.delBtn');
+        const dupBtn = div.querySelector('.dupBtn');
+        const bpChk = div.querySelector('.bpChk');
+
+        bpChk.checked = !!step.breakpoint;
+
+        editBtn.onclick = ()=>openStepEditor(idx);
+        upBtn.onclick = ()=>{ moveStep(idx, idx-1); };
+        downBtn.onclick = ()=>{ moveStep(idx, idx+1); };
+        delBtn.onclick = ()=>{ deleteStep(idx); };
+        dupBtn.onclick = ()=>{ duplicateStep(idx); };
+        bpChk.onchange = (e)=>{ step.breakpoint = e.target.checked; saveModel(); };
+      });
+
+      // select first step editor by default
+    }
+
+    function openStepEditor(index){
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) return;
+      const test = suite.tests[model.activeTestIndex];
+      const step = test.steps[index];
+      // open a prompt-driven editor (plain UI)
+      const newTitle = prompt('Step title', step.title || '');
+      if(newTitle === null) return;
+      step.title = newTitle;
+      const newType = prompt('Step type (action/assert/delay/conditional/loop/mock/random):', step.type || 'action');
+      if(newType === null) return;
+      step.type = newType;
+      step.description = prompt('Description / help text', step.description || '') || '';
+      // type-specific params
+      if(step.type === 'action'){
+        const code = prompt('Action code (JS expression or assignment). Use "vars" object to read/write, e.g. vars.count = (vars.count||0)+1;','' + (step.params && step.params.code || 'vars.count = (vars.count||0) + 1;'));
+        if(code === null) return;
+        step.params = { code };
+      } else if(step.type === 'assert'){
+        const expr = prompt('Assertion expression (JS returning boolean). Use "vars" and "last" and "rng". Example: vars.count === 2','' + (step.params && step.params.expr || 'vars.count === 1'));
+        if(expr === null) return;
+        step.params = { expr };
+      } else if(step.type === 'delay'){
+        const ms = prompt('Delay milliseconds', step.params && step.params.ms || '100');
+        if(ms === null) return;
+        step.params = { ms: Number(ms) };
+      } else if(step.type === 'conditional'){
+        const expr = prompt('Condition expression (JS). If true, goto "onTrue" index, else "onFalse" index. Use "vars". Example: vars.count>3','' + (step.params && step.params.expr || 'vars.count>0'));
+        if(expr === null) return;
+        const onTrue = prompt('Index to jump to if true (1-based index or "end")', step.params && step.params.onTrue || (index+1).toString());
+        if(onTrue === null) return;
+        const onFalse = prompt('Index to jump to if false (1-based index or "end")', step.params && step.params.onFalse || (index+2).toString());
+        if(onFalse === null) return;
+        step.params = { expr, onTrue, onFalse };
+      } else if(step.type === 'loop'){
+        const count = prompt('Repeat count expression (JS) using "vars" and "last". Example: 3','' + (step.params && step.params.count || '3'));
+        if(count === null) return;
+        const bodyIndex = prompt('Start index of loop body (1-based)', '' + (step.params && step.params.bodyIndex || (index+1)));
+        if(bodyIndex === null) return;
+        step.params = { count, bodyIndex: Number(bodyIndex) };
+      } else if(step.type === 'mock'){
+        const name = prompt('Mock name (identifier)', step.params && step.params.name || 'serviceA');
+        if(name === null) return;
+        const latency = prompt('Latency ms expression (JS using rng)', step.params && step.params.latency || '50 + Math.floor(rng()*200)');
+        if(latency === null) return;
+        const failProb = prompt('Failure probability (0-1 expression)', step.params && step.params.failProb || 'rng()<0.2');
+        if(failProb === null) return;
+        step.params = { name, latency, failProb };
+      } else if(step.type === 'random'){
+        const actionCount = prompt('Number of random actions to choose from', step.params && step.params.actionCount || '3');
+        if(actionCount === null) return;
+        const template = prompt('Action templates (semicolon separated JS code using vars). Example: vars.x++; ; vars.x+=2;','' + (step.params && step.params.templates || 'vars.x++;;vars.x+=2;'));
+        if(template === null) return;
+        step.params = { actionCount: Number(actionCount), templates: template };
+      } else {
+        // generic params prompt
+        const raw = prompt('Arbitrary JSON params for step', JSON.stringify(step.params||{}));
+        if(raw === null) return;
+        try{ step.params = JSON.parse(raw); } catch(e){ step.params = { raw }; }
+      }
+      saveModel();
+      renderTestEditor();
+    }
+
+    function moveStep(from, to){
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) return;
+      const test = suite.tests[model.activeTestIndex];
+      if(to<0 || to>=test.steps.length) return;
+      const [s] = test.steps.splice(from,1);
+      test.steps.splice(to,0,s);
+      saveModel();
+      renderTestEditor();
+    }
+
+    function deleteStep(idx){
+      if(!confirm('Delete step #' + (idx+1) + '?')) return;
+      const suite = model.suites[model.activeSuiteIndex];
+      const test = suite.tests[model.activeTestIndex];
+      test.steps.splice(idx,1);
+      saveModel();
+      renderTestEditor();
+    }
+
+    function duplicateStep(idx){
+      const suite = model.suites[model.activeSuiteIndex];
+      const test = suite.tests[model.activeTestIndex];
+      test.steps.splice(idx+1, 0, deepClone(test.steps[idx]));
+      saveModel();
+      renderTestEditor();
+    }
+
+    function saveModel(){
+      // persist minimal fields from editor to model
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) return;
+      suite.name = suiteName.value;
+      const test = suite.tests[model.activeTestIndex];
+      if(!test) return;
+      test.name = testName.value;
+      try{
+        test.initialVars = JSON.parse(initialVarsInput.value || '{}');
+      }catch(e){
+        // keep old if parse fails
+      }
+      test.notes = testNotes.value;
+      updateSuiteTestSelectors();
+    }
+
+    // Execution primitives
+    function evaluateExpression(expr, ctx){
+      // safe-ish wrapper: provide vars, last, rng, lastResult
+      try{
+        const fn = new Function('vars','last','rng','lastRes','return (' + expr + ')');
+        return fn(ctx.vars, ctx.last, ctx.rng, ctx.lastRes);
+      }catch(e){
+        throw new Error('Eval error: ' + e.message + ' in expression: ' + expr);
+      }
+    }
+
+    async function executeStep(step, state, ctx){
+      // step: object; state: {vars, last, history}; ctx: {rng, runId, workerId, log}
+      const startVars = deepClone(state.vars);
+      const result = { status: 'ok', message:'', stepTitle: step.title || '', stepType: step.type };
+      try{
+        if(step.type === 'action'){
+          // code may be assignment expression or statements
+          const code = step.params && step.params.code || '';
+          // execute code with Function wrapper
+          const fn = new Function('vars','rng','last','lastRes', code);
+          const res = fn(state.vars, ctx.rng, state.last, state.lastRes);
+          state.lastRes = res;
+          result.message = 'action executed';
+        } else if(step.type === 'assert'){
+          const expr = step.params && step.params.expr || 'true';
+          const ok = !!evaluateExpression(expr, {vars:state.vars, last:state.last, rng:ctx.rng, lastRes: state.lastRes});
+          result.ok = ok;
+          result.status = ok ? 'pass' : 'fail';
+          result.message = 'assert ' + (ok ? 'passed' : 'FAILED') + ' ('+expr+')';
+        } else if(step.type === 'delay'){
+          const ms = Number(step.params && step.params.ms || 0);
+          result.message = `delay ${ms}ms`;
+          await new Promise(res=>setTimeout(res, ms));
+        } else if(step.type === 'conditional'){
+          const expr = step.params && step.params.expr || 'false';
+          const val = !!evaluateExpression(expr, {vars:state.vars, last:state.last, rng:ctx.rng, lastRes: state.lastRes});
+          result.cond = val;
+          result.message = 'condition ' + (val?'true':'false') + ' ('+expr+')';
+          // result.jumpTo property handled by runner
+        } else if(step.type === 'loop'){
+          const countExpr = step.params && step.params.count || '1';
+          const count = Number(evaluateExpression(countExpr, {vars:state.vars, last:state.last, rng:ctx.rng, lastRes: state.lastRes})) || 0;
+          result.message = `loop ${count} times`;
+          // we return count; runner handles jumping
+          result.loopCount = count;
+        } else if(step.type === 'mock'){
+          // simulate external call
+          const latency = Number(evaluateExpression(step.params.latency || '0', {vars:state.vars, last:state.last, rng:ctx.rng, lastRes: state.lastRes})) || 0;
+          const fail = !!evaluateExpression(step.params.failProb || 'false', {vars:state.vars, last:state.last, rng:ctx.rng, lastRes: state.lastRes});
+          result.message = `mock ${step.params.name} -> ${fail ? 'FAIL' : 'OK'} after ${latency}ms`;
+          await new Promise(res=>setTimeout(res, latency));
+          result.ok = !fail;
+          result.status = fail ? 'fail' : 'pass';
+          if(fail){
+            // optionally set an error variable
+            state.vars['error_'+(step.params.name||'mock')] = true;
+          }else{
+            state.vars['last_'+(step.params.name||'mock')] = 'ok';
+          }
+        } else if(step.type === 'random'){
+          // pick one template to execute
+          const templates = (step.params.templates || '').split(';;').filter(Boolean);
+          if(templates.length === 0){
+            result.message = 'no templates';
+          } else {
+            const idx = Math.floor(ctx.rng() * templates.length);
+            const code = templates[idx];
+            const fn = new Function('vars','rng','last','lastRes', code);
+            const res = fn(state.vars, ctx.rng, state.last, state.lastRes);
+            state.lastRes = res;
+            result.message = 'random action #' + idx;
+          }
+        } else {
+          result.message = 'unknown step type';
+        }
+        // update last
+        state.last = { stepTitle: step.title || '', type: step.type, varsDelta: diffVars(startVars, state.vars) };
+        return result;
+      }catch(e){
+        result.status = 'error';
+        result.message = 'Exception: ' + e.message;
+        return result;
+      }
+    }
+
+    function diffVars(before, after){
+      const dif = {};
+      const keys = new Set([...Object.keys(before||{}), ...Object.keys(after||{})]);
+      keys.forEach(k=>{
+        const a = before[k], b = after[k];
+        if(JSON.stringify(a) !== JSON.stringify(b)) dif[k] = { before: a, after: b };
+      });
+      return dif;
+    }
+
+    // Runner: executes a test instance (single worker)
+    async function runTestInstance(test, opts){
+      // opts: {runId, workerId, seed, speedMs, onLog, stopSignal, autoReset}
+      const runId = opts.runId || ('run'+(engine.runIdSeq++));
+      const rng = makeRNG(Number(opts.seed) || 1);
+      let state = { vars: deepClone(test.initialVars || {}), last: null, lastRes: null, history: [] };
+      const snapshots = [];
+      const assertions = { passed:0, failed:0, errors:0, total:0 };
+      const log = (m)=>opts.onLog && opts.onLog(`[${runId}#${opts.workerId}] ${m}`);
+      log('START (seed='+opts.seed+')');
+      // initial snapshot
+      snapshots.push({ step:0, vars: deepClone(state.vars) });
+      const steps = test.steps;
+      let idx = 0;
+      let loopCounterStack = []; // for nested loops: store {remaining, startIndex}
+      let stopped = false;
+      async function stopIfRequested(){
+        if(opts.stopSignal && opts.stopSignal.cancelled) { stopped = true; throw new Error('Stopped'); }
+      }
+      try{
+        while(idx < steps.length){
+          await stopIfRequested();
+          const step = steps[idx];
+          // breakpoint handling
+          if(step.breakpoint && breakpointToggle.checked){
+            log('Hit breakpoint at step ' + (idx+1) + ': ' + (step.title || step.type));
+            if(runToBreakpoint.checked){
+              // pause entire run loop
+              await new Promise((res,rej)=>{
+                opts.onLog && opts.onLog(`[${runId}#${opts.workerId}] Paused at breakpoint, waiting...`);
+                const cb = ()=>{ document.removeEventListener('continueRun', cb); res(); };
+                document.addEventListener('continueRun', cb);
+              });
+            } else {
+              // just pause briefly
+              await new Promise(r=>setTimeout(r, 50));
+            }
+          }
+
+          const res = await executeStep(step, state, {rng, runId, workerId: opts.workerId, log});
+          const sNum = idx+1;
+          const summary = `${sNum}/${steps.length} [${step.type}] ${step.title||''} => ${res.status || 'ok'} ${res.message? '- '+res.message : ''}`;
+          log(summary);
+          // snapshot after step
+          snapshots.push({ step: sNum, vars: deepClone(state.vars), last: state.last, res });
+          // assertions count
+          if(res.status === 'fail') assertions.failed++, assertions.total++;
+          else if(res.status === 'pass') assertions.passed++, assertions.total++;
+          else if(res.status === 'error') assertions.errors++, assertions.total++;
+          // conditional and loop handling
+          if(step.type === 'conditional'){
+            const cond = !!res.cond;
+            let target = cond ? step.params.onTrue : step.params.onFalse;
+            if(String(target).toLowerCase() === 'end'){ idx = steps.length; continue; }
+            const t = Number(target);
+            if(!isNaN(t)){
+              // convert 1-based index to 0-based
+              idx = Math.max(0, Math.min(steps.length, t-1));
+              continue;
+            } else {
+              // cannot parse, just next
+            }
+          } else if(step.type === 'loop'){
+            const count = res.loopCount || 0;
+            if(count <= 0){
+              idx++;
+              continue;
+            } else {
+              // push a loop frame
+              loopCounterStack.push({ remaining: count, bodyStart: (step.params && step.params.bodyIndex ? (step.params.bodyIndex - 1) : idx + 1), loopStepIndex: idx });
+              // go to bodyStart
+              idx = loopCounterStack[loopCounterStack.length-1].bodyStart;
+              continue;
+            }
+          } else {
+            // normal progression, but handle loop stack if we are at end of body
+            if(loopCounterStack.length > 0){
+              // if current index is last step or next index beyond last of loop? We check whether next step would surpass loop boundaries by detecting when we return to step after loop
+              // Simple approach: when we hit the step that started the loop, decrement remaining
+              const top = loopCounterStack[loopCounterStack.length-1];
+              if(idx === top.loopStepIndex){
+                top.remaining--;
+                if(top.remaining > 0){
+                  idx = top.bodyStart;
+                  continue;
+                } else {
+                  loopCounterStack.pop();
+                  idx++;
+                  continue;
+                }
+              }
+            }
+            idx++;
+          }
+
+          // pacing
+          if(opts.speedMs) await new Promise(r=>setTimeout(r, opts.speedMs));
+        }
+        log('COMPLETE');
+      }catch(e){
+        if(e.message === 'Stopped'){
+          log('STOPPED');
+        } else {
+          log('ERROR: ' + e.message);
+        }
+      } finally{
+        // final snapshot
+        snapshots.push({ step: 'end', vars: deepClone(state.vars) });
+      }
+      return { runId, snapshots, assertions, finalState: state.vars };
+    }
+
+    // UI: wiring
+    function ensureSuiteExists(){
+      if(model.suites.length === 0){
+        model.suites.push({ name: 'Default Suite', tests: [] });
+        model.activeSuiteIndex = 0;
+      }
+      if(model.suites[model.activeSuiteIndex].tests.length === 0){
+        model.suites[model.activeSuiteIndex].tests.push({
+          name: 'Default Test',
+          steps: [],
+          initialVars: {},
+          notes: ''
+        });
+        model.activeTestIndex = 0;
+      }
+      updateSuiteTestSelectors();
+    }
+
+    // Buttons
+    newSuiteBtn.onclick = ()=>{
+      const name = prompt('Suite name', 'Suite ' + (model.suites.length+1));
+      if(!name) return;
+      model.suites.push({ name, tests: [] });
+      model.activeSuiteIndex = model.suites.length - 1;
+      model.activeTestIndex = -1;
+      ensureSuiteExists();
+      saveModel();
+    };
+    deleteSuiteBtn.onclick = ()=>{
+      if(model.activeSuiteIndex < 0) return;
+      if(!confirm('Delete suite?')) return;
+      model.suites.splice(model.activeSuiteIndex,1);
+      model.activeSuiteIndex = Math.min(model.activeSuiteIndex, model.suites.length -1);
+      saveModel();
+      updateSuiteTestSelectors();
+    };
+    newTestBtn.onclick = ()=>{
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) { alert('Create a suite first'); return; }
+      const name = prompt('Test name', 'Test ' + (suite.tests.length+1));
+      if(!name) return;
+      suite.tests.push({ name, steps: [], initialVars: {}, notes: '' });
+      model.activeTestIndex = suite.tests.length - 1;
+      saveModel();
+      renderTestEditor();
+    };
+    deleteTestBtn.onclick = ()=>{
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) return;
+      if(model.activeTestIndex < 0) return;
+      if(!confirm('Delete test?')) return;
+      suite.tests.splice(model.activeTestIndex,1);
+      model.activeTestIndex = Math.max(0, suite.tests.length - 1);
+      saveModel();
+      updateSuiteTestSelectors();
+    };
+
+    suiteSelect.onchange = (e)=>{ model.activeSuiteIndex = Number(e.target.value); model.activeTestIndex = 0; refreshActiveSelections(); };
+    testSelect.onchange = (e)=>{ model.activeTestIndex = Number(e.target.value); renderTestEditor(); };
+
+    addStepBtn.onclick = ()=>{
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) { alert('Create a suite/test first'); return; }
+      const test = suite.tests[model.activeTestIndex];
+      if(!test) return;
+      // default new step
+      const newStep = { type:'action', title:'New action', description:'', params: { code: 'vars.count = (vars.count||0) + 1;' }, breakpoint:false };
+      test.steps.push(newStep);
+      saveModel();
+      renderTestEditor();
+    };
+    insertStepBtn.onclick = ()=>{
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) return;
+      const test = suite.tests[model.activeTestIndex];
+      if(!test) return;
+      const idx = prompt('Insert at index (1-based). Leave empty to append', '');
+      if(idx === null) return;
+      const i = idx ? Math.max(0, Number(idx)-1) : test.steps.length;
+      const newStep = { type:'action', title:'Inserted action', description:'', params: { code: 'vars.count = (vars.count||0) + 1;' } };
+      test.steps.splice(i,0,newStep);
+      saveModel();
+      renderTestEditor();
+    };
+    duplicateStepBtn.onclick = ()=>{
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite) return;
+      const test = suite.tests[model.activeTestIndex];
+      if(!test) return;
+      const idx = prompt('Duplicate index (1-based)', '1');
+      if(idx === null) return;
+      const i = Math.max(0, Number(idx)-1);
+      if(i < 0 || i >= test.steps.length){ alert('Invalid index'); return; }
+      test.steps.splice(i+1,0, deepClone(test.steps[i]));
+      saveModel();
+      renderTestEditor();
+    };
+    clearStepsBtn.onclick = ()=>{
+      if(!confirm('Clear all steps?')) return;
+      const suite = model.suites[model.activeSuiteIndex];
+      const test = suite.tests[model.activeTestIndex];
+      test.steps = [];
+      saveModel();
+      renderTestEditor();
+    };
+
+    exportBtn.onclick = ()=>{
+      const json = JSON.stringify(model, null, 2);
+      const w = window.open();
+      w.document.body.pre.textContent = json;
+      alert('JSON copy opened in new window (you can save from there)');
+    };
+    importBtn.onclick = ()=>{
+      const raw = prompt('Paste JSON to import');
+      if(!raw) return;
+      try{
+        const parsed = JSON.parse(raw);
+        model = parsed;
+        model.activeSuiteIndex = model.activeSuiteIndex || 0;
+        model.activeTestIndex = model.activeTestIndex || 0;
+        updateSuiteTestSelectors();
+      }catch(e){
+        alert('Parse error: ' + e.message);
+      }
+    };
+    loadSampleBtn.onclick = ()=>{ loadSample(); };
+
+    copyJsonBtn.onclick = ()=>{
+      const txt = JSON.stringify(model, null, 2);
+      navigator.clipboard && navigator.clipboard.writeText(txt).then(()=>alert('Copied'), ()=>alert('Clipboard failed'));
+    };
+    downloadJsonBtn.onclick = ()=>{
+      const blob = new Blob([JSON.stringify(model, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'integration-tests.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    // Run controls
+    let stopSignalGlobal = { cancelled: false };
+    runBtn.onclick = async ()=>{
+      saveModel();
+      resetLog();
+      assertSummary.textContent = 'Running...';
+      const suite = model.suites[model.activeSuiteIndex];
+      if(!suite){ alert('No suite'); return; }
+      const test = suite.tests[model.activeTestIndex];
+      if(!test){ alert('No test'); return; }
+      const workers = Number(parallelRuns.value) || 1;
+      const speedMs = Number(workerSpeed.value) || 0;
+      const seed = Number(seedInput.value) || 1;
+      stopSignalGlobal = { cancelled: false };
+      const results = [];
+      for(let w=0; w<workers; w++){
+        const opts = { runId: 'run'+(engine.runIdSeq++), workerId: w+1, seed: seed + w, speedMs, onLog: (m)=>log(m), stopSignal: stopSignalGlobal };
+        engine.workers.push(opts);
+      }
+      engine.running = true;
+      for(const opts of engine.workers){
+        runTestInstance(test, opts).then(r=>{
+          results.push(r);
+          // update final UI state using last result
+          if(r && r.finalState){
+            stateView.textContent = JSON.stringify(r.finalState, null, 2);
+            snapshotsEl.textContent = JSON.stringify(r.snapshots, null, 2);
+          }
+          updateAssertionsSummary(results);
+        }).catch(e=>{
+          log('Worker error: ' + e.message);
+        });
+      }
+      // wait for all
+      await Promise.all(engine.workers.map(o=>{})); // nothing, workers manage logs; provide mechanism to stop
+      // clear worker array
+      engine.workers = [];
+      engine.running = false;
+    };
+
+    function updateAssertionsSummary(results){
+      if(!results || results.length===0) { assertSummary.textContent = 'No runs yet'; return; }
+      const agg = { passed:0, failed:0, errors:0, total:0 };
+      results.forEach(r=>{
+        if(r && r.assertions){
+          agg.passed += r.assertions.passed || 0;
+          agg.failed += r.assertions.failed || 0;
+          agg.errors += r.assertions.errors || 0;
+          agg.total += r.assertions.total || 0;
+        }
+      });
+      assertSummary.textContent = `Assertions: ${agg.passed} passed, ${agg.failed} failed, ${agg.errors} errors (total ${agg.total}) across ${results.length} runs`;
+    }
+
+    pauseBtn.onclick = ()=>{ /* not implemented - toggle paused flag for future extension */ alert('Pause currently toggles via breakpoint or external continue event'); };
+
+    stopBtn.onclick = ()=>{
+      stopSignalGlobal.cancelled = true;
+      engine.workers = [];
+      engine.running = false;
+      log('Requested stop for current workers');
+    };
+
+    stopAllBtn.onclick = () => {
+      stopSignalGlobal.cancelled = true;
+      engine.workers = [];
+      engine.running = false;
+      log('STOP ALL requested');
+    };
+
+    rewindBtn.onclick = ()=>{
+      // reset logs and state
+      resetLog();
+      stateView.textContent = '{}';
+      snapshotsEl.textContent = '';
+      assertSummary.textContent = 'Rewound';
+      log('Rewind: cleared state and log');
+    };
+
+    // Step-run: execute single test run step-by-step (one worker)
+    stepBtn.onclick = async ()=>{
+      saveModel();
+      const suite = model.suites[model.activeSuiteIndex];
+      const test = suite && suite.tests[model.activeTestIndex];
+      if(!test) return;
+      // create a temporary single-step runner with snapshot history
+      const seed = Number(seedInput.value) || 1;
+      const rng = makeRNG(seed);
+      let state = { vars: deepClone(test.initialVars || {}), last: null, lastRes: null };
+      let index = 0;
+      let cont = true;
+      // We will prompt user repeatedly to step forward
+      while(cont && index < test.steps.length){
+        const step = test.steps[index];
+        const res = await executeStep(step, state, { rng, runId: 'interactive', workerId: 1, log:log });
+        log(`Step ${index+1}: ${res.status} - ${res.message}`);
+        stateView.textContent = JSON.stringify(state.vars, null, 2);
+        snapshotsEl.textContent += JSON.stringify({ idx:index+1, vars: state.vars, res }, null, 2) + '\n';
+        if(step.breakpoint && breakpointToggle.checked){
+          alert('Hit breakpoint at step ' + (index+1));
+          // wait for user to continue or cancel
+          const c = confirm('Continue stepping?');
+          if(!c) break;
+        }
+        const contResp = confirm('Step forward to next? (Cancel to stop)');
+        if(!contResp) break;
+        index++;
+      }
+      log('Step run complete or stopped by user');
+    };
+
+    // Fuzzer: generate random sequences and run many paths
+    runFuzzerBtn.onclick = async ()=>{
+      saveModel();
+      const suite = model.suites[model.activeSuiteIndex];
+      const test = suite && suite.tests[model.activeTestIndex];
+      if(!test){ alert('No test selected'); return; }
+      const seed = Number(seedInput.value) || 1;
+      const paths = Number(fuzzPaths.value) || 10;
+      resetLog();
+      log(`Fuzzer: running ${paths} paths (seed ${seed})`);
+      const results = [];
+      for(let p=0;p<paths;p++){
+        const rng = makeRNG(seed + p);
+        // create a clone of test with some randomized steps: replace some actions with random increments
+        const clone = deepClone(test);
+        // mutate some action steps randomly
+        clone.steps.forEach(s=>{
+          if(s.type === 'action' && Math.random() < 0.3){
+            s.params.code = `vars.fuzz_${p} = (vars.fuzz_${p}||0) + ${Math.floor(rng()*10)};`;
+          }
+        });
+        const opts = { runId: 'fuzz'+p, workerId: 1, seed: seed + p, speedMs: 0, onLog: (m)=>log(m), stopSignal: { cancelled:false } };
+        const r = await runTestInstance(clone, opts);
+        results.push(r);
+        log('Fuzz path ' + p + ' finished');
+      }
+      // show aggregated summary
+      let totalPass=0, totalFail=0;
+      results.forEach(r=>{
+        totalPass += r.assertions.passed || 0;
+        totalFail += r.assertions.failed || 0;
+      });
+      assertSummary.textContent = `Fuzzer: ${paths} runs, ${totalPass} assertions passed, ${totalFail} failed.`;
+      log('Fuzzer complete.');
+    };
+
+    // Sample initial data
+    function loadSample(){
+      model = {
+        suites: [
+          {
+            name: 'Sample Suite',
+            tests: [
+              {
+                name: 'Checkout Flow Test',
+                initialVars: { cart: [], loggedIn: false, retries: 0 },
+                notes: 'Simulates a checkout workflow with branching and mocks.',
+                steps: [
+                  { type:'action', title:'Add item', description:'Add item to cart', params: { code: 'vars.cart = vars.cart || []; vars.cart.push({id: "item1", qty: 1});' }, breakpoint:false },
+                  { type:'action', title:'Login', description:'Attempt login', params: { code: 'if(!vars.loggedIn){ if(Math.random()>0.5){ vars.loggedIn = true } else { vars.loggedIn=false }}' }, breakpoint:false },
+                  { type:'mock', title:'Call payment service', description:'Simulate payment gateway', params:{ name:'payment', latency: '100 + Math.floor(rng()*200)', failProb: 'rng()<0.3' }, breakpoint:true },
+                  { type:'conditional', title:'Payment success?', description:'Branch on payment result', params:{ expr: 'vars.last_payment_ok === true || vars.last_payment_ok === undefined ? true : false', onTrue: '5', onFalse: 'end' }, breakpoint:false },
+                  { type:'action', title:'Finalize order', description:'Create order id', params:{ code: 'vars.orderId = "ORD-" + Math.floor(rng()*100000); vars.completed = true;' }, breakpoint:false },
+                  { type:'assert', title:'Order completed', description:'Check completed', params:{ expr: 'vars.completed === true' }, breakpoint:false }
+                ]
+              }
+            ]
+          }
+        ],
+        activeSuiteIndex: 0,
+        activeTestIndex: 0
+      };
+      updateSuiteTestSelectors();
+      saveModel();
+      renderTestEditor();
+    }
+
+    // Initialize simple sample
+    loadSample();
+
+    // Wire save on edit fields
+    suiteName.onchange = saveModel;
+    testName.onchange = saveModel;
+    initialVarsInput.onchange = saveModel;
+    testNotes.onchange = saveModel;
+
+    // Small keyboard hook: 'c' to continue a paused run (used by breakpoint resume)
+    document.addEventListener('keydown', (e)=>{
+      if(e.key === 'c'){
+        const ev = new Event('continueRun');
+        document.dispatchEvent(ev);
+        log('Continue event dispatched');
+      }
+    });
+
+    // Accessibility hint
+    log('Integration Testing Playground loaded. Press "c" to continue past breakpoints when paused.');
+
+  </script>
+</body>
+</html>

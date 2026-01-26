@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Breadth-First Search (BFS) Interactive Explorer</title>
+<style>
+  /* Extremely minimal styling only for layout (black text on white background). */
+  html,body { height:100%; margin:0; font-family:Arial, sans-serif; color:#000; background:#fff; }
+  #app { display:flex; height:100vh; gap:8px; padding:8px; box-sizing:border-box; }
+  #controls { width:380px; overflow:auto; padding:6px; border:1px solid #000; }
+  #canvasWrap { flex:1; padding:6px; border:1px solid #000; display:flex; flex-direction:column; }
+  fieldset { margin-bottom:8px; padding:8px; }
+  label { display:block; margin:4px 0; font-size:13px; }
+  input, select, button, textarea { margin-right:6px; margin-top:4px; }
+  button { margin-bottom:6px; }
+  svg { width:100%; height:100%; border:1px solid #000; background:#fff; }
+  .small { font-size:12px; }
+  #log { width:100%; height:120px; }
+  #queueList, #historyIndex { width:100%; }
+  .controls-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .muted { font-size:12px; opacity:0.9; }
+  .tiny { font-size:11px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="controls">
+    <h3>Breadth-First Search (BFS) Explorer</h3>
+    <fieldset>
+      <legend>Graph Mode & Quick Generators</legend>
+      <div class="controls-row">
+        <label><input type="radio" name="mode" value="grid" checked> Grid mode</label>
+        <label><input type="radio" name="mode" value="free"> Free node mode</label>
+      </div>
+      <div>
+        <label>Grid rows: <input type="number" id="gridRows" value="8" min="1" style="width:60px;"></label>
+        <label>cols: <input type="number" id="gridCols" value="12" min="1" style="width:60px;"></label>
+        <button id="genGrid">Generate Grid</button>
+      </div>
+      <div>
+        <label>Obstacle density (0-1): <input id="obstDensity" type="number" min="0" max="1" step="0.05" value="0.15" style="width:80px;"></label>
+        <button id="randomObstacles">Randomize Obstacles</button>
+      </div>
+      <div>
+        <button id="presetMaze">Preset: Simple Maze</button>
+        <button id="presetDisconnected">Preset: Disconnected</button>
+      </div>
+      <div style="margin-top:6px;">
+        <label><input type="checkbox" id="directedGraph"> Directed edges</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Edit Tools (click elements in canvas)</legend>
+      <div class="controls-row">
+        <label><input type="radio" name="tool" value="select" checked> Select / Move</label>
+        <label><input type="radio" name="tool" value="addnode"> Add Node</label>
+        <label><input type="radio" name="tool" value="addedge"> Add Edge (click source then target)</label>
+        <label><input type="radio" name="tool" value="toggleObstacle"> Toggle Obstacle</label>
+        <label><input type="radio" name="tool" value="setStart"> Set Start</label>
+        <label><input type="radio" name="tool" value="toggleGoal"> Toggle Goal</label>
+      </div>
+      <div style="margin-top:6px;">
+        <button id="deleteSelected">Delete Selected</button>
+        <button id="clearGraph">Clear Graph</button>
+        <button id="autoConnect">Auto-connect nearest</button>
+      </div>
+      <div class="muted tiny">Edge creation in free mode: choose "Add Edge", click source then click target. Double-click node to delete (works too).</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>BFS Controls</legend>
+      <div>
+        <label>Start nodes (comma ids): <input id="startNodesInput" type="text" class="small" placeholder="e.g. 0,1 or r0c0"> </label>
+      </div>
+      <div>
+        <label>Stop policy:
+          <select id="stopPolicy">
+            <option value="first">Stop at first goal found</option>
+            <option value="all">Explore all reachable nodes</option>
+            <option value="k">Stop after K goals found</option>
+          </select>
+        </label>
+        <label id="kLabel" style="display:none">K: <input id="kValue" type="number" value="1" min="1" style="width:60px;"></label>
+      </div>
+      <div>
+        <label>Neighbor order:
+          <select id="neighborOrder">
+            <option value="id_asc">By id ascending</option>
+            <option value="id_desc">By id descending</option>
+            <option value="degree_asc">By degree ascending</option>
+            <option value="degree_desc">By degree descending</option>
+            <option value="random">Random</option>
+            <option value="custom">Custom order (csv below)</option>
+          </select>
+        </label>
+      </div>
+      <div>
+        <label>Custom neighbor preference (csv of node ids):</label>
+        <input id="customPreference" type="text" placeholder="id1,id2,..." style="width:100%;">
+      </div>
+
+      <div style="margin-top:6px;">
+        <button id="bfsReset">Reset BFS state</button>
+        <button id="bfsInit">Initialize BFS (load start nodes)</button>
+      </div>
+
+      <div style="margin-top:6px;" class="controls-row">
+        <button id="stepBtn">Step (space)</button>
+        <button id="runBtn">Run / Pause (r)</button>
+        <button id="fastForward">Run to completion</button>
+        <button id="stopBtn">Stop & Clear BFS</button>
+      </div>
+
+      <div>
+        <label>Speed (ms per step): <input type="range" id="speedSlider" min="50" max="2000" value="400"></label>
+      </div>
+
+      <div style="margin-top:6px;">
+        <button id="undoBtn">Undo (u)</button>
+        <button id="redoBtn">Redo (y)</button>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label>History step: <input id="historyIndex" type="range" min="0" max="0" value="0"></label>
+        <div class="muted tiny">Drag to jump to any saved step.</div>
+      </div>
+
+      <div style="margin-top:6px;">
+        <label><input id="showQueue" type="checkbox" checked> Show queue contents</label>
+        <label><input id="showPath" type="checkbox" checked> Show shortest path to last goal</label>
+        <label><input id="showParents" type="checkbox" checked> Show parent edges</label>
+        <label><input id="showDistances" type="checkbox" checked> Show distances</label>
+        <label><input id="showLayers" type="checkbox"> Show layer numbers</label>
+        <label><input id="visitOrder" type="checkbox"> Show visit order numbers</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Graph Import / Export</legend>
+      <div>
+        <button id="exportJson">Export JSON</button>
+        <button id="importJsonBtn">Import JSON</button>
+      </div>
+      <textarea id="jsonArea" placeholder='{"nodes":[...],"edges":[...],"directed":false}' style="width:100%;height:80px;"></textarea>
+      <div style="margin-top:6px;">
+        <button id="randomGraph">Random free-mode graph</button>
+        <label>nodes: <input id="randNodes" value="12" type="number" min="1" style="width:60px;"></label>
+        <label>edge prob: <input id="randEdgeProb" value="0.12" type="number" step="0.01" min="0" max="1" style="width:80px;"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Diagnostics & Live Info</legend>
+      <div>Visited count: <span id="visitedCount">0</span></div>
+      <div>Frontier (queue) size: <span id="frontierCount">0</span></div>
+      <div>Current node: <span id="currentNode">-</span></div>
+      <div>Found goals: <span id="foundGoals">0</span></div>
+      <div style="margin-top:6px;">
+        <label>Queue contents:</label>
+        <textarea id="queueList" readonly></textarea>
+      </div>
+      <div style="margin-top:6px;">
+        <label>Log / Timeline:</label>
+        <textarea id="log" readonly></textarea>
+      </div>
+    </fieldset>
+
+    <div style="font-size:12px;">
+      Keyboard: Space=Step, R=Run/Pause, F=FastForward, S=Reset, U=Undo, Y=Redo.
+    </div>
+  </div>
+
+  <div id="canvasWrap">
+    <div style="margin-bottom:6px;">
+      <button id="zoomIn">Zoom In</button>
+      <button id="zoomOut">Zoom Out</button>
+      <button id="fitView">Fit View</button>
+      <span class="muted tiny">Click canvas to add nodes in free mode. Drag nodes to move.</span>
+    </div>
+    <svg id="svgCanvas" viewBox="0 0 1200 800"></svg>
+  </div>
+</div>
+
+<script>
+/*
+  BFS Interactive Explorer
+  - Minimal visual style (black on white).
+  - Rich interactivity: grid/free mode, many controls, step/run, undo/redo, import/export, dynamic edits.
+*/
+
+/* -----------------------------
+   Data structures and state
+   ----------------------------- */
+
+let state = {
+  graph: { nodes: {}, edges: [] , directed:false },
+  mode: 'grid', // 'grid' or 'free'
+  tool: 'select', // edit tool
+  svgScale: 1,
+  bfs: {
+    initialized: false,
+    queue: [],
+    inQueue: new Set(),
+    visited: new Set(),
+    parents: {}, // child -> parent
+    distance: {}, // node -> dist
+    visitOrder: {},
+    stepCount: 0,
+    current: null,
+    goalsFound: new Set()
+  },
+  ui: {
+    running: false,
+    timer: null,
+    speed: 400,
+  },
+  history: [], // snapshots for undo/redo and time-travel
+  historyPos: -1,
+  nextNodeId: 0,
+  selection: null,
+  edgeTempSource: null
+};
+
+/* Basic helpers */
+function deepCopy(obj){
+  return JSON.parse(JSON.stringify(obj));
+}
+function nodeIdNum(id){
+  // try to parse numeric core id for random sort consistency
+  let n = parseFloat(id);
+  if(!isNaN(n)) return n;
+  return id;
+}
+
+/* -----------------------------
+   SVG drawing utilities
+   ----------------------------- */
+
+const svg = document.getElementById('svgCanvas');
+const NS = "http://www.w3.org/2000/svg";
+
+function clearSVG(){
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+}
+
+function drawGraph(){
+  clearSVG();
+  const g = state.graph;
+  // draw edges
+  for(let e of g.edges){
+    const a = g.nodes[e.from];
+    const b = g.nodes[e.to];
+    if(!a || !b) continue;
+    let line = document.createElementNS(NS,'line');
+    line.setAttribute('x1', a.x);
+    line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x);
+    line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', '#000');
+    line.setAttribute('stroke-width', 1.2);
+    line.setAttribute('data-from', e.from);
+    line.setAttribute('data-to', e.to);
+    if(state.bfs.parents[b.id] === a.id || state.bfs.parents[a.id] === b.id){
+      // highlight parent edges when showParents
+      if(document.getElementById('showParents').checked) line.setAttribute('stroke-width', 2.2);
+    }
+    svg.appendChild(line);
+    if(g.directed){
+      // draw a small arrow head
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let len = Math.hypot(dx,dy) || 1;
+      let ux = dx/len, uy = dy/len;
+      let arrowSize = 8;
+      let hx = b.x - ux*14, hy = b.y - uy*14;
+      let p1x = hx - uy*(arrowSize/2), p1y = hy + ux*(arrowSize/2);
+      let p2x = hx + uy*(arrowSize/2), p2y = hy - ux*(arrowSize/2);
+      let poly = document.createElementNS(NS,'polygon');
+      poly.setAttribute('points', `${b.x},${b.y} ${p1x},${p1y} ${p2x},${p2y}`);
+      poly.setAttribute('fill','#fff');
+      poly.setAttribute('stroke','#000');
+      poly.setAttribute('stroke-width','1');
+      svg.appendChild(poly);
+    }
+  }
+
+  // draw nodes
+  for(let id in g.nodes){
+    let n = g.nodes[id];
+    let group = document.createElementNS(NS,'g');
+    group.setAttribute('class','node');
+    group.setAttribute('data-id', id);
+    group.setAttribute('transform', `translate(${n.x},${n.y})`);
+    // circle
+    let r = 16;
+    let circ = document.createElementNS(NS,'circle');
+    circ.setAttribute('r', r);
+    circ.setAttribute('cx', 0);
+    circ.setAttribute('cy', 0);
+    circ.setAttribute('stroke', '#000');
+    circ.setAttribute('fill', n.obstacle ? '#fff' : '#fff'); // white fill; obstacle indicated by cross
+    circ.setAttribute('stroke-width', 1.2);
+    group.appendChild(circ);
+    // if obstacle draw X lines
+    if(n.obstacle){
+      let lx1 = document.createElementNS(NS,'line');
+      lx1.setAttribute('x1', -10); lx1.setAttribute('y1', -10);
+      lx1.setAttribute('x2', 10); lx1.setAttribute('y2', 10);
+      lx1.setAttribute('stroke','#000'); lx1.setAttribute('stroke-width',1.2);
+      group.appendChild(lx1);
+      let lx2 = document.createElementNS(NS,'line');
+      lx2.setAttribute('x1', -10); lx2.setAttribute('y1', 10);
+      lx2.setAttribute('x2', 10); lx2.setAttribute('y2', -10);
+      lx2.setAttribute('stroke','#000'); lx2.setAttribute('stroke-width',1.2);
+      group.appendChild(lx2);
+    }
+    // labels
+    let txt = document.createElementNS(NS,'text');
+    txt.setAttribute('x', 0); txt.setAttribute('y', 4);
+    txt.setAttribute('text-anchor','middle');
+    txt.setAttribute('font-size','11');
+    txt.setAttribute('font-family','Arial, sans-serif');
+    txt.textContent = id;
+    group.appendChild(txt);
+
+    // distance text
+    if(document.getElementById('showDistances').checked && state.bfs.distance[id] !== undefined){
+      let d = document.createElementNS(NS,'text');
+      d.setAttribute('x', 18); d.setAttribute('y', -18);
+      d.setAttribute('font-size','10');
+      d.setAttribute('font-family','Arial, sans-serif');
+      d.textContent = state.bfs.distance[id];
+      group.appendChild(d);
+    }
+    // visit order
+    if(document.getElementById('visitOrder').checked && state.bfs.visitOrder[id] !== undefined){
+      let v = document.createElementNS(NS,'text');
+      v.setAttribute('x', -18); v.setAttribute('y', -18);
+      v.setAttribute('font-size','10');
+      v.setAttribute('font-family','Arial, sans-serif');
+      v.textContent = state.bfs.visitOrder[id];
+      group.appendChild(v);
+    }
+    // layer number
+    if(document.getElementById('showLayers').checked && state.bfs.distance[id] !== undefined){
+      let l = document.createElementNS(NS,'text');
+      l.setAttribute('x', -18); l.setAttribute('y', 18);
+      l.setAttribute('font-size','10');
+      l.setAttribute('font-family','Arial, sans-serif');
+      l.textContent = 'L' + state.bfs.distance[id];
+      group.appendChild(l);
+    }
+    // marking start/goal/current
+    if(n.start){
+      let mark = document.createElementNS(NS,'text');
+      mark.setAttribute('x', 0); mark.setAttribute('y', -28);
+      mark.setAttribute('font-size','10');
+      mark.setAttribute('text-anchor','middle');
+      mark.textContent = 'START';
+      group.appendChild(mark);
+    }
+    if(n.goal){
+      let mark = document.createElementNS(NS,'text');
+      mark.setAttribute('x', 0); mark.setAttribute('y', 28);
+      mark.setAttribute('font-size','10');
+      mark.setAttribute('text-anchor','middle');
+      mark.textContent = 'GOAL';
+      group.appendChild(mark);
+    }
+    if(state.bfs.current === id){
+      let mark = document.createElementNS(NS,'text');
+      mark.setAttribute('x', 0); mark.setAttribute('y', -40);
+      mark.setAttribute('font-size','10');
+      mark.setAttribute('text-anchor','middle');
+      mark.textContent = 'CURRENT';
+      group.appendChild(mark);
+    }
+
+    // apply selection visual (simple: stroke-width larger)
+    if(state.selection === id){
+      circ.setAttribute('stroke-width', 2.4);
+    }
+
+    // clickable handlers via event delegation later
+    svg.appendChild(group);
+  }
+}
+
+/* -----------------------------
+   Graph operations
+   ----------------------------- */
+
+function addNode(x,y,id=null,opts={}){
+  if(id === null) id = generateNodeId();
+  let node = { id: id, x: x, y: y, obstacle: !!opts.obstacle, start: !!opts.start, goal: !!opts.goal };
+  state.graph.nodes[id] = node;
+  return id;
+}
+
+function generateNodeId(){
+  // uses incremental numeric id by default: 0,1,2... but keeps custom ids possible (grid r0c0)
+  let id = String(state.nextNodeId++);
+  while(state.graph.nodes[id]) id = String(state.nextNodeId++);
+  return id;
+}
+
+function removeNode(id){
+  delete state.graph.nodes[id];
+  state.graph.edges = state.graph.edges.filter(e => e.from !== id && e.to !== id);
+  // if BFS references this node, remove
+  if(state.bfs.inQueue.has(id)) state.bfs.inQueue.delete(id);
+  if(state.bfs.visited.has(id)) state.bfs.visited.delete(id);
+  delete state.bfs.parents[id];
+  delete state.bfs.distance[id];
+  delete state.bfs.visitOrder[id];
+  state.selection = null;
+}
+
+function addEdge(a,b){
+  if(!state.graph.nodes[a] || !state.graph.nodes[b]) return;
+  // prevent duplicate
+  if(state.graph.edges.some(e => e.from===a && e.to===b)) return;
+  state.graph.edges.push({from:a,to:b});
+  if(!state.graph.directed){
+    if(!state.graph.edges.some(e => e.from===b && e.to===a)) state.graph.edges.push({from:b,to:a});
+  }
+}
+
+function removeEdge(a,b){
+  state.graph.edges = state.graph.edges.filter(e => !(e.from===a && e.to===b));
+  if(!state.graph.directed) state.graph.edges = state.graph.edges.filter(e => !(e.from===b && e.to===a));
+}
+
+function neighborsOf(id){
+  let ns = [];
+  for(let e of state.graph.edges){
+    if(e.from === id){
+      // skip neighbor if node is obstacle?
+      let target = state.graph.nodes[e.to];
+      if(target && target.obstacle) continue;
+      ns.push(e.to);
+    }
+  }
+  return ns;
+}
+
+/* -----------------------------
+   Grid helpers
+   ----------------------------- */
+
+function generateGrid(rows, cols, spacing=60, startIdPrefix='r'){
+  state.graph = { nodes: {}, edges: [], directed: state.graph.directed };
+  state.nextNodeId = 0;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      let id = 'r'+r+'c'+c;
+      addNode(60 + c*spacing, 60 + r*spacing, id, {obstacle:false});
+    }
+  }
+  // connect 4-neighbors
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      let id = 'r'+r+'c'+c;
+      let d = [[1,0],[-1,0],[0,1],[0,-1]];
+      for(let [dr,dc] of d){
+        let rr=r+dr, cc=c+dc;
+        if(rr>=0 && rr<rows && cc>=0 && cc<cols){
+          let id2 = 'r'+rr+'c'+cc;
+          if(state.graph.directed) state.graph.edges.push({from:id,to:id2});
+          else {
+            // ensure pair added once
+            if(!state.graph.edges.some(e=>e.from===id && e.to===id2)) {
+              state.graph.edges.push({from:id,to:id2});
+              state.graph.edges.push({from:id2,to:id});
+            }
+          }
+        }
+      }
+    }
+  }
+  state.mode = 'grid';
+  // update nextNodeId to avoid conflicts with numeric ids
+  state.nextNodeId = Object.keys(state.graph.nodes).length + 1000;
+}
+
+/* -----------------------------
+   BFS algorithm / stepping
+   ----------------------------- */
+
+function bfsInitFromUI(){
+  // clear BFS state but keep graph, set start nodes from input or nodes marked
+  state.bfs = {
+    initialized: true,
+    queue: [],
+    inQueue: new Set(),
+    visited: new Set(),
+    parents: {},
+    distance: {},
+    visitOrder: {},
+    stepCount: 0,
+    current: null,
+    goalsFound: new Set()
+  };
+  let startText = document.getElementById('startNodesInput').value.trim();
+  let starts = [];
+  if(startText){
+    startText.split(',').map(s=>s.trim()).filter(Boolean).forEach(token=>{
+      if(state.graph.nodes[token]) starts.push(token);
+    });
+  }
+  // also include nodes explicitly marked as start
+  for(let id in state.graph.nodes) if(state.graph.nodes[id].start) starts.push(id);
+  // unique
+  starts = Array.from(new Set(starts));
+  if(starts.length === 0){
+    // take first node as default if any
+    let keys = Object.keys(state.graph.nodes);
+    if(keys.length) starts.push(keys[0]);
+  }
+  for(let s of starts){
+    enqueueIfNot(s, 0, null);
+  }
+  saveSnapshot('BFS initialized');
+  updateUI();
+}
+
+function enqueueIfNot(node, dist, parent){
+  if(!state.graph.nodes[node]) return;
+  if(state.graph.nodes[node].obstacle) return;
+  if(state.bfs.visited.has(node)) return;
+  if(state.bfs.inQueue.has(node)) return;
+  state.bfs.queue.push(node);
+  state.bfs.inQueue.add(node);
+  state.bfs.parents[node] = parent;
+  if(parent === null) state.bfs.distance[node] = 0;
+  else state.bfs.distance[node] = (state.bfs.distance[parent] || 0) + 1;
+}
+
+function getStopPolicy(){
+  return document.getElementById('stopPolicy').value;
+}
+
+function stepBFS(){
+  if(!state.bfs.initialized){
+    log('BFS not initialized; press "Initialize BFS" first.');
+    return;
+  }
+  if(state.bfs.queue.length === 0){
+    log('Queue empty. BFS finished.');
+    state.ui.running = false;
+    stopTimer();
+    updateUI();
+    saveSnapshot('Finished');
+    return;
+  }
+  // Dequeue
+  let current = state.bfs.queue.shift();
+  state.bfs.inQueue.delete(current);
+  state.bfs.current = current;
+  state.bfs.stepCount++;
+  state.bfs.visited.add(current);
+  state.bfs.visitOrder[current] = state.bfs.stepCount;
+  // check goals
+  if(state.graph.nodes[current] && state.graph.nodes[current].goal){
+    state.bfs.goalsFound.add(current);
+    log(`Goal found at ${current}`);
+    if(getStopPolicy() === 'first'){
+      // record then halt
+      saveSnapshot(`Found goal ${current}`);
+      state.ui.running = false;
+      stopTimer();
+      updateUI();
+      return;
+    } else if(getStopPolicy() === 'k'){
+      let k = parseInt(document.getElementById('kValue').value) || 1;
+      if(state.bfs.goalsFound.size >= k){
+        saveSnapshot(`Found ${k} goals`);
+        state.ui.running = false;
+        stopTimer();
+        updateUI();
+        return;
+      }
+    }
+  }
+
+  // Get neighbors and enqueue according to neighbor order
+  let neigh = neighborsOf(current);
+  neigh = applyNeighborOrder(neigh);
+  for(let nb of neigh){
+    if(state.bfs.visited.has(nb)) continue;
+    if(state.bfs.inQueue.has(nb)) continue;
+    enqueueIfNot(nb, state.bfs.distance[current]+1, current);
+  }
+
+  // logging
+  log(`Expanded ${current}; enqueued ${neigh.filter(n=>!state.bfs.visited.has(n) && !state.bfs.inQueue.has(n)).join(', ')}`);
+  saveSnapshot(`Step ${state.bfs.stepCount} expand ${current}`);
+  updateUI();
+}
+
+function applyNeighborOrder(list){
+  let method = document.getElementById('neighborOrder').value;
+  let l = Array.from(list);
+  if(method === 'id_asc') l.sort((a,b)=>(String(a)>String(b)?1:-1));
+  else if(method === 'id_desc') l.sort((a,b)=>(String(a)<String(b)?1:-1));
+  else if(method === 'degree_asc') l.sort((a,b)=>getDegree(a)-getDegree(b));
+  else if(method === 'degree_desc') l.sort((a,b)=>getDegree(b)-getDegree(a));
+  else if(method === 'random') for(let i=l.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[l[i],l[j]]=[l[j],l[i]];}
+  else if(method === 'custom'){
+    let pref = document.getElementById('customPreference').value.split(',').map(s=>s.trim()).filter(Boolean);
+    l.sort((a,b)=>{
+      let ai = pref.indexOf(a), bi = pref.indexOf(b);
+      if(ai === -1 && bi === -1) return String(a)>String(b)?1:-1;
+      if(ai === -1) return 1;
+      if(bi === -1) return -1;
+      return ai-bi;
+    });
+  }
+  return l;
+}
+
+function getDegree(nodeId){
+  let deg = 0;
+  for(let e of state.graph.edges){
+    if(e.from === nodeId) deg++;
+  }
+  return deg;
+}
+
+/* -----------------------------
+   Timer / run control
+   ----------------------------- */
+
+function startTimer(){
+  if(state.ui.timer) clearInterval(state.ui.timer);
+  state.ui.timer = setInterval(()=> {
+    stepBFS();
+    if(state.bfs.queue.length === 0) stopTimer();
+  }, state.ui.speed);
+}
+
+function stopTimer(){
+  if(state.ui.timer) clearInterval(state.ui.timer);
+  state.ui.timer = null;
+  state.ui.running = false;
+  document.getElementById('runBtn').textContent = 'Run / Pause (r)';
+}
+
+/* -----------------------------
+   Snapshot history for undo/redo and time travel
+   ----------------------------- */
+
+function saveSnapshot(note=''){
+  // deep copy relevant pieces: graph, bfs, selection
+  const snap = {
+    time: Date.now(),
+    note: note,
+    graph: deepCopy(state.graph),
+    bfs: deepCopy({
+      initialized: state.bfs.initialized,
+      queue: state.bfs.queue.slice(),
+      inQueue: Array.from(state.bfs.inQueue),
+      visited: Array.from(state.bfs.visited),
+      parents: state.bfs.parents,
+      distance: state.bfs.distance,
+      visitOrder: state.bfs.visitOrder,
+      stepCount: state.bfs.stepCount,
+      current: state.bfs.current,
+      goalsFound: Array.from(state.bfs.goalsFound)
+    }),
+    selection: state.selection
+  };
+  // truncate future if we are not at latest
+  if(state.historyPos < state.history.length-1){
+    state.history = state.history.slice(0, state.historyPos+1);
+  }
+  state.history.push(snap);
+  state.historyPos = state.history.length-1;
+  updateHistorySlider();
+}
+
+function restoreSnapshot(pos){
+  if(pos<0 || pos>=state.history.length) return;
+  let snap = state.history[pos];
+  state.graph = deepCopy(snap.graph);
+  // restore BFS structure
+  state.bfs.initialized = snap.bfs.initialized;
+  state.bfs.queue = snap.bfs.queue.slice();
+  state.bfs.inQueue = new Set(snap.bfs.inQueue);
+  state.bfs.visited = new Set(snap.bfs.visited);
+  state.bfs.parents = deepCopy(snap.bfs.parents);
+  state.bfs.distance = deepCopy(snap.bfs.distance);
+  state.bfs.visitOrder = deepCopy(snap.bfs.visitOrder);
+  state.bfs.stepCount = snap.bfs.stepCount;
+  state.bfs.current = snap.bfs.current;
+  state.bfs.goalsFound = new Set(snap.bfs.goalsFound);
+  state.selection = snap.selection;
+  state.historyPos = pos;
+  updateHistorySlider();
+  updateUI();
+}
+
+function updateHistorySlider(){
+  let s = document.getElementById('historyIndex');
+  s.max = Math.max(0, state.history.length-1);
+  s.value = state.historyPos;
+}
+
+/* -----------------------------
+   UI updates, logging
+   ----------------------------- */
+
+function updateUI(){
+  document.getElementById('visitedCount').textContent = state.bfs.visited.size;
+  document.getElementById('frontierCount').textContent = state.bfs.queue.length;
+  document.getElementById('currentNode').textContent = state.bfs.current || '-';
+  document.getElementById('foundGoals').textContent = state.bfs.goalsFound.size;
+  document.getElementById('queueList').value = state.bfs.queue.join(', ');
+  document.getElementById('speedSlider').value = state.ui.speed;
+  // draw graph with overlays
+  drawGraph();
+}
+
+function log(text){
+  let ta = document.getElementById('log');
+  let t = new Date().toLocaleTimeString() + ' - ' + text;
+  ta.value = t + '\n' + ta.value;
+}
+
+/* -----------------------------
+   Event handlers for UI controls
+   ----------------------------- */
+
+document.getElementById('genGrid').addEventListener('click', ()=>{
+  let r = parseInt(document.getElementById('gridRows').value) || 6;
+  let c = parseInt(document.getElementById('gridCols').value) || 8;
+  generateGrid(r,c,60);
+  saveSnapshot('Generated grid');
+  drawGraph();
+});
+
+document.getElementById('randomObstacles').addEventListener('click', ()=>{
+  let density = parseFloat(document.getElementById('obstDensity').value) || 0.15;
+  for(let id in state.graph.nodes){
+    state.graph.nodes[id].obstacle = Math.random() < density;
+  }
+  saveSnapshot('Randomized obstacles');
+  drawGraph();
+});
+
+document.getElementById('presetMaze').addEventListener('click', ()=>{
+  generateGrid(8,12,60);
+  // carve simple corridors
+  for(let id in state.graph.nodes){
+    state.graph.nodes[id].obstacle = false;
+    if(id.includes('r1') || id.includes('r3') || id.includes('r5')) {
+      // remove some nodes to create walls
+      if(Math.random() < 0.25) state.graph.nodes[id].obstacle = true;
+    }
+  }
+  saveSnapshot('Preset maze');
+  drawGraph();
+});
+
+document.getElementById('presetDisconnected').addEventListener('click', ()=>{
+  state.graph = { nodes: {}, edges: [], directed: false };
+  state.nextNodeId = 0;
+  for(let i=0;i<6;i++) addNode(120 + i*60, 120, null);
+  for(let i=0;i<6;i++) addNode(120 + i*60, 300, null);
+  // connect first row fully
+  let keys = Object.keys(state.graph.nodes);
+  for(let i=0;i<4;i++) addEdge(keys[i], keys[i+1]);
+  // connect second row only partly
+  addEdge(keys[6], keys[7]); addEdge(keys[7], keys[8]);
+  saveSnapshot('Preset disconnected');
+  drawGraph();
+});
+
+document.getElementsByName('mode').forEach(el=>{
+  el.addEventListener('change', ()=>{
+    state.mode = document.querySelector('input[name="mode"]:checked').value;
+    log('Mode: ' + state.mode);
+  });
+});
+
+document.getElementsByName('tool').forEach(el=>{
+  el.addEventListener('change', ()=>{
+    state.tool = document.querySelector('input[name="tool"]:checked').value;
+    state.edgeTempSource = null;
+    log('Tool: ' + state.tool);
+  });
+});
+
+document.getElementById('directedGraph').addEventListener('change', (e)=>{
+  state.graph.directed = e.target.checked;
+  saveSnapshot('Toggled directed = ' + state.graph.directed);
+  drawGraph();
+});
+
+document.getElementById('autoConnect').addEventListener('click', ()=>{
+  // connect nearest neighbors in free mode
+  let ids = Object.keys(state.graph.nodes);
+  for(let i=0;i<ids.length;i++){
+    for(let j=i+1;j<ids.length;j++){
+      let a = state.graph.nodes[ids[i]], b = state.graph.nodes[ids[j]];
+      let d = Math.hypot(a.x-b.x,a.y-b.y);
+      if(d < 120) addEdge(a.id, b.id);
+    }
+  }
+  saveSnapshot('Auto-connected nearest');
+  drawGraph();
+});
+
+document.getElementById('clearGraph').addEventListener('click', ()=>{
+  state.graph = { nodes: {}, edges: [], directed: state.graph.directed };
+  state.nextNodeId = 0;
+  saveSnapshot('Cleared graph');
+  drawGraph();
+});
+
+document.getElementById('deleteSelected').addEventListener('click', ()=>{
+  if(state.selection) removeNode(state.selection);
+  state.selection = null;
+  saveSnapshot('Deleted selected');
+  drawGraph();
+});
+
+document.getElementById('bfsInit').addEventListener('click', ()=> bfsInitFromUI());
+document.getElementById('bfsReset').addEventListener('click', ()=>{
+  state.bfs = {
+    initialized: false,
+    queue: [],
+    inQueue: new Set(),
+    visited: new Set(),
+    parents: {},
+    distance: {},
+    visitOrder: {},
+    stepCount: 0,
+    current: null,
+    goalsFound: new Set()
+  };
+  saveSnapshot('BFS reset');
+  updateUI();
+});
+
+document.getElementById('stepBtn').addEventListener('click', ()=> {
+  stepBFS();
+});
+
+document.getElementById('runBtn').addEventListener('click', ()=> {
+  if(state.ui.running){
+    state.ui.running = false;
+    stopTimer();
+  } else {
+    if(!state.bfs.initialized) bfsInitFromUI();
+    state.ui.running = true;
+    state.ui.speed = parseInt(document.getElementById('speedSlider').value) || state.ui.speed;
+    startTimer();
+    document.getElementById('runBtn').textContent = 'Pause (r)';
+  }
+});
+
+document.getElementById('fastForward').addEventListener('click', ()=>{
+  if(!state.bfs.initialized) bfsInitFromUI();
+  // run to completion quickly (without long delay)
+  while(state.bfs.queue.length > 0){
+    stepBFS();
+    // guard to avoid infinite loops
+    if(state.bfs.stepCount > 20000) { log('Aborting fast-forward: too many steps'); break; }
+  }
+});
+
+document.getElementById('stopBtn').addEventListener('click', ()=>{
+  state.ui.running = false;
+  stopTimer();
+  state.bfs.initialized = false;
+  saveSnapshot('Stopped BFS');
+});
+
+document.getElementById('speedSlider').addEventListener('input', (e)=>{
+  state.ui.speed = parseInt(e.target.value);
+  if(state.ui.running) startTimer();
+});
+
+document.getElementById('neighborOrder').addEventListener('change', ()=>{
+  document.getElementById('customPreference').disabled = document.getElementById('neighborOrder').value !== 'custom';
+});
+
+document.getElementById('stopPolicy').addEventListener('change', ()=>{
+  let v = document.getElementById('stopPolicy').value;
+  document.getElementById('kLabel').style.display = (v==='k') ? 'inline-block' : 'none';
+});
+
+document.getElementById('undoBtn').addEventListener('click', ()=>{
+  if(state.historyPos > 0) restoreSnapshot(state.historyPos - 1);
+});
+document.getElementById('redoBtn').addEventListener('click', ()=>{
+  if(state.historyPos < state.history.length - 1) restoreSnapshot(state.historyPos + 1);
+});
+
+document.getElementById('historyIndex').addEventListener('input', (e)=>{
+  let v = parseInt(e.target.value) || 0;
+  restoreSnapshot(v);
+});
+
+/* Import/Export */
+document.getElementById('exportJson').addEventListener('click', ()=>{
+  document.getElementById('jsonArea').value = JSON.stringify(state.graph, null, 2);
+});
+document.getElementById('importJsonBtn').addEventListener('click', ()=>{
+  try{
+    let g = JSON.parse(document.getElementById('jsonArea').value);
+    // basic validation
+    if(!g.nodes || !g.edges) throw new Error('Invalid graph JSON');
+    state.graph = g;
+    // build nodes keyed by id if array provided
+    if(Array.isArray(g.nodes)){
+      let nodesObj = {};
+      for(let n of g.nodes) nodesObj[n.id] = n;
+      state.graph.nodes = nodesObj;
+    }
+    saveSnapshot('Imported graph JSON');
+    drawGraph();
+  }catch(err){
+    log('Import failed: ' + err.message);
+  }
+});
+
+/* Random free-mode graph */
+document.getElementById('randomGraph').addEventListener('click', ()=>{
+  let n = parseInt(document.getElementById('randNodes').value) || 12;
+  let p = parseFloat(document.getElementById('randEdgeProb').value) || 0.12;
+  state.graph = { nodes: {}, edges: [], directed: state.graph.directed };
+  state.nextNodeId = 0;
+  // pack nodes in grid-ish positions
+  for(let i=0;i<n;i++){
+    addNode(80 + (i%6)*120, 80 + Math.floor(i/6)*100);
+  }
+  let keys = Object.keys(state.graph.nodes);
+  for(let i=0;i<keys.length;i++){
+    for(let j=i+1;j<keys.length;j++){
+      if(Math.random() < p) addEdge(keys[i], keys[j]);
+    }
+  }
+  saveSnapshot('Random graph');
+  drawGraph();
+});
+
+/* Zoom / view */
+document.getElementById('zoomIn').addEventListener('click', ()=>{ state.svgScale *= 1.2; svg.setAttribute('viewBox', `0 0 ${1200/state.svgScale} ${800/state.svgScale}`); });
+document.getElementById('zoomOut').addEventListener('click', ()=>{ state.svgScale /= 1.2; svg.setAttribute('viewBox', `0 0 ${1200/state.svgScale} ${800/state.svgScale}`); });
+document.getElementById('fitView').addEventListener('click', ()=>{ state.svgScale = 1; svg.setAttribute('viewBox','0 0 1200 800'); });
+
+/* Keyboard shortcuts */
+document.addEventListener('keydown', (e)=>{
+  if(e.code === 'Space'){ e.preventDefault(); stepBFS(); }
+  else if(e.key.toLowerCase() === 'r'){ e.preventDefault(); document.getElementById('runBtn').click(); }
+  else if(e.key.toLowerCase() === 'f'){ e.preventDefault(); document.getElementById('fastForward').click(); }
+  else if(e.key.toLowerCase() === 's'){ e.preventDefault(); document.getElementById('bfsReset').click(); }
+  else if(e.key.toLowerCase() === 'u'){ document.getElementById('undoBtn').click(); }
+  else if(e.key.toLowerCase() === 'y'){ document.getElementById('redoBtn').click(); }
+});
+
+/* -----------------------------
+   SVG interaction (node creation, selection, drag, edges)
+   ----------------------------- */
+
+svg.addEventListener('dblclick', (ev)=>{
+  // double click on empty area: add node in free mode
+  if(state.mode !== 'free') return;
+  const pt = svgPoint(ev);
+  let id = addNode(pt.x, pt.y);
+  saveSnapshot('Added node ' + id);
+  drawGraph();
+});
+
+svg.addEventListener('click', (ev)=>{
+  const target = ev.target;
+  const tool = state.tool;
+  const pt = svgPoint(ev);
+  // find clicked node by traversing up to <g> with data-id
+  let el = target;
+  while(el && el !== svg && !el.dataset.id) el = el.parentNode;
+  if(el && el.dataset && el.dataset.id){
+    let id = el.dataset.id;
+    if(tool === 'select'){
+      state.selection = id;
+      log('Selected ' + id);
+      drawGraph();
+    } else if(tool === 'addnode'){
+      // clicking node does nothing in add node tool
+      // but we can add a node near clicked to place precisely
+      let newId = addNode(pt.x+30, pt.y+30);
+      saveSnapshot('Added node ' + newId);
+      drawGraph();
+    } else if(tool === 'addedge'){
+      // two-click creation
+      if(!state.edgeTempSource){
+        state.edgeTempSource = id;
+        log('Edge source selected: ' + id + ' - now click target');
+      } else {
+        addEdge(state.edgeTempSource, id);
+        log('Added edge ' + state.edgeTempSource + ' -> ' + id);
+        state.edgeTempSource = null;
+        saveSnapshot('Added edge');
+        drawGraph();
+      }
+    } else if(tool === 'toggleObstacle'){
+      state.graph.nodes[id].obstacle = !state.graph.nodes[id].obstacle;
+      saveSnapshot('Toggled obstacle ' + id);
+      drawGraph();
+    } else if(tool === 'setStart'){
+      // clear other starts unless SHIFT held
+      if(!ev.shiftKey){
+        for(let nid in state.graph.nodes) state.graph.nodes[nid].start = false;
+      }
+      state.graph.nodes[id].start = true;
+      document.getElementById('startNodesInput').value = id;
+      saveSnapshot('Set start ' + id);
+      drawGraph();
+    } else if(tool === 'toggleGoal'){
+      state.graph.nodes[id].goal = !state.graph.nodes[id].goal;
+      saveSnapshot('Toggled goal ' + id);
+      drawGraph();
+    }
+    return;
+  } else {
+    // click on empty canvas
+    if(state.mode === 'free' && tool === 'addnode'){
+      let id = addNode(pt.x, pt.y);
+      saveSnapshot('Added node ' + id);
+      drawGraph();
+    }
+    // clear selection if clicked empty
+    state.selection = null;
+    state.edgeTempSource = null;
+    drawGraph();
+  }
+});
+
+/* drag nodes for move */
+let dragInfo = null;
+svg.addEventListener('mousedown', (ev)=>{
+  const pt = svgPoint(ev);
+  let el = ev.target;
+  while(el && el !== svg && !el.dataset.id) el = el.parentNode;
+  if(el && el.dataset && el.dataset.id){
+    let id = el.dataset.id;
+    if(state.tool === 'select'){
+      dragInfo = { id:id, startX:pt.x, startY:pt.y, origX: state.graph.nodes[id].x, origY: state.graph.nodes[id].y };
+    }
+  }
+});
+svg.addEventListener('mousemove', (ev)=>{
+  if(!dragInfo) return;
+  const pt = svgPoint(ev);
+  let dx = pt.x - dragInfo.startX;
+  let dy = pt.y - dragInfo.startY;
+  state.graph.nodes[dragInfo.id].x = dragInfo.origX + dx;
+  state.graph.nodes[dragInfo.id].y = dragInfo.origY + dy;
+  drawGraph();
+});
+svg.addEventListener('mouseup', (ev)=>{
+  if(dragInfo){
+    saveSnapshot('Moved node ' + dragInfo.id);
+    dragInfo = null;
+  }
+});
+
+/* helper: convert event coords to SVG coords */
+function svgPoint(evt){
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  const ctm = svg.getScreenCTM().inverse();
+  const svgP = pt.matrixTransform(ctm);
+  return {x: svgP.x, y: svgP.y};
+}
+
+/* double click on node to delete */
+svg.addEventListener('dblclick', (e)=> {
+  let el = e.target;
+  while(el && el !== svg && !el.dataset.id) el = el.parentNode;
+  if(el && el.dataset && el.dataset.id){
+    let id = el.dataset.id;
+    removeNode(id);
+    saveSnapshot('Double-click deleted ' + id);
+    drawGraph();
+  }
+});
+
+/* allow removing edges by right-click context menu on edge */
+svg.addEventListener('contextmenu', (e)=>{
+  e.preventDefault();
+  let el = e.target;
+  if(el && el.tagName === 'line'){
+    let from = el.getAttribute('data-from');
+    let to = el.getAttribute('data-to');
+    removeEdge(from,to);
+    saveSnapshot('Removed edge ' + from + ' -> ' + to);
+    drawGraph();
+  }
+});
+
+/* -----------------------------
+   Additional features: path reconstruction, dynamic continuation
+   ----------------------------- */
+
+function reconstructPathTo(goal){
+  if(!state.bfs.parents || !state.bfs.parents) return [];
+  let path = [];
+  let cur = goal;
+  while(cur !== null && cur !== undefined){
+    path.push(cur);
+    cur = state.bfs.parents[cur];
+  }
+  return path.reverse();
+}
+
+/* Helper to highlight shortest path to last found goal if enabled */
+function showPathOverlay(){
+  if(!document.getElementById('showPath').checked) return;
+  if(state.bfs.goalsFound.size === 0) return;
+  // pick last found goal
+  let last = Array.from(state.bfs.goalsFound).pop();
+  let path = reconstructPathTo(last);
+  // draw edges overlay for path: draw thick lines
+  for(let i=0;i<path.length-1;i++){
+    let a = state.graph.nodes[path[i]];
+    let b = state.graph.nodes[path[i+1]];
+    if(!a || !b) continue;
+    let line = document.createElementNS(NS,'line');
+    line.setAttribute('x1', a.x);
+    line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x);
+    line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', '#000');
+    line.setAttribute('stroke-width', 3);
+    svg.appendChild(line);
+  }
+}
+
+/* wrap drawGraph to include path overlay and parent edge emphasis */
+const origDrawGraph = drawGraph;
+drawGraph = function(){
+  clearSVG();
+  const g = state.graph;
+  // edges first
+  for(let e of g.edges){
+    const a = g.nodes[e.from];
+    const b = g.nodes[e.to];
+    if(!a || !b) continue;
+    let line = document.createElementNS(NS,'line');
+    line.setAttribute('x1', a.x);
+    line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x);
+    line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', '#000');
+    line.setAttribute('stroke-width', 1.2);
+    line.setAttribute('data-from', e.from);
+    line.setAttribute('data-to', e.to);
+    // emphasize parent edges if requested
+    if(document.getElementById('showParents').checked){
+      if(state.bfs.parents && state.bfs.parents[b.id] === a.id) line.setAttribute('stroke-width', 2.2);
+    }
+    svg.appendChild(line);
+    if(g.directed){
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let len = Math.hypot(dx,dy) || 1;
+      let ux = dx/len, uy = dy/len;
+      let hx = b.x - ux*14, hy = b.y - uy*14;
+      let arrowSize = 8;
+      let p1x = hx - uy*(arrowSize/2), p1y = hy + ux*(arrowSize/2);
+      let p2x = hx + uy*(arrowSize/2), p2y = hy - ux*(arrowSize/2);
+      let poly = document.createElementNS(NS,'polygon');
+      poly.setAttribute('points', `${b.x},${b.y} ${p1x},${p1y} ${p2x},${p2y}`);
+      poly.setAttribute('fill','#fff');
+      poly.setAttribute('stroke','#000');
+      poly.setAttribute('stroke-width','1');
+      svg.appendChild(poly);
+    }
+  }
+  // nodes
+  for(let id in g.nodes){
+    let n = g.nodes[id];
+    let group = document.createElementNS(NS,'g');
+    group.setAttribute('class','node');
+    group.setAttribute('data-id', id);
+    group.setAttribute('transform', `translate(${n.x},${n.y})`);
+    let r = 16;
+    let circ = document.createElementNS(NS,'circle');
+    circ.setAttribute('r', r);
+    circ.setAttribute('cx', 0);
+    circ.setAttribute('cy', 0);
+    circ.setAttribute('stroke', '#000');
+    circ.setAttribute('fill', '#fff');
+    circ.setAttribute('stroke-width', 1.2);
+    group.appendChild(circ);
+    if(n.obstacle){
+      let lx1 = document.createElementNS(NS,'line');
+      lx1.setAttribute('x1', -10); lx1.setAttribute('y1', -10);
+      lx1.setAttribute('x2', 10); lx1.setAttribute('y2', 10);
+      lx1.setAttribute('stroke','#000'); lx1.setAttribute('stroke-width',1.2);
+      group.appendChild(lx1);
+      let lx2 = document.createElementNS(NS,'line');
+      lx2.setAttribute('x1', -10); lx2.setAttribute('y1', 10);
+      lx2.setAttribute('x2', 10); lx2.setAttribute('y2', -10);
+      lx2.setAttribute('stroke','#000'); lx2.setAttribute('stroke-width',1.2);
+      group.appendChild(lx2);
+    }
+    let txt = document.createElementNS(NS,'text');
+    txt.setAttribute('x', 0); txt.setAttribute('y', 4);
+    txt.setAttribute('text-anchor','middle');
+    txt.setAttribute('font-size','11');
+    txt.textContent = id;
+    group.appendChild(txt);
+    if(document.getElementById('showDistances').checked && state.bfs.distance[id] !== undefined){
+      let d = document.createElementNS(NS,'text');
+      d.setAttribute('x', 18); d.setAttribute('y', -18);
+      d.setAttribute('font-size','10');
+      d.textContent = state.bfs.distance[id];
+      group.appendChild(d);
+    }
+    if(document.getElementById('visitOrder').checked && state.bfs.visitOrder[id] !== undefined){
+      let v = document.createElementNS(NS,'text');
+      v.setAttribute('x', -18); v.setAttribute('y', -18);
+      v.setAttribute('font-size','10');
+      v.textContent = state.bfs.visitOrder[id];
+      group.appendChild(v);
+    }
+    if(document.getElementById('showLayers').checked && state.bfs.distance[id] !== undefined){
+      let l = document.createElementNS(NS,'text');
+      l.setAttribute('x', -18); l.setAttribute('y', 18);
+      l.setAttribute('font-size','10');
+      l.textContent = 'L' + state.bfs.distance[id];
+      group.appendChild(l);
+    }
+    if(n.start){
+      let mark = document.createElementNS(NS,'text');
+      mark.setAttribute('x', 0); mark.setAttribute('y', -28);
+      mark.setAttribute('font-size','10');
+      mark.setAttribute('text-anchor','middle');
+      mark.textContent = 'START';
+      group.appendChild(mark);
+    }
+    if(n.goal){
+      let mark = document.createElementNS(NS,'text');
+      mark.setAttribute('x', 0); mark.setAttribute('y', 28);
+      mark.setAttribute('font-size','10');
+      mark.setAttribute('text-anchor','middle');
+      mark.textContent = 'GOAL';
+      group.appendChild(mark);
+    }
+    if(state.bfs.current === id){
+      let mark = document.createElementNS(NS,'text');
+      mark.setAttribute('x', 0); mark.setAttribute('y', -40);
+      mark.setAttribute('font-size','10');
+      mark.setAttribute('text-anchor','middle');
+      mark.textContent = 'CURRENT';
+      group.appendChild(mark);
+    }
+    if(state.selection === id){
+      circ.setAttribute('stroke-width', 2.4);
+    }
+    svg.appendChild(group);
+  }
+
+  // overlay path
+  showPathOverlay();
+
+  // optionally overlay queue text in corner
+  if(document.getElementById('showQueue').checked){
+    let txt = document.createElementNS(NS,'text');
+    txt.setAttribute('x', 10); txt.setAttribute('y', 20);
+    txt.setAttribute('font-size','12');
+    txt.textContent = 'Queue: ' + state.bfs.queue.join(', ');
+    svg.appendChild(txt);
+  }
+};
+
+/* initialize with a starter grid */
+generateGrid(6,9,80);
+saveSnapshot('Initial grid');
+drawGraph();
+updateUI();
+
+</script>
+</body>
+</html>

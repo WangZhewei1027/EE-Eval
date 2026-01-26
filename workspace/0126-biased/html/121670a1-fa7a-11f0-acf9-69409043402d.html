@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Routing Demo</title>
+<style>
+  /* Minimal styling for layout only */
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  #path, #params, #history, #controls {
+    margin-bottom: 1em;
+  }
+  input[type="text"] {
+    width: 300px;
+  }
+  button, input[type="text"], select {
+    font-size: 1rem;
+    margin: 0 0.2em 0.2em 0;
+  }
+  label {
+    margin-right: 0.5em;
+  }
+  fieldset {
+    margin-bottom: 1em;
+  }
+</style>
+</head>
+<body>
+<h1>Routing with MAXIMUM Interactivity</h1>
+<div id="description">
+  <p>
+    This demo simulates a router with dynamic routes, parameters, query strings, and nested routes.
+    Use the controls below to navigate, edit routes and parameters, and explore state transitions.
+  </p>
+</div>
+
+<section id="navigation">
+  <fieldset>
+    <legend>Current Route Information</legend>
+    <div>
+      <label for="current-path">Path:</label>
+      <input type="text" id="current-path" readonly aria-label="Current Path" />
+    </div>
+    <div>
+      <label for="current-params">Route Parameters (JSON):</label><br />
+      <textarea id="current-params" rows="4" cols="50" readonly aria-label="Route Parameters"></textarea>
+    </div>
+    <div>
+      <label for="current-query">Query Parameters (JSON):</label><br />
+      <textarea id="current-query" rows="3" cols="50" readonly aria-label="Query Parameters"></textarea>
+    </div>
+  </fieldset>
+</section>
+
+<section id="controls">
+  <fieldset>
+    <legend>Navigate / Change Route</legend>
+    <div>
+      <label for="input-route">Enter Route Path:</label>
+      <input type="text" id="input-route" placeholder="/users/:userId/posts/:postId" aria-label="Route Input" />
+      <button id="btn-navigate">Navigate</button>
+    </div>
+    <div>
+      <label for="input-query">Query String (e.g. ?tab=summary&page=2):</label>
+      <input type="text" id="input-query" placeholder="?tab=summary&page=2" aria-label="Query String Input" />
+    </div>
+    <div>
+      <label for="input-params">Route Parameters JSON (optional):</label><br />
+      <textarea id="input-params" rows="3" cols="50" placeholder='{"userId": "123", "postId": "456"}' aria-label="Route Parameters Input"></textarea>
+    </div>
+    <div>
+      <button id="btn-apply-params">Apply Route Parameters</button>
+      <button id="btn-apply-query">Apply Query Parameters</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Modify Path Tokens</legend>
+    <div>
+      <label for="token-select">Select Token to Modify:</label>
+      <select id="token-select" aria-label="Token Selector">
+        <option value="">--No tokens--</option>
+      </select>
+      <input type="text" id="token-value" placeholder="New value" aria-label="Token Value" />
+      <button id="btn-update-token">Update Token</button>
+      <button id="btn-remove-token">Remove Token</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Query Parameters Controls</legend>
+    <div>
+      <label for="query-key">Key:</label>
+      <input type="text" id="query-key" placeholder="key" aria-label="Query Key" />
+      <label for="query-value">Value:</label>
+      <input type="text" id="query-value" placeholder="value" aria-label="Query Value" />
+      <button id="btn-add-query">Add/Update Query Param</button>
+      <button id="btn-remove-query">Remove Query Param</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>History & State Management</legend>
+    <div>
+      <button id="btn-back">Back</button>
+      <button id="btn-forward">Forward</button>
+      <button id="btn-reset">Reset Router</button>
+    </div>
+    <div>
+      <label for="history-index">Jump to History Index:</label>
+      <input type="number" id="history-index" min="0" aria-label="History Index" />
+      <button id="btn-jump-history">Jump</button>
+    </div>
+  </fieldset>
+</section>
+
+<section id="history-area">
+  <fieldset>
+    <legend>Navigation History (most recent last)</legend>
+    <textarea id="history-log" rows="8" cols="80" readonly aria-label="Navigation History Log"></textarea>
+  </fieldset>
+</section>
+
+<section id="routing-explorer">
+  <fieldset>
+    <legend>Deep Route Exploration & Workflow Steps</legend>
+    <div>
+      <label for="workflow-select-step">Select Workflow Step:</label>
+      <select id="workflow-select-step" aria-label="Workflow Step Select">
+        <option value="">--Select Step--</option>
+      </select>
+      <button id="btn-go-step">Go To Step</button>
+    </div>
+    <div id="workflow-step-controls" style="margin-top: 0.5em;">
+      <button id="btn-next-step">Next Step &gt;</button>
+      <button id="btn-prev-step">&lt; Prev Step</button>
+      <button id="btn-new-branch">Create Branch from Current Step</button>
+    </div>
+    <div style="margin-top:0.5em;">
+      <label for="branch-name">Branch Name:</label>
+      <input type="text" id="branch-name" placeholder="New branch name" />
+      <button id="btn-switch-branch">Switch Branch</button>
+      <button id="btn-show-branches">Show Branches</button>
+    </div>
+    <div id="branches-list" style="white-space: pre-wrap; max-height: 8em; overflow-y: auto; border: 1px solid #999; margin-top: 0.5em;"></div>
+  </fieldset>
+</section>
+
+<script>
+(function(){
+// The router state and functionality
+
+/** ROUTING MODEL
+ *
+ * Router state contains:
+ * - currentPath: string, e.g. "/users/123/posts/456"
+ * - routeTemplate: string, e.g. "/users/:userId/posts/:postId"
+ * - params: object, { userId: "123", postId: "456" }
+ * - query: object, { tab: "summary", page: "2" }
+ * - history: array of router states (including current)
+ * - historyIndex: current index in history
+ *
+ * The demo allows:
+ * - Navigating to paths with templates & parameters
+ * - Editing parameters
+ * - Editing query string
+ * - History back/forward/jump
+ * - Maintaining a workflow model with steps and branches
+ *
+ * The workflow model simulates multi-step forms or nested routes
+ * with ability to create branches and jump between workflow steps.
+ */
+
+// ---------------------------
+// UTILS
+
+function parseQueryString(qs) {
+  const obj = {};
+  if (!qs) return obj;
+  if (qs[0] === '?') qs = qs.slice(1);
+  qs.split('&').forEach(pair=>{
+    if (!pair) return;
+    const [k,v=''] = pair.split('=').map(decodeURIComponent);
+    if (k) obj[k] = v;
+  });
+  return obj;
+}
+
+function buildQueryString(obj) {
+  const parts = [];
+  for (const k in obj) {
+    if (obj[k] == null || obj[k] === '') continue;
+    parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(obj[k]));
+  }
+  return parts.length ? '?' + parts.join('&') : '';
+}
+
+// Parse route template (e.g. "/users/:userId/posts/:postId") into tokens array
+// tokens: array of { type: "static"|"param", value: string }
+function parseRouteTemplate(template) {
+  if (!template) return [];
+  if (template[0]!=='/') template = '/' + template;
+  const parts = template.split('/').slice(1); // skip first empty ""
+  return parts.map(p=>{
+    if (p.startsWith(':')) return {type:'param', value:p.slice(1)};
+    return {type:'static', value:p};
+  });
+}
+
+// Build path string from template and params
+function buildPathFromTemplate(template, params) {
+  const tokens = parseRouteTemplate(template);
+  let result = '';
+  for (const t of tokens) {
+    result += '/';
+    if (t.type === 'param') {
+      let val = params && params[t.value];
+      if (val == null) val = ':'+t.value;
+      result += val;
+    } else {
+      result += t.value;
+    }
+  }
+  if (result === '') result = '/';
+  return result;
+}
+
+// Extract parameters from path based on template tokens
+function extractParamsFromPath(template, path) {
+  const tokens = parseRouteTemplate(template);
+  if (!path.startsWith('/')) path = '/' + path;
+  const parts = path.split('/').slice(1);
+  const params = {};
+  for (let i=0; i<tokens.length; i++){
+    const token = tokens[i];
+    const part = parts[i];
+    if (!part) continue;
+    if (token.type === 'param') {
+      params[token.value] = part;
+    } else {
+      if (token.value !== part) {
+        // static part mismatch, no valid params
+        // but still accept partial
+      }
+    }
+  }
+  return params;
+}
+
+// Update URL-like string with query parameters (updates or adds)
+function updatePathWithQuery(path, queryObject) {
+  // strip existing query
+  const [p] = path.split('?');
+  const qstr = buildQueryString(queryObject);
+  return p + qstr;
+}
+
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch(e) {
+    return null;
+  }
+}
+function safeJsonStringify(o) {
+  try {
+    return JSON.stringify(o, null, 2);
+  } catch(e) {
+    return '';
+  }
+}
+// ---------------------------
+// ROUTER STATE
+
+const Router = {
+  current: {
+    routeTemplate: '/home',
+    params: {},
+    query: {},
+    path: '/home',
+  },
+  history: [],
+  historyIndex: -1,
+
+  // Workflow steps and branches
+  workflow: {
+    steps: [], // array of { id, routeTemplate, params, query }
+    currentStepIndex: 0,
+    branches: {
+      main: {name:'main', steps:[], currentStepIndex: 0},
+    },
+    currentBranch: 'main',
+  },
+
+  // Initialize with /home route
+  init() {
+    this.navigate('/home');
+  },
+
+  generateStepId() {
+    return 'step_' + Math.random().toString(36).substr(2,8);
+  },
+  saveStep(routeTemplate, params, query) {
+    return { id:this.generateStepId(), routeTemplate, params:{...params}, query:{...query} };
+  },
+
+  navigate(pathInput, paramsInput, queryInput) {
+    // pathInput might be a string or empty/null
+    // If string includes params, parse them accordingly
+    let path = pathInput || '/home';
+    // detect if pathInput is a full path or a template
+    // We try to keep routeTemplate if paramsInput exists, else infer template from path
+
+    // Normalize
+    if (!path.startsWith('/')) path = '/'+path;
+
+    let routeTemplate = '';
+    let params = {};
+    let query = {};
+
+    if (paramsInput && typeof paramsInput === 'object') {
+      params = {...paramsInput};
+    }
+    if (queryInput && typeof queryInput === 'object') {
+      query = {...queryInput};
+    }
+
+    // Try to detect routeTemplate from path by treating pathInput as template if containing :
+    // or if params provided, use pathInput as template
+    if (path.includes(':')) {
+      routeTemplate = path;
+      path = buildPathFromTemplate(routeTemplate, params);
+    }
+    else if (Object.keys(params).length > 0) {
+      routeTemplate = path;
+      path = buildPathFromTemplate(routeTemplate, params);
+    } else {
+      // no params
+      // Try to find param tokens (":") in path? If not, routeTemplate = path
+      routeTemplate = path;
+      params = extractParamsFromPath(routeTemplate, path);
+    }
+
+    // Apply query string if any
+    path = updatePathWithQuery(path, query);
+
+    // Save current state
+    this.current = {routeTemplate, params, query, path};
+
+    // Add to history, discard forward history
+    this.history.splice(this.historyIndex+1);
+    this.history.push({...this.current});
+    this.historyIndex = this.history.length -1;
+
+    // For workflow integration, add step on new normal navigation (not back/forward)
+    this.workflowAddStep(this.current);
+
+    this.refreshUI();
+  },
+
+  updateParams(newParams) {
+    const params = {...this.current.params, ...newParams};
+    const routeTemplate = this.current.routeTemplate;
+    let path = buildPathFromTemplate(routeTemplate, params);
+    path = updatePathWithQuery(path, this.current.query);
+    this.current.params = params;
+    this.current.path = path;
+
+    // Save to history
+    this.history.splice(this.historyIndex+1);
+    this.history.push({...this.current});
+    this.historyIndex = this.history.length-1;
+
+    this.workflowAddStep(this.current);
+    this.refreshUI();
+  },
+
+  updateQuery(newQuery) {
+    const query = {...this.current.query, ...newQuery};
+    const routeTemplate = this.current.routeTemplate;
+    const params = this.current.params;
+    let path = buildPathFromTemplate(routeTemplate, params);
+    path = updatePathWithQuery(path, query);
+    this.current.query = query;
+    this.current.path = path;
+
+    this.history.splice(this.historyIndex+1);
+    this.history.push({...this.current});
+    this.historyIndex = this.history.length-1;
+
+    this.workflowAddStep(this.current);
+    this.refreshUI();
+  },
+
+  removeParam(paramKey) {
+    if (!(paramKey in this.current.params)) return;
+    const params = {...this.current.params};
+    delete params[paramKey];
+    this.updateParams(params);
+  },
+
+  removeQueryParam(qKey) {
+    if (!(qKey in this.current.query)) return;
+    const query = {...this.current.query};
+    delete query[qKey];
+    this.updateQuery(query);
+  },
+
+  back() {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.current = {...this.history[this.historyIndex]};
+      this.workflowJumpStepByRoute(this.current);
+      this.refreshUI();
+    }
+  },
+
+  forward() {
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      this.current = {...this.history[this.historyIndex]};
+      this.workflowJumpStepByRoute(this.current);
+      this.refreshUI();
+    }
+  },
+
+  jumpToHistory(index) {
+    if (index < 0 || index >= this.history.length) return;
+    this.historyIndex = index;
+    this.current = {...this.history[this.historyIndex]};
+    this.workflowJumpStepByRoute(this.current);
+    this.refreshUI();
+  },
+
+  reset() {
+    this.current = {
+      routeTemplate: '/home',
+      params: {},
+      query: {},
+      path: '/home',
+    };
+    this.history = [ {...this.current} ];
+    this.historyIndex = 0;
+    this.workflow = {
+      steps: [],
+      currentStepIndex: 0,
+      branches: {
+        main: {name:'main', steps:[], currentStepIndex: 0}
+      },
+      currentBranch: 'main',
+    };
+    this.workflowAddStep(this.current);
+    this.refreshUI();
+  },
+
+  /* --------------------
+   * WORKFLOW modeling
+   * -------------------- */
+
+  workflowAddStep(routeState) {
+    // Add step to current branch if differs from last
+    let branch = this.workflow.branches[this.workflow.currentBranch];
+    if (!branch) {
+      branch = {name:this.workflow.currentBranch, steps:[], currentStepIndex:0};
+      this.workflow.branches[this.workflow.currentBranch] = branch;
+    }
+
+    // Check last step in branch
+    if(branch.steps.length === 0) {
+      branch.steps.push({...routeState, id:this.generateStepId()});
+      branch.currentStepIndex = branch.steps.length -1;
+      this.workflow.currentStepIndex = branch.currentStepIndex;
+      this.workflow.steps = branch.steps;
+      return;
+    }
+
+    const lastStep = branch.steps[branch.steps.length-1];
+    function equalSteps(s1,s2) {
+      if(s1.routeTemplate !== s2.routeTemplate) return false;
+      if(JSON.stringify(s1.params) !== JSON.stringify(s2.params)) return false;
+      if(JSON.stringify(s1.query) !== JSON.stringify(s2.query)) return false;
+      return true;
+    }
+    if (!equalSteps(lastStep, routeState)) {
+      branch.steps.push({...routeState, id:this.generateStepId()});
+      branch.currentStepIndex = branch.steps.length -1;
+      this.workflow.currentStepIndex = branch.currentStepIndex;
+      this.workflow.steps = branch.steps;
+    }
+  },
+
+  workflowGoToStep(index) {
+    const branch = this.workflow.branches[this.workflow.currentBranch];
+    if (!branch) return;
+    if(index < 0 || index >= branch.steps.length) return;
+    branch.currentStepIndex = index;
+    this.workflow.currentStepIndex = index;
+    this.workflow.steps = branch.steps;
+    const step = branch.steps[index];
+    if(step) {
+      // Update current state and history
+      this.current = {
+        routeTemplate: step.routeTemplate,
+        params: {...step.params},
+        query: {...step.query},
+        path: buildPathFromTemplate(step.routeTemplate, step.params),
+      };
+      this.current.path = updatePathWithQuery(this.current.path, this.current.query);
+
+      // Add to history
+      this.history.splice(this.historyIndex+1);
+      this.history.push({...this.current});
+      this.historyIndex = this.history.length -1;
+
+      this.refreshUI();
+    }
+  },
+
+  workflowNextStep() {
+    const branch = this.workflow.branches[this.workflow.currentBranch];
+    if (!branch) return;
+    let idx = branch.currentStepIndex;
+    if (idx < branch.steps.length-1) idx++;
+    this.workflowGoToStep(idx);
+  },
+  workflowPrevStep() {
+    const branch = this.workflow.branches[this.workflow.currentBranch];
+    if (!branch) return;
+    let idx = branch.currentStepIndex;
+    if (idx > 0) idx--;
+    this.workflowGoToStep(idx);
+  },
+
+  workflowCreateBranch(branchName) {
+    // Create branch from current branch's current step onward
+    if (!branchName) return false;
+    if (this.workflow.branches[branchName]) return false; // already exists
+
+    const currentBranch = this.workflow.branches[this.workflow.currentBranch];
+    if (!currentBranch) return false;
+    const startingIndex = currentBranch.currentStepIndex;
+    const newSteps = currentBranch.steps.slice(0, startingIndex + 1).map(s => ({...s}));
+    this.workflow.branches[branchName] = {
+      name: branchName,
+      steps: newSteps,
+      currentStepIndex: newSteps.length - 1,
+    };
+    this.workflow.currentBranch = branchName;
+    this.workflow.steps = newSteps;
+    this.workflow.currentStepIndex = newSteps.length -1;
+    this.refreshUI();
+    return true;
+  },
+
+  workflowSwitchBranch(branchName) {
+    if (!this.workflow.branches[branchName]) return false;
+    this.workflow.currentBranch = branchName;
+    const branch = this.workflow.branches[branchName];
+    this.workflow.steps = branch.steps;
+    this.workflow.currentStepIndex = branch.currentStepIndex;
+
+    const step = branch.steps[branch.currentStepIndex];
+    if(step) {
+      this.current = {
+        routeTemplate: step.routeTemplate,
+        params: {...step.params},
+        query: {...step.query},
+        path: buildPathFromTemplate(step.routeTemplate, step.params),
+      };
+      this.current.path = updatePathWithQuery(this.current.path, this.current.query);
+
+      this.history.splice(this.historyIndex+1);
+      this.history.push({...this.current});
+      this.historyIndex = this.history.length-1;
+    }
+
+    this.refreshUI();
+    return true;
+  },
+
+  workflowJumpStepByRoute(routeState) {
+    // Try to find step index in current branch matching routeState
+    const branch = this.workflow.branches[this.workflow.currentBranch];
+    if (!branch) return;
+    // find step equal
+    function equalSteps(s1,s2) {
+      if(s1.routeTemplate !== s2.routeTemplate) return false;
+      if(JSON.stringify(s1.params) !== JSON.stringify(s2.params)) return false;
+      if(JSON.stringify(s1.query) !== JSON.stringify(s2.query)) return false;
+      return true;
+    }
+    const idx = branch.steps.findIndex(s => equalSteps(s, routeState));
+    if (idx >= 0) {
+      branch.currentStepIndex = idx;
+      this.workflow.currentStepIndex = idx;
+      this.workflow.steps = branch.steps;
+    }
+  },
+
+  // ---------------------------
+  // UI REFRESH and EVENT HOOKS
+
+  refreshUI() {
+    // current path input
+    const inputCurrentPath = document.getElementById('current-path');
+    const taCurrentParams = document.getElementById('current-params');
+    const taCurrentQuery = document.getElementById('current-query');
+    const tokenSelect = document.getElementById('token-select');
+    const taInputParams = document.getElementById('input-params');
+    const inputInputRoute = document.getElementById('input-route');
+    const inputInputQuery = document.getElementById('input-query');
+
+    inputCurrentPath.value = this.current.path;
+    try {
+      taCurrentParams.value = JSON.stringify(this.current.params, null, 2);
+    } catch(e) {
+      taCurrentParams.value = String(this.current.params);
+    }
+    try {
+      taCurrentQuery.value = JSON.stringify(this.current.query, null, 2);
+    } catch(e) {
+      taCurrentQuery.value = String(this.current.query);
+    }
+
+    // Update token-select options:
+    const tokens = parseRouteTemplate(this.current.routeTemplate).filter(t => t.type==='param');
+    while(tokenSelect.firstChild){
+      tokenSelect.removeChild(tokenSelect.firstChild);
+    }
+    if (tokens.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '--No tokens--';
+      tokenSelect.appendChild(opt);
+      tokenSelect.disabled = true;
+    } else {
+      tokenSelect.disabled = false;
+      tokens.forEach(t=>{
+        const opt = document.createElement('option');
+        opt.value = t.value;
+        opt.textContent = t.value + (this.current.params[t.value] ? ' = "'+this.current.params[t.value]+'"' : ' (unset)');
+        tokenSelect.appendChild(opt);
+      });
+    }
+
+    // Update history log
+    const taHistoryLog = document.getElementById('history-log');
+    const historyStrings = this.history.map((h,i) => {
+      const marker = (i === this.historyIndex) ? '>' : ' ';
+      return marker + ' [' + i + '] ' + h.path;
+    });
+    taHistoryLog.value = historyStrings.join('\n');
+
+    // Update workflow step selector
+    const workflowStepSelect = document.getElementById('workflow-select-step');
+    while(workflowStepSelect.firstChild) workflowStepSelect.removeChild(workflowStepSelect.firstChild);
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = '--Select Step--';
+    workflowStepSelect.appendChild(emptyOpt);
+
+    const branch = this.workflow.branches[this.workflow.currentBranch];
+    if (branch && branch.steps.length > 0) {
+      branch.steps.forEach((step, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        let label = `Step ${i}: ${step.routeTemplate}`;
+        const paramsString = JSON.stringify(step.params);
+        const queryString = JSON.stringify(step.query);
+        label += ` Params: ${paramsString}`;
+        label += ` Query: ${queryString}`;
+        if (i === branch.currentStepIndex) label += ' [CURRENT]';
+        opt.textContent = label;
+        workflowStepSelect.appendChild(opt);
+      });
+      workflowStepSelect.value = branch.currentStepIndex;
+    }
+
+    // Update branches list display
+    const branchesListEl = document.getElementById('branches-list');
+    let branchesText = 'Branches:\n';
+    for (const bname in this.workflow.branches) {
+      let marker = (bname === this.workflow.currentBranch) ? ' *' : '  ';
+      const b = this.workflow.branches[bname];
+      branchesText += `${marker} ${bname} (Steps: ${b.steps.length}, CurrentStep: ${b.currentStepIndex})\n`;
+    }
+    branchesListEl.textContent = branchesText;
+
+    // Update history-index input max
+    const inputHistoryIndex = document.getElementById('history-index');
+    inputHistoryIndex.max = this.history.length -1;
+    inputHistoryIndex.value = this.historyIndex;
+  },
+
+  setupEventListeners() {
+    const btnNavigate = document.getElementById('btn-navigate');
+    const inputRoute = document.getElementById('input-route');
+    const taInputParams = document.getElementById('input-params');
+    const inputQuery = document.getElementById('input-query');
+
+    btnNavigate.addEventListener('click', ()=>{
+      const routeStr = inputRoute.value.trim();
+      const paramsRaw = taInputParams.value.trim();
+      const paramsObj = safeJsonParse(paramsRaw) || {};
+      const queryStr = inputQuery.value.trim();
+      const queryObj = parseQueryString(queryStr);
+      if (routeStr) {
+        Router.navigate(routeStr, paramsObj, queryObj);
+      }
+    });
+
+    const btnApplyParams = document.getElementById('btn-apply-params');
+    btnApplyParams.addEventListener('click', () => {
+      const paramsRaw = taInputParams.value.trim();
+      const paramsObj = safeJsonParse(paramsRaw);
+      if (paramsObj && typeof paramsObj === 'object') {
+        Router.updateParams(paramsObj);
+      }
+    });
+
+    const btnApplyQuery = document.getElementById('btn-apply-query');
+    btnApplyQuery.addEventListener('click', () => {
+      const queryStr = inputQuery.value.trim();
+      const queryObj = parseQueryString(queryStr);
+      Router.updateQuery(queryObj);
+    });
+
+    // Modify tokens controls
+    const tokenSelect = document.getElementById('token-select');
+    const tokenValueInput = document.getElementById('token-value');
+    const btnUpdateToken = document.getElementById('btn-update-token');
+    const btnRemoveToken = document.getElementById('btn-remove-token');
+
+    btnUpdateToken.addEventListener('click', () => {
+      const token = tokenSelect.value;
+      const val = tokenValueInput.value.trim();
+      if (token) {
+        Router.updateParams({[token]: val});
+        tokenValueInput.value = '';
+      }
+    });
+    btnRemoveToken.addEventListener('click', () => {
+      const token = tokenSelect.value;
+      if (token) {
+        Router.removeParam(token);
+        tokenValueInput.value = '';
+      }
+    });
+
+    // Query param controls
+    const inputQueryKey = document.getElementById('query-key');
+    const inputQueryValue = document.getElementById('query-value');
+    const btnAddQuery = document.getElementById('btn-add-query');
+    const btnRemoveQuery = document.getElementById('btn-remove-query');
+
+    btnAddQuery.addEventListener('click', () => {
+      const key = inputQueryKey.value.trim();
+      const val = inputQueryValue.value.trim();
+      if (key) {
+        const newQuery = {};
+        newQuery[key] = val;
+        Router.updateQuery(newQuery);
+        inputQueryKey.value = '';
+        inputQueryValue.value = '';
+      }
+    });
+    btnRemoveQuery.addEventListener('click', () => {
+      const key = inputQueryKey.value.trim();
+      if (key) {
+        Router.removeQueryParam(key);
+        inputQueryKey.value = '';
+        inputQueryValue.value = '';
+      }
+    });
+
+    // History controls
+    const btnBack = document.getElementById('btn-back');
+    const btnForward = document.getElementById('btn-forward');
+    const btnReset = document.getElementById('btn-reset');
+    const inputHistoryIndex = document.getElementById('history-index');
+    const btnJumpHistory = document.getElementById('btn-jump-history');
+
+    btnBack.addEventListener('click', () => Router.back());
+    btnForward.addEventListener('click', () => Router.forward());
+    btnReset.addEventListener('click', () => Router.reset());
+    btnJumpHistory.addEventListener('click', () => {
+      const val = parseInt(inputHistoryIndex.value,10);
+      if (!isNaN(val)) Router.jumpToHistory(val);
+    });
+
+    // Workflow controls
+    const workflowStepSelect = document.getElementById('workflow-select-step');
+    const btnGoStep = document.getElementById('btn-go-step');
+    const btnNextStep = document.getElementById('btn-next-step');
+    const btnPrevStep = document.getElementById('btn-prev-step');
+    const btnNewBranch = document.getElementById('btn-new-branch');
+    const inputBranchName = document.getElementById('branch-name');
+    const btnSwitchBranch = document.getElementById('btn-switch-branch');
+    const btnShowBranches = document.getElementById('btn-show-branches');
+
+    btnGoStep.addEventListener('click', () => {
+      const idx = parseInt(workflowStepSelect.value, 10);
+      if (!isNaN(idx)) {
+        Router.workflowGoToStep(idx);
+      }
+    });
+    btnNextStep.addEventListener('click', () => Router.workflowNextStep());
+    btnPrevStep.addEventListener('click', () => Router.workflowPrevStep());
+    btnNewBranch.addEventListener('click', () => {
+      const bname = inputBranchName.value.trim();
+      if (bname) {
+        if (Router.workflowCreateBranch(bname)) {
+          inputBranchName.value = '';
+          Router.refreshUI();
+        } else {
+          alert('Branch name exists or invalid');
+        }
+      }
+    });
+    btnSwitchBranch.addEventListener('click', () => {
+      const bname = inputBranchName.value.trim();
+      if (bname) {
+        if (!Router.workflowSwitchBranch(bname)) {
+          alert('Branch not found');
+        } else {
+          inputBranchName.value = '';
+        }
+      }
+    });
+    btnShowBranches.addEventListener('click', () => {
+      const names = Object.keys(Router.workflow.branches);
+      alert('Branches:\n' + names.join('\n'));
+    });
+
+  }
+};
+
+// Initialize and start app
+Router.init();
+Router.setupEventListeners();
+
+window.Router = Router; // expose for debugging
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>REST API Interactive Playground (Minimal UI)</title>
+  <style>
+    /* Intentionally minimal: default browser styles only */
+  </style>
+</head>
+<body>
+  <h1>REST API Interactive Playground</h1>
+  <p>Minimal interface demonstrating a mock REST API server and many interactive controls. Create requests, change server behavior, record sequences, run batches, explore auth, caching, rate-limits, errors, and more.</p>
+
+  <fieldset>
+    <legend>Request Builder</legend>
+
+    Method:
+    <select id="req-method">
+      <option>GET</option>
+      <option>POST</option>
+      <option>PUT</option>
+      <option>PATCH</option>
+      <option>DELETE</option>
+      <option>OPTIONS</option>
+    </select>
+
+    URL:
+    <input id="req-url" size="50" value="/todos" />
+
+    <div>
+      Query params (key=value, one per line):
+      <br>
+      <textarea id="req-query" rows="3" cols="60"></textarea>
+    </div>
+
+    <div>
+      Headers (key:value, one per line):
+      <br>
+      <textarea id="req-headers" rows="3" cols="60"></textarea>
+    </div>
+
+    <div>
+      Body (JSON or raw):
+      <br>
+      <textarea id="req-body" rows="8" cols="60">{ "title": "New item" }</textarea>
+    </div>
+
+    <div>
+      Auth:
+      <select id="auth-mode">
+        <option value="none">None</option>
+        <option value="basic">Basic (username/password)</option>
+        <option value="bearer">Bearer token</option>
+      </select>
+      <span id="auth-basic" style="display:none">
+        Username: <input id="auth-user" value="admin">
+        Password: <input id="auth-pass" value="password">
+      </span>
+      <span id="auth-bearer" style="display:none">
+        Token: <input id="auth-token" size="30">
+        <button id="use-latest-token">Use latest issued token</button>
+      </span>
+    </div>
+
+    <div>
+      File upload (simulated, will embed base64 into body as "fileData"):
+      <input type="file" id="req-file">
+      <button id="attach-file">Attach file to body</button>
+    </div>
+
+    <div>
+      Delay (ms): <input type="range" id="req-delay" min="0" max="5000" value="0"> <span id="req-delay-val">0</span>
+      Error probability (%): <input type="range" id="req-errp" min="0" max="100" value="0"> <span id="req-errp-val">0</span>
+    </div>
+
+    <div>
+      <button id="send-request">Send Request</button>
+      <button id="send-repeat">Send + Retry with backoff (3)</button>
+      <button id="batch-open">Open Batch Composer</button>
+      <button id="record-toggle">Start Recording Sequence</button>
+      <button id="save-preset">Save Preset</button>
+      <button id="load-preset">Load Preset</button>
+      <button id="clear-history">Clear History</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Response / Inspector</legend>
+    <div>
+      Status: <span id="res-status">-</span>
+      | Time: <span id="res-time">-</span> ms
+      | Size: <span id="res-size">-</span> bytes
+    </div>
+    <div>
+      Headers:
+      <pre id="res-headers">-</pre>
+    </div>
+    <div>
+      Body:
+      <pre id="res-body">-</pre>
+    </div>
+    <div>
+      Timeline / Logs:
+      <pre id="res-log" style="height:140px; overflow:auto"></pre>
+    </div>
+
+    <div>
+      Generated code:
+      <select id="code-type"><option>cURL</option><option>fetch</option><option>axios</option></select>
+      <button id="gen-code">Generate Code</button>
+      <pre id="code-out"></pre>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>History & Presets</legend>
+    <div>
+      Recent Requests:
+      <ul id="history-list"></ul>
+    </div>
+    <div>
+      Presets stored locally:
+      <ul id="presets-list"></ul>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Server Controls and Mock Database</legend>
+    <div>
+      Server state:
+      <select id="server-mode">
+        <option value="normal">normal</option>
+        <option value="maintenance">maintenance</option>
+        <option value="broken">broken</option>
+        <option value="offline">offline</option>
+      </select>
+      <button id="restart-server">Restart Server</button>
+      <span>Current: <b id="server-state">normal</b></span>
+    </div>
+
+    <div>
+      Rate limit (requests per minute per token): <input id="server-ratelimit" value="60" size="5">
+      Global error probability (%) <input id="server-errp-global" value="0" size="3">
+    </div>
+
+    <div>
+      Caching: <input type="checkbox" id="server-cache" checked> Use ETag & If-None-Match
+      Concurrency <input type="checkbox" id="server-concurrency" checked> Use If-Match/versions
+    </div>
+
+    <div>
+      Collections:
+      <select id="collection-select">
+        <option>todos</option>
+        <option>users</option>
+      </select>
+      <button id="view-collection">View</button>
+      <button id="add-random">Add Random Item</button>
+      <button id="clear-collection">Clear Collection</button>
+      <div>
+        Collection contents:
+        <pre id="collection-contents" style="height:140px; overflow:auto"></pre>
+      </div>
+    </div>
+
+    <div>
+      Tokens:
+      <button id="issue-token">Issue Token</button>
+      Token list:
+      <ul id="token-list"></ul>
+    </div>
+
+    <div>
+      Custom route behaviors (define a simple mock response):
+      <div>
+        Method: <select id="custom-method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+        Path template: <input id="custom-path" value="/greet/:name" size="20">
+        Status: <input id="custom-status" value="200" size="4">
+      </div>
+      <div>
+        Response template (JSON, use {{param}}, {{query.q}}, {{body.x}} placeholders):
+        <br>
+        <textarea id="custom-template" rows="4" cols="60">{ "message": "Hello {{param.name}}", "echoQuery": "{{query.q}}" }</textarea>
+      </div>
+      <button id="add-custom-route">Add Route</button>
+      <div>
+        Defined routes:
+        <ul id="custom-routes"></ul>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Batch Composer & Sequence Runner</legend>
+    <div id="batch-area" style="display:none">
+      <div>
+        Compose batch (each line JSON with {method,url,headers,body}):
+        <br>
+        <textarea id="batch-text" rows="6" cols="80">[{"method":"GET","url":"/todos"},{"method":"POST","url":"/todos","body":{"title":"Batch added"}}]</textarea>
+      </div>
+      <div>
+        <button id="run-batch">Run Batch</button>
+        <button id="close-batch">Close Batch Composer</button>
+      </div>
+      <div>
+        Batch results:
+        <pre id="batch-results" style="height:140px; overflow:auto"></pre>
+      </div>
+    </div>
+
+    <div id="sequence-area">
+      Sequence recorder:
+      <div>
+        <ol id="sequence-list"></ol>
+      </div>
+      <div>
+        <button id="play-sequence">Play Sequence</button>
+        <button id="clear-sequence">Clear Sequence</button>
+      </div>
+      <div>
+        Add a conditional step:
+        Condition (JS with 'res' variable): <input id="seq-cond" size="50" value="res.status === 201">
+        If true, run request (JSON): <input id="seq-req" size="80" value='{"method":"GET","url":"/todos"}'>
+        <button id="add-seq-step">Add Step</button>
+      </div>
+    </div>
+  </fieldset>
+
+  <script>
+    // Mock REST server core
+    (function(){
+      // Utilities
+      function now(){ return Date.now(); }
+      function deepClone(x){ return JSON.parse(JSON.stringify(x)); }
+      function parseHeaders(text){
+        const lines = text.split('\\n').map(s=>s.trim()).filter(Boolean);
+        const obj = {};
+        lines.forEach(l=>{
+          const i = l.indexOf(':');
+          if(i>=0){
+            const k = l.slice(0,i).trim();
+            const v = l.slice(i+1).trim();
+            obj[k] = v;
+          }
+        });
+        return obj;
+      }
+      function parseQuery(text){
+        const lines = text.split('\\n').map(s=>s.trim()).filter(Boolean);
+        const q = {};
+        lines.forEach(l=>{
+          const i = l.indexOf('=');
+          if(i>=0){
+            const k = l.slice(0,i);
+            const v = l.slice(i+1);
+            q[k] = v;
+          }
+        });
+        return q;
+      }
+      function parseUrlQuery(url){
+        const q = {};
+        const idx = url.indexOf('?');
+        if(idx<0) return {path:url, query:{}};
+        const path = url.slice(0,idx);
+        const params = url.slice(idx+1).split('&').filter(Boolean);
+        params.forEach(p=>{
+          const [k,v=''] = p.split('=');
+          q[decodeURIComponent(k)] = decodeURIComponent(v||'');
+        });
+        return {path, query:q};
+      }
+      function uuid(){ return Math.random().toString(36).slice(2,10); }
+      function etagFor(obj){ try{ return '"' + btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).slice(0,12) + '"'; }catch(e){ return '"0"'; } }
+      function matchPath(template, actual){
+        // template like /todos/:id/sub
+        const tA = template.split('/').filter(Boolean);
+        const aA = actual.split('/').filter(Boolean);
+        if(tA.length !== aA.length) return null;
+        const params = {};
+        for(let i=0;i<tA.length;i++){
+          if(tA[i].startsWith(':')){
+            params[tA[i].slice(1)] = decodeURIComponent(aA[i]);
+          } else if(tA[i] !== aA[i]) return null;
+        }
+        return params;
+      }
+
+      // In-memory DB
+      const DB = {
+        todos: [],
+        users: []
+      };
+
+      // Seed DB
+      for(let i=1;i<=5;i++){
+        DB.todos.push({ id: String(i), title: 'Todo #' + i, completed: i%2===0, version: 1, createdAt: Date.now() - i*100000 });
+      }
+      DB.users.push({ id: 'u1', name: 'Alice', role:'admin', version:1 });
+
+      // Server config and routes
+      const server = {
+        mode: 'normal', // normal, maintenance, broken, offline
+        rateLimitPerMin: 60,
+        globalErrorProbability: 0,
+        cache: true,
+        concurrency: true,
+        tokens: [], // {token,issued,expiresAt,limit,requests}
+        routes: [], // custom routes
+        logs: []
+      };
+
+      // Default helper routes
+      function findRoute(method, path){
+        // check custom routes first
+        for(let r of server.routes){
+          if(r.method === method){
+            const params = matchPath(r.path, path);
+            if(params) return { custom: r, params };
+          }
+        }
+        // built-in routes:
+        // /todos, /todos/:id, /users, /users/:id, /auth/login, /batch
+        const builtins = [
+          { method:'GET', path:'/todos' },
+          { method:'POST', path:'/todos' },
+          { method:'GET', path:'/todos/:id' },
+          { method:'PUT', path:'/todos/:id' },
+          { method:'PATCH', path:'/todos/:id' },
+          { method:'DELETE', path:'/todos/:id' },
+
+          { method:'GET', path:'/users' },
+          { method:'POST', path:'/users' },
+          { method:'GET', path:'/users/:id' },
+
+          { method:'POST', path:'/auth/login' },
+          { method:'POST', path:'/batch' }
+        ];
+        for(let b of builtins){
+          if(b.method === method){
+            const params = matchPath(b.path, path);
+            if(params) return { builtin: b.path, params };
+          }
+        }
+        return null;
+      }
+
+      // Logging helper
+      function log(...args){
+        server.logs.push({time:now(), msg: args.join(' ')});
+        if(server.logs.length>200) server.logs.shift();
+        renderLogs();
+      }
+
+      // Rate limiter reset interval
+      setInterval(()=>{ server.tokens.forEach(t=>t.requests=0); }, 60*1000);
+
+      // Expose server functions
+      window.MockServer = {
+        DB, server,
+        findRoute,
+        handleRequest: async function(request){
+          // request: {method, path, query, headers, body, authToken, clientDelay, errProb}
+          const start = now();
+          // Immediate offline check
+          if(server.mode === 'offline'){
+            await delay(10);
+            return {status:0, headers:{}, body:'Server offline', time: now()-start, size:0, log:'offline'};
+          }
+          // Maintenance vs broken
+          if(server.mode === 'maintenance'){
+            await delay(100);
+            return {status:503, headers:{'Retry-After':'60'}, body:{error:'maintenance'}, time: now()-start, size:0};
+          }
+          if(server.mode === 'broken'){
+            if(Math.random()<0.5) return {status:500, headers:{}, body:{error:'broken'}, time: now()-start, size:0};
+          }
+
+          // Global simulated error
+          const totalErrProb = Math.min(100, (server.globalErrorProbability||0) + (request.errProb||0));
+          if(Math.random()*100 < totalErrProb){
+            await delay(request.clientDelay || 0);
+            log('Injected error for', request.method, request.path);
+            return {status:500, headers:{}, body:{error:'injected error'}, time: now()-start, size:0};
+          }
+
+          // Rate limiting
+          if(request.authToken){
+            const t = server.tokens.find(x=>x.token===request.authToken);
+            if(t){
+              t.requests = (t.requests||0) + 1;
+              const limit = t.limit || server.rateLimitPerMin;
+              if((t.requests||0) > limit){
+                return {status:429, headers:{'X-RateLimit-Limit':String(limit), 'X-RateLimit-Remaining':'0'}, body:{error:'rate limit exceeded'}, time: now()-start, size:0};
+              }
+            } else {
+              // unknown token => 401
+              return {status:401, headers:{}, body:{error:'invalid token'}, time: now()-start, size:0};
+            }
+          } else {
+            // If endpoint requires auth (we can decide that POST/PUT/PATCH/DELETE require auth for todos)
+            if(['POST','PUT','PATCH','DELETE'].includes(request.method) && request.path.startsWith('/todos')){
+              return {status:401, headers:{}, body:{error:'auth required'}, time: now()-start, size:0};
+            }
+          }
+
+          // Check custom routes
+          const matched = findRoute(request.method, request.path);
+          if(matched && matched.custom){
+            // Render template with placeholders
+            const r = matched.custom;
+            const params = matched.params;
+            let outText = r.template;
+            // simple placeholder replacement
+            outText = outText.replace(/\\{\\{\\s*param\\.([a-zA-Z0-9_]+)\\s*\\}\\}/g, (_,k)=>params[k]||'');
+            outText = outText.replace(/\\{\\{\\s*query\\.([a-zA-Z0-9_]+)\\s*\\}\\}/g, (_,k)=>request.query[k]||'');
+            outText = outText.replace(/\\{\\{\\s*body\\.([a-zA-Z0-9_]+)\\s*\\}\\}/g, (_,k)=> (request.body && request.body[k]) ? request.body[k] : '' );
+            await delay(request.clientDelay || 0);
+            let parsed;
+            try{ parsed = JSON.parse(outText); }catch(e){ parsed = outText; }
+            return {status:Number(r.status), headers:{'Content-Type':'application/json'}, body:parsed, time: now()-start, size:JSON.stringify(parsed).length};
+          }
+
+          // Builtin handlers
+          if(matched && matched.builtin){
+            const pathTemplate = matched.builtin;
+            const pathParams = matched.params;
+            // Simulate time
+            await delay(request.clientDelay || 0);
+
+            // /auth/login
+            if(methodEquals(request.method,'POST') && pathTemplate === '/auth/login'){
+              const body = request.body || {};
+              if(body.username === 'admin' && body.password === 'password'){
+                const token = 'tkn_' + uuid();
+                const expires = now() + 60*60*1000;
+                const t = {token, issued: now(), expiresAt: expires, limit: server.rateLimitPerMin, requests:0};
+                server.tokens.push(t);
+                log('Issued token', token);
+                return {status:201, headers:{}, body:{token, expiresAt:expires}, time: now()-start, size:0};
+              } else {
+                return {status:401, headers:{}, body:{error:'bad credentials'}, time: now()-start, size:0};
+              }
+            }
+
+            // /batch
+            if(methodEquals(request.method,'POST') && pathTemplate === '/batch'){
+              // body should be array of request specs
+              const items = Array.isArray(request.body) ? request.body : [];
+              const results = [];
+              for(let it of items){
+                const rreq = {
+                  method: it.method || 'GET',
+                  path: it.url || '/',
+                  query: it.query || {},
+                  headers: it.headers || {},
+                  body: it.body || {},
+                  authToken: it.authToken || request.authToken,
+                  clientDelay: it.delay || 0,
+                  errProb: it.errProb || 0
+                };
+                const res = await window.MockServer.handleRequest(rreq);
+                results.push({status:res.status, body:res.body, headers:res.headers});
+              }
+              return {status:200, headers:{}, body:results, time: now()-start, size:JSON.stringify(results).length};
+            }
+
+            // Todos collection
+            if(pathTemplate.startsWith('/todos')){
+              if(methodEquals(request.method,'GET') && pathTemplate === '/todos'){
+                // support pagination & filter & sort via request.query
+                let items = DB.todos.slice();
+                // filters
+                if(request.query && request.query.filter){
+                  try{
+                    const f = JSON.parse(request.query.filter);
+                    items = items.filter(it=>{
+                      for(let k in f){ if(String(it[k]) !== String(f[k])) return false; }
+                      return true;
+                    });
+                  }catch(e){}
+                }
+                // search q
+                if(request.query && request.query.q){
+                  const q = request.query.q.toLowerCase();
+                  items = items.filter(it => JSON.stringify(it).toLowerCase().includes(q));
+                }
+                // sort
+                if(request.query && request.query.sort){
+                  const s = request.query.sort;
+                  items.sort((a,b)=> a[s] > b[s] ? 1 : -1);
+                }
+                // pagination
+                let page = Number(request.query.page) || 1;
+                let limit = Number(request.query.limit) || 10;
+                const total = items.length;
+                const startIdx = (page-1)*limit;
+                const pageItems = items.slice(startIdx, startIdx+limit);
+                // ETag support
+                const et = etagFor(pageItems);
+                if(server.cache && request.headers && request.headers['If-None-Match'] && request.headers['If-None-Match'] === et){
+                  return {status:304, headers:{ETag:et}, body:null, time: now()-start, size:0};
+                }
+                return {status:200, headers:{ETag:et, 'X-Total-Count':String(total)}, body:{items:pageItems, page, limit, total, _links:{self:request.path }}, time: now()-start, size:JSON.stringify(pageItems).length};
+              }
+
+              // GET /todos/:id
+              if(methodEquals(request.method,'GET') && pathTemplate === '/todos/:id'){
+                const id = pathParams.id;
+                const item = DB.todos.find(x=>x.id===id);
+                if(!item) return {status:404, headers:{}, body:{error:'not found'}};
+                const et = etagFor(item);
+                if(server.cache && request.headers && request.headers['If-None-Match'] && request.headers['If-None-Match'] === et){
+                  return {status:304, headers:{ETag:et}, body:null};
+                }
+                return {status:200, headers:{ETag:et}, body:item, time: now()-start, size:JSON.stringify(item).length};
+              }
+
+              // POST /todos
+              if(methodEquals(request.method,'POST') && pathTemplate === '/todos'){
+                // require auth already checked above
+                const body = request.body || {};
+                if(!body.title) return {status:422, headers:{}, body:{error:'title required'}};
+                const id = String(DB.todos.length ? (Number(DB.todos[DB.todos.length-1].id)+1) : 1);
+                const newItem = { id, title: body.title, completed: !!body.completed, version: 1, createdAt: now() };
+                DB.todos.push(newItem);
+                return {status:201, headers:{Location:'/todos/'+id}, body:newItem, time: now()-start, size:JSON.stringify(newItem).length};
+              }
+
+              // PUT /todos/:id or PATCH
+              if((methodEquals(request.method,'PUT') || methodEquals(request.method,'PATCH')) && pathTemplate === '/todos/:id'){
+                const id = pathParams.id;
+                const idx = DB.todos.findIndex(x=>x.id===id);
+                if(idx<0) return {status:404, headers:{}, body:{error:'not found'}};
+                const existing = DB.todos[idx];
+                // concurrency: If-Match header required if enabled
+                if(server.concurrency && request.headers && request.headers['If-Match']){
+                  const curET = etagFor(existing);
+                  if(request.headers['If-Match'] !== curET) return {status:412, headers:{}, body:{error:'etag mismatch, conflict'}};
+                }
+                const body = request.body || {};
+                const updated = methodEquals(request.method,'PUT') ? Object.assign({}, existing, body) : Object.assign({}, existing, body);
+                updated.version = (existing.version||1)+1;
+                DB.todos[idx] = updated;
+                return {status:200, headers:{ETag:etagFor(updated)}, body:updated, time: now()-start, size:JSON.stringify(updated).length};
+              }
+
+              // DELETE /todos/:id
+              if(methodEquals(request.method,'DELETE') && pathTemplate === '/todos/:id'){
+                const id = pathParams.id;
+                const idx = DB.todos.findIndex(x=>x.id===id);
+                if(idx<0) return {status:404, headers:{}, body:{error:'not found'}};
+                DB.todos.splice(idx,1);
+                return {status:204, headers:{}, body:null, time: now()-start, size:0};
+              }
+            } // end todos
+
+            // Users
+            if(pathTemplate.startsWith('/users')){
+              if(methodEquals(request.method,'GET') && pathTemplate === '/users'){
+                return {status:200, headers:{}, body:DB.users};
+              }
+              if(methodEquals(request.method,'POST') && pathTemplate === '/users'){
+                const b = request.body || {};
+                if(!b.name) return {status:422, body:{error:'name required'}};
+                const id = 'u' + (DB.users.length+1);
+                const u = {id, name: b.name, version:1};
+                DB.users.push(u);
+                return {status:201, headers:{Location:'/users/'+id}, body:u};
+              }
+              if(methodEquals(request.method,'GET') && pathTemplate === '/users/:id'){
+                const id = pathParams.id;
+                const u = DB.users.find(x=>x.id===id);
+                if(!u) return {status:404, body:{error:'not found'}};
+                return {status:200, body:u};
+              }
+            }
+
+          } // end builtin handling
+
+          // Unknown route
+          return {status:404, headers:{}, body:{error:'not found'}};
+        }
+      };
+
+      // Helper
+      function methodEquals(a,b){ return String(a).toUpperCase() === String(b).toUpperCase(); }
+
+      // Delay helper
+      function delay(ms){ return new Promise(res=>setTimeout(res, ms || 0)); }
+
+      // Expose functions to UI
+      window.MockServerAPI = {
+        DB,
+        server,
+        log,
+        issueToken: function(limitMinutes){
+          const token = 'tkn_' + uuid();
+          const t = {token, issued: now(), expiresAt: now() + 60*60*1000, limit: server.rateLimitPerMin, requests:0};
+          server.tokens.push(t);
+          log('Issued token', token);
+          renderTokens();
+          return t;
+        },
+        clearCollection: function(name){ DB[name] = []; renderCollection(); },
+        addRandom: function(name){
+          if(name === 'todos'){
+            const id = String(DB.todos.length ? (Number(DB.todos[DB.todos.length-1].id)+1) : 1);
+            DB.todos.push({id, title: 'Generated '+Math.random().toString(36).slice(2,6), completed: false, version:1, createdAt: now()});
+          } else if(name === 'users'){
+            const id = 'u'+(DB.users.length+1);
+            DB.users.push({id, name: 'User'+Math.random().toString(36).slice(2,4), version:1});
+          }
+          renderCollection();
+        },
+        addCustomRoute: function(method, path, status, template){
+          server.routes.push({method, path, status, template});
+          renderCustomRoutes();
+        },
+        getLogs: function(){ return server.logs.slice(); }
+      };
+
+      // UI wiring - declare elements
+      const el = id => document.getElementById(id);
+
+      // Request UI
+      el('req-delay').addEventListener('input', ()=> el('req-delay-val').textContent = el('req-delay').value);
+      el('req-errp').addEventListener('input', ()=> el('req-errp-val').textContent = el('req-errp').value);
+
+      el('auth-mode').addEventListener('change', ()=>{
+        const v = el('auth-mode').value;
+        el('auth-basic').style.display = v==='basic' ? '' : 'none';
+        el('auth-bearer').style.display = v==='bearer' ? '' : 'none';
+      });
+
+      el('use-latest-token').addEventListener('click', ()=>{
+        const t = server.tokens[server.tokens.length-1];
+        if(t) el('auth-token').value = t.token;
+      });
+
+      // Send request action
+      el('send-request').addEventListener('click', async ()=>{
+        const req = buildRequestFromUI();
+        await sendAndRender(req, {record:true});
+      });
+
+      el('send-repeat').addEventListener('click', async ()=>{
+        const req = buildRequestFromUI();
+        await retryWithBackoff(req, 3);
+      });
+
+      el('attach-file').addEventListener('click', ()=> {
+        const f = el('req-file').files[0];
+        if(!f) return alert('Choose a file first');
+        const reader = new FileReader();
+        reader.onload = function(e){
+          try{
+            const bodyText = el('req-body').value.trim();
+            let body = {};
+            try{ body = JSON.parse(bodyText); }catch(e){ body = {}; }
+            body.fileName = f.name;
+            body.fileData = e.target.result.split(',')[1]; // base64
+            el('req-body').value = JSON.stringify(body, null, 2);
+          }catch(e){ alert('Failed to attach file'); }
+        };
+        reader.readAsDataURL(f);
+      });
+
+      // File prefill
+      el('req-file').addEventListener('change', ()=>{ /* noop */ });
+
+      // Batch composer
+      el('batch-open').addEventListener('click', ()=> el('batch-area').style.display = '');
+      el('close-batch').addEventListener('click', ()=> el('batch-area').style.display = 'none');
+      el('run-batch').addEventListener('click', async ()=>{
+        let arr;
+        try{ arr = JSON.parse(el('batch-text').value); }catch(e){ return alert('Invalid JSON'); }
+        const req = { method:'POST', path:'/batch', body: arr, query:{}, headers:{}, authToken: null, clientDelay:0, errProb:0 };
+        // attach auth if chosen in UI
+        const am = el('auth-mode').value;
+        if(am==='bearer') req.authToken = el('auth-token').value;
+        const res = await window.MockServer.handleRequest(req);
+        el('batch-results').textContent = JSON.stringify(res, null, 2);
+      });
+
+      // History
+      const HISTORY_KEY = 'rest_play_history_v1';
+      let HISTORY = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      function pushHistory(item){
+        HISTORY.unshift(Object.assign({time: now()}, item));
+        if(HISTORY.length>50) HISTORY.length = 50;
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(HISTORY));
+        renderHistory();
+      }
+      function renderHistory(){
+        const ul = el('history-list'); ul.innerHTML = '';
+        HISTORY.forEach((h, idx)=>{
+          const li = document.createElement('li');
+          const t = new Date(h.time).toLocaleTimeString();
+          li.textContent = `[${t}] ${h.method} ${h.url} => ${h.response && h.response.status || '-'}`;
+          li.style.cursor = 'pointer';
+          li.addEventListener('click', ()=> {
+            // restore
+            el('req-method').value = h.method;
+            el('req-url').value = h.url;
+            el('req-headers').value = (h.requestHeadersText||'');
+            el('req-body').value = (h.requestBodyText||'');
+            el('req-query').value = (h.requestQueryText||'');
+          });
+          ul.appendChild(li);
+        });
+      }
+      renderHistory();
+
+      // Presets
+      const PRESETS_KEY = 'rest_play_presets_v1';
+      function savePreset(){
+        const p = {
+          method: el('req-method').value,
+          url: el('req-url').value,
+          headers: el('req-headers').value,
+          body: el('req-body').value,
+          query: el('req-query').value
+        };
+        const presets = JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]');
+        presets.push({name: 'preset '+(new Date()).toLocaleTimeString(), data:p});
+        localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+        renderPresets();
+      }
+      function renderPresets(){
+        const ul = el('presets-list'); ul.innerHTML='';
+        const presets = JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]');
+        presets.forEach((p, idx)=>{
+          const li = document.createElement('li');
+          li.textContent = p.name;
+          const btn = document.createElement('button'); btn.textContent = 'Load';
+          btn.addEventListener('click', ()=>{
+            el('req-method').value = p.data.method;
+            el('req-url').value = p.data.url;
+            el('req-headers').value = p.data.headers;
+            el('req-body').value = p.data.body;
+            el('req-query').value = p.data.query;
+          });
+          li.appendChild(btn);
+          ul.appendChild(li);
+        });
+      }
+      renderPresets();
+      el('save-preset').addEventListener('click', savePreset);
+      el('load-preset').addEventListener('click', ()=> renderPresets());
+
+      el('clear-history').addEventListener('click', ()=> {
+        HISTORY = [];
+        localStorage.removeItem(HISTORY_KEY);
+        renderHistory();
+      });
+
+      // Server controls
+      el('server-mode').addEventListener('change', ()=> {
+        server.mode = el('server-mode').value;
+        el('server-state').textContent = server.mode;
+        log('Server mode changed to', server.mode);
+      });
+      el('restart-server').addEventListener('click', ()=> {
+        server.mode = 'normal';
+        el('server-mode').value = 'normal';
+        el('server-state').textContent = 'normal';
+        server.logs = [];
+        log('Server restarted');
+      });
+      el('server-ratelimit').addEventListener('change', ()=> { server.rateLimitPerMin = Number(el('server-ratelimit').value); });
+      el('server-errp-global').addEventListener('change', ()=> { server.globalErrorProbability = Number(el('server-errp-global').value); });
+      el('server-cache').addEventListener('change', ()=> { server.cache = el('server-cache').checked; });
+      el('server-concurrency').addEventListener('change', ()=> { server.concurrency = el('server-concurrency').checked; });
+
+      // Collections
+      function renderCollection(){
+        const sel = el('collection-select').value;
+        el('collection-contents').textContent = JSON.stringify(window.MockServer.DB[sel], null, 2);
+      }
+      el('view-collection').addEventListener('click', renderCollection);
+      el('add-random').addEventListener('click', ()=> {
+        window.MockServer.addRandom(el('collection-select').value);
+      });
+      el('clear-collection').addEventListener('click', ()=> {
+        const c = el('collection-select').value;
+        if(!confirm('Clear collection '+c+'?')) return;
+        window.MockServer.clearCollection(c);
+      });
+
+      // Tokens
+      function renderTokens(){
+        const ul = el('token-list'); ul.innerHTML='';
+        server.tokens.forEach(t=>{
+          const li = document.createElement('li');
+          li.textContent = t.token + ' (requests:'+ (t.requests||0) +')';
+          const btn = document.createElement('button'); btn.textContent='Revoke';
+          btn.addEventListener('click', ()=> {
+            server.tokens = server.tokens.filter(x=>x.token!==t.token);
+            renderTokens();
+            log('Revoked token', t.token);
+          });
+          li.appendChild(btn);
+          ul.appendChild(li);
+        });
+      }
+      el('issue-token').addEventListener('click', ()=> {
+        const t = window.MockServer.issueToken();
+        renderTokens();
+      });
+      renderTokens();
+
+      // Custom routes
+      function renderCustomRoutes(){
+        const ul = el('custom-routes'); ul.innerHTML='';
+        server.routes.forEach((r, idx)=>{
+          const li = document.createElement('li');
+          li.textContent = `${r.method} ${r.path} -> ${r.status}`;
+          const btn = document.createElement('button'); btn.textContent='Remove';
+          btn.addEventListener('click', ()=> { server.routes.splice(idx,1); renderCustomRoutes(); });
+          li.appendChild(btn);
+          ul.appendChild(li);
+        });
+      }
+      el('add-custom-route').addEventListener('click', ()=> {
+        const m = el('custom-method').value;
+        const p = el('custom-path').value.trim();
+        const s = el('custom-status').value;
+        const t = el('custom-template').value;
+        server.routes.push({method:m, path:p, status:s, template:t});
+        renderCustomRoutes();
+      });
+
+      // Logs rendering
+      function renderLogs(){
+        const logs = server.logs.slice(-200).map(l=> new Date(l.time).toLocaleTimeString() + ' ' + l.msg).join('\\n');
+        el('res-log').textContent = logs;
+      }
+      setInterval(renderLogs, 1000);
+
+      // Sequence recorder
+      let recording = false;
+      const SEQ_KEY = 'rest_play_sequence_v1';
+      let SEQUENCE = JSON.parse(localStorage.getItem(SEQ_KEY) || '[]');
+      function renderSequence(){
+        const ol = el('sequence-list'); ol.innerHTML='';
+        SEQUENCE.forEach((s, idx)=>{
+          const li = document.createElement('li');
+          li.textContent = `If (${s.cond}) then ${s.req.method} ${s.req.url}`;
+          const btn = document.createElement('button'); btn.textContent='Run';
+          btn.addEventListener('click', async ()=> {
+            const r = expandSeqReq(s.req);
+            const res = await window.MockServer.handleRequest(r);
+            el('res-body').textContent = JSON.stringify(res.body, null, 2);
+            el('res-status').textContent = res.status;
+          });
+          const del = document.createElement('button'); del.textContent='Del';
+          del.addEventListener('click', ()=> { SEQUENCE.splice(idx,1); localStorage.setItem(SEQ_KEY, JSON.stringify(SEQUENCE)); renderSequence(); });
+          li.appendChild(btn); li.appendChild(del);
+          ol.appendChild(li);
+        });
+      }
+      function expandSeqReq(reqRaw){
+        const req = JSON.parse(JSON.stringify(reqRaw));
+        req.path = req.url;
+        req.query = req.query || {};
+        req.headers = req.headers || {};
+        req.authToken = req.authToken || (el('auth-mode').value==='bearer' ? el('auth-token').value : null);
+        req.clientDelay = Number(el('req-delay').value) || 0;
+        return req;
+      }
+      el('record-toggle').addEventListener('click', ()=> {
+        recording = !recording;
+        el('record-toggle').textContent = recording ? 'Stop Recording Sequence' : 'Start Recording Sequence';
+      });
+      el('add-seq-step').addEventListener('click', ()=> {
+        const cond = el('seq-cond').value;
+        let req;
+        try{ req = JSON.parse(el('seq-req').value); }catch(e){ return alert('Invalid request JSON'); }
+        SEQUENCE.push({cond, req});
+        localStorage.setItem(SEQ_KEY, JSON.stringify(SEQUENCE));
+        renderSequence();
+      });
+      el('play-sequence').addEventListener('click', async ()=> {
+        for(let step of SEQUENCE){
+          // evaluate cond with last response in context
+          const lastRes = window._lastResponse || {status:0, body:null, headers:{}};
+          let ok = false;
+          try{ ok = !!(new Function('res', 'return ' + step.cond))(lastRes); }catch(e){ ok = false; }
+          if(ok){
+            const r = expandSeqReq(step.req);
+            const res = await window.MockServer.handleRequest(r);
+            window._lastResponse = res;
+            el('res-body').textContent = JSON.stringify(res.body, null, 2);
+            el('res-status').textContent = res.status;
+          }
+        }
+      });
+      el('clear-sequence').addEventListener('click', ()=> { SEQUENCE=[]; localStorage.removeItem(SEQ_KEY); renderSequence(); });
+      renderSequence();
+
+      // Sequence recording: when recording, every send will be appended
+      function recordStepFromRequest(req, res){
+        if(!recording) return;
+        // simple record: condition always true, request saved
+        SEQUENCE.push({cond: 'true', req: {method: req.method, url: req.path, body:req.body}});
+        localStorage.setItem(SEQ_KEY, JSON.stringify(SEQUENCE));
+        renderSequence();
+      }
+
+      // Send + render
+      async function sendAndRender(req, opts){
+        opts = opts || {};
+        const start = now();
+        renderRequestPreview(req);
+        try{
+          const res = await window.MockServer.handleRequest(req);
+          const duration = now()-start;
+          displayResponse(res, duration);
+          // push to history
+          pushHistory({
+            method: req.method,
+            url: req.path,
+            requestHeadersText: Object.entries(req.headers||{}).map(([k,v])=>k+': '+v).join('\\n'),
+            requestBodyText: typeof req.body === 'object' ? JSON.stringify(req.body) : (req.body||''),
+            requestQueryText: Object.entries(req.query||{}).map(([k,v])=>k+'='+v).join('\\n'),
+            response: res
+          });
+          recordStepFromRequest(req, res);
+        }catch(e){
+          el('res-body').textContent = 'Error: ' + String(e);
+        }
+      }
+
+      function renderRequestPreview(req){
+        el('res-log').textContent = 'Sending ' + req.method + ' ' + req.path + '\\n';
+      }
+
+      function displayResponse(res, duration){
+        el('res-status').textContent = res.status;
+        el('res-time').textContent = String(duration);
+        el('res-size').textContent = String(res.size||0);
+        el('res-headers').textContent = JSON.stringify(res.headers||{}, null, 2);
+        el('res-body').textContent = typeof res.body === 'object' ? JSON.stringify(res.body, null, 2) : String(res.body);
+        renderLogs();
+      }
+
+      // Build request from UI fields
+      function buildRequestFromUI(){
+        const method = el('req-method').value;
+        const rawUrl = el('req-url').value.trim();
+        const parsed = parseUrlQuery(rawUrl);
+        const path = parsed.path;
+        const queryFromUrl = parsed.query || {};
+        const qText = el('req-query').value.trim();
+        const qFromText = parseQuery(qText);
+        const query = Object.assign({}, queryFromUrl, qFromText);
+        const headers = parseHeaders(el('req-headers').value);
+        let body;
+        const bodyText = el('req-body').value.trim();
+        try{ body = bodyText ? JSON.parse(bodyText) : null; }catch(e){ body = bodyText; }
+        // auth
+        let authToken = null;
+        const am = el('auth-mode').value;
+        if(am === 'basic'){
+          const user = el('auth-user').value;
+          const pass = el('auth-pass').value;
+          headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+        } else if(am === 'bearer'){
+          authToken = el('auth-token').value;
+          headers['Authorization'] = 'Bearer ' + authToken;
+        }
+        // respect If-None-Match or If-Match if headers text contains them
+        const delayMS = Number(el('req-delay').value) || 0;
+        const errProb = Number(el('req-errp').value) || 0;
+        return { method, path, query, headers, body, authToken, clientDelay: delayMS, errProb };
+      }
+
+      // Retry with exponential backoff
+      async function retryWithBackoff(req, attempts){
+        let attempt = 0;
+        while(attempt < attempts){
+          attempt++;
+          const res = await window.MockServer.handleRequest(req);
+          displayResponse(res, 0);
+          if(res.status >=200 && res.status < 300) return res;
+          // if client or server error, retry with backoff
+          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 200));
+        }
+        alert('Retries exhausted');
+      }
+
+      // Code generation
+      el('gen-code').addEventListener('click', ()=>{
+        const type = el('code-type').value;
+        const req = buildRequestFromUI();
+        const url = req.path + (Object.keys(req.query||{}).length ? '?' + Object.entries(req.query).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&') : '');
+        const headers = req.headers || {};
+        if(req.authToken && !headers['Authorization']) headers['Authorization'] = 'Bearer ' + req.authToken;
+        let out = '';
+        if(type === 'cURL'){
+          out = `curl -X ${req.method} "${url}"`;
+          for(let k in headers) out += ` -H "${k}: ${headers[k]}"`;
+          if(req.body) out += ` -d '${typeof req.body === 'string' ? req.body : JSON.stringify(req.body)}'`;
+        } else if(type === 'fetch'){
+          out = `fetch("${url}", { method: "${req.method}", headers: ${JSON.stringify(headers)}, body: ${req.body ? JSON.stringify(req.body) : 'undefined'} }).then(r=>r.json()).then(console.log)`;
+        } else if(type === 'axios'){
+          out = `axios(${JSON.stringify({ url, method: req.method.toLowerCase(), headers, data: req.body }, null, 2)})`;
+        }
+        el('code-out').textContent = out;
+      });
+
+      // History restore / clickable items already handled
+
+      // Collection render initial
+      renderCollection();
+      renderTokens();
+      renderCustomRoutes();
+      renderLogs();
+
+      // Make MockServer accessible for debugging
+      window._MockServer = window.MockServer;
+    })();
+
+    // Small helpers used in UI functions that reference MockServer var
+    function renderTokens(){ if(window.MockServerAPI) window.MockServerAPI && window.MockServerAPI.server && renderTokensInternal(); }
+    function renderTokensInternal(){}
+  </script>
+</body>
+</html>

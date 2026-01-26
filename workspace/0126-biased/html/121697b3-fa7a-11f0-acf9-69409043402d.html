@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Interactive Git Simulator</title>
+</head>
+<body>
+<h1>Interactive Git Simulator</h1>
+<p>
+This minimal simulator lets you create a local git repository, make commits, create and switch branches, stage changes, and perform merges with conflicts, resets, rebases, and more. All purely simulated in the browser.
+</p>
+
+<!-- Repository Init -->
+<div id="initSection">
+  <button id="initBtn">Initialize New Repository</button>
+</div>
+
+<!-- Repository Info & Controls -->
+<div id="repoSection" style="display:none; margin-top:10px;">
+  <div>
+    <label>Working Directory File (edit content):<br/>
+      <textarea id="workingFile" rows="4" cols="60"></textarea>
+    </label>
+  </div>
+  <div style="margin-top:5px;">
+    <button id="stageBtn">Stage Changes</button>
+    <button id="commitBtn">Commit Staged</button>
+  </div>
+  <div style="margin-top:10px;">
+    <label>New Branch Name: <input type="text" id="newBranchName" size="12"/></label>
+    <button id="createBranchBtn">Create Branch</button>
+    &nbsp;&nbsp;
+    <label>Checkout Branch:
+      <select id="branchSelect"></select>
+    </label>
+    <button id="checkoutBtn">Switch Branch</button>
+  </div>
+  <div style="margin-top:10px;">
+    <button id="logBtn">Show Commit Log</button>
+    <button id="statusBtn">Show Status</button>
+    <button id="diffBtn">Show Diff</button>
+  </div>
+  <div style="margin-top:10px;">
+    <label>Merge Branch:
+      <select id="mergeBranchSelect"></select>
+    </label>
+    <button id="mergeBtn">Merge</button>
+  </div>
+  <div style="margin-top:10px;">
+    <label>Reset to Commit Hash (or empty to cancel): <input type="text" id="resetCommitInput" size="25"/></label>
+    <button id="resetBtn">Reset --mixed</button>
+    <button id="resetHardBtn">Reset --hard</button>
+  </div>
+  <div style="margin-top:10px;">
+    <label>Rebase ontop of (commit hash or branch): <input type="text" id="rebaseTargetInput" size="25" /></label>
+    <button id="rebaseBtn">Rebase Current Branch</button>
+  </div>
+</div>
+
+<!-- Output -->
+<div style="margin-top:15px;">
+  <h3>Output</h3>
+  <pre id="output" style="white-space: pre-wrap; max-height: 500px; overflow-y: scroll; border:1px solid #000; padding:5px;"></pre>
+</div>
+
+<script>
+(() => {
+  // Data structures for simulation:
+
+  class Commit {
+    constructor(hash, message, parentHashes, changes, branch) {
+      // hash is string unique id
+      this.hash = hash;
+      this.message = message;
+      this.parents = parentHashes; // array of parent commit hashes
+      this.changes = changes; // snapshot of file content at commit
+      this.branch = branch; // branch name where commit was created (for info)
+    }
+  }
+
+  // Utility for generating simple hashes:
+  function simpleHash(text) {
+    // simple hash by character codes sum + timestamp (for uniqueness)
+    let hash = 0;
+    for(let i=0; i<text.length; i++) {
+      hash = (hash + text.charCodeAt(i)) % 1000000;
+    }
+    hash = hash.toString(16);
+    if(hash.length < 6) hash = hash.padStart(6, '0');
+    return hash;
+  }
+
+  function generateCommitHash(message, parentHashes) {
+    // Incorporate time + message + parents
+    const input = message + parentHashes.join(',') + Date.now() + Math.random();
+    return simpleHash(input).slice(0,6);
+  }
+
+  // Global state
+  let repo = null;
+
+  // repo = {
+  //    branches: { [branchName]: commitHash },
+  //    commits: { [hash]: Commit },
+  //    head: { type:'branch', name: 'master' } or { type:'detached', hash: 'abc123' },
+  //    index: null or string of staged content,
+  //    working: string content in working directory,
+  // }
+
+  // Initialize repository
+  function initRepo() {
+    const initialContent = ""; // empty file
+    const initialHash = generateCommitHash("Initial commit", []);
+    const initialCommit = new Commit(initialHash, "Initial commit", [], initialContent, "master");
+    repo = {
+      branches: { master: initialHash },
+      commits: { [initialHash]: initialCommit },
+      head: { type:"branch", name:"master" },
+      index: null, // if null => no staged changes, else string content staged
+      working: initialContent,
+    };
+    updateUIAfterRepoChange();
+    printOutput("Repository initialized with empty master branch and initial commit.");
+  }
+
+  // UI Elements
+  const initBtn = document.getElementById('initBtn');
+  const repoSection = document.getElementById('repoSection');
+  const workingFile = document.getElementById('workingFile');
+  const stageBtn = document.getElementById('stageBtn');
+  const commitBtn = document.getElementById('commitBtn');
+  const newBranchName = document.getElementById('newBranchName');
+  const createBranchBtn = document.getElementById('createBranchBtn');
+  const branchSelect = document.getElementById('branchSelect');
+  const checkoutBtn = document.getElementById('checkoutBtn');
+  const logBtn = document.getElementById('logBtn');
+  const output = document.getElementById('output');
+  const statusBtn = document.getElementById('statusBtn');
+  const diffBtn = document.getElementById('diffBtn');
+  const mergeBranchSelect = document.getElementById('mergeBranchSelect');
+  const mergeBtn = document.getElementById('mergeBtn');
+  const resetCommitInput = document.getElementById('resetCommitInput');
+  const resetBtn = document.getElementById('resetBtn');
+  const resetHardBtn = document.getElementById('resetHardBtn');
+  const rebaseTargetInput = document.getElementById('rebaseTargetInput');
+  const rebaseBtn = document.getElementById('rebaseBtn');
+
+  // Helpers for UI updates
+  function updateBranchSelectors() {
+    // clear all branch selects (branchSelect, mergeBranchSelect)
+    [branchSelect, mergeBranchSelect].forEach(sel => {
+      while(sel.firstChild) sel.removeChild(sel.firstChild);
+      Object.keys(repo.branches).forEach(branchName => {
+        let opt = document.createElement("option");
+        opt.value = branchName;
+        opt.textContent = branchName;
+        sel.appendChild(opt);
+      });
+    });
+  }
+
+  // Get commit for current HEAD
+  function getHeadCommit() {
+    if(repo.head.type === "branch") {
+      const branchName = repo.head.name;
+      const commitHash = repo.branches[branchName];
+      return repo.commits[commitHash];
+    } else if(repo.head.type === "detached") {
+      return repo.commits[repo.head.hash];
+    }
+    return null;
+  }
+
+  // Update UI elements on repo changes
+  function updateUIAfterRepoChange() {
+    if(!repo) {
+      repoSection.style.display = "none";
+      return;
+    }
+    repoSection.style.display = "block";
+    updateBranchSelectors();
+
+    // Set working file content as repo.working
+    if(typeof repo.working === "string") {
+      workingFile.value = repo.working;
+    }
+
+    // Enable or disable commit button based on staged changes
+    commitBtn.disabled = (repo.index === null);
+  }
+
+  // print output and scroll to bottom
+  function printOutput(text) {
+    output.textContent += text + "\n";
+    output.scrollTop = output.scrollHeight;
+  }
+
+  // Get difference between two strings line-based
+  function diffStrings(a, b) {
+    // simple line based diff to show lines that differ or added or deleted
+    const aLines = a.split('\n');
+    const bLines = b.split('\n');
+    let diff = [];
+    let maxLines = Math.max(aLines.length, bLines.length);
+    for(let i=0; i<maxLines; i++) {
+      let aLine = aLines[i];
+      let bLine = bLines[i];
+      if(aLine === undefined) {
+        diff.push(`+ ${bLine}`);
+      } else if(bLine === undefined) {
+        diff.push(`- ${aLine}`);
+      } else if(aLine !== bLine) {
+        diff.push(`- ${aLine}`);
+        diff.push(`+ ${bLine}`);
+      } else {
+        diff.push(`  ${aLine}`);
+      }
+    }
+    return diff.join('\n');
+  }
+
+  // Stage changes (copy working to index)
+  function stageChanges() {
+    if(!repo) return;
+    if(repo.working === getHeadCommit().changes) {
+      repo.index = null;
+      printOutput("No changes to stage.");
+      commitBtn.disabled = true;
+    } else {
+      repo.index = repo.working;
+      printOutput("Changes staged.");
+      commitBtn.disabled = false;
+    }
+  }
+
+  // Commit staged changes
+  function commitStaged() {
+    if(!repo || repo.index === null) {
+      printOutput("Nothing staged to commit.");
+      return;
+    }
+    const parentHash = getHeadCommit().hash;
+    let msg = prompt("Enter commit message:");
+    if(msg === null) {
+      printOutput("Commit cancelled.");
+      return;
+    }
+    msg = msg.trim();
+    if(msg === "") {
+      printOutput("Commit message cannot be empty.");
+      return;
+    }
+    const parents = [parentHash];
+    const hash = generateCommitHash(msg, parents);
+    const branchName = (repo.head.type === "branch") ? repo.head.name : null;
+    let commit = new Commit(hash, msg, parents, repo.index, branchName);
+    repo.commits[hash] = commit;
+
+    if(repo.head.type === "branch") {
+      repo.branches[repo.head.name] = hash;
+    } else if(repo.head.type === "detached") {
+      repo.head.hash = hash;
+    }
+
+    repo.index = null;
+    repo.working = commit.changes;
+    workingFile.value = repo.working;
+    commitBtn.disabled = true;
+    printOutput(`Committed new commit ${hash} on ${repo.head.type === "branch" ? repo.head.name : "detached HEAD"}.`);
+  }
+
+  // Create branch at HEAD
+  function createBranch() {
+    if(!repo) return;
+    const name = newBranchName.value.trim();
+    if(name === "") {
+      printOutput("Branch name cannot be empty.");
+      return;
+    }
+    if(repo.branches.hasOwnProperty(name)) {
+      printOutput("Branch name already exists.");
+      return;
+    }
+    const commitHash = getHeadCommit().hash;
+    repo.branches[name] = commitHash;
+    updateBranchSelectors();
+    printOutput(`Branch '${name}' created at commit ${commitHash}.`);
+  }
+
+  // Checkout branch
+  function checkoutBranch() {
+    if(!repo) return;
+    const branch = branchSelect.value;
+    if(!repo.branches.hasOwnProperty(branch)) {
+      printOutput("Branch does not exist.");
+      return;
+    }
+    // checkout
+    repo.head = { type: "branch", name: branch };
+    const commit = repo.commits[repo.branches[branch]];
+    repo.working = commit.changes;
+    repo.index = null;
+    workingFile.value = repo.working;
+    commitBtn.disabled = true;
+    printOutput(`Checked out branch '${branch}'.`);
+  }
+
+  // Show commit log for current branch or detached HEAD
+  function showLog() {
+    if(!repo) return;
+    let startCommit = null;
+    if(repo.head.type === "branch") {
+      const branchName = repo.head.name;
+      startCommit = repo.commits[repo.branches[branchName]];
+    } else if(repo.head.type === "detached") {
+      startCommit = repo.commits[repo.head.hash];
+    }
+    if(!startCommit) {
+      printOutput("No commits to show.");
+      return;
+    }
+    let lines = [];
+    let visited = new Set();
+    let stack = [startCommit];
+    // Traverse commits reachable from startCommit (linear history expected, but we allow merges)
+    while(stack.length > 0) {
+      let c = stack.pop();
+      if(visited.has(c.hash)) continue;
+      visited.add(c.hash);
+      lines.push(`Commit: ${c.hash}\nMessage: ${c.message}\nParents: ${c.parents.join(", ") || "None"}\nBranch: ${c.branch || "detached"}\n---`);
+      c.parents.forEach(pHash => {
+        if(repo.commits[pHash]) stack.push(repo.commits[pHash]);
+      });
+    }
+    printOutput("Commit log (most recent first):\n" + lines.join("\n"));
+  }
+
+  // Show status: staged changes, unstaged changes, HEAD, branch
+  function showStatus() {
+    if(!repo) return;
+    let lines = [];
+    lines.push("On " + (repo.head.type === "branch" ? `branch ${repo.head.name}` : `detached HEAD at ${repo.head.hash}`));
+    const headContent = getHeadCommit().changes;
+    if(repo.index !== null && repo.index !== headContent) {
+      lines.push("Changes staged for commit.");
+    } else {
+      lines.push("No changes staged.");
+    }
+    if(repo.working !== headContent) {
+      lines.push("Unstaged changes in working directory.");
+    } else {
+      lines.push("Working directory clean.");
+    }
+    printOutput(lines.join("\n"));
+  }
+
+  // Show diff between HEAD and working directory (unstaged changes)
+  function showDiff() {
+    if(!repo) return;
+    const headContent = getHeadCommit().changes;
+    if(repo.working === headContent) {
+      printOutput("No differences between HEAD and working directory.");
+      return;
+    }
+    const diffText = diffStrings(headContent, repo.working);
+    printOutput("Diff (HEAD -> Working directory):\n" + diffText);
+  }
+
+  // Merge branch into current branch
+  function mergeBranch() {
+    if(!repo) return;
+    if(repo.head.type !== "branch") {
+      printOutput("Can only merge on a branch (not detached HEAD).");
+      return;
+    }
+    const currentBranch = repo.head.name;
+    const mergeBranch = mergeBranchSelect.value;
+    if(mergeBranch === currentBranch) {
+      printOutput("Cannot merge a branch into itself.");
+      return;
+    }
+    if(!repo.branches.hasOwnProperty(mergeBranch)) {
+      printOutput("Selected branch does not exist.");
+      return;
+    }
+
+    // Find commits to merge
+    const currentCommitHash = repo.branches[currentBranch];
+    const mergeCommitHash = repo.branches[mergeBranch];
+
+    // Find common ancestor (merge base)
+    const baseHash = findMergeBase(currentCommitHash, mergeCommitHash);
+    if(baseHash === mergeCommitHash) {
+      printOutput(`Branch '${mergeBranch}' is already merged (fast-forward).`);
+      return;
+    }
+    // Fast-forward case:
+    if(baseHash === currentCommitHash) {
+      repo.branches[currentBranch] = mergeCommitHash;
+      const newCommit = repo.commits[mergeCommitHash];
+      repo.working = newCommit.changes;
+      repo.index = null;
+      workingFile.value = repo.working;
+      printOutput(`Fast-forward merged '${mergeBranch}' into '${currentBranch}'.`);
+      return;
+    }
+
+    // Normal 3-way merge
+
+    const baseCommit = repo.commits[baseHash];
+    const currentCommit = repo.commits[currentCommitHash];
+    const mergeCommit = repo.commits[mergeCommitHash];
+
+    const mergedContent = threeWayMerge(baseCommit.changes, currentCommit.changes, mergeCommit.changes);
+
+    if(mergedContent.conflict) {
+      // Write conflict markers in working directory
+      repo.working = mergedContent.content;
+      repo.index = null;
+      workingFile.value = repo.working;
+      printOutput("Merge conflict detected! Resolve conflicts in working directory and stage changes.");
+    } else {
+      // Create merge commit:
+      let msg = `Merge branch '${mergeBranch}' into ${currentBranch}`;
+      const parentHashes = [currentCommitHash, mergeCommitHash];
+      const hash = generateCommitHash(msg, parentHashes);
+      const mergeCommitObj = new Commit(hash, msg, parentHashes, mergedContent.content, currentBranch);
+      repo.commits[hash] = mergeCommitObj;
+      repo.branches[currentBranch] = hash;
+      repo.working = mergedContent.content;
+      repo.index = null;
+      workingFile.value = repo.working;
+      printOutput(`Merge successful. New merge commit ${hash} created on branch '${currentBranch}'.`);
+    }
+  }
+
+  // Find merge base (lowest common ancestor) naive BFS walk back through parents
+  function findMergeBase(hash1, hash2) {
+    // Edge case: if equal then return hash
+    if(hash1 === hash2) return hash1;
+
+    function getAncestors(hash) {
+      let ancestors = new Set();
+      let queue = [hash];
+      while(queue.length > 0) {
+        let h = queue.shift();
+        if(ancestors.has(h)) continue;
+        ancestors.add(h);
+        const commit = repo.commits[h];
+        if(commit) {
+          commit.parents.forEach(p => queue.push(p));
+        }
+      }
+      return ancestors;
+    }
+
+    const ancestors1 = getAncestors(hash1);
+    const ancestors2 = getAncestors(hash2);
+
+    // Intersection of ancestors:
+    let common = [...ancestors1].filter(x => ancestors2.has(x));
+
+    if(common.length === 0) return null;
+
+    // Pick closest common ancestor by preferring earliest visited from hash1:
+    // We can do a BFS from hash1 to find the first common ancestor:
+    let queue = [hash1];
+    let visited = new Set();
+    while(queue.length > 0) {
+      let cur = queue.shift();
+      if(common.includes(cur)) return cur;
+      visited.add(cur);
+      const commit = repo.commits[cur];
+      if(commit) {
+        commit.parents.forEach(p => {
+          if(!visited.has(p)) queue.push(p);
+        });
+      }
+    }
+    return common[0];
+  }
+
+  // Three-way merge naive line-based with simple conflict markers
+  // Return {content: mergedString, conflict: bool}
+  function threeWayMerge(base, current, other) {
+    // Strategy: For each line:
+    // if current==other use line
+    // if current==base use other line
+    // if other==base use current line
+    // else conflict => put <<<<<<<, =======, >>>>>>>
+    const baseLines = base.split('\n');
+    const curLines = current.split('\n');
+    const othLines = other.split('\n');
+
+    const maxLines = Math.max(baseLines.length, curLines.length, othLines.length);
+    let mergedLines = [];
+    let conflict = false;
+
+    function safeGet(lines,i) {
+      return (i < lines.length) ? lines[i] : "";
+    }
+
+    for(let i=0; i<maxLines; i++) {
+      const b = safeGet(baseLines,i);
+      const c = safeGet(curLines,i);
+      const o = safeGet(othLines,i);
+      if(c === o) {
+        mergedLines.push(c);
+      } else if(c === b) {
+        mergedLines.push(o);
+      } else if(o === b) {
+        mergedLines.push(c);
+      } else {
+        // Conflict
+        conflict = true;
+        mergedLines.push("<<<<<<< HEAD");
+        mergedLines.push(c);
+        mergedLines.push("=======");
+        mergedLines.push(o);
+        mergedLines.push(">>>>>>>");
+      }
+    }
+    return { content: mergedLines.join('\n'), conflict };
+  }
+
+  // Reset HEAD to commit hash with --mixed (move HEAD and branch or detached) and reset index but not working directory
+  // or --hard (also reset working directory)
+  function resetCommit(h, hard) {
+    if(!repo) return;
+    if(h.trim() === "") {
+      printOutput("Reset cancelled: empty commit hash.");
+      return;
+    }
+    // Find commit starting with h - allow prefix
+    let matches = Object.keys(repo.commits).filter(k => k.startsWith(h));
+    if(matches.length === 0) {
+      printOutput("No matching commit found for hash: " + h);
+      return;
+    }
+    if(matches.length > 1) {
+      printOutput("Ambiguous commit hash prefix - multiple matches.");
+      return;
+    }
+    h = matches[0];
+    if(repo.head.type === "branch") {
+      repo.branches[repo.head.name] = h;
+    } else if(repo.head.type === "detached") {
+      repo.head.hash = h;
+    }
+    if(hard) {
+      repo.working = repo.commits[h].changes;
+      workingFile.value = repo.working;
+    }
+    repo.index = null;
+    commitBtn.disabled = true;
+    printOutput(`Reset ${hard ? "--hard" : "--mixed"} to commit ${h}.`);
+  }
+
+  // Rebase current branch onto another branch or commit
+  // Steps:
+  // 1) Find upstream commit commitObj for target (branch or hash prefix)
+  // 2) Find commits on current branch not in upstream history (commits to replay)
+  // 3) Reset current branch to upstream
+  // 4) Replay commits by applying changes (simulate patches)
+  function rebaseCurrent(targetInput) {
+    if(!repo) return;
+    if(repo.head.type !== "branch") {
+      printOutput("Rebase only supported on a branch.");
+      return;
+    }
+    if(!targetInput || targetInput.trim() === "") {
+      printOutput("Rebase target cannot be empty.");
+      return;
+    }
+    // Resolve target commit or branch
+    let targetCommitHash = null;
+
+    if(repo.branches.hasOwnProperty(targetInput)) {
+      targetCommitHash = repo.branches[targetInput];
+    } else {
+      // Match prefix hash
+      let matches = Object.keys(repo.commits).filter(k=>k.startsWith(targetInput));
+      if(matches.length === 1) targetCommitHash = matches[0];
+      else if(matches.length === 0) {
+        printOutput("Rebase target not found: "+targetInput);
+        return;
+      } else {
+        printOutput("Rebase target ambiguous prefix.");
+        return;
+      }
+    }
+    const currentBranch = repo.head.name;
+    const currentCommitHash = repo.branches[currentBranch];
+
+    // Get upstream ancestors
+    function getAllAncestors(hash) {
+      let ancestors = new Set();
+      let stack = [hash];
+      while(stack.length > 0) {
+        let c = stack.pop();
+        if(ancestors.has(c)) continue;
+        ancestors.add(c);
+        let commit = repo.commits[c];
+        if(commit) {
+          commit.parents.forEach(p => stack.push(p));
+        }
+      }
+      return ancestors;
+    }
+
+    const upstreamAncestors = getAllAncestors(targetCommitHash);
+
+    // Get commits on current branch not in upstreamAncestors, sorted oldest->newest
+    const commitsToReplay = [];
+
+    function getCommitChainTo(fromHash, untilNotIncludedSet) {
+      // Collect commits from fromHash backwards until hit commit in untilNotIncludedSet
+      let chain = [];
+      let cur = fromHash;
+      while(cur && !untilNotIncludedSet.has(cur)) {
+        chain.push(cur);
+        let c = repo.commits[cur];
+        if(!c.parents.length) break;
+        cur = c.parents[0]; // linear history assumed for replay
+      }
+      return chain.reverse(); // oldest->newest
+    }
+
+    const toReplay = getCommitChainTo(currentCommitHash, upstreamAncestors);
+
+    if(toReplay.length === 0) {
+      printOutput("Nothing to rebase: current branch already up-to-date with target.");
+      return;
+    }
+
+    // Reset current branch to targetCommitHash -- effectively git reset
+    repo.branches[currentBranch] = targetCommitHash;
+
+    // Replay commits applying changes on top of targetCommitHash
+    // We simulate patch apply by using commit changes as snapshots:
+    let baseContent = repo.commits[targetCommitHash].changes;
+    let newParent = targetCommitHash;
+
+    for(let i=0; i<toReplay.length; i++) {
+      const oldCommit = repo.commits[toReplay[i]];
+      // Compute diff between oldCommit.parent and oldCommit
+      // We'll just apply commit changes as new snapshot:
+      const newContent = oldCommit.changes;
+
+      // Create new commit on top of newParent with same message and "rebased:"
+      const msg = "(rebased) " + oldCommit.message;
+      const hash = generateCommitHash(msg, [newParent]);
+      const newCommit = new Commit(hash, msg, [newParent], newContent, currentBranch);
+      repo.commits[hash] = newCommit;
+
+      repo.branches[currentBranch] = hash;
+      newParent = hash;
+      baseContent = newContent;
+      printOutput(`Replayed commit ${oldCommit.hash} as ${hash}.`);
+    }
+    repo.working = baseContent;
+    workingFile.value = baseContent;
+    repo.index = null;
+    commitBtn.disabled = true;
+    printOutput(`Rebase completed on branch '${currentBranch}'.`);
+  }
+
+  // Event bindings
+  initBtn.onclick = () => {
+    initRepo();
+  };
+  stageBtn.onclick = () => {
+    if(!repo) {
+      printOutput("Repository not initialized.");
+      return;
+    }
+    repo.working = workingFile.value;
+    stageChanges();
+  };
+  commitBtn.onclick = () => {
+    commitStaged();
+  };
+  createBranchBtn.onclick = () => { createBranch(); };
+  checkoutBtn.onclick = () => { checkoutBranch(); };
+  logBtn.onclick = () => { showLog(); };
+  statusBtn.onclick = () => { showStatus(); };
+  diffBtn.onclick = () => { showDiff(); };
+  mergeBtn.onclick = () => { mergeBranch(); };
+  resetBtn.onclick = () => { resetCommit(resetCommitInput.value.trim(), false); };
+  resetHardBtn.onclick = () => { resetCommit(resetCommitInput.value.trim(), true); };
+  rebaseBtn.onclick = () => { rebaseCurrent(rebaseTargetInput.value.trim()); };
+
+  // Start with no repo loaded
+  updateUIAfterRepoChange();
+
+})();
+</script>
+</body>
+</html>

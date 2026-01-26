@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Type System Playground</title>
+<style>
+  /* Extremely minimal visual design: default fonts, black text on white */
+  body { font-family: Arial, sans-serif; margin: 12px; color: black; background: white; }
+  h1 { font-size: 18px; margin: 6px 0 12px 0; }
+  .row { display: flex; gap: 12px; margin-bottom: 12px; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  label { font-size: 12px; }
+  input, select, textarea, button { font-size: 12px; }
+  textarea { width: 100%; height: 120px; }
+  .small { width: 160px; }
+  .wide { width: 420px; }
+  .list { width: 260px; height: 160px; }
+  .log { width: 640px; height: 240px; white-space: pre-wrap; overflow: auto; border: 1px solid #000; padding: 6px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* Keep everything plain - minimal lines only */
+</style>
+</head>
+<body>
+<h1>Type System Playground</h1>
+
+<div class="row">
+  <div class="col">
+    <label>1) New Type / Alias</label>
+    <div class="controls">
+      <input id="newTypeName" class="small" placeholder="Name (e.g. Pair)"/>
+      <input id="newTypeExpr" class="wide" placeholder="Type expression (e.g. (Int,String) -> Bool or {x:Int, y:String} or List<T>)"/>
+      <button id="addTypeBtn">Add Type</button>
+      <button id="aliasTypeBtn">Add Alias (store as named alias)</button>
+    </div>
+
+    <label>2) Types (environment)</label>
+    <select id="typesList" class="list" size="8"></select>
+    <div class="controls">
+      <button id="viewTypeBtn">View</button>
+      <button id="editTypeBtn">Edit</button>
+      <button id="deleteTypeBtn">Delete</button>
+      <button id="applySubstEnvBtn">Apply last substitution to environment</button>
+    </div>
+
+    <label>3) Variables</label>
+    <div class="controls">
+      <input id="newVarName" class="small" placeholder="var name"/>
+      <select id="varTypeSelect" class="small"></select>
+      <button id="addVarBtn">Add Var</button>
+    </div>
+    <select id="varsList" class="list" size="6"></select>
+    <div class="controls">
+      <button id="viewVarBtn">View Var</button>
+      <button id="deleteVarBtn">Delete Var</button>
+    </div>
+  </div>
+
+  <div class="col">
+    <label>4) Operation</label>
+    <select id="operationSelect" class="wide">
+      <option value="unify">Unify two types</option>
+      <option value="subtype">Check A <: B (subtyping)</option>
+      <option value="instantiate">Instantiate generic (List<T> -> List<Int>)</option>
+      <option value="apply">Apply substitution to a type</option>
+      <option value="simplify">Simplify / normalize a type</option>
+      <option value="infer_simple">Infer simple expression (call/use var)</option>
+    </select>
+
+    <div id="opControls" class="col">
+      <!-- dynamic controls inserted here -->
+    </div>
+
+    <div class="controls">
+      <label><input type="checkbox" id="nominalMode"/> Nominal mode (named types distinct)</label>
+      <label><input type="checkbox" id="allowWild"/> Allow wildcard type vars (a = _)</label>
+      <label>Recursion depth <input id="recDepth" type="range" min="1" max="8" value="6"/></label>
+      <span id="recDepthVal">6</span>
+    </div>
+
+    <div class="controls">
+      <button id="runOpBtn">Run</button>
+      <button id="stepPrevBtn">Step &lt;</button>
+      <input id="traceSlider" type="range" min="0" max="0" value="0"/>
+      <button id="stepNextBtn">Step &gt;</button>
+      <button id="clearLogBtn">Clear Log</button>
+      <button id="resetEnvBtn">Reset Env</button>
+    </div>
+
+    <label>5) Scenarios</label>
+    <div class="controls">
+      <select id="scenarioSelect" class="small">
+        <option value="simple">Simple primitives</option>
+        <option value="functions">Function types & variance</option>
+        <option value="generics">Generics & unification</option>
+        <option value="objects">Object structural subtyping</option>
+        <option value="nominal">Nominal vs Structural</option>
+        <option value="unions">Union & Intersection</option>
+      </select>
+      <button id="loadScenarioBtn">Load Scenario</button>
+    </div>
+
+    <label>6) Save / Load Environment (JSON)</label>
+    <textarea id="envJson"></textarea>
+    <div class="controls">
+      <button id="saveEnvBtn">Export Environment JSON</button>
+      <button id="loadEnvBtn">Import JSON</button>
+    </div>
+  </div>
+</div>
+
+<label>7) Trace & Output</label>
+<div class="log" id="logArea"></div>
+<div class="controls" style="margin-top:8px;">
+  <label>Current Substitution:</label>
+  <input id="currentSubst" class="wide" readonly/>
+</div>
+
+<script>
+/*
+ Type System Playground
+ - Minimal visual design
+ - Rich interaction: define types, variables, unify, subtype check, instantiate generics
+ - Step-by-step traces for unification and subtyping
+*/
+
+/* ---------- Basic Type AST ---------- */
+
+function Type(kind, details) {
+  this.kind = kind; // 'prim', 'var', 'name', 'func', 'obj', 'union', 'inter', 'app'
+  Object.assign(this, details || {});
+}
+
+function tPrim(name) { return new Type('prim', { name }); }
+function tVar(name) { return new Type('var', { name }); }
+function tName(name, params) { return new Type('name', { name, params: params || [] }); } // named alias or generic declaration
+function tFunc(params, ret) { return new Type('func', { params, ret }); }
+function tObj(fields) { return new Type('obj', { fields }); } // fields: {k:Type}
+function tUnion(types) { return new Type('union', { types }); }
+function tInter(types) { return new Type('inter', { types }); }
+function tApp(name, args) { return new Type('app', { name, args }); } // application of generic: name + args
+
+function cloneType(ty) {
+  // deep clone
+  if (!ty) return ty;
+  switch (ty.kind) {
+    case 'prim': return tPrim(ty.name);
+    case 'var': return tVar(ty.name);
+    case 'name': return tName(ty.name, (ty.params || []).map(cloneType));
+    case 'app': return tApp(ty.name, (ty.args || []).map(cloneType));
+    case 'func': return tFunc((ty.params || []).map(cloneType), cloneType(ty.ret));
+    case 'obj': {
+      const f = {};
+      for (const k in ty.fields) f[k] = cloneType(ty.fields[k]);
+      return tObj(f);
+    }
+    case 'union': return tUnion(ty.types.map(cloneType));
+    case 'inter': return tInter(ty.types.map(cloneType));
+  }
+}
+
+/* ---------- Pretty printer ---------- */
+
+function typeToString(ty) {
+  if (!ty) return 'null';
+  switch (ty.kind) {
+    case 'prim': return ty.name;
+    case 'var': return ty.name;
+    case 'name': {
+      if (ty.params && ty.params.length) {
+        return ty.name + "<" + ty.params.map(typeToString).join(",") + ">";
+      }
+      return ty.name;
+    }
+    case 'app': {
+      return ty.name + "<" + ty.args.map(typeToString).join(",") + ">";
+    }
+    case 'func': {
+      const ps = ty.params.map(typeToString).join(", ");
+      return "(" + ps + ") -> " + typeToString(ty.ret);
+    }
+    case 'obj': {
+      const f = Object.keys(ty.fields).map(k => k + ":" + typeToString(ty.fields[k])).join(", ");
+      return "{" + f + "}";
+    }
+    case 'union': return ty.types.map(typeToString).join(" | ");
+    case 'inter': return ty.types.map(typeToString).join(" & ");
+    default: return JSON.stringify(ty);
+  }
+}
+
+/* ---------- Parser (simple) ---------- */
+/* Grammar:
+ Type := Union
+ Union := Inter ('|' Inter)*
+ Inter := Arrow ('&' Arrow)*
+ Arrow := Primary ('->' Arrow)?
+ Primary := IDENT [ '<' TypeList '>' ] | VAR | '(' Type ')' | '{' FieldList '}' 
+ TypeList := Type (',' Type)*
+ FieldList := name ':' Type (',' name ':' Type)*
+ IDENT: [A-Za-z_][A-Za-z0-9_]*
+ VAR: [a-z] (single lowercase letter) denotes type variable
+*/
+
+function tokenize(s) {
+  const tokens = [];
+  const re = /\s*([A-Za-z_][A-Za-z0-9_]*|[a-z]|->|<=|>=|==|!=|[{}(),:<>|&])\s*/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    tokens.push(m[1]);
+  }
+  return tokens;
+}
+
+function parseType(s) {
+  const tokens = tokenize(s);
+  let i = 0;
+  function peek() { return tokens[i]; }
+  function next() { return tokens[i++]; }
+  function expect(tok) {
+    if (peek() !== tok) throw new Error("Expected '" + tok + "' but got '" + peek() + "'");
+    next();
+  }
+  function parsePrimary() {
+    const tk = peek();
+    if (!tk) throw new Error("Unexpected end in primary");
+    if (tk === '(') {
+      next();
+      const t = parseUnion();
+      expect(')');
+      return t;
+    }
+    if (tk === '{') {
+      next();
+      const fields = {};
+      if (peek() !== '}') {
+        while (true) {
+          const name = next();
+          if (!/^[_A-Za-z][_A-Za-z0-9]*$/.test(name)) throw new Error("Bad field name: " + name);
+          expect(':');
+          const ft = parseUnion();
+          fields[name] = ft;
+          if (peek() === ',') { next(); continue; }
+          break;
+        }
+      }
+      expect('}');
+      return tObj(fields);
+    }
+    // identifier or var
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(tk)) {
+      const id = next();
+      // generic application?
+      if (peek() === '<') {
+        next();
+        const args = [];
+        while (true) {
+          args.push(parseUnion());
+          if (peek() === ',') { next(); continue; }
+          break;
+        }
+        expect('>');
+        return tApp(id, args);
+      } else {
+        return tName(id);
+      }
+    }
+    if (/^[a-z]$/.test(tk)) {
+      // single lowercase letter as type variable
+      const v = next();
+      return tVar(v);
+    }
+    throw new Error("Unexpected token in primary: " + tk);
+  }
+
+  function parseArrow() {
+    let left = parsePrimary();
+    if (peek() === '->') {
+      next();
+      const right = parseArrow();
+      // If left is tuple like (a,b) we should treat as params
+      if (left.kind === 'app' && left.name === 'Tuple') {
+        // Not used; keep simple: if left is tApp named 'Tuple' treat as params
+      }
+      // If left is a function param list inside parentheses, the parser will have built separate structure; to handle simple syntax (A,B) -> R, provide helper:
+      if (left.kind === 'name' && left.name === ',' ) {
+        // not used
+      }
+      // If left is an obj or other, wrap single param
+      const params = (left.kind === 'union' || left.kind === 'inter' || left.kind === 'func') ? [left] : [left];
+      return tFunc(params, right);
+    }
+    return left;
+  }
+
+  function parseInter() {
+    let t = parseArrow();
+    while (peek() === '&') {
+      next();
+      const r = parseArrow();
+      if (t.kind === 'inter') t.types.push(r); else t = tInter([t, r]);
+    }
+    return t;
+  }
+
+  function parseUnion() {
+    let t = parseInter();
+    while (peek() === '|') {
+      next();
+      const r = parseInter();
+      if (t.kind === 'union') t.types.push(r); else t = tUnion([t, r]);
+    }
+    return t;
+  }
+
+  const res = parseUnion();
+  if (i < tokens.length) throw new Error("Extra tokens: " + tokens.slice(i).join(" "));
+  return res;
+}
+
+/* ---------- Environment ---------- */
+
+const env = {
+  types: {}, // name -> { type: Type, alias: boolean }
+  vars: {},  // name -> Type
+  lastSubst: {}, // substitution map varName -> Type
+  trace: [], // steps for last operation
+  traceIndex: 0
+};
+
+function resetEnv() {
+  env.types = {};
+  env.vars = {};
+  env.lastSubst = {};
+  env.trace = [];
+  env.traceIndex = 0;
+  log("Environment reset.");
+  refreshUI();
+}
+
+/* ---------- Utilities ---------- */
+
+function log(s) {
+  const a = document.getElementById('logArea');
+  a.textContent += s + "\n";
+  a.scrollTop = a.scrollHeight;
+}
+
+function setSubstDisplay(subst) {
+  const el = document.getElementById('currentSubst');
+  const keys = Object.keys(subst || {});
+  el.value = keys.map(k => k + " ↦ " + typeToString(subst[k])).join(", ");
+}
+
+/* ---------- Unification with trace ---------- */
+/* Unify type a and b. Type variables are lowercase single letters. Returns substitution or throws error */
+function unify(a, b, opts) {
+  opts = opts || {};
+  const nominal = !!opts.nominal;
+  const allowWild = !!opts.allowWild;
+  env.trace = [];
+  env.traceIndex = 0;
+  const subst = {}; // varName -> Type
+
+  function occursCheck(v, t) {
+    if (!t) return false;
+    if (t.kind === 'var') return t.name === v;
+    if (t.kind === 'func') return t.params.some(p => occursCheck(v, p)) || occursCheck(v, t.ret);
+    if (t.kind === 'obj') return Object.values(t.fields).some(f => occursCheck(v, f));
+    if (t.kind === 'union' || t.kind === 'inter') return t.types.some(x => occursCheck(v, x));
+    if (t.kind === 'app') return t.args.some(a => occursCheck(v, a));
+    return false;
+  }
+
+  function applySubst(t) {
+    if (!t) return t;
+    if (t.kind === 'var') {
+      if (subst[t.name]) return applySubst(subst[t.name]);
+      return t;
+    }
+    if (t.kind === 'func') return tFunc(t.params.map(applySubst), applySubst(t.ret));
+    if (t.kind === 'obj') {
+      const f = {};
+      for (const k in t.fields) f[k] = applySubst(t.fields[k]);
+      return tObj(f);
+    }
+    if (t.kind === 'union') return tUnion(t.types.map(applySubst));
+    if (t.kind === 'inter') return tInter(t.types.map(applySubst));
+    if (t.kind === 'app') return tApp(t.name, t.args.map(applySubst));
+    return t;
+  }
+
+  function recordStep(a,b,action) {
+    env.trace.push({a: cloneType(a), b: cloneType(b), subst: JSON.parse(JSON.stringify(subst)), action});
+  }
+
+  function unifyInternal(x, y) {
+    x = applySubst(x);
+    y = applySubst(y);
+    recordStep(x,y,"attempt-unify");
+    // identical
+    if (typeEquals(x, y)) {
+      recordStep(x,y,"identical");
+      return;
+    }
+    // var cases
+    if (x.kind === 'var') {
+      if (allowWild && x.name === '_') {
+        recordStep(x,y,"wildcard-left");
+        return;
+      }
+      if (occursCheck(x.name, y)) {
+        throw new Error("Occurs check failed: " + x.name + " in " + typeToString(y));
+      }
+      subst[x.name] = y;
+      recordStep(x,y,"bind-left "+x.name+" -> "+typeToString(y));
+      return;
+    }
+    if (y.kind === 'var') {
+      if (allowWild && y.name === '_') {
+        recordStep(x,y,"wildcard-right");
+        return;
+      }
+      if (occursCheck(y.name, x)) {
+        throw new Error("Occurs check failed: " + y.name + " in " + typeToString(x));
+      }
+      subst[y.name] = x;
+      recordStep(x,y,"bind-right "+y.name+" -> "+typeToString(x));
+      return;
+    }
+    // same kind primitives / names
+    if (x.kind === 'prim' && y.kind === 'prim') {
+      if (x.name !== y.name) throw new Error("Cannot unify primitives " + x.name + " and " + y.name);
+      return;
+    }
+    // name or app: if nominal mode, names must match; if structural, try to unfold alias
+    if (x.kind === 'name' && y.kind === 'name') {
+      if (x.name === y.name && x.params.length === y.params.length) {
+        for (let i=0;i<x.params.length;i++) unifyInternal(x.params[i], y.params[i]);
+        return;
+      }
+      // try if both defined in env and can be unified structurally by aliasing:
+      if (!nominal) {
+        const ax = env.types[x.name] && env.types[x.name].type;
+        const ay = env.types[y.name] && env.types[y.name].type;
+        if (ax && ay) {
+          unifyInternal(ax, ay);
+          return;
+        }
+      }
+      throw new Error("Cannot unify named types " + x.name + " and " + y.name);
+    }
+    if (x.kind === 'app' && y.kind === 'app') {
+      if (x.name !== y.name || x.args.length !== y.args.length) throw new Error("Cannot unify type applications " + typeToString(x) + " and " + typeToString(y));
+      for (let i=0;i<x.args.length;i++) unifyInternal(x.args[i], y.args[i]);
+      return;
+    }
+    // function types
+    if (x.kind === 'func' && y.kind === 'func') {
+      // unify parameter-wise and return type
+      if (x.params.length !== y.params.length) throw new Error("Function arity mismatch");
+      for (let i=0;i<x.params.length;i++) unifyInternal(x.params[i], y.params[i]);
+      unifyInternal(x.ret, y.ret);
+      return;
+    }
+    // objects: match fields
+    if (x.kind === 'obj' && y.kind === 'obj') {
+      const keysX = Object.keys(x.fields);
+      const keysY = Object.keys(y.fields);
+      const common = keysX.filter(k => keysY.includes(k));
+      if (common.length !== keysX.length || common.length !== keysY.length) {
+        // allow partial match? for unification require same keys
+        throw new Error("Object fields differ: " + JSON.stringify(keysX) + " vs " + JSON.stringify(keysY));
+      }
+      for (const k of common) unifyInternal(x.fields[k], y.fields[k]);
+      return;
+    }
+    // unions and intersections - naive approach: require same structure
+    if (x.kind === 'union' && y.kind === 'union') {
+      if (x.types.length !== y.types.length) throw new Error("Union length mismatch");
+      for (let i=0;i<x.types.length;i++) unifyInternal(x.types[i], y.types[i]);
+      return;
+    }
+    if (x.kind === 'inter' && y.kind === 'inter') {
+      if (x.types.length !== y.types.length) throw new Error("Intersection length mismatch");
+      for (let i=0;i<x.types.length;i++) unifyInternal(x.types[i], y.types[i]);
+      return;
+    }
+    // cross-kind cases: try structural unfold of named types if allowed
+    if (!nominal) {
+      if (x.kind === 'name') {
+        const a = env.types[x.name] && env.types[x.name].type;
+        if (a) { unifyInternal(a, y); return; }
+      }
+      if (y.kind === 'name') {
+        const a = env.types[y.name] && env.types[y.name].type;
+        if (a) { unifyInternal(x, a); return; }
+      }
+    }
+
+    throw new Error("Cannot unify types: " + typeToString(x) + " and " + typeToString(y));
+  }
+
+  try {
+    unifyInternal(a,b);
+  } catch (e) {
+    recordStep(a,b,"error: "+e.message);
+    env.lastSubst = subst;
+    throw e;
+  }
+  env.lastSubst = subst;
+  recordStep(a,b,"success");
+  return subst;
+}
+
+/* ---------- Type equality ---------- */
+
+function typeEquals(a,b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case 'prim': return a.name === b.name;
+    case 'var': return a.name === b.name;
+    case 'name': {
+      if (a.name !== b.name) return false;
+      if ((a.params||[]).length !== (b.params||[]).length) return false;
+      for (let i=0;i<a.params.length;i++) if (!typeEquals(a.params[i], b.params[i])) return false;
+      return true;
+    }
+    case 'app': {
+      if (a.name !== b.name) return false;
+      if (a.args.length !== b.args.length) return false;
+      for (let i=0;i<a.args.length;i++) if (!typeEquals(a.args[i], b.args[i])) return false;
+      return true;
+    }
+    case 'func': {
+      if (a.params.length !== b.params.length) return false;
+      for (let i=0;i<a.params.length;i++) if (!typeEquals(a.params[i], b.params[i])) return false;
+      return typeEquals(a.ret, b.ret);
+    }
+    case 'obj': {
+      const ka = Object.keys(a.fields).sort();
+      const kb = Object.keys(b.fields).sort();
+      if (ka.length !== kb.length) return false;
+      for (let i=0;i<ka.length;i++) if (ka[i] !== kb[i]) return false;
+      for (const k of ka) if (!typeEquals(a.fields[k], b.fields[k])) return false;
+      return true;
+    }
+    case 'union':
+    case 'inter': {
+      if (a.types.length !== b.types.length) return false;
+      for (let i=0;i<a.types.length;i++) if (!typeEquals(a.types[i], b.types[i])) return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ---------- Subtyping (structural) with trace ---------- */
+
+function isSubtype(a,b, opts) {
+  opts = opts || {};
+  const nominal = !!opts.nominal;
+  const allowWild = !!opts.allowWild;
+  env.trace = [];
+  env.traceIndex = 0;
+
+  function recordStep(a,b,action) {
+    env.trace.push({a: cloneType(a), b: cloneType(b), action});
+  }
+
+  function applySubstType(t) { return t; } // no substitution here
+  function subtype(x,y) {
+    recordStep(x,y,"check");
+    if (typeEquals(x,y)) { recordStep(x,y,"equal"); return true; }
+    // var on either side: be permissive: treat var as wildcard or unknown
+    if (x.kind === 'var' || y.kind === 'var') {
+      if (allowWild) { recordStep(x,y,"wildcard-true"); return true; }
+      recordStep(x,y,"var-unknown-false");
+      return false;
+    }
+    // union: A <: B if each component of A is <: B
+    if (x.kind === 'union') {
+      for (const xt of x.types) {
+        if (!subtype(xt, y)) return false;
+      }
+      return true;
+    }
+    // intersection: A <: B if any component of A is <: B
+    if (x.kind === 'inter') {
+      for (const xt of x.types) {
+        if (subtype(xt, y)) return true;
+      }
+      return false;
+    }
+    // B is union: A <: (B1|B2) if A <: B1 or A <: B2
+    if (y.kind === 'union') {
+      for (const yt of y.types) {
+        if (subtype(x, yt)) return true;
+      }
+      return false;
+    }
+    // B is intersection: A <: (B1 & B2) if A <: B1 and A <: B2
+    if (y.kind === 'inter') {
+      for (const yt of y.types) {
+        if (!subtype(x, yt)) return false;
+      }
+      return true;
+    }
+    // primitives
+    if (x.kind === 'prim' && y.kind === 'prim') return x.name === y.name;
+    // functions: contravariant parameters, covariant return
+    if (x.kind === 'func' && y.kind === 'func') {
+      if (x.params.length !== y.params.length) { recordStep(x,y,"func-arity-mismatch"); return false; }
+      // contravariant: y.param <: x.param
+      for (let i=0;i<x.params.length;i++) {
+        if (!subtype(y.params[i], x.params[i])) { recordStep(x,y,"param-contravariant-fail"); return false; }
+      }
+      if (!subtype(x.ret, y.ret)) { recordStep(x,y,"ret-covariant-fail"); return false; }
+      return true;
+    }
+    // objects: structural: x <: y if x has at least y's fields with compatible types
+    if (x.kind === 'obj' && y.kind === 'obj') {
+      for (const k in y.fields) {
+        if (!(k in x.fields)) { recordStep(x,y,"missing-field "+k); return false; }
+        if (!subtype(x.fields[k], y.fields[k])) { recordStep(x,y,"field-type-fail "+k); return false; }
+      }
+      return true;
+    }
+    // names: if nominal and names equal then true, else unfold if structural
+    if (x.kind === 'name' && y.kind === 'name') {
+      if (nominal) return x.name === y.name;
+      // structural: try to resolve both if defined
+      const ax = env.types[x.name] && env.types[x.name].type;
+      const ay = env.types[y.name] && env.types[y.name].type;
+      if (ax && ay) return subtype(ax, ay);
+      return false;
+    }
+    // name vs other
+    if (!nominal) {
+      if (x.kind === 'name') {
+        const ax = env.types[x.name] && env.types[x.name].type;
+        if (ax) return subtype(ax, y);
+      }
+      if (y.kind === 'name') {
+        const ay = env.types[y.name] && env.types[y.name].type;
+        if (ay) return subtype(x, ay);
+      }
+    }
+
+    // app vs app: require same base and arg-wise equality/subtyping depending on variance (simplify: require equality)
+    if (x.kind === 'app' && y.kind === 'app' && x.name === y.name && x.args.length === y.args.length) {
+      for (let i=0;i<x.args.length;i++) {
+        if (!subtype(x.args[i], y.args[i])) return false;
+      }
+      return true;
+    }
+
+    recordStep(x,y,"no-rule");
+    return false;
+  }
+
+  const res = subtype(a,b);
+  env.lastSubst = {}; // no substitution here
+  return res;
+}
+
+/* ---------- Type application / instantiate ---------- */
+
+function instantiate(name, args) {
+  // find type definition for name
+  const tpl = env.types[name];
+  if (!tpl) throw new Error("Type " + name + " not found");
+  const decl = tpl.type;
+  // If decl has params stored in name.params (for tName), we try basic substitution: if decl is a named alias with its own params, we do naive textual replacement
+  // For simplicity, if type was defined as tApp or uses type variables inside, we do a naive replacement based on lowercase vars a,b,...
+  // We'll adopt convention: use type variables named 'T','U','V' or single-letter lowercase 'a' etc -> map by number when applying
+  // If decl includes type variables of form 'a','b', we'll substitute by provided args in order.
+  const mapping = {};
+  // gather declaration type variables by scanning decl for tVar occurrences in order
+  const seen = [];
+  function collectVars(t) {
+    if (!t) return;
+    if (t.kind === 'var') {
+      if (!seen.includes(t.name)) seen.push(t.name);
+    } else if (t.kind === 'func') {
+      t.params.forEach(collectVars); collectVars(t.ret);
+    } else if (t.kind === 'obj') {
+      Object.values(t.fields).forEach(collectVars);
+    } else if (t.kind === 'union' || t.kind === 'inter') {
+      t.types.forEach(collectVars);
+    } else if (t.kind === 'app') {
+      t.args.forEach(collectVars);
+    } else if (t.kind === 'name') {
+      if (t.params) t.params.forEach(collectVars);
+    }
+  }
+  collectVars(decl);
+  for (let i=0;i<seen.length;i++) {
+    mapping[seen[i]] = args[i] || tVar("_");
+  }
+  function subst(t) {
+    if (!t) return t;
+    if (t.kind === 'var') {
+      if (mapping[t.name]) return mapping[t.name];
+      return t;
+    }
+    if (t.kind === 'func') return tFunc(t.params.map(subst), subst(t.ret));
+    if (t.kind === 'obj') {
+      const f = {};
+      for (const k in t.fields) f[k] = subst(t.fields[k]);
+      return tObj(f);
+    }
+    if (t.kind === 'union') return tUnion(t.types.map(subst));
+    if (t.kind === 'inter') return tInter(t.types.map(subst));
+    if (t.kind === 'app') return tApp(t.name, t.args.map(subst));
+    if (t.kind === 'name') return tName(t.name, (t.params||[]).map(subst));
+    return t;
+  }
+  return subst(decl);
+}
+
+/* ---------- UI glue ---------- */
+
+function refreshTypeList() {
+  const sel = document.getElementById('typesList');
+  sel.innerHTML = '';
+  for (const name of Object.keys(env.types)) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + " = " + typeToString(env.types[name].type) + (env.types[name].alias ? " (alias)" : "");
+    sel.appendChild(opt);
+  }
+  refreshTypeOptions();
+}
+
+function refreshTypeOptions() {
+  const sel = document.getElementById('varTypeSelect');
+  sel.innerHTML = '';
+  const sel2 = document.getElementById('opTypeA') || null;
+  const sel3 = document.getElementById('opTypeB') || null;
+  const all = Object.keys(env.types);
+  for (const name of all) {
+    const o = document.createElement('option'); o.value = name; o.textContent = name;
+    sel.appendChild(o);
+  }
+  // also primitives quick add
+  ['Int','String','Bool','Float'].forEach(p => {
+    const o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o);
+  });
+  // update operation selects if present
+  if (sel2) { sel2.innerHTML = ''; all.forEach(n => { const o = document.createElement('option'); o.value=n; o.textContent = n; sel2.appendChild(o); }); ['Int','String','Bool','Float'].forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel2.appendChild(o);}) }
+  if (sel3) { sel3.innerHTML = ''; all.forEach(n => { const o = document.createElement('option'); o.value=n; o.textContent = n; sel3.appendChild(o); }); ['Int','String','Bool','Float'].forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel3.appendChild(o);}) }
+}
+
+function refreshVarList() {
+  const sel = document.getElementById('varsList');
+  sel.innerHTML = '';
+  for (const v of Object.keys(env.vars)) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v + " : " + typeToString(env.vars[v]);
+    sel.appendChild(opt);
+  }
+}
+
+function refreshUI() {
+  refreshTypeList();
+  refreshVarList();
+  setSubstDisplay(env.lastSubst || {});
+  updateTraceControls();
+}
+
+/* ---------- Operations UI ---------- */
+
+function buildOpControls() {
+  const container = document.getElementById('opControls');
+  container.innerHTML = '';
+  const op = document.getElementById('operationSelect').value;
+  // create generic selects for type A and B
+  function mkSelect(id) {
+    const s = document.createElement('select'); s.id = id; s.className = 'small';
+    // options will be filled by refreshTypeOptions
+    return s;
+  }
+
+  if (op === 'unify' || op === 'subtype') {
+    const a = mkSelect('opTypeA'); const b = mkSelect('opTypeB');
+    container.appendChild(document.createTextNode("Type A: "));
+    container.appendChild(a);
+    container.appendChild(document.createTextNode(" Type B: "));
+    container.appendChild(b);
+    refreshTypeOptions();
+  } else if (op === 'instantiate') {
+    const sel = mkSelect('opTypeA');
+    container.appendChild(document.createTextNode("Generic Type Name: "));
+    container.appendChild(sel);
+    refreshTypeOptions();
+    container.appendChild(document.createTextNode(" Type args (comma separated expressions): "));
+    const inpe = document.createElement('input'); inpe.id='instantiateArgs'; inpe.className='wide';
+    inpe.placeholder = "e.g. Int,String or T,U";
+    container.appendChild(inpe);
+  } else if (op === 'apply') {
+    const sel = mkSelect('opTypeA');
+    container.appendChild(document.createTextNode("Type to apply substitution to: "));
+    container.appendChild(sel);
+    refreshTypeOptions();
+  } else if (op === 'simplify') {
+    const inp = document.createElement('input'); inp.id='simplifyExpr'; inp.className='wide';
+    inp.placeholder = "Type expression to simplify";
+    container.appendChild(inp);
+  } else if (op === 'infer_simple') {
+    const vsel = document.createElement('select'); vsel.id='inferVar'; vsel.className='small';
+    for (const n in env.vars) { const o=document.createElement('option'); o.value=n; o.textContent=n; vsel.appendChild(o); }
+    const callName = document.createElement('input'); callName.id='inferCall'; callName.className='small'; callName.placeholder='call with var name (optional)';
+    container.appendChild(document.createTextNode("Use variable: "));
+    container.appendChild(vsel);
+    container.appendChild(document.createTextNode(" Call with argument var (optional): "));
+    container.appendChild(callName);
+  }
+}
+
+/* ---------- Execution ---------- */
+
+document.getElementById('operationSelect').addEventListener('change', buildOpControls);
+
+/* Add type buttons */
+
+document.getElementById('addTypeBtn').addEventListener('click', () => {
+  const n = document.getElementById('newTypeName').value.trim();
+  const expr = document.getElementById('newTypeExpr').value.trim();
+  if (!n || !expr) { alert("Provide name and type expression"); return; }
+  try {
+    const t = parseType(expr);
+    env.types[n] = { type: t, alias: false };
+    log("Added type " + n + " = " + typeToString(t));
+    refreshUI();
+  } catch (e) {
+    alert("Parse error: " + e.message);
+  }
+});
+
+document.getElementById('aliasTypeBtn').addEventListener('click', () => {
+  const n = document.getElementById('newTypeName').value.trim();
+  const expr = document.getElementById('newTypeExpr').value.trim();
+  if (!n || !expr) { alert("Provide name and type expression"); return; }
+  try {
+    const t = parseType(expr);
+    env.types[n] = { type: t, alias: true };
+    log("Added alias " + n + " = " + typeToString(t));
+    refreshUI();
+  } catch (e) {
+    alert("Parse error: " + e.message);
+  }
+});
+
+/* View/Edit/Delete type */
+
+document.getElementById('viewTypeBtn').addEventListener('click', () => {
+  const sel = document.getElementById('typesList');
+  const name = sel.value;
+  if (!name) { alert("Select a type"); return; }
+  const obj = env.types[name];
+  alert(name + " = " + typeToString(obj.type) + (obj.alias ? " (alias)" : ""));
+});
+
+document.getElementById('editTypeBtn').addEventListener('click', () => {
+  const sel = document.getElementById('typesList');
+  const name = sel.value;
+  if (!name) { alert("Select a type"); return; }
+  const newExpr = prompt("Edit type expression for " + name, typeToString(env.types[name].type));
+  if (newExpr === null) return;
+  try {
+    const t = parseType(newExpr);
+    env.types[name].type = t;
+    log("Edited type " + name + " => " + typeToString(t));
+    refreshUI();
+  } catch (e) {
+    alert("Parse error: " + e.message);
+  }
+});
+
+document.getElementById('deleteTypeBtn').addEventListener('click', () => {
+  const sel = document.getElementById('typesList');
+  const name = sel.value;
+  if (!name) { alert("Select a type"); return; }
+  if (!confirm("Delete type " + name + "?")) return;
+  delete env.types[name];
+  log("Deleted type " + name);
+  refreshUI();
+});
+
+/* Variables */
+
+document.getElementById('addVarBtn').addEventListener('click', () => {
+  const name = document.getElementById('newVarName').value.trim();
+  if (!name) { alert("Provide variable name"); return; }
+  const typeName = document.getElementById('varTypeSelect').value;
+  if (!typeName) { alert("Select a type"); return; }
+  // if typeName is a primitive (like Int) create that primitive type, else use env type
+  let ty;
+  if (env.types[typeName]) ty = cloneType(env.types[typeName].type);
+  else ty = tPrim(typeName);
+  env.vars[name] = ty;
+  log("Added variable " + name + " : " + typeToString(ty));
+  refreshUI();
+});
+
+document.getElementById('viewVarBtn').addEventListener('click', () => {
+  const sel = document.getElementById('varsList');
+  const name = sel.value;
+  if (!name) { alert("Select a variable"); return; }
+  alert(name + " : " + typeToString(env.vars[name]));
+});
+
+document.getElementById('deleteVarBtn').addEventListener('click', () => {
+  const sel = document.getElementById('varsList');
+  const name = sel.value;
+  if (!name) { alert("Select a variable"); return; }
+  delete env.vars[name];
+  log("Deleted variable " + name);
+  refreshUI();
+});
+
+/* Run operation */
+
+document.getElementById('runOpBtn').addEventListener('click', () => {
+  const op = document.getElementById('operationSelect').value;
+  const nominal = document.getElementById('nominalMode').checked;
+  const allowWild = document.getElementById('allowWild').checked;
+  const recDepth = parseInt(document.getElementById('recDepth').value,10) || 6;
+  document.getElementById('recDepthVal').textContent = recDepth;
+  try {
+    if (op === 'unify') {
+      const aName = document.getElementById('opTypeA').value;
+      const bName = document.getElementById('opTypeB').value;
+      if (!aName || !bName) { alert("Select two types"); return; }
+      const a = env.types[aName] ? cloneType(env.types[aName].type) : parseType(aName);
+      const b = env.types[bName] ? cloneType(env.types[bName].type) : parseType(bName);
+      log("Unifying " + typeToString(a) + "  and  " + typeToString(b) + "  (nominal=" + nominal + ")");
+      const subst = unify(a,b,{nominal,allowWild});
+      setSubstDisplay(subst);
+      log("Unification success. Substitution: " + Object.keys(subst).map(k => k+"->"+typeToString(subst[k])).join(", "));
+    } else if (op === 'subtype') {
+      const aName = document.getElementById('opTypeA').value;
+      const bName = document.getElementById('opTypeB').value;
+      if (!aName || !bName) { alert("Select two types"); return; }
+      const a = env.types[aName] ? cloneType(env.types[aName].type) : parseType(aName);
+      const b = env.types[bName] ? cloneType(env.types[bName].type) : parseType(bName);
+      log("Checking subtyping " + typeToString(a) + " <: " + typeToString(b) + " (nominal=" + nominal + ")");
+      const res = isSubtype(a,b,{nominal,allowWild});
+      log("Result: " + res);
+      setSubstDisplay({});
+    } else if (op === 'instantiate') {
+      const base = document.getElementById('opTypeA').value;
+      if (!base) { alert("Select a generic type name"); return; }
+      const argsExpr = document.getElementById('instantiateArgs').value.trim();
+      const argList = argsExpr ? argsExpr.split(',').map(s => s.trim()) : [];
+      const args = argList.map(s => {
+        try { return parseType(s); } catch (e) { if (env.types[s]) return cloneType(env.types[s].type); throw e; }
+      });
+      const inst = instantiate(base, args);
+      log("Instantiated " + base + "<" + argList.join(",") + "> => " + typeToString(inst));
+      setSubstDisplay({});
+    } else if (op === 'apply') {
+      const aName = document.getElementById('opTypeA').value;
+      if (!aName) { alert("Select a type"); return; }
+      const ty = env.types[aName] ? cloneType(env.types[aName].type) : parseType(aName);
+      // apply lastSubst
+      const s = env.lastSubst || {};
+      function apply(t) {
+        if (!t) return t;
+        if (t.kind === 'var' && s[t.name]) return apply(s[t.name]);
+        if (t.kind === 'func') return tFunc(t.params.map(apply), apply(t.ret));
+        if (t.kind === 'obj') { const f={}; for (const k in t.fields) f[k]=apply(t.fields[k]); return tObj(f); }
+        if (t.kind === 'union') return tUnion(t.types.map(apply));
+        if (t.kind === 'inter') return tInter(t.types.map(apply));
+        if (t.kind === 'app') return tApp(t.name, t.args.map(apply));
+        return t;
+      }
+      const newt = apply(ty);
+      log("Applied substitution to " + typeToString(ty) + " => " + typeToString(newt));
+      setSubstDisplay(env.lastSubst || {});
+    } else if (op === 'simplify') {
+      const expr = document.getElementById('simplifyExpr').value.trim();
+      if (!expr) { alert("Provide expression"); return; }
+      const ty = parseType(expr);
+      // very simple normalization: resolve named aliases in structural mode
+      function norm(t) {
+        if (!t) return t;
+        if (t.kind === 'name' && env.types[t.name]) return norm(env.types[t.name].type);
+        if (t.kind === 'func') return tFunc(t.params.map(norm), norm(t.ret));
+        if (t.kind === 'obj') { const f={}; for (const k in t.fields) f[k]=norm(t.fields[k]); return tObj(f); }
+        if (t.kind === 'union') return tUnion(t.types.map(norm));
+        if (t.kind === 'inter') return tInter(t.types.map(norm));
+        if (t.kind === 'app') return tApp(t.name, t.args.map(norm));
+        return t;
+      }
+      const n = norm(ty);
+      log("Simplified " + typeToString(ty) + " => " + typeToString(n));
+    } else if (op === 'infer_simple') {
+      const v = document.getElementById('inferVar').value;
+      if (!v) { alert("Select a variable"); return; }
+      const callArg = document.getElementById('inferCall').value.trim();
+      const ty = env.vars[v];
+      if (!ty) { alert("Variable not found"); return; }
+      if (!callArg) {
+        log("Inference: variable " + v + " has type " + typeToString(ty));
+      } else {
+        const argTy = env.vars[callArg];
+        if (!argTy) { alert("Argument variable not found"); return; }
+        // if ty is a function type, check arg compatibility and report result
+        if (ty.kind !== 'func') { log("Variable " + v + " is not a function"); return; }
+        if (ty.params.length !== 1) { log("Only single param functions supported for this simple infer"); return; }
+        // check subtype argTy <: param
+        const ok = isSubtype(argTy, ty.params[0], {nominal: document.getElementById('nominalMode').checked, allowWild: document.getElementById('allowWild').checked});
+        log("Call " + v + "(" + callArg + ") : arg type " + typeToString(argTy) + (ok ? " is compatible " : " is NOT compatible ") + "with param " + typeToString(ty.params[0]) + ". Result type: " + typeToString(ty.ret));
+      }
+    }
+  } catch (e) {
+    log("Error: " + e.message);
+  }
+  updateTraceControls();
+});
+
+/* Trace navigation */
+
+function updateTraceControls() {
+  const s = env.trace || [];
+  const slider = document.getElementById('traceSlider');
+  if (!s || s.length === 0) {
+    slider.max = 0; slider.value = 0;
+  } else {
+    slider.max = Math.max(0, s.length-1);
+    slider.value = Math.min(slider.value || 0, slider.max);
+  }
+  showTraceAt(parseInt(slider.value || 0, 10));
+}
+
+document.getElementById('traceSlider').addEventListener('input', (e) => {
+  showTraceAt(parseInt(e.target.value,10));
+});
+
+document.getElementById('stepPrevBtn').addEventListener('click', () => {
+  const slider = document.getElementById('traceSlider');
+  slider.value = Math.max(0, parseInt(slider.value,10)-1);
+  showTraceAt(parseInt(slider.value,10));
+});
+
+document.getElementById('stepNextBtn').addEventListener('click', () => {
+  const slider = document.getElementById('traceSlider');
+  slider.value = Math.min(slider.max, parseInt(slider.value,10)+1);
+  showTraceAt(parseInt(slider.value,10));
+});
+
+function showTraceAt(idx) {
+  const t = env.trace || [];
+  const out = document.getElementById('logArea');
+  const line = t[idx];
+  if (!line) {
+    // nothing
+    return;
+  }
+  const a = typeToString(line.a || tPrim("null"));
+  const b = typeToString(line.b || tPrim("null"));
+  const action = line.action || "";
+  // show a summary appended to log (do not clear previous logs)
+  log("Trace[" + idx + "]: " + action + "  |  A=" + a + "  B=" + b + "  Subst=" + JSON.stringify(line.subst || {}));
+  setSubstDisplay(line.subst || {});
+}
+
+/* Clear log and reset env controls */
+
+document.getElementById('clearLogBtn').addEventListener('click', () => {
+  document.getElementById('logArea').textContent = "";
+});
+
+document.getElementById('resetEnvBtn').addEventListener('click', () => {
+  if (!confirm("Reset environment and clear types/vars?")) return;
+  resetEnv();
+});
+
+/* Scenarios */
+
+const scenarios = {
+  simple: function() {
+    env.types = {};
+    env.vars = {};
+    env.types['Int'] = { type: tPrim('Int'), alias: false };
+    env.types['String'] = { type: tPrim('String'), alias: false };
+    env.types['Bool'] = { type: tPrim('Bool'), alias: false };
+    env.types['Pair'] = { type: parseType("{fst:Int, snd:Int}"), alias: false };
+    env.vars['x'] = parseType('Int');
+    env.vars['s'] = parseType('String');
+    log("Loaded simple primitives scenario.");
+    refreshUI();
+  },
+  functions: function() {
+    env.types = {};
+    env.vars = {};
+    env.types['Int'] = { type: tPrim('Int') };
+    env.types['String'] = { type: tPrim('String') };
+    env.types['Adder'] = { type: parseType("(Int) -> Int") };
+    env.types['ToString'] = { type: parseType("(Int) -> String") };
+    env.vars['f'] = parseType("(Int) -> Int");
+    env.vars['g'] = parseType("(String) -> Int");
+    log("Loaded functions scenario (try subtyping and contravariant parameter checks).");
+    refreshUI();
+  },
+  generics: function() {
+    env.types = {};
+    env.vars = {};
+    // define generic List<T> as {head:T, tail:List<T>} recursive (we store as name alias)
+    env.types['List'] = { type: parseType("{head:a, tail:List<a>}"), alias: false };
+    env.types['Int'] = { type: tPrim('Int') };
+    env.types['Pair'] = { type: parseType("{fst:a, snd:b}") };
+    log("Loaded generics scenario. 'List' uses type variable 'a' inside its alias.");
+    refreshUI();
+  },
+  objects: function() {
+    env.types = {};
+    env.vars = {};
+    env.types['Point2D'] = { type: parseType("{x:Float, y:Float}") };
+    env.types['Point3D'] = { type: parseType("{x:Float, y:Float, z:Float}") };
+    env.types['HasX'] = { type: parseType("{x:Float}") };
+    env.vars['p2'] = parseType('Point2D');
+    env.vars['p3'] = parseType('Point3D');
+    log("Loaded object subtyping scenario. Try checking Point3D <: Point2D, etc.");
+    refreshUI();
+  },
+  nominal: function() {
+    env.types = {};
+    env.vars = {};
+    env.types['Meter'] = { type: parseType('Float'), alias: true };
+    env.types['Second'] = { type: parseType('Float'), alias: true };
+    env.vars['t'] = parseType('Meter');
+    env.vars['s'] = parseType('Second');
+    log("Loaded nominal scenario where Meter and Second are aliases but in nominal mode they are distinct.");
+    refreshUI();
+  },
+  unions: function() {
+    env.types = {};
+    env.vars = {};
+    env.types['A'] = { type: parseType("{x:Int}") };
+    env.types['B'] = { type: parseType("{y:Int}") };
+    env.types['AorB'] = { type: parseType("{x:Int} | {y:Int}") };
+    env.vars['a'] = parseType('A');
+    env.vars['b'] = parseType('B');
+    log("Loaded unions/intersections scenario.");
+    refreshUI();
+  }
+};
+
+document.getElementById('loadScenarioBtn').addEventListener('click', () => {
+  const name = document.getElementById('scenarioSelect').value;
+  if (!scenarios[name]) { alert("Scenario not found"); return; }
+  scenarios[name]();
+});
+
+/* Save / Load environment JSON */
+
+document.getElementById('saveEnvBtn').addEventListener('click', () => {
+  // export env.types and env.vars in textual form for ease
+  const exportObj = { types: {}, vars: {} };
+  for (const n in env.types) exportObj.types[n] = typeToString(env.types[n].type);
+  for (const v in env.vars) exportObj.vars[v] = typeToString(env.vars[v]);
+  document.getElementById('envJson').value = JSON.stringify(exportObj, null, 2);
+});
+
+document.getElementById('loadEnvBtn').addEventListener('click', () => {
+  let j;
+  try { j = JSON.parse(document.getElementById('envJson').value); } catch (e) { alert("Bad JSON"); return; }
+  env.types = {};
+  env.vars = {};
+  for (const n in j.types) {
+    try { env.types[n] = { type: parseType(j.types[n]), alias: false }; } catch (e) { alert("Error parsing type " + n + ": " + e.message); return; }
+  }
+  for (const v in j.vars) {
+    try { env.vars[v] = parseType(j.vars[v]); } catch (e) { alert("Error parsing var " + v + ": " + e.message); return; }
+  }
+  log("Imported environment from JSON.");
+  refreshUI();
+});
+
+/* Misc initial setup */
+
+resetEnv();
+buildOpControls();
+updateTraceControls();
+
+/* populate simple default scenario */
+scenarios.simple();
+
+</script>
+</body>
+</html>

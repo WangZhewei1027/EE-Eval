@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Branch and Bound Interactive Demonstration</title>
+<style>
+  /* Extremely minimal plain design: black text on white background, basic HTML elements only */
+  html,body { margin:10px; padding:0; font-family: sans-serif; color: #000; background: #fff; }
+  h1,h2,h3 { margin:6px 0; font-weight:normal; }
+  .row { display:flex; gap:10px; align-items:flex-start; }
+  .col { display:flex; flex-direction:column; gap:8px; }
+  .panel { border:1px solid #000; padding:8px; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { border:1px solid #000; padding:4px; font-size:12px; text-align:left; }
+  input[type="number"], input[type="text"], select { width:100px; }
+  button { padding:4px 8px; }
+  textarea { width:100%; height:120px; }
+  .nodes { max-height:320px; overflow:auto; border:1px solid #000; padding:4px; }
+  .mini { font-size:12px; }
+  .controls-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  label { font-size:12px; }
+  .small { width:60px; }
+  .wide { width:200px; }
+  .muted { font-size:12px; color:#000; opacity:0.7;}
+</style>
+</head>
+<body>
+  <h1>Branch and Bound — Interactive Demonstration</h1>
+
+  <div class="row">
+    <div class="col" style="flex:1">
+      <div class="panel">
+        <h2>Problem Setup (0-1 Knapsack)</h2>
+        <div class="controls-row">
+          <label>Items:
+            <input id="itemCount" type="number" min="1" value="6" class="small">
+          </label>
+          <label>Capacity:
+            <input id="capacity" type="number" min="1" value="15" class="small">
+          </label>
+          <button id="generateRandom">Generate Random Items</button>
+          <button id="resetProblem">Reset Problem</button>
+        </div>
+
+        <div style="margin-top:8px;">
+          <button id="addItem">Add Item</button>
+          <button id="removeLast">Remove Last</button>
+        </div>
+
+        <div style="margin-top:8px;">
+          <table id="itemsTable">
+            <thead><tr><th>#</th><th>Value</th><th>Weight</th><th>Value/Weight</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:8px;">
+          <small class="muted">Edit values and weights directly in the table. Click "Generate Random" to randomize.</small>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:10px;">
+        <h2>Branch & Bound Controls</h2>
+
+        <div class="controls-row">
+          <label>Node selection:
+            <select id="nodeStrategy">
+              <option value="best">Best-bound (choose highest upper bound)</option>
+              <option value="dfs">Depth-first (stack)</option>
+              <option value="bfs">Breadth-first (queue)</option>
+            </select>
+          </label>
+
+          <label>Branch variable:
+            <select id="branchStrategy">
+              <option value="first">First free variable</option>
+              <option value="fractional">Most fractional from relaxation</option>
+              <option value="highestRatio">Highest value/weight</option>
+            </select>
+          </label>
+
+          <label>Bound type:
+            <select id="boundType">
+              <option value="fractional">Fractional (greedy) upper bound</option>
+              <option value="greedyLower">Greedy integer lower bound (heuristic)</option>
+              <option value="exact">Exact (exhaustive when small)</option>
+            </select>
+          </label>
+        </div>
+
+        <div style="margin-top:8px;" class="controls-row">
+          <button id="init">Initialize Root Node</button>
+          <button id="step">Step (expand one)</button>
+          <button id="autoRun">Auto Run</button>
+          <button id="pause">Pause</button>
+          <button id="solveAll">Solve to Completion</button>
+          <button id="stepBack">Step Back</button>
+          <label>Speed:
+            <input id="speed" type="range" min="50" max="2000" value="800">
+          </label>
+        </div>
+
+        <div style="margin-top:8px;">
+          <button id="exportState">Export State</button>
+          <button id="importState">Import State</button>
+          <input id="importData" type="text" placeholder='{"...":...}' style="width:320px;">
+        </div>
+
+        <div style="margin-top:8px;">
+          <small class="muted">You can manually expand, branch, prune, compute exact bound for any node in the node list shown below. Extensive manual control enables deep exploration.</small>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:10px;">
+        <h2>Stats and Incumbent</h2>
+        <div id="stats" class="mini">
+          <div>Nodes created: <span id="statNodes">0</span></div>
+          <div>Nodes expanded: <span id="statExpanded">0</span></div>
+          <div>Nodes pruned: <span id="statPruned">0</span></div>
+          <div>Frontier size: <span id="statFrontier">0</span></div>
+        </div>
+
+        <div style="margin-top:8px;">
+          <h3>Current Incumbent (best integer solution found)</h3>
+          <div id="incumbentInfo" class="mini">None</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col" style="width:520px;">
+      <div class="panel">
+        <h2>Nodes (Frontier & Explored)</h2>
+        <div class="nodes" id="nodesList">
+          <!-- Node items will appear here -->
+        </div>
+
+        <div style="margin-top:8px;">
+          <small class="muted">Click a node to inspect and use action buttons that appear for the selected node.</small>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:10px;">
+        <h2>Selected Node Details</h2>
+        <div id="nodeDetails" class="mini">None selected.</div>
+        <div style="margin-top:8px;" id="nodeActions"></div>
+      </div>
+
+      <div class="panel" style="margin-top:10px;">
+        <h2>Log & History</h2>
+        <textarea id="log" readonly></textarea>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  Branch and Bound interactive demo (0-1 Knapsack).
+  - Plain UI, many controls for exploring branching, bounding, strategies.
+  - Minimal design, heavy interactivity and many paths.
+*/
+
+/* ---------- Problem data and utilities ---------- */
+
+let items = []; // each item: {value, weight, ratio}
+let capacity = 15;
+let nextNodeId = 1;
+
+// B&B state
+let state = {
+  nodes: {},           // id -> node
+  frontier: [],        // list of node ids (depending on selection strategy)
+  createdCount: 0,
+  expandedCount: 0,
+  prunedCount: 0,
+  incumbent: null,     // {value, assignment, nodeId}
+  selectedNodeId: null,
+  history: [],
+  historyIndex: -1
+};
+
+// node object: { id, parent, fixed: array (-1 free, 0,1), bound, heuristic, status, depth }
+
+const maxExactFree = 20; // threshold for exact exhaustive bound
+
+// DOM references
+const itemsTableBody = document.querySelector("#itemsTable tbody");
+const itemCountInput = document.getElementById("itemCount");
+const capacityInput = document.getElementById("capacity");
+const generateRandomBtn = document.getElementById("generateRandom");
+const resetProblemBtn = document.getElementById("resetProblem");
+const addItemBtn = document.getElementById("addItem");
+const removeLastBtn = document.getElementById("removeLast");
+const initBtn = document.getElementById("init");
+const stepBtn = document.getElementById("step");
+const autoRunBtn = document.getElementById("autoRun");
+const pauseBtn = document.getElementById("pause");
+const solveAllBtn = document.getElementById("solveAll");
+const stepBackBtn = document.getElementById("stepBack");
+const nodesListDiv = document.getElementById("nodesList");
+const nodeDetailsDiv = document.getElementById("nodeDetails");
+const nodeActionsDiv = document.getElementById("nodeActions");
+const logArea = document.getElementById("log");
+const statNodes = document.getElementById("statNodes");
+const statExpanded = document.getElementById("statExpanded");
+const statPruned = document.getElementById("statPruned");
+const statFrontier = document.getElementById("statFrontier");
+const incumbentInfo = document.getElementById("incumbentInfo");
+const nodeStrategySelect = document.getElementById("nodeStrategy");
+const branchStrategySelect = document.getElementById("branchStrategy");
+const boundTypeSelect = document.getElementById("boundType");
+const speedSlider = document.getElementById("speed");
+const exportStateBtn = document.getElementById("exportState");
+const importStateBtn = document.getElementById("importState");
+const importInput = document.getElementById("importData");
+
+let autoRunTimer = null;
+
+/* ---------- Utility functions ---------- */
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logArea.value = `[${t}] ${msg}\n` + logArea.value;
+}
+
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function updateItemsTable() {
+  itemsTableBody.innerHTML = "";
+  items.forEach((it, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${idx}</td>
+      <td><input data-idx="${idx}" data-field="value" type="number" value="${it.value}"></td>
+      <td><input data-idx="${idx}" data-field="weight" type="number" value="${it.weight}"></td>
+      <td>${(it.ratio).toFixed(3)}</td>
+      <td><button data-idx="${idx}" class="deleteItem">Delete</button></td>`;
+    itemsTableBody.appendChild(tr);
+  });
+  // attach listeners
+  itemsTableBody.querySelectorAll('input[data-field]').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const idx = Number(e.target.getAttribute('data-idx'));
+      const field = e.target.getAttribute('data-field');
+      const val = Number(e.target.value);
+      if (field === 'value') items[idx].value = Math.max(0, val);
+      if (field === 'weight') items[idx].weight = Math.max(1, val);
+      items[idx].ratio = items[idx].value / items[idx].weight;
+      refreshAllDisplays();
+    });
+  });
+  itemsTableBody.querySelectorAll('.deleteItem').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = Number(e.target.getAttribute('data-idx'));
+      items.splice(idx,1);
+      refreshAllDisplays();
+    });
+  });
+}
+
+function randomInt(min,max) { return Math.floor(Math.random()*(max-min+1))+min; }
+
+function generateRandomProblem(n, cap) {
+  items = [];
+  for (let i=0;i<n;i++){
+    const weight = randomInt(1, Math.max(2,Math.floor(cap/2)));
+    const value = randomInt(1, weight*5);
+    items.push({value, weight, ratio: value/weight});
+  }
+  capacity = cap;
+  capacityInput.value = capacity;
+  updateItemsTable();
+  log(`Generated random problem with ${n} items, capacity ${cap}.`);
+}
+
+function resetProblem() {
+  items = [
+    {value:10, weight:6, ratio:10/6},
+    {value:6, weight:3, ratio:6/3},
+    {value:5, weight:4, ratio:5/4},
+    {value:7, weight:4, ratio:7/4},
+    {value:2, weight:1, ratio:2/1},
+    {value:8, weight:5, ratio:8/5}
+  ];
+  capacity = 15;
+  itemCountInput.value = items.length;
+  capacityInput.value = capacity;
+  updateItemsTable();
+  log('Reset to default example problem.');
+}
+
+/* ---------- Bound and heuristics ---------- */
+
+function computeFractionalUpperBoundForNode(node) {
+  // node.fixed: -1 free, 0,1 fixed
+  const fixed = node.fixed;
+  let sumW = 0, sumV = 0;
+  for (let i=0;i<fixed.length;i++){
+    if (fixed[i]===1) {
+      sumW += items[i].weight;
+      sumV += items[i].value;
+    }
+  }
+  if (sumW > capacity) return -Infinity;
+  let capRem = capacity - sumW;
+  // list remaining items sorted by ratio desc
+  const rem = [];
+  for (let i=0;i<fixed.length;i++){
+    if (fixed[i]!==1) rem.push({i, ratio: items[i].ratio, value: items[i].value, weight: items[i].weight});
+  }
+  rem.sort((a,b)=>b.ratio - a.ratio);
+  let ub = sumV;
+  for (const r of rem){
+    if (r.weight <= capRem) {
+      capRem -= r.weight;
+      ub += r.value;
+    } else {
+      // fractional part
+      ub += r.ratio * capRem;
+      capRem = 0;
+      break;
+    }
+  }
+  return ub;
+}
+
+// Greedy integer heuristic for a feasible solution under node constraints
+function greedyIntegerSolutionForNode(node) {
+  const fixed = node.fixed;
+  let assignment = fixed.slice();
+  let sumW = 0, sumV = 0;
+  for (let i=0;i<fixed.length;i++){
+    if (fixed[i]===1) { sumW += items[i].weight; sumV += items[i].value; }
+    if (fixed[i]===0) assignment[i]=0;
+  }
+  if (sumW > capacity) return null;
+  // sort free items by ratio
+  const rem = [];
+  for (let i=0;i<fixed.length;i++){
+    if (fixed[i]===-1) rem.push({i, ratio: items[i].ratio, value: items[i].value, weight: items[i].weight});
+  }
+  rem.sort((a,b)=>b.ratio - a.ratio);
+  for (const r of rem){
+    if (sumW + r.weight <= capacity){
+      sumW += r.weight;
+      sumV += r.value;
+      assignment[r.i] = 1;
+    } else {
+      assignment[r.i] = 0;
+    }
+  }
+  return {value: sumV, weight: sumW, assignment};
+}
+
+// Exact exhaustive search for remaining free variables (only when small)
+function exactExhaustiveForNode(node) {
+  const fixed = node.fixed;
+  let baseW = 0, baseV = 0;
+  const freeIdx = [];
+  for (let i=0;i<fixed.length;i++){
+    if (fixed[i]===1) { baseW += items[i].weight; baseV += items[i].value; }
+    else if (fixed[i]===-1) freeIdx.push(i);
+  }
+  if (baseW > capacity) return {value:-Infinity};
+  const nFree = freeIdx.length;
+  if (nFree > maxExactFree) return {error: 'too many free variables for exhaustive search'};
+  let bestV = -Infinity;
+  let bestAssign = null;
+  const total = 1<<nFree;
+  for (let mask=0; mask<total; mask++){
+    let w = baseW, v = baseV;
+    const assign = fixed.slice();
+    for (let j=0;j<nFree;j++){
+      const idx = freeIdx[j];
+      if (mask & (1<<j)) {
+        w += items[idx].weight;
+        v += items[idx].value;
+        assign[idx] = 1;
+      } else assign[idx] = 0;
+      if (w > capacity) break;
+    }
+    if (w <= capacity && v > bestV){
+      bestV = v;
+      bestAssign = assign.slice();
+    }
+  }
+  if (bestV === -Infinity) return {value:-Infinity};
+  return {value: bestV, assignment: bestAssign};
+}
+
+/* ---------- Node management ---------- */
+
+function makeRootNode() {
+  const n = items.length;
+  const fixed = new Array(n).fill(-1);
+  const node = {
+    id: nextNodeId++,
+    parent: null,
+    fixed,
+    bound: null,
+    heuristic: null,
+    status: 'frontier',
+    depth: 0
+  };
+  state.nodes = {};
+  state.frontier = [];
+  state.createdCount = 0;
+  state.expandedCount = 0;
+  state.prunedCount = 0;
+  state.incumbent = null;
+  state.selectedNodeId = null;
+  state.history = [];
+  state.historyIndex = -1;
+  addNode(node);
+  pushHistory('Initialized root node');
+  refreshAllDisplays();
+  log('Root node created (all variables free).');
+  return node;
+}
+
+function addNode(node) {
+  state.nodes[node.id] = node;
+  state.frontier.push(node.id);
+  state.createdCount++;
+  statNodes.textContent = state.createdCount;
+}
+
+function removeFromFrontier(nodeId) {
+  const idx = state.frontier.indexOf(nodeId);
+  if (idx>=0) state.frontier.splice(idx,1);
+}
+
+function snapshotState(actionLabel) {
+  // store deep clone of essential state for step back capability
+  const snap = {
+    nodes: deepClone(state.nodes),
+    frontier: deepClone(state.frontier),
+    createdCount: state.createdCount,
+    expandedCount: state.expandedCount,
+    prunedCount: state.prunedCount,
+    incumbent: deepClone(state.incumbent),
+    selectedNodeId: state.selectedNodeId
+  };
+  // truncate future history on new actions
+  if (state.historyIndex < state.history.length - 1) {
+    state.history = state.history.slice(0, state.historyIndex + 1);
+  }
+  state.history.push({snap, label: actionLabel});
+  state.historyIndex = state.history.length - 1;
+}
+
+function pushHistory(label) {
+  snapshotState(label);
+}
+
+function restoreHistoryIndex(idx) {
+  if (idx < 0 || idx >= state.history.length) return;
+  const snap = state.history[idx].snap;
+  state.nodes = deepClone(snap.nodes);
+  state.frontier = deepClone(snap.frontier);
+  state.createdCount = snap.createdCount;
+  state.expandedCount = snap.expandedCount;
+  state.prunedCount = snap.prunedCount;
+  state.incumbent = deepClone(snap.incumbent);
+  state.selectedNodeId = snap.selectedNodeId;
+  state.historyIndex = idx;
+  refreshAllDisplays();
+  log(`Restored history: ${state.history[idx].label}`);
+}
+
+/* ---------- Node selection and branching ---------- */
+
+function chooseNodeToExpand() {
+  if (state.frontier.length === 0) return null;
+  const strat = nodeStrategySelect.value;
+  if (strat === 'dfs') {
+    return state.frontier[state.frontier.length - 1];
+  } else if (strat === 'bfs') {
+    return state.frontier[0];
+  } else { // best-bound
+    // ensure bounds are computed
+    let bestId = null, bestBound = -Infinity;
+    for (const id of state.frontier) {
+      const node = state.nodes[id];
+      if (node.bound === null) {
+        node.bound = computeFractionalUpperBoundForNode(node);
+      }
+      if (node.bound > bestBound) {
+        bestBound = node.bound; bestId = id;
+      }
+    }
+    return bestId;
+  }
+}
+
+function chooseBranchVariable(node) {
+  const strat = branchStrategySelect.value;
+  const fixed = node.fixed;
+  if (strat === 'first') {
+    for (let i=0;i<fixed.length;i++) if (fixed[i]===-1) return i;
+  } else if (strat === 'highestRatio') {
+    let bestIdx = -1, bestRatio = -Infinity;
+    for (let i=0;i<fixed.length;i++) if (fixed[i]===-1) {
+      if (items[i].ratio > bestRatio) { bestRatio = items[i].ratio; bestIdx = i; }
+    }
+    return bestIdx;
+  } else if (strat === 'fractional') {
+    // compute fractional solution to detect fractional selection
+    // We'll simulate greedy fractional selection and see if a fractional item appears
+    const fixedCopy = fixed.slice();
+    let sumW = 0;
+    for (let i=0;i<fixedCopy.length;i++){
+      if (fixedCopy[i]===1) sumW += items[i].weight;
+    }
+    let capRem = capacity - sumW;
+    const rem = [];
+    for (let i=0;i<fixedCopy.length;i++){
+      if (fixedCopy[i]!==1) rem.push({i, ratio: items[i].ratio, value: items[i].value, weight: items[i].weight});
+    }
+    rem.sort((a,b)=>b.ratio - a.ratio);
+    for (const r of rem) {
+      if (r.weight <= capRem) { capRem -= r.weight; continue; }
+      // fractional item found
+      return r.i;
+    }
+    // fallback
+    for (let i=0;i<fixed.length;i++) if (fixed[i]===-1) return i;
+  }
+  return null;
+}
+
+/* ---------- Expand single node ---------- */
+
+function expandOneNode(manualNodeId=null) {
+  const nodeId = manualNodeId !== null ? manualNodeId : chooseNodeToExpand();
+  if (nodeId === null || nodeId === undefined) {
+    log('No node available to expand.');
+    return;
+  }
+  const node = state.nodes[nodeId];
+  // snapshot before action
+  pushHistory(`Expand node ${nodeId}`);
+  // compute bound if not yet
+  if (node.bound === null) node.bound = computeFractionalUpperBoundForNode(node);
+  // compute heuristic value
+  node.heuristic = greedyIntegerSolutionForNode(node);
+  // Check prune by bound
+  if (state.incumbent && node.bound !== -Infinity && node.bound <= state.incumbent.value) {
+    node.status = 'pruned';
+    state.prunedCount++;
+    removeFromFrontier(node.id);
+    log(`Node ${node.id} pruned by bound (ub=${node.bound.toFixed(3)}) <= incumbent ${state.incumbent.value}`);
+    refreshAllDisplays();
+    return;
+  }
+  // if all fixed -> feasible leaf
+  const allFixed = node.fixed.every(v => v!==-1);
+  if (allFixed) {
+    // check feasibility
+    const wt = node.fixed.reduce((acc,v,i)=>acc + (v===1?items[i].weight:0),0);
+    const val = node.fixed.reduce((acc,v,i)=>acc + (v===1?items[i].value:0),0);
+    if (wt <= capacity) {
+      node.status = 'feasible';
+      removeFromFrontier(node.id);
+      state.expandedCount++;
+      state.nodes[node.id] = node;
+      log(`Node ${node.id} is a feasible leaf with value ${val} weight ${wt}.`);
+      if (!state.incumbent || val > state.incumbent.value) {
+        state.incumbent = {value: val, assignment: node.fixed.slice(), nodeId: node.id};
+        log(`Incumbent updated to value ${val} at node ${node.id}.`);
+      }
+      refreshAllDisplays();
+      return;
+    } else {
+      node.status = 'infeasible';
+      removeFromFrontier(node.id);
+      state.prunedCount++;
+      log(`Node ${node.id} infeasible (weight ${wt} > capacity). Pruned.`);
+      refreshAllDisplays();
+      return;
+    }
+  }
+
+  // Expand node: branch on selected variable
+  const branchIdx = chooseBranchVariable(node);
+  if (branchIdx === null) {
+    // no variable to branch on (?) treat as expanded
+    node.status = 'expanded';
+    removeFromFrontier(node.id);
+    state.expandedCount++;
+    log(`Node ${node.id} expanded (no branch variable found).`);
+    refreshAllDisplays();
+    return;
+  }
+
+  // Create child where variable=1 first (try to find better incumbent quickly), then 0
+  const child1 = {
+    id: nextNodeId++,
+    parent: node.id,
+    fixed: node.fixed.slice(),
+    bound: null,
+    heuristic: null,
+    status: 'frontier',
+    depth: node.depth + 1
+  };
+  child1.fixed[branchIdx] = 1;
+
+  const child2 = {
+    id: nextNodeId++,
+    parent: node.id,
+    fixed: node.fixed.slice(),
+    bound: null,
+    heuristic: null,
+    status: 'frontier',
+    depth: node.depth + 1
+  };
+  child2.fixed[branchIdx] = 0;
+
+  // Mark expanded and remove from frontier
+  node.status = 'expanded';
+  removeFromFrontier(node.id);
+  // Add children according to ordering (we will add both to frontier)
+  addNode(child1);
+  addNode(child2);
+
+  state.expandedCount++;
+  log(`Expanded node ${node.id} branching on variable ${branchIdx} -> created nodes ${child1.id} (x${branchIdx}=1) and ${child2.id} (x${branchIdx}=0).`);
+
+  refreshAllDisplays();
+}
+
+/* ---------- Manual node operations ---------- */
+
+function computeExactForSelected() {
+  const id = state.selectedNodeId;
+  if (!id) return;
+  const node = state.nodes[id];
+  pushHistory(`Compute exact for node ${id}`);
+  const res = exactExhaustiveForNode(node);
+  if (res.error) {
+    log(`Exact bound not computed for node ${id}: ${res.error}`);
+    alert('Exact exhaustive bound skipped: too many free variables.');
+  } else {
+    node.bound = res.value;
+    if (res.assignment) node.heuristic = {value: res.value, assignment: res.assignment};
+    log(`Exact value for node ${id} = ${res.value}`);
+  }
+  refreshAllDisplays();
+}
+
+function pruneSelected() {
+  const id = state.selectedNodeId;
+  if (!id) return;
+  const node = state.nodes[id];
+  pushHistory(`Manual prune node ${id}`);
+  if (node.status !== 'pruned') {
+    node.status = 'pruned';
+    removeFromFrontier(id);
+    state.prunedCount++;
+    log(`Node ${id} manually pruned.`);
+    refreshAllDisplays();
+  }
+}
+
+function setSelectedAsIncumbent() {
+  const id = state.selectedNodeId;
+  if (!id) return;
+  const node = state.nodes[id];
+  // need to have a feasible assignment
+  if (node.fixed.every(v => v!==-1)) {
+    const wt = node.fixed.reduce((acc,v,i)=>acc + (v===1?items[i].weight:0),0);
+    const val = node.fixed.reduce((acc,v,i)=>acc + (v===1?items[i].value:0),0);
+    if (wt <= capacity) {
+      pushHistory(`Manual incumbent set from node ${id}`);
+      state.incumbent = {value: val, assignment: node.fixed.slice(), nodeId: id};
+      log(`Manually set incumbent to value ${val} from node ${id}.`);
+      refreshAllDisplays();
+    } else {
+      alert('Selected node assignment is infeasible (weight exceeds capacity).');
+    }
+  } else {
+    // try to get a greedy integer solution if possible
+    const greedy = greedyIntegerSolutionForNode(node);
+    if (greedy) {
+      pushHistory(`Manual incumbent set from greedy at node ${id}`);
+      state.incumbent = {value: greedy.value, assignment: greedy.assignment.slice(), nodeId: id};
+      log(`Manually set incumbent to greedy value ${greedy.value} from node ${id}.`);
+      refreshAllDisplays();
+    } else {
+      alert('Cannot create feasible incumbent for this node.');
+    }
+  }
+}
+
+/* ---------- Interface rendering ---------- */
+
+function renderNodesList() {
+  nodesListDiv.innerHTML = '';
+  const allIds = Object.keys(state.nodes).map(x=>Number(x)).sort((a,b)=>a-b);
+  // show frontier first then others
+  const present = new Set(state.frontier);
+  // render frontier items first
+  for (const id of state.frontier) {
+    const node = state.nodes[id];
+    nodesListDiv.appendChild(renderNodeRow(node, true));
+  }
+  // then other nodes not in frontier
+  for (const id of allIds) {
+    if (!present.has(id)) {
+      const node = state.nodes[id];
+      nodesListDiv.appendChild(renderNodeRow(node, false));
+    }
+  }
+}
+
+function renderNodeRow(node, isFrontier) {
+  const div = document.createElement('div');
+  div.style.borderTop = '1px solid #000';
+  div.style.padding = '6px 2px';
+  div.style.fontSize = '12px';
+  const shortFixed = node.fixed.map(v=>v===-1?'.':v).join('');
+  const boundText = node.bound === null ? 'n/a' : (node.bound===-Infinity?'-inf':node.bound.toFixed(3));
+  const heurText = node.heuristic ? (node.heuristic.value !== undefined ? node.heuristic.value : '-') : '-';
+  div.innerHTML = `ID:${node.id} [${shortFixed}] depth:${node.depth} status:${node.status} ub:${boundText} heuristic:${heurText}`;
+  div.addEventListener('click', () => {
+    state.selectedNodeId = node.id;
+    renderNodeDetails(node.id);
+    renderNodesList();
+  });
+  if (state.selectedNodeId === node.id) {
+    div.style.background = '#eee';
+  }
+  return div;
+}
+
+function renderNodeDetails(nodeId) {
+  const node = state.nodes[nodeId];
+  if (!node) {
+    nodeDetailsDiv.textContent = 'None selected.';
+    nodeActionsDiv.innerHTML = '';
+    return;
+  }
+  const fixedStr = node.fixed.map((v,i)=>`${i}:${v===-1?'.':v}`).join(' ');
+  const boundText = node.bound === null ? 'n/a' : (node.bound===-Infinity?'-inf':node.bound.toFixed(3));
+  const heurText = node.heuristic ? (node.heuristic.value !== undefined ? node.heuristic.value : '-') : '-';
+  nodeDetailsDiv.innerHTML = `
+    <div>ID: ${node.id}</div>
+    <div>Parent: ${node.parent}</div>
+    <div>Depth: ${node.depth}</div>
+    <div>Fixed: ${fixedStr}</div>
+    <div>Upper bound: ${boundText}</div>
+    <div>Heuristic value: ${heurText}</div>
+    <div>Status: ${node.status}</div>
+  `;
+  // actions
+  nodeActionsDiv.innerHTML = '';
+  const btnExpand = document.createElement('button'); btnExpand.textContent = 'Expand this node'; btnExpand.addEventListener('click', ()=>expandOneNode(nodeId));
+  const btnCompute = document.createElement('button'); btnCompute.textContent = 'Compute fractional bound'; btnCompute.addEventListener('click', ()=>{
+    pushHistory(`Compute fractional bound for node ${nodeId}`);
+    node.bound = computeFractionalUpperBoundForNode(node);
+    node.heuristic = greedyIntegerSolutionForNode(node);
+    log(`Computed fractional bound for node ${nodeId}: ${node.bound}`);
+    refreshAllDisplays();
+  });
+  const btnExact = document.createElement('button'); btnExact.textContent = 'Compute exact (exhaustive)'; btnExact.addEventListener('click', ()=>computeExactForSelected());
+  const btnPrune = document.createElement('button'); btnPrune.textContent = 'Prune this node'; btnPrune.addEventListener('click', ()=>pruneSelected());
+  const btnInc = document.createElement('button'); btnInc.textContent = 'Set as incumbent (manual)'; btnInc.addEventListener('click', ()=>setSelectedAsIncumbent());
+  const btnEdit = document.createElement('button'); btnEdit.textContent = 'Edit fixed vars'; btnEdit.addEventListener('click', ()=>editFixedVars(nodeId));
+
+  nodeActionsDiv.appendChild(btnExpand);
+  nodeActionsDiv.appendChild(btnCompute);
+  nodeActionsDiv.appendChild(btnExact);
+  nodeActionsDiv.appendChild(btnPrune);
+  nodeActionsDiv.appendChild(btnInc);
+  nodeActionsDiv.appendChild(btnEdit);
+}
+
+function editFixedVars(nodeId) {
+  const node = state.nodes[nodeId];
+  if (!node) return;
+  const newFixedStr = prompt('Enter fixed variable vector as sequence with -,0,1 (e.g. "-1-01" or ".01.1")', node.fixed.map(v=>v===-1?'.':v).join(''));
+  if (newFixedStr === null) return;
+  // parse
+  const arr = newFixedStr.split('');
+  if (arr.length !== node.fixed.length) {
+    alert('Length mismatch.');
+    return;
+  }
+  const newFixed = [];
+  for (const ch of arr) {
+    if (ch === '.' || ch === '-' ) newFixed.push(-1);
+    else if (ch === '0') newFixed.push(0);
+    else if (ch === '1') newFixed.push(1);
+    else { alert('Invalid symbol: use 0,1 or .'); return; }
+  }
+  pushHistory(`Edit fixed vars node ${nodeId}`);
+  node.fixed = newFixed;
+  node.bound = null; node.heuristic = null;
+  log(`Node ${nodeId} fixed variables edited.`);
+  refreshAllDisplays();
+}
+
+function refreshIncumbentDisplay() {
+  if (!state.incumbent) {
+    incumbentInfo.textContent = 'None';
+    return;
+  }
+  const a = state.incumbent.assignment.map((v,i)=>v===1?i:'').filter(x=>x!=='').join(',');
+  incumbentInfo.innerHTML = `Value: ${state.incumbent.value} at node ${state.incumbent.nodeId} <div class="mini">Items selected: ${a || '(none)'}</div>`;
+}
+
+function refreshStats() {
+  statNodes.textContent = state.createdCount;
+  statExpanded.textContent = state.expandedCount;
+  statPruned.textContent = state.prunedCount;
+  statFrontier.textContent = state.frontier.length;
+}
+
+/* Overall refresh */
+function refreshAllDisplays() {
+  updateItemsTable();
+  renderNodesList();
+  renderNodeDetails(state.selectedNodeId);
+  refreshIncumbentDisplay();
+  refreshStats();
+}
+
+/* ---------- Control button handlers ---------- */
+
+generateRandomBtn.addEventListener('click', () => {
+  const n = Number(itemCountInput.value) || 6;
+  const cap = Number(capacityInput.value) || 15;
+  generateRandomProblem(n, cap);
+});
+
+resetProblemBtn.addEventListener('click', () => {
+  resetProblem();
+});
+
+addItemBtn.addEventListener('click', () => {
+  const val = randomInt(1,10); const wt = randomInt(1,6);
+  items.push({value: val, weight: wt, ratio: val/wt});
+  itemCountInput.value = items.length;
+  updateItemsTable();
+});
+
+removeLastBtn.addEventListener('click', () => {
+  if (items.length>0) items.pop();
+  itemCountInput.value = items.length;
+  updateItemsTable();
+});
+
+capacityInput.addEventListener('change', () => {
+  capacity = Math.max(1, Number(capacityInput.value));
+  pushHistory('Capacity changed');
+  log(`Capacity changed to ${capacity}`);
+  refreshAllDisplays();
+});
+
+initBtn.addEventListener('click', () => {
+  // update capacity and itemCount fields
+  capacity = Math.max(1, Number(capacityInput.value));
+  itemCountInput.value = items.length;
+  const root = makeRootNode();
+  // compute root bound and heuristic if requested
+  root.bound = computeFractionalUpperBoundForNode(root);
+  root.heuristic = greedyIntegerSolutionForNode(root);
+  refreshAllDisplays();
+});
+
+stepBtn.addEventListener('click', () => {
+  expandOneNode();
+});
+
+autoRunBtn.addEventListener('click', () => {
+  if (autoRunTimer) { clearInterval(autoRunTimer); autoRunTimer=null; }
+  const interval = Number(speedSlider.value) || 800;
+  autoRunTimer = setInterval(() => {
+    if (state.frontier.length === 0) {
+      clearInterval(autoRunTimer); autoRunTimer = null;
+      log('Auto run finished: frontier empty.');
+      return;
+    }
+    // before expanding, optionally prune nodes by bound using current incumbent
+    if (state.incumbent) {
+      // prune all frontier nodes with bound <= incumbent
+      for (const id of [...state.frontier]) {
+        const node = state.nodes[id];
+        if (node.bound === null) node.bound = computeFractionalUpperBoundForNode(node);
+        if (node.bound !== -Infinity && node.bound <= state.incumbent.value) {
+          pushHistory('Auto prune by bound');
+          node.status = 'pruned';
+          removeFromFrontier(id);
+          state.prunedCount++;
+          log(`Auto-pruned node ${id} (ub=${node.bound} <= incumbent ${state.incumbent.value}).`);
+        }
+      }
+    }
+    if (state.frontier.length === 0) {
+      clearInterval(autoRunTimer); autoRunTimer=null;
+      log('Auto run finished: frontier empty after pruning.');
+      refreshAllDisplays();
+      return;
+    }
+    expandOneNode();
+  }, interval);
+  log('Auto run started.');
+});
+
+pauseBtn.addEventListener('click', () => {
+  if (autoRunTimer) {
+    clearInterval(autoRunTimer); autoRunTimer=null;
+    log('Auto run paused.');
+  } else {
+    log('Auto run was not running.');
+  }
+});
+
+solveAllBtn.addEventListener('click', () => {
+  // iterative loop until frontier empty or fully explored
+  pushHistory('Solve to completion');
+  // caution: this may be long; we will run steps synchronously but with a safety iteration limit
+  let iterations = 0;
+  const maxIter = 200000;
+  while (state.frontier.length > 0 && iterations < maxIter) {
+    // prune by bound using current incumbent
+    if (state.incumbent) {
+      for (const id of [...state.frontier]) {
+        const node = state.nodes[id];
+        if (node.bound === null) node.bound = computeFractionalUpperBoundForNode(node);
+        if (node.bound !== -Infinity && node.bound <= state.incumbent.value) {
+          node.status = 'pruned';
+          removeFromFrontier(id);
+          state.prunedCount++;
+        }
+      }
+    }
+    if (state.frontier.length === 0) break;
+    expandOneNode();
+    iterations++;
+  }
+  if (iterations >= maxIter) log('Solve aborted: reached iteration limit.');
+  else log('Solve to completion finished.');
+});
+
+stepBackBtn.addEventListener('click', () => {
+  if (state.historyIndex <= 0) {
+    alert('No earlier history to restore.');
+    return;
+  }
+  restoreHistoryIndex(state.historyIndex - 1);
+});
+
+exportStateBtn.addEventListener('click', () => {
+  const exportObj = {
+    items, capacity, state
+  };
+  const txt = JSON.stringify(exportObj);
+  importInput.value = txt;
+  alert('State exported to the import box (you can copy it).');
+});
+
+importStateBtn.addEventListener('click', () => {
+  try {
+    const txt = importInput.value.trim();
+    if (!txt) { alert('Enter JSON into the import box.'); return; }
+    const obj = JSON.parse(txt);
+    if (obj.items && Array.isArray(obj.items)) {
+      items = obj.items;
+      capacity = obj.capacity || capacity;
+      // restore state (careful)
+      if (obj.state) {
+        state = obj.state;
+        // restore functions/refs
+        if (!state.history) state.history = [];
+        // ensure any missing fields
+        state.nodes = state.nodes || {};
+        state.frontier = state.frontier || [];
+        nextNodeId = Math.max(nextNodeId, ...Object.keys(state.nodes).map(x=>Number(x)).concat([0])) + 1;
+        log('Imported state from JSON.');
+      }
+      updateItemsTable();
+      refreshAllDisplays();
+    } else {
+      alert('Invalid JSON format.');
+    }
+  } catch (e) {
+    alert('Error parsing JSON: ' + e.message);
+  }
+});
+
+/* ---------- Boot / initial content ---------- */
+
+resetProblem();
+updateItemsTable();
+refreshAllDisplays();
+log('Interactive Branch and Bound demo ready.');
+
+// provide keyboard shortcuts for quick exploration
+document.addEventListener('keydown', (e) => {
+  if (e.key === ' ') { e.preventDefault(); expandOneNode(); }
+  else if (e.key === 'a') { autoRunBtn.click(); }
+  else if (e.key === 'p') { pauseBtn.click(); }
+  else if (e.key === 's') { stepBackBtn.click(); }
+});
+
+</script>
+</body>
+</html>

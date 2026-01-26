@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Congestion Control Interactive Simulator</title>
+<style>
+  /* Extremely minimal visual design: plain black text on white background */
+  html,body { margin:12px; padding:0; font-family: Arial, Helvetica, sans-serif; color:black; background:white; }
+  h1 { font-size:18px; margin:6px 0; }
+  p { margin:6px 0; font-size:13px; }
+  .row { display:block; margin:8px 0; }
+  label { display:inline-block; font-size:13px; width:160px; vertical-align:top; }
+  input, select, button, textarea { font-size:12px; margin:2px 0; }
+  fieldset { margin-bottom:10px; padding:8px; }
+  canvas { border:1px solid #000; display:block; margin:6px 0; }
+  .controls { max-width:980px; }
+  .small { font-size:12px; }
+  .log { width:98%; height:120px; font-family: monospace; font-size:12px; }
+  .inline { display:inline-block; margin-right:8px; }
+</style>
+</head>
+<body>
+<h1>Congestion Control Interactive Simulator</h1>
+<p>This simulator models sender congestion-control behavior (Reno, AIMD, simplified CUBIC, simplified BBR) with interactive controls, manual events, scenario save/load, and plotting. Use the controls below to explore many paths: change network parameters while running, inject losses/delays, switch algorithms, and step through time.</p>
+
+<div class="controls">
+
+  <fieldset>
+    <legend>Algorithm & Core Parameters</legend>
+    <div class="row">
+      <label for="algo">Algorithm</label>
+      <select id="algo">
+        <option value="reno">TCP Reno (slow start / avoidance / fast retransmit)</option>
+        <option value="aimd">AIMD (custom)</option>
+        <option value="cubic">CUBIC (simplified)</option>
+        <option value="bbr">BBR (simplified)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="initCWND">Initial cwnd (pkts)</label>
+      <input id="initCWND" type="number" value="2" min="1" step="1" />
+      <label style="width:120px;">Initial ssthresh</label>
+      <input id="initSSTH" type="number" value="1000" min="1" step="1" />
+    </div>
+
+    <div class="row">
+      <label for="mss">MSS (bytes)</label>
+      <input id="mss" type="number" value="1460" min="100" step="1" />
+      <label style="width:120px;">DupACKs threshold</label>
+      <input id="dupThresh" type="number" value="3" min="1" step="1" />
+    </div>
+
+    <div class="row" id="aimdParams" >
+      <label for="ai">AIMD: additive increase / RTT</label>
+      <input id="ai" type="number" value="1" min="0" step="0.1" />
+      <label style="width:120px;">mult. decrease (beta)</label>
+      <input id="beta" type="number" value="0.5" min="0" max="1" step="0.01" />
+    </div>
+
+    <div class="row" id="cubicParams" style="display:none;">
+      <label for="cubicC">CUBIC: C value</label>
+      <input id="cubicC" type="number" value="0.4" min="0" step="0.01" />
+      <label style="width:120px;">TCP-friendly factor</label>
+      <input id="tcpFriend" type="number" value="0.7" min="0" step="0.01" />
+    </div>
+
+    <div class="row" id="bbrParams" style="display:none;">
+      <label for="bbrGain">BBR: cwnd gain</label>
+      <input id="bbrGain" type="number" value="2" min="0.1" step="0.1" />
+      <label style="width:120px;">ProbeBW interval (s)</label>
+      <input id="bbrInterval" type="number" value="1" min="0.1" step="0.1" />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Network & Link Parameters</legend>
+    <div class="row">
+      <label for="rtt">Base RTT (ms)</label>
+      <input id="rtt" type="number" value="80" min="1" step="1" />
+      <label style="width:120px;">Bandwidth (Mbps)</label>
+      <input id="bandwidth" type="number" value="10" min="0.1" step="0.1" />
+    </div>
+
+    <div class="row">
+      <label for="queue">Queue size (packets)</label>
+      <input id="queue" type="number" value="100" min="1" step="1" />
+      <label style="width:120px;">Cross-traffic (Mbps)</label>
+      <input id="xtraffic" type="number" value="0" min="0" step="0.1" />
+    </div>
+
+    <div class="row">
+      <label for="lossModel">Loss model</label>
+      <select id="lossModel">
+        <option value="queue">Queue overflow only</option>
+        <option value="random">Random loss (probability)</option>
+        <option value="none">No spontaneous loss</option>
+      </select>
+      <label style="width:120px;">Random loss p</label>
+      <input id="lossProb" type="number" value="0.001" min="0" max="1" step="0.0001" />
+    </div>
+
+    <div class="row">
+      <label for="mode">Simulation granularity</label>
+      <select id="mode">
+        <option value="packet">Per-packet discrete</option>
+        <option value="rtt">Per-RTT aggregated</option>
+      </select>
+      <label style="width:120px;">Tick ms</label>
+      <input id="tickMs" type="number" value="10" min="1" step="1" />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Run Controls & Scheduling</legend>
+    <div class="row">
+      <button id="playBtn">Play</button>
+      <button id="stepBtn">Step</button>
+      <button id="resetBtn">Reset</button>
+      <button id="fastRunBtn">Run 500 steps</button>
+      <label style="width:120px;">Speed (steps/sec)</label>
+      <input id="speed" type="number" value="50" min="1" step="1" />
+    </div>
+
+    <div class="row">
+      <label for="autoStopLoss">Auto-stop on N losses (0=no)</label>
+      <input id="autoStopLoss" type="number" value="0" min="0" step="1" />
+      <label style="width:120px;">Record interval (ms)</label>
+      <input id="recordInt" type="number" value="100" min="10" step="10" />
+    </div>
+
+    <div class="row">
+      <label for="simTime">Sim time (s)</label>
+      <input id="simTime" type="number" value="0" min="0" step="1" readonly />
+      <label style="width:120px;">Events scheduled</label>
+      <input id="schedCount" type="number" value="0" min="0" step="1" readonly />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Manual Events & Scenario</legend>
+
+    <div class="row">
+      <label for="dropSeq">Drop packet seq (manual)</label>
+      <input id="dropSeq" type="number" min="1" step="1" />
+      <button id="dropBtn">Drop</button>
+
+      <label style="width:120px;">Delay packet seq</label>
+      <input id="delaySeq" type="number" min="1" step="1" />
+      <label style="width:80px;">ms</label>
+      <input id="delayMs" type="number" value="200" min="1" step="1" style="width:80px;" />
+      <button id="delayBtn">Delay</button>
+    </div>
+
+    <div class="row">
+      <label for="linkDownFor">Take link down (ms)</label>
+      <input id="linkDownFor" type="number" value="0" min="0" step="10" />
+      <button id="linkDownBtn">Take Down</button>
+
+      <label style="width:120px;">Inject cross traffic change</label>
+      <input id="setX" type="number" value="0" min="0" step="0.1" />
+      <button id="setXBtn">Set X-traffic</button>
+    </div>
+
+    <div class="row">
+      <label for="saveScenario">Save/Load Scenario</label>
+      <button id="saveBtn">Save</button>
+      <button id="loadBtn">Load</button>
+      <textarea id="scenarioJson" rows="3" cols="70" placeholder="Scenario JSON appears here or paste to load"></textarea>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Advanced Inspection</legend>
+    <div class="row">
+      <label for="showLog">Show event log</label>
+      <input id="showLog" type="checkbox" checked />
+      <button id="clearLog">Clear log</button>
+      <button id="exportLog">Export log</button>
+    </div>
+
+    <div class="row">
+      <label for="inspectSeq">Inspect packet seq</label>
+      <input id="inspectSeq" type="number" min="1" step="1" />
+      <button id="inspectBtn">Inspect</button>
+      <label style="width:120px;">Flight packets</label>
+      <input id="flightCount" type="number" value="0" readonly />
+    </div>
+  </fieldset>
+
+</div>
+
+<fieldset>
+  <legend>Plots & Metrics</legend>
+  <canvas id="plot" width="900" height="200"></canvas>
+  <div class="row">
+    <label style="width:160px;">Current cwnd</label><span id="cwndVal">0</span>
+    <label style="width:120px;">ssthresh</label><span id="ssthVal">0</span>
+    <label style="width:120px;">state</label><span id="stateVal">-</span>
+    <label style="width:120px;">RTT (ms)</label><span id="rttVal">-</span>
+    <label style="width:120px;">Throughput (Mbps)</label><span id="thrVal">-</span>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Log</legend>
+  <textarea id="log" class="log"></textarea>
+</fieldset>
+
+<script>
+/*
+  Congestion Control Interactive Simulator
+  - Provides multiple algorithms: Reno, AIMD, simplified CUBIC, simplified BBR
+  - Packet-level (discrete) and RTT-aggregated modes
+  - Queue modeling with capacity, random loss, manual events
+  - Extensive controls for user-driven workflows: scheduling, manual packet drops/delays, link down, cross-traffic
+  - Plotting cwnd over time and metrics
+*/
+
+/* Simulation state and helpers */
+(function(){
+  // Utility
+  function nowMs(){ return sim.timeMs; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  // DOM
+  const dom = id => document.getElementById(id);
+
+  // Inputs
+  const algoEl = dom('algo');
+  const initCWND = dom('initCWND');
+  const initSSTH = dom('initSSTH');
+  const mssEl = dom('mss');
+  const dupThreshEl = dom('dupThresh');
+  const aiEl = dom('ai');
+  const betaEl = dom('beta');
+  const cubicC = dom('cubicC');
+  const tcpFriend = dom('tcpFriend');
+  const bbrGain = dom('bbrGain');
+  const bbrInterval = dom('bbrInterval');
+
+  const rttEl = dom('rtt');
+  const bandwidthEl = dom('bandwidth');
+  const queueEl = dom('queue');
+  const xtrafficEl = dom('xtraffic');
+  const lossModelEl = dom('lossModel');
+  const lossProbEl = dom('lossProb');
+  const modeEl = dom('mode');
+  const tickMsEl = dom('tickMs');
+
+  const playBtn = dom('playBtn');
+  const stepBtn = dom('stepBtn');
+  const resetBtn = dom('resetBtn');
+  const fastRunBtn = dom('fastRunBtn');
+  const speedEl = dom('speed');
+  const autoStopLoss = dom('autoStopLoss');
+  const recordInt = dom('recordInt');
+  const simTimeEl = dom('simTime');
+  const schedCountEl = dom('schedCount');
+
+  const dropSeqEl = dom('dropSeq');
+  const dropBtn = dom('dropBtn');
+  const delaySeqEl = dom('delaySeq');
+  const delayMsEl = dom('delayMs');
+  const delayBtn = dom('delayBtn');
+  const linkDownFor = dom('linkDownFor');
+  const linkDownBtn = dom('linkDownBtn');
+  const setX = dom('setX');
+  const setXBtn = dom('setXBtn');
+  const saveBtn = dom('saveBtn');
+  const loadBtn = dom('loadBtn');
+  const scenarioJson = dom('scenarioJson');
+
+  const showLog = dom('showLog');
+  const clearLogBtn = dom('clearLog');
+  const exportLogBtn = dom('exportLog');
+  const inspectSeq = dom('inspectSeq');
+  const inspectBtn = dom('inspectBtn');
+  const flightCountEl = dom('flightCount');
+
+  const cwndVal = dom('cwndVal');
+  const ssthVal = dom('ssthVal');
+  const stateVal = dom('stateVal');
+  const rttVal = dom('rttVal');
+  const thrVal = dom('thrVal');
+
+  const logArea = dom('log');
+  const plot = dom('plot');
+  const ctx = plot.getContext('2d');
+
+  const aimdParams = dom('aimdParams');
+  const cubicParams = dom('cubicParams');
+  const bbrParams = dom('bbrParams');
+
+  // Show/hide parameter panels
+  function updateParamPanels(){
+    const a = algoEl.value;
+    aimdParams.style.display = (a==='aimd'?'block':'none');
+    cubicParams.style.display = (a==='cubic'?'block':'none');
+    bbrParams.style.display = (a==='bbr'?'block':'none');
+  }
+  algoEl.addEventListener('change', updateParamPanels);
+  updateParamPanels();
+
+  // Simulation object
+  const sim = {
+    running:false,
+    timer:null,
+    stepIntervalMs:20,
+    timeMs:0,
+    nextSeq:1,
+    events:[], // scheduled manual events
+    packets:[], // all packets (sent or scheduled)
+    inFlight:[], // packets not yet acked
+    delivered:[], // history of delivered packets
+    cwnd:2, ssth:1000, state:'SlowStart', // sender state
+    dupacks:{}, // map seq->dup ack count
+    lastAcked:0,
+    losses:0,
+    rttBase:80,
+    rttCurrent:80,
+    bandwidthMbps:10,
+    queueMax:100,
+    queue:[], // queued packets waiting for transmission
+    linkUp:true,
+    logLines:[],
+    plotSamples:[], // {t,cwnd,throughput,rtt,queueSize}
+    lastRecordedMs:0,
+    packetSize:1460,
+    mss:1460,
+    lastLossTime:0,
+    cubicState:{wMax:0, tLastLoss:0}, // for cubic
+    bbrState:{bwEst:0, rttMin:Infinity, lastProbe:0},
+    configVersion:1
+  };
+
+  // Logging
+  function log(s){
+    const line = '['+formatMs(sim.timeMs)+'] '+s;
+    sim.logLines.push(line);
+    if (showLog.checked) {
+      logArea.value = sim.logLines.join('\\n');
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+  }
+
+  function clearLog(){
+    sim.logLines = []; logArea.value=''; 
+  }
+  clearLogBtn.addEventListener('click', function(){ clearLog(); });
+
+  exportLogBtn.addEventListener('click', function(){
+    const blob = new Blob([sim.logLines.join('\\n')],'text/plain');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'sim_log.txt'; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Format helpers
+  function formatMs(ms){ return (ms/1000).toFixed(3)+'s'; }
+  function formatMbps(x){ return x.toFixed(2); }
+
+  // Initialize / reset
+  function resetSim(){
+    stop();
+    sim.timeMs = 0;
+    sim.nextSeq = 1;
+    sim.events = [];
+    sim.packets = [];
+    sim.inFlight = [];
+    sim.delivered = [];
+    sim.cwnd = Math.max(1, Number(initCWND.value));
+    sim.ssth = Math.max(1, Number(initSSTH.value));
+    sim.state = 'SlowStart';
+    sim.dupacks = {};
+    sim.lastAcked = 0;
+    sim.losses = 0;
+    sim.rttBase = Number(rttEl.value);
+    sim.rttCurrent = sim.rttBase;
+    sim.bandwidthMbps = Number(bandwidthEl.value);
+    sim.queueMax = Number(queueEl.value);
+    sim.queue = [];
+    sim.linkUp = true;
+    sim.logLines = [];
+    sim.plotSamples = [];
+    sim.lastRecordedMs = 0;
+    sim.packetSize = Number(mssEl.value);
+    sim.mss = sim.packetSize;
+    sim.lastLossTime = 0;
+    sim.cubicState = {wMax:sim.cwnd, tLastLoss:0};
+    sim.bbrState = {bwEst:sim.bandwidthMbps, rttMin:sim.rttBase, lastProbe:0};
+    quickLog('Reset simulation');
+    updateDisplay();
+    drawPlot();
+  }
+
+  function quickLog(s){
+    // short logs for immediate feedback
+    log(s);
+  }
+
+  resetBtn.addEventListener('click', resetSim);
+
+  // Play/Stop
+  function start(){
+    if(sim.running) return;
+    sim.running = true;
+    playBtn.textContent = 'Pause';
+    sim.stepIntervalMs = Math.max(1, Math.floor(1000/Number(speedEl.value)));
+    runLoop();
+  }
+
+  function stop(){
+    sim.running = false;
+    playBtn.textContent = 'Play';
+    if(sim.timer){ clearTimeout(sim.timer); sim.timer = null; }
+  }
+
+  playBtn.addEventListener('click', function(){
+    if(sim.running) stop(); else start();
+  });
+
+  // Step
+  stepBtn.addEventListener('click', function(){
+    tick();
+  });
+
+  fastRunBtn.addEventListener('click', function(){
+    for(let i=0;i<500;i++) tick();
+  });
+
+  // Link down
+  linkDownBtn.addEventListener('click', function(){
+    let duration = Number(linkDownFor.value);
+    if(duration<=0) { quickLog('Specify positive ms for link down'); return; }
+    sim.linkUp = false;
+    quickLog('Link down for '+duration+' ms');
+    setTimeout(function(){
+      sim.linkUp = true;
+      quickLog('Link resumed');
+    }, duration);
+  });
+
+  // Set cross-traffic
+  setXBtn.addEventListener('click', function(){
+    const v = Number(setX.value);
+    xtrafficEl.value = v;
+    quickLog('Set cross-traffic to '+v+' Mbps');
+  });
+
+  // Manual drop
+  dropBtn.addEventListener('click', function(){
+    const seq = Number(dropSeqEl.value);
+    if(!seq){ quickLog('Enter seq to drop'); return; }
+    // find packet
+    const p = sim.packets.find(x=>x.seq===seq && !x.dropped && !x.acked);
+    if(!p){ quickLog('Packet not found or already handled'); return; }
+    p.dropped = true;
+    sim.losses++;
+    sim.lastLossTime = sim.timeMs;
+    quickLog('Manually dropped packet seq '+seq);
+    handleLossEvent(p);
+  });
+
+  // Delay packet
+  delayBtn.addEventListener('click', function(){
+    const seq = Number(delaySeqEl.value);
+    const ms = Number(delayMsEl.value);
+    if(!seq || !ms){ quickLog('Enter seq and ms'); return; }
+    const p = sim.packets.find(x=>x.seq===seq && !x.acked && !x.dropped);
+    if(!p){ quickLog('Packet not found for delay'); return; }
+    p.extraDelay = (p.extraDelay||0) + ms;
+    quickLog('Delayed packet '+seq+' by '+ms+' ms');
+  });
+
+  // Inspect packet
+  inspectBtn.addEventListener('click', function(){
+    const seq = Number(inspectSeq.value);
+    if(!seq){ quickLog('Enter seq to inspect'); return; }
+    const p = sim.packets.find(x=>x.seq===seq);
+    if(!p){ quickLog('No record of seq '+seq); return; }
+    quickLog('Packet '+seq+': sentAt='+formatMs(p.sentAt)+', delivered='+!!p.delivered+', dropped='+!!p.dropped+', acked='+!!p.acked+', extraDelay='+ (p.extraDelay||0));
+  });
+
+  // Save/load scenario
+  saveBtn.addEventListener('click', function(){
+    const scenario = {
+      algo: algoEl.value,
+      initCWND: initCWND.value,
+      initSSTH: initSSTH.value,
+      mss: mssEl.value,
+      dupThresh: dupThreshEl.value,
+      ai: aiEl.value,
+      beta: betaEl.value,
+      cubicC: cubicC.value,
+      tcpFriend: tcpFriend.value,
+      bbrGain: bbrGain.value,
+      bbrInterval: bbrInterval.value,
+      rtt: rttEl.value,
+      bandwidth: bandwidthEl.value,
+      queue: queueEl.value,
+      xtraffic: xtrafficEl.value,
+      lossModel: lossModelEl.value,
+      lossProb: lossProbEl.value,
+      mode: modeEl.value,
+      tickMs: tickMsEl.value
+    };
+    scenarioJson.value = JSON.stringify(scenario, null, 2);
+    quickLog('Scenario saved to text area');
+  });
+
+  loadBtn.addEventListener('click', function(){
+    try{
+      const sc = JSON.parse(scenarioJson.value);
+      algoEl.value = sc.algo || algoEl.value;
+      initCWND.value = sc.initCWND || initCWND.value;
+      initSSTH.value = sc.initSSTH || initSSTH.value;
+      mssEl.value = sc.mss || mssEl.value;
+      dupThreshEl.value = sc.dupThresh || dupThreshEl.value;
+      aiEl.value = sc.ai || aiEl.value;
+      betaEl.value = sc.beta || betaEl.value;
+      cubicC.value = sc.cubicC || cubicC.value;
+      tcpFriend.value = sc.tcpFriend || tcpFriend.value;
+      bbrGain.value = sc.bbrGain || bbrGain.value;
+      bbrInterval.value = sc.bbrInterval || bbrInterval.value;
+      rttEl.value = sc.rtt || rttEl.value;
+      bandwidthEl.value = sc.bandwidth || bandwidthEl.value;
+      queueEl.value = sc.queue || queueEl.value;
+      xtrafficEl.value = sc.xtraffic || xtrafficEl.value;
+      lossModelEl.value = sc.lossModel || lossModelEl.value;
+      lossProbEl.value = sc.lossProb || lossProbEl.value;
+      modeEl.value = sc.mode || modeEl.value;
+      tickMsEl.value = sc.tickMs || tickMsEl.value;
+      updateParamPanels();
+      quickLog('Scenario loaded');
+      resetSim();
+    }catch(e){ quickLog('Invalid JSON scenario'); }
+  });
+
+  // Update displays
+  function updateDisplay(){
+    cwndVal.textContent = sim.cwnd.toFixed(3);
+    ssthVal.textContent = sim.ssth.toFixed(1);
+    stateVal.textContent = sim.state;
+    rttVal.textContent = sim.rttCurrent.toFixed(1);
+    // throughput estimate: last second delivered bytes
+    const lastSec = sim.delivered.filter(p=>p.deliveredAt && (sim.timeMs - p.deliveredAt)<=1000);
+    const bytes = lastSec.reduce((a,p)=>a + p.size,0);
+    const mbps = bytes*8/1000/1000;
+    thrVal.textContent = mbps.toFixed(3);
+    simTimeEl.value = (sim.timeMs/1000).toFixed(3);
+    schedCountEl.value = sim.events.length;
+    flightCountEl.value = sim.inFlight.length;
+  }
+
+  // Plotting
+  function drawPlot(){
+    // Clear
+    ctx.clearRect(0,0,plot.width,plot.height);
+    // axes: time horizontal, cwnd vertical
+    const samples = sim.plotSamples;
+    if(samples.length<2) return;
+    const maxT = samples[samples.length-1].t;
+    const minT = Math.max(0, maxT - 30*1000); // show last 30s
+    const vis = samples.filter(s=>s.t>=minT);
+    if(vis.length<2) return;
+    const cwnds = vis.map(v=>v.cwnd);
+    const maxC = Math.max(1, Math.max(...cwnds));
+    // draw cwnd
+    ctx.beginPath();
+    for(let i=0;i<vis.length;i++){
+      const v = vis[i];
+      const x = ((v.t-minT)/(maxT-minT)) * plot.width;
+      const y = plot.height - (v.cwnd/maxC) * plot.height;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // small ticks and labels (text)
+    ctx.fillStyle = '#000';
+    ctx.font = '10px monospace';
+    ctx.fillText('cwnd (pkts) over last '+((maxT-minT)/1000).toFixed(0)+'s', 6, 12);
+    ctx.fillText('max cwnd '+maxC.toFixed(1), 6, 24);
+  }
+
+  // Core packet sending logic
+  function sendPackets(){
+    // sender can send up to cwnd - inFlight
+    const inFlightCount = sim.inFlight.length;
+    const allowed = Math.floor(sim.cwnd) - inFlightCount;
+    if(allowed<=0) return;
+    for(let i=0;i<allowed;i++){
+      const seq = sim.nextSeq++;
+      const p = {
+        seq: seq,
+        size: sim.mss,
+        sentAt: sim.timeMs,
+        delivered:false,
+        dropped:false,
+        acked:false,
+        extraDelay:0
+      };
+      sim.packets.push(p);
+      sim.inFlight.push(p);
+      // place into queue (model)
+      enqueuePacket(p);
+      log('Sent packet seq '+seq+' cwnd='+sim.cwnd.toFixed(2));
+    }
+  }
+
+  function enqueuePacket(p){
+    // combined arrival: if link down or queue overflow or random loss may drop immediately.
+    // Queue is simple FIFO with finite buffer.
+    // When enqueued, it will be popped/transmitted by linkProcess
+    if(!sim.linkUp){
+      // link down: packet stalls; mark as queued and will wait until link up
+      sim.queue.push(p);
+      return;
+    }
+    // Random loss model
+    if(lossModelEl.value==='random'){
+      const prob = Number(lossProbEl.value);
+      if(Math.random()<prob){
+        p.dropped = true;
+        p.dropReason = 'random';
+        sim.losses++;
+        sim.lastLossTime = sim.timeMs;
+        handleLossEvent(p);
+        return;
+      }
+    }
+    // If queue full -> drop tail
+    if(sim.queue.length >= sim.queueMax){
+      const dropNew = true; // tail drop
+      if(dropNew){
+        p.dropped = true;
+        p.dropReason = 'queue';
+        sim.losses++;
+        sim.lastLossTime = sim.timeMs;
+        handleLossEvent(p);
+        return;
+      } else {
+        const old = sim.queue.shift();
+        old.dropped = true;
+        old.dropReason='queue';
+        sim.losses++;
+        handleLossEvent(old);
+        sim.queue.push(p);
+        return;
+      }
+    }
+    sim.queue.push(p);
+  }
+
+  // Link processing: transmit bytes according to bandwidth and cross traffic
+  function linkProcess(dtMs){
+    if(!sim.linkUp) return;
+    // available bandwidth in bytes for this tick
+    const totalBw = Math.max(0, sim.bandwidthMbps - Number(xtrafficEl.value));
+    const bwBytesPerSec = totalBw * 1000 * 1000 / 8;
+    const allowedBytes = bwBytesPerSec * (dtMs/1000);
+    // send as many queued packets as allowed
+    let budget = allowedBytes;
+    while(sim.queue.length>0 && budget > 0){
+      const p = sim.queue[0];
+      const b = p.size;
+      if(budget >= b){
+        // transmit this packet
+        sim.queue.shift();
+        budget -= b;
+        // schedule delivery after propagation (half RTT) plus queueing as model
+        const prop = (sim.rttBase/2);
+        const qDelay = 0; // queue added in this model already via queueing
+        const extra = p.extraDelay || 0;
+        const deliverTime = sim.timeMs + prop + qDelay + extra;
+        setTimeout(()=>{ // use real-time scheduling only to mimic extraDelay; but actual state will be updated in tick checks
+          // nothing - delivery will be processed by pollDeliveries in tick loop via sim.packets list using deliveredAt
+        },0);
+        // mark delivered when sim.timeMs passes deliverTime
+        p.deliverAt = deliverTime;
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Poll for deliveries and ACKs
+  function pollDeliveries(){
+    // any packet with deliverAt <= current time and not yet delivered and not dropped -> mark delivered and generate ACK later (RTT/2)
+    sim.packets.forEach(p=>{
+      if(!p.delivered && !p.dropped && p.deliverAt !== undefined && p.deliverAt <= sim.timeMs){
+        p.delivered = true;
+        p.deliveredAt = sim.timeMs;
+        // schedule ACK arriving at sender after remaining half-RTT
+        const ackTime = sim.timeMs + (sim.rttBase/2); // simple
+        p.ackAt = ackTime;
+        sim.delivered.push(p);
+      }
+      if(p.delivered && !p.acked && p.ackAt !== undefined && p.ackAt <= sim.timeMs){
+        // process ACK
+        p.acked = true;
+        p.ackReceivedAt = sim.timeMs;
+        processAck(p);
+      }
+      // dropped packets are processed for sender recognition by dupacks/timeouts
+      if(p.dropped && !p.dropNoted){
+        // mark drop noted; simulate that it will never be delivered; sender will detect via dup-acks/timeouts
+        p.dropNoted = true;
+      }
+    });
+  }
+
+  // Process ack at sender
+  function processAck(p){
+    // If ack seq is > lastAcked, update lastAcked and update cwnd based on algorithm
+    if(p.seq <= sim.lastAcked){
+      // duplicate ack
+      sim.dupacks[p.seq] = (sim.dupacks[p.seq]||0) + 1;
+      if(sim.dupacks[p.seq] >= Number(dupThreshEl.value)){
+        // fast retransmit
+        if(!p.fastRetransmitted){
+          sim.losses++;
+          sim.lastLossTime = sim.timeMs;
+          quickLog('Fast retransmit triggered by dupACKs on seq '+p.seq);
+          p.fastRetransmitted = true;
+          handleLossEvent(p);
+        }
+      }
+      return;
+    }
+    // new ack
+    sim.lastAcked = p.seq;
+    // remove from inFlight
+    sim.inFlight = sim.inFlight.filter(ip => ip.seq > p.seq);
+    // reset dupacks for lower seqs
+    Object.keys(sim.dupacks).forEach(k=>{
+      if(Number(k) <= p.seq) delete sim.dupacks[k];
+    });
+
+    // Update RTT estimate and BBR state
+    sim.rttCurrent = Math.max(sim.rttBase, sim.rttBase + sim.queue.length * (sim.mss/(sim.bandwidthMbps*1000000/8) * 1000));
+    if(sim.rttCurrent < sim.bbrState.rttMin) sim.bbrState.rttMin = sim.rttCurrent;
+
+    // Algorithm-specific cwnd update
+    const algo = algoEl.value;
+    if(algo === 'reno'){
+      if(sim.state === 'SlowStart'){
+        sim.cwnd += 1; // +MSS per ACK roughly; normalized to packets
+        if(sim.cwnd >= sim.ssth){
+          sim.state = 'CongAvoid';
+        }
+      } else if(sim.state === 'CongAvoid'){
+        // additive increase per RTT ~ +1 per RTT. We increment per ACK by 1/cwnd
+        sim.cwnd += 1 / Math.max(1, sim.cwnd);
+      } else if(sim.state === 'FastRecovery'){
+        // in fast recovery cwnd behavior simplified: set cwnd to ssth and then exit on new ack
+        sim.state = 'CongAvoid';
+      }
+    } else if(algo === 'aimd'){
+      if(sim.cwnd < sim.ssth){
+        // keep additive increase similar to slow start or treat as AIMD increases slowly
+        sim.cwnd += Number(aiEl.value);
+      } else {
+        sim.cwnd += Number(aiEl.value) / Math.max(1, sim.cwnd);
+      }
+    } else if(algo === 'cubic'){
+      // simplified cubic: cwnd evolves based on time since last loss
+      const C = Number(cubicC.value);
+      const t = (sim.timeMs - sim.cubicState.tLastLoss)/1000;
+      const K = Math.cbrt(sim.cubicState.wMax*(1-Number(tcpFriend.value))/C + 0.000001) || 0;
+      const Wt = C*Math.pow(t-K,3) + sim.cubicState.wMax;
+      const tcpFair = sim.cubicState.wMax * Number(tcpFriend.value) + (3*(1-Number(tcpFriend.value))/ (1 + sim.cwnd));
+      sim.cwnd = Math.max(1, Math.max(Wt, tcpFair));
+    } else if(algo === 'bbr'){
+      // estimate bw and set cwnd = bw * rtt * gain
+      // estimate bw using delivered bytes over last 1s
+      const lastSec = sim.delivered.filter(pp=>pp.deliveredAt && (sim.timeMs - pp.deliveredAt)<=1000);
+      const bytes = lastSec.reduce((a,p)=>a + p.size,0);
+      const bwEst = bytes*8/1000/1000; // Mbps
+      if(bwEst>0) sim.bbrState.bwEst = 0.7*sim.bbrState.bwEst + 0.3*bwEst;
+      const gain = Number(bbrGain.value);
+      const rttSec = sim.rttCurrent/1000;
+      sim.cwnd = Math.max(1, (sim.bbrState.bwEst * 1000 * 1000 / 8) * rttSec / sim.mss * gain);
+    }
+
+    // ensure cwnd bounds
+    sim.cwnd = clamp(sim.cwnd, 0.5, 100000);
+
+    quickLog('ACK for seq '+p.seq+' cwnd now '+sim.cwnd.toFixed(3));
+  }
+
+  // Loss handling
+  function handleLossEvent(p){
+    // On loss, adjust cwnd and ssth based on algo
+    const algo = algoEl.value;
+    if(algo === 'reno'){
+      sim.ssth = Math.max(2, sim.cwnd / 2);
+      sim.cwnd = Math.max(1, sim.ssth);
+      sim.state = 'SlowStart';
+    } else if(algo === 'aimd'){
+      const beta = Number(betaEl.value);
+      sim.ssth = Math.max(2, sim.cwnd * beta);
+      sim.cwnd = Math.max(1, sim.cwnd * beta);
+      sim.state = 'CongAvoid';
+    } else if(algo === 'cubic'){
+      // record wMax and reduce cwnd
+      sim.cubicState.wMax = sim.cwnd;
+      sim.cubicState.tLastLoss = sim.timeMs;
+      sim.cwnd = Math.max(1, sim.cwnd * 0.7);
+      sim.ssth = Math.max(2, sim.cwnd);
+      sim.state = 'CongAvoid';
+      quickLog('CUBIC: loss at seq '+p.seq+' wMax set to '+sim.cubicState.wMax.toFixed(2));
+    } else if(algo === 'bbr'){
+      // BBR reduces pacing/gain; simplified: reduce cwnd to estimate bw*rtt
+      sim.bbrState.bwEst = Math.max(0.1, sim.bbrState.bwEst * 0.9);
+      sim.cwnd = Math.max(1, (sim.bbrState.bwEst * 1000 * 1000 / 8) * (sim.bbrState.rttMin/1000) * Number(bbrGain.value) );
+      sim.state = 'ProbeBW';
+    }
+    // Mark dropped packet as acked to remove from inFlight for this simulator; the sender will eventually retransmit but we do simplified behavior
+    sim.inFlight = sim.inFlight.filter(ip => ip.seq !== p.seq);
+    log('Loss detected seq '+p.seq+'; cwnd->'+sim.cwnd.toFixed(2)+', ssth->'+sim.ssth.toFixed(1));
+  }
+
+  // Engine tick
+  function tick(){
+    // update parameters live
+    sim.rttBase = Number(rttEl.value);
+    sim.bandwidthMbps = Number(bandwidthEl.value);
+    sim.queueMax = Number(queueEl.value);
+    sim.mss = Number(mssEl.value);
+
+    // time advance
+    const dt = Number(tickMsEl.value);
+    sim.timeMs += dt;
+
+    // send new packets according to cwnd
+    if(modeEl.value === 'packet'){
+      sendPackets();
+      linkProcess(dt);
+      pollDeliveries();
+    } else {
+      // RTT aggregated mode: operate in coarse steps: per RTT, try to send cwnd packets and process losses probabilistically
+      // If dt accumulates to >= RTT, do an RTT-round update
+      if(!sim._aggAcc) sim._aggAcc = 0;
+      sim._aggAcc += dt;
+      if(sim._aggAcc >= sim.rttBase){
+        sim._aggAcc = 0;
+        // send cwnd packets
+        const toSend = Math.max(1, Math.floor(sim.cwnd));
+        for(let i=0;i<toSend;i++){
+          const seq=sim.nextSeq++;
+          const p = {seq, size:sim.mss, sentAt:sim.timeMs, delivered:false, dropped:false, acked:false};
+          sim.packets.push(p);
+          sim.inFlight.push(p);
+          // determine loss: random or queue overflow
+          let drop=false;
+          if(lossModelEl.value==='random'){
+            if(Math.random() < Number(lossProbEl.value)){
+              drop=true;
+            }
+          }
+          // queue overflow: if toSend > queueMax -> drop fraction
+          if(sim.queueMax < toSend && Math.random() < 0.2) drop=true;
+          if(drop){
+            p.dropped=true;
+            sim.losses++;
+            handleLossEvent(p);
+            continue;
+          } else {
+            // ACK this RTT
+            p.delivered=true; p.deliveredAt = sim.timeMs;
+            p.ackAt = sim.timeMs + sim.rttBase/2;
+            // immediate ack processing
+            processAck(p);
+          }
+        }
+      }
+    }
+
+    // Recording for plot every recordInt
+    if(sim.timeMs - sim.lastRecordedMs >= Number(recordInt.value)){
+      sim.lastRecordedMs = sim.timeMs;
+      sim.plotSamples.push({t:sim.timeMs, cwnd:sim.cwnd, throughput:0, rtt:sim.rttCurrent, queueSize:sim.queue.length});
+      if(sim.plotSamples.length>2000) sim.plotSamples.shift();
+      drawPlot();
+    }
+
+    // auto stop on loss count
+    const stopAt = Number(autoStopLoss.value);
+    if(stopAt>0 && sim.losses>=stopAt){
+      stop();
+      quickLog('Auto-stopped due to losses >= '+stopAt);
+    }
+
+    updateDisplay();
+  }
+
+  // main loop for running
+  function runLoop(){
+    if(!sim.running) return;
+    tick();
+    // schedule next
+    sim.timer = setTimeout(runLoop, sim.stepIntervalMs);
+  }
+
+  // initial reset
+  resetSim();
+
+  // update param panels initial
+  updateParamPanels();
+
+  // external debug helpers
+  window.__sim = sim;
+
+  // periodically redraw plot in case of changes
+  setInterval(function(){ drawPlot(); updateDisplay(); }, 500);
+
+  // Manual controls wiring done above
+
+  // Additional exploration actions: allow user to schedule events (not UI heavy)
+  // For example: event queue for scriptable changes
+  // Provide basic scheduling via console API: __simSchedule({t:+1000, action: function(sim){ ... }})
+  window.__simSchedule = function(ev){
+    // ev: {delayMs:1000, action: function}
+    const due = sim.timeMs + (ev.delayMs||0);
+    sim.events.push({due:due, action:ev.action, raw:ev});
+    sim.events.sort((a,b)=>a.due-b.due);
+    schedCountEl.value = sim.events.length;
+  };
+
+  // background event runner: process scheduled events in tick
+  setInterval(function(){
+    if(sim.events.length===0) return;
+    const now = sim.timeMs;
+    while(sim.events.length && sim.events[0].due <= now){
+      const e = sim.events.shift();
+      try{ e.action(sim); quickLog('Ran scheduled event'); }catch(err){ quickLog('Event error: '+err); }
+    }
+    schedCountEl.value = sim.events.length;
+  }, 50);
+
+  // Expose quick controls for interactive sequences
+  // For user's ability to explore deep interactions:
+  // - switch algorithms during run: user can change algo dropdown anytime
+  // - change bandwidth/rtt/queue on the fly
+  // - manual drops/delays
+  // - scheduling via __simSchedule from console
+  quickLog('Simulator ready. Use controls above to explore congestion control behaviors.');
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Jump Search Interactive Demo</title>
+<style>
+  /* Extremely minimal styling - plain black on white, simple layout */
+  html,body { margin:10px; padding:0; font-family: monospace; color: black; background: white; }
+  .row { margin:6px 0; }
+  label { margin-right:6px; }
+  input, select, button, textarea { font-family: monospace; font-size: 13px; }
+  textarea { width: 100%; height: 60px; }
+  #arrayView { white-space: pre; border:1px solid #000; padding:6px; margin-top:6px; }
+  .controls { margin-bottom:8px; }
+  .small { font-size:12px; }
+  .compact { display:inline-block; margin-right:6px; }
+  #log { white-space: pre-wrap; border:1px solid #000; padding:6px; height:160px; overflow:auto; }
+  #stepsList { max-height:160px; overflow:auto; border:1px solid #000; padding:6px; }
+  .buttonGrid button { margin:2px; }
+  .arrayItem { cursor: pointer; user-select:none; }
+  .bold { font-weight: bold; }
+  .underline { text-decoration: underline; }
+  /* No colors, no animations; keep it minimal */
+</style>
+</head>
+<body>
+
+<h2>Jump Search - Interactive Exploration</h2>
+
+<div class="controls">
+  <div class="row">
+    <label>Array length:</label>
+    <input id="lenInput" type="number" value="16" min="1" style="width:60px">
+    <label class="compact">Random min:</label>
+    <input id="randMin" type="number" value="0" style="width:70px">
+    <label class="compact">Random max:</label>
+    <input id="randMax" type="number" value="99" style="width:70px">
+    <button id="genBtn">Generate Random Array</button>
+    <button id="uniqueBtn">Generate Unique</button>
+    <button id="shuffleBtn">Shuffle</button>
+    <button id="sortBtn">Sort Asc</button>
+    <button id="revBtn">Reverse</button>
+  </div>
+
+  <div class="row">
+    <label>Manual array (comma separated):</label>
+    <button id="fromTextBtn">Load From Text</button>
+  </div>
+  <div class="row">
+    <textarea id="arrayText" placeholder="e.g. 3,1,4,7,9"></textarea>
+  </div>
+
+  <div class="row">
+    <label>Target value:</label>
+    <input id="targetInput" type="text" value="42" style="width:80px">
+    <button id="setTargetFromClick">(Click array element to set target)</button>
+    <label style="margin-left:12px">Choose algorithm:</label>
+    <select id="algoSelect">
+      <option>Jump Search</option>
+      <option>Linear Search</option>
+      <option>Binary Search</option>
+      <option>Compare All</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label>Jump size (m):</label>
+    <input id="jumpInput" type="number" value="4" min="1" style="width:60px">
+    <button id="optimalBtn">Compute optimal (floor(sqrt(n)))</button>
+    <label style="margin-left:12px">Auto-play speed (ms):</label>
+    <input id="speedInput" type="range" min="100" max="2000" value="600" style="width:200px">
+    <span id="speedVal">600</span>
+  </div>
+
+  <div class="row buttonGrid">
+    <button id="computeBtn">Compute Trace</button>
+    <button id="startBtn">Start / Run</button>
+    <button id="stepFwd">Step →</button>
+    <button id="stepBack">← Step</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="skipEndBtn">Skip to End</button>
+    <button id="replayBtn">Replay</button>
+    <button id="saveSnapBtn">Save Snapshot</button>
+    <select id="snapshots"></select>
+    <button id="loadSnapBtn">Load Snapshot</button>
+    <button id="exportBtn">Export JSON</button>
+    <button id="importBtn">Import JSON</button>
+  </div>
+
+  <div class="row">
+    <label>Manual mode:</label>
+    <input id="manualMode" type="checkbox">
+    <label class="compact">Allow clicking array to move pointer</label>
+    <label style="margin-left:12px">Record trace:</label>
+    <input id="recordTrace" type="checkbox">
+  </div>
+
+  <div class="row">
+    <label>Batch test jump sizes:</label>
+    <input id="batchMin" type="number" value="1" style="width:60px">
+    <input id="batchMax" type="number" value="8" style="width:60px">
+    <button id="batchTestBtn">Run Batch Test</button>
+  </div>
+</div>
+
+<div>
+  <div class="row">
+    <label>Array view (click element to set target or to move pointer if manual mode):</label>
+    <div id="arrayView"></div>
+  </div>
+
+  <div class="row">
+    <label>Search controls & status:</label>
+    <div id="status" class="small"></div>
+  </div>
+
+  <div class="row">
+    <label>Steps (click a step to jump to it):</label>
+    <div id="stepsList"></div>
+  </div>
+
+  <div class="row">
+    <label>Log & Explanation:</label>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+
+/*
+  Jump Search Interactive Demo
+  - Minimal visuals, rich interactivity
+  - Multiple controls, step-by-step traces, comparison across algorithms, batch testing
+*/
+
+/* State */
+let state = {
+  array: [],
+  n: 0,
+  target: null,
+  algo: 'Jump Search',
+  jumpSize: 4,
+  trace: [], // main trace (single or grouped for Compare All)
+  traces: {}, // traces per algorithm name
+  stepIndex: -1, // current step index for displayed trace (if compare, it's a global timeline)
+  playing: false,
+  autoTimer: null,
+  speed: 600,
+  manualMode: false,
+  recordTrace: false,
+  snapshots: {},
+  snapshotCounter: 0,
+  logs: [],
+};
+
+/* Utility functions */
+function log(msg){
+  state.logs.push(msg);
+  if(state.logs.length>500) state.logs.shift();
+  renderLog();
+}
+function clearLog(){ state.logs=[]; renderLog(); }
+
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+function ensureArraySortIfNeeded(name){ /* for binary search we need sorted ascending */
+  // no-op here; user must sort to use binary; we will warn if not sorted
+}
+
+/* DOM elements */
+const lenInput = document.getElementById('lenInput');
+const randMin = document.getElementById('randMin');
+const randMax = document.getElementById('randMax');
+const genBtn = document.getElementById('genBtn');
+const uniqueBtn = document.getElementById('uniqueBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const sortBtn = document.getElementById('sortBtn');
+const revBtn = document.getElementById('revBtn');
+const arrayText = document.getElementById('arrayText');
+const fromTextBtn = document.getElementById('fromTextBtn');
+const arrayView = document.getElementById('arrayView');
+const targetInput = document.getElementById('targetInput');
+const algoSelect = document.getElementById('algoSelect');
+const jumpInput = document.getElementById('jumpInput');
+const optimalBtn = document.getElementById('optimalBtn');
+const computeBtn = document.getElementById('computeBtn');
+const startBtn = document.getElementById('startBtn');
+const stepFwd = document.getElementById('stepFwd');
+const stepBack = document.getElementById('stepBack');
+const pauseBtn = document.getElementById('pauseBtn');
+const skipEndBtn = document.getElementById('skipEndBtn');
+const replayBtn = document.getElementById('replayBtn');
+const saveSnapBtn = document.getElementById('saveSnapBtn');
+const snapshotsSelect = document.getElementById('snapshots');
+const loadSnapBtn = document.getElementById('loadSnapBtn');
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const manualModeChk = document.getElementById('manualMode');
+const setTargetFromClick = document.getElementById('setTargetFromClick');
+const recordTraceChk = document.getElementById('recordTrace');
+const batchTestBtn = document.getElementById('batchTestBtn');
+const batchMin = document.getElementById('batchMin');
+const batchMax = document.getElementById('batchMax');
+const statusDiv = document.getElementById('status');
+const stepsList = document.getElementById('stepsList');
+const logDiv = document.getElementById('log');
+const speedInput = document.getElementById('speedInput');
+const speedVal = document.getElementById('speedVal');
+
+/* Initial setup */
+function init(){
+  bindEvents();
+  generateRandomArray();
+  renderAll();
+}
+function bindEvents(){
+  genBtn.addEventListener('click', generateRandomArray);
+  uniqueBtn.addEventListener('click', ()=>generateRandomArray(true));
+  shuffleBtn.addEventListener('click', shuffleArray);
+  sortBtn.addEventListener('click', ()=>{ state.array.sort((a,b)=>a-b); state.n=state.array.length; renderAll(); });
+  revBtn.addEventListener('click', ()=>{ state.array.reverse(); renderAll(); });
+  fromTextBtn.addEventListener('click', loadFromText);
+  arrayView.addEventListener('click', onArrayClick);
+  targetInput.addEventListener('input', ()=>{ state.target = parseValue(targetInput.value); });
+  algoSelect.addEventListener('change', ()=>{ state.algo = algoSelect.value; renderAll(); });
+  jumpInput.addEventListener('input', ()=>{ state.jumpSize = Math.max(1,parseInt(jumpInput.value)||1); renderAll(); });
+  optimalBtn.addEventListener('click', computeOptimalJump);
+  computeBtn.addEventListener('click', computeTracesFromState);
+  startBtn.addEventListener('click', startAutoPlay);
+  stepFwd.addEventListener('click', stepForward);
+  stepBack.addEventListener('click', stepBackward);
+  pauseBtn.addEventListener('click', pauseAutoPlay);
+  skipEndBtn.addEventListener('click', skipToEnd);
+  replayBtn.addEventListener('click', replayTrace);
+  saveSnapBtn.addEventListener('click', saveSnapshot);
+  loadSnapBtn.addEventListener('click', loadSnapshot);
+  exportBtn.addEventListener('click', exportJSON);
+  importBtn.addEventListener('click', importJSON);
+  manualModeChk.addEventListener('change', ()=>{ state.manualMode = manualModeChk.checked; });
+  setTargetFromClick.addEventListener('click', ()=>{ alert('Click any array element to set the target value (or enable manual mode to move pointer).'); });
+  recordTraceChk.addEventListener('change', ()=>{ state.recordTrace = recordTraceChk.checked; });
+  batchTestBtn.addEventListener('click', runBatchTest);
+  snapshotsSelect.addEventListener('change', ()=>{/* selection change */});
+  speedInput.addEventListener('input', ()=>{ state.speed = parseInt(speedInput.value); speedVal.textContent = state.speed; });
+  // keyboard shortcuts for stepping
+  document.addEventListener('keydown', (e)=>{ if(e.key==='ArrowRight'){ stepForward(); } else if(e.key==='ArrowLeft'){ stepBackward(); } });
+}
+
+function parseValue(s){
+  if(s===null || s===undefined) return null;
+  s = String(s).trim();
+  if(s.length===0) return null;
+  // attempt number parse; fall back to string
+  if(!isNaN(Number(s))) return Number(s);
+  return s;
+}
+
+/* Array generation and manipulation */
+function generateRandomArray(unique=false){
+  const n = Math.max(1, Math.floor(parseInt(lenInput.value)||16));
+  const a = [];
+  const lo = parseInt(randMin.value)||0;
+  const hi = Math.max(lo, parseInt(randMax.value)||99);
+  if(unique){
+    const pool = [];
+    for(let v=lo; v<=hi; v++) pool.push(v);
+    for(let i=0;i<n && pool.length;i++){
+      const idx = randInt(0,pool.length-1);
+      a.push(pool.splice(idx,1)[0]);
+    }
+  } else {
+    for(let i=0;i<n;i++) a.push(randInt(lo,hi));
+  }
+  state.array = a;
+  state.n = a.length;
+  renderAll();
+}
+
+function shuffleArray(){
+  for(let i=state.array.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    const t = state.array[i]; state.array[i]=state.array[j]; state.array[j]=t;
+  }
+  renderAll();
+}
+
+function loadFromText(){
+  const txt = arrayText.value.trim();
+  if(!txt){ alert('Paste comma separated values into the text area.'); return; }
+  const parts = txt.split(',').map(s=>s.trim()).filter(s=>s.length>0);
+  const vals = parts.map(parseValue);
+  state.array = vals;
+  state.n = vals.length;
+  renderAll();
+}
+
+/* Snapshot management */
+function saveSnapshot(){
+  const key = 'snap_'+(++state.snapshotCounter);
+  state.snapshots[key] = {
+    array: state.array.slice(),
+    target: state.target,
+    algo: state.algo,
+    jumpSize: state.jumpSize
+  };
+  const opt = document.createElement('option');
+  opt.value = key;
+  opt.text = key + ' (n='+state.n+')';
+  snapshotsSelect.add(opt);
+  log('Saved snapshot '+key);
+}
+
+function loadSnapshot(){
+  const key = snapshotsSelect.value;
+  if(!key || !state.snapshots[key]){ alert('Select a snapshot to load.'); return; }
+  const snap = state.snapshots[key];
+  state.array = snap.array.slice();
+  state.n = state.array.length;
+  state.target = snap.target;
+  state.algo = snap.algo;
+  state.jumpSize = snap.jumpSize;
+  targetInput.value = state.target===null?'':state.target;
+  algoSelect.value = state.algo;
+  jumpInput.value = state.jumpSize;
+  log('Loaded snapshot '+key);
+  renderAll();
+}
+
+/* Export/Import JSON */
+function exportJSON(){
+  const data = {
+    array: state.array,
+    target: state.target,
+    algo: state.algo,
+    jumpSize: state.jumpSize,
+    snapshots: state.snapshots
+  };
+  const txt = JSON.stringify(data, null, 2);
+  const w = window.open('', '_blank');
+  w.document.write('<pre>'+escapeHtml(txt)+'</pre>');
+  w.document.title = 'Exported Jump Search Data';
+}
+
+function importJSON(){
+  const txt = prompt('Paste JSON export here:');
+  if(!txt) return;
+  try{
+    const obj = JSON.parse(txt);
+    if(obj.array) state.array = obj.array;
+    if('target' in obj) state.target = obj.target;
+    if(obj.algo) state.algo = obj.algo;
+    if(obj.jumpSize) state.jumpSize = obj.jumpSize;
+    if(obj.snapshots) state.snapshots = obj.snapshots;
+    // reload snapshot list
+    snapshotsSelect.innerHTML='';
+    for(const k in state.snapshots){
+      const opt=document.createElement('option'); opt.value=k; opt.text=k; snapshotsSelect.add(opt);
+    }
+    targetInput.value = state.target===null?'':state.target;
+    jumpInput.value = state.jumpSize;
+    algoSelect.value = state.algo;
+    state.n = state.array.length;
+    renderAll();
+    log('Imported JSON data.');
+  }catch(e){ alert('Invalid JSON'); }
+}
+
+/* Helpers for rendering */
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderAll(){
+  renderArrayView();
+  renderStatus();
+  renderStepsList();
+  renderLog();
+}
+
+/* Array visualization (text-based, minimal) */
+function renderArrayView(){
+  // simple text layout: index:value with markers
+  const arr = state.array;
+  const n = arr.length;
+  let out = '';
+  out += 'Index: ';
+  for(let i=0;i<n;i++){
+    out += pad(i,4)+' ';
+  }
+  out += '\nValues:';
+  for(let i=0;i<n;i++){
+    const val = arr[i];
+    const marker = getMarkerForElement(i);
+    out += ' '+pad(String(val)+marker,4);
+  }
+  out += '\n';
+  out += '\nLegend: ">" current pointer, "*" visited, "(F)" found target, "(S)" scanned';
+  arrayView.textContent = out;
+}
+
+function pad(s,w){ s = String(s); if(s.length>=w) return s; return s + ' '.repeat(w-s.length); }
+
+function getMarkerForElement(idx){
+  // derive marker from current step in traces
+  // We'll mark elements visited or current based on traces state
+  // Build sets from traces
+  let marker = '';
+  const current = getCurrentStep();
+  if(!current) return '';
+  if(Array.isArray(current.indices) && current.indices.includes(idx)){
+    if(current.type==='found' && current.index===idx) return '(F)';
+    if(current.type==='linearCheck' || current.type==='check') return '*';
+    if(current.type==='jumpCheck' && current.index===idx) return '>';
+    if(current.type==='scanStart' && current.index===idx) return 'S';
+  }
+  // Also check if any earlier step visited idx
+  for(let i=0;i<=state.stepIndex;i++){
+    const s = state.trace[i];
+    if(!s) continue;
+    if(Array.isArray(s.indices) && s.indices.includes(idx)) marker='*';
+    if(s.type==='found' && s.index===idx) marker='(F)';
+  }
+  return marker;
+}
+
+function getCurrentStep(){
+  if(!state.trace || state.trace.length===0) return null;
+  if(state.stepIndex<0) return null;
+  if(state.stepIndex>=state.trace.length) return state.trace[state.trace.length-1];
+  return state.trace[state.stepIndex];
+}
+
+/* Traces building for algorithms */
+
+function computeTracesFromState(){
+  // parse inputs
+  state.target = parseValue(targetInput.value);
+  state.algo = algoSelect.value;
+  state.jumpSize = Math.max(1,parseInt(jumpInput.value)||1);
+  // compute traces per selected algorithm
+  state.traces = {};
+  state.trace = [];
+  state.stepIndex = -1;
+  if(state.algo === 'Compare All'){
+    state.traces['Jump Search'] = buildJumpTrace(state.array, state.target, state.jumpSize);
+    state.traces['Linear Search'] = buildLinearTrace(state.array, state.target);
+    state.traces['Binary Search'] = buildBinaryTrace(state.array, state.target);
+    // combine into an interleaved timeline by step counts for comparison view
+    state.trace = combineTracesForComparison(state.traces);
+    log('Computed traces for Jump, Linear, Binary. Combined for comparison view.');
+  } else {
+    let t = [];
+    if(state.algo === 'Jump Search') t = buildJumpTrace(state.array, state.target, state.jumpSize);
+    else if(state.algo === 'Linear Search') t = buildLinearTrace(state.array, state.target);
+    else if(state.algo === 'Binary Search') t = buildBinaryTrace(state.array, state.target);
+    state.traces[state.algo] = t;
+    state.trace = t.slice();
+    log('Computed trace for '+state.algo+'. Steps: '+state.trace.length);
+  }
+  state.stepIndex = -1;
+  renderAll();
+}
+
+/* Build jump search trace */
+function buildJumpTrace(arr, target, m){
+  const n = arr.length;
+  const trace = [];
+  let comparisons = 0;
+  const stepsVisited = [];
+  if(n===0){
+    trace.push({type:'start', desc:'Empty array', indices:[]});
+    trace.push({type:'notfound', desc:'Array empty', indices:[], comparisons});
+    return trace;
+  }
+  // Ensure m is positive
+  m = Math.max(1, Math.floor(m));
+  let prev = 0;
+  let foundIndex = -1;
+  // Jump phase
+  trace.push({type:'start', desc:'Start Jump Search (m='+m+')', indices:[]});
+  while(prev < n){
+    let jumpIdx = Math.min(n-1, prev + m - 1);
+    comparisons++;
+    trace.push({type:'jumpCheck', desc:'Jump to index '+jumpIdx+' and compare arr['+jumpIdx+'] >= target', index: jumpIdx, value: arr[jumpIdx], comparisons});
+    stepsVisited.push(jumpIdx);
+    if(!isComparable(arr[jumpIdx], target)){
+      trace.push({type:'error', desc:'Non-comparable value at index '+jumpIdx, index: jumpIdx, value: arr[jumpIdx]});
+      break;
+    }
+    if(arr[jumpIdx] >= target) {
+      // enter linear scan from prev to jumpIdx
+      const scanEnd = jumpIdx;
+      trace.push({type:'scanStart', desc:'Linear scan from index '+prev+' to '+scanEnd, indices:range(prev,scanEnd)});
+      for(let i=prev;i<=scanEnd;i++){
+        comparisons++;
+        trace.push({type:'linearCheck', desc:'Check index '+i, index:i, value:arr[i], comparisons});
+        stepsVisited.push(i);
+        if(equals(arr[i], target)){
+          foundIndex = i;
+          trace.push({type:'found', desc:'Found at index '+i, index:i, value:arr[i], comparisons});
+          return trace;
+        }
+      }
+      // not found in this block
+      trace.push({type:'blockNotFound', desc:'Not found in block ending at '+jumpIdx, indices:range(prev,scanEnd), comparisons});
+      prev = jumpIdx + 1;
+    } else {
+      // arr[jumpIdx] < target: move prev forward
+      trace.push({type:'jumpStep', desc:'arr['+jumpIdx+'] < target, move prev to '+(jumpIdx+1), index: jumpIdx, value: arr[jumpIdx], comparisons});
+      prev = jumpIdx + 1;
+    }
+  }
+  // finished without finding
+  trace.push({type:'notfound', desc:'Target not found', comparisons});
+  return trace;
+}
+
+/* Build linear search trace */
+function buildLinearTrace(arr, target){
+  const trace = [];
+  let comparisons = 0;
+  trace.push({type:'start', desc:'Start Linear Search', indices:[]});
+  for(let i=0;i<arr.length;i++){
+    comparisons++;
+    trace.push({type:'linearCheck', desc:'Check index '+i, index:i, value:arr[i], comparisons});
+    if(equals(arr[i], target)){
+      trace.push({type:'found', desc:'Found at index '+i, index:i, value:arr[i], comparisons});
+      return trace;
+    }
+  }
+  trace.push({type:'notfound', desc:'Target not found', comparisons});
+  return trace;
+}
+
+/* Build binary search trace - requires sorted ascending array; trace steps include mid checks */
+function buildBinaryTrace(arr, target){
+  const trace = [];
+  let comparisons = 0;
+  trace.push({type:'start', desc:'Start Binary Search (requires sorted array ascending)', indices:[]});
+  // verify sorted ascending
+  let sorted = true;
+  for(let i=1;i<arr.length;i++) if(arr[i-1] > arr[i]) { sorted = false; break; }
+  if(!sorted){
+    trace.push({type:'error', desc:'Array not sorted ascending. Binary search may behave incorrectly.'});
+  }
+  let lo = 0, hi = arr.length - 1;
+  while(lo <= hi){
+    const mid = Math.floor((lo+hi)/2);
+    comparisons++;
+    trace.push({type:'binaryCheck', desc:'Check middle index '+mid, index:mid, value:arr[mid], comparisons, lo, hi});
+    if(!isComparable(arr[mid], target)){ trace.push({type:'error', desc:'Non-comparable at mid '+mid}); break; }
+    if(equals(arr[mid], target)){
+      trace.push({type:'found', desc:'Found at mid '+mid, index:mid, value:arr[mid], comparisons});
+      return trace;
+    } else if(arr[mid] < target){
+      trace.push({type:'binaryMove', desc:'Move low to '+(mid+1), lo: mid+1, hi});
+      lo = mid + 1;
+    } else {
+      trace.push({type:'binaryMove', desc:'Move high to '+(mid-1), lo, hi: mid-1});
+      hi = mid - 1;
+    }
+  }
+  trace.push({type:'notfound', desc:'Target not found', comparisons});
+  return trace;
+}
+
+/* Combine traces for comparison display - interleave by steps and tag steps by algorithm */
+function combineTracesForComparison(tracesMap){
+  // We'll produce a timeline of frames: each frame contains steps from each algorithm with the same step index
+  const names = Object.keys(tracesMap);
+  let maxLen = 0;
+  for(const k of names) maxLen = Math.max(maxLen, tracesMap[k].length);
+  const combined = [];
+  for(let i=0;i<maxLen;i++){
+    const frame = {type:'frame', index:i, entries:[], desc: 'Frame '+i};
+    for(const name of names){
+      const steps = tracesMap[name];
+      const step = steps[i] || null;
+      frame.entries.push({algo: name, step: step});
+    }
+    combined.push(frame);
+  }
+  // flatten frames into a sequence where each frame is a combined step
+  // For visualization, each combined frame is a single trace entry
+  return combined;
+}
+
+/* Utilities used in traces */
+function range(a,b){
+  const r = [];
+  for(let i=a;i<=b;i++) r.push(i);
+  return r;
+}
+function equals(a,b){ return a===b; }
+function isComparable(a,b){ return (typeof a !== 'object' || a===null) && (typeof b !== 'object' || b===null); }
+
+/* Playback and stepping */
+function stepForward(){
+  if(!state.trace || state.trace.length===0){ log('No trace computed. Click "Compute Trace".'); return; }
+  if(state.stepIndex < state.trace.length-1){
+    state.stepIndex++;
+    if(state.recordTrace) { /* recording could push to snapshots or external log */ }
+    renderAll();
+    explainCurrentStep();
+  } else {
+    log('Reached end of trace.');
+  }
+}
+
+function stepBackward(){
+  if(!state.trace || state.trace.length===0) return;
+  if(state.stepIndex > -1){
+    state.stepIndex--;
+    renderAll();
+    explainCurrentStep();
+  }
+}
+
+function startAutoPlay(){
+  if(state.playing) return;
+  if(!state.trace || state.trace.length===0){ computeTracesFromState(); }
+  state.playing = true;
+  runAuto();
+}
+
+function runAuto(){
+  if(state.autoTimer) clearTimeout(state.autoTimer);
+  state.autoTimer = setTimeout(()=>{
+    if(state.stepIndex < state.trace.length-1){
+      stepForward();
+      runAuto();
+    } else {
+      state.playing = false;
+      clearTimeout(state.autoTimer);
+      state.autoTimer = null;
+      log('Auto-play finished.');
+    }
+  }, state.speed);
+}
+
+function pauseAutoPlay(){
+  if(state.autoTimer) clearTimeout(state.autoTimer);
+  state.playing = false;
+  state.autoTimer = null;
+  log('Paused.');
+}
+
+function skipToEnd(){
+  if(!state.trace) return;
+  state.stepIndex = state.trace.length - 1;
+  renderAll();
+  explainCurrentStep();
+}
+
+function replayTrace(){
+  state.stepIndex = -1;
+  renderAll();
+  startAutoPlay();
+}
+
+/* Render steps list and allow clicking a step to jump to it */
+function renderStepsList(){
+  stepsList.innerHTML = '';
+  if(!state.trace || state.trace.length===0) { stepsList.textContent = '(no steps)'; return; }
+  // If compare mode, each entry is a frame; else each entry is a normal step
+  for(let i=0;i<state.trace.length;i++){
+    const s = state.trace[i];
+    const div = document.createElement('div');
+    div.style.cursor = 'pointer';
+    div.style.padding = '2px';
+    const mark = (i===state.stepIndex)? '▶ ':'  ';
+    let text = mark + '['+i+'] ';
+    if(s.type === 'frame'){
+      // combined frame display
+      text += 'Frame: ';
+      for(const e of s.entries){
+        text += e.algo + ': ';
+        if(e.step) text += e.step.type + ', ';
+        else text += '(end), ';
+      }
+    } else {
+      text += (s.type || '(step)') + ' - ' + (s.desc || '');
+    }
+    div.textContent = text;
+    div.addEventListener('click', ()=>{ state.stepIndex = i; renderAll(); explainCurrentStep(); });
+    stepsList.appendChild(div);
+  }
+}
+
+/* Explanation for current step */
+function explainCurrentStep(){
+  const s = getCurrentStep();
+  if(!s){ statusDiv.textContent = 'Ready. No step selected.'; return; }
+  if(s.type === 'frame'){
+    // display combined frame details
+    let txt = 'Comparison frame:';
+    for(const e of s.entries){
+      txt += '\nAlgorithm: '+e.algo;
+      if(e.step) txt += ' | Step type: '+e.step.type+' | Desc: '+(e.step.desc||'');
+      else txt += ' | (finished)';
+    }
+    statusDiv.textContent = txt;
+    log(txt);
+    return;
+  }
+  // normal single-step explanation
+  let txt = 'Step: '+(s.type||'')+' - '+(s.desc||'');
+  if('index' in s) txt += '\nIndex: '+s.index+' Value: '+s.value;
+  if('comparisons' in s) txt += '\nComparisons so far: '+s.comparisons;
+  statusDiv.textContent = txt;
+  log(txt);
+}
+
+/* Click handlers for array view */
+function onArrayClick(ev){
+  // Determine clicked index by approximate column coordinate - since we use text rendering, simpler approach:
+  // Offer a dialog to enter index or click will show list of indices and values for selection.
+  const arr = state.array;
+  if(!arr || arr.length===0) return;
+  // Build a lightweight chooser
+  const choices = arr.map((v,i)=>i+': '+v).join('\n');
+  const pick = prompt('Click interaction:\n\nOptions:\n - Type index number to select element\n - Type "t" followed by index to set target\n - Type "m" followed by index to move pointer (if manual mode)\n\nArray elements:\n'+choices,'t0');
+  if(!pick) return;
+  const p = String(pick).trim();
+  if(/^t\d+$/i.test(p)){
+    const idx = parseInt(p.slice(1));
+    if(isFinite(idx) && idx>=0 && idx<arr.length){
+      targetInput.value = String(arr[idx]);
+      state.target = arr[idx];
+      log('Target set to arr['+idx+'] = '+arr[idx]);
+      renderAll();
+    }
+    return;
+  } else if(/^m\d+$/i.test(p)){
+    const idx = parseInt(p.slice(1));
+    if(state.manualMode){
+      // manual pointer movement simulated by adding a synthetic step
+      const step = {type:'manualMove', desc:'Manual move pointer to index '+idx, index:idx, value: arr[idx]};
+      // insert into trace at current position+1
+      if(!state.trace) state.trace=[];
+      state.trace.splice(state.stepIndex+1, 0, step);
+      state.stepIndex++;
+      log('Manual pointer moved to index '+idx);
+      renderAll();
+    } else {
+      alert('Manual mode not enabled. Check "Manual mode" to allow moving pointer.');
+    }
+    return;
+  } else if(/^\d+$/.test(p)){
+    const idx = parseInt(p);
+    if(isFinite(idx) && idx>=0 && idx<arr.length){
+      // set target to that element by default
+      targetInput.value = String(arr[idx]);
+      state.target = arr[idx];
+      log('Target set to arr['+idx+'] = '+arr[idx]);
+      renderAll();
+    }
+    return;
+  } else {
+    alert('Unrecognized input.');
+  }
+}
+
+/* Batch testing over jump sizes - measure comparisons for jump search */
+function runBatchTest(){
+  const min = Math.max(1, parseInt(batchMin.value)||1);
+  const max = Math.max(1, parseInt(batchMax.value)||1);
+  const results = [];
+  const arr = state.array.slice();
+  if(arr.length===0){ alert('Array empty'); return; }
+  // We'll test for many target values (all unique array values if unique else sample)
+  const targets = Array.from(new Set(arr));
+  for(let m=min;m<=max;m++){
+    let totalComparisons = 0;
+    for(const t of targets){
+      const tr = buildJumpTrace(arr, t, m);
+      // find final comparisons value from last step that includes comparisons or found compars
+      const lastWithComp = tr.slice().reverse().find(s => s && 'comparisons' in s);
+      totalComparisons += (lastWithComp ? lastWithComp.comparisons : 0);
+    }
+    const avg = totalComparisons / targets.length;
+    results.push({m, avg, totalComparisons});
+  }
+  // present results as simple text
+  let out = 'Batch test results for Jump Search (averaged over '+targets.length+' targets):\n';
+  for(const r of results) out += 'm='+r.m+' | avg comparisons='+r.avg.toFixed(3)+' | total='+r.totalComparisons+'\n';
+  const w = window.open('', '_blank');
+  w.document.write('<pre>'+escapeHtml(out)+'</pre>');
+  w.document.title = 'Batch Test Results';
+  log('Batch test complete. Opened results in new window.');
+}
+
+/* Utilities: combine multiple traces into a single timeline for display
+   For simplicity in non-compare mode, state.trace is arr of steps; in compare mode, trace entries are frames with entries.
+*/
+
+/* Rendering logs */
+function renderLog(){
+  logDiv.textContent = state.logs.join('\n');
+}
+
+/* Minimal status rendering */
+function renderStatus(){
+  let txt = 'Array length: '+state.n+' | Algo: '+state.algo+' | Jump size: '+state.jumpSize+' | Target: '+(state.target===null?'(not set)':state.target);
+  if(state.trace) txt += ' | Trace steps: '+state.trace.length+' | Step index: '+state.stepIndex;
+  if(state.playing) txt += ' | Auto-playing...';
+  statusDiv.textContent = txt;
+}
+
+/* Utility: combine traces (if needed) - already implemented above */
+
+/* Initial call */
+init();
+
+})();
+</script>
+
+</body>
+</html>

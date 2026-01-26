@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Deadlock Demonstration (Single File)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 16px; background:#f7f9fc; color:#111;}
+    header { margin-bottom: 12px; }
+    h1 { font-size: 20px; margin: 0 0 6px 0; }
+    p { margin: 6px 0; color:#333; }
+    .controls { display:flex; gap:8px; margin: 10px 0 18px 0; flex-wrap:wrap;}
+    button { padding:8px 12px; border-radius:6px; border:1px solid #cbd5e1; background: white; cursor:pointer; }
+    button.primary { background:#2563eb; color:white; border-color:#1d4ed8; }
+    button.warn { background:#f97316; color:white; border-color:#ea580c; }
+    button.ghost { background:transparent; border:1px dashed #cbd5e1; }
+    .board { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+    .column { background: white; border-radius:8px; padding:12px; box-shadow: 0 1px 3px rgba(16,24,40,0.06); width:270px; }
+    .title { font-weight:700; margin-bottom:8px; font-size:14px; }
+    .resource { border:1px solid #e6eef8; border-radius:8px; padding:10px; display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+    .resource .dot { width:14px; height:14px; border-radius:4px; }
+    .free { background:#d1fae5; border:1px solid #86efac; }
+    .owned { background:#fde68a; border:1px solid #facc15; }
+    .waiting { background:#fbcfe8; border:1px solid #fb7185; }
+    .proc { padding:8px; border-radius:8px; margin-bottom:8px; background:#f8fafc; border:1px solid #e2e8f0; }
+    .proc.running { border-color:#34d399; box-shadow:0 0 0 4px rgba(16,185,129,0.06); }
+    .proc.waiting { border-color:#fb7185; box-shadow:0 0 0 4px rgba(239,68,68,0.06); }
+    .log { max-height:240px; overflow:auto; background:#0f172a; color:#e6eef8; padding:8px; border-radius:6px; font-family: monospace; font-size:12px; }
+    .legend { font-size:12px; margin-top:6px; color:#374151; }
+    .link { color:#2563eb; text-decoration:underline; cursor:pointer; background:transparent; border:none; padding:0; }
+    .cycle { color:#b91c1c; font-weight:700; }
+    footer { margin-top:14px; font-size:12px; color:#475569; }
+    .spacer { height:8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Deadlock Demonstration</h1>
+    <p>Interactive single-file demo that simulates two processes and two shared resources. Start the sequence that leads to a deadlock, observe the wait-for graph and detection, and break or avoid the deadlock.</p>
+  </header>
+
+  <div class="controls">
+    <button id="startDead" class="primary">Start Deadlock</button>
+    <button id="startOrdered">Start Without Deadlock (Ordered Locks)</button>
+    <button id="detectToggle">Auto-detect: ON</button>
+    <button id="breakDead" class="warn">Break Deadlock (force release)</button>
+    <button id="reset" class="ghost">Reset</button>
+  </div>
+
+  <div class="board">
+    <div class="column" style="min-width:340px;">
+      <div class="title">Processes</div>
+      <div id="procA" class="proc">
+        <div style="font-weight:700">Process A</div>
+        <div id="procAStatus">Idle</div>
+        <div class="spacer"></div>
+        <div style="font-size:13px">Holds: <span id="holdsA">—</span></div>
+        <div style="font-size:13px">Waiting for: <span id="waitA">—</span></div>
+      </div>
+
+      <div id="procB" class="proc">
+        <div style="font-weight:700">Process B</div>
+        <div id="procBStatus">Idle</div>
+        <div class="spacer"></div>
+        <div style="font-size:13px">Holds: <span id="holdsB">—</span></div>
+        <div style="font-size:13px">Waiting for: <span id="waitB">—</span></div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="title">Log</div>
+      <div id="log" class="log"></div>
+    </div>
+
+    <div class="column">
+      <div class="title">Resources / Locks</div>
+      <div id="res1" class="resource">
+        <div class="dot free" id="dotR1"></div>
+        <div>
+          <div style="font-weight:700">Resource R1</div>
+          <div style="font-size:13px">Owner: <span id="ownerR1">—</span></div>
+        </div>
+      </div>
+
+      <div id="res2" class="resource">
+        <div class="dot free" id="dotR2"></div>
+        <div>
+          <div style="font-weight:700">Resource R2</div>
+          <div style="font-size:13px">Owner: <span id="ownerR2">—</span></div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="title">Deadlock / Wait-for Graph</div>
+      <div id="graphDesc">No active waits.</div>
+      <div style="margin-top:8px" id="cycleInfo"></div>
+      <div class="legend">
+        Legend: <span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#d1fae5;margin-right:6px">Free</span>
+        <span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#fde68a;margin-right:6px">Owned</span>
+        <span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#fbcfe8">Waiting</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Notes: This demo uses cooperative async "locks" to illustrate the four Coffman conditions that cause deadlock: mutual exclusion, hold and wait, no preemption, and circular wait. Press "Break Deadlock" to force release and let one process continue.
+  </footer>
+
+  <script>
+    // Simple Promise-based lock implementation
+    class Lock {
+      constructor(name) {
+        this.name = name;
+        this.owner = null;     // process id string or null
+        this.queue = [];       // array of {pid, resolve}
+      }
+
+      // Acquire returns a promise that resolves when owner is set to pid.
+      acquire(pid) {
+        if (this.owner === null) {
+          this.owner = pid;
+          return Promise.resolve();
+        }
+        // Put the pid into queue and return a promise that resolves when lock assigned
+        return new Promise(resolve => {
+          this.queue.push({ pid, resolve });
+        });
+      }
+
+      // Release the lock. If there's a waiting requester, assign to next in queue.
+      release(releasingPid) {
+        if (this.owner !== releasingPid && this.owner !== null) {
+          // someone else forced or bad release; still allow force release
+        }
+        this.owner = null;
+        if (this.queue.length > 0) {
+          const next = this.queue.shift();
+          this.owner = next.pid;
+          // resolve the waiting acquire
+          next.resolve();
+        }
+      }
+
+      // Force release - empty the queue and free
+      forceRelease() {
+        this.owner = null;
+        // resolve nothing automatically -- we keep queued promises but since owner is null,
+        // next caller will get it on calling acquire. Forcing will also clear queue so waiting tasks won't auto-acquire.
+        this.queue = [];
+      }
+    }
+
+    // Global simulation state
+    const R1 = new Lock('R1');
+    const R2 = new Lock('R2');
+
+    // UI elements
+    const dotR1 = document.getElementById('dotR1');
+    const dotR2 = document.getElementById('dotR2');
+    const ownerR1 = document.getElementById('ownerR1');
+    const ownerR2 = document.getElementById('ownerR2');
+    const procAStatus = document.getElementById('procAStatus');
+    const procBStatus = document.getElementById('procBStatus');
+    const holdsA = document.getElementById('holdsA');
+    const holdsB = document.getElementById('holdsB');
+    const waitA = document.getElementById('waitA');
+    const waitB = document.getElementById('waitB');
+    const logEl = document.getElementById('log');
+    const graphDesc = document.getElementById('graphDesc');
+    const cycleInfo = document.getElementById('cycleInfo');
+
+    const startDead = document.getElementById('startDead');
+    const startOrdered = document.getElementById('startOrdered');
+    const detectToggle = document.getElementById('detectToggle');
+    const breakDead = document.getElementById('breakDead');
+    const resetBtn = document.getElementById('reset');
+
+    let detectOn = true;
+    let simActive = false;
+    let mode = null; // "deadlock" or "ordered"
+    let detectInterval = null;
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      logEl.innerText = `[${time}] ${msg}\n` + logEl.innerText;
+    }
+
+    function updateUI() {
+      ownerR1.innerText = R1.owner || '—';
+      ownerR2.innerText = R2.owner || '—';
+
+      // dot colors
+      dotR1.className = 'dot ' + (R1.owner ? 'owned' : 'free');
+      dotR2.className = 'dot ' + (R2.owner ? 'owned' : 'free');
+
+      // holds lists
+      holdsA.innerText = (R1.owner === 'A' || R2.owner === 'A') ? [R1.owner==='A'?'R1':null, R2.owner==='A'?'R2':null].filter(Boolean).join(', ') : '—';
+      holdsB.innerText = (R1.owner === 'B' || R2.owner === 'B') ? [R1.owner==='B'?'R1':null, R2.owner==='B'?'R2':null].filter(Boolean).join(', ') : '—';
+    }
+
+    // Track waiting states for UI only (not part of Lock)
+    const waitingFor = { A: null, B: null };
+
+    // Wait-for graph detection: edges process -> process if process waits for a resource owned by that other process.
+    function computeWaitForGraph() {
+      const edges = [];
+      if (waitingFor.A) {
+        const owner = (waitingFor.A === 'R1' ? R1.owner : R2.owner);
+        if (owner && owner !== 'A') edges.push(['A', owner]);
+      }
+      if (waitingFor.B) {
+        const owner = (waitingFor.B === 'R1' ? R1.owner : R2.owner);
+        if (owner && owner !== 'B') edges.push(['B', owner]);
+      }
+      return edges;
+    }
+
+    function detectCycle() {
+      const edges = computeWaitForGraph();
+      // build adjacency
+      const nodes = ['A','B'];
+      const adj = { A: [], B: [] };
+      edges.forEach(([u,v]) => adj[u].push(v));
+      // detect cycle with DFS
+      const visited = { A:false, B:false }, stack = { A:false, B:false };
+      const cycleNodes = [];
+
+      function dfs(u) {
+        visited[u]=true; stack[u]=true;
+        for (const v of adj[u]) {
+          if (!visited[v]) {
+            if (dfs(v)) { cycleNodes.push(v); return true; }
+          } else if (stack[v]) {
+            cycleNodes.push(v);
+            return true;
+          }
+        }
+        stack[u]=false;
+        return false;
+      }
+
+      let found=false;
+      for (const n of nodes) {
+        if (!visited[n]) {
+          if (dfs(n)) { cycleNodes.push(n); found=true; break; }
+        }
+      }
+      return { found, edges, cycle: found ? Array.from(new Set(cycleNodes)) : [] };
+    }
+
+    function updateGraphUI() {
+      const { found, edges, cycle } = detectCycle();
+      if (edges.length === 0) {
+        graphDesc.innerText = 'No active waits.';
+        cycleInfo.innerText = '';
+      } else {
+        graphDesc.innerText = 'Wait-for edges: ' + edges.map(e => `${e[0]} → ${e[1]}`).join(', ');
+        if (found) {
+          cycleInfo.innerHTML = '<span class="cycle">Deadlock detected!</span> Cycle involves: ' + cycle.join(', ');
+        } else {
+          cycleInfo.innerText = 'No cycle detected.';
+        }
+      }
+    }
+
+    // Process code. Each process attempts to:
+    // - Acquire first resource and hold
+    // - Then attempt to acquire second resource (which may be held by the other), causing wait.
+    // For "deadlock" mode, A acquires R1 then tries R2; B acquires R2 then tries R1 (circular wait).
+    // For "ordered" mode, both acquire R1 then R2 (same global order) to avoid deadlock.
+    async function processA() { // id 'A'
+      procAStatus.innerText = 'Starting...'; procAStatus.parentElement.classList.remove('waiting'); procAStatus.parentElement.classList.add('running');
+      log('Process A: start');
+      updateUI();
+
+      if (mode === 'deadlock') {
+        // acquire R1
+        procAStatus.innerText = 'Acquiring R1...';
+        await R1.acquire('A');
+        procAStatus.innerText = 'Holding R1';
+        log('Process A acquired R1');
+        updateUI();
+
+        // hold briefly to increase chance of circular wait
+        await sleep(300);
+        // attempt to acquire R2
+        waitingFor.A = 'R2';
+        procAStatus.innerText = 'Waiting for R2';
+        procAStatus.parentElement.classList.remove('running'); procAStatus.parentElement.classList.add('waiting');
+        log('Process A attempts to acquire R2 (may block)');
+        updateGraphUI();
+        await R2.acquire('A'); // will block if B holds it
+        waitingFor.A = null;
+        procAStatus.innerText = 'Acquired R2';
+        procAStatus.parentElement.classList.remove('waiting'); procAStatus.parentElement.classList.add('running');
+        log('Process A acquired R2');
+        updateUI();
+
+        // work, then release both
+        await sleep(400);
+        R2.release('A'); log('Process A released R2');
+        R1.release('A'); log('Process A released R1');
+      } else if (mode === 'ordered') {
+        // both processes acquire in same order: R1 then R2
+        procAStatus.innerText = 'Acquiring R1...';
+        await R1.acquire('A');
+        procAStatus.innerText = 'Holding R1';
+        log('Process A acquired R1 (ordered)');
+        updateUI();
+
+        await sleep(200);
+        waitingFor.A = 'R2';
+        procAStatus.innerText = 'Waiting for R2';
+        procAStatus.parentElement.classList.remove('running'); procAStatus.parentElement.classList.add('waiting');
+        await R2.acquire('A');
+        waitingFor.A = null;
+        procAStatus.innerText = 'Acquired R2';
+        procAStatus.parentElement.classList.remove('waiting'); procAStatus.parentElement.classList.add('running');
+        log('Process A acquired R2 (ordered)');
+        updateUI();
+
+        await sleep(400);
+        R2.release('A'); log('Process A released R2 (ordered)');
+        R1.release('A'); log('Process A released R1 (ordered)');
+      }
+
+      procAStatus.innerText = 'Done';
+      procAStatus.parentElement.classList.remove('running','waiting');
+      waitingFor.A = null;
+      updateUI();
+      updateGraphUI();
+      log('Process A: finished');
+    }
+
+    async function processB() { // id 'B'
+      procBStatus.innerText = 'Starting...'; procBStatus.parentElement.classList.remove('waiting'); procBStatus.parentElement.classList.add('running');
+      log('Process B: start');
+      updateUI();
+
+      if (mode === 'deadlock') {
+        // acquire R2 first (opposite order)
+        procBStatus.innerText = 'Acquiring R2...';
+        await R2.acquire('B');
+        procBStatus.innerText = 'Holding R2';
+        log('Process B acquired R2');
+        updateUI();
+
+        await sleep(300);
+        waitingFor.B = 'R1';
+        procBStatus.innerText = 'Waiting for R1';
+        procBStatus.parentElement.classList.remove('running'); procBStatus.parentElement.classList.add('waiting');
+        log('Process B attempts to acquire R1 (may block)');
+        updateGraphUI();
+        await R1.acquire('B');
+        waitingFor.B = null;
+        procBStatus.innerText = 'Acquired R1';
+        procBStatus.parentElement.classList.remove('waiting'); procBStatus.parentElement.classList.add('running');
+        log('Process B acquired R1');
+        updateUI();
+
+        await sleep(400);
+        R1.release('B'); log('Process B released R1');
+        R2.release('B'); log('Process B released R2');
+      } else if (mode === 'ordered') {
+        // same order: R1 then R2
+        procBStatus.innerText = 'Acquiring R1...';
+        await R1.acquire('B');
+        procBStatus.innerText = 'Holding R1';
+        log('Process B acquired R1 (ordered)');
+        updateUI();
+
+        await sleep(200);
+        waitingFor.B = 'R2';
+        procBStatus.innerText = 'Waiting for R2';
+        procBStatus.parentElement.classList.remove('running'); procBStatus.parentElement.classList.add('waiting');
+        await R2.acquire('B');
+        waitingFor.B = null;
+        procBStatus.innerText = 'Acquired R2';
+        procBStatus.parentElement.classList.remove('waiting'); procBStatus.parentElement.classList.add('running');
+        log('Process B acquired R2 (ordered)');
+        updateUI();
+
+        await sleep(400);
+        R2.release('B'); log('Process B released R2 (ordered)');
+        R1.release('B'); log('Process B released R1 (ordered)');
+      }
+
+      procBStatus.innerText = 'Done';
+      procBStatus.parentElement.classList.remove('running','waiting');
+      waitingFor.B = null;
+      updateUI();
+      updateGraphUI();
+      log('Process B: finished');
+    }
+
+    // utility sleep
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // start functions
+    startDead.addEventListener('click', async () => {
+      if (simActive) { log('Simulation already running'); return; }
+      resetLocks();
+      mode = 'deadlock';
+      simActive = true;
+      log('Starting DEADLOCK scenario (A: R1 then R2; B: R2 then R1)');
+      // start both without waiting for each other; they will interleave
+      processA();
+      processB();
+      startDetectionLoop();
+    });
+
+    startOrdered.addEventListener('click', async () => {
+      if (simActive) { log('Simulation already running'); return; }
+      resetLocks();
+      mode = 'ordered';
+      simActive = true;
+      log('Starting ORDERED scenario (both acquire R1 then R2) - should avoid deadlock');
+      processA();
+      // slight offset to simulate concurrency but maintain ordering
+      setTimeout(processB, 60);
+      startDetectionLoop();
+    });
+
+    detectToggle.addEventListener('click', () => {
+      detectOn = !detectOn;
+      detectToggle.innerText = `Auto-detect: ${detectOn ? 'ON' : 'OFF'}`;
+      if (detectOn) startDetectionLoop(); else stopDetectionLoop();
+    });
+
+    breakDead.addEventListener('click', () => {
+      // Forcefully release one resource to break potential deadlock.
+      log('Force-releasing R2 to break deadlock (simulates preemption)');
+      R2.forceRelease();
+      // also release R1 as safety
+      R1.forceRelease();
+      waitingFor.A = null; waitingFor.B = null;
+      updateUI();
+      updateGraphUI();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      resetAll();
+      log('Reset simulation');
+    });
+
+    function resetLocks() {
+      R1.owner = null; R1.queue = [];
+      R2.owner = null; R2.queue = [];
+      waitingFor.A = null; waitingFor.B = null;
+      updateUI();
+      updateGraphUI();
+      procAStatus.innerText = 'Idle'; procBStatus.innerText = 'Idle';
+      procAStatus.parentElement.classList.remove('running','waiting');
+      procBStatus.parentElement.classList.remove('running','waiting');
+      logEl.innerText = '';
+    }
+
+    function resetAll() {
+      stopDetectionLoop();
+      simActive = false;
+      mode = null;
+      resetLocks();
+    }
+
+    function startDetectionLoop() {
+      if (!detectOn) return;
+      if (detectInterval) clearInterval(detectInterval);
+      detectInterval = setInterval(() => {
+        updateUI();
+        updateGraphUI();
+        const det = detectCycle();
+        if (det.found) {
+          log('Deadlock detected (cycle): ' + det.cycle.join(' -> '));
+        }
+      }, 300);
+    }
+
+    function stopDetectionLoop() {
+      if (detectInterval) { clearInterval(detectInterval); detectInterval = null; }
+    }
+
+    // initialize
+    resetAll();
+    updateUI();
+
+    // Small extra: clicking on resource will force release to show resolution
+    document.getElementById('res1').addEventListener('click', () => {
+      R1.forceRelease();
+      waitingFor.A = waitingFor.A === 'R1' ? null : waitingFor.A;
+      waitingFor.B = waitingFor.B === 'R1' ? null : waitingFor.B;
+      log('R1 force-released (manual)');
+      updateUI(); updateGraphUI();
+    });
+    document.getElementById('res2').addEventListener('click', () => {
+      R2.forceRelease();
+      waitingFor.A = waitingFor.A === 'R2' ? null : waitingFor.A;
+      waitingFor.B = waitingFor.B === 'R2' ? null : waitingFor.B;
+      log('R2 force-released (manual)');
+      updateUI(); updateGraphUI();
+    });
+
+    // Update status display frequently for visual clarity
+    setInterval(() => {
+      // show waiting text values
+      waitA.innerText = waitingFor.A || '—';
+      waitB.innerText = waitingFor.B || '—';
+      updateUI();
+    }, 150);
+
+  </script>
+</body>
+</html>

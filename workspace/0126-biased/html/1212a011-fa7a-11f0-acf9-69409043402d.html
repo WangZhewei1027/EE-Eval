@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Queue Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  input[type="text"], input[type="number"] {
+    width: 8em;
+  }
+  button {
+    margin: 0.2em 0.1em 0.2em 0;
+  }
+  textarea {
+    width: 100%;
+    height: 6em;
+  }
+  label {
+    user-select:none;
+  }
+  #queue-visual {
+    white-space: nowrap;
+    overflow-x: auto;
+    margin: 1em 0;
+    padding: 0.5em 0;
+    border-top: 1px solid black;
+    border-bottom: 1px solid black;
+  }
+  #queue-visual > span {
+    border: 1px solid black;
+    padding: 0.3em 0.6em;
+    margin-right: 0.3em;
+    display: inline-block;
+    min-width: 2em;
+    text-align: center;
+  }
+  #log {
+    white-space: pre-wrap;
+    height: 12em;
+    overflow-y: scroll;
+    border: 1px solid black;
+    padding: 0.3em;
+  }
+  fieldset {
+    margin-top: 1em;
+    padding: 0.6em;
+  }
+</style>
+</head>
+<body>
+<h2>Interactive Queue Explorer</h2>
+
+<div>
+  <label for="input-enqueue">Element to enqueue:</label>
+  <input type="text" id="input-enqueue" aria-label="Element to enqueue" />
+  <button id="btn-enqueue">Enqueue</button>
+</div>
+
+<div>
+  <button id="btn-dequeue">Dequeue</button>
+  <button id="btn-peek">Peek Front</button>
+  <button id="btn-clear">Clear Queue</button>
+</div>
+
+<div>
+  <label for="input-bulk-enqueue">Bulk enqueue (comma or newline separated):</label><br />
+  <textarea id="input-bulk-enqueue" aria-label="Bulk enqueue input"></textarea><br />
+  <button id="btn-bulk-enqueue">Bulk Enqueue</button>
+</div>
+
+<div>
+  <label for="input-enqueue-position">Enqueue at position:</label>
+  <input type="number" id="input-enqueue-position" min="0" />
+  <input type="text" id="input-enqueue-pos-value" aria-label="Value to enqueue at position" />
+  <button id="btn-enqueue-at">Enqueue at Position</button>
+</div>
+
+<div>
+  <label for="input-remove-position">Remove from position:</label>
+  <input type="number" id="input-remove-position" min="0" />
+  <button id="btn-remove-at">Remove at Position</button>
+</div>
+
+<div>
+  <label for="input-find-value">Find all indexes of value:</label>
+  <input type="text" id="input-find-value" />
+  <button id="btn-find">Find</button>
+</div>
+
+<div>
+  <label for="input-rotate-count">Rotate queue by positions (positive = right, negative = left):</label>
+  <input type="number" id="input-rotate-count" />
+  <button id="btn-rotate">Rotate</button>
+</div>
+
+<div>
+  <label for="input-reverse-length">Reverse first N elements (0 = all):</label>
+  <input type="number" id="input-reverse-length" min="0" />
+  <button id="btn-reverse">Reverse</button>
+</div>
+
+<div id="queue-visual" aria-live="polite" aria-label="Queue content" tabindex="0">
+  <!-- Queue elements appear here -->
+</div>
+
+<fieldset>
+<legend>Queue State & Controls</legend>
+<div><b>Current Size:</b> <span id="queue-size">0</span></div>
+<div><b>Front Element:</b> <span id="queue-front">N/A</span></div>
+<div><b>Back Element:</b> <span id="queue-back">N/A</span></div>
+<div><b>Is Empty:</b> <span id="queue-empty">True</span></div>
+
+<label for="input-max-size">Set max queue size (0 = unlimited):</label>
+<input type="number" id="input-max-size" min="0" value="0" />
+<button id="btn-set-max-size">Set Max Size</button>
+<div><small>Enqueue operations respect max size limit.</small></div>
+</fieldset>
+
+<fieldset>
+<legend>Advanced Queue Operations</legend>
+
+<div>
+  <label for="input-compare-value">Count elements equal to value:</label>
+  <input type="text" id="input-compare-value" />
+  <button id="btn-count-equal">Count Equal</button>
+</div>
+
+<div>
+  <label for="input-filter-condition">Filter elements (JavaScript condition, "x" is element):</label><br />
+  <input type="text" id="input-filter-condition" style="width: 100%;" placeholder="e.g. x.length > 3 or x.startsWith('a')" />
+  <button id="btn-filter">Filter Queue</button>
+  <button id="btn-reset-filter">Reset Filter</button>
+  <div><small><b>Warning:</b> this evaluates JavaScript expressions on elements.</small></div>
+</div>
+
+<div>
+  <label for="input-map-function">Map elements (JavaScript expression, "x" is element):</label><br />
+  <input type="text" id="input-map-function" style="width: 100%;" placeholder="e.g. x.toUpperCase() or x.length" />
+  <button id="btn-map">Map Queue</button>
+  <button id="btn-reset-map">Reset Map</button>
+  <div><small><b>Warning:</b> this evaluates JavaScript expressions on elements.</small></div>
+</div>
+
+<div>
+  <button id="btn-history-back">Undo (Back)</button>
+  <button id="btn-history-forward">Redo (Forward)</button>
+  <span><small><i>Undo/Redo queue state changes</i></small></span>
+</div>
+</fieldset>
+
+<fieldset>
+<legend>Operation Log (latest at bottom)</legend>
+<div id="log" aria-live="polite" tabindex="0"></div>
+</fieldset>
+
+<script>
+(function(){
+  // The queue is internally an array
+  let queue = [];
+  let maxSize = 0; // 0 means unlimited
+
+  // For undo/redo functionality: history of queue states
+  const history = [];
+  let historyPos = -1; // Points to current state in history
+
+  // For filter/map layers (transformations)
+  // We keep original queue and show filtered/mapped views
+  // Filtered is an array of indices of elements from original queue kept
+  let filterActive = false;
+  let filterIndices = []; 
+  let filterCondition = '';
+  // Map function string (JS expr) and parsed function
+  let mapActive = false;
+  let mapFunctionStr = '';
+  let mapFunction = null;
+
+  // For preserving original queue when filtering/mapping changes
+  // queue always holds original data
+  // Display uses filtered/mapped data
+
+  // Cached dom elements
+  const elEnqueue = document.getElementById('input-enqueue');
+  const btnEnqueue = document.getElementById('btn-enqueue');
+  const btnDequeue = document.getElementById('btn-dequeue');
+  const btnPeek = document.getElementById('btn-peek');
+  const btnClear = document.getElementById('btn-clear');
+
+  const elBulk = document.getElementById('input-bulk-enqueue');
+  const btnBulk = document.getElementById('btn-bulk-enqueue');
+
+  const elEnqPos = document.getElementById('input-enqueue-position');
+  const elEnqPosVal = document.getElementById('input-enqueue-pos-value');
+  const btnEnqAt = document.getElementById('btn-enqueue-at');
+
+  const elRemPos = document.getElementById('input-remove-position');
+  const btnRemAt = document.getElementById('btn-remove-at');
+
+  const elFindVal = document.getElementById('input-find-value');
+  const btnFind = document.getElementById('btn-find');
+
+  const elRotateCount = document.getElementById('input-rotate-count');
+  const btnRotate = document.getElementById('btn-rotate');
+
+  const elReverseLen = document.getElementById('input-reverse-length');
+  const btnReverse = document.getElementById('btn-reverse');
+
+  const elQueueVisual = document.getElementById('queue-visual');
+
+  const elSize = document.getElementById('queue-size');
+  const elFront = document.getElementById('queue-front');
+  const elBack = document.getElementById('queue-back');
+  const elEmpty = document.getElementById('queue-empty');
+
+  const elMaxSize = document.getElementById('input-max-size');
+  const btnSetMax = document.getElementById('btn-set-max-size');
+
+  const elCountEqualVal = document.getElementById('input-compare-value');
+  const btnCountEqual = document.getElementById('btn-count-equal');
+
+  const elFilterCond = document.getElementById('input-filter-condition');
+  const btnFilter = document.getElementById('btn-filter');
+  const btnResetFilter = document.getElementById('btn-reset-filter');
+
+  const elMapFunc = document.getElementById('input-map-function');
+  const btnMap = document.getElementById('btn-map');
+  const btnResetMap = document.getElementById('btn-reset-map');
+
+  const btnHistBack = document.getElementById('btn-history-back');
+  const btnHistFwd = document.getElementById('btn-history-forward');
+
+  const elLog = document.getElementById('log');
+
+  // Utility: Log event with timestamp
+  function logEvent(msg) {
+    const dt = new Date().toLocaleTimeString();
+    elLog.textContent += `[${dt}] ${msg}\n`;
+    elLog.scrollTop = elLog.scrollHeight;
+  }
+
+  function saveHistory() {
+    // Truncate future if needed
+    if (historyPos < history.length -1) {
+      history.splice(historyPos+1);
+    }
+    // Save current queue copy (shallow copy is enough since elements are strings)
+    history.push(queue.slice());
+    historyPos = history.length -1;
+    updateHistoryButtons();
+  }
+
+  function undo() {
+    if(historyPos > 0) {
+      historyPos--;
+      queue = history[historyPos].slice();
+      resetFiltersAndMaps();
+      logEvent("Undo: Reverted to previous queue state");
+      updateUI();
+      updateHistoryButtons();
+    } else {
+      logEvent("Undo: No earlier state to revert to");
+    }
+  }
+
+  function redo() {
+    if(historyPos < history.length-1){
+      historyPos++;
+      queue = history[historyPos].slice();
+      resetFiltersAndMaps();
+      logEvent("Redo: Reapplied next queue state");
+      updateUI();
+      updateHistoryButtons();
+    } else {
+      logEvent("Redo: No further state to apply");
+    }
+  }
+
+  function updateHistoryButtons() {
+    btnHistBack.disabled = historyPos <= 0;
+    btnHistFwd.disabled = historyPos >= history.length -1;
+  }
+
+  function applyFilter() {
+    if (!filterActive) return null;
+    // filterIndices stores indexes in queue to keep
+    return filterIndices.map(i => queue[i]);
+  }
+
+  function applyMap(arr){
+    if (!mapActive || !mapFunction) return arr;
+    try {
+      return arr.map(mapFunction);
+    } catch(e){
+      logEvent("Error during map application: " + e);
+      return arr;
+    }
+  }
+
+  // Compose final view data after filter and map
+  function getViewQueue() {
+    let data;
+    if(filterActive) {
+      data = applyFilter();
+    } else {
+      data = queue.slice();
+    }
+    data = applyMap(data);
+    return data;
+  }
+
+  // Reset filter and mapping
+  function resetFiltersAndMaps(){
+    filterActive = false;
+    filterIndices = [];
+    filterCondition = '';
+    elFilterCond.value = '';
+    mapActive = false;
+    mapFunctionStr = '';
+    mapFunction = null;
+    elMapFunc.value = '';
+  }
+
+  function updateUI() {
+    // Update size/empty
+    elSize.textContent = queue.length;
+    elEmpty.textContent = queue.length === 0 ? "True" : "False";
+    elFront.textContent = queue.length > 0 ? queue[0] : "N/A";
+    elBack.textContent = queue.length > 0 ? queue[queue.length-1] : "N/A";
+
+    // Update queue visual with applied filter and map
+    const view = getViewQueue();
+
+    elQueueVisual.textContent = '';
+    if(view.length === 0){
+      elQueueVisual.textContent = "(empty)";
+    } else {
+      for(let i=0; i<view.length; i++){
+        const span = document.createElement('span');
+        span.textContent = view[i];
+        span.setAttribute('data-index', i);
+        elQueueVisual.appendChild(span);
+      }
+    }
+    updateHistoryButtons();
+  }
+
+  // Enqueue an element if allowed
+  function enqueue(value) {
+    if (value === '' || value === null || value === undefined) {
+      logEvent("Enqueue: Cannot enqueue empty value");
+      return false;
+    }
+    if(maxSize > 0 && queue.length >= maxSize){
+      logEvent(`Enqueue: Max size ${maxSize} reached, cannot enqueue "${value}"`);
+      return false;
+    }
+    queue.push(String(value));
+    saveHistory();
+    logEvent(`Enqueue: "${value}" added to back`);
+    updateUI();
+    return true;
+  }
+
+  // Enqueue multiple elements
+  function enqueueMultiple(values) {
+    let succeeded = 0;
+    for(let v of values){
+      v = v.trim();
+      if(v === '') continue;
+      if(enqueue(v)){
+        succeeded++;
+      } else {
+        break; // stop if max size reached
+      }
+    }
+    if(succeeded>0){
+      logEvent(`Bulk Enqueue: Added ${succeeded} elements`);
+    }
+    updateUI();
+  }
+
+  // Dequeue element
+  function dequeue() {
+    if(queue.length === 0){
+      logEvent("Dequeue: Queue is empty");
+      return null;
+    }
+    const val = queue.shift();
+    saveHistory();
+    logEvent(`Dequeue: Removed front element "${val}"`);
+    updateUI();
+    return val;
+  }
+
+  // Peek front element
+  function peek() {
+    if(queue.length === 0){
+      logEvent("Peek: Queue is empty");
+      return null;
+    }
+    const val = queue[0];
+    logEvent(`Peek: Front element is "${val}"`);
+    return val;
+  }
+
+  // Clear queue
+  function clearQueue() {
+    if(queue.length === 0){
+      logEvent("Clear: Queue already empty");
+      return;
+    }
+    queue = [];
+    saveHistory();
+    resetFiltersAndMaps();
+    logEvent("Clear: Queue emptied");
+    updateUI();
+  }
+
+  // Enqueue at arbitrary position
+  // position >= 0. If > length, treated as length (back)
+  function enqueueAtPosition(position, value){
+    if(value === '' || value === null) {
+      logEvent("Enqueue at Position: Value is empty");
+      return false;
+    }
+
+    position = Math.floor(position);
+    if(isNaN(position) || position < 0) {
+      logEvent("Enqueue at Position: Invalid position");
+      return false;
+    }
+
+    if(maxSize > 0 && queue.length >= maxSize){
+      logEvent(`Enqueue at Position: Max size ${maxSize} reached, cannot enqueue "${value}"`);
+      return false;
+    }
+    
+    if(queue.length >= maxSize && maxSize > 0){
+      logEvent(`Enqueue at Position: Max size reached, operation aborted`);
+      return false;
+    }
+
+    if(position > queue.length) position = queue.length;
+    queue.splice(position, 0, String(value));
+    saveHistory();
+    logEvent(`Enqueue at Position: Added "${value}" at index ${position}`);
+    updateUI();
+    return true;
+  }
+
+  // Remove at arbitrary position
+  function removeAtPosition(position){
+    position = Math.floor(position);
+    if(isNaN(position) || position < 0 || position >= queue.length){
+      logEvent("Remove at Position: Invalid position");
+      return false;
+    }
+    const removed = queue.splice(position, 1)[0];
+    saveHistory();
+    logEvent(`Remove at Position: Removed element "${removed}" at index ${position}`);
+    updateUI();
+    return true;
+  }
+
+  // Find all indexes of a value in queue (before filter/map)
+  // Strict equality of strings here (after trimming)
+  function findAllIndexes(value){
+    value = String(value);
+    const indexes = [];
+    for(let i=0; i<queue.length; i++){
+      if(queue[i] === value){
+        indexes.push(i);
+      }
+    }
+    if(indexes.length === 0){
+      logEvent(`Find: Value "${value}" not found in queue`);
+    } else {
+      logEvent(`Find: Value "${value}" found at index(es): ${indexes.join(", ")}`);
+    }
+    return indexes;
+  }
+
+  // Rotate queue by n positions (positive right, negative left)
+  function rotateQueue(n){
+    if(queue.length === 0){
+      logEvent("Rotate: Queue is empty");
+      return false;
+    }
+    n = Math.trunc(n);
+    if(n === 0){
+      logEvent("Rotate: Rotation count is zero");
+      return false;
+    }
+    const len = queue.length;
+    // Normalize n in range -len to len
+    n = ((n % len) + len) % len; 
+    if(n === 0){
+      logEvent("Rotate: Effective rotation is zero");
+      return false;
+    }
+    const part1 = queue.slice(-n);
+    const part2 = queue.slice(0, len-n);
+    queue = part1.concat(part2);
+    saveHistory();
+    logEvent(`Rotate: Queue rotated right by ${n} positions`);
+    updateUI();
+    return true;
+  }
+
+  // Reverse first N elements, if N=0 reverse entire queue
+  function reverseFirstN(n){
+    if(queue.length === 0){
+      logEvent("Reverse: Queue is empty");
+      return false;
+    }
+    n = Math.trunc(n);
+    if(n < 0){
+      logEvent("Reverse: N cannot be negative");
+      return false;
+    }
+    if(n === 0 || n > queue.length){
+      n = queue.length;
+    }
+    // Reverse in place first n elements
+    const firstN = queue.slice(0,n).reverse();
+    queue = firstN.concat(queue.slice(n));
+    saveHistory();
+    logEvent(`Reverse: First ${n} elements reversed`);
+    updateUI();
+    return true;
+  }
+
+  // Count elements strictly equal to a value in original queue
+  function countEqualTo(value){
+    value = String(value);
+    let count = 0;
+    for(let el of queue){
+      if(el === value){
+        count++;
+      }
+    }
+    logEvent(`Count Equal: Found ${count} element(s) strictly equal to "${value}"`);
+    return count;
+  }
+
+  // Filter Queue by JS condition on elements ("x" variable)
+  // Returns array of indices kept in filterIndices, else empty array disables filter
+  function filterQueue(conditionStr){
+    if(conditionStr.trim()===''){
+      logEvent("Filter: Empty condition, filter cleared");
+      filterActive = false;
+      filterIndices = [];
+      filterCondition = '';
+      updateUI();
+      return;
+    }
+    try{
+      // Create function dynamically with 'x' as parameter
+      const f = new Function('x', 'return ' + conditionStr);
+      // Find indices where condition is true
+      const newFilter = [];
+      for(let i=0; i<queue.length; i++){
+        // run condition on the element (strings only)
+        let res = f(queue[i]);
+        if(res) newFilter.push(i);
+      }
+      filterActive = true;
+      filterIndices = newFilter;
+      filterCondition = conditionStr;
+      logEvent(`Filter: Condition applied, ${newFilter.length} elements kept`);
+    } catch(e) {
+      logEvent(`Filter: Error in condition: ${e.message}`);
+      return;
+    }
+    updateUI();
+  }
+  
+  function resetFilter() {
+    if(filterActive){
+      filterActive = false;
+      filterIndices = [];
+      filterCondition = '';
+      logEvent("Filter: Filter reset to show all elements");
+      updateUI();
+    } else {
+      logEvent("Filter: No active filter to reset");
+    }
+  }
+
+  // Map queue elements (transform) by JS expression on each element x
+  function mapQueue(exprStr){
+    if(exprStr.trim() === ''){
+      logEvent("Map: Empty expression, map cleared");
+      mapActive = false;
+      mapFunction = null;
+      mapFunctionStr = '';
+      updateUI();
+      return;
+    }
+    try{
+      // Create function of x returning expression
+      const f = new Function('x', 'return ' + exprStr);
+      // Test once to catch possible error
+      for(let x of queue){
+        f(x);
+      }
+      mapActive = true;
+      mapFunctionStr = exprStr;
+      mapFunction = f;
+      logEvent("Map: Mapping function applied to queue");
+    } catch(e){
+      logEvent("Map: Error in map expression: " + e.message);
+      return;
+    }
+    updateUI();
+  }
+
+  function resetMap() {
+    if(mapActive){
+      mapActive = false;
+      mapFunction = null;
+      mapFunctionStr = '';
+      logEvent("Map: Mapping reset to identity");
+      updateUI();
+    } else {
+      logEvent("Map: No active map to reset");
+    }
+  }
+
+  // Event listeners
+  btnEnqueue.addEventListener('click', () => {
+    const val = elEnqueue.value.trim();
+    if(enqueue(val)){
+      elEnqueue.value = '';
+    }
+  });
+
+  btnDequeue.addEventListener('click', () => {
+    dequeue();
+  });
+
+  btnPeek.addEventListener('click', () => {
+    peek();
+  });
+
+  btnClear.addEventListener('click', () => {
+    if(confirm("Are you sure you want to clear the queue?")){
+      clearQueue();
+    }
+  });
+
+  btnBulk.addEventListener('click', () => {
+    const text = elBulk.value;
+    // Split by comma or newline
+    const parts = text.split(/[\n,]+/);
+    enqueueMultiple(parts);
+    elBulk.value = '';
+  });
+
+  btnEnqAt.addEventListener('click', () => {
+    const pos = Number(elEnqPos.value);
+    const val = elEnqPosVal.value.trim();
+    if(enqueueAtPosition(pos, val)){
+      elEnqPos.value = '';
+      elEnqPosVal.value = '';
+    }
+  });
+
+  btnRemAt.addEventListener('click', () => {
+    const pos = Number(elRemPos.value);
+    if(removeAtPosition(pos)){
+      elRemPos.value = '';
+    }
+  });
+
+  btnFind.addEventListener('click', () => {
+    const val = elFindVal.value.trim();
+    if(val === ''){
+      logEvent("Find: No value provided");
+      return;
+    }
+    findAllIndexes(val);
+  });
+
+  btnRotate.addEventListener('click', () => {
+    const n = Number(elRotateCount.value);
+    rotateQueue(n);
+    elRotateCount.value = '';
+  });
+
+  btnReverse.addEventListener('click', () => {
+    let n = Number(elReverseLen.value);
+    if(isNaN(n)) n = 0;
+    reverseFirstN(n);
+    elReverseLen.value = '';
+  });
+
+  btnSetMax.addEventListener('click', () => {
+    let n = Number(elMaxSize.value);
+    if(isNaN(n) || n < 0){
+      logEvent("Max Size: Invalid max size");
+      return;
+    }
+    maxSize = n;
+    logEvent(`Max Size: Queue max size set to ${maxSize === 0 ? "unlimited" : maxSize}`);
+  });
+
+  btnCountEqual.addEventListener('click', () => {
+    const val = elCountEqualVal.value.trim();
+    if(val === ''){
+      logEvent("Count Equal: No value provided");
+      return;
+    }
+    countEqualTo(val);
+  });
+
+  btnFilter.addEventListener('click', () => {
+    const cond = elFilterCond.value.trim();
+    filterQueue(cond);
+  });
+
+  btnResetFilter.addEventListener('click', () => {
+    resetFilter();
+  });
+
+  btnMap.addEventListener('click', () => {
+    const expr = elMapFunc.value.trim();
+    mapQueue(expr);
+  });
+
+  btnResetMap.addEventListener('click', () => {
+    resetMap();
+  });
+
+  btnHistBack.addEventListener('click', () => {
+    undo();
+  });
+
+  btnHistFwd.addEventListener('click', () => {
+    redo();
+  });
+
+  // Initialization
+  // save empty queue state
+  saveHistory();
+  updateUI();
+  logEvent("Queue Explorer loaded");
+
+  // Extra: Allow Enter key press on single element enqueue to enqueue immediately
+  elEnqueue.addEventListener('keypress', e => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      btnEnqueue.click();
+    }
+  });
+  // Same for enqueue at position value input (on Enter enqueue there)
+  elEnqPosVal.addEventListener('keypress', e => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      btnEnqAt.click();
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>

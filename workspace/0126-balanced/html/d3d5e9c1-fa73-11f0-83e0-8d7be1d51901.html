@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Directed Graph - Interactive Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { margin:0; font-family: Arial, sans-serif; display:flex; height:100vh; }
+    #sidebar { width:320px; background:#f4f6f8; padding:12px; box-sizing:border-box; border-right:1px solid #ddd; overflow:auto; }
+    #canvasWrap { flex:1; position:relative; }
+    svg { width:100%; height:100%; background: linear-gradient(#fff,#fbfdff); cursor:crosshair; display:block; }
+    h2 { margin:6px 0 10px; font-size:16px; }
+    .btn { display:inline-block; margin:6px 6px 6px 0; padding:6px 10px; border-radius:4px; background:#1976d2; color:white; cursor:pointer; user-select:none; font-size:13px; }
+    .btn.secondary { background:#e0e0e0; color:#222; }
+    .btn.warn { background:#c62828; }
+    .row { margin-bottom:8px; }
+    label { font-size:13px; display:block; margin-bottom:4px; color:#333; }
+    #adjList { white-space:pre-wrap; background:white; padding:8px; border-radius:4px; border:1px solid #ddd; max-height:160px; overflow:auto; font-family:monospace; font-size:13px; }
+    .info { font-size:13px; color:#444; margin-top:10px; }
+    .controls { display:flex; flex-wrap:wrap; gap:6px; }
+    .small { padding:4px 8px; font-size:13px; }
+    #speed { width:120px; }
+    .hint { font-size:12px; color:#666; margin-top:8px; }
+    #message { margin-top:8px; font-size:13px; color:#1b5e20; }
+    #legend { font-size:13px; margin-top:8px; }
+    .dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>Directed Graph — Interactive Demo</h2>
+    <div class="row controls">
+      <div class="btn" id="btnAddNode">Add Node (Click canvas)</div>
+      <div class="btn secondary" id="btnAddEdge">Add Edge</div>
+      <div class="btn secondary" id="btnDelete">Delete Selected</div>
+      <div class="btn" id="btnClear">Clear Graph</div>
+    </div>
+
+    <div class="row">
+      <label>Traversal / Algorithms</label>
+      <div class="controls">
+        <div class="btn small secondary" id="btnBFS">BFS</div>
+        <div class="btn small secondary" id="btnDFS">DFS</div>
+        <div class="btn small secondary" id="btnTopSort">Topological Sort</div>
+        <div class="btn small secondary" id="btnCycle">Detect Cycle</div>
+      </div>
+      <div class="controls" style="margin-top:6px">
+        <div class="btn small secondary" id="btnShortest">Shortest Path (unweighted)</div>
+      </div>
+      <div class="hint">Click the button, then click node(s) as prompted.</div>
+      <label style="margin-top:8px">Animation speed</label>
+      <input id="speed" type="range" min="100" max="1200" value="450">
+    </div>
+
+    <div class="row">
+      <label>Adjacency List</label>
+      <div id="adjList">(empty)</div>
+      <div class="hint">Edges are directed: from -> to</div>
+    </div>
+
+    <div class="row">
+      <label>Export / Import</label>
+      <div class="controls">
+        <div class="btn small" id="btnExport">Export JSON</div>
+        <div class="btn small secondary" id="btnImport">Import JSON</div>
+      </div>
+      <textarea id="jsonArea" placeholder='Paste exported JSON here to import' style="width:100%;height:80px;margin-top:8px;font-family:monospace;"></textarea>
+    </div>
+
+    <div id="legend">
+      <div><span class="dot" style="background:#e3f2fd;border:1px solid #90caf9"></span> Node</div>
+      <div style="margin-top:6px"><span class="dot" style="background:#ffeb3b"></span> Frontier</div>
+      <div style="margin-top:6px"><span class="dot" style="background:#66bb6a"></span> Visited</div>
+      <div class="info" id="message"></div>
+    </div>
+    <div class="hint">Controls: click empty canvas to add a node (or press Add Node then click). Drag a node to move it. Use "Add Edge" then click source then destination to add a directed edge. Select a node by clicking it.</div>
+  </div>
+
+  <div id="canvasWrap">
+    <svg id="svg"></svg>
+  </div>
+
+<script>
+/* Directed Graph Interactive Demo - single-file
+   Features:
+   - Create nodes by clicking canvas (incremental IDs)
+   - Drag nodes to reposition
+   - Add directed edges using "Add Edge" (click source then dest)
+   - Select nodes, delete selected
+   - Run BFS, DFS (animated), Topological Sort, Cycle detect
+   - Shortest path (unweighted) between two clicked nodes
+   - Export / import as JSON
+*/
+
+(function(){
+  const svg = document.getElementById('svg');
+  const btnAddEdge = document.getElementById('btnAddEdge');
+  const btnAddNode = document.getElementById('btnAddNode');
+  const btnDelete = document.getElementById('btnDelete');
+  const btnClear = document.getElementById('btnClear');
+  const adjListEl = document.getElementById('adjList');
+  const messageEl = document.getElementById('message');
+  const btnBFS = document.getElementById('btnBFS');
+  const btnDFS = document.getElementById('btnDFS');
+  const btnTopSort = document.getElementById('btnTopSort');
+  const btnCycle = document.getElementById('btnCycle');
+  const btnShortest = document.getElementById('btnShortest');
+  const btnExport = document.getElementById('btnExport');
+  const btnImport = document.getElementById('btnImport');
+  const jsonArea = document.getElementById('jsonArea');
+  const speedInput = document.getElementById('speed');
+
+  let nodes = []; // {id, x, y}
+  let edges = []; // {from: id, to: id}
+  let nextNodeId = 1;
+
+  let state = {
+    mode: 'normal', // 'addingEdge', 'choosingBFS', 'choosingDFS', 'choosingSPStart', 'choosingSPEnd'
+    tempEdgeSource: null,
+    selectedNodeId: null,
+    dragging: null,
+    dragOffset: null,
+    animating: false
+  };
+
+  // SVG setup: defs for arrowhead
+  const defs = svgns('defs');
+  const marker = svgns('marker');
+  marker.setAttribute('id','arrowhead');
+  marker.setAttribute('markerWidth','10');
+  marker.setAttribute('markerHeight','7');
+  marker.setAttribute('refX','10');
+  marker.setAttribute('refY','3.5');
+  marker.setAttribute('orient','auto');
+  marker.setAttribute('markerUnits','strokeWidth');
+  const path = svgns('path');
+  path.setAttribute('d','M0,0 L10,3.5 L0,7 Z');
+  path.setAttribute('fill','#555');
+  marker.appendChild(path);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Layer groups
+  const edgesGroup = svgns('g'); svg.appendChild(edgesGroup);
+  const edgeLabelsGroup = svgns('g'); svg.appendChild(edgeLabelsGroup);
+  const nodesGroup = svgns('g'); svg.appendChild(nodesGroup);
+
+  // Add event listeners
+  svg.addEventListener('click', svgClick);
+  svg.addEventListener('mousedown', svgMouseDown);
+  svg.addEventListener('mousemove', svgMouseMove);
+  svg.addEventListener('mouseup', svgMouseUp);
+  window.addEventListener('resize', render);
+
+  document.getElementById('btnAddNode').addEventListener('click', ()=> {
+    notify('Click on canvas to add a node.');
+    state.mode='addingNode';
+  });
+  btnAddEdge.addEventListener('click', ()=> {
+    if (state.mode==='addingEdge') {
+      cancelEdgeMode();
+    } else {
+      state.mode='addingEdge';
+      state.tempEdgeSource = null;
+      notify('Add Edge: click source node, then destination node.');
+      btnAddEdge.classList.add('active');
+    }
+  });
+  btnDelete.addEventListener('click', deleteSelected);
+  btnClear.addEventListener('click', ()=> {
+    if (!confirm('Clear entire graph?')) return;
+    nodes=[]; edges=[]; nextNodeId=1; state.selectedNodeId=null; update();
+  });
+
+  btnBFS.addEventListener('click', ()=> {
+    state.mode='choosingBFS';
+    notify('BFS: click start node.');
+  });
+  btnDFS.addEventListener('click', ()=> {
+    state.mode='choosingDFS';
+    notify('DFS: click start node.');
+  });
+  btnTopSort.addEventListener('click', ()=> {
+    runTopologicalSort();
+  });
+  btnCycle.addEventListener('click', ()=> {
+    const cycle = detectCycle();
+    if (cycle.found) notify('Cycle detected! Example cycle: ' + cycle.cycle.join(' -> '));
+    else notify('No cycle detected (DAG).');
+  });
+  btnShortest.addEventListener('click', ()=> {
+    state.mode='choosingSPStart';
+    notify('Shortest Path: click start node.');
+  });
+
+  btnExport.addEventListener('click', ()=> {
+    const data = { nodes, edges };
+    const json = JSON.stringify(data, null, 2);
+    jsonArea.value = json;
+    notify('Exported JSON to text area.');
+  });
+  btnImport.addEventListener('click', ()=> {
+    try {
+      const data = JSON.parse(jsonArea.value);
+      if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) throw 'Invalid format';
+      nodes = data.nodes.map(n=>({id:n.id,x: n.x, y: n.y}));
+      edges = data.edges.map(e=>({from:e.from, to:e.to}));
+      nextNodeId = nodes.reduce((m,n)=>Math.max(m,n.id),0)+1;
+      state.selectedNodeId=null;
+      update();
+      notify('Imported graph.');
+    } catch(err) {
+      alert('Import error: ' + err);
+    }
+  });
+
+  // Utilities
+  function svgns(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+
+  function notify(msg, color='#165c2d'){
+    messageEl.style.color = color;
+    messageEl.textContent = msg;
+  }
+
+  function cancelEdgeMode(){
+    state.mode='normal';
+    state.tempEdgeSource=null;
+    btnAddEdge.classList.remove('active');
+    notify('Edge creation cancelled.', '#666');
+  }
+
+  // SVG interactions
+  function svgClick(e){
+    // only respond to primary button
+    if (e.button !== 0) return;
+    const pt = getSvgPoint(e);
+    if (state.mode==='addingNode'){
+      addNode(pt.x, pt.y);
+      state.mode='normal';
+      notify('Node added.');
+      return;
+    }
+    // hit test on node
+    const targetId = hitTestNode(e);
+    if (state.mode==='addingEdge'){
+      if (targetId==null) { notify('Click a node to add an edge.'); return; }
+      if (state.tempEdgeSource==null){
+        state.tempEdgeSource = targetId;
+        notify('Source node selected (ID '+targetId+'). Now click destination node.');
+      } else {
+        const src = state.tempEdgeSource, dst = targetId;
+        if (src===dst) { notify('Cannot add self-loop in this demo.'); state.tempEdgeSource=null; return; }
+        addEdge(src,dst);
+        state.tempEdgeSource=null;
+        notify('Edge added ' + src + ' -> ' + dst);
+      }
+      return;
+    }
+
+    if (state.mode==='choosingBFS'){
+      if (targetId==null) { notify('Click a node to start BFS.'); return; }
+      runBFS(targetId);
+      state.mode='normal';
+      return;
+    }
+    if (state.mode==='choosingDFS'){
+      if (targetId==null) { notify('Click a node to start DFS.'); return; }
+      runDFS(targetId);
+      state.mode='normal';
+      return;
+    }
+    if (state.mode==='choosingSPStart'){
+      if (targetId==null) { notify('Click start node.'); return; }
+      state.spStart = targetId;
+      state.mode='choosingSPEnd';
+      notify('Start selected: ' + targetId + '. Now click destination node.');
+      return;
+    }
+    if (state.mode==='choosingSPEnd'){
+      if (targetId==null) { notify('Click destination node.'); return; }
+      const start = state.spStart, end = targetId;
+      state.mode='normal';
+      runShortestPath(start,end);
+      return;
+    }
+
+    // Normal click -> select node if clicked, or deselect
+    if (targetId!=null){
+      state.selectedNodeId = targetId;
+      notify('Selected node ' + targetId, '#0b5394');
+      update();
+    } else {
+      state.selectedNodeId = null;
+      update();
+    }
+  }
+
+  function svgMouseDown(e){
+    if (e.button !== 0) return;
+    const nid = hitTestNode(e);
+    if (nid!=null){
+      // prepare dragging
+      const pt = getSvgPoint(e);
+      const n = nodes.find(x=>x.id===nid);
+      state.dragging = nid;
+      state.dragOffset = { dx: pt.x - n.x, dy: pt.y - n.y };
+    }
+  }
+  function svgMouseMove(e){
+    if (state.dragging!=null){
+      const pt = getSvgPoint(e);
+      const n = nodes.find(x=>x.id===state.dragging);
+      n.x = pt.x - state.dragOffset.dx;
+      n.y = pt.y - state.dragOffset.dy;
+      update();
+    }
+  }
+  function svgMouseUp(e){
+    if (state.dragging!=null){
+      state.dragging = null;
+      state.dragOffset = null;
+    }
+  }
+
+  function getSvgPoint(e){
+    const rect = svg.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    return { x, y };
+  }
+
+  function hitTestNode(e){
+    // check if clicking on a node circle element
+    // we'll use elementFromPoint
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!el) return null;
+    if (el.classList.contains('nodeCircle') || el.classList.contains('nodeLabel')){
+      const nid = parseInt(el.getAttribute('data-id'));
+      return nid;
+    }
+    return null;
+  }
+
+  // Graph manipulation
+  function addNode(x,y){
+    const id = nextNodeId++;
+    nodes.push({ id, x, y });
+    update();
+  }
+  function addEdge(from,to){
+    // avoid duplicates
+    if (edges.some(e=>e.from===from && e.to===to)) return;
+    edges.push({from,to});
+    update();
+  }
+  function deleteSelected(){
+    if (!state.selectedNodeId) { notify('No node selected to delete.'); return; }
+    const id = state.selectedNodeId;
+    nodes = nodes.filter(n=>n.id!==id);
+    edges = edges.filter(e=>e.from!==id && e.to!==id);
+    state.selectedNodeId=null;
+    update();
+    notify('Deleted node ' + id);
+  }
+
+  // Rendering
+  function update(){
+    renderEdges();
+    renderNodes();
+    renderAdjList();
+    // update button states
+    if (state.mode!=='addingEdge') btnAddEdge.classList.remove('active');
+  }
+
+  function render(){
+    update();
+  }
+
+  function renderNodes(){
+    // clear
+    while (nodesGroup.firstChild) nodesGroup.removeChild(nodesGroup.firstChild);
+    for (const n of nodes){
+      const g = svgns('g');
+      const circle = svgns('circle');
+      circle.setAttribute('cx',n.x);
+      circle.setAttribute('cy',n.y);
+      circle.setAttribute('r',20);
+      circle.setAttribute('fill', '#e3f2fd');
+      circle.setAttribute('stroke', '#1976d2');
+      circle.setAttribute('stroke-width', '1.6');
+      circle.classList.add('nodeCircle');
+      circle.setAttribute('data-id', n.id);
+      if (state.selectedNodeId === n.id){
+        circle.setAttribute('stroke-width', '3');
+        circle.setAttribute('stroke', '#0b5394');
+      }
+      g.appendChild(circle);
+      const label = svgns('text');
+      label.setAttribute('x', n.x);
+      label.setAttribute('y', n.y+5);
+      label.setAttribute('text-anchor','middle');
+      label.setAttribute('font-size','13px');
+      label.setAttribute('fill','#0b3a66');
+      label.classList.add('nodeLabel');
+      label.setAttribute('data-id', n.id);
+      label.textContent = n.id;
+      g.appendChild(label);
+      nodesGroup.appendChild(g);
+    }
+  }
+
+  function renderEdges(highlightedPath){
+    while (edgesGroup.firstChild) edgesGroup.removeChild(edgesGroup.firstChild);
+    while (edgeLabelsGroup.firstChild) edgeLabelsGroup.removeChild(edgeLabelsGroup.firstChild);
+    for (const e of edges){
+      const from = nodes.find(n=>n.id===e.from);
+      const to = nodes.find(n=>n.id===e.to);
+      if (!from || !to) continue;
+      // compute direction line endpoints with circle radius offset
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const dist = Math.hypot(dx,dy);
+      const r = 20;
+      const ex = (dx/dist) * r;
+      const ey = (dy/dist) * r;
+      const sx = from.x + ex;
+      const sy = from.y + ey;
+      const tx = to.x - ex;
+      const ty = to.y - ey;
+
+      // For visual variety, compute a small perpendicular offset if bidirectional or multiple edges could overlap.
+      // For simplicity we won't compute unique offsets; a small fixed offset for now:
+      const ux = -dy/dist;
+      const uy = dx/dist;
+      // if there's also opposite edge, offset a bit
+      const opposite = edges.some(o=>o.from===e.to && o.to===e.from);
+      const offset = opposite ? 8 : 0;
+      const sx2 = sx + ux*offset;
+      const sy2 = sy + uy*offset;
+      const tx2 = tx + ux*offset;
+      const ty2 = ty + uy*offset;
+
+      const line = svgns('line');
+      line.setAttribute('x1', sx2);
+      line.setAttribute('y1', sy2);
+      line.setAttribute('x2', tx2);
+      line.setAttribute('y2', ty2);
+      line.setAttribute('stroke','#555');
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('marker-end','url(#arrowhead)');
+      edgesGroup.appendChild(line);
+
+      // if edge is part of a highlighted path, color it
+      if (highlightedPath && highlightedPath.some(p => p.from===e.from && p.to===e.to)){
+        line.setAttribute('stroke', '#f57c00');
+        line.setAttribute('stroke-width','3.2');
+      }
+
+      // optional label at midpoint
+      // const midx=(sx2+tx2)/2, midy=(sy2+ty2)/2;
+      // const t = svgns('text'); t.setAttribute('x',midx); t.setAttribute('y', midy-6); t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','11'); t.setAttribute('fill','#333'); t.textContent=''; edgeLabelsGroup.appendChild(t);
+    }
+  }
+
+  function renderAdjList(){
+    if (nodes.length===0){
+      adjListEl.textContent='(empty)';
+      return;
+    }
+    const map = new Map();
+    for (const n of nodes) map.set(n.id, []);
+    for (const e of edges) {
+      if (map.has(e.from)) map.get(e.from).push(e.to);
+    }
+    let s='';
+    for (const n of nodes){
+      const arr = map.get(n.id) || [];
+      s += n.id + ' -> [' + arr.join(', ') + ']\n';
+    }
+    adjListEl.textContent = s.trim();
+  }
+
+  // Traversals / Algorithms
+
+  function runBFS(startId){
+    if (state.animating) { notify('Animation in progress.'); return; }
+    const neighbors = buildAdj();
+    const visited = new Set();
+    const q = [];
+    q.push(startId);
+    visited.add(startId);
+    const order = [];
+    while(q.length){
+      const v = q.shift();
+      order.push(v);
+      const nbrs = neighbors.get(v) || [];
+      for (const w of nbrs){
+        if (!visited.has(w)){
+          visited.add(w);
+          q.push(w);
+        }
+      }
+    }
+    if (order.length===0) { notify('Empty graph'); return; }
+    animateVisit(order, 'BFS order: ' + order.join(' -> '));
+  }
+
+  function runDFS(startId){
+    if (state.animating) { notify('Animation in progress.'); return; }
+    const neighbors = buildAdj();
+    const visited = new Set();
+    const order = [];
+    function dfs(v){
+      visited.add(v);
+      order.push(v);
+      const nbrs = neighbors.get(v) || [];
+      for (const w of nbrs){
+        if (!visited.has(w)) dfs(w);
+      }
+    }
+    dfs(startId);
+    animateVisit(order, 'DFS order: ' + order.join(' -> '));
+  }
+
+  function buildAdj(){
+    const m = new Map();
+    for (const n of nodes) m.set(n.id, []);
+    for (const e of edges){
+      if (!m.has(e.from)) m.set(e.from, []);
+      m.get(e.from).push(e.to);
+    }
+    return m;
+  }
+
+  function animateVisit(order, finalMsg){
+    state.animating = true;
+    const speed = parseInt(speedInput.value,10);
+    // color sequence: frontier -> visited
+    const nodeElements = {}; // id -> circle element
+    // find circle nodes in SVG
+    nodesGroup.querySelectorAll('circle.nodeCircle').forEach(c=>{
+      nodeElements[c.getAttribute('data-id')] = c;
+      c.setAttribute('fill','#e3f2fd');
+      c.setAttribute('stroke','#1976d2');
+      c.setAttribute('stroke-width','1.6');
+    });
+    let i = 0;
+    notify('Animating...');
+    const interval = setInterval(()=>{
+      if (i>0){
+        const idVisited = order[i-1];
+        const cPrev = nodeElements[idVisited];
+        if (cPrev) cPrev.setAttribute('fill','#66bb6a'); // visited green
+      }
+      if (i<order.length){
+        const id = order[i];
+        const c = nodeElements[id];
+        if (c) c.setAttribute('fill','#ffeb3b'); // frontier yellow
+      } else {
+        clearInterval(interval);
+        state.animating=false;
+        notify(finalMsg);
+        return;
+      }
+      i++;
+    }, Math.max(80, speed/4));
+  }
+
+  function runTopologicalSort(){
+    const nmap = new Map(); // indegree and neighbors
+    for (const n of nodes) nmap.set(n.id, { indeg:0, nbrs:[] });
+    for (const e of edges){
+      if (!nmap.has(e.from) || !nmap.has(e.to)) continue;
+      nmap.get(e.from).nbrs.push(e.to);
+      nmap.get(e.to).indeg++;
+    }
+    const q = [];
+    for (const [id, obj] of nmap.entries()){
+      if (obj.indeg===0) q.push(id);
+    }
+    const order = [];
+    while(q.length){
+      const v = q.shift();
+      order.push(v);
+      for (const w of nmap.get(v).nbrs){
+        nmap.get(w).indeg--;
+        if (nmap.get(w).indeg===0) q.push(w);
+      }
+    }
+    if (order.length !== nodes.length){
+      notify('Graph has a cycle; topological sort not possible.');
+    } else {
+      notify('Topological order: ' + order.join(' -> '));
+      // highlight path edges between successive in order as demonstration
+      const pathEdges = [];
+      for (let i=0;i<order.length-1;i++){
+        pathEdges.push({ from: order[i], to: order[i+1] });
+      }
+      renderEdges(pathEdges);
+      setTimeout(update, 2000);
+    }
+  }
+
+  function detectCycle(){
+    const adj = buildAdj();
+    const temp = new Set();
+    const perm = new Set();
+    let found = false;
+    let cyclePath = [];
+
+    function dfs(v, stack){
+      if (found) return;
+      if (temp.has(v)){
+        // found cycle - slice stack
+        const idx = stack.indexOf(v);
+        cyclePath = stack.slice(idx).concat(v);
+        found = true; return;
+      }
+      if (perm.has(v)) return;
+      temp.add(v);
+      stack.push(v);
+      const nbrs = adj.get(v) || [];
+      for (const w of nbrs){
+        dfs(w, stack);
+        if (found) return;
+      }
+      stack.pop();
+      temp.delete(v);
+      perm.add(v);
+    }
+    for (const n of nodes){
+      if (!perm.has(n.id)) dfs(n.id, []);
+      if (found) break;
+    }
+    return { found, cycle: cyclePath };
+  }
+
+  function runShortestPath(start, end){
+    if (state.animating) { notify('Animation in progress.'); return; }
+    const adj = buildAdj();
+    const q = [start];
+    const prev = new Map();
+    prev.set(start, null);
+    let found=false;
+    while(q.length){
+      const v = q.shift();
+      if (v===end){ found=true; break; }
+      const nbrs = adj.get(v) || [];
+      for (const w of nbrs){
+        if (!prev.has(w)){
+          prev.set(w, v);
+          q.push(w);
+        }
+      }
+    }
+    if (!found){
+      notify('No path from '+ start + ' to ' + end);
+      return;
+    }
+    const path = [];
+    let cur = end;
+    while(cur!=null){
+      path.push(cur);
+      cur = prev.get(cur);
+    }
+    path.reverse();
+    notify('Shortest path: ' + path.join(' -> '));
+    // highlight edges along path
+    const pathEdges = [];
+    for (let i=0;i<path.length-1;i++) pathEdges.push({ from: path[i], to: path[i+1] });
+    renderEdges(pathEdges);
+    // also animate nodes visited order (BFS discovered order)
+    animateVisit(path, 'Reached: ' + path.join(' -> '));
+  }
+
+  // Initialize with a sample graph for quick demo
+  function initDemo(){
+    nodes = [
+      {id:1,x:120,y:80},
+      {id:2,x:300,y:60},
+      {id:3,x:480,y:100},
+      {id:4,x:200,y:220},
+      {id:5,x:380,y:240}
+    ];
+    edges = [
+      {from:1,to:2},{from:2,to:3},{from:1,to:4},{from:4,to:2},{from:2,to:5},{from:5,to:3}
+    ];
+    nextNodeId = 6;
+    update();
+    notify('Sample graph loaded. Try BFS/DFS or Add Edge.');
+  }
+
+  // start
+  initDemo();
+
+})();
+</script>
+</body>
+</html>

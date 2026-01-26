@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Logistic Regression</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/numeric@1.2.6/numeric.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .panel { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        canvas { border: 1px solid #000; }
+        button, input, select { margin: 5px; }
+        .data-point { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Interactive Logistic Regression</h1>
+    
+    <div class="container">
+        <div class="panel" style="flex: 1;">
+            <h2>Data Configuration</h2>
+            <div>
+                <button id="addRandomData">Add Random Data</button>
+                <button id="clearData">Clear Data</button>
+                <button id="toggleClass">Toggle Class (Click Mode)</button>
+                <div>
+                    Points per class: <input type="number" id="pointsPerClass" value="20" min="1" max="100">
+                    Noise level: <input type="number" id="noiseLevel" value="0.2" min="0" max="1" step="0.05">
+                </div>
+            </div>
+            
+            <h2>Model Parameters</h2>
+            <div>
+                Learning rate: <input type="number" id="learningRate" value="0.1" min="0.001" max="1" step="0.01">
+                <button id="trainOneStep">Train One Step</button>
+                <button id="trainMultiple">Train 100 Steps</button>
+                <button id="resetWeights">Reset Weights</button>
+            </div>
+            
+            <h2>Decision Boundary</h2>
+            <div>
+                Threshold: <input type="range" id="threshold" min="0" max="1" value="0.5" step="0.01">
+                <span id="thresholdValue">0.5</span>
+                <button id="toggleBoundary">Show/Hide Boundary</button>
+            </div>
+            
+            <h2>Current Weights</h2>
+            <div id="weightsDisplay">
+                w0: <span id="w0">0.00</span>,
+                w1: <span id="w1">0.00</span>,
+                w2: <span id="w2">0.00</span>
+            </div>
+            
+            <h2>Model Evaluation</h2>
+            <div id="metrics">
+                Accuracy: <span id="accuracy">0%</span><br>
+                Loss: <span id="loss">-</span><br>
+                Precision: <span id="precision">-</span><br>
+                Recall: <span id="recall">-</span>
+            </div>
+        </div>
+        
+        <div class="panel" style="flex: 2;">
+            <canvas id="scatterPlot" width="600" height="500"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let dataPoints = [];
+        let currentClass = 0;
+        let weights = [0, 0, 0]; // w0 (bias), w1, w2
+        let showBoundary = true;
+        let scatterChart;
+        let boundaryLine = null;
+        
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('scatterPlot').getContext('2d');
+            scatterChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Class 0',
+                            data: [],
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            pointRadius: 6
+                        },
+                        {
+                            label: 'Class 1',
+                            data: [],
+                            backgroundColor: 'rgba(150, 150, 150, 0.7)',
+                            pointRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: false,
+                    scales: {
+                        x: { min: -5, max: 5 },
+                        y: { min: -5, max: 5 }
+                    },
+                    onClick: (e) => addDataPoint(e),
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const point = dataPoints.find(p => 
+                                        Math.abs(p.x - context.parsed.x) < 0.01 && 
+                                        Math.abs(p.y - context.parsed.y) < 0.01
+                                    );
+                                    return `Class: ${point.class}, X: ${point.x.toFixed(2)}, Y: ${point.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Add data point on click
+        function addDataPoint(event) {
+            if (!document.getElementById('toggleClass').classList.contains('active')) return;
+            
+            const rect = scatterChart.canvas.getBoundingClientRect();
+            const x = (event.clientX - rect.left) / rect.width * 10 - 5;
+            const y = 5 - (event.clientY - rect.top) / rect.height * 10;
+            
+            dataPoints.push({ x, y, class: currentClass });
+            updateChart();
+            updateMetrics();
+        }
+        
+        // Add random data
+        function addRandomData() {
+            const count = parseInt(document.getElementById('pointsPerClass').value);
+            const noise = parseFloat(document.getElementById('noiseLevel').value);
+            
+            for (let c = 0; c <= 1; c++) {
+                for (let i = 0; i < count; i++) {
+                    let x, y;
+                    if (Math.random() < noise) {
+                        // Noise point
+                        x = (Math.random() * 8) - 4;
+                        y = (Math.random() * 8) - 4;
+                    } else {
+                        // Class-specific distribution
+                        x = (Math.random() * 3) - 1.5 + (c * 2);
+                        y = (Math.random() * 3) - 1.5 + (c * 2);
+                    }
+                    dataPoints.push({ x, y, class: c });
+                }
+            }
+            updateChart();
+            updateMetrics();
+        }
+        
+        // Clear all data
+        function clearData() {
+            dataPoints = [];
+            updateChart();
+            updateMetrics();
+        }
+        
+        // Toggle class for new points
+        function toggleClass() {
+            const btn = document.getElementById('toggleClass');
+            currentClass = 1 - currentClass;
+            btn.classList.toggle('active');
+            btn.textContent = `Add to Class ${currentClass} (Click Mode)`;
+        }
+        
+        // Update chart with current data
+        function updateChart() {
+            scatterChart.data.datasets[0].data = dataPoints
+                .filter(p => p.class === 0)
+                .map(p => ({ x: p.x, y: p.y }));
+                
+            scatterChart.data.datasets[1].data = dataPoints
+                .filter(p => p.class === 1)
+                .map(p => ({ x: p.x, y: p.y }));
+                
+            scatterChart.update();
+            
+            if (showBoundary) {
+                drawDecisionBoundary();
+            } else if (boundaryLine) {
+                boundaryLine.remove();
+                boundaryLine = null;
+            }
+        }
+        
+        // Draw decision boundary
+        function drawDecisionBoundary() {
+            if (boundaryLine) boundaryLine.remove();
+            
+            const threshold = parseFloat(document.getElementById('threshold').value);
+            const ctx = scatterChart.canvas.getContext('2d');
+            
+            // For logistic regression, the decision boundary is w0 + w1*x + w2*y = 0
+            // We'll draw this line across the chart
+            
+            const w0 = weights[0], w1 = weights[1], w2 = weights[2];
+            
+            if (w1 === 0 && w2 === 0) return; // No boundary yet
+            
+            // Find two points on the boundary line
+            let x1 = -5, y1, x2 = 5, y2;
+            
+            if (w2 !== 0) {
+                y1 = (-w0 - w1 * x1) / w2;
+                y2 = (-w0 - w1 * x2) / w2;
+            } else {
+                // Vertical line
+                x1 = x2 = -w0 / w1;
+                y1 = -5;
+                y2 = 5;
+            }
+            
+            // Convert to canvas coordinates
+            const rect = scatterChart.canvas.getBoundingClientRect();
+            const scaleX = rect.width / 10;
+            const scaleY = rect.height / 10;
+            
+            const canvasX1 = (x1 + 5) * scaleX;
+            const canvasY1 = (5 - y1) * scaleY;
+            const canvasX2 = (x2 + 5) * scaleX;
+            const canvasY2 = (5 - y2) * scaleY;
+            
+            // Draw the line
+            ctx.beginPath();
+            ctx.moveTo(canvasX1, canvasY1);
+            ctx.lineTo(canvasX2, canvasY2);
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            boundaryLine = { remove: () => {
+                scatterChart.update(); // Forces redraw without the line
+            }};
+        }
+        
+        // Sigmoid function
+        function sigmoid(z) {
+            return 1 / (1 + Math.exp(-z));
+        }
+        
+        // Compute predictions for all points
+        function predictAll() {
+            return dataPoints.map(point => {
+                const z = weights[0] + weights[1] * point.x + weights[2] * point.y;
+                return sigmoid(z);
+            });
+        }
+        
+        // Train one step of gradient descent
+        function trainOneStep() {
+            if (dataPoints.length === 0) return;
+            
+            const learningRate = parseFloat(document.getElementById('learningRate').value);
+            const predictions = predictAll();
+            
+            // Initialize gradients
+            let dw0 = 0, dw1 = 0, dw2 = 0;
+            
+            // Compute gradients
+            for (let i = 0; i < dataPoints.length; i++) {
+                const point = dataPoints[i];
+                const error = predictions[i] - point.class;
+                
+                dw0 += error;
+                dw1 += error * point.x;
+                dw2 += error * point.y;
+            }
+            
+            // Update weights
+            weights[0] -= learningRate * dw0 / dataPoints.length;
+            weights[1] -= learningRate * dw1 / dataPoints.length;
+            weights[2] -= learningRate * dw2 / dataPoints.length;
+            
+            updateWeightsDisplay();
+            updateChart();
+            updateMetrics();
+        }
+        
+        // Train multiple steps
+        function trainMultiple() {
+            const steps = 100;
+            for (let i = 0; i < steps; i++) {
+                trainOneStep();
+            }
+        }
+        
+        // Reset weights to zero
+        function resetWeights() {
+            weights = [0, 0, 0];
+            updateWeightsDisplay();
+            updateChart();
+            updateMetrics();
+        }
+        
+        // Toggle decision boundary visibility
+        function toggleBoundary() {
+            showBoundary = !showBoundary;
+            updateChart();
+        }
+        
+        // Update weights display
+        function updateWeightsDisplay() {
+            document.getElementById('w0').textContent = weights[0].toFixed(4);
+            document.getElementById('w1').textContent = weights[1].toFixed(4);
+            document.getElementById('w2').textContent = weights[2].toFixed(4);
+        }
+        
+        // Update model metrics
+        function updateMetrics() {
+            if (dataPoints.length === 0) {
+                document.getElementById('accuracy').textContent = '0%';
+                document.getElementById('loss').textContent = '-';
+                document.getElementById('precision').textContent = '-';
+                document.getElementById('recall').textContent = '-';
+                return;
+            }
+            
+            const threshold = parseFloat(document.getElementById('threshold').value);
+            const predictions = predictAll();
+            
+            let truePos = 0, trueNeg = 0, falsePos = 0, falseNeg = 0;
+            
+            for (let i = 0; i < dataPoints.length; i++) {
+                const predictedClass = predictions[i] >= threshold ? 1 : 0;
+                const actualClass = dataPoints[i].class;
+                
+                if (predictedClass === 1 && actualClass === 1) truePos++;
+                if (predictedClass === 0 && actualClass === 0) trueNeg++;
+                if (predictedClass === 1 && actualClass === 0) falsePos++;
+                if (predictedClass === 0 && actualClass === 1) falseNeg++;
+            }
+            
+            const accuracy = (truePos + trueNeg) / dataPoints.length;
+            const precision = truePos / (truePos + falsePos) || 0;
+            const recall = truePos / (truePos + falseNeg) || 0;
+            
+            // Calculate cross-entropy loss
+            let loss = 0;
+            for (let i = 0; i < dataPoints.length; i++) {
+                const y = dataPoints[i].class;
+                const p = predictions[i];
+                loss += y * Math.log(p) + (1 - y) * Math.log(1 - p);
+            }
+            loss = -loss / dataPoints.length;
+            
+            document.getElementById('accuracy').textContent = `${(accuracy * 100).toFixed(1)}%`;
+            document.getElementById('loss').textContent = loss.toFixed(4);
+            document.getElementById('precision').textContent = precision.toFixed(3);
+            document.getElementById('recall').textContent = recall.toFixed(3);
+        }
+        
+        // Event listeners
+        document.getElementById('addRandomData').addEventListener('click', addRandomData);
+        document.getElementById('clearData').addEventListener('click', clearData);
+        document.getElementById('toggleClass').addEventListener('click', toggleClass);
+        document.getElementById('trainOneStep').addEventListener('click', trainOneStep);
+        document.getElementById('trainMultiple').addEventListener('click', trainMultiple);
+        document.getElementById('resetWeights').addEventListener('click', resetWeights);
+        document.getElementById('toggleBoundary').addEventListener('click', toggleBoundary);
+        document.getElementById('threshold').addEventListener('input', function() {
+            document.getElementById('thresholdValue').textContent = this.value;
+            updateChart();
+            updateMetrics();
+        });
+        
+        // Initialize
+        initChart();
+        updateWeightsDisplay();
+        updateMetrics();
+    </script>
+</body>
+</html>

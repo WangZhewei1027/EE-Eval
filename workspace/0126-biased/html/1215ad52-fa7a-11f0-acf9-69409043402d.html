@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Virtual Memory Interactive Simulator</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  input, button, select {
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  hr {
+    margin: 1em 0;
+  }
+  textarea {
+    font-family: monospace, monospace;
+    font-size: 0.9em;
+    width: 100%;
+    height: 12em;
+  }
+  label {
+    display: block;
+    margin-top: 0.5em;
+  }
+  #control-panel > div {
+    margin-bottom: 0.8em;
+  }
+</style>
+</head>
+<body>
+<h1>Virtual Memory Interactive Simulator</h1>
+
+<div id="description">
+  <p>This simulator helps you explore virtual memory concepts by configuring system parameters,
+     loading programs, accessing memory addresses, and observing page tables, physical memory,
+     and page faults. You have full control over page size, virtual memory size, physical memory size,
+     number of processes, and can simulate many memory operations and scenarios.</p>
+</div>
+
+<hr />
+
+<div id="control-panel">
+
+  <div>
+    <b>1. Configure System Parameters:</b><br />
+    <label>
+      Page Size (bytes, power of two, 16 - 1024):
+      <input type="number" id="pageSizeInput" value="64" min="16" max="1024" step="16" />
+    </label>
+    <label>
+      Virtual Address Space Size (KB, 4 - 64):
+      <input type="number" id="virtualMemKBInput" value="16" min="4" max="64" step="4" />
+    </label>
+    <label>
+      Physical Memory Size (KB, 1 - 32):
+      <input type="number" id="physicalMemKBInput" value="8" min="1" max="32" step="1" />
+    </label>
+    <label>
+      Number of Processes (1 - 5):
+      <input type="number" id="processCountInput" value="2" min="1" max="5" step="1" />
+    </label>
+    <button id="applyConfigBtn">Apply Configuration and Initialize</button>
+  </div>
+
+  <hr />
+
+  <div id="process-management" style="display:none;">
+    <b>2. Process Management:</b><br />
+    <label>
+      Select Process:
+      <select id="processSelector"></select>
+    </label>
+    <button id="addProcessBtn">Add New Process</button>
+    <button id="removeProcessBtn">Remove Selected Process</button>
+    <button id="resetAllProcessesBtn">Reset All Processes (Clear Pages/Memory)</button>
+  </div>
+
+  <hr />
+
+  <div id="program-management" style="display:none;">
+    <b>3. Load/Unload Programs into Process Virtual Memory:</b><br />
+    <label>
+      Program Name:
+      <input type="text" id="programNameInput" placeholder="e.g. progA" />
+    </label>
+    <label>
+      Program Size (bytes):
+      <input type="number" id="programSizeInput" min="1" value="256" />
+    </label>
+    <button id="loadProgramBtn">Load Program into Selected Process</button>
+    <button id="unloadProgramBtn">Unload Program from Selected Process</button>
+    <div><small>Programs are mapped to continuous virtual pages starting at 0 (for simplicity)</small></div>
+  </div>
+
+  <hr />
+
+  <div id="memory-access" style="display:none;">
+    <b>4. Memory Access Simulation:</b><br />
+    <label>
+      Access Virtual Address (decimal):
+      <input type="number" id="accessAddressInput" min="0" />
+    </label>
+    <button id="accessMemoryBtn">Access Memory (Read)</button>
+    <label>
+      Access Mode:
+      <select id="accessModeSelect">
+        <option value="read">Read</option>
+        <option value="write">Write</option>
+      </select>
+    </label>
+    <button id="showPageTableBtn">Show Page Table of Selected Process</button>
+    <button id="showPhysicalMemoryBtn">Show Physical Memory Frames</button>
+    <button id="showTLBBtn">Show TLB Entries</button>
+    <div id="memoryAccessResult" style="white-space: pre-wrap; border: 1px solid black; padding: 0.3em; margin-top: 0.5em; height: 8em; overflow-y: auto;"></div>
+  </div>
+  
+  <hr />
+
+  <div id="tlb-controls" style="display:none;">
+    <b>5. TLB (Translation Lookaside Buffer) Controls:</b><br />
+    <label>
+      TLB Size (entries):
+      <input type="number" id="tlbSizeInput" min="1" max="16" value="4" />
+    </label>
+    <button id="applyTLBSizeBtn">Apply TLB Size</button>
+    <button id="clearTLBBtn">Clear TLB</button>
+  </div>
+
+  <hr />
+
+  <div id="stats" style="display:none;">
+    <b>6. Statistics and Logs:</b><br />
+    <div id="statsContent" style="white-space: pre-wrap; border: 1px solid black; padding: 0.4em; height: 10em; overflow-y: auto;"></div>
+    <button id="resetStatsBtn">Reset Statistics</button>
+  </div>
+
+</div>
+
+<hr />
+
+<div id="debug-output" style="white-space: pre-wrap; border: 1px solid black; padding: 0.4em; height: 14em; overflow-y: auto; font-size: 0.85em;"></div>
+
+<script>
+// Virtual Memory Simulator - Data and State
+
+(function(){
+  // Constants and State
+  let config = {
+    pageSize: 64,
+    virtualMemSizeBytes: 16*1024,
+    physicalMemSizeBytes: 8*1024,
+    processCount: 2,
+    tlbSize: 4,
+  };
+
+  let processes = []; // Array of process objects
+  let physicalMemory = {
+    frameCount: 0,
+    frames: [] // frames hold { processId, virtualPage, valid }
+  };
+
+  let tlb = []; // Array of { processId, virtualPage, frameIndex, lastUsedTime }
+
+  // Stats
+  let stats = {
+    memoryAccesses: 0,
+    tlbHits: 0,
+    tlbMisses: 0,
+    pageFaults: 0,
+  };
+
+  let currentProcessId = 0;
+
+  // Utils
+  function isPowerOfTwo(x) {
+    return (x & (x - 1)) === 0;
+  }
+
+  function logDebug(msg){
+    let dbg = document.getElementById('debug-output');
+    dbg.textContent = msg + "\n\n" + dbg.textContent;
+  }
+
+  // Classes and Structures
+
+  // Process structure:
+  // id, programs: [{name, size, pagesCount}], pageTable: array indexed by virtualPage,
+  // each entry: { valid (bool), frameIndex (number|null), referencedAt (timestamp), dirty (bool) }
+  // max pages = virtualMemSizeBytes / pageSize
+  function Process(id){
+    this.id = id;
+    this.programs = [];
+    this.pageTable = [];
+    this.maxPageCount = config.virtualMemSizeBytes / config.pageSize;
+
+    // Initialize page table entries: invalid (not loaded)
+    for(let i=0; i<this.maxPageCount; i++){
+      this.pageTable.push({valid:false, frameIndex:null, referencedAt:0, dirty:false});
+    }
+  }
+  Process.prototype.loadProgram = function(name, sizeBytes){
+    // Program mapped from virtual page 0 up to pages needed
+    let pagesNeeded = Math.ceil(sizeBytes/config.pageSize);
+    if(pagesNeeded > this.maxPageCount){
+      return {success:false, error:"Program size exceeds virtual address space."};
+    }
+    // Check overlapping with existing programs -> for simplicity disallow loading if any page occupied
+    for(let i=0; i<pagesNeeded; i++){
+      if(this.pageTable[i].valid){
+        return {success:false, error:"Virtual pages occupied by existing programs."};
+      }
+    }
+    // Mark pages occupied by this program
+    for(let i=0; i<pagesNeeded; i++){
+      this.pageTable[i].valid = false; // initially not loaded in frames - simulate demand paging
+    }
+    this.programs.push({name:name, size:sizeBytes, pagesCount:pagesNeeded});
+    return {success:true, pages:pagesNeeded};
+  };
+  Process.prototype.unloadProgram = function(name){
+    let idx = this.programs.findIndex(p => p.name === name);
+    if(idx === -1) return {success:false, error:"Program not found in process."};
+    let p = this.programs[idx];
+    // Free virtual pages occupied by the program (assume starting at 0)
+    let pagesCount = p.pagesCount;
+    for(let i=0; i<pagesCount; i++){
+      // Before mark invalid, we must free potential frames
+      if(this.pageTable[i].frameIndex !== null){
+        freePhysicalFrame(this.pageTable[i].frameIndex);
+      }
+      this.pageTable[i] = {valid:false, frameIndex:null, referencedAt:0, dirty:false};
+    }
+    this.programs.splice(idx,1);
+    return {success:true};
+  };
+  Process.prototype.resetPages = function(){
+    for(let i=0; i<this.pageTable.length; i++){
+      if(this.pageTable[i].frameIndex !== null){
+        freePhysicalFrame(this.pageTable[i].frameIndex);
+      }
+      this.pageTable[i] = {valid:false, frameIndex:null, referencedAt:0, dirty:false};
+    }
+    this.programs = [];
+  };
+  Process.prototype.virtualPagesOccupied = function(){
+    let cnt = 0;
+    this.programs.forEach(p => cnt += p.pagesCount);
+    return cnt;
+  };
+
+  // Physical memory management
+  function initPhysicalMemory(){
+    physicalMemory.frameCount = config.physicalMemSizeBytes / config.pageSize;
+    physicalMemory.frames = [];
+    for(let i=0; i<physicalMemory.frameCount; i++){
+      physicalMemory.frames.push({processId:null, virtualPage:null, valid:false, loadedAt:0});
+    }
+  }
+  function freePhysicalFrame(frameIndex){
+    if(frameIndex<0 || frameIndex>=physicalMemory.frameCount) return;
+    let frame = physicalMemory.frames[frameIndex];
+    if(frame.processId !== null){
+      // Remove from TLB
+      tlb = tlb.filter(e => !(e.processId===frame.processId && e.virtualPage===frame.virtualPage));
+      // Remove page table mapping from owning process for safety but process page table should be updated separately
+    }
+    frame.processId = null;
+    frame.virtualPage = null;
+    frame.valid = false;
+    frame.loadedAt = 0;
+  }
+  function findFreeFrame(){
+    for(let i=0; i<physicalMemory.frameCount; i++){
+      if(!physicalMemory.frames[i].valid){
+        return i;
+      }
+    }
+    return null;
+  }
+
+  // Replacement Policy: Least Recently Used (LRU) in physical frames
+  function selectVictimFrame(){
+    // Find frame with oldest loadedAt timestamp
+    let oldestTime = Infinity;
+    let victimIndex = null;
+    for(let i=0; i<physicalMemory.frames.length; i++){
+      if(physicalMemory.frames[i].valid && physicalMemory.frames[i].loadedAt < oldestTime){
+        oldestTime = physicalMemory.frames[i].loadedAt;
+        victimIndex = i;
+      }
+    }
+    return victimIndex;
+  }
+
+  // TLB Management - fully associative, LRU replacement
+  function tlbLookup(processId, virtualPage){
+    let now = Date.now();
+    for(let i=0; i<tlb.length; i++){
+      let entry = tlb[i];
+      if(entry.processId === processId && entry.virtualPage === virtualPage){
+        entry.lastUsedTime = now;
+        return entry.frameIndex;
+      }
+    }
+    return null;
+  }
+  function tlbAddEntry(processId, virtualPage, frameIndex){
+    let now = Date.now();
+    // If already in TLB, update usage
+    for(let i=0; i<tlb.length; i++){
+      let entry = tlb[i];
+      if(entry.processId === processId && entry.virtualPage === virtualPage){
+        entry.lastUsedTime = now;
+        return;
+      }
+    }
+    // Add new entry
+    if(tlb.length >= config.tlbSize){
+      // Evict least recently used
+      let lruTime = Infinity;
+      let lruIndex = -1;
+      for(let i=0; i<tlb.length; i++){
+        if(tlb[i].lastUsedTime < lruTime){
+          lruTime = tlb[i].lastUsedTime;
+          lruIndex = i;
+        }
+      }
+      if(lruIndex !== -1){
+        tlb.splice(lruIndex,1);
+      }
+    }
+    tlb.push({processId:processId, virtualPage:virtualPage, frameIndex:frameIndex, lastUsedTime: now});
+  }
+  function tlbClear(){
+    tlb = [];
+  }
+
+  // Memory Access Simulation
+  // Returns: { success, message, physicalAddress, pageFault }
+  function accessMemory(process, virtualAddress, accessMode){
+    stats.memoryAccesses++;
+    let pageSize = config.pageSize;
+    let pageNumber = Math.floor(virtualAddress / pageSize);
+    let offset = virtualAddress % pageSize;
+
+    if(pageNumber < 0 || pageNumber >= process.maxPageCount){
+      return {success:false, message:"Virtual address out of range."};
+    }
+
+    // Check if page is part of loaded program(s)
+    let occupiedPages = process.virtualPagesOccupied();
+    if(pageNumber >= occupiedPages){
+      return {success:false, message:"Address refers to unused virtual memory (no program loaded here)."};
+    }
+
+    // Check TLB first
+    let frameIndex = tlbLookup(process.id, pageNumber);
+    if(frameIndex !== null){
+      stats.tlbHits++;
+      // Update page table last referenced:
+      process.pageTable[pageNumber].referencedAt = Date.now();
+      if(accessMode === "write") process.pageTable[pageNumber].dirty = true;
+      return {
+        success:true,
+        message:"TLB hit. Physical frame " + frameIndex + ", offset " + offset + ".",
+        physicalAddress: frameIndex*pageSize + offset,
+        pageFault:false
+      };
+    }
+    stats.tlbMisses++;
+
+    // Check page table
+    let pageEntry = process.pageTable[pageNumber];
+    if(!pageEntry.valid){
+      // Page fault
+      stats.pageFaults++;
+      // Try to load page into physical memory
+      let freeFrame = findFreeFrame();
+      let frameToUse;
+      if(freeFrame !== null){
+        frameToUse = freeFrame;
+      } else {
+        // Need to evict a victim frame
+        let victimFrame = selectVictimFrame();
+        if(victimFrame === null){
+          return {success:false, message:"No frame available and no victim found. Memory full."};
+        }
+        // Remove victim frame from owning process page table and anywhere else
+        let victim = physicalMemory.frames[victimFrame];
+        if(victim.processId !== null){
+          let victimProcess = processes.find(p => p.id === victim.processId);
+          if(victimProcess) {
+            if(victimProcess.pageTable[victim.virtualPage]) {
+              victimProcess.pageTable[victim.virtualPage].valid = false;
+              victimProcess.pageTable[victim.virtualPage].frameIndex = null;
+            }
+          }
+          // Remove from TLB
+          tlb = tlb.filter(e => !(e.processId===victim.processId && e.virtualPage===victim.virtualPage));
+        }
+        frameToUse = victimFrame;
+      }
+      // Load the page into frame
+      physicalMemory.frames[frameToUse].processId = process.id;
+      physicalMemory.frames[frameToUse].virtualPage = pageNumber;
+      physicalMemory.frames[frameToUse].valid = true;
+      physicalMemory.frames[frameToUse].loadedAt = Date.now();
+
+      pageEntry.valid = true;
+      pageEntry.frameIndex = frameToUse;
+      pageEntry.referencedAt = Date.now();
+      pageEntry.dirty = (accessMode === "write");
+
+      // Add to TLB
+      tlbAddEntry(process.id, pageNumber, frameToUse);
+
+      return {
+        success:true,
+        message:"Page fault. Loaded virtual page " + pageNumber + " into frame " + frameToUse + ".",
+        physicalAddress: frameToUse*pageSize + offset,
+        pageFault:true
+      };
+    } else {
+      // Page is valid in physical memory
+      pageEntry.referencedAt = Date.now();
+      if(accessMode === "write") pageEntry.dirty = true;
+      frameIndex = pageEntry.frameIndex;
+      // Add to TLB
+      tlbAddEntry(process.id, pageNumber, frameIndex);
+      return {
+        success:true,
+        message:"Page found in page table. Physical frame " + frameIndex + ", offset " + offset + ".",
+        physicalAddress: frameIndex*pageSize + offset,
+        pageFault:false
+      };
+    }
+  }
+
+  // UI Elements
+  const pageSizeInput = document.getElementById('pageSizeInput');
+  const virtualMemKBInput = document.getElementById('virtualMemKBInput');
+  const physicalMemKBInput = document.getElementById('physicalMemKBInput');
+  const processCountInput = document.getElementById('processCountInput');
+  const applyConfigBtn = document.getElementById('applyConfigBtn');
+
+  const processSelector = document.getElementById('processSelector');
+  const addProcessBtn = document.getElementById('addProcessBtn');
+  const removeProcessBtn = document.getElementById('removeProcessBtn');
+  const resetAllProcessesBtn = document.getElementById('resetAllProcessesBtn');
+
+  const programNameInput = document.getElementById('programNameInput');
+  const programSizeInput = document.getElementById('programSizeInput');
+  const loadProgramBtn = document.getElementById('loadProgramBtn');
+  const unloadProgramBtn = document.getElementById('unloadProgramBtn');
+
+  const accessAddressInput = document.getElementById('accessAddressInput');
+  const accessMemoryBtn = document.getElementById('accessMemoryBtn');
+  const accessModeSelect = document.getElementById('accessModeSelect');
+
+  const showPageTableBtn = document.getElementById('showPageTableBtn');
+  const showPhysicalMemoryBtn = document.getElementById('showPhysicalMemoryBtn');
+  const showTLBBtn = document.getElementById('showTLBBtn');
+
+  const memoryAccessResult = document.getElementById('memoryAccessResult');
+
+  const tlbSizeInput = document.getElementById('tlbSizeInput');
+  const applyTLBSizeBtn = document.getElementById('applyTLBSizeBtn');
+  const clearTLBBtn = document.getElementById('clearTLBBtn');
+
+  const processManagementDiv = document.getElementById('process-management');
+  const programManagementDiv = document.getElementById('program-management');
+  const memoryAccessDiv = document.getElementById('memory-access');
+  const tlbControlsDiv = document.getElementById('tlb-controls');
+  const statsDiv = document.getElementById('stats');
+  const statsContent = document.getElementById('statsContent');
+  const resetStatsBtn = document.getElementById('resetStatsBtn');
+
+  // Functions for UI Refresh
+  function refreshProcessSelector(){
+    processSelector.innerHTML = '';
+    processes.forEach(p => {
+      let option = document.createElement('option');
+      option.textContent = 'Process ' + p.id + ' (Loaded progs: ' + p.programs.length + ')';
+      option.value = p.id;
+      processSelector.appendChild(option);
+    });
+    if(processes.length > 0){
+      currentProcessId = parseInt(processSelector.value) || processes[0].id;
+      processSelector.value = currentProcessId;
+    } else {
+      currentProcessId = null;
+    }
+  }
+
+  function getCurrentProcess(){
+    if(currentProcessId === null) return null;
+    return processes.find(p => p.id === currentProcessId);
+  }
+
+  function appendStatsLog(msg){
+    statsContent.textContent = msg + "\n" + statsContent.textContent;
+  }
+
+  // Update statistics display
+  function refreshStats(){
+    let lines = [];
+    lines.push("Total Memory Accesses: " + stats.memoryAccesses);
+    lines.push("TLB Hits: " + stats.tlbHits);
+    lines.push("TLB Misses: " + stats.tlbMisses);
+    lines.push("Page Faults: " + stats.pageFaults);
+    lines.push("");
+    let hitRatio = (stats.memoryAccesses>0)?(stats.tlbHits/stats.memoryAccesses*100).toFixed(2) : "N/A";
+    lines.push("TLB Hit Ratio: " + hitRatio + "%");
+    statsContent.textContent = lines.join('\n');
+  }
+
+  function checkConfigValidity(){
+    let pSize = parseInt(pageSizeInput.value,10);
+    if(!isPowerOfTwo(pSize) || pSize < 16 || pSize > 1024){
+      alert("Page size must be a power of two between 16 and 1024.");
+      return false;
+    }
+    let vMemKB = parseInt(virtualMemKBInput.value,10);
+    if(vMemKB <4 || vMemKB > 64){
+      alert("Virtual memory size must be between 4 KB and 64 KB.");
+      return false;
+    }
+    let pMemKB = parseInt(physicalMemKBInput.value,10);
+    if(pMemKB <1 || pMemKB > 32){
+      alert("Physical memory size must be between 1 KB and 32 KB.");
+      return false;
+    }
+    let pCount = parseInt(processCountInput.value,10);
+    if(pCount <1 || pCount >5){
+      alert("Process count must be between 1 and 5.");
+      return false;
+    }
+    if(pMemKB >= vMemKB){
+      // Warn but allow
+      if(!confirm("Physical memory size is greater or equal to virtual memory size. Do you want to proceed?")){
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Initialize system
+  applyConfigBtn.addEventListener('click', function(){
+    if(!checkConfigValidity()) return;
+    config.pageSize = parseInt(pageSizeInput.value,10);
+    config.virtualMemSizeBytes = parseInt(virtualMemKBInput.value,10)*1024;
+    config.physicalMemSizeBytes = parseInt(physicalMemKBInput.value,10)*1024;
+    config.processCount = parseInt(processCountInput.value,10);
+
+    // Reset all state
+    processes = [];
+    for(let i=0; i<config.processCount; i++){
+      processes.push(new Process(i));
+    }
+    initPhysicalMemory();
+    tlbClear();
+    stats = {
+      memoryAccesses: 0,
+      tlbHits: 0,
+      tlbMisses: 0,
+      pageFaults: 0,
+    };
+    currentProcessId = 0;
+
+    refreshProcessSelector();
+
+    // Enable all controls
+    processManagementDiv.style.display = 'block';
+    programManagementDiv.style.display = 'block';
+    memoryAccessDiv.style.display = 'block';
+    tlbControlsDiv.style.display = 'block';
+    statsDiv.style.display = 'block';
+
+    memoryAccessResult.textContent = '';
+    appendStatsLog("Initialized system with configuration:\n" +
+      "Page size: " + config.pageSize + " bytes\n" +
+      "Virtual memory: " + (config.virtualMemSizeBytes/1024) + " KB\n" +
+      "Physical memory: " + (config.physicalMemSizeBytes/1024) + " KB\n" +
+      "Processes: " + config.processCount + "\n" +
+      "TLB size: " + config.tlbSize);
+
+    refreshStats();
+    logDebug("System initialized.");
+  });
+
+  processSelector.addEventListener('change', function(){
+    currentProcessId = parseInt(processSelector.value,10);
+  });
+
+  addProcessBtn.addEventListener('click', function(){
+    if(processes.length >= 5){
+      alert("Maximum number of processes reached (5).");
+      return;
+    }
+    let newId = 0;
+    while(processes.find(p => p.id === newId)){
+      newId++;
+    }
+    let newProc = new Process(newId);
+    processes.push(newProc);
+    refreshProcessSelector();
+    appendStatsLog("Added process ID " + newId + ".");
+  });
+
+  removeProcessBtn.addEventListener('click', function(){
+    if(processes.length <= 1){
+      alert("At least one process must remain.");
+      return;
+    }
+    let proc = getCurrentProcess();
+    if(!proc){
+      alert("No process selected.");
+      return;
+    }
+    // Free physical frames used by this process
+    proc.pageTable.forEach(entry => {
+      if(entry.frameIndex !== null){
+        freePhysicalFrame(entry.frameIndex);
+      }
+    });
+    // Remove from TLB
+    tlb = tlb.filter(e => e.processId !== proc.id);
+    // Remove process
+    processes = processes.filter(p => p.id !== proc.id);
+    // Change current process to first available
+    if(processes.length > 0) currentProcessId = processes[0].id;
+    else currentProcessId = null;
+    refreshProcessSelector();
+    appendStatsLog("Removed selected process ID " + proc.id + " and freed its pages.");
+  });
+
+  resetAllProcessesBtn.addEventListener('click', function(){
+    if(!confirm("This will clear all programs and memory pages of ALL processes. Continue?")) return;
+    processes.forEach(proc => {
+      proc.resetPages();
+    });
+    initPhysicalMemory();
+    tlbClear();
+    appendStatsLog("Reset all processes and cleared physical memory and TLB.");
+  });
+
+  loadProgramBtn.addEventListener('click', function(){
+    let proc = getCurrentProcess();
+    if(!proc){
+      alert("No process selected.");
+      return;
+    }
+    let name = programNameInput.value.trim();
+    if(!name){
+      alert("Please enter a program name.");
+      return;
+    }
+    let size = parseInt(programSizeInput.value,10);
+    if(isNaN(size) || size<1){
+      alert("Please enter a valid program size (bytes).");
+      return;
+    }
+    let result = proc.loadProgram(name, size);
+    if(result.success){
+      appendStatsLog("Loaded program '" + name + "' (" + size + " bytes, " + result.pages + " pages) into process " + proc.id + ".");
+    } else {
+      alert("Failed to load program: "+result.error);
+    }
+  });
+
+  unloadProgramBtn.addEventListener('click', function(){
+    let proc = getCurrentProcess();
+    if(!proc){
+      alert("No process selected.");
+      return;
+    }
+    let name = programNameInput.value.trim();
+    if(!name){
+      alert("Please enter a program name to unload.");
+      return;
+    }
+    let result = proc.unloadProgram(name);
+    if(result.success){
+      appendStatsLog("Unloaded program '" + name + "' from process " + proc.id + ".");
+    } else {
+      alert("Failed to unload program: "+result.error);
+    }
+  });
+
+  accessMemoryBtn.addEventListener('click', function(){
+    let proc = getCurrentProcess();
+    if(!proc){
+      alert("No process selected.");
+      return;
+    }
+    let vAddr = parseInt(accessAddressInput.value,10);
+    if(isNaN(vAddr) || vAddr < 0){
+      alert("Please enter a valid virtual address (non-negative integer).");
+      return;
+    }
+    if(vAddr >= config.virtualMemSizeBytes){
+      alert("Virtual address exceeds process virtual memory size ("+config.virtualMemSizeBytes+" bytes).");
+      return;
+    }
+    let accessMode = accessModeSelect.value;
+    let res = accessMemory(proc, vAddr, accessMode);
+    if(res.success){
+      let info = "Success: " + res.message + "\n";
+      info += "Virtual Address = " + vAddr + "\n";
+      info += "Physical Address = " + res.physicalAddress + "\n";
+      info += "Page Fault = " + (res.pageFault ? "Yes" : "No");
+      memoryAccessResult.textContent = info;
+      appendStatsLog("Process "+proc.id+" memory access at VA "+vAddr+" ("+accessMode+") - " + (res.pageFault ? "PAGE FAULT" : "No page fault."));
+      refreshStats();
+    } else {
+      memoryAccessResult.textContent = "Error: " + res.message;
+    }
+  });
+
+  showPageTableBtn.addEventListener('click', function(){
+    let proc = getCurrentProcess();
+    if(!proc){
+      alert("No process selected.");
+      return;
+    }
+    let lines = [];
+    lines.push("Page Table of Process " + proc.id + ":");
+    lines.push("Page | Valid | Frame | Referenced At (timestamp) | Dirty | Program Content");
+    for(let i=0; i<proc.pageTable.length; i++){
+      let e = proc.pageTable[i];
+      if(proc.programs.length>0) {
+        // Show only pages used by any program to reduce flood
+        let usedPages = proc.virtualPagesOccupied();
+        if(i >= usedPages) continue;
+      }
+      let dt = e.referencedAt ? new Date(e.referencedAt).toLocaleTimeString() : "-";
+      // Program content: check which program contains this page
+      let progName = '-';
+      let pageStart = 0;
+      for(let pgm of proc.programs){
+        let pageEnd = pageStart + pgm.pagesCount;
+        if(i >= pageStart && i < pageEnd){
+          progName = pgm.name;
+          break;
+        }
+        pageStart = pageEnd;
+      }
+      lines.push(i.toString().padEnd(4) + " | " + (e.valid?"Y":"N") + "     | " +
+        (e.frameIndex!==null?e.frameIndex:"-") + "     | " + dt.padEnd(23) + " | " + (e.dirty?"Y":"N") + "     | " + progName);
+    }
+    memoryAccessResult.textContent = lines.join('\n');
+  });
+
+  showPhysicalMemoryBtn.addEventListener('click', function(){
+    let lines = [];
+    lines.push("Physical Memory Frames ("+physicalMemory.frameCount+" frames):");
+    lines.push("Frame | Valid | Process ID | Virtual Page | Loaded At");
+    physicalMemory.frames.forEach((f,i) => {
+      let loadedTime = f.loadedAt ? new Date(f.loadedAt).toLocaleTimeString() : "-";
+      lines.push(i.toString().padEnd(5) + " | " + (f.valid?"Y":"N") + "     | " + (f.processId!==null?f.processId:"-") + "          | " + (f.virtualPage!==null?f.virtualPage:"-")+"           | " + loadedTime);
+    });
+    memoryAccessResult.textContent = lines.join('\n');
+  });
+
+  showTLBBtn.addEventListener('click', function(){
+    let lines = [];
+    lines.push("TLB Entries ("+tlb.length+"/"+config.tlbSize+"): ");
+    lines.push("Index | Process ID | Virtual Page | Frame | Last Used");
+    tlb.forEach((e,i) => {
+      let usedTime = e.lastUsedTime ? new Date(e.lastUsedTime).toLocaleTimeString() : "-";
+      lines.push(i.toString().padEnd(5) + " | " + e.processId + "          | " + e.virtualPage + "           | " + e.frameIndex + "     | " + usedTime);
+    });
+    if(tlb.length === 0) lines.push("(empty)");
+    memoryAccessResult.textContent = lines.join('\n');
+  });
+
+  applyTLBSizeBtn.addEventListener('click', function(){
+    let sz = parseInt(tlbSizeInput.value,10);
+    if(isNaN(sz) || sz < 1 || sz>16){
+      alert("TLB size must be between 1 and 16.");
+      return;
+    }
+    config.tlbSize = sz;
+    // Trim TLB if current size is bigger
+    if(tlb.length > sz){
+      tlb.sort((a,b) => b.lastUsedTime - a.lastUsedTime); // keep most recently used first
+      tlb = tlb.slice(0, sz);
+    }
+    appendStatsLog("Applied TLB size: " + sz);
+    refreshStats();
+  });
+
+  clearTLBBtn.addEventListener('click', function(){
+    tlbClear();
+    appendStatsLog("TLB cleared.");
+  });
+
+  resetStatsBtn.addEventListener('click', function(){
+    stats.memoryAccesses = 0;
+    stats.tlbHits = 0;
+    stats.tlbMisses = 0;
+    stats.pageFaults = 0;
+    appendStatsLog("Statistics reset.");
+    refreshStats();
+  });
+
+  // Initialization: disable all except config initially
+  processManagementDiv.style.display = 'none';
+  programManagementDiv.style.display = 'none';
+  memoryAccessDiv.style.display = 'none';
+  tlbControlsDiv.style.display = 'none';
+  statsDiv.style.display = 'none';
+
+  logDebug("Welcome to the Virtual Memory Interactive Simulator.\n" +
+           "Start by configuring the system above.");
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Red‑Black Tree — Interactive Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    html,body { height:100%; margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; background:#f6f9fc; color:#111; }
+    .app { display:flex; flex-direction:column; height:100%; padding:14px; box-sizing:border-box; gap:12px; }
+    header { display:flex; gap:12px; align-items:center; }
+    h1 { font-size:18px; margin:0; }
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .controls input[type="number"] { width:110px; padding:6px; border-radius:6px; border:1px solid #cbd5e1; }
+    button { padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; background:white; cursor:pointer;}
+    button.primary { background:#2563eb; color:white; border-color:#1e40af; }
+    button.danger { background:#fee2e2; border-color:#fecaca; }
+    .play-controls { display:flex; gap:6px; align-items:center; }
+    .panel { display:flex; gap:12px; align-items:flex-start; }
+    .canvas-wrap { background:white; border-radius:10px; padding:10px; box-shadow:0 6px 18px rgba(20,30,50,0.06); flex:1; min-height:420px; overflow:auto; }
+    .sidebar { width:360px; min-width:260px; max-width:420px; }
+    .legend { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .legend-item { display:flex; gap:6px; align-items:center; font-size:13px; color:#333; }
+    .key { width:18px; height:18px; border-radius:50%; display:inline-block; }
+    .red { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,0.12); }
+    .black { background:#111827; }
+    .highlight { width:18px; height:18px; border-radius:50%; box-sizing:border-box; border:3px solid; display:inline-block; background:transparent; }
+    .hl-z { border-color:#0369a1; }     /* z: blue */
+    .hl-p { border-color:#a16207; }     /* p: amber */
+    .hl-g { border-color:#b91c1c; }     /* g: red-dark */
+    .hl-u { border-color:#16a34a; }     /* u: green */
+    .info { font-size:13px; color:#334155; margin-top:8px; line-height:1.4; }
+    svg { width:100%; height:520px; }
+    .desc { margin-top:8px; padding:8px; background:#f8fafc; border-radius:8px; border:1px solid #e6eef8; font-size:13px; color:#111827; min-height:36px; }
+    footer { font-size:13px; color:#475569; margin-top:6px; }
+    .small { font-size:12px; color:#475569; }
+    .status { margin-left:6px; font-weight:600; color:#0f172a; }
+    .slider { width:120px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Red‑Black Tree — Interactive Demo</h1>
+      <div class="controls" style="margin-left:auto;">
+        <input id="valInput" type="number" placeholder="value (integer)"/>
+        <button id="insertBtn" class="primary" title="Insert value">Insert</button>
+        <button id="rndBtn" title="Insert random value">Insert Random</button>
+        <button id="bulkBtn" title="Insert sample sequence">Insert Sample Sequence</button>
+        <button id="clearBtn" class="danger" title="Clear tree">Clear</button>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="canvas-wrap">
+        <svg id="svgCanvas" viewBox="0 0 1200 520" preserveAspectRatio="xMidYMin meet"></svg>
+      </div>
+
+      <aside class="sidebar">
+        <div class="play-controls">
+          <button id="prevBtn" title="Previous step">&larr;</button>
+          <button id="nextBtn" title="Next step">&rarr;</button>
+          <button id="playBtn" title="Auto-play">Play</button>
+          <div class="small">Speed:
+            <input id="speed" type="range" min="100" max="2000" value="700" class="slider"/>
+          </div>
+          <div class="small status" id="stepCounter">Step: 0 / 0</div>
+        </div>
+
+        <div class="desc" id="descBox">No steps yet. Insert values to see the insertion algorithm and balancing (rotations & recoloring).</div>
+
+        <div class="legend">
+          <div class="legend-item"><span class="key red"></span> Red node</div>
+          <div class="legend-item"><span class="key black"></span> Black node</div>
+          <div class="legend-item"><span class="highlight hl-z"></span> z (current)</div>
+          <div class="legend-item"><span class="highlight hl-p"></span> parent</div>
+          <div class="legend-item"><span class="highlight hl-g"></span> grandparent</div>
+          <div class="legend-item"><span class="highlight hl-u"></span> uncle</div>
+        </div>
+
+        <div class="info">
+          This demo implements insertion into a Red‑Black Tree and records every step of the fix-up (cases 1–3).
+          Use Next/Prev to step, or Play to animate. Try sequences that force rotations and recoloring.
+        </div>
+
+        <footer>
+          Algorithm: classic CLRS-style RB-INSERT and RB-INSERT-FIXUP. Duplicates are ignored.
+        </footer>
+      </aside>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // --- Data structures: Node and Tree ---
+  let idCounter = 1;
+  function Node(val){
+    this.id = idCounter++;
+    this.val = val;
+    this.left = null;
+    this.right = null;
+    this.parent = null;
+    this.color = 'B'; // 'R' or 'B'
+  }
+
+  let root = null;
+  let snapshots = []; // each snapshot: {nodes: [...], rootId, highlights: {z,p,g,u}, desc}
+  let currentStep = -1;
+  let playing = false;
+  let playTimer = null;
+
+  // --- UI elements ---
+  const svg = document.getElementById('svgCanvas');
+  const insertBtn = document.getElementById('insertBtn');
+  const valInput = document.getElementById('valInput');
+  const rndBtn = document.getElementById('rndBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const bulkBtn = document.getElementById('bulkBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const playBtn = document.getElementById('playBtn');
+  const descBox = document.getElementById('descBox');
+  const stepCounter = document.getElementById('stepCounter');
+  const speedInput = document.getElementById('speed');
+
+  // --- Utility helpers ---
+  function snapshot(desc, highlights){
+    // deep-copy nodes into array representation (by id)
+    const all = [];
+    const visited = new Set();
+    function traverse(n){
+      if(!n || visited.has(n.id)) return;
+      visited.add(n.id);
+      all.push({
+        id: n.id,
+        val: n.val,
+        color: n.color,
+        left: n.left ? n.left.id : null,
+        right: n.right ? n.right.id : null,
+        parent: n.parent ? n.parent.id : null
+      });
+      traverse(n.left);
+      traverse(n.right);
+    }
+    traverse(root);
+    snapshots.push({
+      nodes: all,
+      rootId: root ? root.id : null,
+      highlights: Object.assign({z:null,p:null,g:null,u:null}, highlights || {}),
+      desc: desc || ''
+    });
+    updateCounter();
+  }
+
+  function updateCounter(){
+    stepCounter.textContent = `Step: ${Math.max(0,currentStep+1)} / ${Math.max(0,snapshots.length)}`;
+  }
+
+  // --- Rotation helpers (modify actual node pointers, and snapshot after each) ---
+  function rotateLeft(x){
+    const y = x.right;
+    if(!y) return;
+    x.right = y.left;
+    if(y.left) y.left.parent = x;
+    y.parent = x.parent;
+    if(!x.parent) {
+      root = y;
+    } else if(x === x.parent.left) {
+      x.parent.left = y;
+    } else {
+      x.parent.right = y;
+    }
+    y.left = x;
+    x.parent = y;
+    snapshot(`rotateLeft(${x.val})`, {z: null, p: null, g: null, u: null});
+  }
+
+  function rotateRight(x){
+    const y = x.left;
+    if(!y) return;
+    x.left = y.right;
+    if(y.right) y.right.parent = x;
+    y.parent = x.parent;
+    if(!x.parent) {
+      root = y;
+    } else if(x === x.parent.right) {
+      x.parent.right = y;
+    } else {
+      x.parent.left = y;
+    }
+    y.right = x;
+    x.parent = y;
+    snapshot(`rotateRight(${x.val})`, {z: null, p: null, g: null, u: null});
+  }
+
+  // --- BST insert (no balancing) ---
+  function bstInsertNode(z){
+    let y = null;
+    let x = root;
+    while(x !== null){
+      y = x;
+      if(z.val < x.val) x = x.left;
+      else x = x.right;
+    }
+    z.parent = y;
+    if(!y) root = z;
+    else if(z.val < y.val) y.left = z;
+    else y.right = z;
+  }
+
+  // --- Main insertion algorithm with fix-up and snapshotting ---
+  function insertValue(val){
+    if(typeof val !== 'number' || !isFinite(val)) return;
+    // check duplicates
+    if(findNode(val)){ alert('Duplicate value ignored.'); return; }
+    const z = new Node(val);
+    z.color = 'R';
+    bstInsertNode(z);
+    snapshot(`Inserted ${val} as red node.`, {z: z.id});
+    insertFixup(z);
+    if(root) root.color = 'B';
+    snapshot(`Insertion complete: root is black.`, {z: null, p:null,g:null,u:null});
+  }
+
+  function insertFixup(z){
+    while(z.parent && z.parent.color === 'R'){
+      const p = z.parent;
+      const g = p.parent;
+      if(!g) break; // safety
+      if(p === g.left){
+        const y = g.right; // uncle
+        snapshot(`Fixup: z=${z.val}, parent=${p.val} (red), uncle=${y ? y.val : 'nil'}.`, {z:z.id, p: p.id, g: g.id, u: y? y.id : null});
+        if(y && y.color === 'R'){
+          // Case 1
+          p.color = 'B';
+          y.color = 'B';
+          g.color = 'R';
+          snapshot(`Case 1: parent and uncle recolored black; grandparent ${g.val} red.`, {z:z.id, p: p.id, g:g.id, u:y.id});
+          z = g;
+        } else {
+          if(z === p.right){
+            // Case 2
+            snapshot(`Case 2: z is right child -> rotateLeft(parent=${p.val}).`, {z:z.id, p:p.id, g:g.id, u: y? y.id : null});
+            z = p;
+            rotateLeft(z);
+          }
+          // Case 3
+          p.color = 'B';
+          g.color = 'R';
+          snapshot(`Case 3: parent ${p.val} black, grandparent ${g.val} red; rotateRight(grandparent).`, {z:z.id, p:p.id, g:g.id});
+          rotateRight(g);
+        }
+      } else {
+        // symmetric: parent is right child
+        const y = g.left; // uncle
+        snapshot(`Fixup: z=${z.val}, parent=${p.val} (red), uncle=${y ? y.val : 'nil'}.`, {z:z.id, p: p.id, g: g.id, u: y? y.id : null});
+        if(y && y.color === 'R'){
+          // Case 1
+          p.color = 'B';
+          y.color = 'B';
+          g.color = 'R';
+          snapshot(`Case 1 (sym): parent and uncle recolored black; grandparent ${g.val} red.`, {z:z.id, p:p.id, g:g.id, u:y.id});
+          z = g;
+        } else {
+          if(z === p.left){
+            // Case 2
+            snapshot(`Case 2 (sym): z is left child -> rotateRight(parent=${p.val}).`, {z:z.id, p:p.id, g:g.id, u: y? y.id : null});
+            z = p;
+            rotateRight(z);
+          }
+          // Case 3
+          p.color = 'B';
+          g.color = 'R';
+          snapshot(`Case 3 (sym): parent ${p.val} black, grandparent ${g.val} red; rotateLeft(grandparent).`, {z:z.id, p:p.id, g:g.id});
+          rotateLeft(g);
+        }
+      }
+    }
+  }
+
+  // --- Search for duplicates ---
+  function findNode(val){
+    let x = root;
+    while(x){
+      if(val === x.val) return x;
+      x = (val < x.val) ? x.left : x.right;
+    }
+    return null;
+  }
+
+  // --- Rendering snapshots ---
+  function renderStep(index){
+    if(index < 0 || index >= snapshots.length) return;
+    currentStep = index;
+    updateCounter();
+    const snap = snapshots[index];
+    descBox.textContent = snap.desc || '';
+    // Build map of nodes
+    const map = new Map();
+    snap.nodes.forEach(n => { map.set(n.id, Object.assign({}, n)); });
+    // Determine depth and compute positions using inorder ordering
+    const childrenMap = new Map();
+    map.forEach(n => childrenMap.set(n.id, {left:n.left, right:n.right, parent:n.parent}));
+    const rootId = snap.rootId;
+    // compute depth
+    const depth = new Map();
+    function setDepth(id, d){
+      if(id == null) return;
+      depth.set(id, d);
+      const n = map.get(id);
+      setDepth(n.left, d+1);
+      setDepth(n.right, d+1);
+    }
+    if(rootId) setDepth(rootId, 0);
+    // inorder indexing
+    let xCounter = 0;
+    const pos = new Map();
+    function inorder(id){
+      if(!id) return;
+      const n = map.get(id);
+      inorder(n.left);
+      const d = depth.get(id) || 0;
+      pos.set(id, {x: xCounter * 70 + 40, y: d * 80 + 40});
+      xCounter++;
+      inorder(n.right);
+    }
+    if(rootId) inorder(rootId);
+    const totalWidth = Math.max(700, xCounter * 70 + 40);
+    svg.setAttribute('viewBox', `0 0 ${totalWidth} 520`);
+    // Clear svg
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    // Draw edges
+    map.forEach(n => {
+      if(n.left){
+        const p = pos.get(n.id);
+        const c = pos.get(n.left);
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', p.x);
+        line.setAttribute('y1', p.y + 22);
+        line.setAttribute('x2', c.x);
+        line.setAttribute('y2', c.y - 22);
+        line.setAttribute('stroke', '#cbd5e1');
+        line.setAttribute('stroke-width', '2');
+        svg.appendChild(line);
+      }
+      if(n.right){
+        const p = pos.get(n.id);
+        const c = pos.get(n.right);
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', p.x);
+        line.setAttribute('y1', p.y + 22);
+        line.setAttribute('x2', c.x);
+        line.setAttribute('y2', c.y - 22);
+        line.setAttribute('stroke', '#cbd5e1');
+        line.setAttribute('stroke-width', '2');
+        svg.appendChild(line);
+      }
+    });
+    // Draw nodes
+    map.forEach(n => {
+      const p = pos.get(n.id);
+      if(!p) return;
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      // circle
+      const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circle.setAttribute('cx', p.x);
+      circle.setAttribute('cy', p.y);
+      circle.setAttribute('r', 20);
+      circle.setAttribute('fill', n.color === 'R' ? '#ef4444' : '#0f172a');
+      circle.setAttribute('stroke', '#e6eef8');
+      circle.setAttribute('stroke-width', '2');
+      g.appendChild(circle);
+      // label
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x', p.x);
+      text.setAttribute('y', p.y + 6);
+      text.setAttribute('font-size', '13');
+      text.setAttribute('fill', '#fff');
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('font-family', 'monospace');
+      text.textContent = String(n.val);
+      g.appendChild(text);
+
+      // highlights for z, p, g, u
+      const hl = snap.highlights || {};
+      if(hl.z === n.id || hl.p === n.id || hl.g === n.id || hl.u === n.id){
+        const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        ring.setAttribute('cx', p.x);
+        ring.setAttribute('cy', p.y);
+        ring.setAttribute('r', 26);
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke-width', '4');
+        if(hl.z === n.id) ring.setAttribute('stroke', '#0369a1');
+        else if(hl.p === n.id) ring.setAttribute('stroke', '#a16207');
+        else if(hl.g === n.id) ring.setAttribute('stroke', '#b91c1c');
+        else if(hl.u === n.id) ring.setAttribute('stroke', '#16a34a');
+        ring.setAttribute('stroke-opacity', '0.95');
+        svg.appendChild(ring);
+      }
+
+      svg.appendChild(g);
+    });
+  }
+
+  // --- Navigation and playback ---
+  function goToStep(i){
+    if(i < 0) i = 0;
+    if(i >= snapshots.length) i = snapshots.length - 1;
+    if(snapshots.length === 0){ currentStep = -1; updateCounter(); descBox.textContent = 'No steps yet.'; while(svg.firstChild) svg.removeChild(svg.firstChild); return; }
+    renderStep(i);
+  }
+
+  function nextStep(){
+    if(currentStep < snapshots.length - 1) goToStep(currentStep + 1);
+    else { stopPlaying(); }
+  }
+  function prevStep(){
+    if(currentStep > 0) goToStep(currentStep - 1);
+  }
+
+  function play(){
+    if(playing) return;
+    playing = true;
+    playBtn.textContent = 'Pause';
+    const step = () => {
+      if(currentStep < snapshots.length - 1){
+        nextStep();
+        playTimer = setTimeout(step, Number(speedInput.value) || 700);
+      } else {
+        stopPlaying();
+      }
+    };
+    step();
+  }
+
+  function stopPlaying(){
+    playing = false;
+    playBtn.textContent = 'Play';
+    if(playTimer) { clearTimeout(playTimer); playTimer = null; }
+  }
+
+  // --- UI events ---
+  insertBtn.addEventListener('click', ()=>{
+    const v = Number(valInput.value);
+    if(!Number.isFinite(v)){ alert('Enter a valid integer.'); return; }
+    // capture baseline snapshot count before insertion
+    insertValue(Math.trunc(v));
+    // jump to last step
+    goToStep(snapshots.length - 1);
+  });
+
+  rndBtn.addEventListener('click', ()=>{
+    const v = Math.floor(Math.random()*99) + 1;
+    valInput.value = v;
+    insertBtn.click();
+  });
+
+  bulkBtn.addEventListener('click', ()=>{
+    // a sample sequence that forces various cases
+    const seq = [41, 38, 31, 12, 19, 8];
+    // If tree isn't empty, use additional ones
+    const base = root ? [50, 20, 60, 25, 24, 23] : [];
+    const full = base.concat(seq);
+    full.forEach((v,i) => {
+      setTimeout(()=>{ valInput.value = v; insertBtn.click(); }, i * 150);
+    });
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    root = null;
+    snapshots = [];
+    currentStep = -1;
+    stopPlaying();
+    updateCounter();
+    descBox.textContent = 'Cleared. Insert values to see the insertion algorithm.';
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+  });
+
+  prevBtn.addEventListener('click', ()=>{ stopPlaying(); prevStep(); });
+  nextBtn.addEventListener('click', ()=>{ stopPlaying(); nextStep(); });
+  playBtn.addEventListener('click', ()=>{ if(playing) stopPlaying(); else play(); });
+
+  // allow pressing Enter in input to insert
+  valInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') insertBtn.click();
+  });
+
+  // initialize with an explanatory snapshot
+  snapshot('Empty tree. Start inserting nodes to watch how the Red-Black Tree balances itself.');
+  goToStep(0);
+
+  // expose a couple of convenience functions in console for advanced users
+  window.rb_demo = {
+    getRoot: ()=>root,
+    snapshots: ()=>snapshots,
+    goToStep: goToStep,
+    insertValue: (v)=>{ valInput.value = v; insertBtn.click(); }
+  };
+})();
+</script>
+</body>
+</html>

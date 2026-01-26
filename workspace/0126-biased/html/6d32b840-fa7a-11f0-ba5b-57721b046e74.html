@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Linear Regression</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+            min-width: 300px;
+        }
+        canvas {
+            border: 1px solid #000;
+            margin-top: 10px;
+        }
+        input, button, select {
+            margin: 5px;
+        }
+        .data-point {
+            cursor: pointer;
+        }
+        table {
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        td, th {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Linear Regression</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Data Points</h2>
+            <canvas id="scatterPlot" width="400" height="400"></canvas>
+            <div>
+                <button id="addRandom">Add Random Point</button>
+                <button id="clearPoints">Clear All Points</button>
+                <button id="addLinePoint">Add Point on Line</button>
+                <button id="addNoisyPoint">Add Noisy Point</button>
+            </div>
+            <div>
+                <label>Click on canvas to add points</label>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Regression Controls</h2>
+            <div>
+                <button id="calculateRegression">Calculate Regression</button>
+                <button id="resetLine">Reset Line</button>
+            </div>
+            <div>
+                <label>Manual Line Adjustment:</label>
+                <div>
+                    <label>Slope: </label>
+                    <input type="range" id="sliderSlope" min="-5" max="5" step="0.1" value="1">
+                    <span id="slopeValue">1.0</span>
+                </div>
+                <div>
+                    <label>Intercept: </label>
+                    <input type="range" id="sliderIntercept" min="-200" max="200" step="1" value="0">
+                    <span id="interceptValue">0</span>
+                </div>
+            </div>
+            <div>
+                <label>Learning Rate: </label>
+                <input type="range" id="learningRate" min="0.0001" max="0.1" step="0.0001" value="0.01">
+                <span id="learningRateValue">0.01</span>
+            </div>
+            <div>
+                <button id="gradientDescent">Run Gradient Descent</button>
+                <button id="stopGradient">Stop</button>
+                <input type="number" id="iterations" value="100" min="1" max="10000">
+                <label>iterations</label>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Statistics</h2>
+            <div id="stats">
+                <p>Number of points: <span id="pointCount">0</span></p>
+                <p>Current slope: <span id="currentSlope">0</span></p>
+                <p>Current intercept: <span id="currentIntercept">0</span></p>
+                <p>R-squared: <span id="rSquared">0</span></p>
+                <p>Mean Squared Error: <span id="mse">0</span></p>
+            </div>
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>X</th>
+                        <th>Y</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('scatterPlot');
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        
+        // Data storage
+        let points = [];
+        let currentSlope = 1;
+        let currentIntercept = 0;
+        let isDragging = false;
+        let dragIndex = -1;
+        let gradientDescentRunning = false;
+        let animationId = null;
+        
+        // Initialize canvas
+        function initCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+            drawRegressionLine();
+            drawPoints();
+        }
+        
+        // Draw grid
+        function drawGrid() {
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            
+            // Vertical lines
+            for (let x = 0; x <= canvas.width; x += canvas.width / 10) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Horizontal lines
+            for (let y = 0; y <= canvas.height; y += canvas.height / 10) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Axes
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+        }
+        
+        // Draw regression line
+        function drawRegressionLine() {
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 2;
+            
+            const x1 = 0;
+            const y1 = currentIntercept + currentSlope * (-canvas.width / 2);
+            const x2 = canvas.width;
+            const y2 = currentIntercept + currentSlope * (canvas.width / 2);
+            
+            ctx.beginPath();
+            ctx.moveTo(x1, canvas.height / 2 - y1);
+            ctx.lineTo(x2, canvas.height / 2 - y2);
+            ctx.stroke();
+        }
+        
+        // Draw points
+        function drawPoints() {
+            ctx.fillStyle = '#00f';
+            
+            points.forEach((point, index) => {
+                ctx.beginPath();
+                ctx.arc(
+                    canvas.width / 2 + point.x, 
+                    canvas.height / 2 - point.y, 
+                    5, 0, Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Add index label
+                ctx.fillStyle = '#000';
+                ctx.font = '10px Arial';
+                ctx.fillText(index, canvas.width / 2 + point.x + 8, canvas.height / 2 - point.y + 3);
+                ctx.fillStyle = '#00f';
+            });
+        }
+        
+        // Add point
+        function addPoint(x, y) {
+            // Convert canvas coordinates to data coordinates
+            const dataX = x - canvas.width / 2;
+            const dataY = canvas.height / 2 - y;
+            
+            points.push({ x: dataX, y: dataY });
+            updateTable();
+            updateStats();
+            initCanvas();
+        }
+        
+        // Add random point
+        function addRandomPoint() {
+            const x = (Math.random() - 0.5) * canvas.width - 20;
+            const y = (Math.random() - 0.5) * canvas.height - 20;
+            addPoint(x + canvas.width / 2, canvas.height / 2 - y);
+        }
+        
+        // Add point on current line
+        function addPointOnLine() {
+            if (points.length === 0) return;
+            
+            const x = (Math.random() - 0.5) * canvas.width - 20;
+            const y = currentSlope * x + currentIntercept;
+            addPoint(x + canvas.width / 2, canvas.height / 2 - y);
+        }
+        
+        // Add noisy point near current line
+        function addNoisyPoint() {
+            if (points.length === 0) return;
+            
+            const x = (Math.random() - 0.5) * canvas.width - 20;
+            const y = currentSlope * x + currentIntercept + (Math.random() - 0.5) * 50;
+            addPoint(x + canvas.width / 2, canvas.height / 2 - y);
+        }
+        
+        // Clear all points
+        function clearPoints() {
+            points = [];
+            updateTable();
+            updateStats();
+            initCanvas();
+        }
+        
+        // Calculate linear regression
+        function calculateRegression() {
+            if (points.length < 2) return;
+            
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            const n = points.length;
+            
+            points.forEach(point => {
+                sumX += point.x;
+                sumY += point.y;
+                sumXY += point.x * point.y;
+                sumXX += point.x * point.x;
+            });
+            
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+            
+            currentSlope = slope;
+            currentIntercept = intercept;
+            
+            document.getElementById('sliderSlope').value = slope;
+            document.getElementById('slopeValue').textContent = slope.toFixed(2);
+            document.getElementById('sliderIntercept').value = intercept;
+            document.getElementById('interceptValue').textContent = intercept.toFixed(2);
+            
+            updateStats();
+            initCanvas();
+        }
+        
+        // Update statistics
+        function updateStats() {
+            document.getElementById('pointCount').textContent = points.length;
+            document.getElementById('currentSlope').textContent = currentSlope.toFixed(4);
+            document.getElementById('currentIntercept').textContent = currentIntercept.toFixed(4);
+            
+            if (points.length < 2) {
+                document.getElementById('rSquared').textContent = 'N/A';
+                document.getElementById('mse').textContent = 'N/A';
+                return;
+            }
+            
+            // Calculate R-squared
+            let sumY = 0;
+            points.forEach(point => {
+                sumY += point.y;
+            });
+            const meanY = sumY / points.length;
+            
+            let ssTotal = 0, ssResidual = 0;
+            points.forEach(point => {
+                ssTotal += Math.pow(point.y - meanY, 2);
+                const predictedY = currentSlope * point.x + currentIntercept;
+                ssResidual += Math.pow(point.y - predictedY, 2);
+            });
+            
+            const rSquared = 1 - (ssResidual / ssTotal);
+            document.getElementById('rSquared').textContent = rSquared.toFixed(4);
+            
+            // Calculate MSE
+            const mse = ssResidual / points.length;
+            document.getElementById('mse').textContent = mse.toFixed(4);
+        }
+        
+        // Update data table
+        function updateTable() {
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+            
+            points.forEach((point, index) => {
+                const row = document.createElement('tr');
+                row.className = 'data-point';
+                row.dataset.index = index;
+                
+                const xCell = document.createElement('td');
+                xCell.textContent = point.x.toFixed(2);
+                
+                const yCell = document.createElement('td');
+                yCell.textContent = point.y.toFixed(2);
+                
+                const actionCell = document.createElement('td');
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = function() {
+                    points.splice(index, 1);
+                    updateTable();
+                    updateStats();
+                    initCanvas();
+                };
+                
+                actionCell.appendChild(deleteBtn);
+                row.appendChild(xCell);
+                row.appendChild(yCell);
+                row.appendChild(actionCell);
+                tableBody.appendChild(row);
+            });
+        }
+        
+        // Gradient descent
+        function gradientDescent(iterations, learningRate) {
+            if (points.length < 2) return;
+            
+            let slope = currentSlope;
+            let intercept = currentIntercept;
+            const n = points.length;
+            
+            for (let i = 0; i < iterations && gradientDescentRunning; i++) {
+                let slopeGradient = 0;
+                let interceptGradient = 0;
+                
+                points.forEach(point => {
+                    const predicted = slope * point.x + intercept;
+                    const error = predicted - point.y;
+                    slopeGradient += (2/n) * point.x * error;
+                    interceptGradient += (2/n) * error;
+                });
+                
+                slope -= learningRate * slopeGradient;
+                intercept -= learningRate * interceptGradient;
+                
+                currentSlope = slope;
+                currentIntercept = intercept;
+                
+                document.getElementById('sliderSlope').value = slope;
+                document.getElementById('slopeValue').textContent = slope.toFixed(4);
+                document.getElementById('sliderIntercept').value = intercept;
+                document.getElementById('interceptValue').textContent = intercept.toFixed(4);
+                
+                updateStats();
+                initCanvas();
+                
+                // If we're animating, break after one iteration
+                if (animationId !== null) {
+                    animationId = requestAnimationFrame(() => {
+                        gradientDescent(1, learningRate);
+                    });
+                    return;
+                }
+            }
+        }
+        
+        // Event listeners
+        canvas.addEventListener('click', function(e) {
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            addPoint(x, y);
+        });
+        
+        canvas.addEventListener('mousedown', function(e) {
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Check if clicking on a point
+            for (let i = 0; i < points.length; i++) {
+                const point = points[i];
+                const distance = Math.sqrt(
+                    Math.pow(x - (canvas.width / 2 + point.x), 2) + 
+                    Math.pow(y - (canvas.height / 2 - point.y), 2)
+                );
+                
+                if (distance <= 5) {
+                    isDragging = true;
+                    dragIndex = i;
+                    return;
+                }
+            }
+        });
+        
+        canvas.addEventListener('mousemove', function(e) {
+            if (!isDragging || dragIndex === -1) return;
+            
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            points[dragIndex].x = x - canvas.width / 2;
+            points[dragIndex].y = canvas.height / 2 - y;
+            
+            updateTable();
+            updateStats();
+            initCanvas();
+        });
+        
+        canvas.addEventListener('mouseup', function() {
+            isDragging = false;
+            dragIndex = -1;
+        });
+        
+        canvas.addEventListener('mouseleave', function() {
+            isDragging = false;
+            dragIndex = -1;
+        });
+        
+        document.getElementById('addRandom').addEventListener('click', addRandomPoint);
+        document.getElementById('clearPoints').addEventListener('click', clearPoints);
+        document.getElementById('addLinePoint').addEventListener('click', addPointOnLine);
+        document.getElementById('addNoisyPoint').addEventListener('click', addNoisyPoint);
+        document.getElementById('calculateRegression').addEventListener('click', calculateRegression);
+        document.getElementById('resetLine').addEventListener('click', function() {
+            currentSlope = 1;
+            currentIntercept = 0;
+            document.getElementById('sliderSlope').value = 1;
+            document.getElementById('slopeValue').textContent = '1.0';
+            document.getElementById('sliderIntercept').value = 0;
+            document.getElementById('interceptValue').textContent = '0';
+            updateStats();
+            initCanvas();
+        });
+        
+        document.getElementById('sliderSlope').addEventListener('input', function() {
+            currentSlope = parseFloat(this.value);
+            document.getElementById('slopeValue').textContent = currentSlope.toFixed(2);
+            updateStats();
+            initCanvas();
+        });
+        
+        document.getElementById('sliderIntercept').addEventListener('input', function() {
+            currentIntercept = parseFloat(this.value);
+            document.getElementById('interceptValue').textContent = currentIntercept.toFixed(2);
+            updateStats();
+            initCanvas();
+        });
+        
+        document.getElementById('learningRate').addEventListener('input', function() {
+            document.getElementById('learningRateValue').textContent = this.value;
+        });
+        
+        document.getElementById('gradientDescent').addEventListener('click', function() {
+            const iterations = parseInt(document.getElementById('iterations').value);
+            const learningRate = parseFloat(document.getElementById('learningRate').value);
+            gradientDescentRunning = true;
+            if (animationId === null) {
+                gradientDescent(iterations, learningRate);
+            }
+        });
+        
+        document.getElementById('stopGradient').addEventListener('click', function() {
+            gradientDescentRunning = false;
+            if (animationId !== null) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        });
+        
+        // Initialize
+        initCanvas();
+    </script>
+</body>
+</html>

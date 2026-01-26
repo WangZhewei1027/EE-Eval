@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HTTPS Interactive Simulator</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    /* Minimal styling only to keep UI usable; otherwise plain black on white */
+    body { font-family: monospace; margin: 12px; color: black; background: white; }
+    .col { display: inline-block; vertical-align: top; margin-right: 12px; }
+    textarea, pre { width: 100%; box-sizing: border-box; font-family: monospace; }
+    .panel { border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; }
+    button { margin: 2px 4px 2px 0; }
+    label { display: block; margin-top: 6px; }
+    input[type="text"], select { width: 220px; }
+    .small { font-size: 12px; color: #333; }
+  </style>
+</head>
+<body>
+  <h1>HTTPS Interactive Simulator (Plain UI)</h1>
+  <div class="col" style="width:480px;">
+    <div class="panel">
+      <strong>Client Configuration</strong>
+      <label>Client SNI (server name): <input id="clientSNI" type="text" value="example.com"></label>
+      <label>TLS Version:
+        <select id="clientTLS">
+          <option value="1.3">TLS 1.3</option>
+          <option value="1.2">TLS 1.2</option>
+        </select>
+      </label>
+      <label>Client Cipher Preferences (ordered, comma separated):
+        <input id="clientCiphers" type="text" value="TLS_AES_128_GCM_SHA256,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">
+      </label>
+      <label><input id="clientRequestClientCert" type="checkbox"> Include client certificate if requested</label>
+      <div class="small">Client options: change TLS version, cipher list and SNI. Many handshake paths depend on these values.</div>
+      <div style="margin-top:8px;">
+        <button id="genClientCertBtn">Generate Client Cert</button>
+        <button id="clearClientCertBtn">Clear Client Cert</button>
+        <div id="clientCertInfo" class="small">No client cert</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Server Configuration</strong>
+      <label>Server Name: <input id="serverName" type="text" value="example.com"></label>
+      <label>Supported TLS Versions:
+        <select id="serverTLS" multiple size="2">
+          <option value="1.3" selected>TLS 1.3</option>
+          <option value="1.2" selected>TLS 1.2</option>
+        </select>
+      </label>
+      <label>Server Cipher List (ordered): <input id="serverCiphers" type="text" value="TLS_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"></label>
+      <label><input id="serverRequireClientCert" type="checkbox"> Require client certificate</label>
+      <div style="margin-top:8px;">
+        <button id="genServerCertBtn">Generate Server Cert</button>
+        <button id="issueFromCA">Issue Server Cert From Selected CA</button>
+        <div id="serverCertInfo" class="small">No server cert</div>
+      </div>
+      <label>OCSP: <select id="ocspSelector">
+        <option value="none">None</option>
+        <option value="good">Responder: Good</option>
+        <option value="revoked">Responder: Revoked</option>
+        <option value="unknown">Responder: Unknown</option>
+      </select></label>
+    </div>
+
+    <div class="panel">
+      <strong>Trust Store (Root CAs)</strong>
+      <div>
+        <button id="genRootCA">Generate Root CA</button>
+        <button id="addRootToTrust">Add Selected CA to Trust Store</button>
+        <button id="clearTrust">Clear Trust Store</button>
+      </div>
+      <div style="margin-top:6px;">
+        <label>Select CA:
+          <select id="caList"></select>
+        </label>
+        <label>Trusted Roots (checkboxes will reflect trust):</label>
+        <div id="trustStoreList" class="small"></div>
+      </div>
+      <div class="small">A root CA can be generated and used to sign server certificates. Trust store determines if a certificate is accepted.</div>
+    </div>
+
+    <div class="panel">
+      <strong>Attacker / Network</strong>
+      <label>Mode:
+        <select id="attackerMode">
+          <option value="off">Off</option>
+          <option value="passive">Passive Sniffer</option>
+          <option value="mitm">Active MITM</option>
+        </select>
+      </label>
+      <label>Packet Loss (0-100%): <input id="packetLoss" type="range" min="0" max="90" value="0"> <span id="packetLossVal">0%</span></label>
+      <label>Latency ms (min,max): <input id="latencyMin" type="number" value="10" style="width:70px"> - <input id="latencyMax" type="number" value="150" style="width:70px"></label>
+      <label><input id="downgradeAttack" type="checkbox"> Attempt protocol downgrade attack</label>
+      <div style="margin-top:8px;">
+        <button id="forgeCertBtn">Forge Server Cert (MITM)</button>
+        <button id="startNetworkLog">Start Network Log Capture</button>
+      </div>
+      <div id="networkLog" class="small" style="margin-top:6px; white-space:pre-wrap; max-height:120px; overflow:auto;"></div>
+    </div>
+
+  </div>
+
+  <div class="col" style="width:640px;">
+    <div class="panel">
+      <strong>Handshake Controls & Simulation</strong>
+      <div>
+        <button id="startHandshake">Start Handshake</button>
+        <button id="stepHandshake">Step</button>
+        <button id="autoHandshake">Auto Run</button>
+        <button id="pauseHandshake">Pause</button>
+        <button id="abortHandshake">Abort</button>
+      </div>
+      <div style="margin-top:6px;">
+        Speed (ms delay between steps): <input id="speedSlider" type="range" min="0" max="2000" value="400"> <span id="speedVal">400</span> ms
+      </div>
+      <div style="margin-top:6px;">
+        <button id="sendHttpBtn">Send HTTPS GET / (after secure)</button>
+        <button id="sendEarlyDataBtn">Send 0-RTT Early Data (TLS1.3 only)</button>
+        <button id="resumeBtn">Attempt Session Resumption</button>
+      </div>
+      <div style="margin-top:8px;">
+        <strong>Handshake Log</strong>
+        <pre id="log" style="height:280px; overflow:auto;"></pre>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Message Inspector & Tools</strong>
+      <label>Selected message index: <input id="msgIndex" type="number" value="0" style="width:60px"> <button id="inspectBtn">Inspect</button></label>
+      <pre id="msgInspector" style="height:220px; overflow:auto;"></pre>
+      <div style="margin-top:6px;">
+        <button id="tamperBtn">Tamper Selected Message (flip a bit)</button>
+        <button id="replayBtn">Replay Selected Message</button>
+        <button id="exportLog">Export Log</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Derived Keys / Secrets (for advanced users)</strong>
+      <div class="small">After handshake completes, symmetric keys derived via ECDH/HKDF will appear here and can be used to decrypt encrypted frames.</div>
+      <pre id="secrets" style="height:160px; overflow:auto;"></pre>
+      <div style="margin-top:6px;">
+        <button id="showRawMaster">Show Raw Master Secret</button>
+        <button id="clearSecrets">Clear Secrets</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // HTTPS Interactive Simulator
+    // Extremely minimal UI; many interactive controls in plain HTML.
+    (function(){
+      // Basic helpers
+      const logEl = document.getElementById('log');
+      const networkLog = document.getElementById('networkLog');
+      const caList = document.getElementById('caList');
+      const trustStoreList = document.getElementById('trustStoreList');
+      const clientCertInfo = document.getElementById('clientCertInfo');
+      const serverCertInfo = document.getElementById('serverCertInfo');
+      const msgInspector = document.getElementById('msgInspector');
+      const secretsEl = document.getElementById('secrets');
+
+      const hex = buf => {
+        const a = new Uint8Array(buf);
+        let s = '';
+        for (let b of a) { s += b.toString(16).padStart(2,'0'); }
+        return s;
+      };
+      const bufEqual = (a,b) => {
+        if (a.byteLength !== b.byteLength) return false;
+        const ua = new Uint8Array(a), ub = new Uint8Array(b);
+        for (let i=0;i<ua.length;i++) if (ua[i]!==ub[i]) return false;
+        return true;
+      };
+      const abToBase64 = ab => btoa(String.fromCharCode(...new Uint8Array(ab)));
+      const base64ToAb = s => {
+        const bin = atob(s);
+        const u = new Uint8Array(bin.length);
+        for (let i=0;i<bin.length;i++) u[i] = bin.charCodeAt(i);
+        return u.buffer;
+      };
+
+      // Cryptographic utilities using WebCrypto
+      const cryptoSubtle = window.crypto.subtle;
+
+      async function generateECKeyPair() {
+        return await cryptoSubtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+      }
+      async function generateECDHKeyPair() {
+        return await cryptoSubtle.generateKey({name:'ECDH', namedCurve:'P-256'}, true, ['deriveKey','deriveBits']);
+      }
+      async function signDataECDSA(privateKey, data) {
+        return await cryptoSubtle.sign({name:'ECDSA', hash:'SHA-256'}, privateKey, data);
+      }
+      async function verifyDataECDSA(publicKey, signature, data) {
+        return await cryptoSubtle.verify({name:'ECDSA', hash:'SHA-256'}, publicKey, signature, data);
+      }
+      async function exportPublicKeyRaw(key) {
+        // Accept both ECDSA and ECDH public keys
+        return await cryptoSubtle.exportKey('raw', key);
+      }
+      async function importPublicKeyRaw(raw, type='ecdsa') {
+        const alg = (type==='ecdsa') ? {name:'ECDSA', namedCurve:'P-256'} : {name:'ECDH', namedCurve:'P-256'};
+        return await cryptoSubtle.importKey('raw', raw, alg, true, (type==='ecdsa')?['verify']:[]);
+      }
+
+      async function deriveSharedSecret(privKey, otherPubRaw) {
+        const pubKey = await importPublicKeyRaw(otherPubRaw, 'ecdh');
+        const bits = await cryptoSubtle.deriveBits({name:'ECDH', public:pubKey}, privKey, 256);
+        return bits; // ArrayBuffer of shared secret bits
+      }
+
+      // HKDF implementation using WebCrypto primitives
+      async function hkdfExtract(salt, ikm) {
+        // HMAC-SHA-256
+        const key = await cryptoSubtle.importKey('raw', salt, {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+        const prk = await cryptoSubtle.sign('HMAC', key, ikm);
+        return prk; // ArrayBuffer
+      }
+      async function hkdfExpand(prk, info, length) {
+        // Derive length bytes using HMAC-SHA-256
+        const hashLen = 32;
+        const n = Math.ceil(length / hashLen);
+        let okm = new Uint8Array(0);
+        let t = new Uint8Array(0);
+        const key = await cryptoSubtle.importKey('raw', prk, {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+        for (let i=1;i<=n;i++) {
+          const input = new Uint8Array(t.length + info.byteLength + 1);
+          input.set(t,0);
+          input.set(new Uint8Array(info), t.length);
+          input[input.length-1] = i;
+          t = new Uint8Array(await cryptoSubtle.sign('HMAC', key, input));
+          okm = concatUint8(okm, t);
+        }
+        return okm.slice(0, length).buffer;
+      }
+      function concatUint8(a,b) {
+        const c = new Uint8Array(a.length + b.length);
+        c.set(a,0); c.set(b,a.length); return c;
+      }
+
+      // AES-GCM encryption helper
+      async function aesGcmEncrypt(keyRaw, plaintext) {
+        const cryptoKey = await cryptoSubtle.importKey('raw', keyRaw, {name:'AES-GCM'}, false, ['encrypt']);
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const ct = await cryptoSubtle.encrypt({name:'AES-GCM', iv:iv}, cryptoKey, plaintext);
+        return {iv:iv.buffer, ciphertext:ct};
+      }
+      async function aesGcmDecrypt(keyRaw, iv, ciphertext) {
+        const cryptoKey = await cryptoSubtle.importKey('raw', keyRaw, {name:'AES-GCM'}, false, ['decrypt']);
+        try {
+          const pt = await cryptoSubtle.decrypt({name:'AES-GCM', iv:new Uint8Array(iv)}, cryptoKey, ciphertext);
+          return {ok:true, plaintext:pt};
+        } catch(e) {
+          return {ok:false, error:e};
+        }
+      }
+
+      // In-memory PKI and keys
+      const CAs = []; // {id,name,keys:{signKeyPair},pubRaw,createdAt}
+      const trustStore = new Set(); // CA ids
+      const Certificates = { server: null, client: null }; // store cert objects
+      let generatedServerCSR = null;
+
+      let handshakeState = null; // state machine
+      let messageLog = []; // list of messages (objects)
+      let autoTimer = null;
+      let autoRunning = false;
+
+      function appendLog(s) {
+        const time = new Date().toISOString().slice(11,23);
+        messageLog.push({ts: Date.now(), kind:'log', text:s});
+        logEl.textContent += `[${time}] ${s}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      function appendNetwork(s) {
+        const time = new Date().toISOString().slice(11,23);
+        networkLog.textContent += `[${time}] ${s}\n`;
+        networkLog.scrollTop = networkLog.scrollHeight;
+      }
+
+      // PKI: certificate representation is a JSON-like object that includes public key raw bytes and signature
+      async function createSelfSignedCA(name) {
+        const signKeyPair = await cryptoSubtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+        const pubRaw = await cryptoSubtle.exportKey('raw', signKeyPair.publicKey);
+        const cert = {
+          id: 'ca-' + Math.random().toString(36).slice(2,8),
+          name: name || 'RootCA-' + Math.random().toString(36).slice(2,6),
+          createdAt: Date.now(),
+          type: 'root',
+          pubRaw: abToBase64(pubRaw),
+          signature: null,
+          subject: name || 'RootCA',
+          issuer: null,
+          notBefore: Date.now() - 1000*60*60,
+          notAfter: Date.now() + 1000*60*60*24*365*10
+        };
+        // Self-sign by signing the JSON (simple)
+        const data = new TextEncoder().encode(JSON.stringify({name:cert.name, pubRaw:cert.pubRaw, subject:cert.subject, notBefore:cert.notBefore, notAfter:cert.notAfter}));
+        const sig = await signDataECDSA(signKeyPair.privateKey, data);
+        cert.signature = abToBase64(sig);
+        CAs.push({id:cert.id, name: cert.name, signKeyPair, cert});
+        refreshCAList();
+        appendLog('Generated Root CA: ' + cert.id + ' (' + cert.name + ')');
+        return CAs[CAs.length-1];
+      }
+
+      function refreshCAList() {
+        caList.innerHTML = '';
+        trustStoreList.innerHTML = '';
+        for (const ca of CAs) {
+          const opt = document.createElement('option');
+          opt.value = ca.id;
+          opt.textContent = ca.name + ' (' + ca.id + ')';
+          caList.appendChild(opt);
+
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.id = 'trust-'+ca.id;
+          cb.checked = trustStore.has(ca.id);
+          cb.onchange = () => {
+            if (cb.checked) trustStore.add(ca.id); else trustStore.delete(ca.id);
+            renderTrustStore();
+          };
+          const label = document.createElement('label');
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(' ' + ca.name + ' (' + ca.id + ')'));
+          trustStoreList.appendChild(label);
+          trustStoreList.appendChild(document.createElement('br'));
+        }
+        renderTrustStore();
+      }
+      function renderTrustStore() {
+        const bits = [];
+        for (const ca of CAs) bits.push((trustStore.has(ca.id)?'[TRUSTED] ':'[ ] ') + ca.name + ' (' + ca.id + ')');
+        trustStoreList.title = bits.join('\n');
+      }
+
+      async function issueServerCert(issuerCAId, commonName) {
+        const ca = CAs.find(c=>c.id===issuerCAId);
+        if (!ca) { appendLog('No CA selected'); return null; }
+        // generate server key (ECDH key for key exchange may be ephemeral; but server needs signing key in cert)
+        const signingKeyPair = await cryptoSubtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+        const pubRaw = await cryptoSubtle.exportKey('raw', signingKeyPair.publicKey);
+        const cert = {
+          id: 'svr-' + Math.random().toString(36).slice(2,8),
+          subject: commonName || 'example.com',
+          issuer: ca.cert.name,
+          pubRaw: abToBase64(pubRaw),
+          notBefore: Date.now() - 1000*60*60,
+          notAfter: Date.now() + 1000*60*60*24*90,
+          signature: null,
+          issuerCAId: ca.id
+        };
+        const data = new TextEncoder().encode(JSON.stringify({subject:cert.subject, pubRaw:cert.pubRaw, notBefore:cert.notBefore, notAfter:cert.notAfter}));
+        const sig = await signDataECDSA(ca.signKeyPair.privateKey, data);
+        cert.signature = abToBase64(sig);
+        Certificates.server = {cert, keyPair: signingKeyPair};
+        serverCertInfo.textContent = `Server cert ${cert.id} for ${cert.subject} issued by ${cert.issuer}`;
+        appendLog('Issued server certificate ' + cert.id + ' signed by CA ' + ca.id);
+        return Certificates.server;
+      }
+
+      async function issueClientCert(issuerCAId, subject) {
+        const ca = CAs.find(c=>c.id===issuerCAId);
+        if (!ca) { appendLog('No CA selected for client cert'); return null; }
+        const signingKeyPair = await cryptoSubtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+        const pubRaw = await cryptoSubtle.exportKey('raw', signingKeyPair.publicKey);
+        const cert = {
+          id: 'clt-' + Math.random().toString(36).slice(2,8),
+          subject: subject || 'client',
+          issuer: ca.cert.name,
+          pubRaw: abToBase64(pubRaw),
+          notBefore: Date.now() - 1000*60*60,
+          notAfter: Date.now() + 1000*60*60*24*365,
+          signature: null,
+          issuerCAId: ca.id
+        };
+        const data = new TextEncoder().encode(JSON.stringify({subject:cert.subject, pubRaw:cert.pubRaw, notBefore:cert.notBefore, notAfter:cert.notAfter}));
+        const sig = await signDataECDSA(ca.signKeyPair.privateKey, data);
+        cert.signature = abToBase64(sig);
+        Certificates.client = {cert, keyPair: signingKeyPair};
+        clientCertInfo.textContent = `Client cert ${cert.id} for ${cert.subject} issued by ${cert.issuer}`;
+        appendLog('Issued client certificate ' + cert.id + ' signed by CA ' + ca.id);
+        return Certificates.client;
+      }
+
+      // Certificate verification
+      async function verifyCertChain(certObj) {
+        // certObj contains cert with issuerCAId and signature
+        if (!certObj) return {ok:false, reason:'no cert'};
+        const cert = certObj.cert;
+        const data = new TextEncoder().encode(JSON.stringify({subject:cert.subject, pubRaw:cert.pubRaw, notBefore:cert.notBefore, notAfter:cert.notAfter}));
+        const sig = base64ToAb(cert.signature);
+        // Find CA by issuer name or id
+        let ca = null;
+        if (cert.issuerCAId) ca = CAs.find(c=>c.id===cert.issuerCAId);
+        if (!ca) ca = CAs.find(c=>c.cert.name === cert.issuer);
+        if (!ca) return {ok:false, reason:'Unknown issuer'};
+        // Check trust
+        if (!trustStore.has(ca.id)) return {ok:false, reason:'Issuer not trusted: ' + ca.id};
+        // verify signature
+        const pub = await importPublicKeyRaw(base64ToAb(ca.cert.pubRaw), 'ecdsa');
+        const valid = await verifyDataECDSA(pub, sig, data);
+        if (!valid) return {ok:false, reason:'Signature invalid'};
+        // validity period
+        const now = Date.now();
+        if (now < cert.notBefore) return {ok:false, reason:'Certificate not yet valid'};
+        if (now > cert.notAfter) return {ok:false, reason:'Certificate expired'};
+        return {ok:true, caId:ca.id};
+      }
+
+      // Handshake simulation core
+      function resetHandshakeState() {
+        handshakeState = {
+          stepIndex: 0,
+          steps: [],
+          client: {sni: document.getElementById('clientSNI').value, tls: document.getElementById('clientTLS').value, ciphers: document.getElementById('clientCiphers').value.split(',').map(s=>s.trim()).filter(Boolean)},
+          server: {name: document.getElementById('serverName').value, tlsOptions: Array.from(document.getElementById('serverTLS').options).filter(o=>o.selected).map(o=>o.value), ciphers: document.getElementById('serverCiphers').value.split(',').map(s=>s.trim()).filter(Boolean)},
+          attacker: {mode: document.getElementById('attackerMode').value, packetLoss: parseInt(document.getElementById('packetLoss').value), latencyMin: parseInt(document.getElementById('latencyMin').value), latencyMax: parseInt(document.getElementById('latencyMax').value), downgrade: document.getElementById('downgradeAttack').checked},
+          messages: [],
+          secrets: null,
+          established: false,
+          session: null,
+          aborted: false
+        };
+        messageLog = [];
+        logEl.textContent = '';
+        networkLog.textContent = '';
+        msgInspector.textContent = '';
+        secretsEl.textContent = '';
+      }
+
+      function scheduleStep(fn, delay) {
+        if (handshakeState.aborted) return Promise.reject('aborted');
+        const jitter = Math.floor(Math.random()*50);
+        const d = Math.max(0, delay + jitter);
+        return new Promise(resolve => setTimeout(()=> { fn(); resolve(); }, d));
+      }
+
+      // Utility for simulated network sending with packet loss and MITM interception
+      async function sendMessage(sender, receiver, msgObj) {
+        // Append to handshakeState.messages with metadata
+        const idx = handshakeState.messages.length;
+        handshakeState.messages.push({from:sender,to:receiver,msg:msgObj,ts:Date.now()});
+        appendNetwork(`${sender} -> ${receiver}: ${msgObj.type} (idx ${idx})`);
+        // Packet loss
+        const loss = handshakeState.attacker.packetLoss;
+        if (Math.random()*100 < loss) {
+          appendNetwork(`NETWORK: packet lost (idx ${idx})`);
+          handshakeState.messages[idx].dropped = true;
+          return {dropped:true, idx};
+        }
+        // MITM: if attacker active and mode=mitm and path includes client<->server, attacker can intercept/modify.
+        if (handshakeState.attacker.mode === 'mitm' && ((sender==='client' && receiver==='server') || (sender==='server' && receiver==='client'))) {
+          // Intercept
+          appendNetwork(`MITM: intercepted message idx ${idx}`);
+          // If forging cert is enabled some other way, MITM may alter server Certificate during transit
+          if (msgObj.type === 'Certificate' && document.getElementById('forgeCertBtn').dataset.forged === 'true') {
+            // Replace certificate with forged one
+            const forged = JSON.parse(document.getElementById('forgeCertBtn').dataset.forgedPayload);
+            handshakeState.messages[idx].original = msgObj;
+            handshakeState.messages[idx].msg = forged;
+            appendNetwork(`MITM: replaced Certificate with forged cert (idx ${idx})`);
+          }
+          // Attacker may attempt protocol downgrade by modifying ServerHello to pick earlier version
+          if (handshakeState.attacker.downgrade && msgObj.type === 'ServerHello') {
+            const original = JSON.parse(JSON.stringify(msgObj));
+            if (original.version === '1.3' && handshakeState.server.tlsOptions.includes('1.2')) {
+              msgObj.version = '1.2';
+              appendNetwork(`MITM: modified ServerHello to indicate version 1.2 (downgrade)`);
+            }
+            handshakeState.messages[idx].original = original;
+            handshakeState.messages[idx].msg = msgObj;
+          }
+        }
+        // Simulate network latency
+        const min = handshakeState.attacker.latencyMin || 10;
+        const max = handshakeState.attacker.latencyMax || 150;
+        const latency = Math.floor(Math.random()*(max-min+1)) + min;
+        await new Promise(r=>setTimeout(r, latency));
+        // Deliver: append to log
+        appendLog(`${sender} -> ${receiver}: ${msgObj.type}`);
+        return {dropped:false, idx};
+      }
+
+      // Build handshake steps based on TLS version selected
+      function buildHandshakeSteps() {
+        const clientTLS = handshakeState.client.tls;
+        const serverTLSList = handshakeState.server.tlsOptions;
+        const negotiated = (() => {
+          if (handshakeState.attacker.downgrade && serverTLSList.includes('1.2') && clientTLS==='1.3') return '1.2';
+          if (clientTLS === '1.3' && serverTLSList.includes('1.3')) return '1.3';
+          if (clientTLS === '1.2' && serverTLSList.includes('1.2')) return '1.2';
+          // fallback common minor
+          for (const v of serverTLSList) if (v===clientTLS) return v;
+          return serverTLSList[0] || clientTLS;
+        })();
+
+        handshakeState.negotiatedVersion = negotiated;
+        appendLog('Negotiated TLS version (planned): ' + negotiated);
+
+        const steps = [];
+
+        // ClientHello
+        steps.push({actor:'client', action: async () => {
+          const ch = {type:'ClientHello', version:handshakeState.client.tls, sni:handshakeState.client.sni, cipherSuites:handshakeState.client.ciphers};
+          await sendMessage('client','server',ch);
+        }});
+
+        // ServerHello + Certificate (server may send both)
+        steps.push({actor:'server', action: async () => {
+          // Choose cipher
+          const clientCiphers = handshakeState.client.ciphers;
+          const serverCiphers = handshakeState.server.ciphers;
+          const agreed = clientCiphers.find(c => serverCiphers.includes(c)) || serverCiphers[0] || clientCiphers[0];
+          const sh = {type:'ServerHello', version: negotiated, cipherSuite: agreed, selectedCipher:agreed};
+          await sendMessage('server','client',sh);
+        }});
+
+        steps.push({actor:'server', action: async () => {
+          // Send certificate chain
+          const cert = Certificates.server? Certificates.server.cert : null;
+          const certMsg = {type:'Certificate', cert: cert};
+          await sendMessage('server','client',certMsg);
+        }});
+
+        // If server requests client cert
+        steps.push({actor:'server', action: async () => {
+          if (document.getElementById('serverRequireClientCert').checked) {
+            const req = {type:'CertificateRequest', details:'Server requests client certificate'};
+            await sendMessage('server','client',req);
+          }
+        }});
+
+        // ServerHelloDone (TLS1.2) or EndOfServerHello for TLS1.3 is implicit; we will add marker
+        steps.push({actor:'server', action: async () => {
+          const done = {type:'ServerHelloDone'};
+          await sendMessage('server','client',done);
+        }});
+
+        // Client verifies cert, optionally sends client cert, then sends key exchange
+        steps.push({actor:'client', action: async () => {
+          // Client receives cert earlier; simulate verification
+          const verifyRes = await verifyPresentedServerCert();
+          const info = {type:'ClientCertVerification', result: verifyRes};
+          await sendMessage('client','local',info); // local message to client
+          if (!verifyRes.ok) {
+            appendLog('Client: certificate validation failed: ' + verifyRes.reason);
+            handshakeState.verificationFailed = true;
+            return;
+          }
+          // If server requested client cert and client has one and client allows -> send it
+          if (document.getElementById('serverRequireClientCert').checked && Certificates.client) {
+            const clientCertMsg = {type:'Certificate', cert: Certificates.client.cert};
+            await sendMessage('client','server',clientCertMsg);
+          }
+          // Client and server perform ECDHE: generate ephemeral keys
+          const clientEphemeral = await generateECDHKeyPair();
+          const clientPubRaw = await cryptoSubtle.exportKey('raw', clientEphemeral.publicKey);
+          handshakeState.client.ephemeral = clientEphemeral;
+          const ck = {type:'ClientKeyExchange', pub: abToBase64(clientPubRaw)};
+          await sendMessage('client','server',ck);
+        }});
+
+        // Server derives shared secret and responds with ChangeCipherSpec/Finished
+        steps.push({actor:'server', action: async () => {
+          // Read client's ephemeral (simulate reading last message)
+          const last = handshakeState.messages.findLast(m => m.msg.type === 'ClientKeyExchange');
+          if (!last) { appendLog('Server: no ClientKeyExchange received'); }
+          const clientPubRaw = base64ToAb(last.msg.pub);
+          const serverEphemeral = await generateECDHKeyPair();
+          const serverPubRaw = await cryptoSubtle.exportKey('raw', serverEphemeral.publicKey);
+          handshakeState.server.ephemeral = serverEphemeral;
+
+          // Derive shared secret
+          const shared = await deriveSharedSecret(serverEphemeral.privateKey, clientPubRaw);
+          handshakeState.sharedSecret = shared;
+          appendLog('Server: derived shared secret (ECDH)');
+
+          // Optionally check client cert
+          if (document.getElementById('serverRequireClientCert').checked) {
+            const clientCertMsg = handshakeState.messages.find(m => m.msg.type === 'Certificate' && m.from==='client');
+            if (!clientCertMsg) appendLog('Server: expecting client cert but none provided');
+            else {
+              // verify
+              const clt = {cert: clientCertMsg.msg.cert};
+              const res = await verifyCertChain({cert:clt.cert, keyPair:null});
+              appendLog('Server: client cert verification: ' + (res.ok ? 'OK' : ('FAIL: ' + res.reason)));
+            }
+          }
+
+          // Send ServerKeyExchange if needed (here send server ephemeral)
+          const ske = {type:'ServerKeyExchange', pub: abToBase64(serverPubRaw)};
+          await sendMessage('server','client',ske);
+
+          // Send ChangeCipherSpec/Finished placeholder
+          const ccs = {type:'ChangeCipherSpec'};
+          await sendMessage('server','client',ccs);
+          const fin = {type:'Finished', verifyData: 'server_finished_dummy'};
+          await sendMessage('server','client',fin);
+        }});
+
+        // Client processes ServerKeyExchange and sends ChangeCipherSpec/Finished
+        steps.push({actor:'client', action: async () => {
+          const ske = handshakeState.messages.find(m => m.msg.type === 'ServerKeyExchange');
+          if (!ske) { appendLog('Client: no ServerKeyExchange'); return; }
+          const serverPubRaw = base64ToAb(ske.msg.pub);
+          // Derive shared secret
+          const shared = await deriveSharedSecret(handshakeState.client.ephemeral.privateKey, serverPubRaw);
+          handshakeState.sharedSecret = shared;
+          appendLog('Client: derived shared secret (ECDH)');
+
+          // Derive keys using HKDF simple approach
+          const salt = new Uint8Array(32); // zeros
+          const prk = await hkdfExtract(salt.buffer, shared);
+          const info = new TextEncoder().encode('tls13 simulated keys');
+          const keyMaterial = await hkdfExpand(prk, info, 32); // 256-bit symmetric key
+          handshakeState.symmetricKey = keyMaterial; // raw bytes
+          appendLog('Client: derived symmetric key via HKDF');
+
+          const ccs = {type:'ChangeCipherSpec'};
+          await sendMessage('client','server',ccs);
+          const fin = {type:'Finished', verifyData: 'client_finished_dummy'};
+          await sendMessage('client','server',fin);
+        }});
+
+        // Server receives finalization and marks connection established
+        steps.push({actor:'server', action: async () => {
+          appendLog('Server: Received client Finished; connection established (simulated)');
+          handshakeState.established = true;
+          handshakeState.session = {id:'session-' + Math.random().toString(36).slice(2,8), resumptionTicket: 'ticket-' + Math.random().toString(36).slice(2,8)};
+          appendLog('Server: Session ticket issued: ' + handshakeState.session.resumptionTicket);
+          // Optionally do OCSP check: we will simulate by checking ocspSelector
+          const ocspChoice = document.getElementById('ocspSelector').value;
+          if (ocspChoice === 'revoked') {
+            appendLog('OCSP: certificate revoked -> client would fail validation');
+            handshakeState.ocsp = {status:'revoked'};
+          } else if (ocspChoice === 'good') {
+            appendLog('OCSP: certificate good');
+            handshakeState.ocsp = {status:'good'};
+          } else handshakeState.ocsp = {status:'none'};
+        }});
+
+        return steps;
+      }
+
+      async function verifyPresentedServerCert() {
+        // Find server Certificate message in handshakeState.messages
+        const msg = handshakeState.messages.find(m => m.msg.type === 'Certificate' && m.from === 'server');
+        if (!msg) return {ok:false, reason:'no certificate presented'};
+        const cert = msg.msg.cert;
+        if (!cert) return {ok:false, reason:'server presented empty cert'};
+        // If attacker modified cert in transit, handshakeState.messages will show replaced cert too
+        // We'll attempt to verify chain via verifyCertChain
+        const res = await verifyCertChain({cert: cert});
+        // Also check SNI
+        if (res.ok) {
+          if (cert.subject !== handshakeState.client.sni) {
+            return {ok:false, reason:'Name mismatch: cert subject ' + cert.subject + ' != SNI ' + handshakeState.client.sni};
+          }
+        }
+        return res;
+      }
+
+      // Handshake stepping
+      async function runNextStep() {
+        if (!handshakeState) resetHandshakeState();
+        if (!handshakeState.steps || handshakeState.steps.length===0) {
+          handshakeState.steps = buildHandshakeSteps();
+          handshakeState.stepIndex = 0;
+        }
+        if (handshakeState.stepIndex >= handshakeState.steps.length) {
+          appendLog('Handshake finished or no more steps');
+          return;
+        }
+        const step = handshakeState.steps[handshakeState.stepIndex];
+        handshakeState.stepIndex++;
+        try {
+          await scheduleStep(async () => {
+            await step.action();
+          }, parseInt(document.getElementById('speedSlider').value));
+        } catch(e) {
+          appendLog('Step aborted: ' + e);
+        }
+        // If verification failed at client side, stop
+        if (handshakeState.verificationFailed) {
+          appendLog('Handshake aborted due to certificate verification failure');
+          handshakeState.aborted = true;
+          return;
+        }
+        if (handshakeState.established) {
+          // Derive final secrets if not already
+          if (handshakeState.symmetricKey) {
+            secretsEl.textContent = 'symmetricKey (hex): ' + hex(handshakeState.symmetricKey) + '\nsession: ' + JSON.stringify(handshakeState.session);
+          }
+        }
+      }
+
+      // UI wiring
+      document.getElementById('genRootCA').addEventListener('click', async ()=>{
+        const nm = prompt('Enter CA name (or leave blank):') || 'RootCA';
+        await createSelfSignedCA(nm);
+      });
+
+      document.getElementById('addRootToTrust').addEventListener('click', ()=>{
+        const selected = caList.value;
+        if (!selected) { appendLog('Select a CA first'); return; }
+        trustStore.add(selected);
+        refreshCAList();
+        appendLog('Added CA ' + selected + ' to trust store');
+      });
+
+      document.getElementById('clearTrust').addEventListener('click', ()=>{
+        trustStore.clear();
+        refreshCAList();
+        appendLog('Cleared trust store');
+      });
+
+      document.getElementById('genServerCertBtn').addEventListener('click', async ()=>{
+        // Generate ephemeral self-signed server cert (not from CA)
+        const signingKeyPair = await cryptoSubtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+        const pubRaw = await cryptoSubtle.exportKey('raw', signingKeyPair.publicKey);
+        const cert = {
+          id: 'svr-' + Math.random().toString(36).slice(2,8),
+          subject: document.getElementById('serverName').value,
+          issuer: 'self',
+          pubRaw: abToBase64(pubRaw),
+          notBefore: Date.now() - 1000*60*60,
+          notAfter: Date.now() + 1000*60*60*24*30,
+          signature: null,
+          issuerCAId: null
+        };
+        const data = new TextEncoder().encode(JSON.stringify({subject:cert.subject, pubRaw:cert.pubRaw, notBefore:cert.notBefore, notAfter:cert.notAfter}));
+        const sig = await signDataECDSA(signingKeyPair.privateKey, data);
+        cert.signature = abToBase64(sig);
+        Certificates.server = {cert, keyPair: signingKeyPair};
+        serverCertInfo.textContent = `Server cert ${cert.id} SELF-SIGNED for ${cert.subject}`;
+        appendLog('Generated self-signed server cert: ' + cert.id);
+      });
+
+      document.getElementById('issueFromCA').addEventListener('click', async ()=>{
+        const sel = caList.value;
+        if (!sel) { appendLog('Select a CA to sign the server certificate'); return; }
+        await issueServerCert(sel, document.getElementById('serverName').value);
+      });
+
+      document.getElementById('genClientCertBtn').addEventListener('click', async ()=>{
+        const sel = caList.value;
+        if (!sel) { appendLog('Select a CA to issue client cert'); return; }
+        await issueClientCert(sel, 'client-' + Math.random().toString(36).slice(2,6));
+      });
+
+      document.getElementById('clearClientCertBtn').addEventListener('click', ()=>{
+        Certificates.client = null;
+        clientCertInfo.textContent = 'No client cert';
+        appendLog('Cleared client certificate');
+      });
+
+      document.getElementById('packetLoss').addEventListener('input', (e)=>{
+        document.getElementById('packetLossVal').textContent = e.target.value + '%';
+      });
+
+      document.getElementById('forgeCertBtn').addEventListener('click', async ()=>{
+        // The forge button prepares a forged certificate and stores in dataset; does not automatically inject unless MITM mode active.
+        if (CAs.length === 0) { appendLog('No CA available to forge with. Generate a CA first.'); return; }
+        const attCA = CAs[0]; // choose first CA to sign forged cert
+        // Build forged cert pretending to be server, signed by attacker CA
+        const spoofName = document.getElementById('serverName').value + '-forged';
+        const signingKeyPair = await cryptoSubtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+        const pubRaw = await cryptoSubtle.exportKey('raw', signingKeyPair.publicKey);
+        const cert = {
+          id: 'forged-' + Math.random().toString(36).slice(2,8),
+          subject: document.getElementById('serverName').value,
+          issuer: attCA.cert.name,
+          pubRaw: abToBase64(pubRaw),
+          notBefore: Date.now() - 1000*60*60,
+          notAfter: Date.now() + 1000*60*60*24*365,
+          signature: null,
+          issuerCAId: attCA.id
+        };
+        const data = new TextEncoder().encode(JSON.stringify({subject:cert.subject, pubRaw:cert.pubRaw, notBefore:cert.notBefore, notAfter:cert.notAfter}));
+        const sig = await signDataECDSA(attCA.signKeyPair.privateKey, data);
+        cert.signature = abToBase64(sig);
+        document.getElementById('forgeCertBtn').dataset.forged = 'true';
+        document.getElementById('forgeCertBtn').dataset.forgedPayload = JSON.stringify({type:'Certificate', cert: cert});
+        appendLog('Prepared forged certificate signed by CA ' + attCA.id + '. Switch attacker mode to MITM to use.');
+      });
+
+      document.getElementById('startNetworkLog').addEventListener('click', ()=>{
+        networkLog.textContent = '';
+        appendLog('Network log capture started');
+      });
+
+      // Handshake control buttons
+      document.getElementById('startHandshake').addEventListener('click', async ()=>{
+        resetHandshakeState();
+        handshakeState = handshakeState || {};
+        handshakeState.attacker = {mode: document.getElementById('attackerMode').value, packetLoss: parseInt(document.getElementById('packetLoss').value), latencyMin: parseInt(document.getElementById('latencyMin').value), latencyMax: parseInt(document.getElementById('latencyMax').value), downgrade: document.getElementById('downgradeAttack').checked};
+        handshakeState.client = {sni: document.getElementById('clientSNI').value, tls: document.getElementById('clientTLS').value, ciphers: document.getElementById('clientCiphers').value.split(',').map(s=>s.trim()).filter(Boolean)};
+        handshakeState.server = {name: document.getElementById('serverName').value, tlsOptions: Array.from(document.getElementById('serverTLS').options).filter(o=>o.selected).map(o=>o.value), ciphers: document.getElementById('serverCiphers').value.split(',').map(s=>s.trim()).filter(Boolean)};
+        handshakeState.attacker = {mode: document.getElementById('attackerMode').value, packetLoss: parseInt(document.getElementById('packetLoss').value), latencyMin: parseInt(document.getElementById('latencyMin').value), latencyMax: parseInt(document.getElementById('latencyMax').value), downgrade: document.getElementById('downgradeAttack').checked};
+        handshakeState.messages = [];
+        handshakeState.established = false;
+        handshakeState.aborted = false;
+        handshakeState.steps = buildHandshakeSteps();
+        handshakeState.stepIndex = 0;
+        appendLog('Handshake initialized. Use Step or Auto Run to proceed.');
+      });
+
+      document.getElementById('stepHandshake').addEventListener('click', async ()=>{
+        if (!handshakeState) { appendLog('Click Start Handshake first'); return; }
+        if (handshakeState.aborted) { appendLog('Handshake aborted'); return; }
+        await runNextStep();
+      });
+
+      document.getElementById('autoHandshake').addEventListener('click', ()=>{
+        if (!handshakeState) { appendLog('Click Start Handshake first'); return; }
+        if (autoRunning) { appendLog('Auto already running'); return; }
+        autoRunning = true;
+        appendLog('Auto-run started');
+        const run = async () => {
+          if (!handshakeState || handshakeState.aborted) { autoRunning = false; appendLog('Auto-run stopped'); return; }
+          if (handshakeState.stepIndex >= handshakeState.steps.length) { autoRunning = false; appendLog('Auto-run completed'); return; }
+          await runNextStep();
+          setTimeout(run, parseInt(document.getElementById('speedSlider').value));
+        };
+        run();
+      });
+
+      document.getElementById('pauseHandshake').addEventListener('click', ()=>{
+        autoRunning = false;
+        appendLog('Auto-run paused');
+      });
+
+      document.getElementById('abortHandshake').addEventListener('click', ()=>{
+        if (!handshakeState) { appendLog('No handshake in progress'); return; }
+        handshakeState.aborted = true;
+        appendLog('Handshake aborted by user');
+      });
+
+      document.getElementById('speedSlider').addEventListener('input', (e)=>{
+        document.getElementById('speedVal').textContent = e.target.value;
+      });
+
+      // Message Inspector
+      document.getElementById('inspectBtn').addEventListener('click', ()=>{
+        const idx = parseInt(document.getElementById('msgIndex').value);
+        if (!handshakeState || !handshakeState.messages || !handshakeState.messages[idx]) { msgInspector.textContent = 'No message at index ' + idx; return; }
+        const m = handshakeState.messages[idx];
+        msgInspector.textContent = JSON.stringify(m, null, 2);
+      });
+
+      document.getElementById('tamperBtn').addEventListener('click', ()=>{
+        const idx = parseInt(document.getElementById('msgIndex').value);
+        if (!handshakeState || !handshakeState.messages || !handshakeState.messages[idx]) { appendLog('No message at index ' + idx); return; }
+        const m = handshakeState.messages[idx];
+        // Tamper: flip a bit in JSON string representation for simplicity
+        const s = JSON.stringify(m.msg);
+        const arr = s.split('');
+        const pos = Math.floor(Math.random()*arr.length);
+        arr[pos] = arr[pos] === '"' ? "'" : (arr[pos] === 'a' ? 'b' : 'a');
+        try {
+          const tamperedStr = arr.join('');
+          const tampered = JSON.parse(tamperedStr);
+          handshakeState.messages[idx].msg = tampered;
+          appendLog('Tampered message idx ' + idx + ' (basic JSON flip)');
+        } catch(e) {
+          appendLog('Tampering produced invalid JSON - replaced with string placeholder');
+          handshakeState.messages[idx].msg = {type:'tampered', raw: tamperedStr};
+        }
+      });
+
+      document.getElementById('replayBtn').addEventListener('click', async ()=>{
+        const idx = parseInt(document.getElementById('msgIndex').value);
+        if (!handshakeState || !handshakeState.messages || !handshakeState.messages[idx]) { appendLog('No message at index ' + idx); return; }
+        const m = handshakeState.messages[idx];
+        appendLog('Replaying message idx ' + idx + ' from ' + m.from + ' to ' + m.to);
+        await sendMessage(m.from, m.to, m.msg);
+      });
+
+      document.getElementById('exportLog').addEventListener('click', ()=>{
+        const data = {messageLog, handshakeState};
+        const txt = JSON.stringify(data, null, 2);
+        const win = window.open('', '_blank');
+        win.document.write('<pre>' + escapeHtml(txt) + '</pre>');
+      });
+
+      function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+      // HTTP over TLS simulated request/response
+      document.getElementById('sendHttpBtn').addEventListener('click', async ()=>{
+        if (!handshakeState || !handshakeState.established) { appendLog('Connection not established yet'); return; }
+        // Prepare simple GET request
+        const httpReq = "GET / HTTP/1.1\r\nHost: " + handshakeState.client.sni + "\r\nConnection: close\r\n\r\n";
+        const pt = new TextEncoder().encode(httpReq);
+        // encrypt with symmetric key derived earlier
+        const keyRaw = handshakeState.symmetricKey;
+        if (!keyRaw) { appendLog('No symmetric key available to encrypt HTTP'); return; }
+        const enc = await aesGcmEncrypt(keyRaw, pt);
+        appendLog('Client: Encrypted HTTP request (ciphertext length ' + enc.ciphertext.byteLength + ')');
+        // Send to server (simulated)
+        const msg = {type:'ApplicationData', encrypted:true, iv:abToBase64(enc.iv), ciphertext:abToBase64(enc.ciphertext)};
+        await sendMessage('client','server',msg);
+        // Server decrypt
+        const dec = await aesGcmDecrypt(keyRaw, enc.iv, enc.ciphertext);
+        if (dec.ok) {
+          appendLog('Server: Decrypted HTTP request: ' + new TextDecoder().decode(dec.plaintext).split('\r\n')[0]);
+          // Server prepares response
+          const body = "Hello from " + handshakeState.server.name + " (simulated)";
+          const httpResp = "HTTP/1.1 200 OK\r\nContent-Length: " + body.length + "\r\n\r\n" + body;
+          const encResp = await aesGcmEncrypt(keyRaw, new TextEncoder().encode(httpResp));
+          const respMsg = {type:'ApplicationData', encrypted:true, iv:abToBase64(encResp.iv), ciphertext:abToBase64(encResp.ciphertext)};
+          await sendMessage('server','client',respMsg);
+          // Client decrypts response
+          const dec2 = await aesGcmDecrypt(keyRaw, encResp.iv, encResp.ciphertext);
+          if (dec2.ok) {
+            appendLog('Client: Decrypted HTTP response: ' + new TextDecoder().decode(dec2.plaintext).split('\r\n')[0]);
+          } else appendLog('Client: Failed to decrypt response');
+        } else appendLog('Server: Failed to decrypt request');
+      });
+
+      document.getElementById('sendEarlyDataBtn').addEventListener('click', async ()=>{
+        if (!handshakeState) { appendLog('Start handshake then attempt 0-RTT'); return; }
+        if (handshakeState.negotiatedVersion !== '1.3' && document.getElementById('clientTLS').value === '1.3') {
+          appendLog('0-RTT Early Data simulated only for TLS1.3 when session resumption possible. Simulating early data anyway...');
+        }
+        // We simulate early data by sending ApplicationData before handshake complete
+        const httpReq = "GET /early HTTP/1.1\r\nHost: " + handshakeState.client.sni + "\r\nEarly: yes\r\n\r\n";
+        const pt = new TextEncoder().encode(httpReq);
+        // Use previous session key if exists (simulate)
+        let keyRaw = handshakeState.symmetricKey || window.crypto.getRandomValues(new Uint8Array(32)).buffer;
+        const enc = await aesGcmEncrypt(keyRaw, pt);
+        const msg = {type:'EarlyData', encrypted:true, iv:abToBase64(enc.iv), ciphertext:abToBase64(enc.ciphertext)};
+        await sendMessage('client','server',msg);
+        appendLog('Client: Sent 0-RTT Early Data (simulated)');
+      });
+
+      document.getElementById('resumeBtn').addEventListener('click', async ()=>{
+        if (!handshakeState || !handshakeState.session) { appendLog('No previous session to resume'); return; }
+        appendLog('Attempting session resumption with ticket: ' + handshakeState.session.resumptionTicket);
+        // For simulation, resume simply reuses symmetricKey if present
+        handshakeState.established = true;
+        appendLog('Session resumed (simulated). Connection established.');
+      });
+
+      // Secrets debugging
+      document.getElementById('showRawMaster').addEventListener('click', async ()=>{
+        if (!handshakeState || !handshakeState.sharedSecret) { appendLog('No master secret available'); return; }
+        secretsEl.textContent = 'sharedSecret (hex): ' + hex(handshakeState.sharedSecret) + (handshakeState.symmetricKey ? ('\nderivedKey: ' + hex(handshakeState.symmetricKey)) : '');
+      });
+      document.getElementById('clearSecrets').addEventListener('click', ()=>{
+        secretsEl.textContent = '';
+      });
+
+      // Initialize
+      refreshCAList();
+      appendLog('Simulator ready. Generate a Root CA, issue server cert, add CA to trust, then Start Handshake to explore.');
+    })();
+  </script>
+</body>
+</html>

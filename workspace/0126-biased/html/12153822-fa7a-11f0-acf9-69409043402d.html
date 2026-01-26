@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Space Complexity Interactive Explorer</title>
+<style>
+  body { font-family: monospace, monospace; color: black; background: white; margin: 1em; }
+  textarea, input[type=number], input[type=text] { font-family: monospace, monospace; font-size: 1em; }
+  button, input, select { margin: 0.2em 0.6em 0.4em 0; }
+  fieldset { margin-bottom: 1.2em; }
+  legend { font-weight: bold; }
+  .log, .output, .space-analysis, .workspace { white-space: pre-wrap; border: 1px solid #000; padding: 0.5em; min-height: 5em; max-height: 15em; overflow-y: auto; }
+  label { user-select: none; }
+  #structure-list button { margin: 0 0.3em 0.3em 0; }
+  #inspector > div { margin-top: 0.5em; }
+</style>
+</head>
+<body>
+
+<h1>Space Complexity Interactive Explorer</h1>
+
+<p>
+  This tool lets you explore <strong>space complexity</strong> by 
+  interactively creating algorithms, defining memory structures, running them with example inputs, and tracking detailed memory usage during execution.
+</p>
+
+<section id="workspace" class="workspace">
+  <fieldset>
+    <legend>Step 1: Define Data Structures Used</legend>
+    <p>Define named data structures with their approximate space characteristics. You can customize the definition to reflect different memory usage scenarios:</p>
+    <div>
+      <label for="ds-name">Name: </label>
+      <input type="text" id="ds-name" placeholder="e.g. array" />
+      <label for="ds-type">Type: </label>
+      <select id="ds-type">
+        <option value="primitive">Primitive (constant size)</option>
+        <option value="array">Array / List</option>
+        <option value="object">Object / Dictionary</option>
+        <option value="recursive">Recursive Structure</option>
+      </select>
+      <label for="ds-size">Size param name (optional): </label>
+      <input type="text" id="ds-size" placeholder="e.g. n" />
+      <label for="ds-desc" title="Brief textual description">Description: </label>
+      <input type="text" id="ds-desc" placeholder="e.g. dynamic array size n" size="20"/>
+      <button id="add-ds">Add Structure</button>
+    </div>
+    <p>Defined structures:</p>
+    <div id="structure-list"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step 2: Write the Algorithm (Pseudo-code)</legend>
+    <p>Type a pseudo-code algorithm using the defined data structures. Use a simplified language supporting variable declarations, loops, recursion, and conditional statements.</p>
+    <textarea id="algo-code" rows="12" cols="80" spellcheck="false" placeholder="Example:
+function foo(n)
+  let arr = Array of size n
+  for i = 1 to n
+    do something with arr[i]
+  end
+  return arr
+end"></textarea>
+    <br/>
+    <button id="parse-algo">Parse Algorithm</button>
+    <button id="clear-algo">Clear</button>
+    <div id="parse-log" class="log" aria-live="polite"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step 3: Provide Input Parameters</legend>
+    <p>Enter input values for the algorithm's parameters (variables used in the code header):</p>
+    <div id="inputs-area"></div>
+    <button id="run-algo" disabled>Run Algorithm (Simulate)</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step 4: Memory Usage Simulation & Space Complexity Analysis</legend>
+    <p>
+      During simulation, track memory allocations and deallocations step by step. 
+      Inspect variables, call stack, and current memory footprint.
+    </p>
+    <button id="step-run" disabled>Step Forward</button>
+    <button id="auto-run" disabled>Auto Run (1 step / 800ms)</button>
+    <button id="reset-run" disabled>Reset</button>
+    <p>Simulation Log:</p>
+    <div id="sim-log" class="log" tabindex="0"></div>
+    <p>Current Memory Usage:</p>
+    <div id="memory-usage" class="space-analysis"></div>
+    <p>Call Stack (top is current):</p>
+    <div id="call-stack" class="space-analysis"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step 5: Explore Space Complexity Results</legend>
+    <p>
+      Summary of space usage across steps will be shown here.
+    </p>
+    <button id="show-complexity" disabled>Analyze Complexity</button>
+    <div id="complexity-output" class="output"></div>
+  </fieldset>
+</section>
+
+<script>
+(function(){
+  // Basic usage:
+  // User defines data structures, then types an algo in simplified pseudo-code.
+  // We parse minimal syntax, mainly to detect variables, data structures usage,
+  // simulate memory allocations (through 'let' + structures), loops, recursive calls,
+  // and track allocated sizes, deallocations.
+  //
+  // We'll maintain an abstract interpreter with memory modeled as a map of varName->spaceUsed.
+  //
+  // We offer interactive step-by-step simulation.
+  //
+  // This is NOT a full parser, but parses a highly constrained pseudo code with some syntax rules.
+  //
+  // Also track max allocated space to estimate space complexity.
+
+  // -----------------
+  // Data structures definitions:
+
+  // List of structure definitions:
+  // {id (string), name (string), type (string), sizeParam (string|null), desc (string)}
+  let structures = [];
+
+  // DOM elements
+  const dsNameInp = document.getElementById('ds-name');
+  const dsTypeSel = document.getElementById('ds-type');
+  const dsSizeInp = document.getElementById('ds-size');
+  const dsDescInp = document.getElementById('ds-desc');
+  const addDsBtn = document.getElementById('add-ds');
+  const structureListDiv = document.getElementById('structure-list');
+
+  const algoCodeText = document.getElementById('algo-code');
+  const parseAlgoBtn = document.getElementById('parse-algo');
+  const clearAlgoBtn = document.getElementById('clear-algo');
+  const parseLogDiv = document.getElementById('parse-log');
+
+  const inputsAreaDiv = document.getElementById('inputs-area');
+  const runAlgoBtn = document.getElementById('run-algo');
+
+  const stepRunBtn = document.getElementById('step-run');
+  const autoRunBtn = document.getElementById('auto-run');
+  const resetRunBtn = document.getElementById('reset-run');
+
+  const simLogDiv = document.getElementById('sim-log');
+  const memoryUsageDiv = document.getElementById('memory-usage');
+  const callStackDiv = document.getElementById('call-stack');
+
+  const showComplexityBtn = document.getElementById('show-complexity');
+  const complexityOutputDiv = document.getElementById('complexity-output');
+
+  // Generate a random ID
+  function genId() {
+    return 'id_'+Math.random().toString(36).slice(2,10);
+  }
+
+  // Add structure and update list
+  function addStructure(){
+    const name = dsNameInp.value.trim();
+    if(!name) {
+      alert("Structure name is required.");
+      return;
+    }
+    if(structures.some(s=>s.name === name)){
+      alert("Structure name must be unique.");
+      return;
+    }
+    const type = dsTypeSel.value;
+    const sizeParamRaw = dsSizeInp.value.trim();
+    const sizeParam = sizeParamRaw ? sizeParamRaw : null;
+    const desc = dsDescInp.value.trim();
+
+    const id = genId();
+    structures.push({id, name, type, sizeParam, desc});
+
+    dsNameInp.value = '';
+    dsSizeInp.value = '';
+    dsDescInp.value = '';
+
+    renderStructures();
+    parseLogDiv.textContent = '';
+  }
+
+  function renderStructures(){
+    if(structures.length === 0){
+      structureListDiv.textContent = "(none)";
+      return;
+    }
+    structureListDiv.textContent = '';
+    structures.forEach(s=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = s.name+' ['+s.type+']'+(s.sizeParam? ` size param: ${s.sizeParam}`:'');
+      btn.title = s.desc || '';
+      btn.onclick = function(){
+        if(confirm(`Delete structure "${s.name}"?`)){
+          structures = structures.filter(x=>x.id!==s.id);
+          renderStructures();
+        }
+      };
+      structureListDiv.appendChild(btn);
+    });
+  }
+
+  addDsBtn.addEventListener('click', addStructure);
+
+  // ------------------------------------
+  // STEP 2: parse algorithm pseudo-code
+
+  // We'll do a minimal parsing:
+  //
+  // The pseudo:
+  //
+  // function <fname>([params])
+  //   statement
+  //   for ... end
+  //   if ... else ... end
+  //   let var = StructureName [of size expr]
+  //   return expr
+  // end
+  //
+  // We'll parse one function only.
+  //
+  // We'll parse statements into an AST-like structure for simulation.
+
+  // AST node types:
+  // 'function': {name, params[], body[]}
+  // 'let': {varName, structureName, sizeExpr}
+  // 'assign': {varName, expr}
+  // 'for': {varName, fromExpr, toExpr, body[]}
+  // 'if': {conditionExpr, thenBody[], elseBody[]}
+  // 'return': {expr}
+  // 'expr': evaluate expressions for this limited language (var, number)
+
+  // We'll parse expressions only as numbers, variables or 'var + number' or just variable names for index loops.
+
+  // Parsing errors appear in parseLogDiv
+
+  // We'll guard: variable names and structure names must be consistent with those defined.
+
+  // For sizes or params, variables must exist.
+
+  // Several helper functions:
+
+  // tokenize lines, remove empty lines
+
+  function parseAlgorithm(code){
+    // Reset parse log
+    parseLogDiv.textContent = '';
+
+    const linesRaw = code.split(/\r?\n/);
+    const lines = linesRaw.map(l=>l.trim()).filter(l=>l.length > 0 && !l.startsWith('//'));
+
+    if(lines.length === 0){
+      parseLogDiv.textContent = "No code provided.";
+      return null;
+    }
+
+    // First line must be function definition: function <name>([params])
+    const first = lines[0];
+    const funcMatch = first.match(/^function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)$/);
+    if(!funcMatch){
+      parseLogDiv.textContent = "First line must be a function definition: function name(params)";
+      return null;
+    }
+    const funcName = funcMatch[1];
+    const paramsStr = funcMatch[2];
+    const params = paramsStr.trim() ? paramsStr.split(/\s*,\s*/) : [];
+
+    // Validate params names (only letters, digits or _)
+    for(let p of params){
+      if(!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p)){
+        parseLogDiv.textContent = `Invalid parameter name: "${p}"`;
+        return null;
+      }
+    }
+
+    // Parse the rest of the code lines until we find the matching 'end' for the function.
+    // We'll build a recursive parsing for blocks: for, if, etc.
+    // Rules: indent not required, rely on 'end' keyword lines.
+
+    // A stack of blocks. Each block: {type:'function'|'for'|'if'|'else'|'root', body:[], extra info}
+    // We start with the 'function' block for the top.
+
+    // Supported statements:
+    // let var = StructureName [of size expr]
+    // assign: var = expr
+    // for var = expr to expr
+    // if condition
+    // else
+    // return expr
+    // end
+
+    // Expression evaluation is very minimal:
+    // expr: number literals (integers),
+    // variable names,
+    // arithmetic addition: var + number or number + var (only + allowed)
+    //
+    // condition in if: var (non-zero means true), or comparison: var < number, var <= number, var == number, etc
+
+    function parseExpr(str){
+      str = str.trim();
+      // try number
+      if(/^\d+$/.test(str)) return {type:'number', value:parseInt(str,10)};
+      // var + number or number + var
+      let m = str.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\+\s*(\d+)$/);
+      if(m) return {type:'add', left:{type:'var', name:m[1]}, right:{type:'number', value:parseInt(m[2],10)}};
+      m = str.match(/^(\d+)\s*\+\s*([a-zA-Z_][a-zA-Z0-9_]*)$/);
+      if(m) return {type:'add', left:{type:'number', value:parseInt(m[1],10)}, right:{type:'var', name:m[2]}};
+      // var only
+      if(/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(str)) return {type:'var', name:str};
+      // simple comparisons for conditions:
+      m = str.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(<=|>=|<|>|==|!=)\s*(\d+)$/);
+      if(m) return {type:'cmp', left:{type:'var', name:m[1]}, op:m[2], right:{type:'number', value:parseInt(m[3],10)}};
+      // Just allow raw true or false as fallback
+      if(str === 'true') return {type:'bool', value:true};
+      if(str === 'false') return {type:'bool', value:false};
+      // More complex expr not supported
+      throw new Error("Cannot parse expression: "+str);
+    }
+
+    function parseCondition(str){
+      try {
+        return parseExpr(str);
+      } catch(e){
+        throw new Error("Invalid condition expression: "+e.message);
+      }
+    }
+
+    function isStatementLet(line){
+      // "let var = StructureName [of size expr]"
+      return /^let\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*[a-zA-Z_][a-zA-Z0-9_]*(\s+of\s+size\s+.+)?$/.test(line);
+    }
+    function parseStatementLet(line){
+      // let var = StructureName [of size expr]
+      let m = line.match(/^let\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+of\s+size\s+(.+))?$/);
+      if(!m) throw new Error("Invalid let statement syntax");
+      const varName = m[1];
+      const structName = m[2];
+      const sizeExprRaw = m[3] || null;
+      let sizeExpr = null;
+      if(sizeExprRaw !== null) {
+        sizeExpr = parseExpr(sizeExprRaw);
+      }
+      return {type:'let', varName, structName, sizeExpr};
+    }
+
+    function isStatementAssign(line){
+      // "var = expr" but must NOT start with let or other keywords
+      // avoid conflict with let keyword by previous test
+      return /^[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*.+$/.test(line) && !line.startsWith('let ');
+    }
+    function parseStatementAssign(line){
+      // var= expr
+      let m = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
+      if(!m) throw new Error("Invalid assignment syntax");
+      let varName = m[1];
+      let exprRaw = m[2];
+      let expr = parseExpr(exprRaw);
+      return {type:'assign', varName, expr};
+    }
+
+    function isStatementFor(line){
+      // for var = expr to expr
+      return /^for\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*.+\s+to\s+.+$/.test(line);
+    }
+    function parseStatementFor(line){
+      let m = line.match(/^for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)\s+to\s+(.+)$/);
+      if(!m) throw new Error("Invalid for syntax");
+      const varName = m[1];
+      const fromExpr = parseExpr(m[2]);
+      const toExpr = parseExpr(m[3]);
+      return {type:'for', varName, fromExpr, toExpr, body:[]};
+    }
+
+    function isStatementIf(line){
+      return /^if\s+.+$/.test(line);
+    }
+    function parseStatementIf(line){
+      let m = line.match(/^if\s+(.+)$/);
+      if(!m) throw new Error("Invalid if syntax");
+      const condRaw = m[1];
+      const conditionExpr = parseCondition(condRaw);
+      return {type:'if', conditionExpr, thenBody:[], elseBody:null};
+    }
+
+    function isStatementElse(line){
+      return line === 'else';
+    }
+
+    function isStatementReturn(line){
+      return /^return\s+.+$/.test(line);
+    }
+    function parseStatementReturn(line){
+      let m = line.match(/^return\s+(.+)$/);
+      if(!m) throw new Error("Invalid return syntax");
+      const expr = parseExpr(m[1]);
+      return {type:'return', expr};
+    }
+
+    function isStatementEnd(line){
+      return line === 'end';
+    }
+
+    // To parse function body use recursive function parseBlock(lines, startIndex)
+    // Returns {blockBody:[], nextLineIndex}
+    // blockBody is list of statements
+
+    function parseBlock(lines, fromIndex){
+      let body = [];
+      let i = fromIndex;
+      while(i < lines.length){
+        let line = lines[i];
+        // Check statement type
+        if(isStatementLet(line)){
+          try{
+            let st = parseStatementLet(line);
+            // check structName in defined structures?
+            if(!structures.some(s=>s.name === st.structName)){
+              parseLogDiv.textContent = `Line ${i+1}: Structure "${st.structName}" not defined`;
+              return null;
+            }
+            body.push(st);
+            i++;
+          }catch(e){
+            parseLogDiv.textContent = `Line ${i+1}: Error parsing let: `+e.message;
+            return null;
+          }
+        }
+        else if(isStatementAssign(line)){
+          try {
+            let st = parseStatementAssign(line);
+            body.push(st);
+            i++;
+          } catch(e){
+            parseLogDiv.textContent = `Line ${i+1}: Error parsing assign: `+e.message;
+            return null;
+          }
+        }
+        else if(isStatementFor(line)){
+          let forStmt;
+          try {
+            forStmt = parseStatementFor(line);
+          } catch(e){
+            parseLogDiv.textContent = `Line ${i+1}: Error parsing for: `+e.message;
+            return null;
+          }
+          i++;
+          let innerBlock = parseBlock(lines, i);
+          if(innerBlock === null) return null;
+          forStmt.body = innerBlock.blockBody;
+          i = innerBlock.nextLineIndex;
+          body.push(forStmt);
+        }
+        else if(isStatementIf(line)){
+          let ifStmt;
+          try {
+            ifStmt = parseStatementIf(line);
+          } catch(e){
+            parseLogDiv.textContent = `Line ${i+1}: Error parsing if: `+e.message;
+            return null;
+          }
+          i++;
+          let thenBlock = parseBlock(lines, i);
+          if(thenBlock === null) return null;
+          ifStmt.thenBody = thenBlock.blockBody;
+          i = thenBlock.nextLineIndex;
+          // If next line is else, parse else block
+          if(i < lines.length && isStatementElse(lines[i])){
+            i++;
+            let elseBlock = parseBlock(lines, i);
+            if(elseBlock === null) return null;
+            ifStmt.elseBody = elseBlock.blockBody;
+            i = elseBlock.nextLineIndex;
+          }
+          body.push(ifStmt);
+        }
+        else if(isStatementReturn(line)){
+          try{
+            let st = parseStatementReturn(line);
+            body.push(st);
+            i++;
+          }catch(e){
+            parseLogDiv.textContent = `Line ${i+1}: Error parsing return: `+e.message;
+            return null;
+          }
+          // Return ends the current block, so break immediately here
+          break;
+        }
+        else if(isStatementEnd(line)){
+          i++;
+          break; // end of current block
+        }
+        else {
+          parseLogDiv.textContent = `Line ${i+1}: Unknown statement or syntax: "${line}"`;
+          return null;
+        }
+      }
+      return {blockBody: body, nextLineIndex: i};
+    }
+
+    // Start parsing function body:
+    let bodyParsed = parseBlock(lines,1);
+    if(bodyParsed === null) return null;
+    // Check function ends properly:
+    if(bodyParsed.nextLineIndex < lines.length){
+      if(lines[bodyParsed.nextLineIndex -1] !== 'end'){
+        parseLogDiv.textContent = "Function block missing 'end' at the end.";
+        return null;
+      }
+    } else {
+      parseLogDiv.textContent = "Function block missing 'end'.";
+      return null;
+    }
+
+    let funcAST = {type:'function', name:funcName, params, body: bodyParsed.blockBody};
+
+    parseLogDiv.textContent = "Algorithm parsed successfully.";
+    return funcAST;
+  }
+
+  parseAlgoBtn.addEventListener('click', function(){
+    globalContext.algoAST = parseAlgorithm(algoCodeText.value);
+    // Enable input parameters editing if parse success
+    if(globalContext.algoAST){
+      prepareInputs(globalContext.algoAST.params);
+      runAlgoBtn.disabled = false;
+      stepRunBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      resetRunBtn.disabled = true;
+      showComplexityBtn.disabled = true;
+      simLogDiv.textContent = '';
+      memoryUsageDiv.textContent = '';
+      callStackDiv.textContent = '';
+      complexityOutputDiv.textContent = '';
+    } else {
+      inputsAreaDiv.textContent = '';
+      runAlgoBtn.disabled = true;
+    }
+  });
+
+  clearAlgoBtn.addEventListener('click', function(){
+    algoCodeText.value = '';
+    parseLogDiv.textContent = '';
+    inputsAreaDiv.textContent = '';
+    runAlgoBtn.disabled = true;
+    stepRunBtn.disabled = true;
+    autoRunBtn.disabled = true;
+    resetRunBtn.disabled = true;
+    showComplexityBtn.disabled = true;
+    simLogDiv.textContent = '';
+    memoryUsageDiv.textContent = '';
+    callStackDiv.textContent = '';
+    complexityOutputDiv.textContent = '';
+    globalContext = {};
+  });
+
+  // -------------------------------------
+  // STEP 3: input parameters area
+  function prepareInputs(params){
+    inputsAreaDiv.innerHTML = '';
+    if(params.length === 0){
+      inputsAreaDiv.textContent = "This function has no parameters.";
+      return;
+    }
+    params.forEach(p=>{
+      const lab = document.createElement('label');
+      lab.textContent = p + ': ';
+      lab.htmlFor = 'input-'+p;
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = '0';
+      inp.value = '';
+      inp.id = 'input-'+p;
+      inp.placeholder = 'Enter integer >= 0';
+      inputsAreaDiv.appendChild(lab);
+      inputsAreaDiv.appendChild(inp);
+      inputsAreaDiv.appendChild(document.createElement('br'));
+    });
+  }
+
+  // -----------------------------------
+  // STEP 4: Simulation
+
+  // We'll implement a simple abstract interpreter:
+  //
+  // State of execution:
+  // - call stack: each frame: function name, local variables, current body index, body statements, returned value
+  // - global context: structures, algorithm AST, inputs values
+  //
+  // Data structures memory cost calculation:
+  // - primitive: size=1
+  // - array/list: size param (e.g. n) determines size, so space = size param value or 1 (if missing)
+  // - object/dictionary: size param ignored, assume size 1 per instance
+  // - recursive structure: assume a fixed multiplier of input size param, default 2 if no param
+
+  // Variables allocated by let: allocate memory, unknown integer size if size param missing: take value 1 for simulation.
+
+  // Also track max memory occupied during execution and record it.
+
+  // To allow stepping, the interpreter will pause at each statement and provide a snapshot.
+
+  //
+  // We'll allow recursion: when calling function from itself,
+  // the call stack will grow and sum variables memory cumulatively.
+
+  // Implementation details:
+  // - Only one function in program.
+  // - Support only the declared parameters.
+  // - On 'let' statement, allocate memory for variable.
+  // - On assign statement, reassign variable (no additional memory effect).
+  // - On 'for' loops, repeat body from fromExpr to toExpr (both inclusive).
+  // - On 'if', evaluate condition and run thenBody or elseBody if provided.
+  // - On 'return', set function return value and pop frame.
+
+  // ---------------
+
+  let globalContext = {};
+
+  // Evaluate expression in current frame context of variables
+  function evalExpr(expr, frame, inputs){
+    switch(expr.type){
+      case 'number': return expr.value;
+      case 'var':
+        if(expr.name in frame.locals) return frame.locals[expr.name];
+        if(expr.name in inputs) return inputs[expr.name];
+        return 0; // unknown variable = 0 default
+      case 'add':
+        return evalExpr(expr.left, frame, inputs) + evalExpr(expr.right, frame, inputs);
+      case 'cmp':
+        let lval = evalExpr(expr.left, frame, inputs);
+        let rval = evalExpr(expr.right, frame, inputs);
+        switch(expr.op){
+          case '<': return lval < rval;
+          case '<=': return lval <= rval;
+          case '>': return lval > rval;
+          case '>=': return lval >= rval;
+          case '==': return lval === rval;
+          case '!=': return lval !== rval;
+          default: return false;
+        }
+      case 'bool': return expr.value;
+      default:
+        return 0;
+    }
+  }
+
+  // Compute memory size for a variable of a specific structure and size param value
+  function computeMemSize(structName, sizeValue){
+    // Find structure definition
+    let def = structures.find(s=>s.name===structName);
+    if(!def) return 1; // unknown, minimal 1
+    switch(def.type){
+      case 'primitive': return 1;
+      case 'array':
+        // use sizeValue or 1 default
+        return sizeValue > 0 ? sizeValue : 1;
+      case 'object':
+        // fixed size 1 for object regardless of size param
+        return 1;
+      case 'recursive':
+        // multiply sizeValue by 2 or default 2
+        return (sizeValue > 0 ? sizeValue*2 : 2);
+      default:
+        return 1;
+    }
+  }
+
+  // Simulation stack frame object:
+  // {funcAST, params, locals(varName->value), codeBody, pc: program counter, returnValue, loopStack: for-loop state}
+  // loopStack is an array for nested loops with objects:
+  // {varName, from, to, current}
+
+  // The interpreter state:
+  // callStack: Array of frames
+  // inputs: input parameters values
+  // memoryMap: varName -> memSize allocated
+  //
+  // For variable scope: local variables per frame only
+
+  // On 'let' allocate memory for varName
+  // On assign, no new memory allocated
+  // On return, free local variable memory of current frame before popping
+
+  // Keep a history of memory usage at each step
+
+  // ------------------
+
+  // Global simulation variables:
+  let callStack = [];
+  let inputsValues = {};
+  let memoryMap = {}; // varName (with frame id) -> memSize
+  let memHistory = [];
+
+  // Unique variable names across stack to track memory:
+  // We'll name variables like f0_varX for frame 0 varX, f1_varY etc.
+
+  // Helper to generate unique var id for memory map:
+  function getVarId(frameDepth, varName){
+    return `f${frameDepth}_${varName}`;
+  }
+
+  // Simulation control variables:
+  let currentStep = 0;
+  let maxAllocatedMemory = 0;
+  let autoRunnerInterval = null;
+
+  // Clear simulation states
+  function resetSimulation(){
+    callStack = [];
+    memoryMap = {};
+    memHistory = [];
+    currentStep = 0;
+    maxAllocatedMemory = 0;
+    simLogDiv.textContent = '';
+    memoryUsageDiv.textContent = '';
+    callStackDiv.textContent = '';
+    complexityOutputDiv.textContent = '';
+    stepRunBtn.disabled = false;
+    autoRunBtn.disabled = false;
+    resetRunBtn.disabled = false;
+    showComplexityBtn.disabled = false;
+  }
+
+  // Initialize simulation with the single function call with inputsValues
+  function startSimulation(funcAST, inputs){
+    callStack = [];
+    memoryMap = {};
+    memHistory = [];
+    currentStep = 0;
+    maxAllocatedMemory = 0;
+
+    inputsValues = Object.assign({}, inputs);
+
+    let frame = {
+      funcAST: funcAST,
+      params: funcAST.params,
+      locals: {},
+      codeBody: funcAST.body,
+      pc: 0,
+      returnValue: undefined,
+      loopStack: [],
+      callDepth: 0,
+      returned: false
+    };
+
+    // Set parameter values as local variables:
+    funcAST.params.forEach(p=>{
+      frame.locals[p] = inputsValues[p] !== undefined ? inputsValues[p] : 0;
+    });
+
+    callStack.push(frame);
+    updateSimLog("Started simulation for function: "+funcAST.name);
+    recordMemoryUsage("Initial state");
+  }
+
+  // Record current total allocated memory
+  function recordMemoryUsage(note){
+    let totalMem = Object.values(memoryMap).reduce((a,b)=>a+b,0);
+    if(totalMem > maxAllocatedMemory) maxAllocatedMemory = totalMem;
+    memHistory.push({step: currentStep, mem: totalMem, note: note});
+    displayMemoryUsage(totalMem);
+    displayCallStack();
+  }
+
+  // Display memory usage and max
+  function displayMemoryUsage(currentMem){
+    let out = `Current memory allocated: ${currentMem}\nMax memory allocated so far: ${maxAllocatedMemory}`;
+    memoryUsageDiv.textContent = out;
+  }
+
+  // Display call stack
+  function displayCallStack(){
+    let out = '';
+    for(let i=callStack.length-1; i>=0; i--){
+      let f = callStack[i];
+      out += `#${i} Function: ${f.funcAST.name} | Locals: {`;
+      let vars = Object.entries(f.locals).map(([v,val])=>`${v}=${val}`).join(', ');
+      out += vars + '} | PC: ' + f.pc + '\n';
+    }
+    callStackDiv.textContent = out || "(empty)";
+  }
+
+  // Log lines
+  function updateSimLog(str){
+    simLogDiv.textContent += `[Step ${currentStep}] ${str}\n`;
+    simLogDiv.scrollTop = simLogDiv.scrollHeight;
+  }
+
+  // Evaluate a statement in current frame, step simulation forward
+  // Return boolean done: true if function finished, false otherwise
+  function simulateStep(){
+    if(callStack.length === 0) {
+      updateSimLog("Program finished.");
+      stepRunBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      return true;
+    }
+    currentStep++;
+
+    let frame = callStack[callStack.length - 1];
+
+    if(frame.pc >= frame.codeBody.length){
+      // End of function body reached
+      // If not returned yet, return undefined
+      if(!frame.returned){
+        frame.returnValue = undefined;
+        frame.returned = true;
+      }
+      // Free memory for locals of this frame
+      freeFrameMemory(frame);
+      callStack.pop();
+      updateSimLog(`Function ${frame.funcAST.name} ended. Return: ${frame.returnValue === undefined ? 'undefined' : frame.returnValue}`);
+      recordMemoryUsage(`Function ${frame.funcAST.name} return`);
+      return callStack.length === 0;
+    }
+
+    let stmt = frame.codeBody[frame.pc];
+
+    // Handle statement types:
+    switch(stmt.type){
+      case 'let':
+        {
+          // Evaluate allocation size
+          let sizeVal = 1;
+          if(stmt.sizeExpr){
+            try {
+              sizeVal = evalExpr(stmt.sizeExpr, frame, inputsValues);
+              if(typeof sizeVal !== 'number' || isNaN(sizeVal) || sizeVal < 0) sizeVal = 1;
+            } catch(e){ sizeVal = 1; }
+          } else {
+            // If no size param, check if structure defines sizeParam, try param variable
+            let def = structures.find(s=>s.name === stmt.structName);
+            if(def && def.sizeParam){
+              sizeVal = frame.locals[def.sizeParam] || inputsValues[def.sizeParam] || 1;
+            }
+          }
+          let memSize = computeMemSize(stmt.structName, sizeVal);
+
+          // Assign var in locals placeholder with e.g. sizeVal or zero:
+          frame.locals[stmt.varName] = sizeVal;
+
+          // Allocate memory
+          let varId = getVarId(callStack.length-1, stmt.varName);
+          memoryMap[varId] = memSize;
+
+          updateSimLog(`let ${stmt.varName} = ${stmt.structName} (size param=${sizeVal}) allocates memory ${memSize}`);
+        }
+        frame.pc++;
+        break;
+      case 'assign':
+      {
+        // Evaluate expr, assign to varName in locals
+        let val = evalExpr(stmt.expr, frame, inputsValues);
+        frame.locals[stmt.varName] = val;
+        updateSimLog(`assign ${stmt.varName} = ${val}`);
+        frame.pc++;
+        break;
+      }
+      case 'for':
+      {
+        // Handle loop iteration using loopStack
+        let loopInfo = frame.loopStack.length > 0 ? frame.loopStack[frame.loopStack.length-1] : null;
+        if(!loopInfo || loopInfo.bodyStartPc !== frame.pc){
+          // New loop at this pc
+          let fromVal = evalExpr(stmt.fromExpr, frame, inputsValues);
+          let toVal = evalExpr(stmt.toExpr, frame, inputsValues);
+          fromVal = Number(fromVal) || 0;
+          toVal = Number(toVal) || 0;
+          if(fromVal > toVal){
+            // zero iterations
+            frame.pc++;
+            updateSimLog(`for loop 0 iterations (from=${fromVal} > to=${toVal}), skip`);
+            break;
+          }
+          frame.loopStack.push({
+            varName: stmt.varName,
+            from: fromVal,
+            to: toVal,
+            current: fromVal,
+            bodyStartPc: frame.pc,
+            body: stmt.body,
+            bodyPc: 0
+          });
+          // Set loop var in locals:
+          frame.locals[stmt.varName] = fromVal;
+          updateSimLog(`Enter for loop ${stmt.varName} = ${fromVal} to ${toVal}`);
+        }
+
+        loopInfo = frame.loopStack[frame.loopStack.length - 1];
+        if(loopInfo.bodyPc >= loopInfo.body.length){
+          // Loop body ended for current iteration
+          if(loopInfo.current < loopInfo.to){
+            // next iteration:
+            loopInfo.current++;
+            frame.locals[loopInfo.varName] = loopInfo.current;
+            updateSimLog(`for loop next iteration ${loopInfo.varName} = ${loopInfo.current}`);
+            loopInfo.bodyPc = 0; // reset body pc
+          } else {
+            // Loop finished
+            updateSimLog(`for loop completed`);
+            frame.loopStack.pop();
+            frame.pc++;
+            break;
+          }
+        }
+
+        if(loopInfo.bodyPc < loopInfo.body.length){
+          // Execute statement in loop body at bodyPc
+          let stmtLoop = loopInfo.body[loopInfo.bodyPc];
+          // Simulate one statement in loop body:
+          try {
+            let res = simulateStatementInFrame(stmtLoop, frame, callStack.length-1);
+            if(res === 'pause') {
+              // pause after executing inner statement for stepping
+              loopInfo.bodyPc++;
+              return false;
+            }
+          } catch(e){
+            updateSimLog(`Error in for loop body: ${e.message}`);
+            frame.pc = frame.codeBody.length; // end function immediate
+            return false;
+          }
+          loopInfo.bodyPc++;
+          return false;
+        }
+        break;
+      }
+      case 'if':
+      {
+        let condVal = evalExpr(stmt.conditionExpr, frame, inputsValues);
+        let condBoolean = !!condVal;
+        updateSimLog(`if condition evaluated to ${condBoolean}`);
+        // We replace current codeBody/pc with thenBody or elseBody and unwind afterwards?
+        // Instead, implement like a call stack frame for blocks?
+        //
+        // Implement an internal frame stack for if blocks is complex.
+        // Alternative: inline interpret if then else as immediate block execution.
+
+        // We'll use an internal call stack inside frame for if blocks.
+        if(!frame.internalIfStack) frame.internalIfStack = [];
+        if(frame.internalIfStack.length === 0){
+          // push new if block
+          frame.internalIfStack.push({
+            type: 'if',
+            state: 'start',
+            thenBody: stmt.thenBody,
+            elseBody: stmt.elseBody,
+            pc: 0,
+            branch: condBoolean ? 'then' : 'else',
+            finished: false
+          });
+        }
+
+        let ifBlock = frame.internalIfStack[frame.internalIfStack.length-1];
+        if(ifBlock.finished){
+          // pop ifBlock and continue after if statement
+          frame.internalIfStack.pop();
+          frame.pc++;
+          return false;
+        }
+
+        let currentBody = (ifBlock.branch === 'then') ? ifBlock.thenBody : (ifBlock.elseBody || []);
+        if(ifBlock.pc >= currentBody.length){
+          ifBlock.finished = true;
+          return false;
+        }
+        // execute statement at ifBlock.pc recursively in frame, but separate from main pc
+        let stmtIf = currentBody[ifBlock.pc];
+        try {
+          let res = simulateStatementInFrame(stmtIf, frame, callStack.length-1);
+          if(res === 'pause'){
+            ifBlock.pc++;
+            return false;
+          }
+        } catch(e){
+          updateSimLog("Error in if block: "+e.message);
+          frame.pc = frame.codeBody.length;
+          return false;
+        }
+        ifBlock.pc++;
+        return false;
+      }
+      case 'return':
+      {
+        let val = evalExpr(stmt.expr, frame, inputsValues);
+        frame.returnValue = val;
+        frame.returned = true;
+        updateSimLog(`return ${val}`);
+        // Free frame memory
+        freeFrameMemory(frame);
+        callStack.pop();
+        recordMemoryUsage(`Function ${frame.funcAST.name} return`);
+        // If call stack empty, program finished
+        if(callStack.length === 0){
+          updateSimLog('Program finished.');
+          stepRunBtn.disabled = true;
+          autoRunBtn.disabled = true;
+          return true;
+        } else {
+          // After return, update parent's pc appropriately, e.g. for recursion
+          let caller = callStack[callStack.length-1];
+          if(caller){
+            // Assign call result to something? Function calls not explicitly modeled except recursion, so no assign
+            // Pop current frame means we return to caller frame's pc+1 if this was a function call
+            caller.pc++;
+          }
+          return false;
+        }
+      }
+      default:
+        updateSimLog("Unsupported statement type: "+stmt.type);
+        frame.pc++;
+        return false;
+    }
+
+    return currentStep >= 10000; // artificial step limit forced stop
+  }
+
+  // Helper to simulate one statement in a frame (used for for-body and if-body internals)
+  function simulateStatementInFrame(stmt, frame, frameDepth){
+    switch(stmt.type){
+      case 'let':
+        {
+          let sizeVal = 1;
+          if(stmt.sizeExpr){
+            try {
+              sizeVal = evalExpr(stmt.sizeExpr, frame, inputsValues);
+              if(typeof sizeVal !== 'number' || isNaN(sizeVal) || sizeVal < 0) sizeVal = 1;
+            } catch(e){ sizeVal = 1; }
+          } else {
+            let def = structures.find(s=>s.name === stmt.structName);
+            if(def && def.sizeParam){
+              sizeVal = frame.locals[def.sizeParam] || inputsValues[def.sizeParam] || 1;
+            }
+          }
+          let memSize = computeMemSize(stmt.structName, sizeVal);
+          frame.locals[stmt.varName] = sizeVal;
+          // Allocate memory with unique var id
+          // But variables in loops or inner blocks may conflict?
+          // Use combined frameDepth + current pc + varName as id for memory
+          // But that would leak allocated memory on each iteration? For simulation, assume previous declaration is overwritten (memory reused)
+          // So free previous if any:
+          let varId = getVarId(frameDepth, stmt.varName);
+          // If memory already allocated, free old first
+          if(memoryMap[varId]){
+            memoryMap[varId] = memSize; // overwrite with new size
+          } else {
+            memoryMap[varId] = memSize;
+          }
+          updateSimLog(`let ${stmt.varName} = ${stmt.structName} (size param=${sizeVal}) allocates memory ${memSize}`);
+          recordMemoryUsage(`let ${stmt.varName}`);
+
+          return 'pause';
+        }
+      case 'assign':
+        {
+          let val = evalExpr(stmt.expr, frame, inputsValues);
+          frame.locals[stmt.varName] = val;
+          updateSimLog(`assign ${stmt.varName} = ${val}`);
+          return 'pause';
+        }
+      case 'for':
+      case 'if':
+      case 'return':
+        throw new Error("Nested control statements not supported directly in loop or if bodies in this implementation.");
+      default:
+        throw new Error("Unsupported statement type in block: "+stmt.type);
+    }
+  }
+
+  function freeFrameMemory(frame){
+    // free all locals memory for this frame
+    let frameIdx = callStack.indexOf(frame);
+    if(frameIdx < 0) frameIdx = callStack.length; // if called after pop -1 means no frame index
+    Object.keys(frame.locals).forEach(varName=>{
+      let varId = `f${frameIdx}_${varName}`;
+      if(memoryMap[varId] !== undefined){
+        delete memoryMap[varId];
+      }
+    });
+  }
+
+  // Run simulation step event
+  stepRunBtn.addEventListener('click', function(){
+    if(!globalContext.algoAST) return;
+    let done = simulateStep();
+    if(done){
+      stepRunBtn.disabled = true;
+      autoRunBtn.disabled = true;
+    }
+  });
+
+  autoRunBtn.addEventListener('click', function(){
+    if(autoRunnerInterval !== null){
+      // stop auto run
+      clearInterval(autoRunnerInterval);
+      autoRunnerInterval = null;
+      autoRunBtn.textContent = "Auto Run (1 step / 800ms)";
+      stepRunBtn.disabled = false;
+      return;
+    }
+    // start auto run
+    autoRunBtn.textContent = "Stop Auto Run";
+    stepRunBtn.disabled = true;
+    autoRunnerInterval = setInterval(function(){
+      if(callStack.length === 0){
+        clearInterval(autoRunnerInterval);
+        autoRunnerInterval = null;
+        autoRunBtn.textContent = "Auto Run (1 step / 800ms)";
+        stepRunBtn.disabled = true;
+        autoRunBtn.disabled = true;
+        return;
+      }
+      let done = simulateStep();
+      if(done){
+        clearInterval(autoRunnerInterval);
+        autoRunnerInterval = null;
+        autoRunBtn.textContent = "Auto Run (1 step / 800ms)";
+        stepRunBtn.disabled = true;
+        autoRunBtn.disabled = true;
+      }
+    }, 800);
+  });
+
+  resetRunBtn.addEventListener('click', function(){
+    if(autoRunnerInterval !== null){
+      clearInterval(autoRunnerInterval);
+      autoRunnerInterval = null;
+      autoRunBtn.textContent = "Auto Run (1 step / 800ms)";
+    }
+    if(globalContext.algoAST && inputsValues) {
+      startSimulation(globalContext.algoAST, inputsValues);
+      stepRunBtn.disabled = false;
+      autoRunBtn.disabled = false;
+    }
+  });
+
+  // Run full simulation from inputs when user clicks "Run Algorithm"
+  runAlgoBtn.addEventListener('click', function(){
+    // collect inputs from inputs area
+    inputsValues = {};
+    let allParamsDefined = true;
+    globalContext.algoAST.params.forEach(p=>{
+      let inp = document.getElementById('input-'+p);
+      if(inp){
+        let val = parseInt(inp.value,10);
+        if(isNaN(val) || val < 0) {
+          allParamsDefined = false;
+        } else {
+          inputsValues[p] = val;
+        }
+      } else {
+        allParamsDefined = false;
+      }
+    });
+    if(!allParamsDefined){
+      alert("Please enter valid non-negative integer input values for all parameters");
+      return;
+    }
+    // Start simulation from beginning:
+    startSimulation(globalContext.algoAST, inputsValues);
+    stepRunBtn.disabled = false;
+    autoRunBtn.disabled = false;
+    resetRunBtn.disabled = false;
+    showComplexityBtn.disabled = true;
+    complexityOutputDiv.textContent = '';
+    simLogDiv.textContent = '';
+  });
+
+  // ------------------------------------------
+  // Step 5: Analyze and show complexity summary
+
+  showComplexityBtn.addEventListener('click', function(){
+    if(memHistory.length === 0){
+      complexityOutputDiv.textContent = "Run the simulation first.";
+      return;
+    }
+    // We have memHistory: array of {step, mem}
+
+    // Approach:
+    // Show maximum memory allocated, and try to describe complexity roughly in big-O notation
+
+    // Since our simulation uses concrete input values, space complexity depends on input size.
+
+    // We'll perform simplistic heuristic:
+    // For each input parameter, try to see if max allocated memory is proportional to it or its multiples.
+
+    // We do not have symbolic analysis, so we'll only output numerical max and inputs.
+
+    let maxMem = maxAllocatedMemory;
+
+    let lines = [];
+    lines.push(`Maximum memory allocated during execution: ${maxMem}`);
+    lines.push(`Input parameters:`);
+    Object.entries(inputsValues).forEach(([k,v])=>{
+      lines.push(`  ${k} = ${v}`);
+    });
+
+    // Try to guess complexity by dividing maxMem by inputs
+    // If only one parameter, show linear or constant
+    // If multiple, show combined product estimator
+
+    let params = globalContext.algoAST.params;
+    if(params.length === 1){
+      let p = params[0];
+      let val = inputsValues[p];
+      if(val === 0) {
+        lines.push(`For ${p}=0, memory is constant.`);
+      } else {
+        let ratio = maxMem / val;
+        if(Math.abs(ratio - Math.round(ratio)) < 0.1){
+          lines.push(`Memory approx proportional to ${p} (linear O(${p}))`);
+        } else if(ratio < 1.5){
+          lines.push(`Memory roughly constant O(1) with ${p}.`);
+        } else {
+          lines.push(`Memory complexity unknown; observed memory ${maxMem} for input ${p}=${val}`);
+        }
+      }
+    } else if(params.length > 1) {
+      let product = 1;
+      params.forEach(p=>{
+        product *= inputsValues[p];
+      });
+      let ratio = maxMem / product;
+      if(Math.abs(ratio - Math.round(ratio)) < 0.1){
+        lines.push(`Memory approx proportional to product of inputs (linear O(product of inputs))`);
+      } else {
+        lines.push(`Memory complexity unknown; observed memory ${maxMem} for inputs product=${product}`);
+      }
+    } else {
+      lines.push(`No input parameters; memory constant or unknown.`);
+    }
+
+    complexityOutputDiv.textContent = lines.join('\n');
+  });
+
+  // -----------------------------------------
+  // Initialize
+
+  renderStructures();
+
+  // Disable buttons initially
+  runAlgoBtn.disabled = true;
+  stepRunBtn.disabled = true;
+  autoRunBtn.disabled = true;
+  resetRunBtn.disabled = true;
+  showComplexityBtn.disabled = true;
+
+  // Add keyboard shortcut to step simulation (e.g. Space)
+  window.addEventListener('keydown', function(e){
+    if(e.code === 'Space' && !stepRunBtn.disabled){
+      e.preventDefault();
+      stepRunBtn.click();
+    }
+  });
+
+  // To improve interactivity:
+  // When user changes inputs, disable run
+  inputsAreaDiv.addEventListener('input', function(){
+    runAlgoBtn.disabled = false;
+    stepRunBtn.disabled = true;
+    autoRunBtn.disabled = true;
+    resetRunBtn.disabled = true;
+  });
+
+})();
+</script>
+
+</body>
+</html>

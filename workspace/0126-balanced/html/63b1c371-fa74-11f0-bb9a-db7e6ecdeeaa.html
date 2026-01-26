@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kruskal's Algorithm Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 10px;
+    background: #f0f0f0;
+    user-select: none;
+  }
+  h1 {
+    text-align: center;
+  }
+  #canvas-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+  canvas {
+    background: white;
+    border: 1px solid #aaa;
+  }
+  #controls {
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  button {
+    margin: 0 5px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #info {
+    max-width: 700px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+  }
+  #info b {
+    color: #333;
+  }
+  #legend {
+    margin-top: 10px;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 14px;
+  }
+  #legend div {
+    display: inline-block;
+    margin-right: 15px;
+  }
+  .legend-color {
+    display: inline-block;
+    width: 20px;
+    height: 10px;
+    vertical-align: middle;
+    margin-right: 5px;
+    border-radius: 2px;
+  }
+  .edge-pending {
+    background: #aaa;
+  }
+  .edge-included {
+    background: #4caf50;
+  }
+  .edge-rejected {
+    background: #f44336;
+  }
+  .vertex {
+    fill: #2196f3;
+    stroke: #0b72d1;
+    stroke-width: 2px;
+  }
+  .vertex-label {
+    font-weight: bold;
+    fill: #222;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    user-select: none;
+    pointer-events:none;
+  }
+  .edge-label {
+    font-size: 12px;
+    fill: #333;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<h1>Kruskal's Algorithm Visualization</h1>
+<div id="canvas-container">
+  <canvas id="graphCanvas" width="700" height="500"></canvas>
+</div>
+<div id="controls">
+  <button id="btnStep">Step</button>
+  <button id="btnAuto">Auto Play</button>
+  <button id="btnReset">Reset</button>
+</div>
+<div id="info">
+  <b>Algorithm State:</b> <span id="stateText">Press "Step" to start algorithm.</span>
+</div>
+<div id="legend">
+  <div><span class="legend-color edge-pending"></span> Pending edges</div>
+  <div><span class="legend-color edge-included"></span> Included in MST</div>
+  <div><span class="legend-color edge-rejected"></span> Rejected edges (forms cycle)</div>
+</div>
+
+<script>
+(() => {
+  // The graph structure
+  // Vertices have fixed positions for clear visualization
+  const vertices = [
+    {id: 'A', x: 100, y: 100},
+    {id: 'B', x: 300, y: 70},
+    {id: 'C', x: 500, y: 110},
+    {id: 'D', x: 150, y: 300},
+    {id: 'E', x: 350, y: 330},
+    {id: 'F', x: 550, y: 320},
+    {id: 'G', x: 400, y: 200}
+  ];
+
+  // Edges with weights, unordered pairs (undirected)
+  // We will sort edges by weight in the algorithm.
+  const edges = [
+    {v1: 'A', v2: 'B', weight: 4},
+    {v1: 'A', v2: 'D', weight: 8},
+    {v1: 'B', v2: 'C', weight: 8},
+    {v1: 'B', v2: 'D', weight: 11},
+    {v1: 'C', v2: 'F', weight: 2},
+    {v1: 'C', v2: 'G', weight: 7},
+    {v1: 'D', v2: 'E', weight: 7},
+    {v1: 'E', v2: 'F', weight: 4},
+    {v1: 'E', v2: 'G', weight: 14},
+    {v1: 'F', v2: 'G', weight: 10},
+    {v1: 'B', v2: 'G', weight: 1}  // adding an extra edge to show cycle skipping
+  ];
+
+  // Sort edges ascending by weight (copy array)
+  const sortedEdges = edges.slice().sort((a, b) => a.weight - b.weight);
+
+  // Union-Find structure
+  class UnionFind {
+    constructor(elements) {
+      this.parent = {};
+      this.rank = {};
+      elements.forEach(e => {
+        this.parent[e] = e;
+        this.rank[e] = 0;
+      });
+    }
+    find(e) {
+      if (this.parent[e] !== e) {
+        this.parent[e] = this.find(this.parent[e]);
+      }
+      return this.parent[e];
+    }
+    union(e1, e2) {
+      let root1 = this.find(e1);
+      let root2 = this.find(e2);
+      if (root1 === root2) return false; // cycle
+      // union by rank
+      if (this.rank[root1] < this.rank[root2]) {
+        this.parent[root1] = root2;
+      } else if (this.rank[root1] > this.rank[root2]) {
+        this.parent[root2] = root1;
+      } else {
+        this.parent[root2] = root1;
+        this.rank[root1]++;
+      }
+      return true;
+    }
+  }
+
+  // State for the algorithm step by step
+  let uf;
+  let currentEdgeIndex = 0;
+  let edgeStates = {}; // key: "A-B" or "B-A", value: "pending" | "included" | "rejected"
+  let isRunning = false;
+  let autoTimer = null;
+
+  // Get canvas and context
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // UI elements
+  const btnStep = document.getElementById('btnStep');
+  const btnAuto = document.getElementById('btnAuto');
+  const btnReset = document.getElementById('btnReset');
+  const stateText = document.getElementById('stateText');
+
+  // Helpers
+  function edgeKey(e) {
+    // always sort vertex names to have a unique key for edge
+    return [e.v1, e.v2].sort().join('-');
+  }
+
+  function drawGraph() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw edges
+    edges.forEach(edge => {
+      const state = edgeStates[edgeKey(edge)] || 'pending';
+      const v1 = vertices.find(v => v.id === edge.v1);
+      const v2 = vertices.find(v => v.id === edge.v2);
+
+      // Color edges based on state
+      if (state === 'included') {
+        ctx.strokeStyle = '#4caf50'; // green
+        ctx.lineWidth = 4;
+      } else if (state === 'rejected') {
+        ctx.strokeStyle = '#f44336'; // red
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 10]);
+      } else {
+        ctx.strokeStyle = '#aaa';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(v1.x, v1.y);
+      ctx.lineTo(v2.x, v2.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw weight label near midpoint
+      const midX = (v1.x + v2.x) / 2;
+      const midY = (v1.y + v2.y) / 2;
+
+      // Draw a white background to make text readable
+      const text = edge.weight.toString();
+      ctx.font = '14px Arial';
+      const textWidth = ctx.measureText(text).width;
+      const textHeight = 16;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(midX - textWidth/2 - 3, midY - textHeight/2, textWidth + 6, textHeight);
+
+      ctx.fillStyle = '#333';
+      ctx.fillText(text, midX, midY + 5);
+    });
+
+    // Draw vertices
+    vertices.forEach(v => {
+      ctx.beginPath();
+      ctx.fillStyle = '#2196f3';
+      ctx.strokeStyle = '#0b72d1';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(0,0,0,0.2)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      ctx.arc(v.x, v.y, 18, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.stroke();
+
+      // Text label for vertex
+      ctx.fillStyle = '#222';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(v.id, v.x, v.y);
+    });
+  }
+
+  function updateStateText(text) {
+    stateText.textContent = text;
+  }
+
+  function resetAlgorithm() {
+    uf = new UnionFind(vertices.map(v => v.id));
+    currentEdgeIndex = 0;
+    edgeStates = {};
+    edges.forEach(e => {
+      edgeStates[edgeKey(e)] = 'pending';
+    });
+    updateStateText('Ready. Press "Step" to start algorithm.');
+    drawGraph();
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      btnAuto.textContent = 'Auto Play';
+      isRunning = false;
+    }
+  }
+
+  function stepAlgorithm() {
+    if (currentEdgeIndex >= sortedEdges.length) {
+      updateStateText('Algorithm complete! MST formed.');
+      isRunning = false;
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        btnAuto.textContent = 'Auto Play';
+      }
+      return;
+    }
+
+    const edge = sortedEdges[currentEdgeIndex];
+    const key = edgeKey(edge);
+
+    updateStateText(
+      `Checking edge (${edge.v1} - ${edge.v2}) with weight ${edge.weight}...`
+    );
+
+    // Check if adding edge forms cycle using union-find
+    const united = uf.union(edge.v1, edge.v2);
+    if (united) {
+      edgeStates[key] = 'included';
+      updateStateText(
+        `Included edge (${edge.v1} - ${edge.v2}, weight ${edge.weight}) in MST.`
+      );
+    } else {
+      edgeStates[key] = 'rejected';
+      updateStateText(
+        `Rejected edge (${edge.v1} - ${edge.v2}, weight ${edge.weight}) to avoid cycle.`
+      );
+    }
+
+    currentEdgeIndex++;
+    drawGraph();
+  }
+
+  btnStep.addEventListener('click', () => {
+    if (currentEdgeIndex >= sortedEdges.length) {
+      updateStateText('Algorithm is already complete! Press Reset to run again.');
+      return;
+    }
+    stepAlgorithm();
+  });
+
+  btnReset.addEventListener('click', () => {
+    resetAlgorithm();
+  });
+
+  btnAuto.addEventListener('click', () => {
+    if (isRunning) {
+      // stop
+      clearInterval(autoTimer);
+      autoTimer = null;
+      btnAuto.textContent = 'Auto Play';
+      isRunning = false;
+      updateStateText('Auto Play stopped.');
+    } else {
+      if (currentEdgeIndex >= sortedEdges.length) {
+        updateStateText('Algorithm already complete. Reset to run again.');
+        return;
+      }
+      // start auto stepping every 1.2 seconds
+      isRunning = true;
+      btnAuto.textContent = 'Pause';
+      updateStateText('Auto Play started.');
+      autoTimer = setInterval(() => {
+        if (currentEdgeIndex >= sortedEdges.length) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          btnAuto.textContent = 'Auto Play';
+          isRunning = false;
+          updateStateText('Algorithm complete! MST formed.');
+          return;
+        }
+        stepAlgorithm();
+      }, 1200);
+    }
+  });
+
+  // Init
+  resetAlgorithm();
+})();
+</script>
+</body>
+</html>

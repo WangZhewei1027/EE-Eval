@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Query Optimization Explorer</title>
+</head>
+<body>
+<h1>Query Optimization Explorer</h1>
+
+<p>This is a plain, interactive explorer for query optimization concepts. It emphasizes functional interactivity over visual polish. Use the controls below to build a query, adjust statistics, enable indexes, and try different optimizer algorithms (dynamic programming, greedy, randomized, genetic-like). You can step through the DP optimization process, view plan space, compare and simulate plans, and save/load state as JSON.</p>
+
+<hr>
+
+<!-- Query & Statistics -->
+<fieldset>
+  <legend>Tables & Statistics (add up to 6)</legend>
+  <div>
+    <label>Number of tables:
+      <select id="numTables">
+        <option>2</option>
+        <option selected>3</option>
+        <option>4</option>
+        <option>5</option>
+        <option>6</option>
+      </select>
+    </label>
+    <button id="resetDefaults">Reset to Defaults</button>
+    <button id="randomizeQuery">Randomize Query</button>
+  </div>
+  <div id="tablesContainer"></div>
+  <p>For each table specify estimated rows and whether the table is included in the query.</p>
+</fieldset>
+
+<!-- Predicates -->
+<fieldset>
+  <legend>Join Predicates</legend>
+  <div id="predicatesContainer"></div>
+  <p>Enable predicates between table pairs and set selectivities (0.0 - 1.0). Lower selectivity means fewer rows after join.</p>
+</fieldset>
+
+<!-- Indexes -->
+<fieldset>
+  <legend>Indexes & Hints</legend>
+  <div id="indexesContainer"></div>
+  <p>Enable simple single-column index hints. Indexes reduce scan cost for that table for selective predicates.</p>
+</fieldset>
+
+<!-- Cost Model & Join Algorithms -->
+<fieldset>
+  <legend>Cost Model & Algorithm Options</legend>
+  <div>
+    <label>CPU weight (multiplier):
+      <input type="number" id="cpuWeight" value="1" step="0.1" min="0">
+    </label>
+    <label>IO weight (multiplier):
+      <input type="number" id="ioWeight" value="1" step="0.1" min="0">
+    </label>
+  </div>
+  <div>
+    <label>Join algorithm preference:
+      <select id="joinAlgPreference">
+        <option value="auto">Auto choose cheapest per join</option>
+        <option value="hash">Hash Join</option>
+        <option value="merge">Merge Join</option>
+        <option value="nested">Nested Loops</option>
+      </select>
+    </label>
+    <label>Join style:
+      <select id="joinStyle">
+        <option value="any">Allow bushy/left-deep</option>
+        <option value="leftdeep">Left-deep only</option>
+      </select>
+    </label>
+    <label>
+      <input type="checkbox" id="allowCartesian"> Allow Cartesian joins (no predicate)
+    </label>
+  </div>
+</fieldset>
+
+<!-- Optimizer Controls -->
+<fieldset>
+  <legend>Optimizer Controls</legend>
+  <div>
+    <label>Optimizer:
+      <select id="optimizer">
+        <option value="dp">Dynamic Programming (exhaustive)</option>
+        <option value="greedy">Greedy (heuristic)</option>
+        <option value="random">Randomized (permutations)</option>
+        <option value="genetic">Genetic-like</option>
+      </select>
+    </label>
+    <label>Random iterations:
+      <input type="number" id="randomIters" value="200" min="1">
+    </label>
+    <label>Genetic iterations:
+      <input type="number" id="genIters" value="100" min="1">
+    </label>
+    <label>Population size:
+      <input type="number" id="genPopulation" value="30" min="2">
+    </label>
+  </div>
+  <div>
+    <button id="runOptimizer">Run Optimizer (full)</button>
+    <button id="startDP">Start DP (step mode)</button>
+    <button id="dpNext">DP Step Forward</button>
+    <button id="dpPrev">DP Step Back</button>
+    <button id="runDPToEnd">Run DP to End</button>
+    <button id="runGreedy">Run Greedy</button>
+    <button id="runRandom">Run Randomized</button>
+    <button id="runGenetic">Run Genetic-like</button>
+    <button id="evaluateManual">Evaluate Manual Order</button>
+  </div>
+  <div>
+    <label>Manual join order (comma separated table names):
+      <input type="text" id="manualOrder" placeholder="A,B,C">
+    </label>
+    <label>Manual join algorithm for joins (comma separated or single):
+      <input type="text" id="manualJoinAlgs" placeholder="hash,merge">
+    </label>
+  </div>
+</fieldset>
+
+<!-- Plan Space and DP State -->
+<fieldset>
+  <legend>Plan Space & DP State</legend>
+  <div>
+    <button id="showAllPlans">Show All Evaluated Plans</button>
+    <button id="showBest">Show Best Plan</button>
+    <button id="exportState">Export State JSON</button>
+    <button id="importState">Import State JSON</button>
+    <button id="clearHistory">Clear History</button>
+  </div>
+  <div>
+    <label>State JSON:
+      <textarea id="stateJson" rows="4" cols="80"></textarea>
+    </label>
+  </div>
+  <div>
+    <h3>DP State (subsets with best cost)</h3>
+    <pre id="dpStatePre"></pre>
+  </div>
+  <div>
+    <h3>Plan Space (sorted by cost)</h3>
+    <pre id="planSpacePre"></pre>
+  </div>
+  <div>
+    <h3>Best Plan</h3>
+    <pre id="bestPlanPre"></pre>
+  </div>
+  <div>
+    <h3>History / Steps</h3>
+    <pre id="historyPre"></pre>
+  </div>
+</fieldset>
+
+<!-- Simulation -->
+<fieldset>
+  <legend>Plan Execution Simulator</legend>
+  <div>
+    <button id="simulatePlan">Simulate Best Plan</button>
+    <button id="simulateManual">Simulate Manual Plan</button>
+    <label>Simulation step:
+      <input type="range" id="simStep" min="0" max="10" value="0">
+    </label>
+  </div>
+  <div>
+    <h3>Execution Trace</h3>
+    <pre id="executionPre"></pre>
+  </div>
+</fieldset>
+
+<script>
+/*
+  Query Optimization Explorer - Plain, interactive, single-file.
+  - Many controls to explore dynamic programming, heuristics, and plan evaluation.
+  - Minimal visual styling; all functionality implemented in JavaScript.
+*/
+
+// --- Utility helpers ---
+function $(id) { return document.getElementById(id); }
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// --- Global state ---
+let state = {
+  tables: [], // {name, rows, included}
+  predicates: {}, // key "A|B" -> {enabled, sel}
+  indexes: {}, // tableName -> {enabled}
+  cpuWeight: 1,
+  ioWeight: 1,
+  joinAlgPref: 'auto',
+  allowCartesian: false,
+  joinStyle: 'any',
+  optimizer: 'dp',
+  planSpace: [], // evaluated plans
+  bestPlan: null,
+  dpSteps: [], // snapshot per DP subset-size step
+  dpPointer: -1,
+  history: [],
+};
+
+// --- Initialization: default tables & UI wiring ---
+function initDefaults(n) {
+  state.tables = [];
+  const defaultRows = [1000, 5000, 200, 800, 1200, 300];
+  const names = ['A','B','C','D','E','F'];
+  for (let i=0;i<n;i++){
+    state.tables.push({name:names[i], rows: defaultRows[i] || 1000, included:true});
+  }
+  // default predicates: A-B, B-C, C-D etc enabled with moderate selectivity
+  state.predicates = {};
+  for (let i=0;i<n;i++){
+    for (let j=i+1;j<n;j++){
+      const key = pairKey(state.tables[i].name, state.tables[j].name);
+      const sel = (j===i+1) ? 0.1 : 0.5; // adjacent more selective
+      state.predicates[key] = {enabled: (j===i+1), sel: sel};
+    }
+  }
+  state.indexes = {};
+  state.tables.forEach(t => state.indexes[t.name] = {enabled:false});
+  state.cpuWeight = parseFloat($('cpuWeight').value);
+  state.ioWeight = parseFloat($('ioWeight').value);
+  state.joinAlgPref = $('joinAlgPreference').value;
+  state.allowCartesian = $('allowCartesian').checked;
+  state.joinStyle = $('joinStyle').value;
+  state.optimizer = $('optimizer').value;
+  state.planSpace = [];
+  state.bestPlan = null;
+  state.dpSteps = [];
+  state.dpPointer = -1;
+  state.history = [];
+}
+
+function pairKey(a,b){
+  return a < b ? (a + '|' + b) : (b + '|' + a);
+}
+
+function buildTablesUI(){
+  const container = $('tablesContainer');
+  container.innerHTML = '';
+  state.tables.forEach((t, idx)=>{
+    const div = document.createElement('div');
+    div.innerHTML =
+      '<label><input type="checkbox" data-idx="'+idx+'" class="tableIncluded" '+(t.included?'checked':'')+'> Include '+t.name+'</label> ' +
+      '<label> Rows: <input type="number" class="tableRows" data-idx="'+idx+'" value="'+t.rows+'" min="1" step="1"></label>';
+    container.appendChild(div);
+  });
+  // wire events
+  Array.from(document.getElementsByClassName('tableIncluded')).forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const idx = parseInt(e.target.dataset.idx);
+      state.tables[idx].included = e.target.checked;
+    });
+  });
+  Array.from(document.getElementsByClassName('tableRows')).forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const idx = parseInt(e.target.dataset.idx);
+      let v = parseInt(e.target.value) || 1;
+      state.tables[idx].rows = Math.max(1, v);
+    });
+  });
+}
+
+function buildPredicatesUI(){
+  const container = $('predicatesContainer');
+  container.innerHTML = '';
+  const includedTables = state.tables.map(t=>t.name);
+  for (let i=0;i<includedTables.length;i++){
+    for (let j=i+1;j<includedTables.length;j++){
+      const a = includedTables[i], b = includedTables[j];
+      const key = pairKey(a,b);
+      const pred = state.predicates[key] || {enabled:false, sel:0.1};
+      const div = document.createElement('div');
+      div.innerHTML = '<label><input type="checkbox" data-key="'+key+'" class="predEnabled" '+(pred.enabled ? 'checked' : '')+'> Predicate '+a+'-'+b+'</label> ' +
+        '<label> Selectivity: <input type="number" step="0.01" min="0.0001" max="1" data-key="'+key+'" class="predSel" value="'+pred.sel+'"></label>';
+      container.appendChild(div);
+    }
+  }
+  Array.from(document.getElementsByClassName('predEnabled')).forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const key = e.target.dataset.key;
+      if (!state.predicates[key]) state.predicates[key] = {enabled:false, sel:0.1};
+      state.predicates[key].enabled = e.target.checked;
+    });
+  });
+  Array.from(document.getElementsByClassName('predSel')).forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const key = e.target.dataset.key;
+      if (!state.predicates[key]) state.predicates[key] = {enabled:false, sel:0.1};
+      let v = parseFloat(e.target.value);
+      if (isNaN(v) || v<=0) v = 0.001;
+      if (v>1) v = 1;
+      state.predicates[key].sel = v;
+    });
+  });
+}
+
+function buildIndexesUI(){
+  const container = $('indexesContainer');
+  container.innerHTML = '';
+  state.tables.forEach(t=>{
+    const idx = state.indexes[t.name] || {enabled:false};
+    const div = document.createElement('div');
+    div.innerHTML = '<label><input type="checkbox" data-name="'+t.name+'" class="idxEnabled" '+(idx.enabled ? 'checked' : '')+'> Index on '+t.name+'</label>';
+    container.appendChild(div);
+  });
+  Array.from(document.getElementsByClassName('idxEnabled')).forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const name = e.target.dataset.name;
+      if (!state.indexes[name]) state.indexes[name] = {enabled:false};
+      state.indexes[name].enabled = e.target.checked;
+    });
+  });
+}
+
+function refreshAllUI(){
+  buildTablesUI();
+  buildPredicatesUI();
+  buildIndexesUI();
+  updateComputedDisplays();
+}
+
+// --- Cost & evaluation model ---
+// Basic cost estimation functions: compute join selectivity between two sets, cost formulas.
+function getIncludedTableNames(){
+  return state.tables.filter(t=>t.included).map(t=>t.name);
+}
+function getTableRows(name){
+  const t = state.tables.find(x=>x.name===name);
+  return t ? t.rows : 0;
+}
+function predicateBetween(a,b){
+  const key = pairKey(a,b);
+  return state.predicates[key] && state.predicates[key].enabled ? state.predicates[key].sel : null;
+}
+function combinedSelectivityBetweenSets(leftTables, rightTables){
+  // multiply selectivities of any enabled predicates between any pair across groups.
+  // If none and allowCartesian is false, treat selectivity high (0) to penalize; but we allow optionally.
+  let found = false;
+  let sel = 1.0;
+  for (let la of leftTables){
+    for (let rb of rightTables){
+      const p = predicateBetween(la, rb);
+      if (p !== null && p !== undefined){
+        found = true;
+        sel *= p;
+      }
+    }
+  }
+  if (!found){
+    return state.allowCartesian ? 1.0 : 1.0; // we'll penalize via cost not selectivity (cost big if cross)
+  }
+  return Math.max(0.000001, sel);
+}
+
+function chooseJoinAlgorithm(leftRows, rightRows, sel){
+  // If preference is auto, pick fastest estimated join algorithm based on simple heuristic.
+  const pref = $('joinAlgPreference').value;
+  if (pref !== 'auto') return pref;
+  // heuristic: if one side very small -> nested loops; else hash join
+  if (Math.min(leftRows, rightRows) < 100) return 'nested';
+  return 'hash';
+}
+
+function joinCostEstimate(leftRows, rightRows, sel, joinAlg, leftHasIndex, rightHasIndex){
+  // rows after join
+  let rows = Math.max(1, Math.floor(leftRows * rightRows * sel));
+  // base CPU cost proportional to inputs * sel
+  let cpu = leftRows * rightRows * sel;
+  // IO cost: scanning inputs (reduced by index if available and selective)
+  let io = leftRows + rightRows;
+  if (leftHasIndex) io *= 0.3;
+  if (rightHasIndex) io *= 0.3;
+  // algorithm multipliers
+  let algMult = 1.0;
+  if (joinAlg === 'nested') algMult = 2.5;
+  if (joinAlg === 'merge') algMult = 1.2;
+  if (joinAlg === 'hash') algMult = 1.0;
+  const cpuW = parseFloat($('cpuWeight').value) || 1;
+  const ioW = parseFloat($('ioWeight').value) || 1;
+  const cost = algMult * (cpuW * cpu + ioW * io);
+  return {cost: cost, rows: rows};
+}
+
+// Evaluate a plan tree recursively. Tree structure:
+// leaf: {type:'leaf', name:'A'}
+// join: {type:'join', left: {...}, right:{...}, alg: 'hash'}; We'll compute cost and rows and add metadata.
+function evaluatePlanTree(node){
+  if (node.type === 'leaf'){
+    node.rows = getTableRows(node.name);
+    node.cost = 0;
+    node.desc = node.name;
+    return node;
+  }
+  // evaluate children
+  evaluatePlanTree(node.left);
+  evaluatePlanTree(node.right);
+  const leftRows = node.left.rows;
+  const rightRows = node.right.rows;
+  // determine predicate selectivity across left/right groups
+  const leftLeafNames = leafNames(node.left);
+  const rightLeafNames = leafNames(node.right);
+  const sel = combinedSelectivityBetweenSets(leftLeafNames, rightLeafNames);
+  const leftIndex = anyIndexOnSet(leftLeafNames);
+  const rightIndex = anyIndexOnSet(rightLeafNames);
+  const alg = node.alg || chooseJoinAlgorithm(leftRows, rightRows, sel);
+  const jc = joinCostEstimate(leftRows, rightRows, sel, alg, leftIndex, rightIndex);
+  node.joinSelectivity = sel;
+  node.alg = alg;
+  node.rows = jc.rows;
+  node.localCost = jc.cost;
+  node.cost = (node.left.cost || 0) + (node.right.cost || 0) + node.localCost;
+  node.desc = '(' + node.left.desc + ' ⋈ ' + node.right.desc + ')';
+  return node;
+}
+
+function leafNames(node){
+  if (node.type === 'leaf') return [node.name];
+  return leafNames(node.left).concat(leafNames(node.right));
+}
+function anyIndexOnSet(names){
+  for (const n of names) if (state.indexes[n] && state.indexes[n].enabled) return true;
+  return false;
+}
+
+function treeToString(node, indent=""){
+  if (!node) return "";
+  if (node.type === 'leaf') return indent + node.name + ' [rows=' + node.rows + ']\n';
+  let s = indent + 'JOIN alg=' + node.alg + ' sel=' + (node.joinSelectivity||1).toFixed(4) + ' localCost=' + (node.localCost||0).toFixed(2) + ' rows=' + node.rows + ' totalCost=' + (node.cost||0).toFixed(2) + '\n';
+  s += treeToString(node.left, indent + '  ');
+  s += treeToString(node.right, indent + '  ');
+  return s;
+}
+
+// --- Plan generation / enumeration ---
+
+function makeLeaf(name){ return {type:'leaf', name:name}; }
+
+// DP enumeration: for included tables generate best plan per subset mask
+function runDynamicProgramming(stepMode){
+  const tables = getIncludedTableNames();
+  const n = tables.length;
+  if (n < 2) { alert('Need at least 2 included tables to join.'); return; }
+  if (n > 6) {
+    if (!confirm('Exhaustive DP over more than 6 tables may be slow. Continue?')) return;
+  }
+  // map table index
+  const idxOf = {};
+  tables.forEach((t,i)=>idxOf[t]=i);
+  const totalMasks = 1<<n;
+  const best = new Array(totalMasks).fill(null); // best[mask] = {plan,cost,rows}
+  // initialize singletons
+  for (let i=0;i<n;i++){
+    const mask = 1<<i;
+    const leaf = makeLeaf(tables[i]);
+    evaluatePlanTree(leaf);
+    best[mask] = {plan:leaf, cost:leaf.cost, rows:leaf.rows};
+  }
+  // if stepMode we will create snapshots after processing each subset-size
+  const steps = [];
+  steps.push(cloneDPStateSnapshot(best, n));
+  for (let size=2; size<=n; size++){
+    // iterate masks with popcount == size
+    for (let mask=0; mask<totalMasks; mask++){
+      if (popcount(mask) !== size) continue;
+      let bestPlan = null;
+      let bestCost = Infinity;
+      // iterate non-empty proper submasks L of mask
+      // for efficiency iterate L = (mask-1) & mask ... typical submask enumeration
+      for (let left = (mask-1) & mask; left > 0; left = (left-1) & mask){
+        const right = mask ^ left;
+        if (right === 0) continue;
+        // If left-deep only and left is not singleton (to ensure left-deep?), we can enforce strategy:
+        if ($('joinStyle').value === 'leftdeep'){
+          // only consider left as a continuous prefix in some permutation - hard to enforce here simply.
+          // Simple enforcement: only allow left to be a singleton (grow left-deep by adding one table at a time)
+          if (popcount(left) !== 1) continue;
+        }
+        const leftBest = best[left];
+        const rightBest = best[right];
+        if (!leftBest || !rightBest) continue;
+        // combine trees
+        // choose join alg (auto or pref)
+        const alg = $('joinAlgPreference').value === 'auto' ? chooseJoinAlgorithm(leftBest.rows, rightBest.rows, combinedSelectivityBetweenSets(leafNames(leftBest.plan), leafNames(rightBest.plan))) : $('joinAlgPreference').value;
+        const node = {type:'join', left: clone(leftBest.plan), right: clone(rightBest.plan), alg: alg};
+        evaluatePlanTree(node);
+        // penalize Cartesian joins if disallowed
+        const leftNames = leafNames(node.left);
+        const rightNames = leafNames(node.right);
+        const sel = combinedSelectivityBetweenSets(leftNames, rightNames);
+        if (!state.allowCartesian && !hasPredicateBetweenSets(leftNames, rightNames) && sel===1.0){
+          node.cost *= 1000; // big penalty
+        }
+        if (node.cost < bestCost){
+          bestCost = node.cost;
+          bestPlan = node;
+        }
+      }
+      if (bestPlan){
+        best[mask] = {plan: bestPlan, cost: bestCost, rows: bestPlan.rows};
+      }
+    }
+    steps.push(cloneDPStateSnapshot(best, n));
+  }
+  // final best for full mask
+  const fullMask = (1<<n) - 1;
+  const final = best[fullMask];
+  state.planSpace = collectAllPlansFromDP(best, n);
+  state.bestPlan = final ? final.plan : null;
+  state.dpSteps = steps;
+  state.dpPointer = steps.length - 1;
+  state.history.push({action:'dp_complete', details:{tables:tables.slice(), best: state.bestPlan ? state.bestPlan.desc : null}});
+  updateComputedDisplays();
+  if (!stepMode){
+    alert('DP completed. Best cost: ' + (state.bestPlan ? state.bestPlan.cost.toFixed(2) : 'n/a'));
+  } else {
+    alert('DP started in step mode. Use Step Forward to move through subset sizes.');
+  }
+}
+
+function cloneDPStateSnapshot(bestArr, n){
+  // create human-friendly snapshot: for each mask store best desc and cost
+  const snapshot = [];
+  const totalMasks = 1<<n;
+  for (let mask=1; mask<totalMasks; mask++){
+    const item = bestArr[mask];
+    snapshot.push({
+      mask: mask,
+      tables: maskToTableNames(mask,n),
+      bestDesc: item ? (item.plan.desc || leafNames(item.plan).join(',')) : null,
+      cost: item ? item.cost : null,
+      rows: item ? item.rows : null
+    });
+  }
+  return snapshot;
+}
+
+function maskToTableNames(mask, n){
+  const names = getIncludedTableNames();
+  const arr = [];
+  for (let i=0;i<n;i++) if (mask & (1<<i)) arr.push(names[i]);
+  return arr;
+}
+function popcount(x){ return x.toString(2).split('0').join('').length; }
+function hasPredicateBetweenSets(leftNames, rightNames){
+  for (let la of leftNames) for (let rb of rightNames) if (predicateBetween(la, rb) !== null) return true;
+  return false;
+}
+function collectAllPlansFromDP(bestArr, n){
+  const fullMask = (1<<n)-1;
+  const planList = [];
+  // traverse recursively from full mask collecting candidate plans by re-evaluating partitions (this produces one best plan per mask)
+  function collectForMask(mask){
+    const item = bestArr[mask];
+    if (!item) return;
+    planList.push(item.plan);
+    // recursively collect children plans
+    if (item.plan.type === 'join'){
+      collectPlanNodes(item.plan, planList);
+    }
+  }
+  collectForMask(fullMask);
+  // sort by cost (evaluatePlanTree may have already added costs)
+  const unique = dedupePlans(planList).map(p=>{ evaluatePlanTree(p); return p; });
+  unique.sort((a,b)=> (a.cost || 0) - (b.cost || 0));
+  return unique;
+}
+function collectPlanNodes(node, list){
+  if (!node) return;
+  if (node.type === 'leaf') return;
+  list.push(node.left);
+  list.push(node.right);
+  collectPlanNodes(node.left, list);
+  collectPlanNodes(node.right, list);
+}
+function dedupePlans(arr){
+  const seen = new Set();
+  const res = [];
+  arr.forEach(p=>{
+    const key = JSON.stringify(planSignature(p));
+    if (!seen.has(key)){ seen.add(key); res.push(p); }
+  });
+  return res;
+}
+function planSignature(node){
+  if (!node) return null;
+  if (node.type === 'leaf') return {t: 'L', name: node.name};
+  return {t: 'J', left: planSignature(node.left), right: planSignature(node.right), alg: node.alg};
+}
+
+// --- Heuristics and Randomized strategies ---
+
+function runGreedy(){
+  const tables = getIncludedTableNames();
+  if (tables.length < 2) { alert('Need at least 2 tables.'); return; }
+  // start with the table with smallest rows
+  let remaining = tables.slice();
+  remaining.sort((a,b)=>getTableRows(a)-getTableRows(b));
+  let currentPlan = makeLeaf(remaining.shift());
+  while (remaining.length){
+    let bestMerge = null;
+    let bestCost = Infinity;
+    let bestIdx = -1;
+    for (let i=0;i<remaining.length;i++){
+      const cand = makeLeaf(remaining[i]);
+      const node = {type:'join', left: clone(currentPlan), right: cand, alg: $('joinAlgPreference').value === 'auto' ? undefined : $('joinAlgPreference').value};
+      evaluatePlanTree(node);
+      if (!state.allowCartesian && !hasPredicateBetweenSets(leafNames(node.left), leafNames(node.right)) && combinedSelectivityBetweenSets(leafNames(node.left), leafNames(node.right))===1.0){
+        node.cost *= 1000;
+      }
+      if (node.cost < bestCost){
+        bestCost = node.cost;
+        bestMerge = node;
+        bestIdx = i;
+      }
+    }
+    if (bestMerge === null) break;
+    currentPlan = bestMerge;
+    remaining.splice(bestIdx, 1);
+  }
+  evaluatePlanTree(currentPlan);
+  state.planSpace = [currentPlan];
+  state.bestPlan = currentPlan;
+  state.history.push({action:'greedy', details:{best:currentPlan.desc}});
+  updateComputedDisplays();
+  alert('Greedy completed. Cost: ' + currentPlan.cost.toFixed(2));
+}
+
+function runRandomized(iterations){
+  const tables = getIncludedTableNames();
+  if (tables.length < 2) { alert('Need at least 2 tables.'); return; }
+  const plans = [];
+  for (let it=0; it<iterations; it++){
+    const perm = shuffle(tables.slice());
+    // build left-deep plan from permutation
+    let plan = makeLeaf(perm[0]);
+    for (let i=1;i<perm.length;i++){
+      const r = makeLeaf(perm[i]);
+      const node = {type:'join', left: clone(plan), right: r, alg: undefined};
+      evaluatePlanTree(node);
+      if (!state.allowCartesian && !hasPredicateBetweenSets(leafNames(node.left), leafNames(node.right)) && combinedSelectivityBetweenSets(leafNames(node.left), leafNames(node.right))===1.0){
+        node.cost *= 1000;
+      }
+      plan = node;
+    }
+    evaluatePlanTree(plan);
+    plans.push(plan);
+  }
+  plans.sort((a,b)=>a.cost - b.cost);
+  state.planSpace = plans;
+  state.bestPlan = plans[0];
+  state.history.push({action:'random', details:{iters:iterations, best: state.bestPlan.desc}});
+  updateComputedDisplays();
+  alert('Randomized search done. Best cost: ' + state.bestPlan.cost.toFixed(2));
+}
+
+function shuffle(arr){
+  for (let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    const tmp = arr[i]; arr[i]=arr[j]; arr[j]=tmp;
+  }
+  return arr;
+}
+
+function runGenetic(popSize, iter){
+  const tables = getIncludedTableNames();
+  if (tables.length < 2) { alert('Need at least 2 tables.'); return; }
+  // individual = permutation array
+  let population = [];
+  // initialize population randomly including a few heuristics
+  population.push(tables.slice().sort((a,b)=>getTableRows(a)-getTableRows(b))); // small-first
+  population.push(tables.slice().sort((a,b)=>getTableRows(b)-getTableRows(a))); // large-first
+  while (population.length < popSize){
+    population.push(shuffle(tables.slice()));
+  }
+  let evaluate = (perm) => {
+    let plan = makeLeaf(perm[0]);
+    for (let i=1;i<perm.length;i++){
+      const node = {type:'join', left: clone(plan), right: makeLeaf(perm[i]), alg: undefined};
+      evaluatePlanTree(node);
+      if (!state.allowCartesian && !hasPredicateBetweenSets(leafNames(node.left), leafNames(node.right)) && combinedSelectivityBetweenSets(leafNames(node.left), leafNames(node.right))===1.0){
+        node.cost *= 1000;
+      }
+      plan = node;
+    }
+    evaluatePlanTree(plan);
+    return {perm: perm.slice(), plan: plan, cost: plan.cost};
+  };
+  // evaluate initial
+  let popEval = population.map(p=>evaluate(p));
+  for (let it=0; it<iter; it++){
+    // selection: keep top 50%
+    popEval.sort((a,b)=>a.cost-b.cost);
+    const survivors = popEval.slice(0, Math.max(2, Math.floor(popEval.length/2)));
+    // reproduce: cross-over pairs and mutate
+    const nextPop = survivors.map(s=>s.perm);
+    while (nextPop.length < popSize){
+      const a = survivors[Math.floor(Math.random()*survivors.length)].perm;
+      const b = survivors[Math.floor(Math.random()*survivors.length)].perm;
+      const child = crossoverPerm(a,b);
+      if (Math.random() < 0.2) mutatePerm(child);
+      nextPop.push(child);
+    }
+    popEval = nextPop.map(p=>evaluate(p));
+  }
+  popEval.sort((a,b)=>a.cost-b.cost);
+  state.planSpace = popEval.map(x=>x.plan);
+  state.bestPlan = popEval[0].plan;
+  state.history.push({action:'genetic', details:{iters:iter, pop:popSize, best: state.bestPlan.desc}});
+  updateComputedDisplays();
+  alert('Genetic-like search done. Best cost: ' + state.bestPlan.cost.toFixed(2));
+}
+
+function crossoverPerm(a,b){
+  // order crossover (OX)
+  const n = a.length;
+  const child = new Array(n).fill(null);
+  const i = Math.floor(Math.random()*n);
+  const j = Math.floor(Math.random()*n);
+  const s = Math.min(i,j), e = Math.max(i,j);
+  for (let k=s;k<=e;k++) child[k] = a[k];
+  let bi = 0;
+  for (let k=0;k<n;k++){
+    const idx = (e+1+k)%n;
+    while (child[idx] === null){
+      if (!a.includes(b[bi]) || child.includes(b[bi])) bi++;
+      if (bi >= b.length) break;
+      if (!child.includes(b[bi])) { child[idx] = b[bi]; bi++; break; }
+      bi++;
+    }
+  }
+  // fill left positions with elements from b in order
+  let pos = 0;
+  for (let x of b){
+    if (!child.includes(x)){
+      while (child[pos] !== null) pos++;
+      child[pos] = x;
+    }
+  }
+  return child;
+}
+function mutatePerm(p){
+  const i = Math.floor(Math.random()*p.length);
+  const j = Math.floor(Math.random()*p.length);
+  const tmp = p[i]; p[i]=p[j]; p[j]=tmp;
+}
+
+// --- Manual plan evaluation ---
+function evaluateManualPlan(){
+  const orderText = $('manualOrder').value.trim();
+  if (!orderText) { alert('Enter a manual join order.'); return; }
+  const tables = orderText.split(',').map(s=>s.trim()).filter(s=>s);
+  const included = getIncludedTableNames();
+  // validate
+  if (tables.length !== included.length || !tables.every(t=>included.includes(t))){
+    if (!confirm('Manual order does not exactly match included tables. Proceed with given names?')) {
+      return;
+    }
+  }
+  // join algs
+  let algs = $('manualJoinAlgs').value.split(',').map(s=>s.trim()).filter(s=>s);
+  if (algs.length === 0) algs = [undefined];
+  let plan = makeLeaf(tables[0]);
+  for (let i=1;i<tables.length;i++){
+    const alg = algs[(i-1) % algs.length] || undefined;
+    const node = {type:'join', left: clone(plan), right: makeLeaf(tables[i]), alg: alg};
+    evaluatePlanTree(node);
+    plan = node;
+  }
+  evaluatePlanTree(plan);
+  state.bestPlan = plan;
+  state.planSpace.unshift(plan);
+  state.history.push({action:'manual_eval', details:{order:tables, cost:plan.cost}});
+  updateComputedDisplays();
+  alert('Manual plan evaluated. Cost: ' + plan.cost.toFixed(2));
+}
+
+// --- DP step control ---
+function startDP(){
+  runDynamicProgramming(true);
+  state.dpPointer = 0;
+  showDPPointer();
+}
+function dpStepForward(){
+  if (!state.dpSteps || state.dpSteps.length === 0){ alert('No DP session. Click Start DP.'); return; }
+  if (state.dpPointer < state.dpSteps.length - 1) state.dpPointer++;
+  showDPPointer();
+}
+function dpStepBack(){
+  if (!state.dpSteps || state.dpSteps.length === 0){ alert('No DP session. Click Start DP.'); return; }
+  if (state.dpPointer > 0) state.dpPointer--;
+  showDPPointer();
+}
+function runDPToEnd(){
+  if (!state.dpSteps || state.dpSteps.length === 0) { alert('No DP session. Click Start DP.'); return; }
+  state.dpPointer = state.dpSteps.length - 1;
+  showDPPointer();
+}
+function showDPPointer(){
+  const dpStatePre = $('dpStatePre');
+  const ptr = state.dpPointer;
+  if (ptr < 0 || ptr >= state.dpSteps.length){ dpStatePre.textContent = 'No DP snapshot.'; return; }
+  const snap = state.dpSteps[ptr];
+  let s = 'DP snapshot step ' + ptr + ' (subsets processed up to size ' + ptr + ')\n';
+  snap.forEach(it=>{
+    s += ' {' + it.tables.join(',') + '} -> ' + (it.bestDesc ? it.bestDesc : 'n/a') + ' cost=' + (it.cost ? it.cost.toFixed(2) : 'n/a') + '\n';
+  });
+  dpStatePre.textContent = s;
+  $('historyPre').textContent = JSON.stringify(state.history, null, 2);
+}
+
+// --- Display & UI updates ---
+function updateComputedDisplays(){
+  // planSpace display
+  const ps = $('planSpacePre');
+  let s = '';
+  if (state.planSpace && state.planSpace.length){
+    state.planSpace.forEach((p,i)=>{
+      evaluatePlanTree(p); // refresh numbers
+      s += '[' + (i+1) + '] cost=' + p.cost.toFixed(2) + ' rows=' + p.rows + ' desc=' + (p.desc || leafNames(p).join(',')) + '\n';
+    });
+  } else s = '(no plans evaluated yet)\n';
+  ps.textContent = s;
+  // best plan
+  const bp = $('bestPlanPre');
+  if (state.bestPlan){
+    evaluatePlanTree(state.bestPlan);
+    bp.textContent = treeToString(state.bestPlan);
+  } else bp.textContent = '(no best plan)';
+  // dpState
+  showDPPointer();
+  // history
+  $('historyPre').textContent = state.history.map(h=>JSON.stringify(h)).join('\n');
+}
+
+function showAllPlans(){
+  if (!state.planSpace || state.planSpace.length===0){ alert('No evaluated plans yet. Run an optimizer or evaluate manually.'); return; }
+  let s = '';
+  state.planSpace.forEach((p,i)=>{
+    evaluatePlanTree(p);
+    s += '--- Plan #' + (i+1) + ' ---\n';
+    s += treeToString(p);
+    s += '\n';
+  });
+  alert('See plan list in the "Plan Space" area and "Best Plan".');
+}
+
+// Execution simulation
+function simulatePlan(plan, stepSliderId){
+  if (!plan){ alert('No plan to simulate.'); return; }
+  evaluatePlanTree(plan);
+  // flatten join nodes in order (left-deep execution order emulated by post-order)
+  const joinNodes = [];
+  function collectJoins(node){
+    if (!node) return;
+    if (node.type === 'join'){
+      collectJoins(node.left); collectJoins(node.right);
+      joinNodes.push(node);
+    }
+  }
+  collectJoins(plan);
+  // build trace
+  let trace = '';
+  let totalCost = 0;
+  joinNodes.forEach((jn, idx)=>{
+    trace += 'Step ' + (idx+1) + ': JOIN ' + jn.left.desc + ' ⋈ ' + jn.right.desc + '\n';
+    trace += '  algorithm=' + jn.alg + ' selectivity=' + (jn.joinSelectivity||1).toFixed(6) + '\n';
+    trace += '  leftRows=' + jn.left.rows + ' rightRows=' + jn.right.rows + ' resultRows=' + jn.rows + '\n';
+    trace += '  localCost=' + (jn.localCost||0).toFixed(2) + ' totalSoFar=' + (totalCost + (jn.localCost||0)).toFixed(2) + '\n\n';
+    totalCost += (jn.localCost||0);
+  });
+  trace += 'Final estimated cost: ' + (plan.cost||0).toFixed(2) + '\n';
+  $('executionPre').textContent = trace;
+  // configure slider
+  const slider = $('simStep');
+  slider.max = Math.max(0, joinNodes.length);
+  slider.value = 0;
+  slider.oninput = function(){
+    const step = parseInt(slider.value);
+    let partialTrace = '';
+    let runningCost = 0;
+    for (let i=0;i<step && i<joinNodes.length;i++){
+      const jn = joinNodes[i];
+      partialTrace += 'Step ' + (i+1) + ': JOIN ' + jn.left.desc + ' ⋈ ' + jn.right.desc + '\n';
+      partialTrace += '  algorithm=' + jn.alg + ' selectivity=' + (jn.joinSelectivity||1).toFixed(6) + '\n';
+      partialTrace += '  leftRows=' + jn.left.rows + ' rightRows=' + jn.right.rows + ' resultRows=' + jn.rows + '\n';
+      partialTrace += '  localCost=' + (jn.localCost||0).toFixed(2) + ' totalSoFar=' + (runningCost + (jn.localCost||0)).toFixed(2) + '\n\n';
+      runningCost += (jn.localCost||0);
+    }
+    partialTrace += 'Partial estimated cost after ' + step + ' steps: ' + runningCost.toFixed(2) + '\n';
+    $('executionPre').textContent = partialTrace;
+  };
+}
+
+// --- State import/export ---
+function exportStateJSON(){
+  const st = clone(state);
+  // don't export functions or large structures; keep essential parts
+  const exportObj = {
+    tables: st.tables,
+    predicates: st.predicates,
+    indexes: st.indexes,
+    cpuWeight: $('cpuWeight').value,
+    ioWeight: $('ioWeight').value,
+    joinAlgPreference: $('joinAlgPreference').value,
+    joinStyle: $('joinStyle').value,
+    allowCartesian: $('allowCartesian').checked
+  };
+  $('stateJson').value = JSON.stringify(exportObj, null, 2);
+}
+function importStateJSON(){
+  try{
+    const txt = $('stateJson').value;
+    if (!txt) { alert('Paste JSON into the State JSON textarea and click Import'); return; }
+    const obj = JSON.parse(txt);
+    if (!obj.tables) throw 'Invalid JSON: missing tables';
+    // apply
+    state.tables = obj.tables;
+    state.predicates = obj.predicates || {};
+    state.indexes = obj.indexes || {};
+    $('cpuWeight').value = obj.cpuWeight || 1;
+    $('ioWeight').value = obj.ioWeight || 1;
+    $('joinAlgPreference').value = obj.joinAlgPreference || 'auto';
+    $('joinStyle').value = obj.joinStyle || 'any';
+    $('allowCartesian').checked = obj.allowCartesian || false;
+    $('numTables').value = state.tables.length;
+    refreshAllUI();
+    alert('Imported state.');
+  }catch(e){
+    alert('Import failed: ' + e);
+  }
+}
+
+// --- Helpers & wiring events ---
+function updateConfigFromUI(){
+  state.cpuWeight = parseFloat($('cpuWeight').value) || 1;
+  state.ioWeight = parseFloat($('ioWeight').value) || 1;
+  state.joinAlgPref = $('joinAlgPreference').value;
+  state.allowCartesian = $('allowCartesian').checked;
+  state.joinStyle = $('joinStyle').value;
+  state.optimizer = $('optimizer').value;
+}
+
+function clearHistory(){
+  state.history = [];
+  updateComputedDisplays();
+}
+
+function randomizeQuery(){
+  const n = parseInt($('numTables').value);
+  initDefaults(n);
+  // random rows and random predicates
+  state.tables.forEach(t => {
+    t.rows = Math.max(10, Math.round(Math.exp(Math.random()*6)));
+    t.included = Math.random() > 0.1;
+  });
+  for (const k in state.predicates){
+    state.predicates[k].enabled = Math.random() > 0.6;
+    state.predicates[k].sel = +(Math.random()*(0.9)+0.01).toFixed(3);
+  }
+  // random indexes
+  for (const nname in state.indexes){
+    state.indexes[nname].enabled = Math.random() > 0.75;
+  }
+  refreshAllUI();
+  state.history.push({action:'randomize_query'});
+}
+
+function resetToDefaults(){
+  const n = parseInt($('numTables').value);
+  initDefaults(n);
+  refreshAllUI();
+  state.history.push({action:'reset_defaults'});
+}
+
+function exportAllPlansAsJSON(){
+  const exportPlans = state.planSpace.map(p => ({desc: p.desc || leafNames(p).join(','), cost: p.cost, rows: p.rows, tree: planSignature(p)}));
+  $('stateJson').value = JSON.stringify({plans: exportPlans}, null, 2);
+}
+
+function simulateBestPlan(){
+  if (!state.bestPlan){ alert('No best plan computed. Run an optimizer first.'); return; }
+  simulatePlan(clone(state.bestPlan));
+}
+function simulateManual(){
+  const orderText = $('manualOrder').value.trim();
+  if (!orderText){ alert('Provide a manual order to simulate.'); return; }
+  // evaluate manual plan into temp plan
+  const prevBest = state.bestPlan;
+  evaluateManualPlan();
+  simulatePlan(clone(state.bestPlan));
+  state.bestPlan = prevBest; // restore
+}
+
+// --- Event wiring ---
+window.onload = function(){
+  // initial
+  const n = parseInt($('numTables').value);
+  initDefaults(n);
+  refreshAllUI();
+
+  // wiring buttons
+  $('numTables').addEventListener('change', function(){
+    const nv = parseInt(this.value);
+    initDefaults(nv);
+    refreshAllUI();
+  });
+  $('resetDefaults').addEventListener('click', resetToDefaults);
+  $('randomizeQuery').addEventListener('click', randomizeQuery);
+
+  $('cpuWeight').addEventListener('change', updateConfigFromUI);
+  $('ioWeight').addEventListener('change', updateConfigFromUI);
+  $('joinAlgPreference').addEventListener('change', updateConfigFromUI);
+  $('allowCartesian').addEventListener('change', updateConfigFromUI);
+  $('joinStyle').addEventListener('change', updateConfigFromUI);
+  $('optimizer').addEventListener('change', updateConfigFromUI);
+
+  $('runOptimizer').addEventListener('click', function(){
+    updateConfigFromUI();
+    const opt = $('optimizer').value;
+    if (opt === 'dp') runDynamicProgramming(false);
+    else if (opt === 'greedy') runGreedy();
+    else if (opt === 'random') runRandomized(parseInt($('randomIters').value) || 200);
+    else if (opt === 'genetic') runGenetic(parseInt($('genPopulation').value) || 30, parseInt($('genIters').value) || 100);
+    updateComputedDisplays();
+  });
+
+  $('startDP').addEventListener('click', function(){ updateConfigFromUI(); startDP(); });
+  $('dpNext').addEventListener('click', dpStepForward);
+  $('dpPrev').addEventListener('click', dpStepBack);
+  $('runDPToEnd').addEventListener('click', runDPToEnd);
+  $('runGreedy').addEventListener('click', function(){ updateConfigFromUI(); runGreedy(); });
+  $('runRandom').addEventListener('click', function(){ updateConfigFromUI(); runRandomized(parseInt($('randomIters').value) || 200); });
+  $('runGenetic').addEventListener('click', function(){ updateConfigFromUI(); runGenetic(parseInt($('genPopulation').value) || 30, parseInt($('genIters').value) || 100); });
+
+  $('evaluateManual').addEventListener('click', evaluateManualPlan);
+  $('showAllPlans').addEventListener('click', showAllPlans);
+  $('showBest').addEventListener('click', function(){ if (!state.bestPlan) alert('No best plan'); else alert('Best plan shown in Best Plan area.'); });
+  $('exportState').addEventListener('click', exportStateJSON);
+  $('importState').addEventListener('click', importStateJSON);
+  $('clearHistory').addEventListener('click', clearHistory);
+  $('showAllPlans').addEventListener('click', updateComputedDisplays);
+  $('exportState').addEventListener('click', exportAllPlansAsJSON);
+
+  $('simulatePlan').addEventListener('click', simulateBestPlan);
+  $('simulateManual').addEventListener('click', simulateManual);
+  $('stateJson').addEventListener('change', function(){ /* optional */ });
+
+  // initial update
+  updateComputedDisplays();
+};
+
+// --- Misc helpers for plan collection and display ---
+function planToSimpleObject(node){
+  if (!node) return null;
+  if (node.type === 'leaf') return {type:'leaf', name:node.name, rows:node.rows};
+  return {type:'join', alg:node.alg, rows:node.rows, cost:node.cost, left:planToSimpleObject(node.left), right:planToSimpleObject(node.right)};
+}
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,439 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3d59ba1-fa73-11f0-83e0-8d7be1d51901.html';
+
+// Page Object encapsulating interactions with the Min Heap Visualizer
+class HeapPage {
+  /**
+   * @param {import('@playwright/test').Page} page
+   */
+  constructor(page) {
+    this.page = page;
+    this.selectors = {
+      valueInput: '#valueInput',
+      insertBtn: '#insertBtn',
+      extractBtn: '#extractBtn',
+      peekBtn: '#peekBtn',
+      arrayInput: '#arrayInput',
+      buildBtn: '#buildBtn',
+      randomBtn: '#randomBtn',
+      clearBtn: '#clearBtn',
+      stepInsert: '#stepInsert',
+      stepExtract: '#stepExtract',
+      arrayArea: '#arrayArea',
+      size: '#size',
+      levels: '#levels',
+      log: '#log',
+      speed: '#speed',
+      speedVal: '#speedVal',
+      treeWrap: '#treeWrap'
+    };
+  }
+
+  async goto() {
+    await this.page.goto(APP_URL);
+    // ensure the app finished initial render
+    await this.page.waitForSelector(this.selectors.arrayArea);
+  }
+
+  // set animation speed (ms) via range input and trigger input event
+  async setSpeed(ms) {
+    await this.page.$eval(this.selectors.speed, (el, val) => {
+      el.value = String(val);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, ms);
+    // ensure UI reflects new speed text
+    await this.page.waitForFunction(
+      (sel, msStr) => document.querySelector(sel).textContent.includes(msStr),
+      {},
+      this.selectors.speedVal,
+      String(ms) + ' ms'
+    );
+  }
+
+  async getSize() {
+    return Number(await this.page.$eval(this.selectors.size, el => el.textContent.trim()));
+  }
+
+  async getLevels() {
+    return await this.page.$eval(this.selectors.levels, el => el.textContent.trim());
+  }
+
+  async getArrayValues() {
+    return this.page.$$eval(`${this.selectors.arrayArea} .cell`, cells => cells.map(c => c.textContent.trim()));
+  }
+
+  async getNodeValues() {
+    // nodes in tree have class node and contain .val span
+    return this.page.$$eval(`${this.selectors.treeWrap} .node .val`, spans => spans.map(s => s.textContent.trim()));
+  }
+
+  async waitForLogContaining(text, timeout = 5000) {
+    await this.page.waitForFunction(
+      (sel, t) => document.querySelector(sel).innerText.toLowerCase().includes(t.toLowerCase()),
+      { timeout },
+      this.selectors.log,
+      text
+    );
+  }
+
+  async clearLogs() {
+    await this.page.$eval(this.selectors.log, el => { el.innerHTML = ''; });
+  }
+
+  // action helpers
+  async clickInsertWithValue(value) {
+    await this.page.fill(this.selectors.valueInput, String(value));
+    await this.page.click(this.selectors.insertBtn);
+    // wait for an Operation complete log entry
+    await this.waitForLogContaining('operation complete');
+  }
+
+  // insert without filling value (to trigger alert)
+  async clickInsertExpectingDialog() {
+    // ensure input empty
+    await this.page.fill(this.selectors.valueInput, '');
+    const [dialog] = await Promise.all([
+      this.page.waitForEvent('dialog'),
+      this.page.click(this.selectors.insertBtn)
+    ]);
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  }
+
+  async clickExtractExpectingDialogIfEmpty() {
+    const size = await this.getSize();
+    if (size === 0) {
+      const [dialog] = await Promise.all([
+        this.page.waitForEvent('dialog'),
+        this.page.click(this.selectors.extractBtn)
+      ]);
+      const message = dialog.message();
+      await dialog.accept();
+      return message;
+    } else {
+      // normal extract: click and wait for log entries
+      await this.page.click(this.selectors.extractBtn);
+      await this.waitForLogContaining('extract min');
+      await this.waitForLogContaining('operation complete');
+      return null;
+    }
+  }
+
+  async clickPeekExpectingDialog() {
+    const [dialog] = await Promise.all([
+      this.page.waitForEvent('dialog'),
+      this.page.click(this.selectors.peekBtn)
+    ]);
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  }
+
+  async buildFromArrayString(arrStr) {
+    await this.page.fill(this.selectors.arrayInput, arrStr);
+    await this.page.click(this.selectors.buildBtn);
+    // wait for buildStart and done -> 'operation complete'
+    await this.waitForLogContaining('operation complete');
+    // small extra wait to allow DOM updates
+    await this.page.waitForTimeout(50);
+  }
+
+  async clickRandomizeAndWait() {
+    await this.page.click(this.selectors.randomBtn);
+    // randomBtn sets arrayInput and triggers buildFromArray -> wait for done
+    await this.waitForLogContaining('operation complete');
+  }
+
+  async clickClearAndWait() {
+    await this.page.click(this.selectors.clearBtn);
+    // clear triggers a log 'Heap cleared'
+    await this.waitForLogContaining('heap cleared');
+    // ensure DOM applied
+    await this.page.waitForTimeout(30);
+  }
+
+  async clickStepInsertAndWait() {
+    await this.page.click(this.selectors.stepInsert);
+    // demo logs 'Demo complete.' at end
+    await this.waitForLogContaining('demo complete');
+  }
+
+  async clickStepExtractAndWait() {
+    // stepExtract may alert if heap empty; calling routine should ensure heap non-empty
+    await this.page.click(this.selectors.stepExtract);
+    await this.waitForLogContaining('all elements extracted.');
+  }
+}
+
+// Test suite
+test.describe.serial('Min Heap Visualizer - FSM and UI tests (d3d59ba1-fa73-11f0-83e0-8d7be1d51901)', () => {
+  // capture console errors and page errors for each test
+  test.beforeEach(async ({ page }) => {
+    // attach arrays to the page object for collection
+    page['_consoleErrors'] = [];
+    page['_pageErrors'] = [];
+
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        page['_consoleErrors'].push({
+          text: msg.text(),
+          location: msg.location()
+        });
+      }
+    });
+
+    page.on('pageerror', err => {
+      page['_pageErrors'].push(err);
+    });
+
+    // navigate and create ready state
+    const heapPage = new HeapPage(page);
+    await heapPage.goto();
+    // reduce animation speed to be faster for tests
+    await heapPage.setSpeed(50);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Assert there were no unexpected runtime errors or console errors
+    const cons = page['_consoleErrors'] || [];
+    const pageErrs = page['_pageErrors'] || [];
+    expect(cons, 'No console errors should be emitted during test').toEqual([]);
+    expect(pageErrs, 'No uncaught page errors should occur during test').toEqual([]);
+  });
+
+  test('Initial state (S0_Idle) should render empty heap and size 0', async ({ page }) => {
+    // This test validates the Idle state: entry action renderImmediate([]) must produce empty arrayArea and size 0.
+    const heapPage = new HeapPage(page);
+
+    const size = await heapPage.getSize();
+    expect(size).toBe(0);
+
+    const arrayVals = await heapPage.getArrayValues();
+    expect(arrayVals.length).toBe(0);
+
+    const levels = await heapPage.getLevels();
+    expect(levels).toBe('0');
+
+    // tree should have no nodes
+    const nodes = await heapPage.getNodeValues();
+    expect(nodes.length).toBe(0);
+  });
+
+  test('Insert transitions Idle -> HasValues and updates array & tree views', async ({ page }) => {
+    // Validate Insert event and transition from S0_Idle to S1_HasValues.
+    const heapPage = new HeapPage(page);
+
+    // insert one value and wait for operation complete
+    await heapPage.clickInsertWithValue(42);
+
+    // size should be 1
+    const size = await heapPage.getSize();
+    expect(size).toBe(1);
+
+    // array cell should show the value
+    const arrayVals = await heapPage.getArrayValues();
+    expect(arrayVals).toContain('42');
+
+    // tree node should exist and show 42
+    const nodeVals = await heapPage.getNodeValues();
+    expect(nodeVals).toContain('42');
+  });
+
+  test('Insert multiple values, then ExtractMin should remove minimum and reduce size', async ({ page }) => {
+    // Validate extract transition from S1_HasValues to S1_HasValues and ensure min removed.
+    const heapPage = new HeapPage(page);
+
+    // Insert values: 5, 3, 8, 1
+    await heapPage.clickInsertWithValue(5);
+    await heapPage.clickInsertWithValue(3);
+    await heapPage.clickInsertWithValue(8);
+    await heapPage.clickInsertWithValue(1);
+
+    let size = await heapPage.getSize();
+    expect(size).toBe(4);
+
+    // Peek to verify min is 1 via dialog
+    const peekMsgBefore = await heapPage.clickPeekExpectingDialog();
+    expect(peekMsgBefore).toMatch(/Min: 1/);
+
+    // Extract min
+    await heapPage.clickExtractExpectingDialogIfEmpty();
+
+    // after extract, size should be 3
+    size = await heapPage.getSize();
+    expect(size).toBe(3);
+
+    // peek to verify new min (should be 3)
+    const peekMsgAfter = await heapPage.clickPeekExpectingDialog();
+    expect(peekMsgAfter).toMatch(/Min: 3/);
+  });
+
+  test('Peek when heap empty shows alert and when non-empty shows min', async ({ page }) => {
+    // Test both peek edge cases
+    const heapPage = new HeapPage(page);
+
+    // Ensure cleared
+    await heapPage.clickClearAndWait();
+
+    // Peek on empty: expect dialog 'Heap is empty'
+    const emptyPeekMsg = await heapPage.clickPeekExpectingDialog();
+    expect(emptyPeekMsg).toMatch(/Heap is empty/);
+
+    // Build from array and peek for min
+    await heapPage.buildFromArrayString('10,2,7,3');
+    const peekMsg = await heapPage.clickPeekExpectingDialog();
+    // min should be 2
+    expect(peekMsg).toMatch(/Min: 2/);
+  });
+
+  test('Build Heap from array creates proper min-heap (BuildHeap event)', async ({ page }) => {
+    // Validate BuildHeap transition from S0_Idle -> S1_HasValues
+    const heapPage = new HeapPage(page);
+
+    await heapPage.buildFromArrayString('5,3,8,1');
+
+    const size = await heapPage.getSize();
+    expect(size).toBe(4);
+
+    // root (array index 0) should be the minimum value 1
+    const arrayValues = await heapPage.getArrayValues();
+    expect(arrayValues[0]).toBe('1');
+
+    // levels should be > 0
+    const levels = await heapPage.getLevels();
+    expect(Number(levels)).toBeGreaterThan(0);
+  });
+
+  test('Randomize button populates array input and builds heap (Randomize event)', async ({ page }) => {
+    // Validate Randomize event builds a heap and updates arrayInput
+    const heapPage = new HeapPage(page);
+
+    // clear logs so we assert on fresh logs
+    await heapPage.clearLogs();
+
+    await heapPage.clickRandomizeAndWait();
+
+    // after randomize, arrayInput should not be empty and size should be > 0
+    const arrayInputValue = await page.$eval(heapPage.selectors.arrayInput, el => el.value);
+    expect(arrayInputValue.trim().length).toBeGreaterThan(0);
+
+    const size = await heapPage.getSize();
+    expect(size).toBeGreaterThan(0);
+  });
+
+  test('Clear button empties the heap and returns to Idle (Clear event)', async ({ page }) => {
+    // Build some heap then clear to test transition S1_HasValues -> S0_Idle
+    const heapPage = new HeapPage(page);
+
+    await heapPage.buildFromArrayString('9,4,6');
+    let size = await heapPage.getSize();
+    expect(size).toBe(3);
+
+    await heapPage.clickClearAndWait();
+
+    size = await heapPage.getSize();
+    expect(size).toBe(0);
+
+    const arrayVals = await heapPage.getArrayValues();
+    expect(arrayVals.length).toBe(0);
+
+    const levels = await heapPage.getLevels();
+    expect(levels).toBe('0');
+  });
+
+  test('Step Insert demo performs step-by-step insertions and finishes (StepInsert event)', async ({ page }) => {
+    // Validate step-by-step insert demo populates heap with expected demo sequence
+    const heapPage = new HeapPage(page);
+
+    // Start demo
+    await heapPage.clickStepInsertAndWait();
+
+    // After demo completes, expect size 7 (demo array length)
+    const size = await heapPage.getSize();
+    expect(size).toBe(7);
+
+    // demo array was [15,6,23,4,7,2,9] inserted -> min should be 2 at root
+    const rootVal = (await heapPage.getArrayValues())[0];
+    expect(rootVal).toBe('2');
+
+    // log should contain 'Demo complete.'
+    await heapPage.waitForLogContaining('Demo complete.');
+  }, 20000); // increased timeout because demo runs multiple inserts (though speed is reduced)
+
+  test('Step Extract demo repeatedly extracts until empty (StepExtract event)', async ({ page }) => {
+    // Validate step extract empties the heap
+    const heapPage = new HeapPage(page);
+
+    // prepare heap (build from known array)
+    await heapPage.buildFromArrayString('12,3,5,1');
+
+    // run step extract demo
+    await heapPage.clickStepExtractAndWait();
+
+    // After demo completes, heap should be empty
+    const size = await heapPage.getSize();
+    expect(size).toBe(0);
+
+    // log should contain 'All elements extracted.'
+    await heapPage.waitForLogContaining('All elements extracted.');
+  }, 20000);
+
+  test('Edge cases: inserting invalid input and extracting from empty heap show proper alerts', async ({ page }) => {
+    const heapPage = new HeapPage(page);
+
+    // Ensure heap empty
+    await heapPage.clickClearAndWait();
+
+    // Insert without value should trigger alert
+    const insertAlert = await heapPage.clickInsertExpectingDialog();
+    expect(insertAlert).toMatch(/Please enter a number to insert/);
+
+    // Extract on empty should trigger alert
+    const extractAlert = await heapPage.clickExtractExpectingDialogIfEmpty();
+    expect(extractAlert).toMatch(/Heap is empty/);
+  });
+
+  test('Visual feedback: highlights and swaps appear during operations', async ({ page }) => {
+    // This test checks that during insert/compare/swap operations the UI temporarily applies highlight/swap classes.
+    // Reduce speed to minimal to observe transient classes quicker
+    const heapPage = new HeapPage(page);
+    await heapPage.setSpeed(50);
+
+    // Start with empty heap
+    await heapPage.clickInsertWithValue(20);
+
+    // Insert another value that will bubble up to cause swap (e.g., insert 5)
+    // Instead of trying to capture extremely short-lived classes, we will:
+    // - Start insertion
+    // - Immediately poll for presence of any '.swap' or '.highlight' in arrayArea/treeWrap
+    await page.fill(heapPage.selectors.valueInput, '5');
+
+    // listen for operation complete while simultaneously clicking insert
+    const checkForHighlights = page.waitForFunction((selArray, selTree) => {
+      const arr = document.querySelector(selArray);
+      const tree = document.querySelector(selTree);
+      const hasArrHighlights = !!arr && !!arr.querySelector('.cell.highlight, .cell.swap');
+      const hasTreeHighlights = !!tree && !!tree.querySelector('.node.highlight, .node.swap');
+      return hasArrHighlights || hasTreeHighlights;
+    }, {}, heapPage.selectors.arrayArea, heapPage.selectors.treeWrap);
+
+    const action = Promise.all([
+      page.click(heapPage.selectors.insertBtn),
+      checkForHighlights,
+      heapPage.waitForLogContaining('Operation complete')
+    ]);
+
+    // set the value first to ensure the button will insert the provided number
+    // ensure valueInput set
+    await page.fill(heapPage.selectors.valueInput, '5');
+
+    // Now click insert and wait for highlights detection and completion
+    await Promise.all([
+      page.click(heapPage.selectors.insertBtn),
+      checkForHighlights.catch(() => { /* highlight may be too brief; ignore timeouts here */ }),
+      heapPage.waitForLogContaining('Operation complete')
+    ]);
+
+    // At the

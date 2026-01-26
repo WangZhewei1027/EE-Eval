@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jump Search Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  textarea, input, button, select {
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 6em;
+  }
+  #arrayDisplay {
+    white-space: pre-wrap;
+    max-height: 6em;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 0.5em;
+    margin-bottom: 0.5em;
+  }
+  #log {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    height: 10em;
+    overflow-y: auto;
+    padding: 0.5em;
+    margin-top: 0.5em;
+  }
+  label {
+    display: inline-block;
+    margin-top: 0.5em;
+  }
+  button {
+    margin-top: 0.5em;
+    margin-right: 0.5em;
+  }
+  #stepControls button {
+    width: 6em;
+  }
+  #settings {
+    border: 1px solid black;
+    padding: 0.5em;
+    margin-bottom: 1em;
+  }
+</style>
+</head>
+<body>
+<h1>Jump Search Interactive Demo</h1>
+
+<div id="settings">
+  <label for="arrayInput">Enter sorted array (comma separated integers):</label><br />
+  <textarea id="arrayInput" aria-label="Array Input">1,3,5,7,9,11,13,15,17,19,21,23,25,27,29</textarea><br />
+
+  <label for="searchValue">Enter value to search for:</label><br />
+  <input type="number" id="searchValue" aria-label="Search Value" value="19" /><br />
+
+  <label for="blockSize">Jump block size (optional; 0 = auto):</label><br />
+  <input type="number" id="blockSize" min="0" max="100" value="0" aria-label="Block Size" /><br />
+
+  <button id="initSearch" aria-label="Initialize Search">Initialize Search</button>
+  <button id="resetAll" aria-label="Reset All">Reset All</button>
+</div>
+
+<div id="arrayContainer" aria-live="polite" aria-atomic="true" aria-relevant="additions">
+  <strong>Array:</strong>
+  <div id="arrayDisplay" tabindex="0" aria-label="Displayed array"></div>
+</div>
+
+<div id="infoContainer" aria-live="polite" aria-atomic="true">
+  <strong>Current State:</strong>
+  <div id="currentState">Not initialized</div>
+</div>
+
+<div id="controls" aria-label="Step controls" hidden>
+  <button id="stepBack" aria-label="Step Back">&lt; Step Back</button>
+  <button id="stepForward" aria-label="Step Forward">Step Forward &gt;</button>
+  <button id="autoRun" aria-label="Auto Run Pause">Auto Run</button>
+  <button id="jumpToStart" aria-label="Jump to Start">|&lt;</button>
+  <button id="jumpToEnd" aria-label="Jump to End">&gt;|</button>
+  <br />
+  <label for="speedControl">Auto Run Speed (ms delay):</label>
+  <input type="range" id="speedControl" min="100" max="2000" step="100" value="800" aria-label="Auto Run Speed Slider" />
+  <span id="speedValue">800</span> ms
+</div>
+
+<div id="manualStepControls" aria-label="Manual step controls" hidden>
+  <label for="selectStep">Jump to Step:</label>
+  <input type="number" id="selectStep" min="0" step="1" value="0" aria-label="Select Step Number" />
+  <button id="gotoStep" aria-label="Go to Step">Go</button>
+</div>
+
+<div id="detailedControls" aria-label="Detailed controls" hidden>
+  <button id="retrySearch" aria-label="Retry Search">Retry Search (Same array, new value)</button>
+  <button id="newArray" aria-label="New Array">New Array</button>
+  <button id="exportLog" aria-label="Export Log">Export Log</button>
+</div>
+
+<div>
+  <h2>Log / Explanation:</h2>
+  <div id="log" tabindex="0" aria-live="polite" aria-atomic="true"></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // State variables
+  let array = [];
+  let searchValue = null;
+  let blockSize = 0;
+  let steps = []; // Each step is { type:"jump"|"linear", index:number, from:number, to:number, explanation:string, found:boolean|null }
+  let currentStepIndex = -1;
+  let autoRunTimer = null;
+
+  // DOM references
+  const arrayInput = document.getElementById("arrayInput");
+  const searchValueInput = document.getElementById("searchValue");
+  const blockSizeInput = document.getElementById("blockSize");
+  const initSearchBtn = document.getElementById("initSearch");
+  const resetAllBtn = document.getElementById("resetAll");
+  const arrayDisplay = document.getElementById("arrayDisplay");
+  const currentState = document.getElementById("currentState");
+  const stepBackBtn = document.getElementById("stepBack");
+  const stepForwardBtn = document.getElementById("stepForward");
+  const autoRunBtn = document.getElementById("autoRun");
+  const jumpToStartBtn = document.getElementById("jumpToStart");
+  const jumpToEndBtn = document.getElementById("jumpToEnd");
+  const speedControl = document.getElementById("speedControl");
+  const speedValue = document.getElementById("speedValue");
+  const controlsDiv = document.getElementById("controls");
+  const manualStepControls = document.getElementById("manualStepControls");
+  const selectStepInput = document.getElementById("selectStep");
+  const gotoStepBtn = document.getElementById("gotoStep");
+  const detailedControls = document.getElementById("detailedControls");
+  const retrySearchBtn = document.getElementById("retrySearch");
+  const newArrayBtn = document.getElementById("newArray");
+  const exportLogBtn = document.getElementById("exportLog");
+  const logDiv = document.getElementById("log");
+
+  // Utility funcs
+  function clearLog() {
+    logDiv.textContent = "";
+  }
+  function appendLog(text) {
+    logDiv.textContent += text + "\n";
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+  function clearState() {
+    array = [];
+    searchValue = null;
+    blockSize = 0;
+    steps = [];
+    currentStepIndex = -1;
+    clearInterval(autoRunTimer);
+    autoRunTimer = null;
+    autoRunBtn.textContent = "Auto Run";
+    controlsDiv.hidden = true;
+    manualStepControls.hidden = true;
+    detailedControls.hidden = true;
+    currentState.textContent = "Not initialized";
+    arrayDisplay.textContent = "";
+    clearLog();
+    selectStepInput.min = 0;
+    selectStepInput.value = 0;
+  }
+
+  // Validate and parse array input
+  function parseArray(str) {
+    // remove spaces, split by commas
+    const parts = str.split(",").map(s => s.trim());
+    if (parts.length === 0) return null;
+    const res = [];
+    for (let p of parts) {
+      if (p === "") continue;
+      let n = Number(p);
+      if (!Number.isInteger(n)) return null;
+      res.push(n);
+    }
+    return res;
+  }
+
+  // Verify array is sorted ascending
+  function isSortedAsc(arr) {
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] < arr[i - 1]) return false;
+    }
+    return true;
+  }
+
+  // Format array for display and highlight a given index (or indices)
+  // highlightIndices: Set of indices to highlight (array of numbers)
+  // linearRange: if specified, an object {from:number, to:number} to highlight linarly checked
+  function formatArray(arr, highlightIndices = new Set(), linearRange = null, currentJumpIndex = null) {
+    // We'll show index:value style, one per element, separated by space
+    // Highlight with square brackets: [val]
+    // For linear range highlight with : ( )
+    let parts = arr.map((val, idx) => {
+      let base = val.toString();
+      if (highlightIndices.has(idx)) base = "[" + base + "]";
+      else if (linearRange && idx >= linearRange.from && idx <= linearRange.to) {
+        base = "(" + base + ")";
+      }
+      if (currentJumpIndex === idx) base = "*" + base + "*";
+      return base;
+    });
+    return parts.join(" ");
+  }
+
+  // Build the steps for Jump Search
+  function generateSteps(arr, target, block) {
+    // Clear prev steps
+    const stepsList = [];
+
+    const n = arr.length;
+    if (n === 0) return stepsList;
+
+    if (block <= 0) {
+      block = Math.floor(Math.sqrt(n));
+      if (block < 1) block = 1;
+    }
+
+    let prev = 0;
+    let curr = Math.min(block, n);
+    let jumpIndex = 0;
+
+    // Jump phase
+    while (curr < n && arr[curr - 1] < target) {
+      stepsList.push({
+        type: "jump",
+        index: curr - 1,
+        from: prev,
+        to: curr - 1,
+        explanation: `Jump to index ${curr - 1} with value ${arr[curr -1]}, which is less than ${target}.`,
+        found: null
+      });
+      prev = curr;
+      curr = Math.min(curr + block, n);
+      jumpIndex++;
+    }
+
+    // Check last jump position if not already added
+    if (prev < n) {
+      stepsList.push({
+        type: "jump",
+        index: Math.min(curr - 1, n -1),
+        from: prev,
+        to: Math.min(curr - 1, n -1),
+        explanation: `Block found between indexes ${prev} and ${Math.min(curr -1, n -1)} for linear search.`,
+        found: null
+      });
+    }
+
+    // Linear search inside the block
+    let foundIndex = -1;
+    for (let i = prev; i <= Math.min(curr - 1, n -1); i++) {
+      const explanationLinear = `Linear search at index ${i} with value ${arr[i]}.`;
+      let f = null;
+      if (arr[i] === target) f = true;
+      else if (arr[i] > target) f = false; // definitely not found beyond this
+      stepsList.push({
+        type: "linear",
+        index: i,
+        from: prev,
+        to: Math.min(curr -1, n -1),
+        explanation: explanationLinear,
+        found: f
+      });
+      if (f === true) {
+        foundIndex = i;
+        break;
+      }
+      if (f === false) {
+        break;
+      }
+    }
+
+    if (foundIndex === -1) {
+      stepsList.push({
+        type: "result",
+        explanation: `Value ${target} not found in array.`,
+        found: false,
+        index: -1,
+        from: -1,
+        to: -1,
+      });
+    } else {
+      stepsList.push({
+        type: "result",
+        explanation: `Value ${target} found at index ${foundIndex}.`,
+        found: true,
+        index: foundIndex,
+        from: -1,
+        to: -1,
+      });
+    }
+    return stepsList;
+  }
+
+  // Display current step
+  function displayStep(idx) {
+    if (idx < 0) {
+      currentState.textContent = "Not initialized";
+      arrayDisplay.textContent = formatArray(array);
+      appendLog("No step selected.");
+      return;
+    }
+    if (idx >= steps.length) {
+      currentState.textContent = "Step index out of range";
+      return;
+    }
+    currentStepIndex = idx;
+    selectStepInput.value = idx;
+    const step = steps[idx];
+    let highlightSet = new Set();
+    let linearRange = null;
+    let currentJumpIndex = null;
+
+    clearLog();
+    switch(step.type) {
+      case "jump":
+        // Highlight jumped index, linear range empty
+        highlightSet.add(step.index);
+        currentJumpIndex = step.index;
+        currentState.textContent = `Jump step ${idx}: jumped to index ${step.index}`;
+        appendLog(step.explanation);
+        arrayDisplay.textContent = formatArray(array, highlightSet, null, currentJumpIndex);
+        break;
+      case "linear":
+        // Highlight linear search range, and highlight current linear index
+        linearRange = {from: step.from, to: step.to};
+        highlightSet.add(step.index);
+        currentState.textContent = `Linear search step ${idx}: checking index ${step.index}`;
+        appendLog(step.explanation);
+        if (step.found === true) appendLog(`Found target at index ${step.index}.`);
+        else if (step.found === false) appendLog(`Value at index is greater than target. Stopping linear search.`);
+        arrayDisplay.textContent = formatArray(array, highlightSet, linearRange);
+        break;
+      case "result":
+        currentState.textContent = `Result step ${idx}: search complete.`;
+        appendLog(step.explanation);
+        if (step.found === true) {
+          highlightSet.add(step.index);
+          arrayDisplay.textContent = formatArray(array, highlightSet);
+        } else {
+          arrayDisplay.textContent = formatArray(array);
+        }
+        break;
+      default:
+        currentState.textContent = "Unknown step type";
+        arrayDisplay.textContent = formatArray(array);
+        break;
+    }
+  }
+
+  // Init / Start search from inputs
+  function startSearch() {
+    clearInterval(autoRunTimer);
+    autoRunTimer = null;
+    autoRunBtn.textContent = "Auto Run";
+
+    const arrParsed = parseArray(arrayInput.value);
+    if (!arrParsed) {
+      alert("Invalid array input. Please enter comma separated integers.");
+      return;
+    }
+    if (!isSortedAsc(arrParsed)) {
+      alert("Array must be sorted in ascending order for Jump Search.");
+      return;
+    }
+    const valParsed = Number(searchValueInput.value);
+    if (!Number.isInteger(valParsed)) {
+      alert("Search value must be an integer.");
+      return;
+    }
+    let blockVal = Number(blockSizeInput.value);
+    if (isNaN(blockVal) || blockVal < 0) {
+      alert("Block size must be 0 or a positive integer.");
+      return;
+    }
+    if (blockVal > arrParsed.length) {
+      alert("Block size cannot be larger than array length.");
+      return;
+    }
+
+    array = arrParsed;
+    searchValue = valParsed;
+    blockSize = blockVal;
+
+    steps = generateSteps(array, searchValue, blockSize);
+    if (steps.length === 0) {
+      alert("No steps generated. Array might be empty.");
+      return;
+    }
+
+    controlsDiv.hidden = false;
+    manualStepControls.hidden = false;
+    detailedControls.hidden = false;
+    selectStepInput.min = 0;
+    selectStepInput.max = Math.max(steps.length - 1, 0);
+    selectStepInput.value = 0;
+
+    clearLog();
+    appendLog(`Starting Jump Search for value ${searchValue} in array of length ${array.length} with block size ${blockSize <= 0 ? "auto (" + Math.floor(Math.sqrt(array.length)) + ")" : blockSize}.`);
+    displayStep(0);
+  }
+
+  // Go to step safely
+  function gotoStepSafe(idx) {
+    if (idx < 0) idx = 0;
+    if (idx >= steps.length) idx = steps.length - 1;
+    displayStep(idx);
+  }
+
+  // Auto run loop
+  function autoRun() {
+    if (autoRunTimer) return; // Already running
+    autoRunBtn.textContent = "Pause";
+    const delay = Number(speedControl.value);
+    autoRunTimer = setInterval(() => {
+      if (currentStepIndex >= steps.length - 1) {
+        clearInterval(autoRunTimer);
+        autoRunTimer = null;
+        autoRunBtn.textContent = "Auto Run";
+        return;
+      }
+      displayStep(currentStepIndex + 1);
+    }, delay);
+  }
+
+  // Pause auto run
+  function pauseAutoRun() {
+    if (!autoRunTimer) return;
+    clearInterval(autoRunTimer);
+    autoRunTimer = null;
+    autoRunBtn.textContent = "Auto Run";
+  }
+
+  // Toggle auto run
+  function toggleAutoRun() {
+    if (autoRunTimer) pauseAutoRun();
+    else autoRun();
+  }
+
+  // Retry same array, new value
+  function retrySearch() {
+    clearInterval(autoRunTimer);
+    autoRunTimer = null;
+    autoRunBtn.textContent = "Auto Run";
+    // Reset search value to empty, force user input
+    searchValueInput.value = "";
+    searchValueInput.focus();
+    clearLog();
+    currentState.textContent = "Ready for new search value.";
+    controlsDiv.hidden = true;
+    manualStepControls.hidden = true;
+    detailedControls.hidden = true;
+    arrayDisplay.textContent = formatArray(array);
+    steps = [];
+    currentStepIndex = -1;
+  }
+
+  // Export log text as file
+  function exportLog() {
+    const content = logDiv.textContent;
+    const blob = new Blob([content], {type: "text/plain"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "jump_search_log.txt";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+
+
+  // Event listeners
+  initSearchBtn.addEventListener("click", startSearch);
+  resetAllBtn.addEventListener("click", () => {
+    clearState();
+    arrayInput.focus();
+  });
+
+  stepBackBtn.addEventListener("click", () => {
+    pauseAutoRun();
+    if (currentStepIndex > 0) displayStep(currentStepIndex -1);
+  });
+  stepForwardBtn.addEventListener("click", () => {
+    pauseAutoRun();
+    if (currentStepIndex < steps.length -1) displayStep(currentStepIndex + 1);
+  });
+  autoRunBtn.addEventListener("click", () => {
+    toggleAutoRun();
+  });
+  jumpToStartBtn.addEventListener("click", () => {
+    pauseAutoRun();
+    displayStep(0);
+  });
+  jumpToEndBtn.addEventListener("click", () => {
+    pauseAutoRun();
+    displayStep(steps.length - 1);
+  });
+
+  speedControl.addEventListener("input", () => {
+    speedValue.textContent = speedControl.value;
+    if (autoRunTimer) {
+      pauseAutoRun();
+      autoRun();
+    }
+  });
+
+  gotoStepBtn.addEventListener("click", () => {
+    const val = Number(selectStepInput.value);
+    if (!Number.isInteger(val)) {
+      alert("Step must be an integer.");
+      return;
+    }
+    if (val < 0 || val >= steps.length) {
+      alert("Step out of range (0 to " + (steps.length -1) + ").");
+      return;
+    }
+    pauseAutoRun();
+    displayStep(val);
+  });
+
+  retrySearchBtn.addEventListener("click", retrySearch);
+  newArrayBtn.addEventListener("click", () => {
+    clearState();
+    arrayInput.focus();
+  });
+  exportLogBtn.addEventListener("click", exportLog);
+
+  // Initialize with default values loaded
+  clearState();
+  arrayDisplay.textContent = formatArray(parseArray(arrayInput.value) || []);
+
+  // Accessibility: Keyboard shortcuts
+  document.body.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (controlsDiv.hidden) return;
+    switch(e.key) {
+      case "ArrowRight":
+        e.preventDefault();
+        stepForwardBtn.click();
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        stepBackBtn.click();
+        break;
+      case "Home":
+        e.preventDefault();
+        jumpToStartBtn.click();
+        break;
+      case "End":
+        e.preventDefault();
+        jumpToEndBtn.click();
+        break;
+      case " ":
+        e.preventDefault();
+        autoRunBtn.click();
+        break;
+    }
+  });
+})();
+</script>
+</body>
+</html>

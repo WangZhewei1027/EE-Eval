@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Virtual Memory Interactive Simulator</title>
+<style>
+/* Extremely minimal styling to keep layout readable but plain */
+body { background: white; color: black; font-family: monospace; margin: 10px; }
+section { margin-bottom: 12px; }
+label { display: inline-block; width: 160px; }
+input, select, button, textarea { font-family: monospace; }
+textarea { width: 100%; height: 120px; }
+table { border-collapse: collapse; }
+td, th { padding: 2px 6px; border: 1px solid #000; text-align: left; }
+.small { width: 60px; }
+.mono { font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>Virtual Memory Interactive Simulator</h1>
+
+<section id="setup">
+  <h2>1) System Configuration</h2>
+  <div>
+    <label>Page size (KB):</label><input id="pageSizeKB" type="number" value="4" min="1" class="small"> 
+    <label>Pages per process:</label><input id="pagesPerProcess" type="number" value="64" min="1" class="small">
+    <label>Physical frames:</label><input id="numFrames" type="number" value="16" min="1" class="small">
+  </div>
+  <div>
+    <label>TLB entries:</label><input id="tlbEntries" type="number" value="4" min="0" class="small">
+    <label>Replacement alg:</label>
+    <select id="replacementAlg">
+      <option value="LRU">LRU</option>
+      <option value="FIFO">FIFO</option>
+      <option value="Clock">Clock</option>
+      <option value="Random">Random</option>
+    </select>
+  </div>
+  <div>
+    <label>Swap latency (ms):</label><input id="swapLatency" type="number" value="50" min="0" class="small">
+    <label>Prefetch on load:</label><input id="prefetch" type="checkbox">
+    <label>Demand paging only:</label><input id="demandOnly" type="checkbox" checked>
+  </div>
+  <div>
+    <button id="applyConfig">Apply configuration</button>
+    <button id="resetSystem">Reset system</button>
+    <button id="randomizeState">Randomize initial memory</button>
+  </div>
+</section>
+
+<section id="processControls">
+  <h2>2) Processes & Memory Allocation</h2>
+  <div>
+    <label>New process name:</label><input id="newProcName" type="text" value="P1">
+    <label>Initial pages:</label><input id="newProcPages" type="number" class="small" value="16" min="1">
+    <button id="createProc">Create process</button>
+    <button id="killProc">Kill selected process</button>
+  </div>
+  <div>
+    <label>Selected process:</label>
+    <select id="procSelect"></select>
+    <label>Pin pages at creation:</label><input id="pinOnCreate" type="checkbox">
+  </div>
+  <div>
+    <label>Clone (copy-on-write):</label><button id="cloneProc">Clone selected</button>
+    <label>Force allocate page:</label><input id="forcePageNum" type="number" class="small" value="0" min="0">
+    <button id="forceAlloc">Force allocate</button>
+    <button id="forceFree">Force free page</button>
+  </div>
+  <div>
+    <label>Manual page ops (PID:VPN):</label>
+    <input id="manualPID" type="text" placeholder="P1" class="small">
+    <input id="manualVPN" type="number" class="small" value="0" min="0">
+    <button id="pinPage">Pin</button>
+    <button id="unpinPage">Unpin</button>
+    <button id="markDirty">Mark dirty</button>
+    <button id="clearDirty">Clear dirty</button>
+  </div>
+</section>
+
+<section id="workloads">
+  <h2>3) Memory Accesses & Workloads</h2>
+  <div>
+    <label>Address input (hex/dec):</label>
+    <input id="addrPID" type="text" placeholder="P1" class="small">
+    <input id="addrInput" type="text" placeholder="0x1A" class="small">
+    <select id="accessType"><option>R</option><option>W</option></select>
+    <button id="accessBtn">Access</button>
+    <button id="explainLast">Explain last action</button>
+  </div>
+  <div>
+    <label>Prebuilt pattern:</label>
+    <select id="patternSelect">
+      <option value="sequential">Sequential scan</option>
+      <option value="random">Random accesses</option>
+      <option value="locality">Looping working set (locality)</option>
+      <option value="stress">Stress test (many faults)</option>
+    </select>
+    <label>Operations:</label><input id="patternOps" type="number" value="100" min="1" class="small">
+    <button id="runPattern">Run pattern</button>
+    <button id="stopRun">Stop run</button>
+    <label>Speed (ms/op):</label><input id="runSpeed" type="number" value="200" min="0" class="small">
+  </div>
+  <div>
+    <label>Custom script (one access per line):</label>
+    <textarea id="scriptArea" placeholder="Format: PID R 0x10   or  P1 W 42"></textarea>
+    <button id="runScript">Run script</button>
+  </div>
+</section>
+
+<section id="tlbControls">
+  <h2>4) TLB & Caching Controls</h2>
+  <div>
+    <label>Enable TLB:</label><input id="enableTLB" type="checkbox" checked>
+    <label>TLB entries:</label><input id="tlbSizeCtl" type="number" value="4" min="0" class="small">
+    <label>TLB replacement:</label>
+    <select id="tlbAlg"><option>LRU</option><option>FIFO</option><option>Random</option></select>
+  </div>
+  <div>
+    <button id="flushTLB">Flush TLB</button>
+    <button id="showTLB">Show TLB state</button>
+  </div>
+</section>
+
+<section id="controls">
+  <h2>5) Simulation Controls & Stats</h2>
+  <div>
+    <label>Step mode:</label><button id="stepBtn">Step</button>
+    <label>Play:</label><button id="playBtn">Play</button>
+    <label>Pause:</label><button id="pauseBtn">Pause</button>
+    <label>Run until faults:</label><input id="runUntilFaults" type="number" value="0" class="small" min="0">
+    <button id="runUntil">Run</button>
+  </div>
+  <div>
+    <label>Statistics:</label>
+    <button id="resetStats">Reset stats</button>
+    <button id="dumpState">Dump system state</button>
+  </div>
+</section>
+
+<section id="visuals">
+  <h2>6) Visual State</h2>
+  <div>
+    <h3>Processes</h3>
+    <div id="procTableContainer"></div>
+  </div>
+  <div>
+    <h3>Physical Frames</h3>
+    <div id="frameTableContainer"></div>
+  </div>
+  <div>
+    <h3>Page Table (selected process)</h3>
+    <div id="pageTableContainer"></div>
+  </div>
+  <div>
+    <h3>Logs</h3>
+    <textarea id="logArea" readonly></textarea>
+    <div>
+      <button id="clearLog">Clear log</button>
+      <button id="exportLog">Export log (console)</button>
+    </div>
+  </div>
+  <div>
+    <h3>Counters</h3>
+    <div id="counters"></div>
+  </div>
+</section>
+
+<script>
+/*
+Virtual Memory Interactive Simulator
+Plain UI, rich interactivity. Single-file implementation.
+*/
+
+// Utilities
+function $(id){return document.getElementById(id);}
+function now(){return Date.now();}
+function log(s){ const a=$('logArea'); a.value = nowReadable() + ' ' + s + '\\n' + a.value; }
+function nowReadable(){ const d=new Date(); return d.toLocaleTimeString(); }
+function hex(v){ return '0x' + (v>>>0).toString(16).toUpperCase(); }
+
+// System state
+let config = {
+  pageSizeKB: 4,
+  pagesPerProc: 64,
+  numFrames: 16,
+  tlbEntries: 4,
+  replacementAlg: 'LRU',
+  swapLatency: 50,
+  prefetch: false,
+  demandOnly: true
+};
+
+let processes = {}; // pid -> process
+let processList = []; // order
+let frames = []; // array of frame objects
+let tlb = []; // array of entries
+let swapStore = {}; // swapSlotId -> {pid,vpn,dirty,data}
+let nextSwapSlot = 1;
+let globalCounters = {};
+let sim = { playing:false, interval:null, speed:200, runUntilFaults:0, stopRequested:false };
+
+initialize();
+
+function initialize(){
+  setupFromUI();
+  resetSystem();
+  attachUI();
+  renderAll();
+  log('Simulator initialized.');
+}
+
+function setupFromUI(){
+  config.pageSizeKB = parseInt($('pageSizeKB').value) || 4;
+  config.pagesPerProc = parseInt($('pagesPerProcess').value) || 64;
+  config.numFrames = parseInt($('numFrames').value) || 16;
+  config.tlbEntries = parseInt($('tlbEntries').value) || 4;
+  config.replacementAlg = $('replacementAlg').value;
+  config.swapLatency = parseInt($('swapLatency').value) || 50;
+  config.prefetch = $('prefetch').checked;
+  config.demandOnly = $('demandOnly').checked;
+}
+
+function resetSystem(){
+  // reset data structures
+  processes = {};
+  processList = [];
+  frames = [];
+  for(let i=0;i<config.numFrames;i++){
+    frames.push({
+      id:i, occupied:false, pid:null, vpn:null, dirty:false, referenced:false, pinned:false,
+      loadTime:0, lastAccess:0, fifoOrder:i
+    });
+  }
+  tlb = [];
+  for(let i=0;i<config.tlbEntries;i++){
+    tlb.push({valid:false, pid:null, vpn:null, frame:null, lastAccess:0, loadedAt:i});
+  }
+  swapStore = {};
+  nextSwapSlot = 1;
+  resetCounters();
+  sim.playing = false;
+  sim.stopRequested = false;
+  if(sim.interval) clearInterval(sim.interval);
+  renderAll();
+}
+
+function resetCounters(){
+  globalCounters = {
+    accesses:0, reads:0, writes:0, pageFaults:0, tlbHits:0, tlbMisses:0, swapsOut:0, swapsIn:0, evictions:0
+  };
+}
+
+// UI attachment
+function attachUI(){
+  $('applyConfig').onclick = () => { setupFromUI(); resetSystem(); log('Applied configuration.'); };
+  $('resetSystem').onclick = () => { setupFromUI(); resetSystem(); log('System reset.'); };
+  $('randomizeState').onclick = randomizeMemory;
+
+  $('createProc').onclick = createProcessFromUI;
+  $('killProc').onclick = killSelectedProcess;
+  $('procSelect').onchange = renderAll;
+  $('cloneProc').onclick = cloneSelectedProcess;
+  $('forceAlloc').onclick = forceAllocate;
+  $('forceFree').onclick = forceFree;
+  $('pinPage').onclick = () => manualPageOp('pin');
+  $('unpinPage').onclick = () => manualPageOp('unpin');
+  $('markDirty').onclick = () => manualPageOp('dirtyOn');
+  $('clearDirty').onclick = () => manualPageOp('dirtyOff');
+
+  $('accessBtn').onclick = handleAccessInput;
+  $('explainLast').onclick = explainLast;
+  $('runPattern').onclick = runPattern;
+  $('stopRun').onclick = stopRun;
+  $('runScript').onclick = runScript;
+  $('stepBtn').onclick = stepOnce;
+  $('playBtn').onclick = startPlay;
+  $('pauseBtn').onclick = pausePlay;
+  $('runUntil').onclick = runUntilFaults;
+  $('resetStats').onclick = () => { resetCounters(); renderAll(); log('Stats reset.'); };
+  $('dumpState').onclick = () => { console.log({config,processes,frames,tlb,swapStore,globalCounters}); log('State dumped to console.'); };
+
+  $('flushTLB').onclick = flushTLB;
+  $('showTLB').onclick = () => { console.log(tlb); alert('TLB dumped to console'); };
+
+  $('clearLog').onclick = () => { $('logArea').value=''; };
+  $('exportLog').onclick = () => { console.log($('logArea').value); alert('Log exported to console'); };
+
+  $('applyConfig').onclick = () => { setupFromUI(); resetSystem(); renderAll(); log('Configuration applied.'); };
+  // dynamic UI values
+  $('tlbSizeCtl').onchange = () => { $('tlbEntries').value = $('tlbSizeCtl').value; $('tlbEntries').dispatchEvent(new Event('change')); };
+  $('tlbEntries').onchange = () => { config.tlbEntries = parseInt($('tlbEntries').value)||0; rebuildTLB(); renderAll(); };
+
+  $('runSpeed').onchange = () => { sim.speed = parseInt($('runSpeed').value)||200; if(sim.playing){ pausePlay(); startPlay(); } };
+  $('tlbSizeCtl').value = config.tlbEntries;
+
+  // ensure procSelect initial
+  renderProcSelect();
+}
+
+// Processes
+function pidFromName(name){ return name.trim(); }
+
+function createProcessFromUI(){
+  let name = $('newProcName').value.trim();
+  if(!name){ alert('Provide a process name.'); return; }
+  if(processes[name]) { alert('Process already exists.'); return; }
+  let pages = parseInt($('newProcPages').value)||16;
+  createProcess(name, pages, $('pinOnCreate').checked);
+}
+
+function createProcess(name, numPages, pinPages=false){
+  let proc = {
+    pid: pidFromName(name),
+    name: name,
+    numPages: numPages,
+    pageTable: [],
+    stats: { accesses:0, faults:0, reads:0, writes:0 }
+  };
+  for(let v=0; v<numPages; v++){
+    proc.pageTable[v] = {
+      valid:false, frame:null, dirty:false, referenced:false, swapped:false, swapSlot:null, permissions:'RW'
+    };
+  }
+  processes[proc.pid] = proc;
+  processList.push(proc.pid);
+  // Optionally allocate pinned pages in frames
+  if(pinPages){
+    for(let v=0; v<Math.min(numPages, config.numFrames); v++){
+      let f = findFreeFrame();
+      if(!f) break;
+      mapFrameTo(proc.pid, v, f);
+      f.pinned = true;
+    }
+  }
+  log('Created process ' + proc.pid + ' with ' + numPages + ' pages.');
+  renderProcSelect();
+  renderAll();
+}
+
+function killSelectedProcess(){
+  let pid = $('procSelect').value;
+  if(!pid) { alert('No process selected'); return; }
+  killProcess(pid);
+}
+
+function killProcess(pid){
+  let proc = processes[pid];
+  if(!proc) return;
+  // free frames and swap slots
+  for(let v=0; v<proc.numPages; v++){
+    let pte = proc.pageTable[v];
+    if(pte.valid){
+      let f = frames[pte.frame];
+      if(f){
+        f.occupied = false; f.pid=null; f.vpn=null; f.dirty=false; f.referenced=false; f.pinned=false;
+      }
+      pte.valid=false; pte.frame=null;
+    }
+    if(pte.swapped && pte.swapSlot){
+      delete swapStore[pte.swapSlot];
+      pte.swapped=false; pte.swapSlot=null;
+    }
+  }
+  delete processes[pid];
+  processList = processList.filter(x=>x!==pid);
+  flushTLBEntriesForPid(pid);
+  log('Killed process ' + pid);
+  renderProcSelect();
+  renderAll();
+}
+
+function cloneSelectedProcess(){
+  let pid = $('procSelect').value;
+  if(!pid) { alert('No process selected'); return; }
+  let old = processes[pid];
+  if(!old) return;
+  // create a clone with COW semantics: new PIDs appended with _c
+  let newPid = pid + '_c' + Math.floor(Math.random()*1000);
+  let cloneProc = {
+    pid: newPid,
+    name: newPid,
+    numPages: old.numPages,
+    pageTable: [],
+    stats: { accesses:0, faults:0, reads:0, writes:0 }
+  };
+  for(let v=0; v<old.numPages; v++){
+    let opte = old.pageTable[v];
+    cloneProc.pageTable[v] = {
+      valid: opte.valid,
+      frame: opte.frame,
+      dirty: false, // child's write will mark COW
+      referenced: opte.referenced,
+      swapped: opte.swapped, swapSlot: opte.swapSlot, permissions: 'R' // start read-only
+    };
+    // parent also becomes read-only if page in memory
+    if(opte.valid){
+      processes[pid].pageTable[v].permissions = 'R';
+    }
+  }
+  processes[newPid] = cloneProc;
+  processList.push(newPid);
+  log('Cloned ' + pid + ' -> ' + newPid + ' (COW enabled)');
+  renderProcSelect();
+  renderAll();
+}
+
+// Frames & mapping
+function findFreeFrame(){
+  for(let f of frames) if(!f.occupied) return f;
+  return null;
+}
+
+function mapFrameTo(pid, vpn, frame){
+  const proc = processes[pid];
+  if(!proc) return;
+  frame.occupied = true; frame.pid = pid; frame.vpn = vpn; frame.dirty = false; frame.referenced = true;
+  frame.loadTime = now();
+  proc.pageTable[vpn].valid = true; proc.pageTable[vpn].frame = frame.id; proc.pageTable[vpn].referenced = true;
+  proc.pageTable[vpn].swapped = false; proc.pageTable[vpn].swapSlot = null;
+  return frame;
+}
+
+function evictFrame(frame){
+  // remove mapping from owner process, write to swap if dirty, respect pinned
+  if(frame.pinned) return false;
+  let pid = frame.pid;
+  let vpn = frame.vpn;
+  if(pid===null || vpn===null) {
+    frame.occupied = false; frame.pid = null; frame.vpn = null; frame.dirty=false; frame.referenced=false;
+    return true;
+  }
+  let proc = processes[pid];
+  if(!proc) { frame.occupied=false; frame.pid=null; frame.vpn=null; frame.dirty=false; frame.referenced=false; return true; }
+  let pte = proc.pageTable[vpn];
+  // write-back if dirty
+  if(frame.dirty || pte.dirty){
+    // allocate swap slot
+    let slot = nextSwapSlot++;
+    swapStore[slot] = {pid:pid, vpn:vpn, dirty:true, data:'(page data)'}; // data is symbolic
+    pte.swapped = true; pte.swapSlot = slot; globalCounters.swapsOut++;
+    log('Evicted page ' + pid + ':' + vpn + ' -> swap slot ' + slot + ' (dirty)');
+    // simulate latency not blocking here; accounted via counters
+  } else {
+    // not dirty
+    pte.swapped = true; pte.swapSlot = nextSwapSlot++; swapStore[pte.swapSlot] = {pid:pid, vpn:vpn, dirty:false, data:'(page data)'};
+    log('Evicted page ' + pid + ':' + vpn + ' -> swap slot ' + pte.swapSlot + ' (clean)');
+  }
+  pte.valid = false; pte.frame = null; pte.dirty = false; pte.referenced = false;
+  frame.occupied = false; frame.pid = null; frame.vpn = null; frame.dirty = false; frame.referenced = false; frame.pinned=false;
+  globalCounters.evictions++;
+  return true;
+}
+
+// Replacement algorithm
+function chooseFrameToEvict(){
+  // Try free frame first
+  let freef = findFreeFrame();
+  if(freef) return freef;
+  let alg = config.replacementAlg;
+  if(alg === 'Random') {
+    let candidates = frames.filter(f=> !f.pinned);
+    return candidates[Math.floor(Math.random()*candidates.length)];
+  }
+  if(alg === 'FIFO') {
+    // choose oldest loadTime
+    let cand = null; let min = Infinity;
+    for(let f of frames) if(!f.pinned && f.loadTime < min){min=f.loadTime; cand=f;}
+    return cand;
+  }
+  if(alg === 'LRU') {
+    let cand = null; let min = Infinity;
+    for(let f of frames) if(!f.pinned && f.lastAccess < min){min=f.lastAccess; cand=f;}
+    return cand;
+  }
+  if(alg === 'Clock') {
+    // implement simple clock hand
+    if(typeof chooseFrameToEvict.clockHand === 'undefined') chooseFrameToEvict.clockHand = 0;
+    let loops = 0;
+    while(loops < frames.length*2){
+      let f = frames[chooseFrameToEvict.clockHand];
+      chooseFrameToEvict.clockHand = (chooseFrameToEvict.clockHand+1) % frames.length;
+      if(f.pinned) { loops++; continue; }
+      if(!f.referenced) return f;
+      f.referenced = false;
+      loops++;
+    }
+    // fallback
+    return frames[0];
+  }
+  // default fallback
+  return frames[0];
+}
+
+// TLB operations
+function rebuildTLB(){
+  let newSize = parseInt($('tlbEntries').value) || 0;
+  tlb = [];
+  for(let i=0;i<newSize;i++) tlb.push({valid:false, pid:null, vpn:null, frame:null, lastAccess:0, loadedAt:i});
+  renderAll();
+}
+
+function lookupTLB(pid, vpn){
+  if(!($('enableTLB').checked)) return null;
+  for(let i=0;i<tlb.length;i++){
+    let e = tlb[i];
+    if(e.valid && e.pid === pid && e.vpn === vpn){
+      e.lastAccess = now();
+      globalCounters.tlbHits++;
+      return e.frame;
+    }
+  }
+  globalCounters.tlbMisses++;
+  return null;
+}
+
+function insertTLB(pid, vpn, frame){
+  if(!($('enableTLB').checked)) return;
+  let alg = $('tlbAlg').value;
+  // find empty slot
+  for(let e of tlb) if(!e.valid){ e.valid=true; e.pid=pid; e.vpn=vpn; e.frame=frame; e.lastAccess=now(); return; }
+  // replacement
+  let idx = 0;
+  if(alg === 'Random') idx = Math.floor(Math.random()*tlb.length);
+  else if(alg === 'FIFO') {
+    // oldest loadedAt
+    let min=Infinity; for(let i=0;i<tlb.length;i++){ if(tlb[i].loadedAt < min){min=tlb[i].loadedAt; idx=i;} }
+  } else { // LRU
+    let min=Infinity; for(let i=0;i<tlb.length;i++){ if(tlb[i].lastAccess < min){min=tlb[i].lastAccess; idx=i;} }
+  }
+  tlb[idx] = {valid:true, pid:pid, vpn:vpn, frame:frame, lastAccess:now(), loadedAt:now()};
+}
+
+// Page fault handler / memory access
+let lastActionExplanation = '';
+
+function accessMemory(pid, seqAccess){
+  // seqAccess: {type:'R'|'W', addr: number (byte offset) or vpn number if small}
+  const proc = processes[pid];
+  if(!proc){ log('Access to non-existent process ' + pid); return; }
+  globalCounters.accesses++;
+  if(seqAccess.type === 'R') globalCounters.reads++; else globalCounters.writes++;
+  proc.stats.accesses++;
+  // Interpret address as page number or raw hex.
+  let vpn = resolveAddressToVPN(seqAccess.addr, proc);
+  if(vpn < 0 || vpn >= proc.numPages){ log('Access fault: address out of process range: ' + seqAccess.addr); return; }
+  // TLB lookup
+  let tlbFrame = lookupTLB(pid, vpn);
+  let usedTLB = tlbFrame !== null;
+  let explanation = [];
+  explanation.push('Access ' + seqAccess.type + ' to ' + pid + ':' + vpn + ' (addr=' + seqAccess.addr + ')');
+  if(usedTLB){ explanation.push('TLB hit -> frame ' + tlbFrame); recordAccessOnFrame(tlbFrame); lastActionExplanation = explanation.join('\\n'); renderAll(); return; }
+  explanation.push('TLB miss or disabled.');
+  // check page table
+  let pte = proc.pageTable[vpn];
+  if(pte.valid){
+    // page in memory
+    let frame = frames[pte.frame];
+    explanation.push('Page present in frame ' + frame.id);
+    // permissions and COW handling
+    if(seqAccess.type === 'W' && pte.permissions && pte.permissions.indexOf('W')===-1){
+      // Copy-on-write: allocate new frame, copy content
+      explanation.push('Write attempt on read-only page -> Copy-on-write triggered.');
+      handleCOW(pid, vpn, frame, explanation);
+    } else {
+      // normal access
+      pte.referenced = true; frame.referenced = true; frame.lastAccess = now();
+      if(seqAccess.type === 'W'){ pte.dirty = true; frame.dirty = true; proc.stats.writes++; }
+    }
+    insertTLB(pid, vpn, pte.frame);
+    lastActionExplanation = explanation.join('\\n');
+    renderAll();
+    return;
+  }
+  // page fault
+  globalCounters.pageFaults++; proc.stats.faults++;
+  explanation.push('Page fault: page not present. Handling fault...');
+  // Find frame to use
+  let targetFrame = findFreeFrame();
+  if(!targetFrame){
+    targetFrame = chooseFrameToEvict();
+    explanation.push('No free frame -> evict candidate frame ' + targetFrame.id + ' (pid=' + targetFrame.pid + ',vpn=' + targetFrame.vpn + ')');
+    let ok = evictFrame(targetFrame);
+    if(!ok){
+      explanation.push('Eviction failed due to pin. Searching next candidate.');
+      // try linear fallback
+      for(let f of frames){ if(!f.pinned){ targetFrame=f; evictFrame(f); break; } }
+    }
+  }
+  // load page into frame (simulate swap in if needed)
+  if(pte.swapped && pte.swapSlot){
+    explanation.push('Loading from swap slot ' + pte.swapSlot + ' (swap latency ' + config.swapLatency + 'ms).');
+    globalCounters.swapsIn++;
+    // symbolic read
+    delete swapStore[pte.swapSlot]; pte.swapped=false; pte.swapSlot=null;
+  } else {
+    explanation.push('Allocating new zero-filled page from backing store.');
+  }
+  // map
+  mapFrameTo(pid, vpn, targetFrame);
+  if(seqAccess.type === 'W') { proc.pageTable[vpn].dirty = true; targetFrame.dirty = true; proc.stats.writes++; }
+  targetFrame.lastAccess = now(); targetFrame.loadTime = now();
+  insertTLB(pid, vpn, targetFrame.id);
+  lastActionExplanation = explanation.join('\\n');
+  renderAll();
+}
+
+function resolveAddressToVPN(addr, proc){
+  // Accept formats: hex string "0x1A", decimal, or integer representing page number for simplicity when small
+  if(typeof addr === 'number') return addr;
+  if(typeof addr === 'string'){
+    let s = addr.trim();
+    if(s.startsWith('0x') || s.startsWith('0X')){
+      let val = parseInt(s,16);
+      return Math.floor(val / (config.pageSizeKB*1024));
+    } else if(/^[0-9]+$/.test(s)){
+      let v = parseInt(s,10);
+      // if value looks like a small page number (less than pages per proc), treat as vpn
+      if(v < proc.numPages) return v;
+      return Math.floor(v / (config.pageSizeKB*1024));
+    } else {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+function recordAccessOnFrame(frameId){
+  let f = frames[frameId];
+  if(!f) return;
+  f.lastAccess = now();
+  f.referenced = true;
+}
+
+// Copy on write
+function handleCOW(pid, vpn, frame, explanation){
+  // allocate new frame and copy mapping for writer
+  let freef = findFreeFrame();
+  if(!freef){
+    freef = chooseFrameToEvict();
+    explanation.push('No free frame for COW, evicting frame ' + freef.id);
+    evictFrame(freef);
+  }
+  // copy contents (symbolic)
+  mapFrameTo(pid, vpn, freef);
+  freef.dirty = true;
+  processes[pid].pageTable[vpn].permissions = 'RW'; // now writer gets RW
+  explanation.push('Allocated new frame ' + freef.id + ' for write.');
+  // original frame remains mapped by other process if any; parent's page becomes read-only
+  // update TLB etc.
+}
+
+// Manual operations
+function manualPageOp(op){
+  let pid = $('manualPID').value.trim();
+  let vpn = parseInt($('manualVPN').value)||0;
+  if(!processes[pid]){ alert('Process not found'); return; }
+  let p = processes[pid];
+  if(vpn<0||vpn>=p.numPages){ alert('VPN out of range'); return; }
+  let pte = p.pageTable[vpn];
+  if(op==='pin'){ if(pte.valid){ frames[pte.frame].pinned=true; log('Pinned ' + pid + ':' + vpn); } else log('Cannot pin: page not resident.'); }
+  if(op==='unpin'){ if(pte.valid){ frames[pte.frame].pinned=false; log('Unpinned ' + pid + ':' + vpn); } }
+  if(op==='dirtyOn'){ if(pte.valid){ pte.dirty=true; frames[pte.frame].dirty=true; log('Marked dirty ' + pid + ':' + vpn); } }
+  if(op==='dirtyOff'){ if(pte.valid){ pte.dirty=false; frames[pte.frame].dirty=false; log('Cleared dirty ' + pid + ':' + vpn); } }
+  renderAll();
+}
+
+function forceAllocate(){
+  let pid = $('procSelect').value;
+  let v = parseInt($('forcePageNum').value)||0;
+  if(!processes[pid]){ alert('Select process'); return; }
+  if(v<0||v>=processes[pid].numPages){ alert('Page out of range'); return; }
+  let f = findFreeFrame();
+  if(!f){ f=chooseFrameToEvict(); evictFrame(f); }
+  mapFrameTo(pid, v, f);
+  log('Forced allocation of ' + pid + ':' + v + ' into frame ' + f.id);
+  renderAll();
+}
+
+function forceFree(){
+  let pid = $('procSelect').value;
+  let v = parseInt($('forcePageNum').value)||0;
+  if(!processes[pid]){ alert('Select process'); return; }
+  let pte = processes[pid].pageTable[v];
+  if(!pte.valid){ alert('Page not resident'); return; }
+  let f = frames[pte.frame];
+  if(f) { evictFrame(f); log('Force freed ' + pid + ':' + v + ' from frame ' + f.id); renderAll(); }
+}
+
+// Workload runner
+let runner = { active:false, scriptQueue:[], onStep:null };
+
+function runPattern(){
+  let pattern = $('patternSelect').value;
+  let ops = parseInt($('patternOps').value)||100;
+  let speed = parseInt($('runSpeed').value)||200;
+  sim.speed = speed;
+  runner.scriptQueue = [];
+  if(processList.length===0){ alert('Create at least one process first.'); return; }
+  if(pattern === 'sequential'){
+    for(let pid of processList){
+      for(let v=0; v<Math.min(processes[pid].numPages, ops); v++){
+        runner.scriptQueue.push({pid:pid, type:'R', addr:v});
+      }
+    }
+  } else if(pattern === 'random'){
+    for(let i=0;i<ops;i++){
+      let pid = processList[Math.floor(Math.random()*processList.length)];
+      let vpn = Math.floor(Math.random()*processes[pid].numPages);
+      let t = Math.random()<0.5?'R':'W';
+      runner.scriptQueue.push({pid:pid, type:t, addr:vpn});
+    }
+  } else if(pattern === 'locality'){
+    // pick one process and small working set
+    let pid = processList[0];
+    let ws = Math.min(8, processes[pid].numPages);
+    for(let i=0;i<ops;i++){
+      let base = Math.floor(Math.random()*(processes[pid].numPages - ws));
+      let vpn = base + Math.floor(Math.random()*ws);
+      let t = Math.random()<0.25?'W':'R';
+      runner.scriptQueue.push({pid:pid, type:t, addr:vpn});
+    }
+  } else if(pattern === 'stress'){
+    for(let i=0;i<ops;i++){
+      let pid = processList[Math.floor(Math.random()*processList.length)];
+      let vpn = Math.floor(Math.random()*processes[pid].numPages);
+      let t = Math.random()<0.5?'W':'R';
+      runner.scriptQueue.push({pid:pid, type:t, addr:vpn});
+    }
+  }
+  runner.active = true;
+  sim.stopRequested = false;
+  runNextInQueue();
+}
+
+function runNextInQueue(){
+  if(sim.stopRequested || !runner.active) { runner.active=false; log('Pattern run stopped.'); return; }
+  if(runner.scriptQueue.length===0){ runner.active=false; log('Pattern run completed.'); return; }
+  let op = runner.scriptQueue.shift();
+  accessMemory(op.pid, op);
+  renderAll();
+  if(sim.runUntilFaults>0 && globalCounters.pageFaults >= sim.runUntilFaults){ log('Stopped: reached page fault target'); runner.active=false; return; }
+  setTimeout(runNextInQueue, sim.speed);
+}
+
+function stopRun(){
+  sim.stopRequested = true;
+  runner.active = false;
+}
+
+// Script runner
+function runScript(){
+  let text = $('scriptArea').value.trim();
+  if(!text) { alert('Enter script lines'); return; }
+  let lines = text.split('\\n').map(s=>s.trim()).filter(s=>s);
+  runner.scriptQueue = [];
+  for(let line of lines){
+    let parts = line.split(/\\s+/);
+    if(parts.length < 3) continue;
+    let pid = parts[0];
+    let type = parts[1].toUpperCase();
+    let addr = parts[2];
+    runner.scriptQueue.push({pid:pid, type:type, addr:addr});
+  }
+  runner.active = true; sim.stopRequested=false; runNextInQueue();
+}
+
+// Single step
+function stepOnce(){
+  // simple: if script queue has items, execute next; otherwise do nothing.
+  if(runner.active && runner.scriptQueue.length>0){
+    let op = runner.scriptQueue.shift();
+    accessMemory(op.pid, op);
+    renderAll();
+  } else {
+    // No script queued: prompt user for manual step?
+    log('Step executed (no queued operations). You can create operations or run a pattern/script.');
+  }
+}
+
+// Play/Pause
+function startPlay(){
+  if(sim.playing) return;
+  sim.playing = true;
+  sim.interval = setInterval(()=> {
+    // default behavior: if script queue active, perform next; else try a random access
+    if(runner.active && runner.scriptQueue.length>0) runNextInQueue();
+    else {
+      // random gentle activity: pick random process and random page
+      if(processList.length===0) return;
+      let pid = processList[Math.floor(Math.random()*processList.length)];
+      let vpn = Math.floor(Math.random()*processes[pid].numPages);
+      let t = Math.random()<0.25?'W':'R';
+      accessMemory(pid,{type:t, addr:vpn});
+      renderAll();
+    }
+  }, sim.speed);
+  log('Play started.');
+}
+
+function pausePlay(){
+  if(sim.interval) clearInterval(sim.interval);
+  sim.playing=false;
+  sim.interval=null;
+  log('Play paused.');
+}
+
+// Run until faults count
+function runUntilFaults(){
+  let target = parseInt($('runUntilFaults').value)||0;
+  if(target <= 0){ alert('Enter a positive number of faults to run until.'); return; }
+  sim.runUntilFaults = globalCounters.pageFaults + target;
+  sim.stopRequested = false;
+  // start random activities until pageFaults >= sim.runUntilFaults
+  if(!sim.playing) startPlay();
+  let checkInterval = setInterval(()=> {
+    if(globalCounters.pageFaults >= sim.runUntilFaults){ pausePlay(); clearInterval(checkInterval); log('Reached target page faults.'); }
+    if(!sim.playing) { clearInterval(checkInterval); }
+  }, 100);
+}
+
+// TLB flush
+function flushTLB(){
+  for(let e of tlb){ e.valid=false; e.pid=null; e.vpn=null; e.frame=null; e.lastAccess=0; }
+  log('TLB flushed.');
+  renderAll();
+}
+
+function flushTLBEntriesForPid(pid){
+  for(let e of tlb) if(e.valid && e.pid===pid) e.valid=false;
+}
+
+// Randomize initial memory (useful for testing)
+function randomizeMemory(){
+  // create frames filled randomly by random existing processes or void
+  for(let f of frames){
+    if(Math.random() < 0.5 && processList.length>0){
+      let pid = processList[Math.floor(Math.random()*processList.length)];
+      let vpn = Math.floor(Math.random()*processes[pid].numPages);
+      mapFrameTo(pid, vpn, f);
+      f.dirty = Math.random() < 0.3;
+      f.pinned = Math.random() < 0.1;
+    } else {
+      f.occupied = false; f.pid=null; f.vpn=null; f.dirty=false; f.referenced=false; f.pinned=false;
+    }
+  }
+  log('Memory randomized.');
+  renderAll();
+}
+
+// Explain last action
+function explainLast(){
+  alert(lastActionExplanation || 'No recorded action yet.');
+}
+
+// Rendering
+function renderAll(){
+  renderProcSelect();
+  renderProcTable();
+  renderFrameTable();
+  renderPageTable();
+  renderCounters();
+}
+
+function renderProcSelect(){
+  let sel = $('procSelect');
+  sel.innerHTML = '';
+  for(let pid of processList){
+    let opt = document.createElement('option');
+    opt.value = pid; opt.textContent = pid;
+    sel.appendChild(opt);
+  }
+}
+
+function renderProcTable(){
+  let cont = $('procTableContainer');
+  let html = '<table><tr><th>PID</th><th>Pages</th><th>Resident</th><th>Faults</th><th>Accesses</th></tr>';
+  for(let pid of processList){
+    let p = processes[pid];
+    let resident = p.pageTable.filter(x=>x.valid).length;
+    html += '<tr><td>' + pid + '</td><td>' + p.numPages + '</td><td>' + resident + '</td><td>' + p.stats.faults + '</td><td>' + p.stats.accesses + '</td></tr>';
+  }
+  html += '</table>';
+  cont.innerHTML = html;
+}
+
+function renderFrameTable(){
+  let cont = $('frameTableContainer');
+  let html = '<table><tr><th>Frame</th><th>PID</th><th>VPN</th><th>Dirty</th><th>Ref</th><th>Pinned</th><th>Loaded</th><th>LastAccess</th></tr>';
+  for(let f of frames){
+    html += '<tr><td>' + f.id + '</td><td>' + (f.pid||'') + '</td><td>' + (f.vpn!==null?f.vpn:'') + '</td><td>' + (f.dirty?'Y':'') + '</td><td>' + (f.referenced?'Y':'') + '</td><td>' + (f.pinned?'Y':'') + '</td><td>' + (f.loadTime?new Date(f.loadTime).toLocaleTimeString():'') + '</td><td>' + (f.lastAccess?new Date(f.lastAccess).toLocaleTimeString():'') + '</td></tr>';
+  }
+  html += '</table>';
+  cont.innerHTML = html;
+}
+
+function renderPageTable(){
+  let sel = $('procSelect');
+  let pid = sel.value;
+  let cont = $('pageTableContainer');
+  if(!pid || !processes[pid]) { cont.innerHTML = '<div>Select a process to view its page table</div>'; return; }
+  let p = processes[pid];
+  let html = '<table><tr><th>VPN</th><th>Valid</th><th>Frame</th><th>Dirty</th><th>Ref</th><th>Swapped</th><th>SwapSlot</th><th>Perm</th></tr>';
+  for(let v=0; v<p.numPages; v++){
+    let e = p.pageTable[v];
+    html += '<tr><td>' + v + '</td><td>' + (e.valid?'Y':'') + '</td><td>' + (e.frame!==null?e.frame:'') + '</td><td>' + (e.dirty?'Y':'') + '</td><td>' + (e.referenced?'Y':'') + '</td><td>' + (e.swapped?'Y':'') + '</td><td>' + (e.swapSlot||'') + '</td><td>' + (e.permissions||'') + '</td></tr>';
+  }
+  html += '</table>';
+  cont.innerHTML = html;
+}
+
+function renderCounters(){
+  let c = $('counters');
+  c.innerHTML = '';
+  let s = '';
+  s += 'Accesses: ' + globalCounters.accesses + ' | Reads: ' + globalCounters.reads + ' | Writes: ' + globalCounters.writes + '<br>';
+  s += 'TLB Hits: ' + globalCounters.tlbHits + ' | TLB Misses: ' + globalCounters.tlbMisses + '<br>';
+  s += 'Page Faults: ' + globalCounters.pageFaults + ' | Swaps In: ' + globalCounters.swapsIn + ' | Swaps Out: ' + globalCounters.swapsOut + ' | Evictions: ' + globalCounters.evictions + '<br>';
+  s += 'Replacement: ' + config.replacementAlg + ' | Frames: ' + config.numFrames + ' | Page size: ' + config.pageSizeKB + 'KB';
+  c.innerHTML = s;
+}
+
+// Explain last step more detailed in the log
+// (We already store lastActionExplanation string)
+
+// Initial demo: create default processes so user can interact quickly
+(function initialDemo(){
+  // apply UI config
+  setupFromUI();
+  // Create two demo processes
+  createProcess('P1', Math.max(16, config.pagesPerProc), false);
+  createProcess('P2', Math.max(12, Math.floor(config.pagesPerProc/2)), false);
+  // Preload a few pages
+  for(let i=0;i<4;i++){
+    let f = findFreeFrame(); if(!f) break;
+    mapFrameTo('P1', i, f);
+  }
+  renderAll();
+  log('Demo processes P1 and P2 created.');
+})();
+
+</script>
+
+</body>
+</html>

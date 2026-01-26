@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Load Balancing Interactive Simulator</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    /* Minimal visual styling only to ensure readability; otherwise plain */
+    body { font-family: sans-serif; color: black; background: white; margin: 12px; }
+    h1 { font-size: 18px; margin: 6px 0; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .col { flex: 1 1 320px; min-width: 240px; }
+    label { display: block; margin-top: 6px; }
+    input[type="number"], input[type="text"], select, textarea { width: 100%; box-sizing: border-box; }
+    button { margin: 4px 2px; }
+    table { border-collapse: collapse; width: 100%; }
+    table, td, th { border: 1px solid #ddd; }
+    th, td { padding: 6px; text-align: left; font-size: 13px; }
+    textarea { height: 160px; font-family: monospace; font-size: 12px; }
+    .small { font-size: 12px; }
+    .tiny { font-size: 11px; }
+    details { margin-top: 6px; }
+    pre { white-space: pre-wrap; font-family: monospace; font-size: 12px; }
+    /* visual minimalism: no colors, no fancy styling */
+  </style>
+</head>
+<body>
+  <h1>Load Balancing Interactive Simulator</h1>
+
+  <div class="row">
+    <div class="col">
+      <h2>Controller</h2>
+      <label>Algorithm
+        <select id="algo">
+          <option value="round-robin">Round Robin</option>
+          <option value="weighted-round-robin">Weighted Round Robin</option>
+          <option value="least-connections">Least Connections</option>
+          <option value="random">Random</option>
+          <option value="ip-hash">IP Hash (Session Affinity)</option>
+        </select>
+      </label>
+
+      <label>Session affinity
+        <select id="affinity">
+          <option value="none">None</option>
+          <option value="ip">Client IP</option>
+          <option value="cookie">Cookie (simulated)</option>
+        </select>
+      </label>
+
+      <label>Request arrival rate (requests / sec)
+        <input id="rate" type="range" min="0" max="200" step="1" value="10">
+        <div class="tiny"><span id="rateVal">10</span> req/s</div>
+      </label>
+
+      <label>Per-request timeout (ms)
+        <input id="timeout" type="number" value="5000" min="100" step="100">
+      </label>
+
+      <label>Max retries
+        <input id="retries" type="number" value="1" min="0" step="1">
+      </label>
+
+      <label>Queue policy
+        <select id="queuePolicy">
+          <option value="global">Global queue (shared)</option>
+          <option value="per-server">Per-server queue</option>
+          <option value="drop-tail">Drop (tail) when full</option>
+          <option value="drop-oldest">Drop oldest when full</option>
+        </select>
+      </label>
+
+      <label>Global queue size (0 = unlimited)
+        <input id="globalQueueSize" type="number" value="50" min="0" step="1">
+      </label>
+
+      <label>Auto-start
+        <input id="autostart" type="checkbox" checked>
+      </label>
+
+      <div style="margin-top:8px;">
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="stepBtn">Step</button>
+        <button id="resetBtn">Reset</button>
+        <button id="drainAllBtn">Drain All Servers</button>
+      </div>
+
+      <details open>
+        <summary>Advanced controls</summary>
+
+        <label>Simulated time resolution (ms per tick)
+          <input id="tickMs" type="number" value="200" min="10" step="10">
+        </label>
+
+        <label>Retry backoff base (ms)
+          <input id="backoffBase" type="number" value="200" min="0" step="50">
+        </label>
+
+        <label>Health check interval (ticks)
+          <input id="healthInterval" type="number" value="10" min="1" step="1">
+        </label>
+
+        <label>Enable automated health checks
+          <input id="healthChecksEnabled" type="checkbox" checked>
+        </label>
+
+        <label>Log verbosity
+          <select id="logVerbosity">
+            <option value="debug">Debug (all)</option>
+            <option value="info" selected>Info</option>
+            <option value="warn">Warn+Error</option>
+            <option value="error">Error only</option>
+          </select>
+        </label>
+
+        <div style="margin-top:6px;">
+          <button id="exportBtn">Export configuration</button>
+          <button id="importBtn">Import configuration</button>
+          <input id="importArea" type="file" style="display:none">
+        </div>
+      </details>
+
+    </div>
+
+    <div class="col">
+      <h2>Servers</h2>
+      <div>
+        <button id="addServerBtn">Add Server</button>
+        <button id="resetServersBtn">Reset Servers</button>
+      </div>
+
+      <table id="serversTable">
+        <thead>
+          <tr>
+            <th>ID</th><th>Up?</th><th>Draining?</th><th>Weight</th><th>Capacity</th><th>Base ms</th><th>Jitter ms</th><th>Fail %</th><th>Queue size</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+
+      <details>
+        <summary>Preset server topologies</summary>
+        <button id="presetSimple">3 identical servers</button>
+        <button id="presetWeighted">2 small + 1 large (weights)</button>
+        <button id="presetHetero">Heterogeneous latencies</button>
+      </details>
+    </div>
+
+    <div class="col">
+      <h2>Generation & Clients</h2>
+
+      <label>Client IP pool size
+        <input id="clientPool" type="number" value="20" min="1" step="1">
+      </label>
+
+      <label>Payload size (simulated ms)
+        <input id="payloadMs" type="number" value="0" min="0" step="10">
+      </label>
+
+      <label>Burst generator: count
+        <input id="burstCount" type="number" value="10" min="1" step="1">
+      </label>
+
+      <div style="margin-top:6px;">
+        <button id="sendOneBtn">Send 1 Request</button>
+        <button id="sendBurstBtn">Send Burst</button>
+        <button id="clearQueueBtn">Clear Queues</button>
+      </div>
+
+      <details>
+        <summary>Client behavior</summary>
+        <label>Sticky cookie TTL (ticks)
+          <input id="cookieTTL" type="number" value="50" min="0" step="1">
+        </label>
+
+        <label>Client retry behavior (ms)
+          <input id="clientRetryAfter" type="number" value="1000" min="0" step="100">
+        </label>
+
+      </details>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="row">
+    <div class="col">
+      <h2>Statistics</h2>
+      <div id="stats">
+        <div>Total requests sent: <span id="statSent">0</span></div>
+        <div>Completed: <span id="statCompleted">0</span></div>
+        <div>Errors: <span id="statErrors">0</span></div>
+        <div>Avg latency ms: <span id="statAvg">0</span></div>
+        <div>Throughput req/s (window): <span id="statThroughput">0</span></div>
+        <div>Queue length (global): <span id="statQueue">0</span></div>
+      </div>
+
+      <details open>
+        <summary>Per-server summary</summary>
+        <div id="serverSummary" class="small"></div>
+      </details>
+    </div>
+
+    <div class="col">
+      <h2>Live Log</h2>
+      <div>
+        <label>Filter by request id / server id / text
+          <input id="logFilter" type="text">
+        </label>
+        <label>Auto-scroll
+          <input id="autoScroll" type="checkbox" checked>
+        </label>
+      </div>
+      <textarea id="log" readonly></textarea>
+      <div style="margin-top:6px;">
+        <button id="clearLog">Clear Log</button>
+        <button id="exportLog">Export Log</button>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2>Inspect Requests</h2>
+      <label>Find request id
+        <input id="findReq" type="text">
+      </label>
+      <button id="findReqBtn">Find</button>
+      <pre id="reqDetail">Select a request from the log to inspect details. You can also find by id.</pre>
+    </div>
+  </div>
+
+  <script>
+    // Load Balancer Simulator - Plain, interactive, feature rich
+    (function(){
+      // Utility
+      function uid(prefix) {
+        return (prefix || 'id') + '-' + Math.random().toString(36).slice(2,9);
+      }
+      function nowMs() { return Date.now(); }
+
+      // State
+      let state = {
+        servers: [],
+        nextServerId: 1,
+        running: false,
+        tickInterval: null,
+        tickMs: 200,
+        time: 0,
+        requestCounter: 0,
+        requests: {}, // id -> req object
+        completed: 0,
+        errors: 0,
+        totalLatency: 0,
+        arrivalAccumulator: 0,
+        algoState: { rrIndex: 0, wrrCounters: [] },
+        affinityMap: {}, // key -> serverId, with expiry ticks if cookie
+        logs: [],
+        logLimit: 2000,
+        globalQueue: [],
+      };
+
+      // DOM refs
+      const algoEl = document.getElementById('algo');
+      const affinityEl = document.getElementById('affinity');
+      const rateEl = document.getElementById('rate');
+      const rateValEl = document.getElementById('rateVal');
+      const startBtn = document.getElementById('startBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const stepBtn = document.getElementById('stepBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const serversTableBody = document.querySelector('#serversTable tbody');
+      const addServerBtn = document.getElementById('addServerBtn');
+      const resetServersBtn = document.getElementById('resetServersBtn');
+      const presetSimple = document.getElementById('presetSimple');
+      const presetWeighted = document.getElementById('presetWeighted');
+      const presetHetero = document.getElementById('presetHetero');
+      const startAutostart = document.getElementById('autostart');
+      const tickMsEl = document.getElementById('tickMs');
+      const timeoutEl = document.getElementById('timeout');
+      const retriesEl = document.getElementById('retries');
+      const queuePolicyEl = document.getElementById('queuePolicy');
+      const globalQueueSizeEl = document.getElementById('globalQueueSize');
+      const sendOneBtn = document.getElementById('sendOneBtn');
+      const sendBurstBtn = document.getElementById('sendBurstBtn');
+      const burstCountEl = document.getElementById('burstCount');
+      const clientPoolEl = document.getElementById('clientPool');
+      const payloadMsEl = document.getElementById('payloadMs');
+      const clearQueueBtn = document.getElementById('clearQueueBtn');
+      const rateSlider = rateEl;
+      const statSentEl = document.getElementById('statSent');
+      const statCompletedEl = document.getElementById('statCompleted');
+      const statErrorsEl = document.getElementById('statErrors');
+      const statAvgEl = document.getElementById('statAvg');
+      const statThroughputEl = document.getElementById('statThroughput');
+      const statQueueEl = document.getElementById('statQueue');
+      const serverSummaryEl = document.getElementById('serverSummary');
+      const logArea = document.getElementById('log');
+      const clearLogBtn = document.getElementById('clearLog');
+      const exportLogBtn = document.getElementById('exportLog');
+      const logFilterEl = document.getElementById('logFilter');
+      const autoScrollEl = document.getElementById('autoScroll');
+      const findReqEl = document.getElementById('findReq');
+      const findReqBtn = document.getElementById('findReqBtn');
+      const reqDetailPre = document.getElementById('reqDetail');
+      const healthChecksEnabledEl = document.getElementById('healthChecksEnabled');
+      const healthIntervalEl = document.getElementById('healthInterval');
+      const backoffBaseEl = document.getElementById('backoffBase');
+      const cookieTTLEl = document.getElementById('cookieTTL');
+      const clientRetryAfterEl = document.getElementById('clientRetryAfter');
+      const importBtn = document.getElementById('importBtn');
+      const importArea = document.getElementById('importArea');
+      const exportBtn = document.getElementById('exportBtn');
+      const drainAllBtn = document.getElementById('drainAllBtn');
+      const clearLogTextBtn = clearLogBtn;
+
+      // Logging
+      const verbosityLevels = { debug:1, info:2, warn:3, error:4 };
+      function log(level, text, meta) {
+        const verbosity = document.getElementById('logVerbosity').value;
+        if (verbosityLevels[level] < verbosityLevels[verbosity]) return;
+        const ts = '[' + Math.floor(state.time) + 't]';
+        const entry = ts + ' ' + level.toUpperCase() + ': ' + text + (meta? (' | ' + JSON.stringify(meta)) : '');
+        state.logs.push({ time: state.time, level, text, meta, raw: entry });
+        if (state.logs.length > state.logLimit) state.logs.shift();
+        renderLogs();
+      }
+
+      function renderLogs() {
+        const filter = (logFilterEl.value || '').trim();
+        let text = '';
+        for (let e of state.logs) {
+          if (!filter || e.raw.indexOf(filter) !== -1 || JSON.stringify(e.meta || '').indexOf(filter) !== -1) {
+            text += e.raw + "\n";
+          }
+        }
+        logArea.value = text;
+        if (autoScrollEl.checked) logArea.scrollTop = logArea.scrollHeight;
+      }
+
+      // Servers management
+      function addServer(config) {
+        const id = state.nextServerId++;
+        const server = {
+          id: id,
+          name: 'srv' + id,
+          up: true,
+          draining: false,
+          weight: config && config.weight || 1,
+          capacity: config && config.capacity || 5, // max concurrent
+          baseMs: config && config.baseMs || 100, // base processing time
+          jitterMs: config && config.jitterMs || 50, // added random
+          failRate: config && config.failRate || 0, // percent
+          queueSize: config && config.queueSize || 10, // per-server queue size
+          current: 0, // current running
+          processed: 0,
+          errors: 0,
+          totalTime: 0,
+          queue: [], // per-server queue if used
+        };
+        state.servers.push(server);
+        log('info', 'Added server ' + server.name, server);
+        rebuildServerTable();
+      }
+
+      function removeServer(id) {
+        const idx = state.servers.findIndex(s=>s.id===id);
+        if (idx>=0) {
+          const srv = state.servers.splice(idx,1)[0];
+          log('info','Removed server '+srv.name, srv);
+          rebuildServerTable();
+        }
+      }
+
+      function resetServers() {
+        state.servers = [];
+        state.nextServerId = 1;
+        state.globalQueue = [];
+        state.requests = {};
+        state.requestCounter = 0;
+        state.aggCompleted = 0;
+        rebuildServerTable();
+        log('info','Reset all servers');
+      }
+
+      // Build server table UI
+      function rebuildServerTable() {
+        serversTableBody.innerHTML = '';
+        for (let s of state.servers) {
+          const tr = document.createElement('tr');
+
+          const idCell = document.createElement('td'); idCell.textContent = s.name; tr.appendChild(idCell);
+
+          const upCell = document.createElement('td'); 
+          const upChk = document.createElement('input'); upChk.type='checkbox'; upChk.checked = s.up;
+          upChk.onchange = function(){ s.up = upChk.checked; log('info','Server '+s.name+' set up='+(s.up)); renderSummary(); };
+          upCell.appendChild(upChk); tr.appendChild(upCell);
+
+          const drainCell = document.createElement('td');
+          const drainChk = document.createElement('input'); drainChk.type='checkbox'; drainChk.checked = s.draining;
+          drainChk.onchange = function(){ s.draining = drainChk.checked; log('info','Server '+s.name+' draining='+(s.draining)); renderSummary(); };
+          drainCell.appendChild(drainChk); tr.appendChild(drainCell);
+
+          const weightCell = document.createElement('td');
+          const weightInput = document.createElement('input'); weightInput.type='number'; weightInput.value = s.weight; weightInput.min = 1; weightInput.onchange = function(){ s.weight = Math.max(1, parseInt(weightInput.value)||1); log('info','Server '+s.name+' weight set to '+s.weight); };
+          weightCell.appendChild(weightInput); tr.appendChild(weightCell);
+
+          const capCell = document.createElement('td');
+          const capInput = document.createElement('input'); capInput.type='number'; capInput.value = s.capacity; capInput.min = 1; capInput.onchange = function(){ s.capacity = Math.max(1, parseInt(capInput.value)||1); log('info','Server '+s.name+' capacity set to '+s.capacity); };
+          capCell.appendChild(capInput); tr.appendChild(capCell);
+
+          const baseCell = document.createElement('td');
+          const baseInput = document.createElement('input'); baseInput.type='number'; baseInput.value = s.baseMs; baseInput.min = 0; baseInput.onchange = function(){ s.baseMs = Math.max(0, parseInt(baseInput.value)||0); };
+          baseCell.appendChild(baseInput); tr.appendChild(baseCell);
+
+          const jitterCell = document.createElement('td');
+          const jitterInput = document.createElement('input'); jitterInput.type='number'; jitterInput.value = s.jitterMs; jitterInput.min = 0; jitterInput.onchange = function(){ s.jitterMs = Math.max(0, parseInt(jitterInput.value)||0); };
+          jitterCell.appendChild(jitterInput); tr.appendChild(jitterCell);
+
+          const failCell = document.createElement('td');
+          const failInput = document.createElement('input'); failInput.type='number'; failInput.value = s.failRate; failInput.min = 0; failInput.max = 100; failInput.onchange = function(){ s.failRate = Math.min(100, Math.max(0, parseFloat(failInput.value)||0)); };
+          failCell.appendChild(failInput); tr.appendChild(failCell);
+
+          const qCell = document.createElement('td');
+          const qInput = document.createElement('input'); qInput.type='number'; qInput.value = s.queueSize; qInput.min = 0; qInput.onchange = function(){ s.queueSize = Math.max(0, parseInt(qInput.value)||0); };
+          qCell.appendChild(qInput); tr.appendChild(qCell);
+
+          const actionCell = document.createElement('td');
+          const remBtn = document.createElement('button'); remBtn.textContent = 'Remove';
+          remBtn.onclick = function(){ removeServer(s.id); };
+          const toxBtn = document.createElement('button'); toxBtn.textContent = 'Toggle Fail';
+          toxBtn.onclick = function(){ s.up = !s.up; rebuildServerTable(); log('warn','Toggled server '+s.name+' up=' + s.up); };
+          const drainBtn = document.createElement('button'); drainBtn.textContent = 'Drain';
+          drainBtn.onclick = function(){ s.draining = true; rebuildServerTable(); log('info','Server '+s.name+' set to draining'); };
+          actionCell.appendChild(remBtn); actionCell.appendChild(toxBtn); actionCell.appendChild(drainBtn); tr.appendChild(actionCell);
+
+          serversTableBody.appendChild(tr);
+        }
+        renderSummary();
+      }
+
+      // Preset topologies
+      presetSimple.onclick = function(){ resetServers(); addServer({weight:1,capacity:5,baseMs:100,jitterMs:40}); addServer({weight:1,capacity:5,baseMs:100,jitterMs:40}); addServer({weight:1,capacity:5,baseMs:100,jitterMs:40}); };
+      presetWeighted.onclick = function(){ resetServers(); addServer({weight:1,capacity:3,baseMs:120,jitterMs:50}); addServer({weight:1,capacity:3,baseMs:120,jitterMs:50}); addServer({weight:4,capacity:12,baseMs:80,jitterMs:30}); };
+      presetHetero.onclick = function(){ resetServers(); addServer({weight:1,capacity:4,baseMs:60,jitterMs:20}); addServer({weight:1,capacity:4,baseMs:150,jitterMs:100}); addServer({weight:2,capacity:6,baseMs:90,jitterMs:60}); };
+
+      // Core: Request lifecycle
+      function makeClientIP() {
+        const pool = Math.max(1, parseInt(clientPoolEl.value)||1);
+        const n = Math.floor(Math.random()*pool)+1;
+        return '10.0.0.'+n;
+      }
+
+      function enqueueToServerQueue(server, req) {
+        if (server.queueSize>0 && server.queue.length >= server.queueSize) {
+          const policy = queuePolicyEl.value;
+          if (policy === 'drop-tail') {
+            // drop this req
+            log('warn','Server '+server.name+' queue full - drop tail -> request dropped', req.id);
+            return false;
+          } else if (policy === 'drop-oldest') {
+            // drop oldest
+            const removed = server.queue.shift();
+            log('warn','Dropped oldest from '+server.name+' queue', removed.id);
+            server.queue.push(req);
+            return true;
+          } else {
+            // default: reject
+            log('warn','Server '+server.name+' queue full - reject', req.id);
+            return false;
+          }
+        } else {
+          server.queue.push(req);
+          return true;
+        }
+      }
+
+      function enqueueGlobal(req) {
+        const qsz = parseInt(globalQueueSizeEl.value)||0;
+        const policy = queuePolicyEl.value;
+        if (qsz>0 && state.globalQueue.length >= qsz) {
+          if (policy === 'drop-tail') {
+            log('warn','Global queue full - drop tail for req '+req.id);
+            return false;
+          } else if (policy === 'drop-oldest') {
+            const removed = state.globalQueue.shift();
+            log('warn','Dropped oldest from global queue: '+removed.id);
+            state.globalQueue.push(req);
+            return true;
+          } else {
+            log('warn','Global queue full - reject req '+req.id);
+            return false;
+          }
+        } else {
+          state.globalQueue.push(req);
+          return true;
+        }
+      }
+
+      function selectServer(req) {
+        // selection depends on algorithm and server state
+        const algo = algoEl.value;
+        const affinity = affinityEl.value;
+        // session affinity check
+        if (affinity !== 'none') {
+          let key;
+          if (affinity === 'ip') key = req.clientIP;
+          else if (affinity === 'cookie') key = req.cookie || req.clientIP; // cookie simulated
+          if (key && state.affinityMap[key]) {
+            const mapped = state.affinityMap[key];
+            // check if mapping expired (cookie TTL)
+            if (!mapped.expiry || mapped.expiry > state.time) {
+              const server = state.servers.find(s => s.id === mapped.serverId && s.up);
+              if (server) {
+                return {server, reason: 'affinity'};
+              }
+            } else {
+              delete state.affinityMap[key];
+            }
+          }
+        }
+
+        // create candidate list of up & non-draining servers (draining can finish but shouldn't accept new)
+        const candidates = state.servers.filter(s => s.up && !s.draining);
+        if (candidates.length === 0) {
+          // maybe allow draining servers if no other choice
+          const drainCandidates = state.servers.filter(s => s.up);
+          if (drainCandidates.length === 0) return null;
+          candidates.push(...drainCandidates);
+        }
+
+        if (algo === 'round-robin') {
+          let i = state.algoState.rrIndex % candidates.length;
+          state.algoState.rrIndex = (state.algoState.rrIndex + 1) % candidates.length;
+          return {server: candidates[i], reason:'rr'};
+        }
+
+        if (algo === 'weighted-round-robin') {
+          // simple implementation: expand weighted list
+          const pool = [];
+          for (let s of candidates) {
+            const w = Math.max(1, Math.floor(s.weight));
+            for (let i=0;i<w;i++) pool.push(s);
+          }
+          if (pool.length === 0) return null;
+          state.algoState.wrrCounters = pool; // store for debugging
+          const pick = pool[Math.floor(Math.random()*pool.length)];
+          return {server: pick, reason:'wrr'};
+        }
+
+        if (algo === 'least-connections') {
+          let best = null;
+          for (let s of candidates) {
+            if (!best || s.current < best.current) best = s;
+          }
+          return {server: best, reason:'leastconn'};
+        }
+
+        if (algo === 'random') {
+          const pick = candidates[Math.floor(Math.random()*candidates.length)];
+          return {server: pick, reason:'random'};
+        }
+
+        if (algo === 'ip-hash') {
+          // simple hash by IP string
+          const ip = req.clientIP || ('client'+Math.floor(Math.random()*100000));
+          let h = 0;
+          for (let i=0;i<ip.length;i++) h = ((h<<5)-h) + ip.charCodeAt(i);
+          h = Math.abs(h);
+          const idx = h % candidates.length;
+          return {server: candidates[idx], reason:'ip-hash'};
+        }
+
+        return null;
+      }
+
+      function assignRequest(req) {
+        const sel = selectServer(req);
+        if (!sel) {
+          log('warn','No available server for request '+req.id, req);
+          // enqueue globally or fail
+          if (queuePolicyEl.value === 'global' || queuePolicyEl.value === 'drop-tail' || queuePolicyEl.value === 'drop-oldest') {
+            if (enqueueGlobal(req)) {
+              log('debug','Request '+req.id+' enqueued globally');
+              return true;
+            } else {
+              failRequest(req, 'No server and queue rejected');
+              return false;
+            }
+          } else {
+            failRequest(req, 'No server available');
+            return false;
+          }
+        }
+
+        const server = sel.server;
+        // if server at capacity -> queue on server or global
+        if (server.current >= server.capacity) {
+          if (queuePolicyEl.value === 'per-server') {
+            if (enqueueToServerQueue(server, req)) {
+              log('debug','Request '+req.id+' queued on server '+server.name);
+              return true;
+            } else {
+              failRequest(req, 'Server queue rejected');
+              return false;
+            }
+          } else if (queuePolicyEl.value === 'global') {
+            if (enqueueGlobal(req)) {
+              log('debug','Request '+req.id+' enqueued globally');
+              return true;
+            } else {
+              failRequest(req, 'Global queue rejected');
+              return false;
+            }
+          } else {
+            // drop or reject
+            if (enqueueGlobal(req)) {
+              return true;
+            } else {
+              failRequest(req, 'All queues full');
+              return false;
+            }
+          }
+        }
+
+        // Accept on server
+        server.current += 1;
+        server.processed += 1;
+        req.assignedTo = server.id;
+        req.attempts += 1;
+        req.assignTime = state.time;
+        req.started = true;
+        // determine processing time
+        const base = server.baseMs + (parseInt(payloadMsEl.value)||0);
+        const jitter = Math.floor(Math.random()*(server.jitterMs+1));
+        const procMs = base + jitter;
+        // store remaining ticks
+        req.remainingMs = procMs;
+        req.deadline = state.time + (parseInt(timeoutEl.value)||5000)/state.tickMs; // in ticks
+        req.serverName = server.name;
+        // set affinity mapping if configured
+        const aff = affinityEl.value;
+        if (aff === 'cookie' || aff === 'ip') {
+          const key = aff === 'cookie' ? (req.cookie || req.clientIP) : req.clientIP;
+          if (key) {
+            const ttl = parseInt(cookieTTLEl.value) || 0;
+            state.affinityMap[key] = { serverId: server.id, expiry: ttl>0 ? state.time + ttl : null };
+          }
+        }
+        log('info','Assigned request '+req.id+' to '+server.name+' ('+sel.reason+')', {reqId:req.id, server:server.name, procMs});
+        return true;
+      }
+
+      function failRequest(req, reason) {
+        req.failed = true;
+        req.failReason = reason;
+        state.errors += 1;
+        log('error','Request '+req.id+' failed: '+reason, req);
+        delete state.requests[req.id];
+      }
+
+      function completeRequest(req, success, server) {
+        state.completed += 1;
+        server.current = Math.max(0, server.current - 1);
+        server.totalTime += (req.originalMs || req.remainingMsActual || 0);
+        if (!success) server.errors += 1;
+        if (success) {
+          state.totalLatency += req.originalMs || req.remainingMsActual || 0;
+        }
+        // mark request finished
+        req.finished = true;
+        req.finishTime = state.time;
+        if (success) log('info','Completed req '+req.id+' on '+server.name+' in '+(req.originalMs||req.remainingMsActual)+'ms', req);
+        else log('warn','Request '+req.id+' failed on '+server.name, req);
+        delete state.requests[req.id];
+
+        // If per-server queue has waiting requests, pop next
+        if (server.queue && server.queue.length>0) {
+          const next = server.queue.shift();
+          assignRequest(next);
+        }
+      }
+
+      // Tick: simulation step
+      function tick() {
+        state.time += 1;
+        // health checks
+        if (healthChecksEnabledEl.checked && state.time % Math.max(1, parseInt(healthIntervalEl.value)||1) === 0) {
+          for (let s of state.servers) {
+            // small probabilistic recovery / fail changes according to failRate
+            if (!s.up) {
+              // random chance to recover
+              if (Math.random() < 0.05) { s.up = true; log('info','Health check: '+s.name+' recovered'); }
+            } else {
+              // if server has failRate > 0 then possibly fail
+              if (s.failRate > 0 && Math.random() < (s.failRate/100) * 0.02) {
+                s.up = false;
+                log('warn','Health check: '+s.name+' became unhealthy (simulated)'); 
+              }
+            }
+          }
+        }
+
+        // generate arrivals according to Poisson process approximation
+        const rate = parseFloat(rateEl.value) || 0;
+        const dtSec = (parseInt(tickMsEl.value)||200)/1000;
+        const expected = rate * dtSec;
+        // sample Poisson via approximation: number ~ floor(expected) + Bernoulli(prob)
+        let arrivals = Math.floor(expected);
+        if (Math.random() < (expected - arrivals)) arrivals += 1;
+        for (let i=0;i<arrivals;i++) {
+          spawnRequest();
+        }
+
+        // process global queue if using
+        if (state.globalQueue.length>0) {
+          // attempt to assign some number up to available capacity
+          for (let i=state.globalQueue.length-1;i>=0;i--) {
+            const req = state.globalQueue[i];
+            const ok = assignRequest(req);
+            if (ok) {
+              // remove from global queue if assigned or accepted
+              const ind = state.globalQueue.indexOf(req);
+              if (ind>=0) state.globalQueue.splice(ind,1);
+            }
+            // limit how many we try this tick to avoid thrashing
+            if (i < state.globalQueue.length - 20) break;
+          }
+        }
+
+        // progress running requests
+        for (let id in state.requests) {
+          const req = state.requests[id];
+          if (!req.started) continue;
+          if (req.finished) continue;
+          // if assignment timed out before starting
+          if (state.time > (req.deadline || Infinity)) {
+            // timed out
+            log('warn','Request '+req.id+' timed out before completion');
+            // free server slot if assigned
+            if (req.assignedTo) {
+              const srv = state.servers.find(s=>s.id===req.assignedTo);
+              if (srv) srv.current = Math.max(0, srv.current-1);
+            }
+            // trigger retry if allowed
+            if ((req.attempts || 0) <= parseInt(retriesEl.value || 0)) {
+              // schedule retry with backoff
+              req.attempts = (req.attempts||0) + 1;
+              req.started = false;
+              req.assignedTo = null;
+              const backoff = parseInt(backoffBaseEl.value||200);
+              req.nextAttemptTick = state.time + Math.ceil(backoff / (parseInt(tickMsEl.value)||200));
+              // put back in global queue so it will be attempted later
+              state.globalQueue.push(req);
+              log('debug','Scheduling retry for '+req.id+' after backoff');
+            } else {
+              failRequest(req, 'timeout');
+            }
+            continue;
+          }
+
+          // decrement remainingMs
+          if (!req.remainingMsActual) {
+            // convert remainingMs (ms) to ticks
+            // remainingMs stored as ms at assignment; convert per tick
+            req.remainingMsActual = req.remainingMs;
+          }
+          // decrement by tickMs
+          req.remainingMsActual -= (parseInt(tickMsEl.value)||200);
+          if (req.remainingMsActual <= 0) {
+            // processing finished
+            // pick the assigned server
+            const srv = state.servers.find(s=>s.id===req.assignedTo);
+            // simulate server failure at completion if failRate triggers
+            const failureProb = (srv && srv.failRate) ? (srv.failRate/100) : 0;
+            const actuallyFailed = Math.random() < failureProb;
+            completeRequest(req, !actuallyFailed, srv || {name:'<unknown>'});
+          }
+        }
+
+        // attempt to drain global queue into servers if capacity opened
+        if (state.globalQueue.length>0) {
+          for (let i=state.globalQueue.length-1;i>=0;i--) {
+            const req = state.globalQueue[i];
+            // if req has nextAttemptTick and hasn't reached it, skip
+            if (req.nextAttemptTick && state.time < req.nextAttemptTick) continue;
+            const ok = assignRequest(req);
+            if (ok) {
+              const idx = state.globalQueue.indexOf(req);
+              if (idx>=0) state.globalQueue.splice(idx,1);
+            }
+          }
+        }
+
+        // update UI
+        renderSummary();
+        renderLogs();
+        updateStats();
+      }
+
+      // Request creation
+      function spawnRequest(custom) {
+        const id = ++state.requestCounter;
+        const req = {
+          id: 'r' + id,
+          clientIP: makeClientIP(),
+          arrivalTime: state.time,
+          attempts: 0,
+          started: false,
+          finished: false,
+          failed: false,
+          originalMs: null,
+          cookie: 'ck-' + (Math.floor(Math.random()*1000000)),
+        };
+        if (custom) Object.assign(req, custom);
+        state.requests[req.id] = req;
+        log('debug','Spawned request '+req.id+' from '+req.clientIP);
+        // immediate assign attempt
+        const assigned = assignRequest(req);
+        if (!assigned) {
+          // if assignment failed and queue policy rejects, it's already failed and removed
+        } else {
+          // track stats
+          statInc('sent');
+        }
+      }
+
+      // Controls event handlers
+      startBtn.onclick = function() {
+        startSim();
+      };
+      pauseBtn.onclick = function() {
+        stopSim();
+      };
+      stepBtn.onclick = function() {
+        // one tick
+        applyConfigToState();
+        tick();
+      };
+      resetBtn.onclick = function() {
+        stopSim();
+        // clear state but keep servers
+        state.time = 0;
+        state.requestCounter = 0;
+        state.requests = {};
+        state.completed = 0;
+        state.errors = 0;
+        state.totalLatency = 0;
+        state.globalQueue = [];
+        state.affinityMap = {};
+        state.logs = [];
+        log('info','Simulator reset (kept servers)');
+        renderLogs();
+        renderSummary();
+        updateStats();
+      };
+
+      addServerBtn.onclick = function() { addServer(); };
+      resetServersBtn.onclick = function() { resetServers(); };
+
+      sendOneBtn.onclick = function() { spawnRequest(); };
+      sendBurstBtn.onclick = function() {
+        const count = Math.max(1, parseInt(burstCountEl.value)||1);
+        for (let i=0;i<count;i++) spawnRequest();
+      };
+      clearQueueBtn.onclick = function() {
+        state.globalQueue = [];
+        for (let s of state.servers) s.queue = [];
+        log('info','Cleared all queues');
+        renderSummary();
+      };
+
+      clearLogBtn.onclick = function(){ state.logs=[]; renderLogs(); };
+      exportLogBtn.onclick = function(){
+        const data = state.logs.map(e=>e.raw).join('\n');
+        const blob = new Blob([data], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'lb-log.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      findReqBtn.onclick = function() {
+        const id = findReqEl.value.trim();
+        if (!id) return;
+        const r = state.requests[id];
+        if (r) {
+          reqDetailPre.textContent = JSON.stringify(r, null, 2);
+          return;
+        }
+        // search logs for ID
+        for (let e of state.logs) {
+          if (e.raw.indexOf(id)!==-1) {
+            reqDetailPre.textContent = e.raw + "\n\nmeta: " + JSON.stringify(e.meta || {}, null, 2);
+            return;
+          }
+        }
+        reqDetailPre.textContent = 'Request ' + id + ' not found';
+      };
+
+      importBtn.onclick = function() { importArea.click(); };
+      importArea.onchange = function(e) {
+        const f = importArea.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          try {
+            const obj = JSON.parse(ev.target.result);
+            if (obj.servers) {
+              resetServers();
+              for (let s of obj.servers) {
+                addServer(s);
+              }
+              log('info','Imported configuration with '+obj.servers.length+' servers');
+            }
+          } catch(err) { log('error','Import failed: '+err.message); }
+        };
+        reader.readAsText(f);
+      };
+
+      exportBtn.onclick = function() {
+        const cfg = { servers: state.servers.map(s=>{
+          return { weight: s.weight, capacity: s.capacity, baseMs: s.baseMs, jitterMs: s.jitterMs, failRate: s.failRate, queueSize: s.queueSize };
+        })};
+        const blob = new Blob([JSON.stringify(cfg, null, 2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'lb-config.json'; a.click(); URL.revokeObjectURL(url);
+      };
+
+      drainAllBtn.onclick = function() {
+        for (let s of state.servers) s.draining = true;
+        log('info','All servers set to draining');
+        rebuildServerTable();
+      };
+
+      // Stats helpers
+      const statWindow = { ticks: [], windowSize: 20 };
+      function statInc(kind) {
+        if (kind === 'sent') {
+          statSentEl.textContent = parseInt(statSentEl.textContent || 0) + 1;
+          // track throughput
+          statWindow.ticks.push({ time: state.time, sent:1 });
+          while (statWindow.ticks.length > statWindow.windowSize) statWindow.ticks.shift();
+        }
+      }
+
+      function updateStats() {
+        document.getElementById('rateVal').textContent = rateEl.value;
+        statCompletedEl.textContent = state.completed;
+        statErrorsEl.textContent = state.errors;
+        statQueueEl.textContent = state.globalQueue.length;
+        statSentEl.textContent = state.requestCounter;
+        const avg = state.completed ? Math.round(state.totalLatency / Math.max(1,state.completed)) : 0;
+        statAvgEl.textContent = avg;
+        // throughput compute over last N ticks
+        const now = state.time;
+        const tw = 10; // last 10 ticks
+        let recent = 0;
+        for (let i=now - tw; i<=now; i++) {
+          // approximate by counting completions in logs
+        }
+        // compute throughput approximate as completed / seconds
+        const tickMs = parseInt(tickMsEl.value)||200;
+        const seconds = (statWindow.windowSize * tickMs)/1000 || 1;
+        const completedNow = state.completed;
+        // no persistent window for completed, so best-effort: show completed / seconds since start or last reset
+        const throughput = seconds>0 ? (state.completed / ((state.time* tickMs)/1000 || 1)) : 0;
+        statThroughputEl.textContent = throughput.toFixed(2);
+      }
+
+      function renderSummary() {
+        // server summary lines
+        let out = '';
+        for (let s of state.servers) {
+          const util = s.capacity > 0 ? Math.round((s.current / s.capacity)*100) : 0;
+          out += s.name + ' | up=' + s.up + ' | draining=' + s.draining + ' | cur=' + s.current + '/' + s.capacity + ' | q=' + (s.queue? s.queue.length:0) + ' | processed=' + s.processed + ' | errors=' + s.errors + ' | util%=' + util + '\n';
+        }
+        serverSummaryEl.textContent = out;
+      }
+
+      // start/stop
+      function applyConfigToState() {
+        state.tickMs = Math.max(10, parseInt(tickMsEl.value)||200);
+      }
+
+      function startSim() {
+        if (state.running) return;
+        applyConfigToState();
+        state.running = true;
+        // if autostart to begin spawn or resume
+        state.tickInterval = setInterval(tick, state.tickMs);
+        log('info','Simulation started (tickMs='+state.tickMs+')');
+      }
+      function stopSim() {
+        if (!state.running) return;
+        clearInterval(state.tickInterval);
+        state.tickInterval = null;
+        state.running = false;
+        log('info','Simulation paused');
+      }
+
+      // Startup defaults
+      function boot() {
+        // add default servers for demo
+        presetSimple.click();
+        // start if autostart
+        if (startAutostart.checked) startSim();
+        renderLogs();
+        renderSummary();
+      }
+
+      // click handler to view details on log click - not possible in textarea, offer select from raw logs
+      // Provide ability to click log lines by double click -> inspect
+      logArea.ondblclick = function() {
+        const sel = logArea.value.substring(logArea.selectionStart, logArea.selectionEnd).trim();
+        if (!sel) return;
+        // try to parse id r<number> from selection
+        const match = sel.match(/r\d+/);
+        const id = match ? match[0] : sel.split(/\s+/)[0];
+        if (id) {
+          const r = state.requests[id];
+          if (r) {
+            reqDetailPre.textContent = JSON.stringify(r, null, 2);
+            return;
+          } else {
+            reqDetailPre.textContent = 'Request ' + id + ' not found in active requests. Searching logs...\n';
+            for (let e of state.logs) {
+              if (e.raw.indexOf(id)!==-1) {
+                reqDetailPre.textContent += e.raw + "\n\nmeta: " + JSON.stringify(e.meta || {}, null, 2);
+                return;
+              }
+            }
+            reqDetailPre.textContent += 'No match';
+          }
+        }
+      };
+
+      // UI bindings
+      rateEl.oninput = function(){ rateValEl.textContent = rateEl.value; };
+      tickMsEl.onchange = function(){ /* apply on start */ };
+      // keyboard shortcuts minimal
+      document.addEventListener('keydown', function(e){
+        if (e.key === ' ') { e.preventDefault(); if (state.running) stopSim(); else startSim(); }
+      });
+
+      // Final boot
+      boot();
+
+      // Expose some state for debugging in console
+      window.LBSim = {
+        state,
+        addServer,
+        resetServers,
+        spawnRequest,
+        startSim,
+        stopSim,
+        tick,
+      };
+    })();
+  </script>
+</body>
+</html>
