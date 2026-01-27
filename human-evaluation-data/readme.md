@@ -1,0 +1,9 @@
+## 拉取最新结果的命令
+
+```bash
+curl 'https://zkmniqsodtsqmqmbpmnt.supabase.co/rest/v1/evaluations?select=*' \
+-H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprbW5pcXNvZHRzcW1xbWJwbW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4Nzc3MjEsImV4cCI6MjA4NDQ1MzcyMX0.hMrxzI3wuDEvnJ_AaVx4sbC19vO31s6J0cnWes6w_Z8" \
+-H "Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprbW5pcXNvZHRzcW1xbWJwbW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4Nzc3MjEsImV4cCI6MjA4NDQ1MzcyMX0.hMrxzI3wuDEvnJ_AaVx4sbC19vO31s6J0cnWes6w_Z8"
+```
+
+用这个命令可以拉取最新的evaluation数据。
