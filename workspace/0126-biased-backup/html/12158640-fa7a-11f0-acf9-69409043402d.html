@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Context Switching Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  .section {
+    margin-bottom: 1em;
+    border: 1px solid black;
+    padding: 0.5em;
+  }
+  label, button {
+    cursor: pointer;
+  }
+  input[type="text"], textarea {
+    width: 100%;
+    font-family: monospace;
+    font-size: 1em;
+  }
+  select {
+    font-family: monospace;
+    font-size: 1em;
+  }
+  .log {
+    white-space: pre-wrap;
+    height: 10em;
+    overflow-y: scroll;
+    border: 1px solid black;
+    padding: 0.3em;
+    font-size: 0.9em;
+    background-color: white;
+    margin-top: 0.3em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Context Switching Interactive Demo</h1>
+
+<div class="section" id="context-creation-section">
+  <h2>Create/Edit Context</h2>
+  <label for="ctx-name-input">Context Name:</label><br />
+  <input type="text" id="ctx-name-input" placeholder="Enter context name" /><br /><br />
+
+  <label for="ctx-description-input">Context Description:</label><br />
+  <textarea id="ctx-description-input" rows="3" placeholder="Describe this context"></textarea><br /><br />
+
+  <label for="ctx-data-input">Context Data (JSON format):</label><br />
+  <textarea id="ctx-data-input" rows="5" placeholder='{"key1": "value1", "key2": 2}'></textarea><br /><br />
+
+  <button id="ctx-save-btn">Save Context</button>
+  <button id="ctx-clear-btn">Clear Inputs</button>
+  <div id="ctx-validation-msg" style="color:red; font-weight:bold; margin-top:0.3em;"></div>
+</div>
+
+<div class="section" id="context-list-section">
+  <h2>Available Contexts</h2>
+  <select id="ctx-list" size="6" style="width: 100%;"></select><br /><br />
+  <button id="ctx-load-btn" disabled>Load Selected Context</button>
+  <button id="ctx-delete-btn" disabled>Delete Selected Context</button>
+</div>
+
+<div class="section" id="context-switching-section">
+  <h2>Context Switching</h2>
+  <div>
+    <label>Current Context:</label>
+    <span id="current-context-name">[None]</span><br />
+    <textarea id="current-context-data" rows="6" readonly placeholder="No context loaded"></textarea>
+  </div>
+  <br />
+  <label for="switch-target-select">Switch To Context:</label><br />
+  <select id="switch-target-select" style="width: 100%;"></select><br /><br />
+
+  <label for="switch-mode-select">Switch Mode:</label><br />
+  <select id="switch-mode-select" style="width: 100%;">
+    <option value="instant">Instant (Replace)</option>
+    <option value="overlay">Overlay (Merge)</option>
+    <option value="sandbox">Sandbox (Isolated copy)</option>
+  </select><br /><br />
+
+  <button id="perform-switch-btn" disabled>Perform Context Switch</button><br /><br />
+
+  <label for="switch-undo-levels">Undo Levels (steps to remember):</label><br />
+  <input type="number" min="1" max="100" id="switch-undo-levels" value="10" /><br /><br />
+
+  <button id="undo-switch-btn" disabled>Undo Last Switch</button>
+  <button id="redo-switch-btn" disabled>Redo Switch</button>
+  <br /><br />
+
+  <label for="switch-history-select">Switch History:</label><br />
+  <select id="switch-history-select" size="5" style="width: 100%;"></select><br /><br />
+
+  <button id="load-history-select-btn" disabled>Load Selected History State as Current</button>
+</div>
+
+<div class="section" id="interaction-logging-section">
+  <h2>Interaction Log</h2>
+  <button id="clear-log-btn">Clear Log</button><br /><br />
+  <div class="log" id="interaction-log" aria-live="polite" aria-atomic="true"></div>
+</div>
+
+<script>
+(function(){
+  // Storage keys
+  const STORAGE_CTX_KEY = "cs_contexts";
+  const STORAGE_HISTORY_KEY = "cs_switch_history";
+
+  // State variables
+  let contexts = {}; // { name: {name, description, dataObject} }
+  let currentContext = null; // {name, description, dataObject}
+  let switchHistory = []; // array of {timestamp, fromContextName, toContextName, mode, stateSnapshot}
+  let undoIndex = -1; // points to current position in history for undo/redo
+  let maxUndoLevels = 10;
+
+  // DOM references
+  const ctxNameInput = document.getElementById("ctx-name-input");
+  const ctxDescriptionInput = document.getElementById("ctx-description-input");
+  const ctxDataInput = document.getElementById("ctx-data-input");
+  const ctxSaveBtn = document.getElementById("ctx-save-btn");
+  const ctxClearBtn = document.getElementById("ctx-clear-btn");
+  const ctxValidationMsg = document.getElementById("ctx-validation-msg");
+  const ctxListSelect = document.getElementById("ctx-list");
+  const ctxLoadBtn = document.getElementById("ctx-load-btn");
+  const ctxDeleteBtn = document.getElementById("ctx-delete-btn");
+
+  const currentContextNameSpan = document.getElementById("current-context-name");
+  const currentContextDataArea = document.getElementById("current-context-data");
+  const switchTargetSelect = document.getElementById("switch-target-select");
+  const switchModeSelect = document.getElementById("switch-mode-select");
+  const performSwitchBtn = document.getElementById("perform-switch-btn");
+  const switchUndoLevelsInput = document.getElementById("switch-undo-levels");
+  const undoSwitchBtn = document.getElementById("undo-switch-btn");
+  const redoSwitchBtn = document.getElementById("redo-switch-btn");
+  const switchHistorySelect = document.getElementById("switch-history-select");
+  const loadHistorySelectBtn = document.getElementById("load-history-select-btn");
+
+  const interactionLog = document.getElementById("interaction-log");
+  const clearLogBtn = document.getElementById("clear-log-btn");
+
+  // Utility functions
+  function logInteraction(msg){
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString() + "." + now.getMilliseconds().toString().padStart(3, '0');
+    interactionLog.textContent += `[${timestamp}] ${msg}\n`;
+    interactionLog.scrollTop = interactionLog.scrollHeight;
+  }
+
+  function saveContextsToStorage(){
+    try{
+      localStorage.setItem(STORAGE_CTX_KEY, JSON.stringify(contexts));
+      logInteraction("Contexts saved to localStorage.");
+    } catch(e) {
+      logInteraction("Error saving contexts: " + e.toString());
+    }
+  }
+
+  function loadContextsFromStorage(){
+    const json = localStorage.getItem(STORAGE_CTX_KEY);
+    if(json){
+      try{
+        contexts = JSON.parse(json);
+        // Validate all contexts, remove any invalid ones
+        for(let k in contexts){
+          if(!contexts[k].name || !contexts[k].hasOwnProperty("dataObject")){
+            delete contexts[k];
+          }
+        }
+      } catch(e){
+        contexts = {};
+        logInteraction("Failed to parse contexts from localStorage, starting fresh.");
+      }
+    }
+  }
+
+  function saveHistoryToStorage(){
+    try{
+      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify({history:switchHistory, undoIndex:undoIndex}));
+      logInteraction("Switch history saved to localStorage.");
+    } catch(e) {
+      logInteraction("Error saving history: " + e.toString());
+    }
+  }
+
+  function loadHistoryFromStorage(){
+    const json = localStorage.getItem(STORAGE_HISTORY_KEY);
+    if(json){
+      try{
+        const obj = JSON.parse(json);
+        if(Array.isArray(obj.history) && typeof obj.undoIndex === "number"){
+          switchHistory = obj.history;
+          undoIndex = obj.undoIndex;
+        } else {
+          switchHistory = [];
+          undoIndex = -1;
+        }
+      } catch(e){
+        switchHistory = [];
+        undoIndex = -1;
+      }
+    }
+  }
+
+  // UI update functions
+  function updateContextList(){
+    // Clear
+    ctxListSelect.innerHTML = "";
+    switchTargetSelect.innerHTML = "";
+
+    // Alphabetical order
+    const ordered = Object.keys(contexts).sort();
+    for(let name of ordered){
+      const option1 = document.createElement("option");
+      option1.value = name;
+      option1.textContent = name;
+      ctxListSelect.appendChild(option1);
+
+      const option2 = document.createElement("option");
+      option2.value = name;
+      option2.textContent = name;
+      switchTargetSelect.appendChild(option2);
+    }
+
+    ctxLoadBtn.disabled = ctxListSelect.selectedIndex === -1 || ctxListSelect.options.length === 0;
+    ctxDeleteBtn.disabled = ctxLoadBtn.disabled;
+
+    performSwitchBtn.disabled = switchTargetSelect.selectedIndex === -1 || switchTargetSelect.options.length === 0 || currentContext === null || 
+      switchTargetSelect.value === currentContext.name;
+  }
+
+  function updateCurrentContextDisplay(){
+    if(currentContext){
+      currentContextNameSpan.textContent = currentContext.name;
+      try {
+        currentContextDataArea.value = JSON.stringify(currentContext.dataObject, null, 2);
+      } catch(e){
+        currentContextDataArea.value = "[Unable to display data]";
+      }
+    } else {
+      currentContextNameSpan.textContent = "[None]";
+      currentContextDataArea.value = "";
+    }
+  }
+
+  function updateUndoRedoButtons(){
+    undoSwitchBtn.disabled = undoIndex <= 0;
+    redoSwitchBtn.disabled = undoIndex >= switchHistory.length-1 || undoIndex === -1;
+  }
+
+  function updateHistoryList(){
+    switchHistorySelect.innerHTML = "";
+    switchHistory.forEach((entry,i)=>{
+      const option = document.createElement("option");
+      const d = new Date(entry.timestamp);
+      option.value = i;
+      option.textContent = `${i+1}: ${entry.fromContextName || "[none]"} → ${entry.toContextName || "[none]"} | Mode: ${entry.mode} | ${d.toLocaleString()}`;
+      switchHistorySelect.appendChild(option);
+    });
+    loadHistorySelectBtn.disabled = switchHistorySelect.selectedIndex === -1 || switchHistorySelect.options.length === 0;
+  }
+
+  // Context operations
+  function validateContextInputs(name, description, dataStr){
+    if(!name.trim()) return "Context Name cannot be empty.";
+    if(name.match(/^\s+$/)) return "Context Name cannot be just whitespace.";
+    if(name.length > 50) return "Context Name must be 50 characters or less.";
+    try {
+      JSON.parse(dataStr);
+    } catch (e){
+      return "Context Data must be valid JSON: " + e.message;
+    }
+    return null;
+  }
+
+  // Save or update context
+  function saveContext(){
+    const name = ctxNameInput.value.trim();
+    const description = ctxDescriptionInput.value.trim();
+    const dataStr = ctxDataInput.value.trim();
+
+    const validationMsg = validateContextInputs(name, description, dataStr);
+    if(validationMsg){
+      ctxValidationMsg.textContent = validationMsg;
+      return;
+    }
+    ctxValidationMsg.textContent = "";
+
+    const dataObj = JSON.parse(dataStr);
+
+    contexts[name] = { name, description, dataObject: dataObj };
+    saveContextsToStorage();
+    logInteraction(`Context "${name}" saved.`);
+    updateContextList();
+    clearContextInputs();
+  }
+
+  function clearContextInputs(){
+    ctxNameInput.value = "";
+    ctxDescriptionInput.value = "";
+    ctxDataInput.value = "";
+    ctxValidationMsg.textContent = "";
+  }
+
+  function loadSelectedContext(){
+    const name = ctxListSelect.value;
+    if(name && contexts[name]){
+      ctxNameInput.value = contexts[name].name;
+      ctxDescriptionInput.value = contexts[name].description;
+      ctxDataInput.value = JSON.stringify(contexts[name].dataObject, null, 2);
+      ctxValidationMsg.textContent = "";
+      logInteraction(`Context "${name}" loaded into editor.`);
+    }
+  }
+
+  function deleteSelectedContext(){
+    const name = ctxListSelect.value;
+    if(name && contexts[name]){
+      if(currentContext && currentContext.name === name){
+        alert("Cannot delete context currently loaded. Switch to a different context first.");
+        return;
+      }
+      if(confirm(`Delete context "${name}"? This action cannot be undone.`)){
+        delete contexts[name];
+        saveContextsToStorage();
+        logInteraction(`Context "${name}" deleted.`);
+        updateContextList();
+      }
+    }
+  }
+
+  // Context switching workflow
+  function performSwitch(){
+    if(!currentContext){
+      alert("You must first load a context to perform switching.");
+      return;
+    }
+    const targetName = switchTargetSelect.value;
+    const switchMode = switchModeSelect.value;
+    if(!targetName || !contexts[targetName]){
+      alert("Please select a valid target context.");
+      return;
+    }
+    if(targetName === currentContext.name){
+      alert("Cannot switch to the same context currently loaded.");
+      return;
+    }
+
+    // Prepare new state
+    const targetContext = contexts[targetName];
+    let newDataObj;
+
+    try {
+      switch(switchMode){
+        case "instant":
+          // Replace currentContext with targetContext completely
+          newDataObj = deepClone(targetContext.dataObject);
+          break;
+        case "overlay":
+          // Merge targetContext data into currentContext data (target values override)
+          newDataObj = mergeDeep(deepClone(currentContext.dataObject), targetContext.dataObject);
+          break;
+        case "sandbox":
+          // Make isolated working copy based on targetContext, not affecting stored context until saved
+          newDataObj = deepClone(targetContext.dataObject);
+          break;
+        default:
+          alert("Unknown switch mode!");
+          return;
+      }
+    } catch(e){
+      alert("Error performing switch operation: " + e.message);
+      return;
+    }
+
+    // Save undo state and update history
+    const historyEntry = {
+      timestamp: Date.now(),
+      fromContextName: currentContext.name,
+      toContextName: targetName,
+      mode: switchMode,
+      stateSnapshot: deepClone(newDataObj)
+    };
+
+    // Trim history if needed
+    if(undoIndex < switchHistory.length -1){
+      switchHistory.splice(undoIndex+1);
+    }
+
+    switchHistory.push(historyEntry);
+    undoIndex++;
+    maxUndoLevels = Math.max(1, Math.min(100, Number(switchUndoLevelsInput.value) || 10));
+    if(switchHistory.length > maxUndoLevels){
+      switchHistory.shift();
+      undoIndex--;
+    }
+
+    currentContext = {
+      name: targetName,
+      description: targetContext.description,
+      dataObject: newDataObj
+    };
+
+    saveHistoryToStorage();
+    updateHistoryList();
+    updateCurrentContextDisplay();
+    updateUndoRedoButtons();
+    updateContextList();
+    performSwitchBtn.disabled = true;
+    logInteraction(`Switched context to "${targetName}" using mode "${switchMode}".`);
+  }
+
+  // Utilities: deep clone and deep merge
+  function deepClone(obj){
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  // Deep merge - target overrides source, merges recursively objects, arrays replaced directly
+  function mergeDeep(source, target){
+    if(typeof source !== "object" || source === null) return deepClone(target);
+    if(typeof target !== "object" || target === null) return deepClone(target);
+
+    let output = Array.isArray(source) ? [] : {};
+    if(Array.isArray(source) && Array.isArray(target)){
+      // Replace arrays directly
+      return deepClone(target);
+    }
+
+    const keys = new Set([...Object.keys(source), ...Object.keys(target)]);
+    keys.forEach(key => {
+      const sVal = source[key];
+      const tVal = target[key];
+      if(tVal === undefined){
+        output[key] = deepClone(sVal);
+      } else if(sVal === undefined){
+        output[key] = deepClone(tVal);
+      } else if(typeof sVal === 'object' && sVal !== null && typeof tVal === 'object' && tVal !== null && !Array.isArray(sVal) && !Array.isArray(tVal)){
+        output[key] = mergeDeep(sVal, tVal);
+      } else {
+        output[key] = deepClone(tVal);
+      }
+    });
+    return output;
+  }
+
+  // Undo / Redo switching
+  function undoSwitch(){
+    if(undoIndex <= 0){
+      alert("No more undo steps available.");
+      return;
+    }
+    undoIndex--;
+    const historyEntry = switchHistory[undoIndex];
+    if(!historyEntry){
+      alert("Undo state invalid.");
+      return;
+    }
+    currentContext = {
+      name: historyEntry.toContextName,
+      description: contexts[historyEntry.toContextName] ? contexts[historyEntry.toContextName].description : "",
+      dataObject: deepClone(historyEntry.stateSnapshot)
+    };
+    saveHistoryToStorage();
+    updateCurrentContextDisplay();
+    updateUndoRedoButtons();
+    updateContextList();
+    updateHistoryList();
+    logInteraction(`Undo: switched back to "${currentContext.name}"`);
+  }
+
+  function redoSwitch(){
+    if(undoIndex >= switchHistory.length -1){
+      alert("No more redo steps available.");
+      return;
+    }
+    undoIndex++;
+    const historyEntry = switchHistory[undoIndex];
+    if(!historyEntry){
+      alert("Redo state invalid.");
+      return;
+    }
+    currentContext = {
+      name: historyEntry.toContextName,
+      description: contexts[historyEntry.toContextName] ? contexts[historyEntry.toContextName].description : "",
+      dataObject: deepClone(historyEntry.stateSnapshot)
+    };
+    saveHistoryToStorage();
+    updateCurrentContextDisplay();
+    updateUndoRedoButtons();
+    updateContextList();
+    updateHistoryList();
+    logInteraction(`Redo: switched forward to "${currentContext.name}"`);
+  }
+
+  // Load selected history state as current context (snapshot only, does not modify history or undoIndex)
+  function loadHistorySelectedState(){
+    const idx = switchHistorySelect.selectedIndex;
+    if(idx === -1 || !switchHistory[idx]){
+      alert("Please select a valid history entry.");
+      return;
+    }
+    const entry = switchHistory[idx];
+    currentContext = {
+      name: entry.toContextName,
+      description: contexts[entry.toContextName] ? contexts[entry.toContextName].description : "",
+      dataObject: deepClone(entry.stateSnapshot)
+    };
+    updateCurrentContextDisplay();
+    updateContextList();
+    performSwitchBtn.disabled = true;
+    logInteraction(`Loaded history state #${idx+1} ("${entry.toContextName}") as current context (no history changed).`);
+  }
+
+  // Event listeners
+
+  ctxSaveBtn.addEventListener("click", e => {
+    e.preventDefault();
+    saveContext();
+  });
+
+  ctxClearBtn.addEventListener("click", e => {
+    e.preventDefault();
+    clearContextInputs();
+  });
+
+  ctxListSelect.addEventListener("change", e => {
+    ctxLoadBtn.disabled = ctxListSelect.selectedIndex === -1;
+    ctxDeleteBtn.disabled = ctxLoadBtn.disabled;
+  });
+
+  ctxLoadBtn.addEventListener("click", e => {
+    e.preventDefault();
+    loadSelectedContext();
+  });
+
+  ctxDeleteBtn.addEventListener("click", e => {
+    e.preventDefault();
+    deleteSelectedContext();
+  });
+
+  switchTargetSelect.addEventListener("change", e => {
+    if(currentContext){
+      performSwitchBtn.disabled = switchTargetSelect.selectedIndex === -1 ||
+        switchTargetSelect.value === currentContext.name;
+    } else {
+      performSwitchBtn.disabled = true;
+    }
+  });
+
+  switchModeSelect.addEventListener("change", e => {
+    if(currentContext && switchTargetSelect.selectedIndex !== -1) {
+      performSwitchBtn.disabled = switchTargetSelect.value === currentContext.name;
+    } else {
+      performSwitchBtn.disabled = true;
+    }
+  });
+
+  performSwitchBtn.addEventListener("click", e=>{
+    e.preventDefault();
+    performSwitch();
+  });
+
+  switchUndoLevelsInput.addEventListener("change", e => {
+    let val = Number(switchUndoLevelsInput.value);
+    if(isNaN(val) || val < 1) val = 1;
+    if(val > 100) val = 100;
+    maxUndoLevels = val;
+    switchUndoLevelsInput.value = val;
+    logInteraction(`Undo levels set to ${val}`);
+  });
+
+  undoSwitchBtn.addEventListener("click", e=>{
+    e.preventDefault();
+    undoSwitch();
+  });
+
+  redoSwitchBtn.addEventListener("click", e=>{
+    e.preventDefault();
+    redoSwitch();
+  });
+
+  switchHistorySelect.addEventListener("change", e=>{
+    loadHistorySelectBtn.disabled = switchHistorySelect.selectedIndex === -1;
+  });
+
+  loadHistorySelectBtn.addEventListener("click", e=>{
+    e.preventDefault();
+    loadHistorySelectedState();
+  });
+
+  clearLogBtn.addEventListener("click", e=>{
+    e.preventDefault();
+    interactionLog.textContent = "";
+  });
+
+  // Initialization
+  function init(){
+    loadContextsFromStorage();
+    loadHistoryFromStorage();
+    updateContextList();
+    updateHistoryList();
+    updateUndoRedoButtons();
+    updateCurrentContextDisplay();
+    performSwitchBtn.disabled = true;
+    ctxLoadBtn.disabled = true;
+    ctxDeleteBtn.disabled = true;
+    undoSwitchBtn.disabled = true;
+    redoSwitchBtn.disabled = true;
+    loadHistorySelectBtn.disabled = true;
+    logInteraction("Context Switching demo initialized.");
+  }
+
+  init();
+
+  // For accessibility, trap enter on context name to save quickly
+  ctxNameInput.addEventListener("keydown", e=>{
+    if(e.key === "Enter"){
+      e.preventDefault();
+      saveContext();
+    }
+  });
+
+  // Accessibility: trigger load selected context with Enter key
+  ctxListSelect.addEventListener("keydown", e=>{
+    if(e.key === "Enter" && !ctxLoadBtn.disabled){
+      e.preventDefault();
+      loadSelectedContext();
+    }
+  });
+
+  // Accessibility: trigger switch with Enter key in switchTargetSelect or switchModeSelect
+  [switchTargetSelect, switchModeSelect].forEach(el=>{
+    el.addEventListener("keydown", e=>{
+      if(e.key === "Enter" && !performSwitchBtn.disabled){
+        e.preventDefault();
+        performSwitch();
+      }
+    });
+  });
+
+  // Accessibility: trigger history load with Enter key on history select
+  switchHistorySelect.addEventListener("keydown", e=>{
+    if(e.key === "Enter" && !loadHistorySelectBtn.disabled){
+      e.preventDefault();
+      loadHistorySelectedState();
+    }
+  });
+
+})();
+
+</script>
+</body>
+</html>

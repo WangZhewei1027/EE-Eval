@@ -211,7 +211,7 @@ test.describe('KNN Interactive Demo (d3dbdd31-fa73-11f0-83e0-8d7be1d51901)', () 
         page.waitForEvent('dialog'),
         page.click('#explainBtn'),
       ]);
-      const msg = dialog.message();
+      const msg1 = dialog.message();
       expect(msg).toContain('Classification explanation');
       expect(msg).toMatch(/Nearest neighbors \(closest first\):/);
       // accept dialog

@@ -66,8 +66,8 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     // Ensure we have an initial semaphore (created on load). Click spawn and assert running worker
     const spawnBtn = page.locator('#spawnBtn');
     const runningCount = page.locator('#runningCount');
-    const capacityLabel = page.locator('#capacityLabel');
-    const logArea = page.locator('#logArea');
+    const capacityLabel1 = page.locator('#capacityLabel1');
+    const logArea1 = page.locator('#logArea1');
 
     // Get initial available count
     const beforeCapacity = await capacityLabel.textContent();
@@ -99,7 +99,7 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     const spawnNBtn = page.locator('#spawnNBtn');
     const queueLen = page.locator('#queueLen');
     const queueList = page.locator('#queueList');
-    const logArea = page.locator('#logArea');
+    const logArea2 = page.locator('#logArea2');
 
     // Set permits to 1 and recreate semaphore
     await permCount.fill('1');
@@ -130,14 +130,14 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
 
   test('Manual release should wake a queued worker (S3_WorkerQueued -> S2_WorkerRunning)', async ({ page }) => {
     // Ensure we have queued workers from previous test scenario: if not, prepare a queued situation.
-    const permCount = page.locator('#permCount');
-    const createBtn = page.locator('#createBtn');
-    const spawnNInput = page.locator('#spawnN');
-    const spawnNBtn = page.locator('#spawnNBtn');
+    const permCount1 = page.locator('#permCount1');
+    const createBtn1 = page.locator('#createBtn1');
+    const spawnNInput1 = page.locator('#spawnN');
+    const spawnNBtn1 = page.locator('#spawnNBtn1');
     const manualRelease = page.locator('#manualRelease');
-    const queueLen = page.locator('#queueLen');
-    const runningCount = page.locator('#runningCount');
-    const logArea = page.locator('#logArea');
+    const queueLen1 = page.locator('#queueLen1');
+    const runningCount1 = page.locator('#runningCount1');
+    const logArea3 = page.locator('#logArea3');
 
     // Recreate semaphore with capacity 1 and spawn 3 to ensure queue exists
     await permCount.fill('1');
@@ -178,7 +178,7 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     const toggleAuto = page.locator('#toggleAuto');
     const autoMs = page.locator('#autoMs');
     const fairness = page.locator('#fairness');
-    const logArea = page.locator('#logArea');
+    const logArea4 = page.locator('#logArea4');
 
     // Ensure semaphore exists
     await page.locator('#permCount').fill('2');
@@ -214,14 +214,14 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
 
   test('Release all should attempt to free permits and clear waiters (ReleaseAll)', async ({ page }) => {
     // Prepare a semaphore with capacity 2 and spawn several workers to generate queue
-    const permCount = page.locator('#permCount');
-    const createBtn = page.locator('#createBtn');
-    const spawnNInput = page.locator('#spawnN');
-    const spawnNBtn = page.locator('#spawnNBtn');
+    const permCount2 = page.locator('#permCount2');
+    const createBtn2 = page.locator('#createBtn2');
+    const spawnNInput2 = page.locator('#spawnN');
+    const spawnNBtn2 = page.locator('#spawnNBtn2');
     const releaseAllBtn = page.locator('#releaseAll');
-    const queueLen = page.locator('#queueLen');
-    const capacityLabel = page.locator('#capacityLabel');
-    const logArea = page.locator('#logArea');
+    const queueLen2 = page.locator('#queueLen2');
+    const capacityLabel2 = page.locator('#capacityLabel2');
+    const logArea5 = page.locator('#logArea5');
 
     await permCount.fill('2');
     await createBtn.click();
@@ -237,7 +237,7 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     await page.waitForTimeout(250);
 
     // After release-all, queue should be 0 and capacityLabel should show full capacity
-    const qLen = parseInt((await queueLen.textContent()) || '0', 10);
+    const qLen1 = parseInt((await queueLen.textContent()) || '0', 10);
     expect(qLen).toBe(0);
 
     // capacityLabel should show count == capacity (e.g., 2 / 2)
@@ -253,13 +253,13 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
 
   test('Drain queue should cancel queued waiters and log cancellations (DrainQueue)', async ({ page }) => {
     // Create capacity 1 and spawn a few so we have a queue, then drain and assert canceled logs
-    const permCount = page.locator('#permCount');
-    const createBtn = page.locator('#createBtn');
-    const spawnNInput = page.locator('#spawnN');
-    const spawnNBtn = page.locator('#spawnNBtn');
+    const permCount3 = page.locator('#permCount3');
+    const createBtn3 = page.locator('#createBtn3');
+    const spawnNInput3 = page.locator('#spawnN');
+    const spawnNBtn3 = page.locator('#spawnNBtn3');
     const drainQueueBtn = page.locator('#drainQueue');
-    const queueLen = page.locator('#queueLen');
-    const logArea = page.locator('#logArea');
+    const queueLen3 = page.locator('#queueLen3');
+    const logArea6 = page.locator('#logArea6');
 
     await permCount.fill('1');
     await createBtn.click();
@@ -269,7 +269,7 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     await spawnNBtn.click();
     await page.waitForTimeout(220);
 
-    const beforeQueue = parseInt((await queueLen.textContent()) || '0', 10);
+    const beforeQueue1 = parseInt((await queueLen.textContent()) || '0', 10);
     expect(beforeQueue).toBeGreaterThanOrEqual(2);
 
     // Drain queue
@@ -277,7 +277,7 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     await page.waitForTimeout(250);
 
     // queue should be cleared
-    const afterQueue = parseInt((await queueLen.textContent()) || '0', 10);
+    const afterQueue1 = parseInt((await queueLen.textContent()) || '0', 10);
     expect(afterQueue).toBe(0);
 
     // Log should mention cleared N queued waiters
@@ -293,13 +293,13 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
 
   test('Reset while auto running should stop auto and clear UI (Reset)', async ({ page }) => {
     // Start auto, then reset, and verify toggle shows "Start Auto" and tokens/queue cleared.
-    const toggleAuto = page.locator('#toggleAuto');
-    const autoMs = page.locator('#autoMs');
+    const toggleAuto1 = page.locator('#toggleAuto1');
+    const autoMs1 = page.locator('#autoMs1');
     const resetBtn = page.locator('#resetBtn');
     const toggleText = toggleAuto;
     const tokensArea = page.locator('#tokensArea');
-    const queueList = page.locator('#queueList');
-    const logArea = page.locator('#logArea');
+    const queueList1 = page.locator('#queueList1');
+    const logArea7 = page.locator('#logArea7');
 
     // Ensure semaphore exists and start auto
     await page.locator('#permCount').fill('2');
@@ -329,9 +329,9 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
 
   test('Edge case: manual release and actions when no semaphore exists', async ({ page }) => {
     // Reset to remove semaphore then click manualRelease to test error/log path
-    const resetBtn = page.locator('#resetBtn');
-    const manualRelease = page.locator('#manualRelease');
-    const logArea = page.locator('#logArea');
+    const resetBtn1 = page.locator('#resetBtn1');
+    const manualRelease1 = page.locator('#manualRelease1');
+    const logArea8 = page.locator('#logArea8');
 
     // Reset (ensures sem = null)
     await resetBtn.click();
@@ -345,7 +345,7 @@ test.describe('Semaphore Demo (FSM) - d3d91e11-fa73-11f0-83e0-8d7be1d51901', () 
     await expect(logArea).toContainText('No semaphore exists.');
 
     // Additionally, pressing spawn when no sem should prompt creation message in logs
-    const spawnBtn = page.locator('#spawnBtn');
+    const spawnBtn1 = page.locator('#spawnBtn1');
     await spawnBtn.click();
     await page.waitForTimeout(120);
     // Because sem is null, spawnOneWorker logs 'Create the semaphore first (click "Create Semaphore").'

@@ -88,7 +88,7 @@ test.describe('SQL Concept Demonstration - FSM and interaction tests', () => {
     expect(title.trim()).toBe('SQL Concept Demonstration');
 
     // Button must exist with the exact onclick attribute expected by the FSM
-    const btn = await app.getRunButton();
+    const btn1 = await app.getRunButton();
     await expect(btn).toBeVisible();
     const btnOnclick = await app.getButtonOnclickAttribute();
     expect(btnOnclick).toBe("runQueries()");
@@ -116,7 +116,7 @@ test.describe('SQL Concept Demonstration - FSM and interaction tests', () => {
   test('S1_Queries_Ran: clicking the Run button triggers runQueries and output is populated correctly', async ({ page }) => {
     // This test validates the transition from S0_Idle to S1_Queries_Ran triggered by the RunQueries event.
     // It clicks the button and asserts the output contains expected query labels and resulting JSON.
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
     await app.goto();
 
     // Ensure displayQueryResults (FSM's S1 entry action) is not implemented in the page.
@@ -169,7 +169,7 @@ test.describe('SQL Concept Demonstration - FSM and interaction tests', () => {
     expect(bob).toBeTruthy();
     expect(bob.Salary).toBe(55000);
 
-    // After deletion, Dana (ID:4) should be removed
+    // After deletion, Dana (ID) should be removed
     const matchAfterDeletion = output.match(/4\. DELETE FROM Employees WHERE ID = 4;\n([\s\S]*?)\n\n/);
     expect(matchAfterDeletion).not.toBeNull();
     const afterDeletionJson = matchAfterDeletion[1];
@@ -193,14 +193,14 @@ test.describe('SQL Concept Demonstration - FSM and interaction tests', () => {
 
     // Ensure no uncaught page errors were produced during the click and processing.
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Edge case: repeated clicks produce stable output and no runtime errors', async ({ page }) => {
     // This test validates idempotency: clicking the Run button multiple times should produce the same output
     // and must not cause exceptions or different outputs (the implementation uses non-mutating patterns).
-    const app = new AppPage(page);
+    const app2 = new AppPage(page);
     await app.goto();
 
     // First click
@@ -229,7 +229,7 @@ test.describe('SQL Concept Demonstration - FSM and interaction tests', () => {
 
   test('Observability: console messages and page errors are captured and contain no unexpected error-level messages', async ({ page }) => {
     // This test demonstrates observation of console and page errors and asserts that the page behaves cleanly.
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
     await app.goto();
 
     // No output yet and no errors expected

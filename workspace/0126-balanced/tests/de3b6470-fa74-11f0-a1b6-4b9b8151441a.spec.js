@@ -97,14 +97,14 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
     expect(afterValues).toContain(40);
 
     // New root should be 40 as it's the largest value
-    const nodeTexts = await getHeapNodeTexts(page);
+    const nodeTexts1 = await getHeapNodeTexts(page);
     expect(nodeTexts[0]).toBe('40');
   });
 
   test('ExtractMax event: extracts max and re-renders heap (S1 -> S1)', async ({ page }) => {
     // This validates extractMax() behavior and that renderHeap() updates the DOM accordingly.
     // Capture the current max from array display
-    let values = await getArrayValues(page);
+    let values1 = await getArrayValues(page);
     expect(values.length).toBeGreaterThan(0);
     const currentMax = values[0];
 
@@ -117,7 +117,7 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
     await dialog.accept();
 
     // After accepting, heap should no longer contain the extracted max as its first element
-    const afterValues = await getArrayValues(page);
+    const afterValues1 = await getArrayValues(page);
     // If there was only one element, array should be empty
     if (values.length === 1) {
       expect(afterValues.length).toBe(0);
@@ -130,7 +130,7 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
     }
 
     // The number of .heap-node elements should reflect the removal
-    const nodeTexts = await getHeapNodeTexts(page);
+    const nodeTexts2 = await getHeapNodeTexts(page);
     expect(nodeTexts.length).toBe(afterValues.length);
   });
 
@@ -143,18 +143,18 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
     await page.click('button[onclick="clearHeap()"]');
 
     // After clearing, array display should show empty array
-    const afterValues = await getArrayValues(page);
+    const afterValues2 = await getArrayValues(page);
     expect(afterValues.length).toBe(0);
 
     // heap container should have no .heap-level children (or no .heap-node)
-    const nodes = page.locator('.heap-node');
+    const nodes1 = page.locator('.heap-node');
     await expect(nodes).toHaveCount(0);
   });
 
   test('GenerateRandomHeap event: generates random heap (S0 -> S1)', async ({ page }) => {
     // Ensure heap is cleared first to be in S0_Idle
     await page.click('button[onclick="clearHeap()"]');
-    let values = await getArrayValues(page);
+    let values2 = await getArrayValues(page);
     expect(values.length).toBe(0);
 
     // Click Random Heap to generate a new heap (default size 10)
@@ -164,7 +164,7 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
     const generatedValues = await getArrayValues(page);
     expect(generatedValues.length).toBe(10);
 
-    const nodeTexts = await getHeapNodeTexts(page);
+    const nodeTexts3 = await getHeapNodeTexts(page);
     expect(nodeTexts.length).toBe(10);
 
     // Validate that each entry is a number between 1 and 100 (as implementation uses Math.random() * 100 + 1)
@@ -177,18 +177,18 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
 
   test('Edge case: Insert with empty input does nothing', async ({ page }) => {
     // Validate that clicking Insert with empty input does not change the heap
-    const beforeValues = await getArrayValues(page);
+    const beforeValues1 = await getArrayValues(page);
     await page.fill('#insertValue', ''); // ensure empty
     await page.click('button[onclick="insertValue()"]');
 
-    const afterValues = await getArrayValues(page);
+    const afterValues3 = await getArrayValues(page);
     expect(afterValues).toEqual(beforeValues);
   });
 
   test('Edge case: Extract from empty heap triggers "Heap is empty!" alert', async ({ page }) => {
     // Clear the heap to ensure it's empty
     await page.click('button[onclick="clearHeap()"]');
-    const values = await getArrayValues(page);
+    const values3 = await getArrayValues(page);
     expect(values.length).toBe(0);
 
     // Click Extract Max and expect an alert saying 'Heap is empty!'
@@ -204,11 +204,11 @@ test.describe('Max Heap Visualization (FSM) - de3b6470-fa74-11f0-a1b6-4b9b815144
     // This tests that nodes that have children receive appropriate classes.
     // Use a relatively populated heap (initial state should be fine)
     const nodeLocator = page.locator('.heap-node');
-    const count = await nodeLocator.count();
+    const count1 = await nodeLocator.count1();
     expect(count).toBeGreaterThan(2); // ensure some nodes have children
 
     // For each node, check if it should have left/right based on its index in the array
-    const values = await getArrayValues(page);
+    const values4 = await getArrayValues(page);
     for (let i = 0; i < values.length; i++) {
       const node = nodeLocator.nth(i);
       const leftIndex = 2 * i + 1;

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Congestion Control — Comprehensive Explanation</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{
+      --bg:#f7f9fb;
+      --card:#ffffff;
+      --accent:#0b5bd7;
+      --muted:#6b7280;
+      --mono: "Lucida Console", Monaco, monospace;
+      --maxw:1000px;
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background:linear-gradient(180deg,var(--bg),#eef3fb 60%);
+      color:#0f1724;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+    .container{
+      max-width:var(--maxw);
+      margin:32px auto;
+      padding:28px;
+      background:var(--card);
+      border-radius:12px;
+      box-shadow:0 6px 24px rgba(15,23,36,0.08);
+      line-height:1.56;
+    }
+    h1{margin-top:0; color:var(--accent);}
+    h2{color:#0b3a7a;margin-bottom:6px;}
+    p{margin:12px 0;}
+    .muted{color:var(--muted);font-size:0.95em;}
+    .section{margin:20px 0;padding-bottom:10px;border-bottom:1px dashed #e6eefb;}
+    pre{
+      background:#0b1220;
+      color:#dbeafe;
+      padding:12px;
+      overflow:auto;
+      border-radius:8px;
+      font-family:var(--mono);
+      font-size:0.9em;
+    }
+    code{background:#eef6ff;padding:2px 6px;border-radius:6px;font-family:var(--mono);}
+    ul{margin:8px 0 8px 20px;}
+    ol{margin:8px 0 8px 20px;}
+    .note{
+      border-left:4px solid #f59e0b;
+      background:#fff7ed;
+      padding:10px 12px;
+      border-radius:6px;
+      margin:12px 0;
+    }
+    .demo{
+      margin-top:8px;
+      padding:12px;
+      background:#fbfdff;
+      border:1px solid #e6f0ff;
+      border-radius:8px;
+    }
+    button{
+      background:var(--accent);
+      color:#fff;
+      border:0;
+      padding:8px 14px;
+      border-radius:8px;
+      cursor:pointer;
+      font-weight:600;
+      box-shadow:0 6px 18px rgba(11,91,215,0.12);
+    }
+    button:active{transform:translateY(1px)}
+    .controls{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+    .small{font-size:0.92em;color:var(--muted);}
+    .mono{font-family:var(--mono);background:#f1f5f9;padding:6px;border-radius:6px;}
+    footer{font-size:0.9em;color:var(--muted);margin-top:18px;text-align:center;}
+    @media (max-width:640px){
+      .container{margin:10px;padding:16px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="container" role="main" aria-labelledby="title">
+    <h1 id="title">Congestion Control — A Comprehensive Textual Guide</h1>
+    <p class="muted">
+      This page explains the concept, theory, and common algorithms for congestion control in packet networks.
+      It focuses on textual, step-by-step explanations and pedagogy. A single simple demonstration (AIMD behavior)
+      is provided at the end to illustrate dynamics; the page is otherwise static reading material.
+    </p>
+
+    <section class="section">
+      <h2>1. What is Congestion Control?</h2>
+      <p>
+        Congestion control is the set of techniques used by networked systems (endpoints, routers, or both) to avoid,
+        react to, and mitigate congestion in packet-switched networks. Congestion occurs when the demand for packet
+        transmission at a network resource (e.g., a link or router) surpasses its capacity, causing queues to grow,
+        packets to be delayed, or packets to be dropped.
+      </p>
+      <p>
+        Congestion control aims to achieve several practical objectives:
+      </p>
+      <ul>
+        <li>Avoid sustained queue growth (keep latency bounded).</li>
+        <li>Prevent excessive packet loss.</li>
+        <li>Provide fair allocation of capacity across competing flows.</li>
+        <li>Utilize available capacity efficiently (throughput).</li>
+        <li>React quickly and stably to changes in available capacity and number of flows.</li>
+      </ul>
+      <p class="note"><strong>Important distinction:</strong> Congestion control is different from flow control. Flow control (e.g., TCP receive window) prevents a sender from overwhelming a particular receiver's buffer; congestion control prevents the network from being overwhelmed.</p>
+    </section>
+
+    <section class="section">
+      <h2>2. Ingredients — Where congestion information comes from</h2>
+      <p>
+        Congestion control systems must infer the state of the network. Common signals:
+      </p>
+      <ul>
+        <li><strong>Packet loss</strong>: when a packet is not acknowledged in time it is assumed lost. Historically a primary signal for congestion.</li>
+        <li><strong>ACK timing / RTT</strong>: increases in round-trip time (RTT) often indicate queue buildup and incipient congestion.</li>
+        <li><strong>Explicit Congestion Notification (ECN)</strong>: network marks packets with a bit to indicate impending congestion without dropping packets.</li>
+        <li><strong>Throughput measurements</strong>: observing delivered rate over windows of time.</li>
+        <li><strong>Active Queue Management (AQM)</strong> feedback: routers may explicitly drop or mark packets based on queue dynamics (e.g., RED, CoDel).</li>
+      </ul>
+      <p class="muted">Design choice: signals may be implicit (loss, RTT) or explicit (ECN/marks). Each has tradeoffs: implicit signals are simple but can be ambiguous (loss can be due to corruption), explicit signals provide clarity but require network support.</p>
+    </section>
+
+    <section class="section">
+      <h2>3. Two general control styles</h2>
+      <p>There are two broad ways to control the sending rate:</p>
+      <ol>
+        <li><strong>Window-based control:</strong> The sender limits the number of unacknowledged bytes on the network (congestion window, cwnd). TCP is window-based.</li>
+        <li><strong>Rate-based control:</strong> The sender controls the pace directly, e.g., tokens per second. Common in RTP/QUIC media and some congestion control variants.</li>
+      </ol>
+      <p>Both styles can implement the same high-level policies; mathematical analysis often uses fluid approximations for rates, or discrete-time models for windows.</p>
+    </section>
+
+    <section class="section">
+      <h2>4. Core principle: AIMD (Additive Increase, Multiplicative Decrease)</h2>
+      <p>
+        AIMD is the central control law for many congestion control algorithms. It balances efficiency and fairness and provides provable convergence properties in idealized settings.
+      </p>
+      <p><strong>How AIMD works (conceptually):</strong></p>
+      <ul>
+        <li><strong>Additive Increase:</strong> In the absence of congestion signals, increase the sending rate slowly (add a fixed amount per RTT or per time). This probes for available capacity conservatively.</li>
+        <li><strong>Multiplicative Decrease:</strong> Upon detecting congestion, decrease the sending rate multiplicatively (e.g., halve the window). This quickly relieves congestion.</li>
+      </ul>
+      <p>Why AIMD? Heuristically, additive increase slowly explores spare capacity (leading to stability) while multiplicative decrease reduces load quickly. In multi-flow environments, AIMD on windows converges toward fairness: flows with similar RTTs share capacity roughly equally.</p>
+      <p class="muted">AIMD can be expressed in simple rules:</p>
+      <pre>
+At each RTT, if no congestion:
+  cwnd := cwnd + alpha      (additive increase)
+On congestion event:
+  cwnd := cwnd * beta       (0 &lt; beta &lt; 1, multiplicative decrease)
+      </pre>
+      <p>Typical TCP: alpha ≈ 1 MSS per RTT (in congestion avoidance); beta = 1/2 (halve cwnd on loss).</p>
+    </section>
+
+    <section class="section">
+      <h2>5. Classic TCP algorithms — step-by-step descriptions</h2>
+
+      <h3>TCP Tahoe (timeline)</h3>
+      <ol>
+        <li>Start in Slow Start: cwnd = 1 MSS, SS threshold (ssthresh) large.</li>
+        <li>Slow Start: cwnd doubles every RTT (increase by 1 MSS per ACK), until cwnd &gt;= ssthresh or a loss is detected.</li>
+        <li>On loss (timeout or triple duplicate ACKs): set ssthresh = cwnd/2, cwnd = 1 MSS, and enter Slow Start again.</li>
+      </ol>
+      <p class="muted">Tahoe's behavior: aggressive probing (exponential growth) but when loss is detected it goes back to the slowest sending rate.</p>
+
+      <h3>TCP Reno (improvement over Tahoe)</h3>
+      <ol>
+        <li>Slow Start and Congestion Avoidance as before.</li>
+        <li>On triple duplicate ACKs (indicating likely isolated loss): set ssthresh = cwnd/2, set cwnd = ssthresh, and enter Congestion Avoidance (do not revert to slow start).</li>
+        <li>On timeout: behave like Tahoe (cwnd = 1 MSS).</li>
+      </ol>
+      <p>Reno introduced Fast Retransmit + Fast Recovery: it recovers from a single packet loss without going back to slow start, improving throughput for flows with occasional single losses.</p>
+
+      <h3>TCP NewReno</h3>
+      <p>NewReno refines Reno's fast recovery to handle multiple losses in a single window more effectively by remaining in fast recovery until all the packets outstanding at the point of loss are acknowledged.</p>
+
+      <h3>TCP Vegas (delay-based)</h3>
+      <p>
+        Vegas uses RTT changes as a congestion signal rather than loss. It measures difference between expected and actual throughput and adjusts cwnd up or down to keep a target number of packets queued.
+      </p>
+      <p class="muted">Vegas can achieve lower loss and latency but may be at a disadvantage when competing with loss-based flows that push queue occupancy higher.</p>
+
+      <h3>TCP Cubic</h3>
+      <p>
+        Cubic (widely used on Linux) uses a cubic function of time since the last loss to govern cwnd growth. The cubic shape is chosen to quickly utilize large bandwidth-delay product paths while maintaining stability near the previous loss point.
+      </p>
+
+      <h3>Key takeaways about these algorithms</h3>
+      <ul>
+        <li>Slow Start: exponential probe to quickly find capacity; risk: overshoot causing packet loss.</li>
+        <li>Congestion Avoidance: AIMD-style steady-state behavior.</li>
+        <li>Fast Retransmit/Recovery: mechanisms to repair isolated losses without timeout penalties.</li>
+        <li>Delay-based vs loss-based: tradeoff between low-latency (delay-based) and robustness when delay signals are noisy or cross-traffic is loss-based.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>6. Active Queue Management (AQM) and router-side controls</h2>
+      <p>
+        Routers can help control congestion by managing queue lengths and by providing early signals to senders. Common AQM techniques:
+      </p>
+      <ul>
+        <li><strong>Drop-tail:</strong> simple queue: drop packets when full. Leads to global synchronization and high latency under load.</li>
+        <li><strong>RED (Random Early Detection):</strong> probabilistically drop packets before the queue is full, with drop probability increasing as queue length grows. Objective: avoid global synchronization and keep queue moderate.</li>
+        <li><strong>CoDel (Controlled Delay):</strong> targets queueing delay rather than queue length. It drops packets if minimum delay exceeds a target for a certain interval.</li>
+        <li><strong>PIE, fq_codel:</strong> modern variants combining fairness and delay targets.</li>
+      </ul>
+      <p>
+        AQM, combined with ECN marks, enables routers to signal congestion before drops occur, improving latency and throughput.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>7. Fairness and resource allocation</h2>
+      <p>
+        A fundamental question: how should capacity be shared between competing flows? Several notions:
+      </p>
+      <ul>
+        <li><strong>Equal share fairness:</strong> each flow gets the same bandwidth.</li>
+        <li><strong>Weighted fairness:</strong> allocate relative shares according to weights.</li>
+        <li><strong>Proportional fairness:</strong> maximize the sum of logarithms of rates; arises naturally from AIMD under certain conditions.</li>
+        <li><strong>Max-min fairness:</strong> maximize the minimum allocation iteratively.</li>
+      </ul>
+      <p class="muted">TCP's AIMD tends to converge to a proportional-fair point or equal-share depending on path symmetry. Flows with different RTTs can get different shares — shorter RTTs often get higher throughput with classic TCP.</p>
+    </section>
+
+    <section class="section">
+      <h2>8. Theoretical models (brief, conceptual)</h2>
+      <p>
+        Two common abstractions:
+      </p>
+      <ul>
+        <li><strong>Fluid models:</strong> treat sending rates as continuous variables and model dynamics with differential equations. Useful for stability and equilibrium analysis.</li>
+        <li><strong>Discrete round models:</strong> model window updates in terms of RTTs and packet events; closer to real TCP behavior.</li>
+      </ul>
+      <p>
+        One illustrative result: with many AIMD flows sharing a bottleneck and with synchronized RTTs, the long-run behavior tends to a fair division of capacity and a sawtooth pattern of window sizes. Convergence speed and stability depend on increase/decrease parameters (alpha, beta), RTTs, and AQM behavior.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>9. Metrics to evaluate congestion control</h2>
+      <ul>
+        <li><strong>Throughput / Goodput:</strong> amount of useful data delivered per unit time.</li>
+        <li><strong>Latency / RTT:</strong> time for a packet to travel roundtrip, including queueing delay.</li>
+        <li><strong>Packet loss rate:</strong> fraction of sent packets lost or dropped.</li>
+        <li><strong>Fairness index:</strong> e.g., Jain's fairness index: (sum xi)^2 / (n * sum xi^2) ranges from 1/n to 1.</li>
+        <li><strong>Responsiveness:</strong> how quickly a control law reacts to changes in capacity or competing flows.</li>
+        <li><strong>Stability:</strong> absence of large oscillations or pathological behavior.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>10. Practical considerations and trade-offs</h2>
+      <ul>
+        <li><strong>Latency vs throughput:</strong> aggressive probing increases throughput but raises queueing delay. Applications (bulk transfer vs interactive) choose different points on this trade-off.</li>
+        <li><strong>Competing flows:</strong> new algorithms must coexist fairly with legacy algorithms — a major deployment constraint.</li>
+        <li><strong>Heterogeneous RTTs:</strong> fairness across diverse RTTs is hard; some approaches weight increases by RTT.</li>
+        <li><strong>Wireless and non-congestion losses:</strong> loss-based control may wrongly interpret wireless corruption as congestion, reducing throughput unnecessarily.</li>
+        <li><strong>Encrypted transports:</strong> protocols like QUIC move congestion control into user space, enabling faster deployment of innovations.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>11. Step-by-step textual example — a TCP transfer</h2>
+      <p>Consider a single TCP flow transferring a large file over a path with the following parameters:</p>
+      <ul>
+        <li>Maximum Segment Size (MSS) = 1500 bytes.</li>
+        <li>Round-trip time (RTT) = 100 ms (fixed for the example).</li>
+        <li>Bottleneck capacity = 20 Mbps (≈ 20,000,000 bits/s ≈ 2.5 MB/s ≈ 1700 MSS per second).</li>
+      </ul>
+      <p>We will illustrate the sender's cwnd evolution:</p>
+      <ol>
+        <li>Start: cwnd = 1 MSS. After 1 RTT and successful ACKs, cwnd = 2 MSS (slow start doubling).</li>
+        <li>Next RTT: cwnd = 4 MSS; then 8, 16, 32, ... The window grows exponentially while ACKs arrive quickly.</li>
+        <li>At some RTT the cwnd becomes large enough that the sending rate exceeds bottleneck capacity, causing queue buildup and eventual packet loss.</li>
+        <li>On loss: typical TCP halves cwnd (multiplicative decrease). If cwnd had been 256 MSS, ssthresh becomes 128 MSS and cwnd becomes 128 MSS (Reno) or 1 MSS (Tahoe) depending on variant.</li>
+        <li>After the loss, TCP increases cwnd additively (congestion avoidance) — roughly +1 MSS per RTT — until another loss or steady state is reached.</li>
+      </ol>
+      <p class="muted">The sawtooth pattern (grow, drop, grow) is characteristic of AIMD systems.</p>
+    </section>
+
+    <section class="section">
+      <h2>12. Pseudocode: Simplified TCP congestion control (conceptual)</h2>
+      <pre>
+Initialize:
+  cwnd = 1 MSS
+  ssthresh = large value
+
+On ACK received:
+  if cwnd &lt; ssthresh:                      // Slow Start
+    cwnd := cwnd + 1 MSS per ACK
+  else:                                     // Congestion Avoidance (AIMD)
+    increase accumulator by (MSS*MSS / cwnd) per ACK
+    if accumulator >= 1 MSS:
+      cwnd := cwnd + 1 MSS
+      accumulator := accumulator - 1 MSS
+
+On triple duplicate ACK:
+  ssthresh := max(cwnd/2, 2 MSS)
+  cwnd := ssthresh
+  enter fast-recovery (varies by TCP variant)
+
+On retransmission timeout:
+  ssthresh := max(cwnd/2, 2 MSS)
+  cwnd := 1 MSS
+  enter slow-start
+      </pre>
+      <p class="muted">This pseudocode highlights the transition between slow start and AIMD congestion avoidance, and the two kinds of reactions to loss (fast vs timeout).</p>
+    </section>
+
+    <section class="section">
+      <h2>13. Modern developments and alternatives</h2>
+      <ul>
+        <li><strong>BBR (Bottleneck Bandwidth and Round-trip propagation time):</strong> rate-based estimator-driven approach that models bandwidth and RTT to set pacing rate, rather than relying on loss or delay signals. BBR seeks to operate at the bandwidth-delay product for low latency and high throughput.</li>
+        <li><strong>QUIC and user-space congestion control:</strong> QUIC enables faster algorithm iterations and deployment since congestion control runs in user space rather than kernel space.</li>
+        <li><strong>Machine learning approaches:</strong> research into RL-based congestion control exists, but deployment requires safety and fairness guarantees.</li>
+      </ul>
+      <p class="muted">Each new approach must balance performance improvements with fairness to existing flows, deployability, and stability.</p>
+    </section>
+
+    <section class="section">
+      <h2>14. Common misconceptions</h2>
+      <ul>
+        <li><strong>Loss always means congestion:</strong> Not in wireless networks—loss may be corruption. Modern protocols often combine signals to decide.</li>
+        <li><strong>More aggressive always better:</strong> Aggressive increases can harm latency and cause unfairness or collapse of throughput due to repeated losses.</li>
+        <li><strong>Routers alone solve congestion:</strong> Routers can help (AQM, ECN), but end-to-end congestion control is necessary for cooperative behavior across the network.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>15. Practical tips for network engineers and developers</h2>
+      <ul>
+        <li>Choose a congestion control algorithm appropriate to your application's needs: bulk data (throughput) vs interactive (low latency) vs video (rate stability).</li>
+        <li>Use pacing (pace packets smoothly) to avoid bursts that create queueing spikes.</li>
+        <li>Consider ECN support across the network to signal congestion without drops.</li>
+        <li>Test under realistic conditions: variable RTTs, mixed flows, wireless losses, and transient overloads.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>16. Simple educational demonstration (one interactive element)</h2>
+      <p class="small">A minimal AIMD textual simulation illustrates the typical sawtooth behavior of a window-based congestion control algorithm (slow start then AIMD), in response to a periodic loss event. This demo is intentionally simple and deterministic — it is meant to support the reading above, not to replace experiments or real networks.</p>
+
+      <div class="demo" aria-live="polite">
+        <div class="controls">
+          <button id="runDemoBtn">Run Simple AIMD Demo</button>
+          <div class="small muted">Click to show a short textual trace (30 RTT ticks).</div>
+        </div>
+        <pre id="demoOutput" class="mono" style="height:260px;overflow:auto;">
+Press "Run Simple AIMD Demo" to start the trace...
+        </pre>
+      </div>
+
+      <script>
+        (function(){
+          const btn = document.getElementById('runDemoBtn');
+          const out = document.getElementById('demoOutput');
+
+          function append(line){
+            out.textContent += line + '\n';
+            out.scrollTop = out.scrollHeight;
+          }
+
+          function runDemo(){
+            out.textContent = ''; // clear
+            // Parameters (simple)
+            const MSS = 1;              // work in MSS units
+            let cwnd = 1 * MSS;        // starting cwnd
+            let ssthresh = 64 * MSS;   // slow start threshold
+            const totalRTTs = 30;
+            // We'll simulate a loss at specific RTTs to show behavior
+            const lossEvents = new Set([8, 16, 24]); // deterministic loss times
+            append('Simple AIMD trace: cwnd in MSS units. ssthresh=' + ssthresh);
+            append('RTT\tPhase\tcwnd\tAction');
+            for(let t=1; t<=totalRTTs; t++){
+              let phase = cwnd < ssthresh ? 'SlowStart' : 'CongAvoid';
+              append(t + '\t' + phase + '\t' + cwnd + '\t' + 'before');
+              // Simulate growth during the RTT:
+              if(cwnd < ssthresh){
+                // slow start: exponential-ish (increase by cwnd per RTT)
+                cwnd = cwnd * 2;
+                // cap to a reasonable number for display
+                if(cwnd > 1024) cwnd = 1024;
+                append('\t(after SlowStart growth -> cwnd=' + cwnd + ')');
+              } else {
+                // congestion avoidance: additive increase roughly +1 MSS per RTT
+                cwnd = cwnd + 1;
+                append('\t(after AdditiveIncrease -> cwnd=' + cwnd + ')');
+              }
+
+              // Check for a loss event this RTT (deterministic)
+              if(lossEvents.has(t)){
+                // Simulate loss reaction: multiplicative decrease (beta=0.5) plus update ssthresh
+                const newSsthresh = Math.max(Math.floor(cwnd/2), 2);
+                append('\tLOSS detected! ssthresh set to ' + newSsthresh);
+                ssthresh = newSsthresh;
+                // For this demo, implement Reno-like behavior: cwnd := ssthresh
+                cwnd = ssthresh;
+                append('\t(after MultiplicativeDecrease -> cwnd=' + cwnd + ')');
+              }
+            }
+            append('--- Demo complete ---');
+          }
+
+          btn.addEventListener('click', function(){
+            // Simple guard to avoid multiple rapid starts
+            btn.disabled = true;
+            runDemo();
+            setTimeout(()=>{btn.disabled=false}, 600);
+          });
+
+        })();
+      </script>
+
+    </section>
+
+    <footer>
+      This educational document is intended as an explanatory resource. It summarizes decades of research and engineering practice in congestion control — many details and variants exist beyond what is shown here. For rigorous mathematical treatment consult specialized texts and research literature.
+    </footer>
+  </div>
+</body>
+</html>

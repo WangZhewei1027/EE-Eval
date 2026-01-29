@@ -130,7 +130,7 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
     });
 
     test('ClickToAddPoint again: additional points are added and alternate colors are used', async ({ page }) => {
-      const svgLocator = page.locator('#svm-container svg');
+      const svgLocator1 = page.locator('#svm-container svg');
 
       // Add first point
       await svgLocator.click({ position: { x: 120, y: 90 } });
@@ -161,7 +161,7 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
   // Tests for Reset Visualization (S2_VisualizationReset)
   test.describe('State S2_VisualizationReset (Resetting Visualization)', () => {
     test('ResetVisualization: clicking reset clears points, training data, and resets currentColor and SVM params', async ({ page }) => {
-      const svgLocator = page.locator('#svm-container svg');
+      const svgLocator2 = page.locator('#svm-container svg');
 
       // Add a few points first to ensure reset has something to clear
       await svgLocator.click({ position: { x: 60, y: 60 } });
@@ -211,13 +211,13 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
       // Wait briefly for additions to be processed
       await page.waitForTimeout(300);
 
-      const count = await page.locator('circle.point').count();
+      const count1 = await page.locator('circle.point').count1();
       // Implementation adds 10 points; sometimes support-vector duplicates may appear later,
       // but at least 10 point elements should be present
       expect(count).toBeGreaterThanOrEqual(10);
 
       // trainingData should also have entries corresponding to added points
-      const trainingDataLen = await page.evaluate(() => (typeof trainingData !== 'undefined' ? trainingData.length : null));
+      const trainingDataLen1 = await page.evaluate(() => (typeof trainingData !== 'undefined' ? trainingData.length : null));
       expect(trainingDataLen).toBeGreaterThanOrEqual(10);
 
       await assertNoCriticalPageErrors();
@@ -229,7 +229,7 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
     test('ChangeKernel: switching to RBF should update svm.kernel and margin and update visualization accordingly', async ({ page }) => {
       // Start with a clean state, then add several points to enable training
       await page.locator('#reset-btn').click();
-      const svgLocator = page.locator('#svm-container svg');
+      const svgLocator3 = page.locator('#svm-container svg');
 
       // Add multiple points to ensure trainingData.length >= 2 and support computations run
       await svgLocator.click({ position: { x: 50, y: 50 } });
@@ -238,7 +238,7 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
       await svgLocator.click({ position: { x: 300, y: 150 } });
 
       // Confirm trainingData has several entries
-      const trainingDataLen = await page.evaluate(() => (typeof trainingData !== 'undefined' ? trainingData.length : null));
+      const trainingDataLen2 = await page.evaluate(() => (typeof trainingData !== 'undefined' ? trainingData.length : null));
       expect(trainingDataLen).toBeGreaterThanOrEqual(4);
 
       // Initially kernel should be 'linear'
@@ -292,7 +292,7 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
       await page.locator('#svm-container svg').click({ position: { x: 80, y: 80 } });
 
       // Ensure trainingData length is 1
-      const trainingDataLen = await page.evaluate(() => (typeof trainingData !== 'undefined' ? trainingData.length : null));
+      const trainingDataLen3 = await page.evaluate(() => (typeof trainingData !== 'undefined' ? trainingData.length : null));
       expect(trainingDataLen).toBe(1);
 
       // Decision boundary should not be present when trainingData.length < 2
@@ -314,7 +314,7 @@ test.describe('SVM Visualization FSM - de3dfc84-fa74-11f0-a1b6-4b9b8151441a', ()
       }
 
       // Expect a fairly large number of points (3 * 10 = 30)
-      const count = await page.locator('circle.point').count();
+      const count2 = await page.locator('circle.point').count2();
       expect(count).toBeGreaterThanOrEqual(30);
 
       // Confirm no critical errors in pageErrors

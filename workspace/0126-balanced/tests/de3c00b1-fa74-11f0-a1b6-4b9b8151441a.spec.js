@@ -101,7 +101,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
       const stepsInfo = await bfPage.getStepsInfoText();
       expect(stepsInfo).toContain('Click "Run Algorithm" to start visualization.');
 
-      const rows = await bfPage.getDistanceTableRows();
+      const rows1 = await bfPage.getDistanceTableRows();
       // There should be one row per graph node (graph.nodes has 5 nodes)
       expect(await rows.count()).toBeGreaterThanOrEqual(5);
 
@@ -142,7 +142,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
         expect(resultHtml).toContain('Negative weight cycle detected');
       } else {
         expect(stepsText).toContain('Algorithm completed successfully!');
-        const resultHtml = await bfPage.getResultHtml();
+        const resultHtml1 = await bfPage.getResultHtml();
         expect(resultHtml).toContain('Shortest paths calculated successfully');
       }
 
@@ -171,7 +171,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
       for (let i = 0; i < maxClicks; i++) {
         await bfPage.clickStep();
         // Small micro-wait to allow DOM updates (stepAlgorithm updates DOM synchronously, but be safe)
-        const txt = await bfPage.getStepsInfoText();
+        const txt1 = await bfPage.getStepsInfoText();
         if (txt.includes('Algorithm completed successfully!') || txt.includes('Negative cycle detected!')) {
           completed = true;
           break;
@@ -190,7 +190,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
 
       const finalStepsText = await bfPage.getStepsInfoText();
       if (finalStepsText.includes('Negative cycle detected')) {
-        const resultHtml = await bfPage.getResultHtml();
+        const resultHtml2 = await bfPage.getResultHtml();
         expect(resultHtml).toContain('Negative weight cycle detected');
       } else {
         expect(finalStepsText).toContain('Algorithm completed successfully!');
@@ -213,27 +213,27 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
       // Run to completion
       await bfPage.clickRun();
       await page.waitForFunction(() => {
-        const txt = document.getElementById('steps-info')?.innerText || '';
+        const txt2 = document.getElementById('steps-info')?.innerText || '';
         return txt.includes('Algorithm completed successfully!') || txt.includes('Negative cycle detected!');
       }, { timeout: 5000 });
 
       // Now click Reset and assert state is reset
       await bfPage.clickReset();
-      const stepsText = await bfPage.getStepsInfoText();
+      const stepsText1 = await bfPage.getStepsInfoText();
       expect(stepsText).toContain('Algorithm reset');
 
-      const resultHtml = await bfPage.getResultHtml();
+      const resultHtml3 = await bfPage.getResultHtml();
       expect(resultHtml).toBe('');
 
       // Table should reflect initial distances: A=0, others ∞
-      const distA = await bfPage.getDistanceForVertex('A');
+      const distA1 = await bfPage.getDistanceForVertex('A');
       expect(distA).toBe('0');
       const distC = await bfPage.getDistanceForVertex('C');
       expect(['∞', 'Infinity']).toContain(distC);
 
       // No uncaught errors observed
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
   });
@@ -243,7 +243,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
       // Run to completion
       await bfPage.clickRun();
       await page.waitForFunction(() => {
-        const txt = document.getElementById('steps-info')?.innerText || '';
+        const txt3 = document.getElementById('steps-info')?.innerText || '';
         return txt.includes('Algorithm completed successfully!') || txt.includes('Negative cycle detected!');
       }, { timeout: 5000 });
 
@@ -253,7 +253,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
       await bfPage.clickRun();
 
       await page.waitForFunction(() => {
-        const txt = document.getElementById('steps-info')?.innerText || '';
+        const txt4 = document.getElementById('steps-info')?.innerText || '';
         return txt.includes('Algorithm completed successfully!') || txt.includes('Negative cycle detected!');
       }, { timeout: 5000 });
 
@@ -262,7 +262,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
 
       // No uncaught errors observed in this edge path
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
 
@@ -282,7 +282,7 @@ test.describe('Bellman-Ford Algorithm Interactive App (de3c00b1-fa74-11f0-a1b6-4
       expect(pageErrors.length).toBe(0, `Unexpected page errors occurred:\n${errs}`);
 
       // Also assert there are no console.error messages
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
   });

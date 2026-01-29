@@ -91,7 +91,7 @@ test.describe('520b90e0-fa76-11f0-a09b-87751f540fd8 — Logistic Regression FSM 
     // The expected FSM observable when transition succeeds is:
     // "Predictions: 0 1 1 1 "
     // Because a SyntaxError occurred, displayResult should not have executed; assert that the exact expected text is not present.
-    const resultText = await page.locator('#result').innerText();
+    const resultText1 = await page.locator('#result').innerText();
     expect(resultText).not.toBe('Predictions: 0 1 1 1 ');
 
     // Also assert that the result text does not contain the substring 'Predictions:' which would indicate displayResult ran.

@@ -25,7 +25,7 @@ class NNPage {
     return parseInt((txt || '0').trim(), 10);
   }
   async lastLoss() {
-    const txt = await this.page.textContent('#lastLoss');
+    const txt1 = await this.page.textContent('#lastLoss');
     return txt ? txt.trim() : '';
   }
   async layerSpec() {
@@ -157,7 +157,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
 
     test('Start training transition Idle -> Training (StartTraining event)', async ({ page }) => {
       // Clicking Start training should begin the loop: trainBtn disabled, stopBtn enabled, epochCount increases.
-      const nn = new NNPage(page);
+      const nn1 = new NNPage(page);
       await nn.goto();
 
       // pre-check: ensure trainBtn enabled
@@ -179,7 +179,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
 
     test('Stop training transition Training -> Stopped (StopTraining event) and ensure training stops', async ({ page }) => {
       // Validate clicking Stop stops the animation and disables Stop button again.
-      const nn = new NNPage(page);
+      const nn2 = new NNPage(page);
       await nn.goto();
 
       // start training first
@@ -206,20 +206,20 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
 
     test('Resume training transition Stopped -> Training (StartTraining event) resumes training', async ({ page }) => {
       // Start, stop, then start again and verify epochs increase after resuming.
-      const nn = new NNPage(page);
+      const nn3 = new NNPage(page);
       await nn.goto();
 
       // ensure stopped state
       await nn.clickStop(); // safe even if already stopped
       await page.waitForTimeout(50);
 
-      const before = await nn.epochCount();
+      const before1 = await nn.epochCount();
       await nn.clickTrain();
       await page.waitForTimeout(100);
       expect(await nn.isTrainBtnDisabled()).toBe(true);
       expect(await nn.isStopBtnDisabled()).toBe(false);
 
-      const after = await nn.waitForEpochIncrease(before, 4000);
+      const after1 = await nn.waitForEpochIncrease(before, 4000);
       expect(after).toBeGreaterThan(before);
 
       // finally stop to leave app in non-training state
@@ -229,7 +229,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
 
     test('Reset transition S2_Stopped -> S0_Idle (Reset event) resets dataset and network', async ({ page }) => {
       // Validate resetBtn triggers resetDataset() and initNetwork()
-      const nn = new NNPage(page);
+      const nn4 = new NNPage(page);
       await nn.goto();
 
       // Ensure we are stopped
@@ -237,7 +237,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
       await page.waitForTimeout(50);
 
       // capture some pre-reset state
-      const beforeEpoch = await nn.epochCount();
+      const beforeEpoch1 = await nn.epochCount();
       const beforeWeights = await nn.weightsView();
 
       // click reset
@@ -259,7 +259,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
   test.describe('Events and Controls', () => {
     test('ChangeDataset event triggers resetDataset and redraw (ChangeDataset)', async ({ page }) => {
       // Change dataset selection and ensure dataset is regenerated
-      const nn = new NNPage(page);
+      const nn5 = new NNPage(page);
       await nn.goto();
 
       // set points per class to 40 to make forensic check easier
@@ -269,7 +269,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
       await nn.selectDataset('AND');
       await page.waitForTimeout(150); // allow handlers to run
 
-      const dlen = await nn.datasetLength();
+      const dlen1 = await nn.datasetLength();
       // generateDataset for AND creates total = ptsPerClass (it loops ptsPerClass/4 for 4 bases)
       expect(dlen).toBe(40);
       // epochCount should be reset to 0 by resetDataset
@@ -277,7 +277,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
     });
 
     test('ChangeHiddenLayers event calls initNetwork and updates layerSpec (ChangeHiddenLayers)', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn6 = new NNPage(page);
       await nn.goto();
 
       // set a complex hidden configuration and trigger change
@@ -295,7 +295,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
     });
 
     test('ChangeActivationFunction event updates network activation and drawNetwork is invoked (ChangeActivationFunction)', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn7 = new NNPage(page);
       await nn.goto();
 
       // ensure net exists
@@ -310,13 +310,13 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
       expect(activationName).toBe('sigmoid');
 
       // weightsView JSON should include the activation name (when net.toJSON is called it stores activation)
-      const wv = await nn.weightsView();
+      const wv1 = await nn.weightsView();
       expect(wv).toContain('"activation"');
       expect(wv).toContain('sigmoid');
     });
 
     test('ChangePointsPerClass event regenerates dataset with expected size (ChangePointsPerClass)', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn8 = new NNPage(page);
       await nn.goto();
 
       // set points per class to 24
@@ -324,29 +324,29 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
       await page.waitForTimeout(150);
 
       // dataset should be regenerated to 24 entries for XOR/AND styles (implementation yields ptsPerClass total)
-      const dlen = await nn.datasetLength();
+      const dlen2 = await nn.datasetLength();
       expect(dlen).toBe(24);
       // epochCount should be reset to 0
       expect(await nn.epochCount()).toBe(0);
     });
 
     test('StepTraining event performs a single training step (Step) and increments epochCount', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn9 = new NNPage(page);
       await nn.goto();
 
       // ensure we are stopped so step is available
       await nn.clickStop();
       await page.waitForTimeout(50);
 
-      const before = await nn.epochCount();
+      const before2 = await nn.epochCount();
       await nn.clickStep();
       // after a step, epochCount should increase by at least 1 (mini-batch count)
-      const after = await nn.waitForEpochIncrease(before, 3000);
+      const after2 = await nn.waitForEpochIncrease(before, 3000);
       expect(after).toBeGreaterThan(before);
     });
 
     test('RandomizeWeights event re-initializes params and updates weightsView', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn10 = new NNPage(page);
       await nn.goto();
 
       // capture current weightsView
@@ -365,7 +365,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
     });
 
     test('DownloadSnapshot event triggers two downloads (image + weights)', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn11 = new NNPage(page);
       await nn.goto();
 
       // The download handler clicks two anchors; Playwright can capture downloads
@@ -390,7 +390,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
     });
 
     test('LoadWeights with invalid JSON triggers alert and does not crash (error scenario)', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn12 = new NNPage(page);
       await nn.goto();
 
       // Put invalid JSON in textarea
@@ -413,7 +413,7 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
 
   test.describe('Edge cases and robustness', () => {
     test('Toggling activation while training does not throw and updates visuals', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn13 = new NNPage(page);
       await nn.goto();
 
       // Start training
@@ -433,17 +433,17 @@ test.describe('Neural Networks — Interactive Demo (FSM + UI)', () => {
     });
 
     test('Keyboard shortcuts (space toggles training, s triggers step) are wired', async ({ page }) => {
-      const nn = new NNPage(page);
+      const nn14 = new NNPage(page);
       await nn.goto();
 
       // Ensure starting from stopped
       await nn.clickStop();
       await page.waitForTimeout(50);
-      const before = await nn.epochCount();
+      const before3 = await nn.epochCount();
 
       // Press 's' to trigger a single step (should increase epochCount)
       await page.keyboard.press('s');
-      const after = await nn.waitForEpochIncrease(before, 3000);
+      const after3 = await nn.waitForEpochIncrease(before, 3000);
       expect(after).toBeGreaterThan(before);
 
       // Press space to toggle training start

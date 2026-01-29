@@ -88,7 +88,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
   test('Clicking Start Monitoring transitions to Monitoring and appends call info and result', async ({ page }) => {
     // This test validates the transition S0_Idle -> S1_Monitoring on ButtonClick.
     // It asserts both expected observables appear in the output in the correct order.
-    const monitor = new MonitorPage(page);
+    const monitor1 = new MonitorPage(page);
     await monitor.goto();
 
     // Click the monitor button once
@@ -109,7 +109,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
     expect(texts[1]).toContain('Result of function: 5');
 
     // Ensure no uncaught page errors nor console errors occurred as part of this normal flow
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -117,7 +117,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
   test('Multiple clicks append outputs and increment call counts sequentially', async ({ page }) => {
     // This test exercises repeated transitions (re-entrancy of Monitoring state)
     // and ensures the monitor's count increments across clicks.
-    const monitor = new MonitorPage(page);
+    const monitor2 = new MonitorPage(page);
     await monitor.goto();
 
     // Click three times
@@ -130,7 +130,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
       return out.querySelectorAll('p').length >= 6;
     });
 
-    const texts = await monitor.getOutputParagraphs();
+    const texts1 = await monitor.getOutputParagraphs();
     expect(texts.length).toBeGreaterThanOrEqual(6);
 
     // The call info paragraphs should be at indices 0,2,4 with counts 1,2,3 respectively
@@ -146,7 +146,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
     }
 
     // No uncaught page errors for normal repeated usage
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -156,7 +156,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
     // In the provided implementation monitoredFunction is declared with const at top-level,
     // which does not necessarily expose it as a global (window) property in the page context.
     // Therefore we expect a ReferenceError to be thrown when trying to access it directly.
-    const monitor = new MonitorPage(page);
+    const monitor3 = new MonitorPage(page);
     await monitor.goto();
 
     // Attempt to call monitoredFunction via evaluate and expect an exception
@@ -222,7 +222,7 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
     // so that a SyntaxError occurs in the page runtime and emits a pageerror event.
     await page.goto(APP_URL);
 
-    const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 2000 });
+    const pageErrorPromise1 = page.waitForEvent('pageerror', { timeout: 2000 });
 
     // Run invalid code asynchronously to trigger pageerror
     await page.evaluate(() => {
@@ -233,11 +233,11 @@ test.describe('Monitor Example (FSM: Idle -> Monitoring)', () => {
       }, 0);
     });
 
-    const pageErr = await pageErrorPromise;
+    const pageErr1 = await pageErrorPromise;
     expect(pageErr).toBeTruthy();
 
-    const name = pageErr.name || '';
-    const msg = pageErr.message || '';
+    const name1 = pageErr.name1 || '';
+    const msg1 = pageErr.message || '';
     // Assert that this is a SyntaxError (engine-specific naming may vary but typically 'SyntaxError')
     expect(name.toLowerCase()).toContain('syntaxerror');
     // The message should indicate a parsing issue

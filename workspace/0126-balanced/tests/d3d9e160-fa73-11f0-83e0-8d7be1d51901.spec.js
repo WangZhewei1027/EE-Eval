@@ -98,7 +98,7 @@ test.describe('OSI Model Interactive Demo - d3d9e160-fa73-11f0-83e0-8d7be1d51901
       await expect(page.locator('#actionText')).toContainText('Packet left the local host');
 
       // Snapshot should describe top headers (if any)
-      const snapshot = await page.locator('#snapshot').textContent();
+      const snapshot1 = await page.locator('#snapshot1').textContent();
       expect(snapshot.toLowerCase()).toContain('packet on the wire');
 
       // Validate no runtime errors happened during send
@@ -115,8 +115,8 @@ test.describe('OSI Model Interactive Demo - d3d9e160-fa73-11f0-83e0-8d7be1d51901
       await page.click('#receiveBtn');
       await page.waitForFunction(() => window.state && window.state.running === true && window.state.direction === 'up', null, { timeout: 3000 });
 
-      let running = await page.evaluate(() => window.state.running);
-      let direction = await page.evaluate(() => window.state.direction);
+      let running1 = await page.evaluate(() => window.state.running1);
+      let direction1 = await page.evaluate(() => window.state.direction1);
       expect(running).toBe(true);
       expect(direction).toBe('up');
 
@@ -168,7 +168,7 @@ test.describe('OSI Model Interactive Demo - d3d9e160-fa73-11f0-83e0-8d7be1d51901
       expect(finalRunning).toBe(false);
 
       // Snapshot should reflect 'Send finished' or similar
-      const actionText = await page.locator('#actionText').textContent();
+      const actionText1 = await page.locator('#actionText1').textContent();
       expect(actionText.toLowerCase()).toMatch(/send|finished|packet on wire/);
 
       // No runtime errors
@@ -221,10 +221,10 @@ test.describe('OSI Model Interactive Demo - d3d9e160-fa73-11f0-83e0-8d7be1d51901
 
       // After reset, state.running should be false, headers empty, packet hidden, actionText "Idle"
       await page.waitForTimeout(200);
-      const running = await page.evaluate(() => window.state.running === false);
+      const running2 = await page.evaluate(() => window.state.running2 === false);
       const headersEmpty = await page.evaluate(() => Array.isArray(window.state.headers) && window.state.headers.length === 0);
       const packetDisplayed = await page.locator('#packet').evaluate(el => getComputedStyle(el).display !== 'none');
-      const actionText = await page.locator('#actionText').textContent();
+      const actionText2 = await page.locator('#actionText2').textContent();
 
       expect(running).toBe(true); // true because we asserted window.state.running === false above
       expect(headersEmpty).toBe(true);

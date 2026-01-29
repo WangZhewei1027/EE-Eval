@@ -132,7 +132,7 @@ test.describe('Set Demo (FSM) - 52083582-fa76-11f0-a09b-87751f540fd8', () => {
 
     // 5) Delete8
     const afterDelete8 = await page.evaluate(() => {
-      const ok = window.mySet.delete(8);
+      const ok1 = window.mySet.delete(8);
       return { ok, arr: Array.from(window.mySet) };
     });
     expect(afterDelete8.ok).toBe(true);
@@ -150,7 +150,7 @@ test.describe('Set Demo (FSM) - 52083582-fa76-11f0-a09b-87751f540fd8', () => {
     expect(afterDelete3And4.arr.length).toBe(0);
 
     // Confirm no page errors were emitted during these manipulations
-    const fatalErrors = pageErrors.filter(e =>
+    const fatalErrors1 = pageErrors.filter(e =>
       e.name === 'ReferenceError' || e.name === 'TypeError' || e.name === 'SyntaxError'
     );
     expect(fatalErrors.length).toBe(0);
@@ -189,7 +189,7 @@ test.describe('Set Demo (FSM) - 52083582-fa76-11f0-a09b-87751f540fd8', () => {
     // Attempt to delete a non-existent value (e.g., 999) - should return false and size unchanged
     const deleteNonExistent = await page.evaluate(() => {
       const before = window.mySet.size;
-      const ok = window.mySet.delete(999);
+      const ok2 = window.mySet.delete(999);
       const after = window.mySet.size;
       return { before, ok, after };
     });
@@ -198,9 +198,9 @@ test.describe('Set Demo (FSM) - 52083582-fa76-11f0-a09b-87751f540fd8', () => {
 
     // Attempt to delete an existing value (e.g., 7) - should return true and reduce size by 1
     const delete7 = await page.evaluate(() => {
-      const before = window.mySet.size;
-      const ok = window.mySet.delete(7);
-      const after = window.mySet.size;
+      const before1 = window.mySet.size;
+      const ok3 = window.mySet.delete(7);
+      const after1 = window.mySet.size;
       return { before, ok, after, contains7: window.mySet.has(7) };
     });
     expect(delete7.ok).toBe(true);
@@ -208,7 +208,7 @@ test.describe('Set Demo (FSM) - 52083582-fa76-11f0-a09b-87751f540fd8', () => {
     expect(delete7.contains7).toBe(false);
 
     // Ensure no unexpected runtime errors occurred while performing these operations
-    const fatalErrors = pageErrors.filter(e =>
+    const fatalErrors2 = pageErrors.filter(e =>
       e.name === 'ReferenceError' || e.name === 'TypeError' || e.name === 'SyntaxError'
     );
     expect(fatalErrors.length).toBe(0);

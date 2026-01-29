@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>REST API Explorer</title>
+    <script>
+        // Global state
+        let apiState = {
+            baseUrl: 'https://jsonplaceholder.typicode.com',
+            endpoints: [
+                { path: '/posts', method: 'GET', description: 'Get all posts' },
+                { path: '/posts/1', method: 'GET', description: 'Get post with ID 1' },
+                { path: '/posts', method: 'POST', description: 'Create new post' },
+                { path: '/posts/1', method: 'PUT', description: 'Update post with ID 1' },
+                { path: '/posts/1', method: 'PATCH', description: 'Partially update post with ID 1' },
+                { path: '/posts/1', method: 'DELETE', description: 'Delete post with ID 1' }
+            ],
+            currentEndpoint: null,
+            requestBody: '{\n  "title": "foo",\n  "body": "bar",\n  "userId": 1\n}',
+            response: null,
+            history: [],
+            customUrl: '',
+            customMethod: 'GET',
+            customHeaders: '{\n  "Content-Type": "application/json"\n}',
+            params: [{ key: '', value: '' }]
+        };
+
+        // Initialize the app
+        function init() {
+            renderEndpoints();
+            updateRequestPreview();
+            document.getElementById('requestBody').value = apiState.requestBody;
+            document.getElementById('customHeaders').value = apiState.customHeaders;
+        }
+
+        // Render available endpoints
+        function renderEndpoints() {
+            const container = document.getElementById('endpoints');
+            container.innerHTML = '';
+            
+            apiState.endpoints.forEach(endpoint => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <button onclick="selectEndpoint('${endpoint.path}', '${endpoint.method}')">
+                        ${endpoint.method} ${endpoint.path}
+                    </button>
+                    <span>${endpoint.description}</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Select an endpoint
+        function selectEndpoint(path, method) {
+            apiState.currentEndpoint = { path, method };
+            document.getElementById('endpointInfo').innerText = `${method} ${apiState.baseUrl}${path}`;
+            updateRequestPreview();
+        }
+
+        // Update the request preview
+        function updateRequestPreview() {
+            let preview = '';
+            if (apiState.currentEndpoint) {
+                preview = `${apiState.currentEndpoint.method} ${apiState.baseUrl}${apiState.currentEndpoint.path}`;
+            } else if (apiState.customUrl) {
+                preview = `${apiState.customMethod} ${apiState.customUrl}`;
+            }
+            document.getElementById('requestPreview').innerText = preview;
+        }
+
+        // Execute the request
+        async function executeRequest() {
+            let url, method, body, headers;
+            
+            if (apiState.currentEndpoint) {
+                url = apiState.baseUrl + apiState.currentEndpoint.path;
+                method = apiState.currentEndpoint.method;
+            } else {
+                url = apiState.customUrl;
+                method = apiState.customMethod;
+            }
+            
+            // Add query params
+            const queryParams = apiState.params
+                .filter(p => p.key && p.value)
+                .map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`)
+                .join('&');
+            
+            if (queryParams) {
+                url += (url.includes('?') ? '&' : '?') + queryParams;
+            }
+            
+            try {
+                headers = JSON.parse(apiState.customHeaders);
+            } catch (e) {
+                alert('Invalid headers JSON');
+                return;
+            }
+            
+            if (method !== 'GET' && method !== 'DELETE') {
+                try {
+                    body = JSON.parse(apiState.requestBody);
+                } catch (e) {
+                    alert('Invalid request body JSON');
+                    return;
+                }
+            }
+            
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers
+                }
+            };
+            
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            
+            try {
+                document.getElementById('responseStatus').innerText = 'Loading...';
+                document.getElementById('responseBody').innerText = '';
+                
+                const startTime = Date.now();
+                const response = await fetch(url, options);
+                const responseTime = Date.now() - startTime;
+                
+                const responseData = await response.json();
+                
+                apiState.response = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    body: responseData,
+                    time: responseTime
+                };
+                
+                // Add to history
+                apiState.history.unshift({
+                    url,
+                    method,
+                    status: response.status,
+                    time: new Date().toLocaleTimeString()
+                });
+                renderHistory();
+                
+                displayResponse();
+            } catch (error) {
+                document.getElementById('responseStatus').innerText = 'Error: ' + error.message;
+            }
+        }
+
+        // Display the response
+        function displayResponse() {
+            const response = apiState.response;
+            if (!response) return;
+            
+            document.getElementById('responseStatus').innerText = 
+                `${response.status} ${response.statusText} (${response.time}ms)`;
+            
+            document.getElementById('responseBody').innerText = 
+                JSON.stringify(response.body, null, 2);
+            
+            let headersText = '';
+            for (const [key, value] of Object.entries(response.headers)) {
+                headersText += `${key}: ${value}\n`;
+            }
+            document.getElementById('responseHeaders').innerText = headersText;
+        }
+
+        // Render history
+        function renderHistory() {
+            const container = document.getElementById('history');
+            container.innerHTML = '';
+            
+            apiState.history.slice(0, 10).forEach(item => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <span>[${item.time}]</span>
+                    <span>${item.method}</span>
+                    <span>${item.url}</span>
+                    <span>${item.status}</span>
+                    <button onclick="loadFromHistory('${item.url}', '${item.method}')">Load</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Load from history
+        function loadFromHistory(url, method) {
+            apiState.currentEndpoint = null;
+            apiState.customUrl = url;
+            apiState.customMethod = method;
+            document.getElementById('customUrl').value = url;
+            document.getElementById('customMethod').value = method;
+            updateRequestPreview();
+        }
+
+        // Add a parameter
+        function addParam() {
+            apiState.params.push({ key: '', value: '' });
+            renderParams();
+        }
+
+        // Remove a parameter
+        function removeParam(index) {
+            apiState.params.splice(index, 1);
+            renderParams();
+        }
+
+        // Update a parameter
+        function updateParam(index, field, value) {
+            apiState.params[index][field] = value;
+        }
+
+        // Render parameters
+        function renderParams() {
+            const container = document.getElementById('paramsContainer');
+            container.innerHTML = '';
+            
+            apiState.params.forEach((param, index) => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <input type="text" placeholder="Key" value="${param.key}" 
+                        onchange="updateParam(${index}, 'key', this.value)">
+                    <input type="text" placeholder="Value" value="${param.value}" 
+                        onchange="updateParam(${index}, 'value', this.value)">
+                    <button onclick="removeParam(${index})">Remove</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Toggle between endpoint and custom request
+        function toggleRequestType() {
+            const showCustom = document.getElementById('requestType').value === 'custom';
+            document.getElementById('endpointsSection').style.display = showCustom ? 'none' : 'block';
+            document.getElementById('customRequestSection').style.display = showCustom ? 'block' : 'none';
+            updateRequestPreview();
+        }
+
+        // Update custom URL
+        function updateCustomUrl() {
+            apiState.customUrl = document.getElementById('customUrl').value;
+            updateRequestPreview();
+        }
+
+        // Update custom method
+        function updateCustomMethod() {
+            apiState.customMethod = document.getElementById('customMethod').value;
+            updateRequestPreview();
+        }
+
+        // Update request body
+        function updateRequestBody() {
+            apiState.requestBody = document.getElementById('requestBody').value;
+        }
+
+        // Update custom headers
+        function updateCustomHeaders() {
+            apiState.customHeaders = document.getElementById('customHeaders').value;
+        }
+
+        // Format JSON
+        function formatJson(textareaId) {
+            try {
+                const json = JSON.parse(document.getElementById(textareaId).value);
+                document.getElementById(textareaId).value = JSON.stringify(json, null, 2);
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+            }
+        }
+    </script>
+</head>
+<body onload="init()">
+    <h1>REST API Explorer</h1>
+    
+    <div>
+        <h2>Request Type</h2>
+        <select id="requestType" onchange="toggleRequestType()">
+            <option value="endpoint">Predefined Endpoint</option>
+            <option value="custom">Custom Request</option>
+        </select>
+    </div>
+    
+    <div id="endpointsSection">
+        <h2>Available Endpoints</h2>
+        <div id="endpoints"></div>
+        <div id="endpointInfo"></div>
+    </div>
+    
+    <div id="customRequestSection" style="display: none;">
+        <h2>Custom Request</h2>
+        <div>
+            <select id="customMethod" onchange="updateCustomMethod()">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+            </select>
+            <input type="text" id="customUrl" placeholder="Enter URL" onchange="updateCustomUrl()">
+        </div>
+    </div>
+    
+    <div>
+        <h2>Query Parameters</h2>
+        <div id="paramsContainer"></div>
+        <button onclick="addParam()">Add Parameter</button>
+    </div>
+    
+    <div>
+        <h2>Request Headers</h2>
+        <textarea id="customHeaders" rows="4" cols="50" onchange="updateCustomHeaders()"></textarea>
+        <button onclick="formatJson('customHeaders')">Format JSON</button>
+    </div>
+    
+    <div>
+        <h2>Request Body</h2>
+        <textarea id="requestBody" rows="10" cols="50" onchange="updateRequestBody()"></textarea>
+        <button onclick="formatJson('requestBody')">Format JSON</button>
+    </div>
+    
+    <div>
+        <h2>Request Preview</h2>
+        <div id="requestPreview"></div>
+        <button onclick="executeRequest()">Send Request</button>
+    </div>
+    
+    <div>
+        <h2>Response</h2>
+        <div id="responseStatus"></div>
+        <h3>Headers</h3>
+        <pre id="responseHeaders"></pre>
+        <h3>Body</h3>
+        <pre id="responseBody"></pre>
+    </div>
+    
+    <div>
+        <h2>History</h2>
+        <div id="history"></div>
+    </div>
+</body>
+</html>

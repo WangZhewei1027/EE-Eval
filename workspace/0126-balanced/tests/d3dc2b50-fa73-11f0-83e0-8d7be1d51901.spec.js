@@ -141,7 +141,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
 
   test.describe('Control interactions and FSM transitions', () => {
     test('DegreeChange: moving degree slider updates UI and triggers a redraw', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app1 = new OverfittingPage(page);
 
       // Record previous metrics
       const prevTrain = await app.getTrainMse();
@@ -172,7 +172,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     });
 
     test('SamplesChange: updating sample count updates UI (state updated) but data regenerates only on Regenerate', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app2 = new OverfittingPage(page);
 
       // Change samples slider to a different number
       await app.setRangeInput(app.nSamples, 100);
@@ -205,7 +205,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     });
 
     test('NoiseChange: updating noise updates UI state', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app3 = new OverfittingPage(page);
 
       // Change noise slider
       await app.setRangeInput(app.noise, 0.8);
@@ -218,7 +218,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     });
 
     test('TrainPctChange: updating train percent updates UI label', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app4 = new OverfittingPage(page);
 
       // Change train percent
       await app.setRangeInput(app.trainPct, 50);
@@ -226,17 +226,17 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
 
       // Because updateStateFromUI was called, the label updates. Actual split will change on regenerate.
       // Trigger regenerate to apply new split and ensure metrics update
-      const beforeTest = await app.getTestMse();
+      const beforeTest1 = await app.getTestMse();
       await app.clickRegenerate();
       await app.waitForRedraw();
       expect(await app.getTestMse()).toMatch(/^[\d-]/); // either numeric or '-' if no test samples (should be numeric)
     });
 
     test('LambdaChange: changing ridge parameter updates UI and triggers redraw (smoothing effect)', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app5 = new OverfittingPage(page);
 
-      const beforeTrain = await app.getTrainMse();
-      const beforeTest = await app.getTestMse();
+      const beforeTrain1 = await app.getTrainMse();
+      const beforeTest2 = await app.getTestMse();
 
       // Increase lambda
       await app.setRangeInput(app.lambda, 1.5);
@@ -245,8 +245,8 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
 
       expect(await app.getLambdaVal()).toBe('1.50');
 
-      const afterTrain = await app.getTrainMse();
-      const afterTest = await app.getTestMse();
+      const afterTrain1 = await app.getTrainMse();
+      const afterTest1 = await app.getTestMse();
 
       expect(afterTrain).toMatch(/^\d+\.\d{4}$/);
       expect(afterTest).toMatch(/^\d+\.\d{4}$/);
@@ -258,7 +258,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     });
 
     test('RegenerateData (button): clicking Regenerate updates data and redraws', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app6 = new OverfittingPage(page);
 
       // read metrics
       const aTrain = await app.getTrainMse();
@@ -283,7 +283,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     });
 
     test('ResetParameters: clicking Reset restores defaults and regenerates data', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app7 = new OverfittingPage(page);
 
       // Change many controls to non-defaults
       await app.setRangeInput(app.degree, 12);
@@ -319,7 +319,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
 
   test.describe('Edge cases, robustness and error observation', () => {
     test('High degree and low samples: exercise potential numerical issues (no patching allowed)', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app8 = new OverfittingPage(page);
 
       // Set degree very high and smallish sample count (but within allowed bounds)
       await app.setRangeInput(app.degree, 20);
@@ -349,7 +349,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     });
 
     test('Lambda extreme value: set to max to ensure regularization path runs without exceptions', async ({ page }) => {
-      const app = new OverfittingPage(page);
+      const app9 = new OverfittingPage(page);
 
       // Set lambda to upper bound
       await app.setRangeInput(app.lambda, 10.0);
@@ -367,7 +367,7 @@ test.describe('Overfitting Demo — Polynomial Regression (d3dc2b50...)', () => 
     test('Observe console and page errors: capture any ReferenceError/SyntaxError/TypeError occurrences', async ({ page }) => {
       // This test explicitly records any console messages or page errors and asserts none of the critical JS errors occurred.
       // (Per instructions we observe console and page errors; we do NOT modify the page environment.)
-      const app = new OverfittingPage(page);
+      const app10 = new OverfittingPage(page);
 
       // perform a few interactions to exercise code paths
       await app.setRangeInput(app.degree, 7);

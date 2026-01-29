@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Authentication Exploration</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    white-space: pre-wrap;
+  }
+  #log {
+    margin-top: 1em;
+    height: 200px;
+    overflow-y: scroll;
+    border: 1px solid black;
+    padding: 4px;
+    background: #fff;
+  }
+  label {
+    display: block;
+    margin: 0.3em 0 0 0;
+  }
+  button, input[type="text"], input[type="password"], select {
+    margin: 0.2em 0 0 0;
+  }
+</style>
+</head>
+<body>
+<h1>Authentication System Interactive Demo</h1>
+<p>
+This demo simulates a rich, multi-step, multi-method authentication process.<br />
+You can configure users, try multiple auth methods, adjust parameters and explore the workflows.
+</p>
+
+<div id="app">
+
+  <fieldset>
+    <legend>User Setup / Management</legend>
+    <label for="newUsername">Add New User (username):</label>
+    <input type="text" id="newUsername" />
+    <button id="addUserBtn">Add User</button>
+
+    <label for="userList">Existing Users:</label>
+    <select id="userList" size="4" style="width: 150px;"></select>
+    <button id="deleteUserBtn" disabled>Delete Selected User</button>
+
+    <div id="userDetails" style="margin-top:1em;"></div>
+  </fieldset>
+
+  <fieldset style="margin-top:1em;">
+    <legend>Authentication Workflow Controls</legend>
+    <label for="authUserSelect">Select User to Authenticate:</label>
+    <select id="authUserSelect" style="width: 150px;"></select>
+
+    <label for="authMethodSelect">Choose Authentication Method:</label>
+    <select id="authMethodSelect" style="width: 150px;">
+      <option value="password">Password</option>
+      <option value="totp">TOTP (Time-based One-Time Password)</option>
+      <option value="securityQuestion">Security Question</option>
+      <option value="emailCode">Email Code (Simulated)</option>
+      <option value="captcha">CAPTCHA</option>
+    </select>
+
+    <button id="startAuthBtn">Start Authentication</button>
+  </fieldset>
+
+  <fieldset id="authStepFieldset" style="margin-top:1em; display:none;">
+    <legend>Authentication Step</legend>
+    <div id="authStepContent"></div>
+    <button id="authBackBtn" disabled>Back</button>
+    <button id="authNextBtn" disabled>Next / Submit</button>
+  </fieldset>
+
+  <fieldset style="margin-top:1em;">
+    <legend>Authentication Log & State</legend>
+    <button id="clearLogBtn">Clear Log</button>
+    <div id="log" aria-live="polite" aria-atomic="true"></div>
+  </fieldset>
+
+</div>
+
+<script>
+// --- Data Structures ---
+
+// Each user has:
+// username: string
+// password: string (plaintext for demo, normally hashed)
+// totpSecret: string (for TOTP simulation)
+// securityQuestions: Array of {question:string, answer:string}
+// email: string (for email code simulation)
+// emailCode: string|null (current code, expires quickly)
+// captchaExpected: string (for CAPTCHA simulation)
+
+// For TOTP we'll simulate a 6-digit code incrementing every 30 seconds
+// For CAPTCHA we will generate random string user must enter
+
+// State tracking for authentication workflow:
+const AuthStates = {
+  idle: 'idle',
+  inProgress: 'inProgress',
+  success: 'success',
+  failure: 'failure'
+};
+
+const users = [];
+
+let authSession = null;
+// authSession structure:
+// {
+//   user: userObject,
+//   method: string,
+//   step: number,
+//   history: Array of strings describing steps or inputs,
+//   tempData: {} - for storing OTP codes, email codes, captcha, attempts etc.
+// }
+
+// --- DOM Elements ---
+const newUsernameInput = document.getElementById('newUsername');
+const addUserBtn = document.getElementById('addUserBtn');
+const userListSelect = document.getElementById('userList');
+const deleteUserBtn = document.getElementById('deleteUserBtn');
+const userDetailsDiv = document.getElementById('userDetails');
+
+const authUserSelect = document.getElementById('authUserSelect');
+const authMethodSelect = document.getElementById('authMethodSelect');
+const startAuthBtn = document.getElementById('startAuthBtn');
+
+const authStepFieldset = document.getElementById('authStepFieldset');
+const authStepContent = document.getElementById('authStepContent');
+const authBackBtn = document.getElementById('authBackBtn');
+const authNextBtn = document.getElementById('authNextBtn');
+
+const logDiv = document.getElementById('log');
+const clearLogBtn = document.getElementById('clearLogBtn');
+
+// --- Logging ---
+function log(message) {
+  const time = new Date().toLocaleTimeString();
+  logDiv.textContent += `[${time}] ${message}\n`;
+  logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+// --- Utility Functions ---
+function generateTOTP(secret) {
+  // For demo: generate a 6-digit code based on current time & secret hash
+  // This is just simulated, not secure
+  const now = Math.floor(Date.now() / 30000);
+  let hash = 0;
+  for(let i = 0; i < secret.length; i++) {
+    hash = (hash * 31 + secret.charCodeAt(i)) & 0xffffffff;
+  }
+  const code = (now + hash) % 1000000;
+  return code.toString().padStart(6, '0');
+}
+
+function generateRandomCode(length = 6) {
+  let digits = '0123456789';
+  let code = '';
+  for(let i=0; i<length; i++) {
+    code += digits[Math.floor(Math.random() * digits.length)];
+  }
+  return code;
+}
+
+function generateCaptcha() {
+  // simple captcha: 5 letter uppercase string
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let s = '';
+  for(let i=0; i<5; i++) {
+    s += letters[Math.floor(Math.random() * letters.length)];
+  }
+  return s;
+}
+
+function findUser(username) {
+  return users.find(u => u.username === username);
+}
+
+function refreshUserList() {
+  userListSelect.innerHTML = '';
+  users.forEach(user => {
+    const opt = document.createElement('option');
+    opt.value = user.username;
+    opt.textContent = user.username;
+    userListSelect.appendChild(opt);
+  });
+  deleteUserBtn.disabled = userListSelect.selectedIndex < 0;
+  refreshAuthUserSelect();
+  refreshUserDetails();
+}
+function refreshAuthUserSelect() {
+  authUserSelect.innerHTML = '';
+  users.forEach(user => {
+    const opt = document.createElement('option');
+    opt.value = user.username;
+    opt.textContent = user.username;
+    authUserSelect.appendChild(opt);
+  });
+}
+
+function refreshUserDetails() {
+  const selectedUser = userListSelect.value ? findUser(userListSelect.value) : null;
+  if (!selectedUser) {
+    userDetailsDiv.textContent = '(No user selected)';
+    deleteUserBtn.disabled = true;
+    return;
+  }
+  deleteUserBtn.disabled = false;
+
+  let details = `Username: ${selectedUser.username}\n`;
+  details += `Password: ${selectedUser.password ? '(set)' : '(none)'}\n`;
+  details += `Email: ${selectedUser.email ? selectedUser.email : '(none)'}\n`;
+  details += `TOTP Secret: ${selectedUser.totpSecret ? selectedUser.totpSecret : '(none)'}\n`;
+  details += `Security Questions (${selectedUser.securityQuestions.length}):\n`;
+  selectedUser.securityQuestions.forEach((qa, idx) => {
+    details += `  Q${idx+1}: ${qa.question}\n`;
+  });
+
+  userDetailsDiv.textContent = details;
+}
+
+function validateUsername(name) {
+  if (!name) return false;
+  if (users.some(u => u.username === name)) return false;
+  if (!/^[a-zA-Z0-9_]+$/.test(name)) return false;
+  return true;
+}
+
+// --- User Management ---
+addUserBtn.addEventListener('click', () => {
+  let username = newUsernameInput.value.trim();
+  if (!validateUsername(username)) {
+    alert('Invalid or duplicate username. Use alphanumeric and underscore only, unique.');
+    return;
+  }
+  // Add user with default empty fields
+  const newUser = {
+    username,
+    password: '',
+    totpSecret: '',
+    securityQuestions: [],
+    email: '',
+    emailCode: null,
+    captchaExpected: null
+  };
+  users.push(newUser);
+  log(`User added: '${username}'.`);
+
+  refreshUserList();
+  newUsernameInput.value = '';
+});
+
+userListSelect.addEventListener('change', () => {
+  refreshUserDetails();
+});
+
+deleteUserBtn.addEventListener('click', () => {
+  const selected = userListSelect.value;
+  if (!selected) return;
+  const idx = users.findIndex(u => u.username === selected);
+  if (idx >= 0) {
+    users.splice(idx,1);
+    log(`User deleted: '${selected}'.`);
+    refreshUserList();
+  }
+});
+
+// --- User Editing Interface ---
+userDetailsDiv.addEventListener('click', () => {
+  // No editing here, it's display only
+});
+
+// Let's create a separate interface below user details for editing user parameters:
+function renderUserEditor() {
+  if (!userListSelect.value) {
+    return;
+  }
+  const user = findUser(userListSelect.value);
+  if (!user) {
+    return;
+  }
+  let html = '';
+  html += 'Edit User Fields:\n';
+
+  html += 'Password (plain text): ';
+  html += '\n';
+  html += '<input type="password" id="editPwd" value="' + (user.password || '') + '" style="width:150px;">\n';
+
+  html += 'Email: ';
+  html += '\n';
+  html += '<input type="text" id="editEmail" value="' + (user.email || '') + '" style="width:200px;">\n';
+
+  html += 'TOTP Secret: ';
+  html += '\n';
+  html += '<input type="text" id="editTOTP" value="' + (user.totpSecret || '') + '" style="width:100px;">\n';
+
+  html += 'Security Questions (Add/Modify/Remove):';
+  html += '\n';
+
+  html += '<div id="secQList"></div>\n';
+
+  html += '<button id="addSecQBtn">Add Security Question</button>\n';
+
+  userDetailsDiv.innerHTML = '';
+  // Create inputs via DOM for better interaction:
+  // We'll build a very basic form interface here.
+  // Clear previous content:
+  userDetailsDiv.innerHTML = '';
+
+  // Password input
+  const pwdLabel = document.createElement('label');
+  pwdLabel.textContent = 'Password (plain text):';
+  const pwdInput = document.createElement('input');
+  pwdInput.type = 'password';
+  pwdInput.value = user.password;
+  pwdInput.style.width = '150px';
+  pwdInput.id = 'editPwd';
+
+  // Email input
+  const emailLabel = document.createElement('label');
+  emailLabel.textContent = 'Email:';
+  const emailInput = document.createElement('input');
+  emailInput.type = 'text';
+  emailInput.value = user.email;
+  emailInput.style.width = '200px';
+  emailInput.id = 'editEmail';
+
+  // TOTP secret input
+  const totpLabel = document.createElement('label');
+  totpLabel.textContent = 'TOTP Secret:';
+  const totpInput = document.createElement('input');
+  totpInput.type = 'text';
+  totpInput.value = user.totpSecret;
+  totpInput.style.width = '100px';
+  totpInput.id = 'editTOTP';
+
+  // Security Questions container
+  const sqLabel = document.createElement('label');
+  sqLabel.textContent = 'Security Questions (Add/Modify/Remove):';
+  const sqList = document.createElement('div');
+  sqList.id = 'secQList';
+
+  // Add Security Question Button
+  const addSQBtn = document.createElement('button');
+  addSQBtn.textContent = 'Add Security Question';
+  addSQBtn.id = 'addSecQBtn';
+
+  userDetailsDiv.appendChild(pwdLabel);
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(pwdInput);
+
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(emailLabel);
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(emailInput);
+
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(totpLabel);
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(totpInput);
+
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(sqLabel);
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(sqList);
+
+  userDetailsDiv.appendChild(document.createElement('br'));
+  userDetailsDiv.appendChild(addSQBtn);
+
+  function renderSQList() {
+    sqList.innerHTML = '';
+    user.securityQuestions.forEach((qa, idx) => {
+      const qDiv = document.createElement('div');
+      qDiv.style.borderTop = '1px solid black';
+      qDiv.style.marginTop = '3px';
+      qDiv.style.paddingTop = '3px';
+
+      const qLabel = document.createElement('label');
+      qLabel.textContent = `Q${idx+1}:`;
+      const qInput = document.createElement('input');
+      qInput.type = 'text';
+      qInput.value = qa.question;
+      qInput.style.width = '250px';
+
+      const aLabel = document.createElement('label');
+      aLabel.textContent = `A${idx+1}:`;
+      aLabel.style.marginLeft = '10px';
+      const aInput = document.createElement('input');
+      aInput.type = 'text';
+      aInput.value = qa.answer;
+      aInput.style.width = '150px';
+
+      const remBtn = document.createElement('button');
+      remBtn.textContent = 'Remove';
+      remBtn.style.marginLeft = '10px';
+
+      // Change handlers
+      qInput.addEventListener('input', () => {
+        user.securityQuestions[idx].question = qInput.value;
+      });
+      aInput.addEventListener('input', () => {
+        user.securityQuestions[idx].answer = aInput.value;
+      });
+      remBtn.addEventListener('click', () => {
+        user.securityQuestions.splice(idx, 1);
+        renderSQList();
+        log(`Security question #${idx+1} removed from user '${user.username}'.`);
+      });
+
+      qDiv.appendChild(qLabel);
+      qDiv.appendChild(qInput);
+      qDiv.appendChild(aLabel);
+      qDiv.appendChild(aInput);
+      qDiv.appendChild(remBtn);
+
+      sqList.appendChild(qDiv);
+    });
+  }
+
+  renderSQList();
+
+  addSQBtn.addEventListener('click', () => {
+    user.securityQuestions.push({question:'', answer:''});
+    renderSQList();
+    log(`Added new security question slot for user '${user.username}'.`);
+  });
+
+  // Save on input changes for pwd,email,totp
+  pwdInput.addEventListener('input', () => {
+    user.password = pwdInput.value;
+  });
+  emailInput.addEventListener('input', () => {
+    user.email = emailInput.value;
+  });
+  totpInput.addEventListener('input', () => {
+    user.totpSecret = totpInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  });
+
+}
+userListSelect.addEventListener('change', renderUserEditor);
+
+// --- Authentication Process ---
+startAuthBtn.addEventListener('click', () => {
+  const username = authUserSelect.value;
+  if (!username) {
+    alert('Select a user to authenticate.');
+    return;
+  }
+  const user = findUser(username);
+  if (!user) {
+    alert('Selected user not found.');
+    return;
+  }
+  const method = authMethodSelect.value;
+
+  // Initialize authSession
+  authSession = {
+    user,
+    method,
+    step: 0,
+    history: [],
+    tempData: {
+      attempts: 0,
+      emailCodeExpiresAt: null,
+      captcha: null,
+      captchaTries: 0,
+      lastInput: null,
+      totpCounter: 0
+    },
+    state: AuthStates.inProgress
+  };
+
+  log(`Authentication started for user '${user.username}' via method '${method}'.`);
+
+  authStepFieldset.style.display = 'block';
+  authBackBtn.disabled = true; // no going back at start
+  authNextBtn.disabled = false;
+
+  renderAuthStep();
+});
+
+authBackBtn.addEventListener('click', () => {
+  if (!authSession) return;
+  if (authSession.step > 0) {
+    authSession.step--;
+    log(`Back to step ${authSession.step + 1} in authentication for '${authSession.user.username}'.`);
+    authNextBtn.disabled = false;
+    if (authSession.step === 0) {
+      authBackBtn.disabled = true;
+    }
+    renderAuthStep();
+  }
+});
+
+authNextBtn.addEventListener('click', () => {
+  if (!authSession) return;
+
+  // Process input and validate current step
+  const currentStepResult = processAuthStepInput();
+
+  if (currentStepResult === false) {
+    // input invalid or failed, stay in step, do not increment
+    return;
+  }
+  if (authSession.state === AuthStates.success) {
+    // End workflow
+    authStepContent.innerHTML = 'Authentication Success! You are now logged in.';
+    authBackBtn.disabled = true;
+    authNextBtn.disabled = true;
+    log(`Authentication successful for user '${authSession.user.username}' using method '${authSession.method}'.`);
+    return;
+  }
+  if (authSession.state === AuthStates.failure) {
+    authStepContent.innerHTML = 'Authentication Failed. Please try again or start over.';
+    authBackBtn.disabled = true;
+    authNextBtn.disabled = true;
+    log(`Authentication failed for user '${authSession.user.username}' using method '${authSession.method}'.`);
+    return;
+  }
+
+  authSession.step++;
+  authBackBtn.disabled = false;
+  renderAuthStep();
+});
+
+// Clear log
+clearLogBtn.addEventListener('click', () => {
+  logDiv.textContent = '';
+});
+
+// --- Render Authentication Steps ---
+// Each method has its own workflow with multiple steps where applicable
+
+function renderAuthStep() {
+  if (!authSession) return;
+  const user = authSession.user;
+  const method = authSession.method;
+  const step = authSession.step;
+
+  // Clear previous content, will render new
+  authStepContent.innerHTML = '';
+
+  // We'll create inputs/buttons dynamically depending on method and step
+
+  if (method === 'password') {
+    // Single step: enter password
+
+    if (step === 0) {
+      const label = document.createElement('label');
+      label.textContent = 'Enter password:';
+      const pwdInput = document.createElement('input');
+      pwdInput.type = 'password';
+      pwdInput.id = 'authPasswordInput';
+
+      authStepContent.appendChild(label);
+      authStepContent.appendChild(document.createElement('br'));
+      authStepContent.appendChild(pwdInput);
+      pwdInput.focus();
+    } else {
+      // No further steps, success or failure handled in processAuthStepInput
+      authStepContent.textContent = 'No further steps.';
+    }
+
+  } else if (method === 'totp') {
+    // We simulate TOTP codes, 2 steps: enter secret or show code, then enter TOTP
+
+    // Steps:
+    // 0: If user has no totpSecret, ask to set it (can simulate secret entry)
+    // 1: Show current valid TOTP code (simulate), prompt for code entry
+    // 2: Validate code
+
+    if (step === 0) {
+      if (!user.totpSecret) {
+        const label = document.createElement('label');
+        label.textContent = 'No TOTP secret set. Enter a secret string for TOTP (alphanumeric):';
+        const secretInput = document.createElement('input');
+        secretInput.type = 'text';
+        secretInput.id = 'authTOTPSecretInput';
+        secretInput.value = '';
+
+        authStepContent.appendChild(label);
+        authStepContent.appendChild(document.createElement('br'));
+        authStepContent.appendChild(secretInput);
+        secretInput.focus();
+      } else {
+        // Skip to next step immediately
+        authSession.step++;
+        renderAuthStep();
+      }
+    } else if (step === 1) {
+      // Show current code (for demo) and ask user to enter code
+      authStepContent.textContent = `Current TOTP code (simulated): ${generateTOTP(user.totpSecret)}\nEnter the 6-digit code:`;
+
+      const codeInput = document.createElement('input');
+      codeInput.type = 'text';
+      codeInput.id = 'authTOTPCodeInput';
+      codeInput.maxLength = 6;
+      codeInput.style.width = '50px';
+
+      authStepContent.appendChild(document.createElement('br'));
+      authStepContent.appendChild(codeInput);
+      codeInput.focus();
+
+    } else if (step === 2) {
+      // Wait for code validation (processAuthStepInput)
+      authStepContent.textContent = 'Validating code...';
+    }
+  } else if (method === 'securityQuestion') {
+    // Multiple questions, ask them one by one
+    const totalQ = user.securityQuestions.length;
+    if (totalQ === 0) {
+      authStepContent.textContent = 'User has no security questions configured.';
+      authNextBtn.disabled = true;
+      authBackBtn.disabled = false;
+      return;
+    }
+    if (step < totalQ) {
+      const q = user.securityQuestions[step].question || '(No question set)';
+      const label = document.createElement('label');
+      label.textContent = `Question ${(step + 1)}: ${q}`;
+      const ansInput = document.createElement('input');
+      ansInput.type = 'text';
+      ansInput.id = 'authSQAnswerInput';
+      authStepContent.appendChild(label);
+      authStepContent.appendChild(document.createElement('br'));
+      authStepContent.appendChild(ansInput);
+      ansInput.focus();
+
+    } else {
+      authStepContent.textContent = 'No more questions.';
+    }
+  } else if (method === 'emailCode') {
+    // Steps:
+    // 0: send email code (simulate), display sending message
+    // 1: enter the code
+    // 2: validate code
+
+    if (step === 0) {
+      if (!user.email) {
+        authStepContent.textContent = 'User has no email set for sending code.';
+        authNextBtn.disabled = true;
+        return;
+      }
+      const code = generateRandomCode();
+      user.emailCode = code;
+      authSession.tempData.emailCodeExpiresAt = Date.now() + 120 * 1000; // expire in 2 minutes
+      authStepContent.textContent = `Email code sent to ${user.email} (simulated): ${code}\nClick Next to enter code.`;
+      authNextBtn.disabled = false;
+    } else if (step === 1) {
+      const label = document.createElement('label');
+      label.textContent = 'Enter the 6-digit code received in email:';
+      const codeInput = document.createElement('input');
+      codeInput.type = 'text';
+      codeInput.id = 'authEmailCodeInput';
+      codeInput.maxLength = 6;
+      codeInput.style.width = '60px';
+      authStepContent.appendChild(label);
+      authStepContent.appendChild(document.createElement('br'));
+      authStepContent.appendChild(codeInput);
+      codeInput.focus();
+    } else if (step === 2) {
+      authStepContent.textContent = 'Validating code...';
+    }
+  } else if (method === 'captcha') {
+    // Single step: show captcha and prompt to type it
+
+    if (step === 0) {
+      const captcha = generateCaptcha();
+      authSession.tempData.captcha = captcha;
+      authSession.tempData.captchaTries = 0;
+
+      const label = document.createElement('label');
+      label.textContent = 'CAPTCHA: Type the characters shown below:';
+
+      const captchaShow = document.createElement('div');
+      captchaShow.textContent = captcha;
+      captchaShow.style.fontWeight = 'bold';
+      captchaShow.style.letterSpacing = '0.3em';
+      captchaShow.style.userSelect = 'none';
+      captchaShow.style.marginTop = '2px';
+      captchaShow.style.marginBottom = '2px';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'authCaptchaInput';
+      input.maxLength = 5;
+      input.style.width = '80px';
+
+      authStepContent.appendChild(label);
+      authStepContent.appendChild(captchaShow);
+      authStepContent.appendChild(input);
+      input.focus();
+    } else if (step === 1) {
+      // Validate captcha result handled on Next; render a message waiting validation
+      authStepContent.textContent = 'Validating CAPTCHA...';
+    }
+  }
+}
+
+// Process user input from auth step, return true if proceed/advance, false if retry or error shown
+function processAuthStepInput() {
+  if (!authSession) return false;
+  const user = authSession.user;
+  const method = authSession.method;
+  const step = authSession.step;
+  const temp = authSession.tempData;
+
+  if (method === 'password') {
+    if (step === 0) {
+      const pwdInput = document.getElementById('authPasswordInput');
+      if (!pwdInput) return false;
+      const inputPwd = pwdInput.value;
+      authSession.history.push(`Entered password: ${inputPwd ? '(hidden)' : '(empty)'}`);
+
+      if (inputPwd === user.password && user.password !== '') {
+        authSession.state = AuthStates.success;
+        return true;
+      } else {
+        log(`Password incorrect for user '${user.username}'.`);
+        alert('Password incorrect.');
+        return false;
+      }
+    }
+  } else if (method === 'totp') {
+    if (step === 0) {
+      if (!user.totpSecret) {
+        const secretInput = document.getElementById('authTOTPSecretInput');
+        if (!secretInput) return false;
+        const secret = secretInput.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!secret) {
+          alert('TOTP secret cannot be empty and must be alphanumeric.');
+          return false;
+        }
+        user.totpSecret = secret;
+        log(`Set TOTP secret for user '${user.username}': ${secret}`);
+        authSession.step++; // skip to showing code
+        renderAuthStep();
+        return false;
+      }
+    } else if (step === 1) {
+      const codeInput = document.getElementById('authTOTPCodeInput');
+      if (!codeInput) return false;
+      const code = codeInput.value.trim();
+      authSession.history.push(`Entered TOTP code: ${code}`);
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+        alert('TOTP code must be 6 digit number.');
+        return false;
+      }
+      const expectedCode = generateTOTP(user.totpSecret);
+      if (code === expectedCode) {
+        authSession.state = AuthStates.success;
+        return true;
+      } else {
+        log(`TOTP code incorrect. Expected: ${expectedCode}, got: ${code}`);
+        alert('TOTP code incorrect.');
+        return false;
+      }
+    }
+  } else if (method === 'securityQuestion') {
+    const totalQ = user.securityQuestions.length;
+    if (step < totalQ) {
+      const ansInput = document.getElementById('authSQAnswerInput');
+      if (!ansInput) return false;
+      const answer = ansInput.value.trim();
+      authSession.history.push(`Answered Q${step+1}: '${answer}'`);
+
+      const correctAnswer = user.securityQuestions[step].answer.trim();
+      if (answer.toLowerCase() === correctAnswer.toLowerCase()) {
+        if (step + 1 === totalQ) {
+          authSession.state = AuthStates.success;
+          return true;
+        }
+        return true;
+      } else {
+        authSession.tempData.attempts++;
+        if (authSession.tempData.attempts >= 3) {
+          authSession.state = AuthStates.failure;
+          log(`Too many wrong answers for security questions for user '${user.username}'.`);
+          alert('Too many wrong answers. Authentication failed.');
+        } else {
+          alert(`Answer incorrect for question ${step + 1}. Attempts left: ${3 - authSession.tempData.attempts}`);
+          return false;
+        }
+      }
+    }
+  } else if (method === 'emailCode') {
+    if (step === 0) {
+      // email sent message shown, just proceed to enter code
+      return true;
+    } else if (step === 1) {
+      const codeInput = document.getElementById('authEmailCodeInput');
+      if (!codeInput) return false;
+      const code = codeInput.value.trim();
+      authSession.history.push(`Entered email code: ${code}`);
+
+      if (!user.emailCode || Date.now() > authSession.tempData.emailCodeExpiresAt) {
+        alert('Email code has expired. Restart authentication.');
+        authSession.state = AuthStates.failure;
+        return true;
+      }
+      if (code === user.emailCode) {
+        user.emailCode = null; // consume code
+        authSession.state = AuthStates.success;
+        return true;
+      } else {
+        temp.attempts = (temp.attempts || 0) + 1;
+        if (temp.attempts >= 3) {
+          authSession.state = AuthStates.failure;
+          log(`Too many wrong email code entries for user '${user.username}'.`);
+          alert('Too many wrong codes. Authentication failed.');
+          return true;
+        } else {
+          alert(`Incorrect code. Attempts left: ${3 - temp.attempts}`);
+          return false;
+        }
+      }
+    }
+  } else if (method === 'captcha') {
+    if (step === 0) {
+      const input = document.getElementById('authCaptchaInput');
+      if (!input) return false;
+      const val = input.value.trim().toUpperCase();
+      authSession.history.push(`Entered CAPTCHA: '${val}'`);
+      if (val === authSession.tempData.captcha) {
+        authSession.state = AuthStates.success;
+        return true;
+      } else {
+        authSession.tempData.captchaTries++;
+        if (authSession.tempData.captchaTries >= 3) {
+          authSession.state = AuthStates.failure;
+          alert('Too many failed CAPTCHA attempts.');
+          log(`CAPTCHA failed for user '${user.username}'.`);
+          return true;
+        } else {
+          alert(`CAPTCHA incorrect. Attempts left: ${3 - authSession.tempData.captchaTries}`);
+          return false;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+// On page load, populate some data for deep exploration:
+function seedUsers() {
+  users.push(
+    {
+      username: 'alice',
+      password: 'password123',
+      totpSecret: 'ABCDEF123456',
+      securityQuestions: [
+        {question: 'Your mother\'s maiden name?', answer: 'Smith'},
+        {question: 'Favorite color?', answer: 'Blue'}
+      ],
+      email: 'alice@example.com',
+      emailCode: null,
+      captchaExpected: null
+    },
+    {
+      username: 'bob',
+      password: 'b0bpwd',
+      totpSecret: '',
+      securityQuestions: [
+        {question: 'City you were born in?', answer: 'Paris'}
+      ],
+      email: 'bob@example.com',
+      emailCode: null,
+      captchaExpected: null
+    },
+    {
+      username: 'charlie',
+      password: '',
+      totpSecret: 'XYZ789',
+      securityQuestions: [],
+      email: '',
+      emailCode: null,
+      captchaExpected: null
+    }
+  );
+  refreshUserList();
+}
+
+seedUsers();
+renderUserEditor();
+
+</script>
+</body>
+</html>

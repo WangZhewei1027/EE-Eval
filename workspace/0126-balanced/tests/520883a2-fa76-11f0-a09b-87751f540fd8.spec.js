@@ -131,7 +131,7 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     // - the implementation contains undefined variables and logic that should produce runtime errors (ReferenceError/TypeError)
     // - the heap visual (#heap) should remain unchanged (or at least not contain a valid two-number result)
 
-    const heapPage = new HeapPage(page);
+    const heapPage1 = new HeapPage(page);
 
     // Pre-condition: ensure heap is empty
     expect(await heapPage.getHeapText()).toBe('');
@@ -166,7 +166,7 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     // - the implementation is intentionally buggy and should throw runtime errors when executed
     // - the heap visual (#heap) should not contain valid output after invocation
 
-    const heapPage = new HeapPage(page);
+    const heapPage2 = new HeapPage(page);
 
     // Ensure heap is initially empty
     expect(await heapPage.getHeapText()).toBe('');
@@ -175,7 +175,7 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     await heapPage.clickHeapifyDown();
 
     // Wait for either ReferenceError or TypeError to surface
-    const err = await waitForPageErrorMatching((e) =>
+    const err1 = await waitForPageErrorMatching((e) =>
       e.name === 'ReferenceError' || e.name === 'TypeError'
     );
 
@@ -183,8 +183,8 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     expect(['ReferenceError', 'TypeError']).toContain(err.name);
 
     // After the failed operation, the heap element should not contain a valid pair of numeric tokens
-    const heapTextAfter = await heapPage.getHeapText();
-    const numericPairRegex = /^\s*-?\d+\s+-?\d+\s*$/;
+    const heapTextAfter1 = await heapPage.getHeapText();
+    const numericPairRegex1 = /^\s*-?\d+\s+-?\d+\s*$/;
     expect(numericPairRegex.test(heapTextAfter)).toBeFalsy();
 
     // Ensure pageErrors captured this error
@@ -197,7 +197,7 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     // - invoke heapifyUp and heapifyDown multiple times
     // - verify that runtime errors are reported each time (or at least once), and the page remains responsive
 
-    const heapPage = new HeapPage(page);
+    const heapPage3 = new HeapPage(page);
 
     // Set a boundary value
     await heapPage.setInput(1);
@@ -212,7 +212,7 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     await heapPage.clickHeapifyDown();
 
     // Wait for at least one runtime error to be captured
-    const err = await waitForPageErrorMatching((e) =>
+    const err2 = await waitForPageErrorMatching((e) =>
       e.name === 'ReferenceError' || e.name === 'TypeError'
     , 3000);
 
@@ -231,7 +231,7 @@ test.describe('520883a2-fa76-11f0-a09b-87751f540fd8 - Heap (Max) interactive tes
     // This test ensures our instrumentation captures console messages and runtime exceptions.
     // We intentionally trigger a call that causes an error and assert our listeners captured it.
 
-    const heapPage = new HeapPage(page);
+    const heapPage4 = new HeapPage(page);
 
     // Trigger an action expected to cause a runtime exception
     await heapPage.clickHeapifyUp();

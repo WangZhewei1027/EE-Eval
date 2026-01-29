@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Integration Testing Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  label {
+    display: block;
+    margin-top: 1em;
+  }
+  input[type=text], input[type=number], select {
+    width: 200px;
+  }
+  button {
+    margin: 0.3em 0.3em 0.3em 0;
+  }
+  #log {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    padding: 0.5em;
+    height: 250px;
+    overflow-y: scroll;
+    margin-top: 1em;
+    background: #fff;
+  }
+  fieldset {
+    margin-top: 1em;
+    padding: 0.5em;
+  }
+</style>
+</head>
+<body>
+<h1>Integration Testing Interactive Demo</h1>
+<p>This demo simulates a complex integration testing workflow with multiple interactive controls and state transitions. Use the controls below to configure modules, define test scenarios, run stepwise integration tests, and explore branching paths.</p>
+
+<form id="configForm" onsubmit="return false;">
+  <fieldset>
+    <legend>1. Module Configuration</legend>
+    <label>
+      Number of Modules:
+      <input type="number" id="numModules" min="2" max="8" value="3" />
+    </label>
+    <label>
+      Module Names (comma separated):
+      <input type="text" id="moduleNames" value="Auth,DB,API" />
+    </label>
+    <label>
+      Select Module to Set Status:
+      <select id="moduleSelect"></select>
+      <button id="toggleModuleStatus">Toggle Status (Active/Inactive)</button>
+    </label>
+    <label>
+      Current Status:
+      <span id="moduleStatusDisplay"></span>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Test Scenario Setup</legend>
+    <label>
+      Select Test Scenario:
+      <select id="testScenarioSelect">
+        <option value="happyPath">Happy Path</option>
+        <option value="failAuth">Fail Auth Module</option>
+        <option value="dbTimeout">DB Timeout</option>
+        <option value="apiError">API Returns Error</option>
+        <option value="custom">Custom</option>
+      </select>
+    </label>
+    <div id="customScenarioConfig" style="display:none; margin-top:0.5em;">
+      <label>
+        Set Module Failures (comma separated module names to FAIL):
+        <input type="text" id="customFailures" placeholder="e.g. Auth,API" />
+      </label>
+      <label>
+        Set Module Delays (milliseconds, format: Module=Delay, e.g. DB=500,API=200):
+        <input type="text" id="customDelays" placeholder="e.g. DB=500,API=200" />
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Integration Test Execution</legend>
+    <button id="startTestRun">Start Test Run</button>
+    <button id="stepTestRun" disabled>Next Step</button>
+    <button id="resetTestRun" disabled>Reset Test Run</button>
+    <label>
+      Step Delay (ms):
+      <input type="number" id="stepDelay" min="10" max="5000" value="500" />
+    </label>
+    <label>
+      Auto Run:
+      <input type="checkbox" id="autoRunToggle" />
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>4. Branching Control</legend>
+    <label>
+      At Failure, Choose Next Action:
+      <select id="failureActionSelect" disabled>
+        <option value="retry">Retry Module</option>
+        <option value="skip">Skip Module</option>
+        <option value="abort">Abort Test</option>
+        <option value="modify">Modify Config & Continue</option>
+      </select>
+    </label>
+    <div id="modifyConfigSection" style="display:none; margin-top:0.5em;">
+      <label>
+        Toggle Modules Active/Inctive (comma separated):
+        <input type="text" id="modifyModules" placeholder="e.g. API,DB" />
+      </label>
+      <button id="applyModifyConfig">Apply Modifications</button>
+    </div>
+  </fieldset>
+</form>
+
+<fieldset>
+  <legend>Test Execution Log & State</legend>
+  <div id="log" tabindex="0" aria-label="Test execution log"></div>
+</fieldset>
+
+<script>
+(() => {
+  // State and Data Structures
+  const maxModules = 8;
+
+  // Module: {name:string, active:boolean, fail:boolean, delay:number(ms), lastResult: 'pending'|'success'|'fail'|'skipped', lastMessage:string}
+  let modules = [];
+
+  // Test scenario config
+  let testScenario = "happyPath";
+
+  // Step index in module execution
+  let currentStep = 0;
+
+  // Running state: 'idle'|'running'|'paused'|'finished'|'aborted'
+  let runState = 'idle';
+
+  // Timer for auto run
+  let autoRunTimer = null;
+
+  // Failure handling
+  // Options: retry, skip, abort, modify (fallback)
+  let failureAction = 'retry';
+
+  // Elements cache
+  const el = {
+    numModules: document.getElementById('numModules'),
+    moduleNames: document.getElementById('moduleNames'),
+    moduleSelect: document.getElementById('moduleSelect'),
+    moduleStatusDisplay: document.getElementById('moduleStatusDisplay'),
+    toggleModuleStatus: document.getElementById('toggleModuleStatus'),
+    testScenarioSelect: document.getElementById('testScenarioSelect'),
+    customScenarioConfig: document.getElementById('customScenarioConfig'),
+    customFailures: document.getElementById('customFailures'),
+    customDelays: document.getElementById('customDelays'),
+    startTestRun: document.getElementById('startTestRun'),
+    stepTestRun: document.getElementById('stepTestRun'),
+    resetTestRun: document.getElementById('resetTestRun'),
+    stepDelay: document.getElementById('stepDelay'),
+    autoRunToggle: document.getElementById('autoRunToggle'),
+    failureActionSelect: document.getElementById('failureActionSelect'),
+    modifyConfigSection: document.getElementById('modifyConfigSection'),
+    modifyModules: document.getElementById('modifyModules'),
+    applyModifyConfig: document.getElementById('applyModifyConfig'),
+    log: document.getElementById('log')
+  };
+
+  function log(msg){
+    const now = new Date();
+    const timestamp = now.toTimeString().slice(0,8);
+    el.log.textContent += `[${timestamp}] ${msg}\n`;
+    el.log.scrollTop = el.log.scrollHeight;
+  }
+
+  function clearLog(){
+    el.log.textContent = "";
+  }
+
+  // Initialize modules from input controls
+  function initModulesFromInput(){
+    let n = parseInt(el.numModules.value, 10);
+    if(isNaN(n) || n < 2) n = 2;
+    if(n > maxModules) n = maxModules;
+    el.numModules.value = n;
+
+    let namesRaw = el.moduleNames.value.trim();
+    let names = namesRaw.length ? namesRaw.split(',').map(s=>s.trim()).filter(s=>s.length) : [];
+
+    // Pad or trim to n
+    if(names.length > n) names = names.slice(0,n);
+    else while(names.length < n) names.push(`Module${names.length+1}`);
+
+    modules = names.map(name => ({
+      name,
+      active: true,
+      fail: false,
+      delay: 0,
+      lastResult: 'pending',
+      lastMessage: ''
+    }));
+
+    el.moduleNames.value = names.join(',');
+
+    updateModuleSelectOptions();
+    displaySelectedModuleStatus();
+  }
+
+  // Update module select with current modules
+  function updateModuleSelectOptions(){
+    const sel = el.moduleSelect;
+    sel.innerHTML = "";
+    modules.forEach((m,i) => {
+      let option = document.createElement('option');
+      option.value = i;
+      option.textContent = m.name;
+      sel.appendChild(option);
+    });
+  }
+
+  // Display the current status of selected module
+  function displaySelectedModuleStatus(){
+    const idx = parseInt(el.moduleSelect.value,10);
+    if(isNaN(idx) || idx < 0 || idx >= modules.length){
+      el.moduleStatusDisplay.textContent = 'N/A';
+      return;
+    }
+    const m = modules[idx];
+    el.moduleStatusDisplay.textContent = `Active: ${m.active}, Fail: ${m.fail}, Delay: ${m.delay}ms, Last Result: ${m.lastResult}${m.lastMessage ? " (" + m.lastMessage + ")" : ""}`;
+  }
+
+  // Toggle module active status
+  function toggleSelectedModuleStatus(){
+    const idx = parseInt(el.moduleSelect.value,10);
+    if(isNaN(idx) || idx < 0 || idx >= modules.length) return;
+    modules[idx].active = !modules[idx].active;
+    log(`Module "${modules[idx].name}" active set to ${modules[idx].active}`);
+    displaySelectedModuleStatus();
+  }
+
+  // Setup test scenario presets
+  function applyTestScenarioPreset(scenarioKey) {
+    switch(scenarioKey){
+      case 'happyPath':
+        // No failures, no delays
+        modules.forEach(m => { m.fail = false; m.delay = 0; });
+        clearLog();
+        log("Test scenario set to Happy Path. No failures, no delays.");
+        break;
+      case 'failAuth':
+        // Fail Auth module ONLY if exists
+        modules.forEach(m => {
+          m.fail = false;
+          m.delay = 0;
+          if(m.name.toLowerCase().includes('auth')) m.fail = true;
+        });
+        clearLog();
+        log("Test scenario set to Fail Auth Module.");
+        break;
+      case 'dbTimeout':
+        // DB module delayed and fail
+        modules.forEach(m => {
+          m.fail = false;
+          m.delay = 0;
+          if(m.name.toLowerCase().includes('db')) {
+            m.fail = true;
+            m.delay = 1000;
+          }
+        });
+        clearLog();
+        log("Test scenario set to DB Timeout (delay + failure).");
+        break;
+      case 'apiError':
+        modules.forEach(m => {
+          m.fail = false;
+          m.delay = 0;
+          if(m.name.toLowerCase().includes('api')) m.fail = true;
+        });
+        clearLog();
+        log("Test scenario set to API Returns Error.");
+        break;
+      case 'custom':
+        clearLog();
+        log("Custom test scenario - configure failures and delays manually.");
+        break;
+      default:
+        break;
+    }
+    // Reset lastResult states
+    modules.forEach(m => {
+      m.lastResult = 'pending';
+      m.lastMessage = '';
+    });
+    displaySelectedModuleStatus();
+  }
+
+  // Apply custom test scenario config from text inputs
+  function applyCustomScenarioConfig() {
+    const failText = el.customFailures.value.trim();
+    const delayText = el.customDelays.value.trim();
+
+    // Reset all fails/delays
+    modules.forEach(m => {
+      m.fail = false;
+      m.delay = 0;
+    });
+
+    if(failText.length){
+      const fails = failText.split(',').map(s=>s.trim().toLowerCase());
+      modules.forEach(m => {
+        if(fails.includes(m.name.toLowerCase())) m.fail = true;
+      });
+    }
+    if(delayText.length){
+      // Format: Module=Delay,...
+      delayText.split(',').forEach(pair=>{
+        const [mod, val] = pair.split('=').map(s=>s.trim());
+        if(!mod || !val) return;
+        const delayVal = parseInt(val,10);
+        if(isNaN(delayVal) || delayVal < 0) return;
+        modules.forEach(m=>{
+          if(m.name.toLowerCase() === mod.toLowerCase()) m.delay = delayVal;
+        });
+      });
+    }
+    // Reset lastResult states
+    modules.forEach(m => {
+      m.lastResult = 'pending';
+      m.lastMessage = '';
+    });
+    displaySelectedModuleStatus();
+    clearLog();
+    log("Custom scenario applied.");
+    log(`Failures: ${failText || '(none)'} | Delays: ${delayText || '(none)'}`);
+  }
+
+  // Execution step function: Executes current step module integration test step
+  async function executeStep(){
+    if(runState !== 'running') return;
+
+    if(currentStep >= modules.length){
+      log("Test run completed successfully.");
+      runState = 'finished';
+      el.stepTestRun.disabled = true;
+      el.startTestRun.disabled = false;
+      el.resetTestRun.disabled = false;
+      el.failureActionSelect.disabled = true;
+      el.autoRunToggle.disabled = false;
+      return;
+    }
+
+    const mod = modules[currentStep];
+    if(!mod.active){
+      mod.lastResult = 'skipped';
+      mod.lastMessage = "Module inactive, skipped";
+      log(`Step ${currentStep+1}/${modules.length}: Module "${mod.name}" skipped (inactive).`);
+      currentStep++;
+      return;
+    }
+
+    log(`Step ${currentStep+1}/${modules.length}: Testing module "${mod.name}"...`);
+
+    // Simulate delay
+    if(mod.delay > 0) {
+      log(`Delaying ${mod.delay}ms...`);
+      await delay(mod.delay);
+    }
+
+    // Determine pass/fail
+    if(mod.fail){
+      mod.lastResult = 'fail';
+      mod.lastMessage = "Simulated failure";
+      log(`Module "${mod.name}" FAILED!`);
+
+      // Handle failure
+      await handleFailure(mod, currentStep);
+      return;
+    } else {
+      mod.lastResult = 'success';
+      mod.lastMessage = "Passed";
+      log(`Module "${mod.name}" passed.`);
+      currentStep++;
+    }
+  }
+
+  function delay(ms){return new Promise(res=>setTimeout(res, ms));}
+
+  // Handles a failure step based on the configured failureAction
+  async function handleFailure(mod, idx){
+    failureAction = el.failureActionSelect.value || 'retry';
+    log(`Failure action selected: ${failureAction}`);
+
+    switch(failureAction){
+      case 'retry':
+        log(`Retrying module "${mod.name}"...`);
+        // Just re-run the same step
+        // No state change, keep currentStep unchanged
+        // But to avoid infinite loops, limit retries
+        mod.retryCount = (mod.retryCount||0) + 1;
+        if(mod.retryCount > 3){
+          log(`Module "${mod.name}" retry limit exceeded (3). Aborting test.`);
+          abortTestRun();
+          return;
+        }
+        // Retry with delay
+        await delay(100);
+        break;
+      case 'skip':
+        log(`Skipping module "${mod.name}". Marking as skipped.`);
+        mod.lastResult = 'skipped';
+        mod.lastMessage = "Skipped due to failure";
+        mod.retryCount = 0;
+        currentStep++;
+        mod.retryCount = 0;
+        break;
+      case 'abort':
+        log("Aborting test run due to failure.");
+        abortTestRun();
+        break;
+      case 'modify':
+        log("Pausing test run for config modification.");
+        runState = 'paused';
+        el.failureActionSelect.disabled = false;
+        el.modifyConfigSection.style.display = 'block';
+        el.applyModifyConfig.disabled = false;
+        el.stepTestRun.disabled = true;
+        el.startTestRun.disabled = true;
+        el.resetTestRun.disabled = false;
+        return;  // Pause here to allow user modifications
+      default:
+        log("Unknown failure action, aborting.");
+        abortTestRun();
+        break;
+    }
+  }
+
+  // Abort test run immediately
+  function abortTestRun(){
+    runState = 'aborted';
+    log("Test run aborted.");
+    el.stepTestRun.disabled = true;
+    el.startTestRun.disabled = false;
+    el.resetTestRun.disabled = false;
+    el.failureActionSelect.disabled = true;
+    el.autoRunToggle.disabled = false;
+    clearAutoRunTimer();
+  }
+
+  // Begin test run from step 0
+  function startTestRun(){
+    if(runState === 'running') return;
+    runState = 'running';
+    currentStep = 0;
+
+    // Reset module last result states
+    modules.forEach(m=>{
+      m.lastResult = 'pending';
+      m.lastMessage = '';
+      m.retryCount = 0;
+    });
+
+    clearLog();
+    log(`Starting test run with scenario "${testScenario}" on ${modules.length} module(s).`);
+
+    el.stepTestRun.disabled = false;
+    el.resetTestRun.disabled = false;
+    el.startTestRun.disabled = true;
+    el.failureActionSelect.disabled = false;
+    el.autoRunToggle.disabled = false;
+
+    if(el.autoRunToggle.checked){
+      startAutoRun();
+    }
+  }
+
+  // Step one step manually
+  async function stepTestRunAction(){
+    if(runState !== 'running' && runState !== 'paused') return;
+    el.stepTestRun.disabled = true;
+    await executeStep();
+    if(runState === 'running'){
+      el.stepTestRun.disabled = false;
+    }
+  }
+
+  // Reset test run to idle state
+  function resetTestRun(){
+    runState = 'idle';
+    currentStep = 0;
+    clearAutoRunTimer();
+    modules.forEach(m=>{
+      m.lastResult = 'pending';
+      m.lastMessage = '';
+      m.retryCount = 0;
+    });
+    clearLog();
+    log("Test run reset to idle.");
+    el.startTestRun.disabled = false;
+    el.stepTestRun.disabled = true;
+    el.resetTestRun.disabled = true;
+    el.failureActionSelect.disabled = true;
+    el.modifyConfigSection.style.display = 'none';
+    el.autoRunToggle.disabled = false;
+  }
+
+  // Auto run timer implementation
+  function startAutoRun(){
+    clearAutoRunTimer();
+    el.stepTestRun.disabled = true;
+    el.startTestRun.disabled = true;
+    el.resetTestRun.disabled = false;
+    el.failureActionSelect.disabled = false;
+    el.autoRunToggle.disabled = false;
+
+    const delayTime = parseInt(el.stepDelay.value,10);
+    if(isNaN(delayTime) || delayTime < 10) {
+      log("Invalid step delay value. Using 500ms.");
+    }
+    const delayVal = (delayTime >= 10) ? delayTime : 500;
+
+    autoRunTimer = setInterval(async () => {
+      if(runState !== 'running') {
+        clearAutoRunTimer();
+        return;
+      }
+      await executeStep();
+      if(runState !== 'running'){
+        clearAutoRunTimer();
+      }
+    }, delayVal);
+  }
+
+  function clearAutoRunTimer(){
+    if(autoRunTimer){
+      clearInterval(autoRunTimer);
+      autoRunTimer = null;
+    }
+  }
+
+  // Handle scenario select change
+  function onScenarioChange(){
+    testScenario = el.testScenarioSelect.value;
+    if(testScenario === 'custom'){
+      el.customScenarioConfig.style.display = 'block';
+    } else {
+      el.customScenarioConfig.style.display = 'none';
+      applyTestScenarioPreset(testScenario);
+      resetTestRun();
+    }
+  }
+
+  // Apply custom scenario config button (no explicit button, use input focus lost or manual apply on scenario change/start)
+  function applyCustomScenarioIfNeeded(){
+    if(testScenario !== 'custom') return;
+    applyCustomScenarioConfig();
+    resetTestRun();
+  }
+
+  // Apply modifications after failure pause
+  function applyModifyConfig(){
+    const modText = el.modifyModules.value.trim();
+    if(modText.length){
+      const modsToToggle = modText.split(',').map(s=>s.trim().toLowerCase()).filter(s => s.length);
+      let changedMods = [];
+      modules.forEach(m => {
+        if(modsToToggle.includes(m.name.toLowerCase())){
+          m.active = !m.active;
+          changedMods.push(`${m.name} set to active=${m.active}`);
+        }
+      });
+      if(changedMods.length){
+        log(`Modified module activations after failure:\n - ${changedMods.join('\n - ')}`);
+      } else {
+        log("No matching modules found to modify.");
+      }
+    } else {
+      log("No modules specified for modification.");
+    }
+    // Hide modification section, resume run
+    el.modifyConfigSection.style.display = 'none';
+    el.failureActionSelect.disabled = false;
+    runState = 'running';
+    el.stepTestRun.disabled = false;
+    el.startTestRun.disabled = true;
+  }
+
+  // Event Listeners Initialization
+  function initEventListeners(){
+    // Module count or names change
+    el.numModules.addEventListener('change', () => {
+      if(runState !== 'idle'){
+        alert("Cannot change module count during a test run.");
+        el.numModules.value = modules.length;
+        return;
+      }
+      initModulesFromInput();
+      resetTestRun();
+    });
+    el.moduleNames.addEventListener('change', () => {
+      if(runState !== 'idle'){
+        alert("Cannot change module names during a test run.");
+        el.moduleNames.value = modules.map(m=>m.name).join(',');
+        return;
+      }
+      initModulesFromInput();
+      resetTestRun();
+    });
+
+    el.moduleSelect.addEventListener('change', displaySelectedModuleStatus);
+    el.toggleModuleStatus.addEventListener('click', e=>{
+      e.preventDefault();
+      toggleSelectedModuleStatus();
+    });
+
+    el.testScenarioSelect.addEventListener('change', onScenarioChange);
+    el.customFailures.addEventListener('blur', applyCustomScenarioIfNeeded);
+    el.customDelays.addEventListener('blur', applyCustomScenarioIfNeeded);
+
+    el.startTestRun.addEventListener('click', e=>{
+      e.preventDefault();
+      applyCustomScenarioIfNeeded();
+      startTestRun();
+    });
+
+    el.stepTestRun.addEventListener('click', async e=>{
+      e.preventDefault();
+      await stepTestRunAction();
+    });
+
+    el.resetTestRun.addEventListener('click', e=>{
+      e.preventDefault();
+      resetTestRun();
+    });
+
+    el.failureActionSelect.addEventListener('change', e=>{
+      failureAction = e.target.value;
+      if(runState === 'paused'){
+        // Depending on failureAction, show or hide modification section
+        if(failureAction === 'modify'){
+          el.modifyConfigSection.style.display = 'block';
+        } else {
+          el.modifyConfigSection.style.display = 'none';
+        }
+      }
+    });
+
+    el.applyModifyConfig.addEventListener('click', e=>{
+      e.preventDefault();
+      applyModifyConfig();
+    });
+
+    el.autoRunToggle.addEventListener('change', e=>{
+      if(e.target.checked){
+        if(runState === 'running'){
+          startAutoRun();
+        }
+      } else {
+        clearAutoRunTimer();
+        if(runState === 'running'){
+          el.stepTestRun.disabled = false;
+          el.startTestRun.disabled = true;
+        }
+      }
+    });
+
+    el.stepDelay.addEventListener('change', e=>{
+      if(el.autoRunToggle.checked && runState === 'running'){
+        startAutoRun();
+      }
+    });
+  }
+
+  // Initialize on load
+  function init(){
+    initModulesFromInput();
+    applyTestScenarioPreset('happyPath');
+    resetTestRun();
+    initEventListeners();
+  }
+
+  window.addEventListener('load', init);
+})();
+</script>
+
+</body>
+</html>

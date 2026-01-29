@@ -116,7 +116,7 @@ test.describe('Undirected Graph Visualization - Idle State (S0_Idle)', () => {
 
   test('Clicking the graph container does not create nodes or trigger handlers (no event handlers present)', async ({ page }) => {
     // This test validates the FSM observation that "No interactive elements or event handlers were found."
-    const gp = new GraphPage(page);
+    const gp1 = new GraphPage(page);
     gp.attachListeners();
 
     await gp.goto();
@@ -149,7 +149,7 @@ test.describe('Undirected Graph Visualization - Idle State (S0_Idle)', () => {
     // The FSM lists an entry action renderPage(). The provided HTML did not define such a function.
     // This test evaluates typeof renderPage, and then intentionally invokes it to let the ReferenceError happen
     // naturally in the page context. We assert that the thrown error reflects that renderPage is not defined.
-    const gp = new GraphPage(page);
+    const gp2 = new GraphPage(page);
     gp.attachListeners();
 
     await gp.goto();
@@ -201,7 +201,7 @@ test.describe('Undirected Graph Visualization - Idle State (S0_Idle)', () => {
   test('Edge case: verify there are no interactive controls for adding/removing nodes (expected absence)', async ({ page }) => {
     // This test looks for UI controls (buttons, inputs) that would enable adding/removing nodes.
     // The provided HTML snippet had none; ensure none are present.
-    const gp = new GraphPage(page);
+    const gp3 = new GraphPage(page);
     gp.attachListeners();
 
     await gp.goto();
@@ -224,7 +224,7 @@ test.describe('Undirected Graph Visualization - Idle State (S0_Idle)', () => {
 
   test('Observability: Capture console and page errors while interacting; assert captured errors are of known kinds if present', async ({ page }) => {
     // This test ensures we collect console and page errors and, if present, they are typical JS runtime errors.
-    const gp = new GraphPage(page);
+    const gp4 = new GraphPage(page);
     gp.attachListeners();
 
     await gp.goto();

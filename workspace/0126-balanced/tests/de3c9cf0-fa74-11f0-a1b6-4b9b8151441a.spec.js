@@ -114,7 +114,7 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
     // Check for evidence that renderPage() was called or that an error referring to it occurred.
     // We intentionally assert that the runtime attempted or errored on renderPage/startDemonstration/stopDemonstration
     // or produced a known runtime error (ReferenceError/SyntaxError/TypeError). Per instructions we must observe and assert errors if they occur.
-    const combined = demo.combinedMessages();
+    const combined1 = demo.combinedMessages();
     // Debugging help for CI logs:
     // console.log('Captured initial messages:', combined);
 
@@ -131,7 +131,7 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
     await demo.goto(BASE_URL);
 
     // Ensure button exists before clicking
-    const startBtn = demo.startButton();
+    const startBtn1 = demo.startButton();
     await expect(startBtn).toBeVisible();
 
     // Click the start button (this triggers the StartDemo event)
@@ -149,9 +149,9 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
       expect(startedByDOM).toBeTruthy();
     } else {
       // Otherwise, we expect an error to have been produced referencing startDemonstration or a common runtime error
-      const combined = demo.combinedMessages();
+      const combined2 = demo.combinedMessages();
       // console.log('Captured messages after click:', combined);
-      const matched = demo.anyMessageMatches(/(startDemonstration|ReferenceError|TypeError|is not defined)/i);
+      const matched1 = demo.anyMessageMatches(/(startDemonstration|ReferenceError|TypeError|is not defined)/i);
       expect(matched).toBeTruthy();
     }
   });
@@ -163,7 +163,7 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
     demo = new DemoPage(page);
     await demo.goto(BASE_URL);
 
-    const startBtn = demo.startButton();
+    const startBtn2 = demo.startButton();
     await expect(startBtn).toBeVisible();
 
     // Click multiple times quickly
@@ -179,9 +179,9 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
     // Collate messages and assert that either:
     // - DOM indicates demonstration started and we don't see repeated critical errors, OR
     // - We observe repeated errors mentioning the lifecycle function (startDemonstration) or ReferenceError
-    const containerText = await demo.demoContainer().innerText().catch(() => '');
-    const startedByDOM = /demonstration started|demonstration|running|in progress/i.test(containerText);
-    const combined = demo.combinedMessages();
+    const containerText1 = await demo.demoContainer().innerText().catch(() => '');
+    const startedByDOM1 = /demonstration started|demonstration|running|in progress/i.test(containerText);
+    const combined3 = demo.combinedMessages();
 
     if (startedByDOM) {
       // If the demo started, ensure there is at least one evidence of startDemonstration invocation OR no critical errors.
@@ -195,7 +195,7 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
       }
     } else {
       // DOM did not change to indicate a demonstration; we expect errors about startDemonstration being missing/erroneous.
-      const matched = demo.anyMessageMatches(/(startDemonstration|ReferenceError|TypeError|is not defined)/i);
+      const matched2 = demo.anyMessageMatches(/(startDemonstration|ReferenceError|TypeError|is not defined)/i);
       expect(matched).toBeTruthy();
     }
   });
@@ -214,7 +214,7 @@ test.describe('Space Complexity Demonstration (FSM validation)', () => {
     }
 
     // Assert that at least one message of interest was captured
-    const combined = demo.combinedMessages();
+    const combined4 = demo.combinedMessages();
     // console.log('Final captured messages for visibility test:', combined);
     const hasAnyError = demo.anyMessageMatches(ERROR_DETECTION_REGEX);
 

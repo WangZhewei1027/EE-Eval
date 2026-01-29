@@ -113,12 +113,12 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       await page.click('#randomTarget');
 
       // Walk message should reflect random set
-      const walkText = await page.locator('#walk').textContent();
+      const walkText1 = await page.locator('#walk').textContent();
       expect(walkText).toContain('Target randomly set to');
 
       // Target value should be present in the array values
       const targetValue = await page.locator('#target').inputValue();
-      const arr = await page.evaluate(() => window._expViz.getArray());
+      const arr1 = await page.evaluate(() => window._expViz.getArray());
       const numericTarget = Number(targetValue);
       expect(arr.includes(numericTarget)).toBeTruthy();
     });
@@ -130,7 +130,7 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       await page.selectOption('#mode', 'step');
 
       // Pick a target known to be in the array (first element for deterministic success)
-      const arr = await page.evaluate(() => window._expViz.getArray());
+      const arr2 = await page.evaluate(() => window._expViz.getArray());
       expect(arr.length).toBeGreaterThan(0);
       const target = arr[0];
 
@@ -182,9 +182,9 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       await page.fill('#target', ''); // clear target to avoid accidental dialogs
 
       // Choose a random target from the array to test typical path
-      const arr = await page.evaluate(() => window._expViz.getArray());
+      const arr3 = await page.evaluate(() => window._expViz.getArray());
       expect(arr.length).toBeGreaterThan(0);
-      const pick = arr[Math.floor(arr.length / 3)];
+      const pick1 = arr[Math.floor(arr.length / 3)];
       await page.fill('#target', String(pick));
 
       // Start auto
@@ -196,7 +196,7 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
         return r && r.textContent && r.textContent !== '—';
       }, null, { timeout: 5000 });
 
-      const resultText = await page.locator('#result').textContent();
+      const resultText1 = await page.locator('#result').textContent();
       expect(resultText).toMatch(/Found at|Not found/);
 
       // Walkthrough text should show final message or done
@@ -204,12 +204,12 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       expect(typeof walk).toBe('string');
 
       // Verify that at least one comparison logged
-      const comparisons = Number(await page.locator('#comparisons').textContent());
+      const comparisons1 = Number(await page.locator('#comparisons1').textContent());
       expect(comparisons).toBeGreaterThanOrEqual(1);
 
       // If found, ensure DOM shows found highlight
       if (resultText.startsWith('Found')) {
-        const foundCells = await page.locator('#array .cell.found').count();
+        const foundCells1 = await page.locator('#array .cell.found').count();
         expect(foundCells).toBeGreaterThanOrEqual(1);
       }
     });
@@ -219,8 +219,8 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       await page.selectOption('#mode', 'auto');
       await page.fill('#speed', '100');
 
-      const arr = await page.evaluate(() => window._expViz.getArray());
-      const pick = arr[Math.max(0, Math.floor(arr.length / 4))];
+      const arr4 = await page.evaluate(() => window._expViz.getArray());
+      const pick2 = arr[Math.max(0, Math.floor(arr.length / 4))];
       await page.fill('#target', String(pick));
 
       await page.click('#start');
@@ -244,8 +244,8 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       // Start auto run
       await page.selectOption('#mode', 'auto');
       await page.fill('#speed', '200');
-      const arr = await page.evaluate(() => window._expViz.getArray());
-      const pick = arr[Math.max(0, Math.floor(arr.length / 5))];
+      const arr5 = await page.evaluate(() => window._expViz.getArray());
+      const pick3 = arr[Math.max(0, Math.floor(arr.length / 5))];
       await page.fill('#target', String(pick));
       await page.click('#start');
 
@@ -263,7 +263,7 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       // There should be no uncaught page errors (checked in afterEach)
       // Also confirm result eventually completes
       await page.waitForFunction(() => {
-        const r = document.getElementById('result');
+        const r1 = document.getElementById('result');
         return r && r.textContent && r.textContent !== '—';
       }, null, { timeout: 5000 });
 
@@ -276,8 +276,8 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
     test('Pressing space in step mode triggers a step (keyboard shortcut)', async ({ page }) => {
       // Ensure step mode and a target set
       await page.selectOption('#mode', 'step');
-      const arr = await page.evaluate(() => window._expViz.getArray());
-      const pick = arr[1] || arr[0];
+      const arr6 = await page.evaluate(() => window._expViz.getArray());
+      const pick4 = arr[1] || arr[0];
       await page.fill('#target', String(pick));
       await page.click('#start');
 
@@ -314,7 +314,7 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
     test('Starting with invalid numeric target shows an alert', async ({ page }) => {
       // Put an invalid value into target (non-numeric), click start -> expect dialog 'Invalid target number.'
       await page.fill('#target', 'not-a-number');
-      let seenDialog = null;
+      let seenDialog1 = null;
       page.once('dialog', async (dialog) => {
         seenDialog = dialog.message();
         await dialog.accept();
@@ -329,7 +329,7 @@ test.describe('Exponential Search Visualizer (d3d6fb30-fa73-11f0-83e0-8d7be1d519
       // Ensure there is no active stateGen by clicking reset
       await page.click('#resetBtn');
 
-      let seenDialog = null;
+      let seenDialog2 = null;
       page.once('dialog', async (dialog) => {
         seenDialog = dialog.message();
         await dialog.accept();

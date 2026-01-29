@@ -121,7 +121,7 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
 
   test.describe('JavaScript Demo Running (S1_JavaScriptDemoRunning) and transitions', () => {
     test('clicking Run Demo Code clears js-output and produces expected demonstration output', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo1 = new DemoPage(page);
       await demo.goto();
 
       // Prefill js-output to ensure clearOutput('js-output') happens on entry to S1
@@ -139,8 +139,8 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
       expect(out).not.toContain('PREVIOUS OUTPUT');
 
       // Validate key lines from the JS demo were output
-      expect(out).toContain('Initial value: 42 (type: number)');
-      expect(out).toContain('After reassignment: hello (type: string)');
+      expect(out).toContain('Initial value: 42 (type)');
+      expect(out).toContain('After reassignment: hello (type)');
       // The demo logs 2 + "3" = "23" but output formatting uses JS join logic -> check for 23
       expect(out).toContain('2 + "3" = 23');
       expect(out).toContain('0 == false: true');
@@ -152,7 +152,7 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
     });
 
     test('clicking Run Demo Code multiple times resets and re-runs the demo', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo2 = new DemoPage(page);
       await demo.goto();
 
       // First run
@@ -178,7 +178,7 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
 
   test.describe('Type Checker Demo Running (S2_TypeCheckerDemoRunning) and transitions', () => {
     test('clicking Run Type Checker Demo clears tc-output and shows type checking and errors for invalid expr', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo3 = new DemoPage(page);
       await demo.goto();
 
       // Prefill tc-output to ensure clearOutput('tc-output') happens
@@ -190,12 +190,12 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
       // Wait for output indicating the expression was type-checked
       await demo.waitForTcOutputContains('Expression type:', { timeout: 2000 });
 
-      const out = await demo.getTcOutputText();
+      const out1 = await demo.getTcOutputText();
 
       // Ensure previous content was cleared
       expect(out).not.toContain('OLD_TC_OUTPUT');
 
-      // Validate that the valid expression was reported as number and evaluation result printed
+      // Validate that the valid expression was reported and evaluation result printed
       expect(out).toContain('Expression type: number');
       expect(out).toContain('Evaluation result:');
 
@@ -211,20 +211,20 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
     });
 
     test('clicking Run Type Checker Demo multiple times resets output and reproduces messages', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo4 = new DemoPage(page);
       await demo.goto();
 
       // Run once
       await demo.clickRunTypeChecker();
       await demo.waitForTcOutputContains('Expression type:', { timeout: 2000 });
-      const first = await demo.getTcOutputText();
+      const first1 = await demo.getTcOutputText();
       expect(first).toContain('Expression type: number');
 
       // Run again and validate there is only one set of messages (not appended duplicates)
       await demo.clickRunTypeChecker();
       await demo.waitForTcOutputContains('Expression type:', { timeout: 2000 });
-      const second = await demo.getTcOutputText();
-      const occurrences = (second.match(/Expression type:/g) || []).length;
+      const second1 = await demo.getTcOutputText();
+      const occurrences1 = (second.match(/Expression type:/g) || []).length;
       expect(occurrences).toBe(1);
 
       expect(pageErrors.length).toBe(0);
@@ -234,7 +234,7 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
 
   test.describe('Edge cases and error observation', () => {
     test('no unexpected uncaught ReferenceError/SyntaxError/TypeError occur during normal interactions', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo5 = new DemoPage(page);
       await demo.goto();
 
       // Interact with both demos
@@ -251,7 +251,7 @@ test.describe('Type System Demonstration - FSM driven tests', () => {
     });
 
     test('verify that clicking buttons does not throw unhandled exceptions (monitoring console and page errors)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo6 = new DemoPage(page);
       await demo.goto();
 
       // Attempt multiple interactions

@@ -146,7 +146,7 @@ test.describe('DFS Interactive Application - FSM validation and runtime errors',
     const secondVisited = await graphPage.getVisitedArray();
 
     expect(firstVisited.sort()).toEqual(secondVisited.sort());
-    const expectedNodes = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const expectedNodes1 = ['A', 'B', 'C', 'D', 'E', 'F'];
     expect(firstVisited.length).toBe(expectedNodes.length);
     for (const n of expectedNodes) expect(firstVisited).toContain(n);
   });
@@ -156,8 +156,8 @@ test.describe('DFS Interactive Application - FSM validation and runtime errors',
     // - StartDFS triggers dfs calls (VisitNode)
     // - Recursion over children (VisitNode repeated)
     // - Completion leads to empty stack and full visited set
-    const visited = await graphPage.getVisitedArray();
-    const stack = await graphPage.getStackArray();
+    const visited1 = await graphPage.getVisitedArray();
+    const stack1 = await graphPage.getStackArray();
 
     expect(visited.length).toBeGreaterThanOrEqual(1); // StartDFS at least visited something
     expect(stack.length).toBe(0); // Completed DFS should leave stack empty
@@ -191,10 +191,10 @@ test.describe('DFS Interactive Application - FSM validation and runtime errors',
 
   test('Robustness: despite runtime errors from drawing, DFS algorithm side-effects completed before drawGraph error', async () => {
     // This final test ensures the logical algorithm work (visited set) completed before UI drawing crashed.
-    const visited = await graphPage.getVisitedArray();
+    const visited2 = await graphPage.getVisitedArray();
 
     // Confirm visited still contains expected nodes
-    const expectedNodes = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const expectedNodes2 = ['A', 'B', 'C', 'D', 'E', 'F'];
     for (const n of expectedNodes) expect(visited).toContain(n);
     expect(visited.length).toBe(expectedNodes.length);
   });

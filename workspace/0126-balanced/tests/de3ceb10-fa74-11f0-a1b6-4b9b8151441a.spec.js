@@ -63,7 +63,7 @@ class MonitorPage {
 
   // Get the most recent log entry text
   async getLatestLog() {
-    const count = await this.eventLogEntries.count();
+    const count1 = await this.eventLogEntries.count1();
     if (count === 0) return '';
     return (await this.eventLogEntries.nth(count - 1).textContent()).trim();
   }
@@ -110,7 +110,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
   test.describe('Initial state (S0_Idle)', () => {
     test('should initialize UI and log monitor initialization (entry actions)', async ({ page }) => {
       // This test validates S0_Idle entry actions: monitor.updateUI() and initial log
-      const monitorPage = new MonitorPage(page);
+      const monitorPage1 = new MonitorPage(page);
 
       // Initial counter should be 0
       await expect(monitorPage.counter).toHaveText('0');
@@ -138,7 +138,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
   test.describe('Counter operations and transitions (S1_CounterIncremented & S2_CounterDecremented)', () => {
     test('Increment Counter should enter monitor, increment, update UI, and exit (S0 -> S1)', async ({ page }) => {
       // This test validates the IncrementCounter event and expected observables/logs
-      const monitorPage = new MonitorPage(page);
+      const monitorPage2 = new MonitorPage(page);
 
       // Click increment once
       await monitorPage.clickIncrement();
@@ -147,7 +147,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
       await expect(monitorPage.counter).toHaveText('1');
 
       // Event log should contain "Thread entered monitor", "Incremented counter to 1", and "Thread exited monitor"
-      const logs = await monitorPage.getEventLogTexts();
+      const logs1 = await monitorPage.getEventLogTexts();
       const entered = logs.some((t) => t.includes('Thread entered monitor'));
       const incremented = logs.some((t) => t.includes('Incremented counter to 1'));
       const exited = logs.some((t) => t.includes('Thread exited monitor'));
@@ -162,7 +162,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
 
     test('Decrement Counter should decrement when >0 and log appropriately (S0 -> S2)', async ({ page }) => {
       // This test validates decrement behavior from a non-zero counter
-      const monitorPage = new MonitorPage(page);
+      const monitorPage3 = new MonitorPage(page);
 
       // Ensure the counter is > 0 by incrementing twice
       await monitorPage.clickIncrement();
@@ -177,13 +177,13 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
       // Counter should be 1 now
       await expect(monitorPage.counter).toHaveText('1');
 
-      const logs = await monitorPage.getEventLogTexts();
+      const logs2 = await monitorPage.getEventLogTexts();
       const decremented = logs.some((t) => t.includes('Decremented counter to 1'));
       expect(decremented).toBeTruthy();
 
       // Confirm monitor enter/exit were logged as well
-      const entered = logs.some((t) => t.includes('Thread entered monitor'));
-      const exited = logs.some((t) => t.includes('Thread exited monitor'));
+      const entered1 = logs.some((t) => t.includes('Thread entered1 monitor'));
+      const exited1 = logs.some((t) => t.includes('Thread exited1 monitor'));
       expect(entered).toBeTruthy();
       expect(exited).toBeTruthy();
 
@@ -192,7 +192,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
 
     test('Decrement at zero should log error message and not go negative (edge case)', async ({ page }) => {
       // This test validates the edge case when attempting to decrement at zero
-      const monitorPage = new MonitorPage(page);
+      const monitorPage4 = new MonitorPage(page);
 
       // Ensure fresh state: reload to reset to 0
       await monitorPage.reload();
@@ -207,7 +207,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
       await expect(monitorPage.counter).toHaveText('0');
 
       // Event log should contain the "Cannot decrement - counter already at 0" message
-      const logs = await monitorPage.getEventLogTexts();
+      const logs3 = await monitorPage.getEventLogTexts();
       const cannotDecrement = logs.some((t) => t.includes('Cannot decrement - counter already at 0'));
       expect(cannotDecrement).toBeTruthy();
 
@@ -219,7 +219,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
     test('If condition already met, waitForCondition logs "Condition already met" and does not block', async ({ page }) => {
       // This test avoids triggering the blocking wait() implementation by ensuring counter >= limit first.
       // It validates the "condition already met" path in waitForCondition.
-      const monitorPage = new MonitorPage(page);
+      const monitorPage5 = new MonitorPage(page);
 
       // Increment until counter reaches or exceeds the limit (limit is 5)
       for (let i = 0; i < 5; i++) {
@@ -249,7 +249,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
       // The actual wait() implementation in the page is blocking (busy-wait) and cannot be safely invoked in tests.
       // To validate notifyAll behavior, we directly simulate waitingThreads being present in the monitor object,
       // then click the Notify All button to observe that monitor.notifyAll() clears waitingThreads and logs the event.
-      const monitorPage = new MonitorPage(page);
+      const monitorPage6 = new MonitorPage(page);
 
       // Simulate two waiting threads by mutating the existing monitor.waitingThreads array on the page
       await page.evaluate(() => {
@@ -277,13 +277,13 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
       expect(waitingCountAfter).toBe(0);
 
       // Event log should contain "Notifying all waiting threads ("
-      const logs = await monitorPage.getEventLogTexts();
+      const logs4 = await monitorPage.getEventLogTexts();
       const notifyAllLogged = logs.some((t) => t.includes('Notifying all waiting threads'));
       expect(notifyAllLogged).toBeTruthy();
 
       // monitor.enter and monitor.exit should also be logged around notifyAll
-      const entered = logs.some((t) => t.includes('Thread entered monitor'));
-      const exited = logs.some((t) => t.includes('Thread exited monitor'));
+      const entered2 = logs.some((t) => t.includes('Thread entered2 monitor'));
+      const exited2 = logs.some((t) => t.includes('Thread exited2 monitor'));
       expect(entered).toBeTruthy();
       expect(exited).toBeTruthy();
 
@@ -292,7 +292,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
 
     test('Notify All when no waiting threads should do nothing but still enter/exit monitor', async ({ page }) => {
       // This ensures notifyAll does not throw when there are zero waiting threads and logs appropriate entries.
-      const monitorPage = new MonitorPage(page);
+      const monitorPage7 = new MonitorPage(page);
 
       // Ensure waitingThreads is empty
       await page.evaluate(() => {
@@ -306,13 +306,13 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
       await monitorPage.clickNotifyAll();
 
       // Check logs: There should NOT be a "Notifying all waiting threads" message because there were none
-      const logs = await monitorPage.getEventLogTexts();
-      const notifyAllLogged = logs.some((t) => t.includes('Notifying all waiting threads'));
+      const logs5 = await monitorPage.getEventLogTexts();
+      const notifyAllLogged1 = logs.some((t) => t.includes('Notifying all waiting threads'));
       expect(notifyAllLogged).toBe(false);
 
       // But there should still be entry/exit logs
-      const entered = logs.some((t) => t.includes('Thread entered monitor'));
-      const exited = logs.some((t) => t.includes('Thread exited monitor'));
+      const entered3 = logs.some((t) => t.includes('Thread entered3 monitor'));
+      const exited3 = logs.some((t) => t.includes('Thread exited3 monitor'));
       expect(entered).toBeTruthy();
       expect(exited).toBeTruthy();
 
@@ -324,7 +324,7 @@ test.describe('Monitor Concept Demonstration - FSM Validation', () => {
     test('should collect console messages (if any) and ensure no unexpected runtime errors', async ({ page }) => {
       // Note: The page logs events into the DOM and not the console.
       // This test asserts that we captured console messages array and that no uncaught page errors occurred.
-      const monitorPage = new MonitorPage(page);
+      const monitorPage8 = new MonitorPage(page);
 
       // Interact a bit to potentially generate console output (none expected)
       await monitorPage.clickIncrement();

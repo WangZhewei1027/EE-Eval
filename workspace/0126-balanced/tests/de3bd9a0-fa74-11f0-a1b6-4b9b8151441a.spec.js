@@ -62,11 +62,11 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
 
   test.describe('Searching State (S1_Searching) and Result States (S3_ResultFound, S4_ResultNotFound)', () => {
     test('should perform jump search and find existing element (Result Found - S3)', async ({ page }) => {
-      const arrayInput = page.locator('#array-input');
-      const targetInput = page.locator('#target-input');
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const arrayDisplay = page.locator('#array-display');
-      const stepsDiv = page.locator('#steps');
+      const arrayInput1 = page.locator('#array-input');
+      const targetInput1 = page.locator('#target-input');
+      const searchButton1 = page.locator("button[onclick='performJumpSearch()']");
+      const arrayDisplay1 = page.locator('#array-display');
+      const stepsDiv1 = page.locator('#steps');
 
       // Ensure starting from defaults (array contains 13 at index 6)
       await expect(arrayInput).toHaveValue(/13/);
@@ -92,10 +92,10 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
     });
 
     test('should perform jump search and report not found for missing element (Result Not Found - S4)', async ({ page }) => {
-      const targetInput = page.locator('#target-input');
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const stepsDiv = page.locator('#steps');
-      const arrayDisplay = page.locator('#array-display');
+      const targetInput2 = page.locator('#target-input');
+      const searchButton2 = page.locator("button[onclick='performJumpSearch()']");
+      const stepsDiv2 = page.locator('#steps');
+      const arrayDisplay2 = page.locator('#array-display');
 
       // Set a target that is not in the default array
       await targetInput.fill('14'); // 14 is not present
@@ -115,9 +115,9 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
 
   test.describe('Error State (S2_Error) - Input Validation', () => {
     test('should display error when array contains non-numeric entries (Error - S2)', async ({ page }) => {
-      const arrayInput = page.locator('#array-input');
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const stepsDiv = page.locator('#steps');
+      const arrayInput2 = page.locator('#array-input');
+      const searchButton3 = page.locator("button[onclick='performJumpSearch()']");
+      const stepsDiv3 = page.locator('#steps');
 
       // Introduce invalid array content that will cause arr.some(isNaN) to be true
       await arrayInput.fill('1, 2, foo, 4');
@@ -132,9 +132,9 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
     });
 
     test('should display error when target is invalid or empty (Error - S2)', async ({ page }) => {
-      const targetInput = page.locator('#target-input');
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const stepsDiv = page.locator('#steps');
+      const targetInput3 = page.locator('#target-input');
+      const searchButton4 = page.locator("button[onclick='performJumpSearch()']");
+      const stepsDiv4 = page.locator('#steps');
 
       // Clear the target input to produce NaN when parsed
       await targetInput.fill('');
@@ -151,8 +151,8 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
 
   test.describe('Transitions and Edge Cases', () => {
     test('clicking the Search button triggers the searching flow (S0 -> S1) and appends steps', async ({ page }) => {
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const stepsDiv = page.locator('#steps');
+      const searchButton5 = page.locator("button[onclick='performJumpSearch()']");
+      const stepsDiv5 = page.locator('#steps');
 
       // Ensure steps area is empty then click
       await expect(stepsDiv).toBeEmpty();
@@ -171,10 +171,10 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
     });
 
     test('edge case: array of length 1 and searching for that element', async ({ page }) => {
-      const arrayInput = page.locator('#array-input');
-      const targetInput = page.locator('#target-input');
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const stepsDiv = page.locator('#steps');
+      const arrayInput3 = page.locator('#array-input');
+      const targetInput4 = page.locator('#target-input');
+      const searchButton6 = page.locator("button[onclick='performJumpSearch()']");
+      const stepsDiv6 = page.locator('#steps');
 
       // Replace array with a single element and search for it
       await arrayInput.fill('42');
@@ -196,8 +196,8 @@ test.describe('Jump Search Interactive Application - de3bd9a0-fa74-11f0-a1b6-4b9
       // This test purposefully exercises the page and then asserts that we've captured any console/page errors.
       // It does NOT attempt to alter the runtime environment or fix errors. It simply verifies the captured logs.
 
-      const searchButton = page.locator("button[onclick='performJumpSearch()']");
-      const arrayInput = page.locator('#array-input');
+      const searchButton7 = page.locator("button[onclick='performJumpSearch()']");
+      const arrayInput4 = page.locator('#array-input');
 
       // Introduce a scenario that could produce unexpected behavior: extremely malformed input
       await arrayInput.fill(',,, , , ,');

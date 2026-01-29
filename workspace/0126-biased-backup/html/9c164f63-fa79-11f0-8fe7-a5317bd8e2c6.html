@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Interpreter — Interactive Demo</title>
+<style>
+/* Minimal / mostly empty to satisfy embedding requirement */
+</style>
+</head>
+<body>
+<h1>Interpreter — Interactive Demo</h1>
+
+<p>Plain, functional interface. Edit the program, compile, run, step, set breakpoints, snapshot, fork runs, compare runs. Everything is text-based and minimal.</p>
+
+<div>
+  <label>Sample programs:
+    <select id="sampleSelect">
+      <option value="fib">Fibonacci (recursive)</option>
+      <option value="count">While loop counter</option>
+      <option value="closure">Closure and RET</option>
+      <option value="ifelse">If / Else example</option>
+      <option value="factorial">Factorial (iterative)</option>
+      <option value="mutate">Mutate example</option>
+    </select>
+  </label>
+  <button id="loadSample">Load sample</button>
+</div>
+
+<div>
+  <label>Program (edit):</label><br>
+  <textarea id="program" rows="18" cols="95">// Example language:
+ // let x = 1;
+ // fun add(a,b){ return a + b; }
+ // print(add(2,3));
+
+ // Sample program - Fibonacci by default:
+ fun fib(n) {
+   if (n <= 1) {
+     return n;
+   } else {
+     return fib(n-1) + fib(n-2);
+   }
+ }
+
+ print("fib(6) = " + fib(6));
+</textarea>
+</div>
+
+<div>
+  <button id="parseBtn">Tokenize & Parse</button>
+  <button id="compileBtn">Compile</button>
+  <button id="runBtn">Run</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="stepBtn">Step (Into)</button>
+  <button id="stepOverBtn">Step Over</button>
+  <button id="stepOutBtn">Step Out</button>
+  <button id="resetBtn">Reset</button>
+  <label>Speed: <input type="range" id="speed" min="0" max="1000" value="200"></label>
+  <label>Auto-run until breakpoints: <input type="checkbox" id="autoRunBreakpoints"></label>
+</div>
+
+<div>
+  <label>Initial Environment (JSON):</label><br>
+  <input id="initEnv" style="width:95%" value='{"print": "builtin"}'>
+</div>
+
+<div>
+  <label>Breakpoints (comma list of instr ids): <input id="breakpointsInput" style="width:50%"></label>
+  <button id="toggleBreakpointAtPC">Toggle breakpoint at current PC</button>
+  <button id="clearBreakpoints">Clear breakpoints</button>
+</div>
+
+<div>
+  <button id="snapshotBtn">Snapshot</button>
+  <button id="restoreBtn">Restore</button>
+  <button id="forkBtn">Fork current VM (create branch)</button>
+  <button id="compareBtn">Compare with last run</button>
+  <button id="mutateRenameBtn">Rename variable (simple replace)</button>
+  <input id="renameFrom" placeholder="from" value="x">
+  <input id="renameTo" placeholder="to" value="y">
+  <button id="mutateInlineBtn">Inline constant (replace literal)</button>
+  <input id="inlineFrom" placeholder="from literal">
+  <input id="inlineTo" placeholder="to literal">
+</div>
+
+<hr>
+
+<div style="display:flex;gap:10px;">
+  <div style="flex:1;">
+    <h3>Tokens</h3>
+    <pre id="tokens" style="height:180px;overflow:auto;border:1px solid #000;"></pre>
+    <h3>AST (JSON)</h3>
+    <pre id="ast" style="height:220px;overflow:auto;border:1px solid #000;"></pre>
+  </div>
+
+  <div style="flex:1;">
+    <h3>Instructions</h3>
+    <pre id="instructions" style="height:300px;overflow:auto;border:1px solid #000;"></pre>
+    <h4>Click an instruction to toggle breakpoint</h4>
+  </div>
+
+  <div style="width:350px;">
+    <h3>Execution / Debug</h3>
+    <div>PC: <span id="pc">-</span> &nbsp; Frame: <span id="frameIdx">-</span></div>
+    <div>Breakpoints: <span id="bpsList">none</span></div>
+    <h4>Stack</h4>
+    <pre id="stack" style="height:120px;overflow:auto;border:1px solid #000;"></pre>
+    <h4>Call Stack</h4>
+    <pre id="callstack" style="height:120px;overflow:auto;border:1px solid #000;"></pre>
+    <h4>Global Env</h4>
+    <pre id="globals" style="height:120px;overflow:auto;border:1px solid #000;"></pre>
+  </div>
+</div>
+
+<hr>
+
+<div style="display:flex;gap:10px;">
+  <div style="flex:1;">
+    <h3>Output</h3>
+    <pre id="output" style="height:200px;overflow:auto;border:1px solid #000;"></pre>
+    <h3>Trace Log</h3>
+    <pre id="trace" style="height:200px;overflow:auto;border:1px solid #000;"></pre>
+  </div>
+
+  <div style="width:420px;">
+    <h3>Snapshots / Branches</h3>
+    <pre id="snapshots" style="height:420px;overflow:auto;border:1px solid #000;"></pre>
+  </div>
+</div>
+
+<script>
+// Minimal but functional interpreter demo JavaScript
+
+// Language: small C/JS-like syntax with:
+// let/assignment, fun, return, if/else, while, print builtin, expressions, calls, blocks, numbers, strings, booleans
+
+// Tokenizer
+function tokenize(input) {
+  const tokens = [];
+  const re = /\s*([A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)?|"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|<=|>=|==|!=|&&|\|\||[+\-*/%<>=!(),;{}]|\S)/y;
+  let m;
+  while ((m = re.exec(input)) !== null) {
+    let t = m[1];
+    if (/^"([^"\\]|\\.)*"$/.test(t) || /^'([^'\\]|\\.)*'$/.test(t)) {
+      // string literal
+      const raw = t;
+      const val = raw.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      tokens.push({type:'string', value: val});
+    } else if (/^[0-9]+(?:\.[0-9]+)?$/.test(t)) {
+      tokens.push({type:'number', value: Number(t)});
+    } else if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
+      tokens.push({type:'ident', value: t});
+    } else {
+      tokens.push({type: t, value: t});
+    }
+  }
+  tokens.push({type: 'EOF'});
+  return tokens;
+}
+
+// Parser: recursive descent
+function parse(tokens) {
+  let i = 0;
+  function peek() { return tokens[i]; }
+  function next() { return tokens[i++]; }
+  function expect(type, val) {
+    const t = peek();
+    if (!t || (t.type !== type && t.value !== type)) {
+      throw new Error('Expected ' + type + ' but got ' + JSON.stringify(t));
+    }
+    return next();
+  }
+
+  function parseProgram() {
+    const body = [];
+    while (peek().type !== 'EOF') {
+      body.push(parseStatement());
+    }
+    return {type:'Program', body};
+  }
+
+  function parseStatement() {
+    const t = peek();
+    if (t.type === 'ident' && t.value === 'let') {
+      next();
+      const name = expect('ident').value;
+      expect('=');
+      const expr = parseExpression();
+      optional(';');
+      return {type:'VariableDeclaration', id:name, init:expr};
+    }
+    if (t.type === 'ident' && t.value === 'fun') {
+      next();
+      const nameOrParen = peek();
+      let name = null;
+      if (nameOrParen.type === 'ident') name = next().value;
+      expect('(');
+      const params = [];
+      if (peek().type !== ')') {
+        while (true) {
+          params.push(expect('ident').value);
+          if (peek().type === ',') { next(); continue; }
+          break;
+        }
+      }
+      expect(')');
+      const body = parseBlock();
+      return {type:'FunctionDeclaration', id:name, params, body};
+    }
+    if (t.type === 'ident' && t.value === 'return') {
+      next();
+      const arg = (peek().type === ';' ? null : parseExpression());
+      optional(';');
+      return {type:'ReturnStatement', argument: arg};
+    }
+    if (t.type === 'ident' && t.value === 'if') {
+      next();
+      expect('(');
+      const test = parseExpression();
+      expect(')');
+      const consequent = parseBlock();
+      let alternate = null;
+      if (peek().type === 'ident' && peek().value === 'else') {
+        next();
+        alternate = parseBlock();
+      }
+      return {type:'IfStatement', test, consequent, alternate};
+    }
+    if (t.type === 'ident' && t.value === 'while') {
+      next();
+      expect('(');
+      const test = parseExpression();
+      expect(')');
+      const body = parseBlock();
+      return {type:'WhileStatement', test, body};
+    }
+    if (t.type === '{') {
+      return parseBlock();
+    }
+    // expression or assignment
+    const expr = parseExpression();
+    optional(';');
+    // if expression is assignment to identifier and not a call, treat as assignment
+    if (expr.type === 'AssignmentExpression') return {type:'ExpressionStatement', expression:expr};
+    if (expr.type === 'CallExpression' || expr.type === 'BinaryExpression' || expr.type === 'UnaryExpression' || expr.type === 'Identifier' || expr.type === 'Literal' || expr.type === 'MemberExpression') {
+      return {type:'ExpressionStatement', expression:expr};
+    }
+    return {type:'ExpressionStatement', expression:expr};
+  }
+
+  function parseBlock() {
+    if (peek().type === '{') {
+      next();
+      const body = [];
+      while (peek().type !== '}') {
+        if (peek().type === 'EOF') throw new Error('Unterminated block');
+        body.push(parseStatement());
+      }
+      next();
+      return {type:'BlockStatement', body};
+    } else {
+      // single statement as block
+      const stmt = parseStatement();
+      return {type:'BlockStatement', body:[stmt]};
+    }
+  }
+
+  function optional(tok) {
+    if (peek().type === tok) { next(); return true; }
+    return false;
+  }
+
+  // Expression parsing (precedence climbing)
+  function parseExpression() {
+    return parseAssignment();
+  }
+
+  function parseAssignment() {
+    const left = parseLogicalOr();
+    if (peek().type === '=') {
+      next();
+      const right = parseAssignment();
+      if (left.type === 'Identifier') {
+        return {type:'AssignmentExpression', operator:'=', left:left, right:right};
+      } else {
+        throw new Error('Invalid assignment target');
+      }
+    }
+    return left;
+  }
+
+  function parseLogicalOr() {
+    let node = parseLogicalAnd();
+    while (peek().type === '||') {
+      const op = next().type;
+      const right = parseLogicalAnd();
+      node = {type:'BinaryExpression', operator: op, left: node, right: right};
+    }
+    return node;
+  }
+  function parseLogicalAnd() {
+    let node = parseEquality();
+    while (peek().type === '&&') {
+      const op = next().type;
+      const right = parseEquality();
+      node = {type:'BinaryExpression', operator: op, left: node, right: right};
+    }
+    return node;
+  }
+  function parseEquality() {
+    let node = parseRelational();
+    while (peek().type === '==' || peek().type === '!=') {
+      const op = next().type;
+      const right = parseRelational();
+      node = {type:'BinaryExpression', operator: op, left: node, right: right};
+    }
+    return node;
+  }
+  function parseRelational() {
+    let node = parseAdditive();
+    while (peek().type === '<' || peek().type === '>' || peek().type === '<=' || peek().type === '>=') {
+      const op = next().type;
+      const right = parseAdditive();
+      node = {type:'BinaryExpression', operator: op, left: node, right: right};
+    }
+    return node;
+  }
+  function parseAdditive() {
+    let node = parseMultiplicative();
+    while (peek().type === '+' || peek().type === '-') {
+      const op = next().type;
+      const right = parseMultiplicative();
+      node = {type:'BinaryExpression', operator: op, left: node, right: right};
+    }
+    return node;
+  }
+  function parseMultiplicative() {
+    let node = parseUnary();
+    while (peek().type === '*' || peek().type === '/' || peek().type === '%') {
+      const op = next().type;
+      const right = parseUnary();
+      node = {type:'BinaryExpression', operator: op, left: node, right: right};
+    }
+    return node;
+  }
+  function parseUnary() {
+    if (peek().type === '!' || peek().type === '-') {
+      const op = next().type;
+      const arg = parseUnary();
+      return {type:'UnaryExpression', operator: op, argument: arg};
+    }
+    return parsePrimary();
+  }
+  function parsePrimary() {
+    const t = peek();
+    if (t.type === 'number') { next(); return {type:'Literal', value: t.value}; }
+    if (t.type === 'string') { next(); return {type:'Literal', value: t.value}; }
+    if (t.type === 'ident') {
+      const id = next().value;
+      if (peek().type === '(') {
+        // call
+        next();
+        const args = [];
+        if (peek().type !== ')') {
+          while (true) {
+            args.push(parseExpression());
+            if (peek().type === ',') { next(); continue; }
+            break;
+          }
+        }
+        expect(')');
+        return {type:'CallExpression', callee:{type:'Identifier', name:id}, arguments: args};
+      } else {
+        return {type:'Identifier', name: id};
+      }
+    }
+    if (t.type === '(') {
+      next();
+      const expr = parseExpression();
+      expect(')');
+      return expr;
+    }
+    throw new Error('Unexpected token in expression: ' + JSON.stringify(t));
+  }
+
+  const ast = parseProgram();
+  return ast;
+}
+
+// Compiler: compile AST to instruction arrays; each function gets its own instructions with id
+let instrIdCounter = 1;
+function compileProgram(ast) {
+  instrIdCounter = 1;
+  const funcTable = [];
+  function compileNode(node, instrs, add) {
+    add = add || function(i){ instrs.push(i); };
+    switch (node.type) {
+      case 'Program':
+        for (const s of node.body) compileNode(s, instrs);
+        add({op:'PUSH_CONST', arg: null}); // program returns null
+        add({op:'RETURN'});
+        break;
+      case 'BlockStatement':
+        for (const s of node.body) compileNode(s, instrs);
+        break;
+      case 'VariableDeclaration':
+        compileNode(node.init, instrs);
+        add({op:'STORE', arg: node.id});
+        break;
+      case 'FunctionDeclaration':
+        // compile function body to its own instr array and record function object
+        const funcInstr = [];
+        const fid = instrIdCounter++;
+        funcInstr._id = fid;
+        // parameters are node.params
+        // create local variables for params will be handled at call setup
+        // compile function body
+        compileNode(node.body, funcInstr);
+        funcInstr.push({op:'PUSH_CONST', arg: null});
+        funcInstr.push({op:'RETURN'});
+        funcTable.push({id: fid, params: node.params, instrs: funcInstr});
+        add({op:'PUSH_CONST', arg: {type:'function_literal', id: fid, params: node.params}});
+        if (node.id) {
+          add({op:'STORE', arg: node.id});
+        } else {
+          // anonymous function expression on stack (if used)
+        }
+        break;
+      case 'ReturnStatement':
+        if (node.argument) compileNode(node.argument, instrs);
+        else instrs.push({op:'PUSH_CONST', arg: null});
+        instrs.push({op:'RETURN'});
+        break;
+      case 'IfStatement':
+        compileNode(node.test, instrs);
+        const jfalseIdx = instrs.length;
+        instrs.push({op:'JUMP_IF_FALSE', arg: null}); // patch
+        compileNode(node.consequent, instrs);
+        const jendIdx = instrs.length;
+        instrs.push({op:'JUMP', arg: null}); // patch
+        // patch false jump to here
+        instrs[jfalseIdx].arg = instrs.length;
+        if (node.alternate) compileNode(node.alternate, instrs);
+        instrs[jendIdx].arg = instrs.length;
+        break;
+      case 'WhileStatement':
+        const loopStart = instrs.length;
+        compileNode(node.test, instrs);
+        const jumpEndIdx = instrs.length;
+        instrs.push({op:'JUMP_IF_FALSE', arg: null});
+        compileNode(node.body, instrs);
+        instrs.push({op:'JUMP', arg: loopStart});
+        instrs[jumpEndIdx].arg = instrs.length;
+        break;
+      case 'ExpressionStatement':
+        compileNode(node.expression, instrs);
+        instrs.push({op:'POP'});
+        break;
+      case 'AssignmentExpression':
+        compileNode(node.right, instrs);
+        add({op:'STORE', arg: node.left.name});
+        break;
+      case 'CallExpression':
+        // compile arguments left-to-right
+        for (const a of node.arguments) compileNode(a, instrs);
+        // push function reference (identifier)
+        if (node.callee.type === 'Identifier') {
+          add({op:'LOAD', arg: node.callee.name});
+        } else {
+          throw new Error('Unsupported callee type'); // simplified
+        }
+        add({op:'CALL', arg: node.arguments.length});
+        break;
+      case 'BinaryExpression':
+        compileNode(node.left, instrs);
+        compileNode(node.right, instrs);
+        add({op:'BINARY', arg: node.operator});
+        break;
+      case 'UnaryExpression':
+        compileNode(node.argument, instrs);
+        add({op:'UNARY', arg: node.operator});
+        break;
+      case 'Identifier':
+        add({op:'LOAD', arg: node.name});
+        break;
+      case 'Literal':
+        add({op:'PUSH_CONST', arg: node.value});
+        break;
+      default:
+        throw new Error('Compile: unknown node type ' + node.type);
+    }
+  }
+
+  const mainInstrs = [];
+  compileNode(ast, mainInstrs);
+  mainInstrs._id = instrIdCounter++;
+  return {main: mainInstrs, functions: funcTable};
+}
+
+// Runtime VM
+function createVM(compiled, initEnv) {
+  // env is chain of objects: {vars: {}, parent: env or null}
+  function makeEnv(parent) { return {vars: Object.create(null), parent: parent}; }
+  const globalEnv = makeEnv(null);
+  // initialize with initEnv keys
+  try {
+    const parsed = (typeof initEnv === 'string') ? JSON.parse(initEnv) : initEnv;
+    if (parsed && typeof parsed === 'object') {
+      for (const k of Object.keys(parsed)) {
+        if (parsed[k] === 'builtin') {
+          // an easy way to configure builtins via initial environment:
+          // known builtins: print
+          if (k === 'print') {
+            globalEnv.vars['print'] = {type:'builtin', fn: (args, vm)=>{ vm.appendOutput(args.map(v=>String(v)).join(' ')); return null; }};
+          } else {
+            globalEnv.vars[k] = parsed[k];
+          }
+        } else {
+          globalEnv.vars[k] = parsed[k];
+        }
+      }
+    }
+  } catch(e){}
+  // also ensure print exists
+  if (!('print' in globalEnv.vars)) {
+    globalEnv.vars['print'] = {type:'builtin', fn: (args, vm)=>{ vm.appendOutput(args.map(v=>String(v)).join(' ')); return null; }};
+  }
+
+  // map function literals id -> compiled instructions and params
+  const funcMap = new Map();
+  for (const f of compiled.functions) {
+    f.instrs._id = f.id;
+    funcMap.set(f.id, f);
+  }
+
+  // VM structure
+  const vm = {
+    // frames: array of frames {instrs, ip, env, retStackSize}
+    frames: [],
+    stack: [],
+    outputLines: [],
+    trace: [],
+    breakpoints: new Set(), // store "instrId:pc" as string for disambiguation
+    running: false,
+    paused: false,
+    // for stepping semantics
+    requestedStep: null,
+    // functions
+    appendOutput(text) {
+      this.outputLines.push(String(text));
+      updateUI();
+    },
+    pushFrame(instrs, env) {
+      this.frames.push({instrs: instrs, ip:0, env: env, retStackSize: this.stack.length});
+    },
+    popFrame() {
+      return this.frames.pop();
+    },
+    currentFrame() {
+      return this.frames[this.frames.length-1] || null;
+    },
+    lookup(name, env) {
+      let cur = env;
+      while (cur) {
+        if (Object.prototype.hasOwnProperty.call(cur.vars, name)) return {found:true, env:cur};
+        cur = cur.parent;
+      }
+      return {found:false, env: env}; // default to current env for store
+    },
+    stepInstruction() {
+      const frame = this.currentFrame();
+      if (!frame) return {status:'halted'};
+      if (frame.ip >= frame.instrs.length) {
+        // frame ended without return: pop it
+        this.popFrame();
+        return {status:'frame_end'};
+      }
+      const ins = frame.instrs[frame.ip];
+      // trace
+      this.trace.push('[' + (frame.instrs._id || '?') + ':' + frame.ip + '] ' + JSON.stringify(ins));
+      frame.ip++;
+      switch (ins.op) {
+        case 'PUSH_CONST':
+          this.stack.push(ins.arg);
+          break;
+        case 'LOAD': {
+          const res = this.lookup(ins.arg, frame.env);
+          if (res.found) {
+            this.stack.push(res.env.vars[ins.arg]);
+          } else {
+            this.stack.push(undefined);
+          }
+          break;
+        }
+        case 'STORE': {
+          const val = this.stack.pop();
+          const res = this.lookup(ins.arg, frame.env);
+          if (res.found) {
+            res.env.vars[ins.arg] = val;
+          } else {
+            // store in current frame env
+            frame.env.vars[ins.arg] = val;
+          }
+          break;
+        }
+        case 'POP':
+          this.stack.pop();
+          break;
+        case 'JUMP':
+          frame.ip = ins.arg;
+          break;
+        case 'JUMP_IF_FALSE': {
+          const v = this.stack.pop();
+          let cond = Boolean(v);
+          if (!cond) frame.ip = ins.arg;
+          break;
+        }
+        case 'BINARY': {
+          const b = this.stack.pop();
+          const a = this.stack.pop();
+          let res;
+          switch (ins.arg) {
+            case '+': res = (a==null?0:a) + (b==null?0:b); break;
+            case '-': res = a - b; break;
+            case '*': res = a * b; break;
+            case '/': res = a / b; break;
+            case '%': res = a % b; break;
+            case '<': res = a < b; break;
+            case '>': res = a > b; break;
+            case '<=': res = a <= b; break;
+            case '>=': res = a >= b; break;
+            case '==': res = a == b; break;
+            case '!=': res = a != b; break;
+            case '&&': res = a && b; break;
+            case '||': res = a || b; break;
+            default: throw new Error('Unknown binary ' + ins.arg);
+          }
+          this.stack.push(res);
+          break;
+        }
+        case 'UNARY': {
+          const a = this.stack.pop();
+          if (ins.arg === '-') this.stack.push(-a);
+          else if (ins.arg === '!') this.stack.push(!a);
+          else throw new Error('Unknown unary ' + ins.arg);
+          break;
+        }
+        case 'CALL': {
+          // pop function (top is function?) We compiled with args first then function
+          const argCount = ins.arg;
+          const fn = this.stack.pop();
+          const args = [];
+          for (let k=0;k<argCount;k++) {
+            args.unshift(this.stack.pop());
+          }
+          // builtin function?
+          if (fn && fn.type === 'builtin') {
+            const ret = fn.fn(args, this);
+            this.stack.push(ret);
+            break;
+          }
+          if (!fn) {
+            this.stack.push(undefined);
+            break;
+          }
+          if (fn.type === 'function_literal') {
+            const meta = funcMap.get(fn.id);
+            if (!meta) throw new Error('Unknown function id ' + fn.id);
+            // create new env with parent = fn.env if closure captured, but we didn't implement capturing of envs at creation time
+            // For simplicity, capture global env as parent when function literal was created: we will store env pointer when the literal was created on stack.
+            // But here we didn't store, so instead use current frame.env as parent (lexical scoping approximation)
+            const parentEnv = frame.env; // lexical approximated
+            const newEnv = makeEnv(parentEnv);
+            // set params
+            for (let p=0;p<meta.params.length;p++) {
+              newEnv.vars[meta.params[p]] = (p < args.length ? args[p] : undefined);
+            }
+            // push return placeholder then new frame
+            this.pushFrame(meta.instrs, newEnv);
+            break;
+          }
+          // else if function is a compiled closure object stored in env
+          if (fn && typeof fn === 'object' && fn.__is_compiled_function) {
+            const meta = fn.meta;
+            const newEnv = makeEnv(fn.env); // capture env stored on function object
+            for (let p=0;p<meta.params.length;p++) {
+              newEnv.vars[meta.params[p]] = (p < args.length ? args[p] : undefined);
+            }
+            this.pushFrame(meta.instrs, newEnv);
+            break;
+          }
+          this.stack.push(undefined);
+          break;
+        }
+        case 'RETURN': {
+          const ret = this.stack.pop();
+          // pop frames until ret stack size?
+          const ended = this.popFrame();
+          // push return value onto previous frame stack
+          if (this.currentFrame()) this.stack.push(ret);
+          else {
+            // program return
+            this.stack.push(ret);
+            this.running = false;
+          }
+          break;
+        }
+        default:
+          throw new Error('Unknown op ' + ins.op);
+      }
+      return {status:'ok', instr: ins, frame: frame};
+    },
+    runUntilPause(stepMs, onTick) {
+      if (this.running) return;
+      this.running = true;
+      this.paused = false;
+      const runLoop = () => {
+        if (!this.running || this.paused) return;
+        // check breakpoint before executing instruction
+        const frame = this.currentFrame();
+        if (!frame) { this.running = false; updateUI(); return; }
+        const key = (frame.instrs._id || '?') + ':' + frame.ip;
+        if (this.breakpoints.has(key) && document.getElementById('autoRunBreakpoints').checked) {
+          // hit breakpoint
+          this.appendTrace('Hit breakpoint ' + key);
+          this.paused = true;
+          updateUI();
+          return;
+        }
+        try {
+          const res = this.stepInstruction();
+          updateUI();
+          if (res && res.status === 'frame_end') {
+            // keep running
+          }
+        } catch(e) {
+          this.appendTrace('Runtime error: ' + e.message);
+          this.running = false;
+          this.paused = true;
+          updateUI();
+          return;
+        }
+        if (typeof onTick === 'function') onTick();
+        // schedule next
+        const ms = Number(document.getElementById('speed').value) || 200;
+        setTimeout(runLoop, ms);
+      };
+      runLoop();
+    },
+    pause() {
+      this.paused = true; this.running = false;
+    },
+    appendTrace(s) { this.trace.push(String(s)); updateUI(); },
+    // utility to create function literal object capturing env
+    makeFunctionLiteral(fid, env) {
+      return {type:'function_literal', id: fid, __is_compiled_function:true, meta: funcMap.get(fid), env: env};
+    }
+  };
+
+  // create main frame env chain: global
+  vm.pushFrame(compiled.main, globalEnv);
+  // Note: when compiling, we pushed literal function objects as constants onto the main instruction array with {type:'function_literal', id: fid}
+  // We want those to become closure objects that capture the environment at creation time. We'll process compiled.main to replace any PUSH_CONST function_literal to closure with env.
+  function instantiateFunctionLiterals(instrs, env) {
+    for (let idx=0; idx<instrs.length; idx++) {
+      const ins = instrs[idx];
+      if (ins && ins.op === 'PUSH_CONST' && ins.arg && ins.arg.type === 'function_literal') {
+        // replace with closure that stores env pointer
+        instrs[idx] = {op:'PUSH_CONST', arg: vm.makeFunctionLiteral(ins.arg.id, env)};
+      }
+    }
+  }
+  instantiateFunctionLiterals(compiled.main, globalEnv);
+  for (const f of compiled.functions) {
+    // each function body may contain nested function literals; we will instantiate when executing MAKE_FUNCTION by creating closure at that time,
+    // but also we can pre-instantiate with global env for top-level.
+    instantiateFunctionLiterals(f.instrs, globalEnv);
+  }
+
+  return vm;
+}
+
+// UI wiring and state
+let currentCompiled = null;
+let currentVM = null;
+let lastRunState = null;
+let snapshots = [];
+
+const el = {
+  program: document.getElementById('program'),
+  tokens: document.getElementById('tokens'),
+  ast: document.getElementById('ast'),
+  instructions: document.getElementById('instructions'),
+  stack: document.getElementById('stack'),
+  callstack: document.getElementById('callstack'),
+  globals: document.getElementById('globals'),
+  output: document.getElementById('output'),
+  trace: document.getElementById('trace'),
+  pc: document.getElementById('pc'),
+  frameIdx: document.getElementById('frameIdx'),
+  bpsList: document.getElementById('bpsList'),
+  snapshots: document.getElementById('snapshots'),
+  breakpointsInput: document.getElementById('breakpointsInput'),
+  initEnv: document.getElementById('initEnv')
+};
+
+function safeJSON(obj) {
+  try { return JSON.stringify(obj, replacer, 2); } catch (e) { return String(obj); }
+  function replacer(k,v){ if (typeof v === 'function') return '[Function]'; if (v && v.__is_compiled_function) return '[FunctionLiteral id='+v.id+']'; return v; }
+}
+
+document.getElementById('parseBtn').onclick = () => {
+  try {
+    const src = el.program.value;
+    const toks = tokenize(src);
+    el.tokens.textContent = safeJSON(toks);
+    const ast = parse(toks);
+    el.ast.textContent = safeJSON(ast);
+    currentCompiled = null;
+  } catch(e) {
+    el.tokens.textContent = 'Parse error: ' + e.message;
+  }
+};
+
+document.getElementById('compileBtn').onclick = () => {
+  try {
+    const src = el.program.value;
+    const toks = tokenize(src);
+    const ast = parse(toks);
+    const compiled = compileProgram(ast);
+    currentCompiled = compiled;
+    displayInstructions(compiled);
+    el.ast.textContent = safeJSON(ast);
+    el.tokens.textContent = safeJSON(toks);
+    currentVM = null;
+    el.output.textContent = '';
+    el.trace.textContent = '';
+  } catch(e) {
+    el.tokens.textContent = 'Compile error: ' + e.message;
+  }
+};
+
+function displayInstructions(compiled) {
+  const out = [];
+  function render(instrs) {
+    const id = instrs._id || '?';
+    out.push('== instrs id: ' + id + ' ==');
+    for (let i=0;i<instrs.length;i++) {
+      const ins = instrs[i];
+      out.push('['+id+':' + i + '] ' + JSON.stringify(ins));
+    }
+  }
+  render(compiled.main);
+  for (const f of compiled.functions) render(f.instrs);
+  el.instructions.textContent = out.join('\n');
+}
+
+document.getElementById('runBtn').onclick = () => {
+  if (!currentCompiled) {
+    document.getElementById('compileBtn').click();
+    if (!currentCompiled) return;
+  }
+  if (!currentVM) {
+    try {
+      currentVM = createVM(currentCompiled, el.initEnv.value);
+    } catch(e) {
+      el.trace.textContent += 'VM init error: ' + e.message + '\n';
+      return;
+    }
+  }
+  currentVM.runUntilPause();
+  updateUI();
+  // record as last run baseline after completion (when done)
+  const checkFinished = setInterval(()=> {
+    if (!currentVM || currentVM.running === false) {
+      if (currentVM) lastRunState = snapshotVM(currentVM);
+      clearInterval(checkFinished);
+    }
+  }, 200);
+};
+
+document.getElementById('pauseBtn').onclick = () => {
+  if (currentVM) { currentVM.pause(); updateUI(); }
+};
+
+document.getElementById('stepBtn').onclick = () => {
+  if (!currentCompiled) { document.getElementById('compileBtn').click(); }
+  if (!currentVM) currentVM = createVM(currentCompiled, el.initEnv.value);
+  // step single instruction
+  try {
+    const res = currentVM.stepInstruction();
+    updateUI();
+  } catch(e) {
+    currentVM.appendTrace('Runtime error: ' + e.message);
+  }
+};
+
+document.getElementById('stepOverBtn').onclick = () => {
+  if (!currentCompiled) { document.getElementById('compileBtn').click(); }
+  if (!currentVM) currentVM = createVM(currentCompiled, el.initEnv.value);
+  // step over: if current instruction is CALL, run until return to same frame
+  const frame = currentVM.currentFrame();
+  if (!frame) return;
+  const key = frame.instrs._id + ':' + frame.ip;
+  // determine if current instruction is CALL op
+  const ins = frame.instrs[frame.ip];
+  if (ins && ins.op === 'CALL') {
+    const initialDepth = currentVM.frames.length;
+    // run step by step until frame depth returns to initialDepth
+    const runOnce = () => {
+      try {
+        if (!currentVM.currentFrame()) return;
+        currentVM.stepInstruction();
+        updateUI();
+        if (currentVM.frames.length >= initialDepth) {
+          // still in or returned to same frame
+          if (currentVM.frames.length === initialDepth) {
+            // done stepping over
+            return;
+          } else {
+            setTimeout(runOnce, 0);
+          }
+        } else {
+          // popped deeper than expected, stop
+          return;
+        }
+      } catch(e) {
+        currentVM.appendTrace('Runtime error: ' + e.message);
+      }
+    };
+    runOnce();
+  } else {
+    // just step one instruction
+    document.getElementById('stepBtn').click();
+  }
+};
+
+document.getElementById('stepOutBtn').onclick = () => {
+  if (!currentVM) return;
+  const initialDepth = currentVM.frames.length;
+  if (initialDepth <= 1) { // already at top
+    document.getElementById('stepBtn').click();
+    return;
+  }
+  const runUntilReturn = () => {
+    try {
+      if (!currentVM.currentFrame()) return;
+      currentVM.stepInstruction();
+      updateUI();
+      if (currentVM.frames.length < initialDepth) {
+        // returned to caller
+        return;
+      }
+      setTimeout(runUntilReturn, 0);
+    } catch(e) {
+      currentVM.appendTrace('Runtime error: ' + e.message);
+    }
+  };
+  runUntilReturn();
+};
+
+document.getElementById('resetBtn').onclick = () => {
+  currentVM = null;
+  el.output.textContent = '';
+  el.trace.textContent = '';
+  el.stack.textContent = '';
+  el.callstack.textContent = '';
+  el.globals.textContent = '';
+  el.pc.textContent = '-';
+  el.frameIdx.textContent = '-';
+};
+
+document.getElementById('toggleBreakpointAtPC').onclick = () => {
+  if (!currentVM) return;
+  const f = currentVM.currentFrame();
+  if (!f) return;
+  const key = (f.instrs._id || '?') + ':' + f.ip;
+  if (currentVM.breakpoints.has(key)) currentVM.breakpoints.delete(key);
+  else currentVM.breakpoints.add(key);
+  updateUI();
+};
+
+document.getElementById('breakpointsInput').onchange = () => {
+  const s = document.getElementById('breakpointsInput').value.trim();
+  if (!currentVM) currentVM = currentCompiled ? createVM(currentCompiled, el.initEnv.value) : null;
+  if (!currentVM) return;
+  currentVM.breakpoints.clear();
+  if (s) {
+    const parts = s.split(',');
+    for (const p of parts) {
+      const t = p.trim();
+      if (t) currentVM.breakpoints.add(t);
+    }
+  }
+  updateUI();
+};
+
+document.getElementById('clearBreakpoints').onclick = () => {
+  if (currentVM) currentVM.breakpoints.clear();
+  updateUI();
+};
+
+document.getElementById('snapshotBtn').onclick = () => {
+  if (!currentVM) return;
+  try {
+    const snap = snapshotVM(currentVM);
+    snapshots.push(snap);
+    renderSnapshots();
+  } catch(e) {
+    alert('Snapshot failed: ' + e.message);
+  }
+};
+
+document.getElementById('restoreBtn').onclick = () => {
+  if (snapshots.length === 0) return;
+  const snap = snapshots[snapshots.length - 1];
+  currentVM = restoreSnapshot(snap);
+  updateUI();
+};
+
+document.getElementById('forkBtn').onclick = () => {
+  if (!currentVM) return;
+  const snap = snapshotVM(currentVM);
+  // create forked VM by restoring snapshot
+  const fork = restoreSnapshot(snap);
+  // give fork a branch id and store
+  snapshots.push(snap);
+  renderSnapshots();
+  alert('Fork created and snapshot saved. Use Restore to switch to it.');
+};
+
+document.getElementById('compareBtn').onclick = () => {
+  if (!lastRunState || !currentVM) {
+    alert('Need a last run baseline and a VM to compare');
+    return;
+  }
+  const cur = snapshotVM(currentVM);
+  const diffs = diffSnapshots(lastRunState, cur);
+  el.trace.textContent += '\n=== Compare diffs ===\n' + diffs.join('\n') + '\n';
+  updateUI();
+};
+
+document.getElementById('mutateRenameBtn').onclick = () => {
+  const from = document.getElementById('renameFrom').value.trim();
+  const to = document.getElementById('renameTo').value.trim();
+  if (!from || !to) return;
+  // simple textual replace within program
+  const src = el.program.value;
+  const re = new RegExp('\\b' + from + '\\b', 'g');
+  el.program.value = src.replace(re, to);
+  document.getElementById('compileBtn').click();
+};
+
+document.getElementById('mutateInlineBtn').onclick = () => {
+  const from = document.getElementById('inlineFrom').value;
+  const to = document.getElementById('inlineTo').value;
+  if (!from) return;
+  const src = el.program.value;
+  // naive replace of exact literal appearance
+  el.program.value = src.split(from).join(to);
+  document.getElementById('compileBtn').click();
+};
+
+// sample loader
+document.getElementById('loadSample').onclick = () => {
+  const v = document.getElementById('sampleSelect').value;
+  let text = '';
+  if (v === 'fib') {
+    text = `fun fib(n) {
+  if (n <= 1) {
+    return n;
+  } else {
+    return fib(n-1) + fib(n-2);
+  }
+}
+print("fib(6) = " + fib(6));`;
+  } else if (v === 'count') {
+    text = `let i = 0;
+while (i < 5) {
+  print("i = " + i);
+  i = i + 1;
+}
+print("done");`;
+  } else if (v === 'closure') {
+    text = `fun makeAdder(x) {
+  fun add(y) { return x + y; }
+  return add;
+}
+let f = makeAdder(10);
+print(f(7));`;
+  } else if (v === 'ifelse') {
+    text = `let a = 5;
+if (a % 2 == 0) {
+  print("even");
+} else {
+  print("odd");
+}
+`;
+  } else if (v === 'factorial') {
+    text = `fun fact(n) {
+  let r = 1;
+  while (n > 1) {
+    r = r * n;
+    n = n - 1;
+  }
+  return r;
+}
+print(fact(6));`;
+  } else if (v === 'mutate') {
+    text = `let x = 1;
+fun inc() { x = x + 1; return x; }
+print(inc());
+print(inc());`;
+  }
+  el.program.value = text;
+  document.getElementById('compileBtn').click();
+};
+
+// snapshots UI
+function renderSnapshots() {
+  const out = [];
+  for (let i=0;i<snapshots.length;i++) {
+    const s = snapshots[i];
+    out.push('Snapshot ' + i + ': time=' + new Date(s.time).toISOString());
+    out.push('  frames=' + s.frames.length + ' stack=' + s.stack.length);
+    out.push('  globals: ' + safeJSON(s.globals));
+  }
+  el.snapshots.textContent = out.join('\n');
+}
+
+// snapshot VM state (best-effort)
+function snapshotVM(vm) {
+  // copy frames info, stack, globals, output, trace
+  // NOTE: functions and env closures may contain references; we will preserve references by shallow copying objects.
+  const frames = vm.frames.map(f => {
+    return {instrsId: f.instrs._id, ip: f.ip, env: shallowCopyEnvChain(f.env), retStackSize: f.retStackSize};
+  });
+  return {
+    time: Date.now(),
+    frames: frames,
+    stack: shallowCopyArray(vm.stack),
+    output: shallowCopyArray(vm.outputLines),
+    trace: shallowCopyArray(vm.trace),
+    globals: shallowCopyEnvChain(vm.frames[0] ? vm.frames[0].env : null),
+    breakpoints: Array.from(vm.breakpoints)
+  };
+
+  function shallowCopyEnvChain(env) {
+    if (!env) return null;
+    const chain = [];
+    let cur = env;
+    while(cur) {
+      chain.push(Object.assign({}, cur.vars));
+      cur = cur.parent;
+    }
+    return chain;
+  }
+  function shallowCopyArray(arr) {
+    return arr.map(v => (v && typeof v === 'object') ? v : v);
+  }
+}
+
+// restore snapshot to create a fresh VM approximating state (limitations apply)
+function restoreSnapshot(snapshot) {
+  if (!currentCompiled) throw new Error('No compiled program to restore into');
+  const vm = createVM(currentCompiled, el.initEnv.value);
+  // try to map snapshot frames to compiled instruction arrays by instrsId
+  vm.frames = [];
+  for (const f of snapshot.frames) {
+    const instrs = findInstrById(currentCompiled, f.instrsId) || currentCompiled.main;
+    const env = rebuildEnvChain(f.env);
+    vm.frames.push({instrs: instrs, ip: f.ip, env: env, retStackSize: f.retStackSize});
+  }
+  vm.stack = Array.isArray(snapshot.stack) ? snapshot.stack.slice() : [];
+  vm.outputLines = snapshot.output ? snapshot.output.slice() : [];
+  vm.trace = snapshot.trace ? snapshot.trace.slice() : [];
+  vm.breakpoints = new Set(snapshot.breakpoints || []);
+  return vm;
+
+  function rebuildEnvChain(chain) {
+    if (!chain) return null;
+    let parent = null;
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const e = {vars: Object.assign({}, chain[i]), parent: parent};
+      parent = e;
+    }
+    return parent;
+  }
+  function findInstrById(compiled, id) {
+    if (compiled.main._id == id) return compiled.main;
+    for (const f of compiled.functions) if (f.instrs._id == id) return f.instrs;
+    return null;
+  }
+}
+
+function diffSnapshots(a,b) {
+  const diffs = [];
+  diffs.push('Output diff:');
+  diffs.push('  A output: ' + (a.output || []).join(' | '));
+  diffs.push('  B output: ' + (b.output || []).join(' | '));
+  // compare global vars as best-effort
+  diffs.push('Globals diff:');
+  const ga = a.globals && a.globals[0] ? a.globals[0] : {};
+  const gb = b.globals && b.globals[0] ? b.globals[0] : {};
+  const keys = new Set([...Object.keys(ga||{}), ...Object.keys(gb||{})]);
+  for (const k of keys) {
+    if (String(ga[k]) !== String(gb[k])) diffs.push('  ' + k + ': A=' + ga[k] + ' B=' + gb[k]);
+  }
+  return diffs;
+}
+
+// update UI status
+function updateUI() {
+  // instructions highlight
+  if (currentCompiled) {
+    displayInstructions(currentCompiled);
+  }
+  if (!currentVM) {
+    el.stack.textContent = '';
+    el.callstack.textContent = '';
+    el.globals.textContent = '';
+    el.output.textContent = '';
+    el.trace.textContent = '';
+    el.pc.textContent = '-';
+    el.frameIdx.textContent = '-';
+    el.bpsList.textContent = '';
+    return;
+  }
+  // show stack
+  el.stack.textContent = safeJSON(currentVM.stack);
+  // callstack
+  el.callstack.textContent = currentVM.frames.map((f, idx) => {
+    return 'Frame ' + idx + ' instrsId=' + (f.instrs._id || '?') + ' ip=' + f.ip + ' retStack=' + f.retStackSize;
+  }).join('\n');
+  // globals: show vars of first frame env (global)
+  const g = currentVM.frames[0] ? currentVM.frames[0].env : null;
+  el.globals.textContent = safeJSON(g ? g.vars : {});
+  el.output.textContent = (currentVM.outputLines || []).join('\n');
+  el.trace.textContent = (currentVM.trace || []).join('\n');
+  const cf = currentVM.currentFrame();
+  if (cf) {
+    el.pc.textContent = (cf.instrs._id || '?') + ':' + cf.ip;
+    el.frameIdx.textContent = currentVM.frames.length - 1;
+  } else {
+    el.pc.textContent = '-';
+    el.frameIdx.textContent = '-';
+  }
+  el.bpsList.textContent = Array.from(currentVM.breakpoints).join(', ');
+  renderSnapshots();
+}
+
+// instruction click to toggle breakpoint
+el.instructions.onclick = function(e) {
+  const txt = el.instructions.textContent;
+  const sel = window.getSelection().toString();
+  // attempt to find bracket like [id:pc]
+  const re = /\[(\S+:\d+)\]/g;
+  // find nearest occurance of [something] under click by reading caret position - fallback: prompt
+  let match, found = null;
+  while ((match = re.exec(txt)) !== null) {
+    found = match[1];
+    break;
+  }
+  if (!currentVM) {
+    if (currentCompiled) currentVM = createVM(currentCompiled, el.initEnv.value);
+  }
+  if (!found && currentVM) {
+    // fallback: toggle input-specified
+    const s = prompt('Enter breakpoint label (instrId:pc) to toggle');
+    if (!s) return;
+    if (currentVM.breakpoints.has(s)) currentVM.breakpoints.delete(s); else currentVM.breakpoints.add(s);
+  } else if (found && currentVM) {
+    if (currentVM.breakpoints.has(found)) currentVM.breakpoints.delete(found); else currentVM.breakpoints.add(found);
+  }
+  updateUI();
+};
+
+// initial compile
+document.getElementById('compileBtn').click();
+
+</script>
+</body>
+</html>

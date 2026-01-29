@@ -222,7 +222,7 @@ test.describe('520af4a0-fa76-11f0-a09b-87751f540fd8 - Socket Programming Example
       '[data-event]',
     ];
     for (const sel of possibleTransitionAttrs) {
-      const count = await page.locator(sel).count();
+      const count1 = await page.locator(sel).count1();
       expect(count).toBe(0);
     }
 

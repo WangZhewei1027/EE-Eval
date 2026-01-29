@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>TCP/IP Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  button, input[type=text], input[type=number], select {
+    font: inherit;
+    margin: 0.2em 0.5em 0.2em 0;
+  }
+  label {
+    margin-right: 0.3em;
+  }
+  textarea {
+    width: 100%;
+    height: 6em;
+    font-family: monospace, monospace;
+  }
+  fieldset {
+    margin-bottom: 1em;
+    padding: 0.4em;
+  }
+  legend {
+    font-weight: bold;
+  }
+  hr {
+    margin: 1em 0;
+  }
+  .small {
+    font-size: 0.9em;
+  }
+</style>
+</head>
+<body>
+
+<h1>TCP/IP Protocol Suite Interactive Explorer</h1>
+<p>Explore TCP/IP through layered protocol interaction, packet crafting, connection simulation, and routing. Use controls below to build packets, simulate transmissions and understand protocol behavior step-by-step.</p>
+
+<hr />
+
+<fieldset>
+  <legend>1. Select Layer & Protocol</legend>
+  <label><input type="radio" name="layer" value="link" checked /> Link Layer (Ethernet)</label>
+  <label><input type="radio" name="layer" value="internet" /> Internet Layer (IP)</label>
+  <label><input type="radio" name="layer" value="transport" /> Transport Layer (TCP/UDP)</label>
+  <label><input type="radio" name="layer" value="application" /> Application Layer (HTTP/DNS/Custom)</label>
+</fieldset>
+
+<fieldset id="protocol-section">
+  <legend>2. Protocol Options</legend>
+  <div id="protocol-controls">
+    <!-- Dynamic controls for protocols will appear here -->
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>3. Packet Builder</legend>
+  <div id="packet-builder">
+    <!-- Fields vary by layer and protocol -->
+  </div>
+  <button id="build-packet">Build Packet</button>
+  <button id="reset-builder">Reset Fields</button>
+</fieldset>
+
+<fieldset>
+  <legend>4. Packet Preview & Edit</legend>
+  <textarea id="packet-preview" readonly></textarea><br/>
+  <button id="edit-packet">Edit Packet JSON</button>
+  <button id="save-packet" disabled>Save Edited Packet</button>
+  <button id="clear-packet">Clear</button>
+</fieldset>
+
+<hr />
+
+<fieldset>
+  <legend>5. Transmission Simulation</legend>
+  <label for="simulate-path">Choose Transmission Path:</label>
+  <select id="simulate-path">
+    <option value="local">Local Ethernet Segment</option>
+    <option value="internet">Internet (IP Routing)</option>
+    <option value="loopback">Loopback Interface</option>
+  </select>
+  <button id="start-sim">Start Simulation</button>
+  <button id="step-sim" disabled>Step Simulation</button>
+  <button id="reset-sim" disabled>Reset Simulation</button>
+  <button id="auto-run" disabled>Auto Run (5 steps)</button>
+  <div id="sim-log" style="white-space: pre-wrap; border: 1px solid black; margin-top:0.5em; height: 12em; overflow-y: scroll; background:#fff;"></div>
+</fieldset>
+
+<hr />
+
+<fieldset>
+  <legend>6. TCP Connection Simulator</legend>
+  <div>
+    <button id="start-conn">Start TCP 3-Way Handshake</button>
+    <button id="close-conn" disabled>Close TCP Connection</button>
+  </div>
+  <div style="margin-top:0.5em;">
+    <label for="tcp-send-data">Send Data (string):</label>
+    <input type="text" id="tcp-send-data" />
+    <button id="tcp-send" disabled>Send</button>
+  </div>
+  <div id="tcp-status" style="white-space: pre-wrap; border: 1px solid black; margin-top:0.5em; height: 10em; overflow-y: scroll; background:#fff;"></div>
+</fieldset>
+
+<hr />
+
+<fieldset>
+  <legend>7. Routing & IP Address Exploration</legend>
+  <div>
+    <label for="my-ip">My IP:</label>
+    <input type="text" id="my-ip" value="192.168.1.2" size="15" />
+    <label for="dest-ip">Destination IP:</label>
+    <input type="text" id="dest-ip" value="8.8.8.8" size="15" />
+    <button id="calc-route">Calculate Routing Path</button>
+  </div>
+  <pre id="routing-output" style="border:1px solid black; margin-top:0.5em; height: 8em; overflow-y: auto;"></pre>
+  <button id="reset-routing">Reset</button>
+</fieldset>
+
+<hr />
+
+<fieldset>
+  <legend>8. Custom User Packet JSON Input</legend>
+  <textarea id="custom-json" placeholder='Paste custom packet JSON here'></textarea><br/>
+  <button id="load-custom-json">Load & Validate</button>
+  <div id="json-valid-msg" class="small"></div>
+</fieldset>
+
+<script>
+(() => {
+  // Data structures & templates
+
+  // Protocols available by layer
+  const PROTOCOLS = {
+    link: ['Ethernet'],
+    internet: ['IPv4', 'IPv6', 'ICMP'],
+    transport: ['TCP', 'UDP'],
+    application: ['HTTP', 'DNS', 'Custom']
+  };
+
+  // Packet templates by protocol - for packet builder defaults and fields
+  const PACKET_TEMPLATES = {
+    Ethernet: {
+      description: "Classic Ethernet II frame",
+      fields: {
+        destMAC: {label: "Destination MAC (e.g. AA:BB:CC:DD:EE:FF)", type: "text", default: "ff:ff:ff:ff:ff:ff"},
+        srcMAC: {label: "Source MAC", type: "text", default: "00:11:22:33:44:55"},
+        ethType: {label: "Ethertype (hex, e.g. 0800 for IPv4)", type: "text", default: "0800"},
+        payload: {label: "Payload (hex string)", type: "text", default: ""}
+      }
+    },
+    IPv4: {
+      description: "Internet Protocol version 4 packet",
+      fields: {
+        version: {label: "Version (fixed 4)", type: "number", default: 4, readonly: true},
+        ihl: {label: "IHL (header length in 32-bit words)", type: "number", default: 5, min: 5, max: 15},
+        tos: {label: "Type of Service (decimal)", type: "number", default: 0, min: 0, max: 255},
+        totalLength: {label: "Total Length (bytes)", type: "number", default: 20, min: 20, max: 65535},
+        identification: {label: "Identification", type: "number", default: 0, min: 0, max: 65535},
+        flags: {label: "Flags (3 bits decimal)", type: "number", default: 2, min: 0, max: 7},
+        fragmentOffset: {label: "Fragment Offset", type: "number", default: 0, min:0, max: 8191},
+        ttl: {label: "Time to Live", type: "number", default: 64, min: 1, max: 255},
+        protocol: {label: "Protocol (decimal, e.g. 6=TCP, 17=UDP, 1=ICMP)", type: "number", default: 6, min: 0, max: 255},
+        headerChecksum: {label: "Header Checksum (hex, auto-calc ignored)", type: "text", default: "0000"},
+        srcIP: {label: "Source IP (dotted decimal)", type: "text", default: "192.168.1.2"},
+        destIP: {label: "Destination IP", type: "text", default: "192.168.1.1"},
+        payload: {label: "Payload (hex string)", type: "text", default: ""}
+      }
+    },
+    IPv6: {
+      description: "Internet Protocol version 6 packet",
+      fields: {
+        version: {label: "Version (fixed 6)", type: "number", default: 6, readonly: true},
+        trafficClass: {label: "Traffic Class", type: "number", default: 0, min: 0, max: 255},
+        flowLabel: {label: "Flow Label", type: "number", default: 0, min: 0, max: 1048575},
+        payloadLength: {label: "Payload Length", type: "number", default: 0, min:0, max:65535},
+        nextHeader: {label: "Next Header (decimal, e.g. 6=TCP)", type: "number", default: 6, min: 0, max: 255},
+        hopLimit: {label: "Hop Limit", type: "number", default: 64, min: 1, max: 255},
+        srcIP: {label: "Source IPv6 (hex notation)", type: "text", default: "::1"},
+        destIP: {label: "Destination IPv6", type: "text", default: "::1"},
+        payload: {label: "Payload (hex string)", type: "text", default: ""}
+      }
+    },
+    ICMP: {
+      description: "Internet Control Message Protocol",
+      fields: {
+        type: {label: "Type", type: "number", default: 8, min: 0, max: 255},
+        code: {label: "Code", type: "number", default: 0, min: 0, max: 255},
+        checksum: {label: "Checksum (hex string)", type: "text", default: "0000"},
+        identifier: {label: "Identifier", type: "number", default: 0, min: 0, max: 65535},
+        sequenceNumber: {label: "Sequence Number", type: "number", default: 0, min: 0, max: 65535},
+        data: {label: "Data (hex string)", type: "text", default: ""}
+      }
+    },
+    TCP: {
+      description: "Transmission Control Protocol segment",
+      fields: {
+        srcPort: {label: "Source Port", type: "number", default: 12345, min: 0, max: 65535},
+        destPort: {label: "Destination Port", type: "number", default: 80, min: 0, max: 65535},
+        seqNum: {label: "Sequence Number", type: "number", default: 0, min: 0, max: 4294967295},
+        ackNum: {label: "Acknowledgment Number", type: "number", default: 0, min: 0, max: 4294967295},
+        dataOffset: {label: "Data Offset (header length)", type: "number", default: 5, min: 5, max: 15},
+        reserved: {label: "Reserved (3 bits)", type: "number", default: 0, min: 0, max: 7},
+        flags: {label: "Flags (decimal bitmask)", type: "number", default: 2, min: 0, max: 511}, // Typically 9 bits, e.g., SYN=2, ACK=16,...
+        windowSize: {label: "Window Size", type: "number", default: 65535, min: 0, max: 65535},
+        checksum: {label: "Checksum (hex string)", type: "text", default: "0000"},
+        urgentPointer: {label: "Urgent Pointer", type: "number", default: 0, min: 0, max: 65535},
+        options: {label: "Options (hex string)", type: "text", default: ""},
+        payload: {label: "Payload (ASCII string)", type: "text", default: ""}
+      }
+    },
+    UDP: {
+      description: "User Datagram Protocol datagram",
+      fields: {
+        srcPort: {label: "Source Port", type: "number", default: 12345, min: 0, max: 65535},
+        destPort: {label: "Destination Port", type: "number", default: 53, min: 0, max: 65535},
+        length: {label: "Length (bytes)", type: "number", default: 8, min: 8, max: 65535},
+        checksum: {label: "Checksum (hex string)", type: "text", default: "0000"},
+        payload: {label: "Payload (ASCII string)", type: "text", default: ""}
+      }
+    },
+    HTTP: {
+      description: "HTTP protocol - request or response builder",
+      fields: {
+        method: {label: "Method (GET/POST/PUT/DELETE)", type: "text", default: "GET"},
+        url: {label: "URL", type: "text", default: "/"},
+        httpVersion: {label: "HTTP Version", type: "text", default: "HTTP/1.1"},
+        headers: {label: "Headers (JSON object string)", type: "text", default: "{\"Host\":\"example.com\"}"},
+        body: {label: "Body (string)", type: "text", default: ""}
+      }
+    },
+    DNS: {
+      description: "DNS query packet builder",
+      fields: {
+        transactionID: {label: "Transaction ID (hex 4 digits)", type: "text", default: "1234"},
+        flags: {label: "Flags (hex 4 digits)", type: "text", default: "0100"},
+        questions: {label: "Number of Questions", type: "number", default: 1, min: 0, max: 65535},
+        answerRRs: {label: "Answer RRs", type: "number", default: 0, min: 0, max: 65535},
+        authorityRRs: {label: "Authority RRs", type: "number", default: 0, min: 0, max: 65535},
+        additionalRRs: {label: "Additional RRs", type: "number", default: 0, min: 0, max: 65535},
+        queryName: {label: "Query Name (domain)", type: "text", default: "example.com"},
+        queryType: {label: "Query Type (A/AAAA/CNAME/etc)", type: "text", default: "A"},
+        queryClass: {label: "Query Class (default 1)", type: "number", default: 1, min: 0, max: 65535}
+      }
+    },
+    Custom: {
+      description: "Custom Application Payload",
+      fields: {
+        data: {label: "Custom Raw Payload (ASCII or hex, specify)", type: "text", default: ""}
+      }
+    }
+  };
+
+  // Protocol selection & controls cache
+  let currentLayer = 'link';
+  let currentProtocol = PROTOCOLS.link[0]; // defaults
+  let packetState = null; // last built packet object
+  let editingPacket = false;  // is user editing custom json
+
+  // DOM refs
+  const protocolSection = document.getElementById('protocol-controls');
+  const packetBuilderDiv = document.getElementById('packet-builder');
+  const packetPreview = document.getElementById('packet-preview');
+  const buildPacketBtn = document.getElementById('build-packet');
+  const resetBuilderBtn = document.getElementById('reset-builder');
+  const editPacketBtn = document.getElementById('edit-packet');
+  const savePacketBtn = document.getElementById('save-packet');
+  const clearPacketBtn = document.getElementById('clear-packet');
+  const simLogDiv = document.getElementById('sim-log');
+
+  const startSimBtn = document.getElementById('start-sim');
+  const stepSimBtn = document.getElementById('step-sim');
+  const resetSimBtn = document.getElementById('reset-sim');
+  const autoRunBtn = document.getElementById('auto-run');
+  const simulatePathSelect = document.getElementById('simulate-path');
+
+  const startConnBtn = document.getElementById('start-conn');
+  const closeConnBtn = document.getElementById('close-conn');
+  const tcpSendDataInput = document.getElementById('tcp-send-data');
+  const tcpSendBtn = document.getElementById('tcp-send');
+  const tcpStatusDiv = document.getElementById('tcp-status');
+
+  const myIpInput = document.getElementById('my-ip');
+  const destIpInput = document.getElementById('dest-ip');
+  const calcRouteBtn = document.getElementById('calc-route');
+  const routingOutput = document.getElementById('routing-output');
+  const resetRoutingBtn = document.getElementById('reset-routing');
+
+  const customJsonArea = document.getElementById('custom-json');
+  const loadCustomJsonBtn = document.getElementById('load-custom-json');
+  const jsonValidMsg = document.getElementById('json-valid-msg');
+
+  // Utility functions
+
+  function clearChildren(elem) {
+    while(elem.firstChild) elem.removeChild(elem.firstChild);
+  }
+
+  function createInputField(key, config, value) {
+    const container = document.createElement('div');
+    const label = document.createElement('label');
+    label.textContent = config.label + ": ";
+    label.htmlFor = "field-" + key;
+    const input = document.createElement(config.type === "number" ? "input" : "input");
+    input.type = config.type;
+    input.id = "field-" + key;
+    input.name = key;
+    if(config.readonly) input.readOnly = true;
+    if(config.min !== undefined) input.min = config.min;
+    if(config.max !== undefined) input.max = config.max;
+    if(config.size) input.size = config.size;
+    input.value = value !== undefined ? value : (config.default !== undefined ? config.default : '');
+    container.appendChild(label);
+    container.appendChild(input);
+    return container;
+  }
+
+  function loadProtocolOptions(layer) {
+    const protocols = PROTOCOLS[layer];
+    clearChildren(protocolSection);
+    // Add dropdown to select protocol within layer if multiple
+    if(protocols.length > 1) {
+      const label = document.createElement('label');
+      label.textContent = "Protocol: ";
+      const select = document.createElement('select');
+      select.id = 'protocol-select';
+
+      protocols.forEach(proto => {
+        const option = document.createElement('option');
+        option.value = proto;
+        option.textContent = proto;
+        select.appendChild(option);
+      });
+
+      protocolSection.appendChild(label);
+      protocolSection.appendChild(select);
+
+      select.value = currentProtocol;
+      select.addEventListener('change', e => {
+        currentProtocol = e.target.value;
+        loadPacketBuilderFields(currentProtocol);
+        clearPacketPreview();
+      });
+
+    } else {
+      // Single protocol - just show its name and description
+      const p = document.createElement('p');
+      currentProtocol = protocols[0];
+      p.textContent = "Protocol: " + currentProtocol + " - " + (PACKET_TEMPLATES[currentProtocol]?.description || "");
+      protocolSection.appendChild(p);
+    }
+    loadPacketBuilderFields(currentProtocol);
+  }
+
+  function loadPacketBuilderFields(protocol) {
+    clearChildren(packetBuilderDiv);
+    const template = PACKET_TEMPLATES[protocol];
+    if(!template) {
+      packetBuilderDiv.textContent = "No template available.";
+      return;
+    }
+    // Provide inputs for all fields
+    for(const key in template.fields) {
+      const config = template.fields[key];
+      const fieldNode = createInputField(key, config);
+      packetBuilderDiv.appendChild(fieldNode);
+    }
+  }
+
+  // Get packet builder data as object, casting values
+  function readPacketBuilderData(protocol) {
+    const template = PACKET_TEMPLATES[protocol];
+    if(!template) return null;
+    const obj = {protocol};
+    for(const key in template.fields) {
+      const config = template.fields[key];
+      const input = document.getElementById("field-" + key);
+      if(!input) continue;
+      let val = input.value;
+      if(config.type === "number") {
+        val = val === '' ? NaN : Number(val);
+        if(isNaN(val)) return null;
+        // Optional: validate ranges - skipping here for brevity
+      }
+      obj[key] = val;
+    }
+    return obj;
+  }
+
+  function updatePacketPreview(packet) {
+    if(!packet) {
+      packetPreview.value = '';
+      return;
+    }
+    packetPreview.value = JSON.stringify(packet, null, 2);
+  }
+
+  function clearPacketPreview() {
+    packetPreview.value = '';
+    packetState = null;
+    editingPacket = false;
+    savePacketBtn.disabled = true;
+  }
+
+  function toggleEditing(enable) {
+    if(enable) {
+      packetPreview.readOnly = false;
+      savePacketBtn.disabled = false;
+      editingPacket = true;
+    } else {
+      packetPreview.readOnly = true;
+      savePacketBtn.disabled = true;
+      editingPacket = false;
+    }
+  }
+
+  // Validate MAC address format (simple)
+  function validMAC(mac) {
+    return /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(mac);
+  }
+
+  // Validate IPv4 address (simplified)
+  function validIPv4(ip) {
+    const parts = ip.split('.');
+    if(parts.length !== 4) return false;
+    return parts.every(p => {
+      const n = Number(p);
+      return n>=0 && n<=255 && String(n) === p;
+    });
+  }
+
+  // Validate IPv6 address (very basic)
+  function validIPv6(ip) {
+    // just check if contains colon for this demo
+    return ip.includes(':');
+  }
+
+  // Validation of packet fields sanity (simple)
+  function validatePacket(packet) {
+    if(!packet) return false;
+    switch(packet.protocol) {
+      case 'Ethernet':
+        if(!validMAC(packet.destMAC)) return false;
+        if(!validMAC(packet.srcMAC)) return false;
+        if(!/^[0-9a-fA-F]{4}$/.test(packet.ethType)) return false;
+        // payload can be empty or hex string
+        if(packet.payload && !/^[0-9a-fA-F]*$/.test(packet.payload)) return false;
+        return true;
+      case 'IPv4':
+        if(packet.version != 4) return false;
+        if(!validIPv4(packet.srcIP)) return false;
+        if(!validIPv4(packet.destIP)) return false;
+        if(isNaN(packet.ihl) || packet.ihl < 5 || packet.ihl > 15) return false;
+        if(isNaN(packet.tos) || packet.tos < 0 || packet.tos > 255) return false;
+        if(isNaN(packet.ttl) || packet.ttl < 1 || packet.ttl > 255) return false;
+        if(isNaN(packet.protocol) || packet.protocol < 0 || packet.protocol > 255) return false;
+        if(packet.payload && !/^[0-9a-fA-F]*$/.test(packet.payload)) return false;
+        return true;
+      case 'IPv6':
+        if(packet.version != 6) return false;
+        if(!validIPv6(packet.srcIP)) return false;
+        if(!validIPv6(packet.destIP)) return false;
+        if(isNaN(packet.trafficClass) || packet.trafficClass<0 || packet.trafficClass>255) return false;
+        if(isNaN(packet.nextHeader) || packet.nextHeader<0 || packet.nextHeader>255) return false;
+        if(isNaN(packet.hopLimit) || packet.hopLimit < 1 || packet.hopLimit > 255) return false;
+        if(packet.payload && !/^[0-9a-fA-F]*$/.test(packet.payload)) return false;
+        return true;
+      case 'ICMP':
+        if(isNaN(packet.type) || packet.type<0 || packet.type>255) return false;
+        if(isNaN(packet.code) || packet.code<0 || packet.code>255) return false;
+        if(!/^[0-9a-fA-F]{4}$/.test(packet.checksum)) return false;
+        if(isNaN(packet.identifier) || packet.identifier<0 || packet.identifier>65535) return false;
+        if(isNaN(packet.sequenceNumber) || packet.sequenceNumber<0 || packet.sequenceNumber>65535) return false;
+        if(packet.data && !/^[0-9a-fA-F]*$/.test(packet.data)) return false;
+        return true;
+      case 'TCP':
+        for(const key of ['srcPort','destPort','seqNum','ackNum','dataOffset','reserved','flags','windowSize','urgentPointer']) {
+          if(isNaN(packet[key])) return false;
+        }
+        if(!/^[0-9a-fA-F]*$/.test(packet.checksum)) return false;
+        if(packet.options && !/^[0-9a-fA-F]*$/.test(packet.options)) return false;
+        // payload is ASCII string, accept any
+        return true;
+      case 'UDP':
+        for(const key of ['srcPort','destPort','length']) {
+          if(isNaN(packet[key])) return false;
+        }
+        if(!/^[0-9a-fA-F]*$/.test(packet.checksum)) return false;
+        // payload ASCII string, accept any
+        return true;
+      case 'HTTP':
+        if(typeof packet.method !== 'string') return false;
+        if(typeof packet.url !== 'string') return false;
+        if(typeof packet.httpVersion !== 'string') return false;
+        try {
+          JSON.parse(packet.headers);
+        } catch {
+          return false;
+        }
+        return true;
+      case 'DNS':
+        if(!/^[0-9a-fA-F]{4}$/.test(packet.transactionID)) return false;
+        if(!/^[0-9a-fA-F]{4}$/.test(packet.flags)) return false;
+        for(const key of ['questions','answerRRs','authorityRRs','additionalRRs','queryClass']) {
+          if(isNaN(packet[key]) || packet[key] < 0) return false;
+        }
+        if(typeof packet.queryName !== 'string') return false;
+        if(typeof packet.queryType !== 'string') return false;
+        return true;
+      case 'Custom':
+        return typeof packet.data === 'string';
+      default:
+        return false;
+    }
+  }
+
+  // Text helpers for simulation logs
+  function logSim(text) {
+    simLogDiv.textContent += text + "\n";
+    simLogDiv.scrollTop = simLogDiv.scrollHeight;
+  }
+
+  // ----------------------------------
+  // INTERACTIVE FUNCTIONALITY STARTS
+  // ----------------------------------
+
+  // Initial setup
+  function init() {
+    // Load initial layer protocols & packet builder
+    const radios = document.querySelectorAll('input[name=layer]');
+    radios.forEach(radio => {
+      radio.addEventListener('change', e => {
+        currentLayer = e.target.value;
+        const protocols = PROTOCOLS[currentLayer];
+        currentProtocol = protocols[0];
+        loadProtocolOptions(currentLayer);
+        clearPacketPreview();
+      });
+    });
+    loadProtocolOptions(currentLayer);
+
+    buildPacketBtn.addEventListener('click', () => {
+      if(editingPacket) {
+        alert("You are editing packet JSON. Save or cancel editing first.");
+        return;
+      }
+      const packet = readPacketBuilderData(currentProtocol);
+      if(!packet) {
+        alert("Invalid or incomplete input values.");
+        return;
+      }
+      if(!validatePacket(packet)) {
+        alert("Validation failed: Check field formats and ranges.");
+        return;
+      }
+      packetState = packet;
+      updatePacketPreview(packet);
+      alert("Packet built successfully.");
+    });
+
+    resetBuilderBtn.addEventListener('click', () => {
+      loadPacketBuilderFields(currentProtocol);
+      clearPacketPreview();
+    });
+
+    editPacketBtn.addEventListener('click', () => {
+      if(!packetState) {
+        alert("No packet to edit. Build one first.");
+        return;
+      }
+      toggleEditing(true);
+    });
+
+    savePacketBtn.addEventListener('click', () => {
+      try {
+        const parsed = JSON.parse(packetPreview.value);
+        if(!validatePacket(parsed)) {
+          alert("Validation failed: Edited JSON does not match protocol fields or has invalid values.");
+          return;
+        }
+        packetState = parsed;
+        toggleEditing(false);
+        alert("Packet JSON saved successfully.");
+      } catch(e) {
+        alert("Invalid JSON format: " + e.message);
+      }
+    });
+
+    clearPacketBtn.addEventListener('click', () => {
+      packetState = null;
+      clearPacketPreview();
+      toggleEditing(false);
+      loadPacketBuilderFields(currentProtocol);
+    });
+
+    // Simulation controls
+    startSimBtn.addEventListener('click', () => {
+      if(!packetState) {
+        alert("Build or load a packet first before starting simulation.");
+        return;
+      }
+      simLogDiv.textContent = "";
+      simulation.reset(packetState, simulatePathSelect.value);
+      logSim("Simulation started on path: " + simulatePathSelect.value);
+      stepSimBtn.disabled = false;
+      resetSimBtn.disabled = false;
+      autoRunBtn.disabled = false;
+      startSimBtn.disabled = true;
+    });
+
+    stepSimBtn.addEventListener('click', () => {
+      const done = simulation.step();
+      if(done) {
+        logSim("Simulation ended.");
+        stepSimBtn.disabled = true;
+        autoRunBtn.disabled = true;
+        startSimBtn.disabled = false;
+      }
+    });
+
+    resetSimBtn.addEventListener('click', () => {
+      simulation.reset(null, null);
+      simLogDiv.textContent = "";
+      stepSimBtn.disabled = true;
+      resetSimBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      startSimBtn.disabled = false;
+    });
+
+    autoRunBtn.addEventListener('click', () => {
+      autoRunBtn.disabled = true;
+      stepSimBtn.disabled = true;
+      startSimBtn.disabled = true;
+      resetSimBtn.disabled = true;
+
+      let steps = 5;
+      function doStep() {
+        if(steps <= 0) {
+          logSim("Auto-run finished.");
+          stepSimBtn.disabled = true;
+          startSimBtn.disabled = false;
+          resetSimBtn.disabled = false;
+          return;
+        }
+        const done = simulation.step();
+        if(done) {
+          logSim("Simulation ended.");
+          stepSimBtn.disabled = true;
+          startSimBtn.disabled = false;
+          resetSimBtn.disabled = false;
+          return;
+        }
+        steps--;
+        setTimeout(doStep, 700);
+      }
+      doStep();
+    });
+
+    // TCP connection simulator
+    startConnBtn.addEventListener('click', () => {
+      tcpConnection.startHandshake();
+      tcpSendBtn.disabled = false;
+      closeConnBtn.disabled = false;
+      startConnBtn.disabled = true;
+      tcpSendDataInput.value = "";
+      tcpStatusDiv.textContent = "";
+    });
+
+    closeConnBtn.addEventListener('click', () => {
+      tcpConnection.closeConnection();
+      closeConnBtn.disabled = true;
+      tcpSendBtn.disabled = true;
+      startConnBtn.disabled = false;
+      tcpSendDataInput.value = "";
+    });
+
+    tcpSendBtn.addEventListener('click', () => {
+      const text = tcpSendDataInput.value.trim();
+      if(text === "") {
+        alert("Type data to send.");
+        return;
+      }
+      tcpConnection.sendData(text);
+      tcpSendDataInput.value = "";
+    });
+
+    // Routing & IP exploration
+    calcRouteBtn.addEventListener('click', () => {
+      const src = myIpInput.value.trim();
+      const dst = destIpInput.value.trim();
+      routingOutput.textContent = "";
+      if(!validIPv4(src)) {
+        alert("My IP is not valid IPv4 address.");
+        return;
+      }
+      if(!validIPv4(dst)) {
+        alert("Destination IP is not valid IPv4 address.");
+        return;
+      }
+      try {
+        const routeSteps = routingCalculator.calculateRouting(src, dst);
+        routingOutput.textContent = "Routing Path:\n" + routeSteps.map((s,i) => (i+1) + ". " + s).join("\n");
+      } catch (e) {
+        routingOutput.textContent = "Error calculating route: " + e.message;
+      }
+    });
+
+    resetRoutingBtn.addEventListener('click', () => {
+      routingOutput.textContent = "";
+      myIpInput.value = "192.168.1.2";
+      destIpInput.value = "8.8.8.8";
+    });
+
+    // Custom JSON input
+    loadCustomJsonBtn.addEventListener('click', () => {
+      const raw = customJsonArea.value.trim();
+      jsonValidMsg.textContent = "";
+      if(!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if(typeof parsed !== 'object' || parsed === null) {
+          jsonValidMsg.textContent = "JSON is not an object";
+          return;
+        }
+        if(!parsed.protocol) {
+          jsonValidMsg.textContent = "Missing 'protocol' field.";
+          return;
+        }
+        if(!validatePacket(parsed)) {
+          jsonValidMsg.textContent = "Validation failed according to protocol.";
+          return;
+        }
+        packetState = parsed;
+        updatePacketPreview(parsed);
+        loadPacketBuilderFields(parsed.protocol);
+        // fill inputs
+        const template = PACKET_TEMPLATES[parsed.protocol];
+        for(const key in template.fields) {
+          const input = document.getElementById("field-"+key);
+          if(input && (parsed[key] !== undefined)) input.value = parsed[key];
+        }
+        jsonValidMsg.textContent = "Packet loaded successfully.";
+      } catch(e) {
+        jsonValidMsg.textContent = "Invalid JSON: " + e.message;
+      }
+    });
+  }
+
+  // ------------------
+  // Simulation engine
+  // ------------------
+
+  // Simulation states & step logic
+  const simulation = (() => {
+    let currentPacket = null;
+    let path = null;
+    let stepCount = 0;
+    let maxSteps = 20;
+
+    function reset(packet, selectedPath) {
+      currentPacket = packet;
+      path = selectedPath || null;
+      stepCount = 0;
+    }
+
+    function step() {
+      if(!currentPacket || !path) {
+        logSim("No active simulation.");
+        return true; // no simulation
+      }
+      stepCount++;
+      switch(path) {
+        case 'local':
+          if(stepCount === 1) {
+            logSim("[Ethernet] Frame created with dest MAC: " + currentPacket.destMAC);
+            return false;
+          }
+          if(stepCount === 2) {
+            logSim("[Ethernet] Frame is checked for CRC and sent on local LAN.");
+            return false;
+          }
+          if(stepCount === 3) {
+            logSim("[Ethernet] Frame received by destination device.");
+            return false;
+          }
+          if(stepCount === 4) {
+            if(currentPacket.ethType === '0800') {
+              logSim("[Ethernet] Detected IPv4 packet inside Ethernet. Passing to IP layer.");
+              return false;
+            } else {
+              logSim("[Ethernet] Payload processed at Link Layer.");
+              return true;
+            }
+          }
+          return true;
+
+        case 'internet':
+          if(stepCount === 1) {
+            logSim("[Link] Frame created (Ethernet) encapsulating IP packet.");
+            return false;
+          }
+          if(stepCount === 2) {
+            logSim("[IP] IP header checksum verified; TTL decremented.");
+            return false;
+          }
+          if(stepCount === 3) {
+            logSim("[IP] Routing table checked for destination address.");
+            return false;
+          }
+          if(stepCount === 4) {
+            logSim("[IP] Packet forwarded to next hop router.");
+            return false;
+          }
+          if(stepCount === 5) {
+            if(currentPacket.protocol === 6) {
+              logSim("[Transport] TCP segment processed, state machine updated.");
+              return false;
+            } else if(currentPacket.protocol === 17) {
+              logSim("[Transport] UDP datagram processed.");
+              return false;
+            } else {
+              logSim("[Transport] Other Transport protocol.");
+              return false;
+            }
+          }
+          if(stepCount === 6) {
+            logSim("[Application] Data delivered to application layer.");
+            return true;
+          }
+          return true;
+
+        case 'loopback':
+          if(stepCount === 1) {
+            logSim("[Loopback] Packet sent to loopback interface.");
+            return false;
+          }
+          if(stepCount === 2) {
+            logSim("[Loopback] Packet received by same host.");
+            return false;
+          }
+          if(stepCount === 3) {
+            logSim("[Loopback] Packet passed up protocol stack internally.");
+            return true;
+          }
+          return true;
+
+        default:
+          logSim("Unknown simulation path.");
+          return true;
+      }
+    }
+
+    return {reset, step};
+  })();
+
+  // -----------------------
+  // TCP Connection Simulator
+  // -----------------------
+
+  const tcpConnection = (() => {
+    // TCP states
+    // CLOSED -> SYN-SENT -> ESTABLISHED
+    // ESTABLISHED -> FIN-WAIT -> CLOSED
+    // We'll simulate simplified 3-way handshake + data send + FIN close
+    let state = 'CLOSED';
+    let seqNum = 0;
+    let ackNum = 0;
+
+    function logStatus(msg) {
+      tcpStatusDiv.textContent += msg + "\n";
+      tcpStatusDiv.scrollTop = tcpStatusDiv.scrollHeight;
+    }
+
+    function startHandshake() {
+      state = 'CLOSED';
+      seqNum = Math.floor(Math.random()*100000);
+      ackNum = 0;
+      tcpStatusDiv.textContent = "";
+      logStatus("Starting TCP 3-way handshake...");
+      logStatus("[Client] State: CLOSED");
+      setTimeout(() => {
+        sendSYN();
+      }, 500);
+    }
+
+    function sendSYN() {
+      if(state !== 'CLOSED') return;
+      state = 'SYN-SENT';
+      logStatus("[Client] Sending SYN (Seq="+seqNum+")");
+      setTimeout(() => {
+        receiveSYNACK();
+      }, 1000);
+    }
+
+    function receiveSYNACK() {
+      if(state !== 'SYN-SENT') return;
+      ackNum = seqNum + 1;
+      seqNum = Math.floor(Math.random()*100000);
+      logStatus("[Server] Received SYN");
+      logStatus("[Server] Sending SYN+ACK (Seq="+seqNum+", Ack="+ackNum+")");
+      setTimeout(() => {
+        sendACK();
+      }, 1000);
+    }
+
+    function sendACK() {
+      if(state !== 'SYN-SENT') return;
+      state = 'ESTABLISHED';
+      ackNum = seqNum + 1;
+      logStatus("[Client] Received SYN+ACK");
+      logStatus("[Client] Sending ACK (Seq="+ackNum+", Ack="+ackNum+")");
+      logStatus("[Client] State: ESTABLISHED");
+      logStatus("TCP connection established.");
+    }
+
+    function sendData(data) {
+      if(state !== 'ESTABLISHED') {
+        alert("TCP connection not established.");
+        return;
+      }
+      logStatus("[Client] Sending data: \"" + data + "\"");
+      seqNum += data.length;
+      setTimeout(() => {
+        receiveDataAck(seqNum);
+      }, 800);
+    }
+
+    function receiveDataAck(newAck) {
+      logStatus("[Server] Received data, sending ACK (Ack="+newAck+")");
+      ackNum = newAck;
+    }
+
+    // Closing sequence (4-step simplified)
+    function closeConnection() {
+      if(state !== 'ESTABLISHED') {
+        alert("TCP connection not established.");
+        return;
+      }
+      logStatus("[Client] Sending FIN");
+      state = 'FIN-WAIT';
+      setTimeout(() => {
+        receiveFINACK();
+      }, 800);
+    }
+
+    function receiveFINACK() {
+      logStatus("[Server] Received FIN");
+      logStatus("[Server] Sending ACK");
+      setTimeout(() => {
+        sendFIN();
+      }, 800);
+    }
+
+    function sendFIN() {
+      logStatus("[Client] Received ACK, sending FIN");
+      setTimeout(() => {
+        receiveFINACK2();
+      }, 800);
+    }
+
+    function receiveFINACK2() {
+      logStatus("[Server] Received FIN");
+      logStatus("[Server] Sending ACK");
+      setTimeout(() => {
+        state = 'CLOSED';
+        logStatus("TCP connection closed. State: CLOSED");
+        closeConnBtn.disabled = true;
+        tcpSendBtn.disabled = true;
+        startConnBtn.disabled = false;
+      }, 500);
+    }
+
+    return {
+      startHandshake,
+      sendData,
+      closeConnection
+    };
+  })();
+
+  // ----------------------
+  // Routing Calculator
+  // ----------------------
+
+  const routingCalculator = (() => {
+    // Simulate simple IPv4 routing table:
+    // 192.168.1.0/24 => local LAN
+    // 10.0.0.0/8 => VPN
+    // 0.0.0.0/0 via default gateway 192.168.1.1
+
+    // for demo: if destination is in same subnet => direct
+    // else => gateway
+
+    function ipToInt(ip) {
+      const parts = ip.split('.');
+      return parts.reduce((acc,v) => (acc<<8) + Number(v), 0) >>> 0;
+    }
+
+    function inSubnet(ip, subnet, maskBits) {
+      const ipInt = ipToInt(ip);
+      const subnetInt = ipToInt(subnet);
+      const mask = ~(0xFFFFFFFF >>> maskBits) >>> 0;
+      return (ipInt & mask) === (subnetInt & mask);
+    }
+
+    function calculateRouting(srcIP, destIP) {
+      const steps = [];
+      steps.push("Host src IP: "+srcIP);
+      if(inSubnet(destIP, "192.168.1.0", 24)) {
+        steps.push("Destination IP is in the same subnet 192.168.1.0/24");
+        steps.push("Send directly via Ethernet");
+      } else if(inSubnet(destIP, "10.0.0.0", 8)) {
+        steps.push("Destination IP is in VPN subnet 10.0.0.0/8");
+        steps.push("Send packet via VPN tunnel interface");
+      } else {
+        steps.push("Destination IP is external");
+        steps.push("Send packet to default gateway 192.168.1.1");
+        steps.push("Router forwards packet to destination via next hop");
+      }
+      return steps;
+    }
+
+    return {calculateRouting};
+  })();
+
+  // Initialize everything
+  init();
+
+})();
+</script>
+
+</body>
+</html>

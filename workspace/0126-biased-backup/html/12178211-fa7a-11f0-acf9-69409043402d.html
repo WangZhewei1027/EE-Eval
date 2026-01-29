@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>K-Means Clustering Interactive Demonstration</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+<h1>K-Means Clustering Interactive Demo</h1>
+
+<section>
+<h2>Dataset Input / Generation</h2>
+<p>You can add points manually using the controls below or generate random data. Points are displayed in coordinate space [0,100] x [0,100].</p>
+<label for="input-x">X (0-100): </label>
+<input type="number" id="input-x" min="0" max="100" step="0.1" value="50" />
+<label for="input-y">Y (0-100): </label>
+<input type="number" id="input-y" min="0" max="100" step="0.1" value="50" />
+<button id="add-point-btn">Add Point</button>
+<button id="clear-points-btn">Clear All Points</button>
+<br/>
+<label for="gen-count">Generate Random Points Count: </label>
+<input type="number" id="gen-count" min="1" max="500" step="1" value="50" />
+<button id="generate-random-btn">Generate Random Points</button>
+</section>
+
+<hr/>
+
+<section>
+<h2>Clustering Controls</h2>
+<label for="k-input">Number of Clusters (k): </label>
+<input type="number" id="k-input" min="1" max="20" step="1" value="3" />
+<button id="init-centroids-btn" disabled>Initialize Centroids (Random)</button>
+<button id="step-btn" disabled>Run One K-Means Iteration Step</button>
+<button id="run-btn" disabled>Run Until Convergence</button>
+<button id="reset-btn" disabled>Reset Clustering</button>
+</section>
+
+<hr/>
+
+<section>
+<h2>Centroid Initialization Options</h2>
+<label><input type="radio" name="init-method" value="random" checked> Random</label><br/>
+<label><input type="radio" name="init-method" value="kmeans++"> K-Means++</label><br/>
+<label><input type="radio" name="init-method" value="manual"> Manual (Place centroids)</label><br/>
+<button id="reset-manual-centroids" disabled>Clear Manual Centroids</button>
+<p><em>When Manual mode is active, click on the plot area below to add centroids up to k.</em></p>
+</section>
+
+<hr/>
+
+<section>
+<h2>Algorithm Status and Info</h2>
+<p id="status-message">No points in dataset.</p>
+<p>Iteration: <span id="iteration-count">0</span></p>
+<p>Sum of Squared Distances (SSE): <span id="sse-value">N/A</span></p>
+<p>Cluster Sizes: <span id="cluster-sizes">N/A</span></p>
+</section>
+
+<hr/>
+
+<section>
+<h2>Plot and Interaction</h2>
+<p><em>Coordinate grid 0 to 100 in X and Y. Points are black dots. Centroids are labeled with cluster number.</em></p>
+<svg id="plot-area" width="600" height="600" style="border:1px solid black" tabindex="0" aria-label="K-Means clustering plot area"></svg>
+<br/>
+<button id="show-distances-btn">Show Distances On Hover: Off</button>
+</section>
+
+<hr/>
+
+<section>
+<h2>Export / Import</h2>
+<button id="export-json-btn">Export Dataset & Clustering (JSON)</button>
+<button id="import-json-btn">Import Dataset & Clustering (JSON)</button>
+<input type="file" id="import-json-file" accept=".json" style="display:none" />
+</section>
+
+<script>
+// Global data and state
+const state = {
+  points: [], // {x,y,cluster}
+  centroids: [], // {x,y,clusterIndex}
+  k: 3,
+  iteration: 0,
+  assignmentsMade: false,
+  distancesVisible: false,
+  initMethod: 'random',
+  manualCentroidAddAllowed: false,
+  manualCentroidCount: 0,
+  hasConverged: false
+};
+
+const plotSize = 600;
+const coordMax = 100;
+
+const plotArea = document.getElementById('plot-area');
+const inputX = document.getElementById('input-x');
+const inputY = document.getElementById('input-y');
+const addPointBtn = document.getElementById('add-point-btn');
+const clearPointsBtn = document.getElementById('clear-points-btn');
+const genCountInput = document.getElementById('gen-count');
+const generateRandomBtn = document.getElementById('generate-random-btn');
+
+const kInput = document.getElementById('k-input');
+const initCentroidsBtn = document.getElementById('init-centroids-btn');
+const stepBtn = document.getElementById('step-btn');
+const runBtn = document.getElementById('run-btn');
+const resetBtn = document.getElementById('reset-btn');
+
+const statusMessage = document.getElementById('status-message');
+const iterationCountSpan = document.getElementById('iteration-count');
+const sseValueSpan = document.getElementById('sse-value');
+const clusterSizesSpan = document.getElementById('cluster-sizes');
+
+const initMethodRadios = document.getElementsByName('init-method');
+const resetManualCentroidsBtn = document.getElementById('reset-manual-centroids');
+
+const showDistancesBtn = document.getElementById('show-distances-btn');
+
+const exportJsonBtn = document.getElementById('export-json-btn');
+const importJsonBtn = document.getElementById('import-json-btn');
+const importJsonFileInput = document.getElementById('import-json-file');
+
+// Utility functions
+
+function coordToSvg(x) {
+  return (x / coordMax) * plotSize;
+}
+
+function svgToCoord(s) {
+  return (s / plotSize) * coordMax;
+}
+
+function distanceSquared(p1, p2) {
+  const dx = p1.x - p2.x;
+  const dy = p1.y - p2.y;
+  return dx*dx + dy*dy;
+}
+
+function updateStatus() {
+  if(state.points.length === 0){
+    statusMessage.textContent = "No points in dataset.";
+    iterationCountSpan.textContent = "0";
+    sseValueSpan.textContent = "N/A";
+    clusterSizesSpan.textContent = "N/A";
+    initCentroidsBtn.disabled = true;
+    stepBtn.disabled = true;
+    runBtn.disabled = true;
+    resetBtn.disabled = true;
+  } else {
+    statusMessage.textContent = `Dataset: ${state.points.length} points, k=${state.k}`;
+    iterationCountSpan.textContent = state.iteration;
+    let sse = calculateSSE();
+    sseValueSpan.textContent = sse.toFixed(4);
+    let sizes = clusterSizes();
+    clusterSizesSpan.textContent = sizes.length > 0 ? sizes.map((s,i)=>`#${i+1}: ${s}`).join(", ") : "N/A";
+
+    initCentroidsBtn.disabled = false;
+    resetBtn.disabled = false;
+
+    if(state.centroids.length === state.k){
+      stepBtn.disabled = false;
+      runBtn.disabled = false;
+    } else {
+      stepBtn.disabled = true;
+      runBtn.disabled = true;
+    }
+  }
+  resetManualCentroidsBtn.disabled = !(state.manualCentroidAddAllowed);
+}
+
+function calculateSSE(){
+  if(state.points.length === 0 || state.centroids.length === 0) return 0;
+  let sse = 0;
+  for(let p of state.points){
+    if(p.cluster === null || p.cluster === undefined) continue;
+    let c = state.centroids[p.cluster];
+    sse += distanceSquared(p,c);
+  }
+  return sse;
+}
+
+function clusterSizes(){
+  if(state.points.length === 0 || state.centroids.length === 0) return [];
+  let sizes = Array(state.k).fill(0);
+  for(let p of state.points){
+    if(p.cluster !== null && p.cluster !== undefined) sizes[p.cluster]++;
+  }
+  return sizes;
+}
+
+function clearPlot(){
+  while(plotArea.firstChild) {
+    plotArea.removeChild(plotArea.firstChild);
+  }
+  // Draw axes gridlines or markers?
+  // Minimal design: could place ticks every 10 units on axes for user orientation
+  for(let i=0; i<=coordMax; i +=10){
+    let xLine = document.createElementNS("http://www.w3.org/2000/svg","line");
+    xLine.setAttribute("x1",coordToSvg(i));
+    xLine.setAttribute("y1",0);
+    xLine.setAttribute("x2",coordToSvg(i));
+    xLine.setAttribute("y2",plotSize);
+    xLine.setAttribute("stroke","gray");
+    xLine.setAttribute("stroke-width","0.5");
+    plotArea.appendChild(xLine);
+
+    let yLine = document.createElementNS("http://www.w3.org/2000/svg","line");
+    yLine.setAttribute("x1",0);
+    yLine.setAttribute("y1",coordToSvg(i));
+    yLine.setAttribute("x2",plotSize);
+    yLine.setAttribute("y2",coordToSvg(i));
+    yLine.setAttribute("stroke","gray");
+    yLine.setAttribute("stroke-width","0.5");
+    plotArea.appendChild(yLine);
+
+    // axis labels
+    let xLabel = document.createElementNS("http://www.w3.org/2000/svg","text");
+    xLabel.setAttribute("x",coordToSvg(i));
+    xLabel.setAttribute("y",plotSize+12);
+    xLabel.setAttribute("font-size","10");
+    xLabel.textContent = i.toString();
+    plotArea.appendChild(xLabel);
+
+    let yLabel = document.createElementNS("http://www.w3.org/2000/svg","text");
+    yLabel.setAttribute("x",-15);
+    yLabel.setAttribute("y",coordToSvg(i)+4);
+    yLabel.setAttribute("font-size","10");
+    yLabel.setAttribute("text-anchor","end");
+    yLabel.textContent = i.toString();
+    plotArea.appendChild(yLabel);
+  }
+}
+
+// Draws points and centroids, cluster numbers at centroid, and optionally distances on hover
+function drawPlot(mouseX=null,mouseY=null){
+  clearPlot();
+
+  // Draw points
+  for(let i=0;i<state.points.length;i++){
+    let p = state.points[i];
+    let cx = coordToSvg(p.x);
+    let cy = coordToSvg(coordMax - p.y); // Invert Y for SVG coordinates (Y grows down)
+    let circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    circle.setAttribute("cx",cx);
+    circle.setAttribute("cy",cy);
+    circle.setAttribute("r",3);
+    circle.setAttribute("fill","black");
+    circle.setAttribute("tabindex","0");
+    circle.setAttribute("aria-label",`Point ${i+1}: (${p.x.toFixed(1)}, ${p.y.toFixed(1)}) Cluster: ${p.cluster !== null && p.cluster !== undefined ? p.cluster+1 : "none"}`);
+    plotArea.appendChild(circle);
+
+    if(state.distancesVisible && mouseX !== null && mouseY !== null && state.centroids.length === state.k){
+      // If mouse is near this point? We'll show lines and distances for the hovered point only later.
+      // TBD: We'll handle distances below for hovered.
+    }
+  }
+
+  // Draw centroids
+  for(let j=0; j<state.centroids.length; j++){
+    let c = state.centroids[j];
+    let cx = coordToSvg(c.x);
+    let cy = coordToSvg(coordMax - c.y);
+    let centroidCircle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    centroidCircle.setAttribute("cx",cx);
+    centroidCircle.setAttribute("cy",cy);
+    centroidCircle.setAttribute("r",7);
+    centroidCircle.setAttribute("fill","none");
+    centroidCircle.setAttribute("stroke","black");
+    centroidCircle.setAttribute("stroke-width","1.5");
+    centroidCircle.setAttribute("aria-label",`Centroid ${j+1}: (${c.x.toFixed(1)}, ${c.y.toFixed(1)})`);
+    centroidCircle.setAttribute("data-centroid-index",j);
+    plotArea.appendChild(centroidCircle);
+
+    let text = document.createElementNS("http://www.w3.org/2000/svg","text");
+    text.setAttribute("x",cx);
+    text.setAttribute("y",cy+4);
+    text.setAttribute("font-size","12");
+    text.setAttribute("font-weight","bold");
+    text.setAttribute("text-anchor","middle");
+    text.textContent = (j+1).toString();
+    plotArea.appendChild(text);
+  }
+
+  // If distancesVisible and mouseX/mouseY present, and points and centroids present, show distances for hovered point
+  if(state.distancesVisible && mouseX !== null && mouseY !== null && state.points.length>0 && state.centroids.length === state.k){
+    // Find nearest point to mouse
+    // Transform mouseX,Y in SVG coordinates to coordinates in data space
+
+    const svgRect = plotArea.getBoundingClientRect();
+    let mouseSvgX = mouseX - svgRect.left;
+    let mouseSvgY = mouseY - svgRect.top;
+    let mouseCoordX = svgToCoord(mouseSvgX);
+    let mouseCoordY = coordMax - svgToCoord(mouseSvgY);
+
+    // Find point within threshold distance (e.g. 3 units)
+    let foundPointIndex = null;
+    let minPixDist = 15;
+    for(let i=0; i<state.points.length; i++){
+      let p = state.points[i];
+      let px = coordToSvg(p.x);
+      let py = coordToSvg(coordMax - p.y);
+      let dx = px - mouseSvgX;
+      let dy = py - mouseSvgY;
+      let pixDist = Math.sqrt(dx*dx+dy*dy);
+      if(pixDist < minPixDist){
+        foundPointIndex = i;
+        minPixDist = pixDist;
+      }
+    }
+    if(foundPointIndex !== null){
+      let p = state.points[foundPointIndex];
+      let px = coordToSvg(p.x);
+      let py = coordToSvg(coordMax - p.y);
+      // Draw lines and distances to each centroid
+      for(let j=0; j<state.centroids.length; j++){
+        let c = state.centroids[j];
+        let cx = coordToSvg(c.x);
+        let cy = coordToSvg(coordMax - c.y);
+
+        let line = document.createElementNS("http://www.w3.org/2000/svg","line");
+        line.setAttribute("x1",px);
+        line.setAttribute("y1",py);
+        line.setAttribute("x2",cx);
+        line.setAttribute("y2",cy);
+        line.setAttribute("stroke","black");
+        line.setAttribute("stroke-width","0.8");
+        plotArea.appendChild(line);
+
+        // Distance label (midpoint)
+        let midX = (px+cx)/2;
+        let midY = (py+cy)/2;
+        let distValue = Math.sqrt(distanceSquared(p,c));
+        let distLabel = document.createElementNS("http://www.w3.org/2000/svg","text");
+        distLabel.setAttribute("x",midX);
+        distLabel.setAttribute("y",midY);
+        distLabel.setAttribute("font-size","10");
+        distLabel.setAttribute("text-anchor","middle");
+        distLabel.textContent = distValue.toFixed(2);
+        plotArea.appendChild(distLabel);
+      }
+    }
+  }
+}
+
+// K-Means algorithm core steps
+
+function assignClusters(){
+  // assign each point to nearest centroid
+  if(state.centroids.length !== state.k) return;
+  let changed = false;
+  for(let p of state.points){
+    let minDist = Infinity;
+    let minIndex = null;
+    for(let i=0; i<state.centroids.length; i++){
+      let c = state.centroids[i];
+      let d = distanceSquared(p,c);
+      if(d < minDist){
+        minDist = d;
+        minIndex = i;
+      }
+    }
+    if(p.cluster !== minIndex){
+      changed = true;
+      p.cluster = minIndex;
+    }
+  }
+  return changed;
+}
+
+function updateCentroids(){
+  // recompute centroid positions as mean of assigned points
+  // if any cluster has no points, centroid stays the same
+  if(state.points.length === 0) return false;
+  let moved = false;
+  let newCentroids = [];
+  for(let i=0; i<state.k; i++){
+    let assignedPoints = state.points.filter(p=>p.cluster === i);
+    if(assignedPoints.length === 0){
+      // No change
+      newCentroids.push({...state.centroids[i]});
+      continue;
+    }
+    let sumX=0, sumY=0;
+    for(let p of assignedPoints){
+      sumX += p.x;
+      sumY += p.y;
+    }
+    let meanX = sumX / assignedPoints.length;
+    let meanY = sumY / assignedPoints.length;
+    if(Math.abs(meanX - state.centroids[i].x) > 1e-6 || Math.abs(meanY - state.centroids[i].y) > 1e-6) moved = true;
+    newCentroids.push({x:meanX, y:meanY, clusterIndex:i});
+  }
+  state.centroids = newCentroids;
+  return moved;
+}
+
+function fullIterationStep(){
+  if(state.centroids.length !== state.k) return false;
+  let changedAssignments = assignClusters();
+  let movedCentroids = updateCentroids();
+  state.iteration++;
+  drawPlot();
+  updateStatus();
+  if(!changedAssignments && !movedCentroids){
+    state.hasConverged = true;
+    statusMessage.textContent += " (Converged)";
+  }
+  return state.hasConverged;
+}
+
+// Initialization methods
+
+function initCentroidsRandom(){
+  if(state.points.length < state.k){
+    statusMessage.textContent = "Not enough points to initialize centroids";
+    return false;
+  }
+  state.centroids = [];
+  // Pick k random unique points from dataset as centroids starting positions
+  let usedIndices = new Set();
+  while(state.centroids.length < state.k){
+    let idx = Math.floor(Math.random() * state.points.length);
+    if(!usedIndices.has(idx)){
+      usedIndices.add(idx);
+      let p = state.points[idx];
+      state.centroids.push({x:p.x, y:p.y, clusterIndex: state.centroids.length});
+    }
+  }
+  state.iteration = 0;
+  state.hasConverged = false;
+  assignClusters();
+  drawPlot();
+  updateStatus();
+  return true;
+}
+
+// K-Means++ initialization for centroids (more complex)
+
+function initCentroidsKMeansPP(){
+  if(state.points.length < state.k){
+    statusMessage.textContent = "Not enough points to initialize centroids";
+    return false;
+  }
+  state.centroids = [];
+  // 1. Pick first centroid randomly
+  let idx = Math.floor(Math.random() * state.points.length);
+  state.centroids.push({x:state.points[idx].x, y:state.points[idx].y, clusterIndex:0});
+  // 2. For each next centroid (2..k):
+  for(let cIdx=1; cIdx < state.k; cIdx++){
+    let distances = [];
+    // For each point, find distance to nearest already chosen centroid squared
+    for(let p of state.points){
+      let minDist = Infinity;
+      for(let c of state.centroids){
+        let d = distanceSquared(p,c);
+        if(d < minDist) minDist = d;
+      }
+      distances.push(minDist);
+    }
+    // Sum distances
+    let sumD = distances.reduce((a,b)=>a+b,0);
+    if(sumD === 0) {
+      // All points identical, pick random from points
+      let pickIdx = Math.floor(Math.random() * state.points.length);
+      state.centroids.push({x:state.points[pickIdx].x, y:state.points[pickIdx].y, clusterIndex:cIdx});
+      continue;
+    }
+    // Pick next centroid with probability proportional to distance squared
+    let r = Math.random() * sumD;
+    let runningSum = 0;
+    let nextIndex = 0;
+    for(let i=0; i<distances.length; i++){
+      runningSum += distances[i];
+      if(r <= runningSum){
+        nextIndex = i;
+        break;
+      }
+    }
+    state.centroids.push({x:state.points[nextIndex].x, y:state.points[nextIndex].y, clusterIndex:cIdx});
+  }
+  state.iteration = 0;
+  state.hasConverged = false;
+  assignClusters();
+  drawPlot();
+  updateStatus();
+  return true;
+}
+
+// Manual centroid adding mode
+
+function enableManualCentroidAdd(){
+  state.manualCentroidAddAllowed = true;
+  resetManualCentroidsBtn.disabled = false;
+  initCentroidsBtn.disabled = true;
+  stepBtn.disabled = true;
+  runBtn.disabled = true;
+  resetBtn.disabled = false;
+  statusMessage.textContent = "Manual centroid placement active. Click plot to add centroids.";
+}
+
+function disableManualCentroidAdd(){
+  state.manualCentroidAddAllowed = false;
+  resetManualCentroidsBtn.disabled = true;
+  initCentroidsBtn.disabled = false;
+  if(state.centroids.length === state.k){
+    stepBtn.disabled = false;
+    runBtn.disabled = false;
+  }
+  updateStatus();
+}
+
+function tryAddManualCentroid(svgX,svgY){
+  if(!state.manualCentroidAddAllowed) return;
+  if(state.centroids.length >= state.k) return;
+  let x = svgToCoord(svgX);
+  let y = coordMax - svgToCoord(svgY); // flip y
+  state.centroids.push({x:x,y:y, clusterIndex:state.centroids.length});
+  if(state.centroids.length === state.k){
+    // Finished manual placing
+    assignClusters();
+    state.iteration = 0;
+    state.hasConverged = false;
+    disableManualCentroidAdd();
+  }
+  drawPlot();
+  updateStatus();
+}
+
+// Event handlers
+
+addPointBtn.addEventListener('click',()=>{
+  let x = parseFloat(inputX.value);
+  let y = parseFloat(inputY.value);
+  if(isNaN(x) || x < 0 || x > coordMax || isNaN(y) || y < 0 || y > coordMax){
+    alert("Invalid coordinates. Values must be numbers between 0 and 100.");
+    return;
+  }
+  state.points.push({x:x, y:y, cluster:null});
+  drawPlot();
+  updateStatus();
+});
+
+clearPointsBtn.addEventListener('click',()=>{
+  if(!confirm("Are you sure you want to clear all points and reset clustering?")) return;
+  state.points = [];
+  state.centroids = [];
+  state.iteration = 0;
+  state.hasConverged = false;
+  drawPlot();
+  updateStatus();
+});
+
+generateRandomBtn.addEventListener('click',()=>{
+  let count = parseInt(genCountInput.value);
+  if(isNaN(count) || count < 1 || count > 500){
+    alert("Invalid point count. Enter a number between 1 and 500.");
+    return;
+  }
+  // Generate random points uniformly in [0,100]
+  for(let i=0; i<count; i++){
+    state.points.push({
+      x: Math.random()*coordMax,
+      y: Math.random()*coordMax,
+      cluster: null
+    });
+  }
+  drawPlot();
+  updateStatus();
+});
+
+kInput.addEventListener('change',()=>{
+  let val = parseInt(kInput.value);
+  if(isNaN(val) || val < 1) {
+    kInput.value = state.k;
+    return;
+  }
+  if(val > 20){
+    kInput.value = 20;
+    val = 20;
+  } 
+  state.k = val;
+
+  // Reset any previous centroids/clustering when k changes as points remain
+  state.centroids = [];
+  state.iteration = 0;
+  state.hasConverged = false;
+  state.points.forEach(p => p.cluster = null);
+  // If manual centroids mode enabled, reset it
+  if(state.manualCentroidAddAllowed){
+    disableManualCentroidAdd();
+  }
+  updateStatus();
+  drawPlot();
+});
+
+initCentroidsBtn.addEventListener('click',()=>{
+  if(state.points.length < state.k){
+    alert("Not enough points to initialize centroids");
+    return;
+  }
+  if(state.initMethod === 'random'){
+    initCentroidsRandom();
+  } else if(state.initMethod === 'kmeans++'){
+    initCentroidsKMeansPP();
+  } else if(state.initMethod === 'manual'){
+    if(state.manualCentroidAddAllowed){
+      alert("Manual centroid placement already active.");
+      return;
+    }
+    state.centroids = [];
+    state.iteration = 0;
+    state.hasConverged = false;
+    enableManualCentroidAdd();
+    drawPlot();
+    updateStatus();
+  }
+});
+
+stepBtn.addEventListener('click',()=>{
+  if(state.hasConverged){
+    statusMessage.textContent = "Algorithm already converged.";
+    return;
+  }
+  fullIterationStep();
+});
+
+runBtn.addEventListener('click',()=>{
+  if(state.hasConverged){
+    statusMessage.textContent = "Algorithm already converged.";
+    return;
+  }
+  // Run iterations until convergence or max iterations (100)
+  let maxIter = 100;
+  let i=0;
+  let converged = false;
+  while(i < maxIter && !converged){
+    converged = fullIterationStep();
+    i++;
+  }
+  if(!converged){
+    statusMessage.textContent += " (Stopped after max iterations)";
+  }
+});
+
+resetBtn.addEventListener('click',()=>{
+  state.centroids = [];
+  state.iteration = 0;
+  state.hasConverged = false;
+  state.points.forEach(p=>p.cluster=null);
+  if(state.manualCentroidAddAllowed) disableManualCentroidAdd();
+  drawPlot();
+  updateStatus();
+});
+
+for(let radio of initMethodRadios){
+  radio.addEventListener('change',()=>{
+    if(radio.checked){
+      state.initMethod = radio.value;
+      if(state.initMethod === 'manual'){
+        initCentroidsBtn.textContent = "Enable Manual Centroid Placement";
+        if(state.centroids.length === state.k && !state.manualCentroidAddAllowed){
+          stepBtn.disabled = false;
+          runBtn.disabled = false;
+          resetManualCentroidsBtn.disabled = false;
+        }
+      } else {
+        initCentroidsBtn.textContent = "Initialize Centroids (Random)";
+        if(state.manualCentroidAddAllowed){
+          disableManualCentroidAdd();
+        }
+      }
+      updateStatus();
+    }
+  });
+}
+
+resetManualCentroidsBtn.addEventListener('click',()=>{
+  if(!state.manualCentroidAddAllowed) return;
+  state.centroids = [];
+  drawPlot();
+  updateStatus();
+});
+
+plotArea.addEventListener('click',(evt)=>{
+  if(state.manualCentroidAddAllowed){
+    let point = evt;
+    tryAddManualCentroid(point.clientX, point.clientY);
+  }
+});
+
+showDistancesBtn.addEventListener('click',()=>{
+  state.distancesVisible = !state.distancesVisible;
+  showDistancesBtn.textContent = "Show Distances On Hover: " + (state.distancesVisible ? "On" : "Off");
+  drawPlot();
+});
+
+// Mouse move on plot for showing distances dynamically
+plotArea.addEventListener('mousemove',(evt)=>{
+  if(state.distancesVisible){
+    drawPlot(evt.clientX, evt.clientY);
+  }
+});
+
+plotArea.addEventListener('mouseleave',(evt)=>{
+  if(state.distancesVisible){
+    drawPlot();
+  }
+});
+
+// Export / Import functionality (JSON)
+
+function exportJSON(){
+  // Export points, centroids, k, iteration, cluster assignments
+  let exportData = {
+    points: state.points.map(p=>({x:p.x,y:p.y,cluster:p.cluster})),
+    centroids: state.centroids.map(c=>({x:c.x,y:c.y,clusterIndex:c.clusterIndex})),
+    k: state.k,
+    iteration: state.iteration,
+    hasConverged: state.hasConverged
+  };
+  let jsonStr = JSON.stringify(exportData, null, 2);
+  let blob = new Blob([jsonStr], {type:"application/json"});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url;
+  a.download = 'kmeans_data_export.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJSON(file){
+  let reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      let data = JSON.parse(e.target.result);
+      if(!data.points || !Array.isArray(data.points)) throw "Invalid JSON format (points)";
+      if(!data.centroids || !Array.isArray(data.centroids)) throw "Invalid JSON format (centroids)";
+      if(typeof data.k !== "number") throw "Invalid JSON format (k)";
+      if(typeof data.iteration !== "number") throw "Invalid JSON format (iteration)";
+      // Overwrite current state carefully
+      state.points = data.points.map(p=>({x:p.x,y:p.y,cluster:p.cluster}));
+      state.centroids = data.centroids.map(c=>({x:c.x,y:c.y,clusterIndex:c.clusterIndex}));
+      state.k = data.k;
+      state.iteration = data.iteration;
+      state.hasConverged = data.hasConverged || false;
+      kInput.value = state.k;
+      // disable manual centroid mode on import
+      if(state.manualCentroidAddAllowed) disableManualCentroidAdd();
+      drawPlot();
+      updateStatus();
+      statusMessage.textContent = "Imported dataset and clustering.";
+    }catch(err){
+      alert("Error parsing import JSON: " + err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+exportJsonBtn.addEventListener('click',exportJSON);
+
+importJsonBtn.addEventListener('click',()=>{
+  importJsonFileInput.value = "";
+  importJsonFileInput.click();
+});
+
+importJsonFileInput.addEventListener('change',()=>{
+  if(importJsonFileInput.files.length === 0) return;
+  let file = importJsonFileInput.files[0];
+  importJSON(file);
+});
+
+// Initial plot and status update
+updateStatus();
+drawPlot();
+
+</script>
+</body>
+</html>

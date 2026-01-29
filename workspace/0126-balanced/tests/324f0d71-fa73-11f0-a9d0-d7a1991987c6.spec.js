@@ -106,7 +106,7 @@ test.describe('Transaction Concept Demonstration - FSM behavior', () => {
       // This test validates the FSM transition from Idle -> Processing on ProcessTransactionClick
       // and that processTransaction() runs: logs to console for each transaction and shows an alert.
 
-      const txPage = new TransactionsPage(page);
+      const txPage1 = new TransactionsPage(page);
 
       // Prepare to capture the dialog produced by alert(...)
       const dialogPromise = page.waitForEvent('dialog');
@@ -125,7 +125,7 @@ test.describe('Transaction Concept Demonstration - FSM behavior', () => {
       await page.waitForTimeout(150);
 
       // Extract text of console messages
-      const texts = consoleMessages.map(m => m.text);
+      const texts1 = consoleMessages.map(m => m.text);
 
       // Expect the expected deposit/withdraw logs to be present
       expect(texts).toEqual(expect.arrayContaining([
@@ -158,7 +158,7 @@ test.describe('Transaction Concept Demonstration - FSM behavior', () => {
       // This test validates repeated transitions/triggers: clicking Process Transaction multiple times.
       // We expect repeated alerts and repeated console logs for each transaction run.
 
-      const txPage = new TransactionsPage(page);
+      const txPage2 = new TransactionsPage(page);
 
       // Click once and handle dialog
       const firstDialogPromise = page.waitForEvent('dialog');
@@ -205,16 +205,16 @@ test.describe('Transaction Concept Demonstration - FSM behavior', () => {
       // This test ensures the button remains present and clickable after a processing run,
       // and that the transactions list is not removed or corrupted.
 
-      const txPage = new TransactionsPage(page);
+      const txPage3 = new TransactionsPage(page);
 
       // Ensure the button is visible and enabled
       await expect(txPage.processButton).toBeVisible();
       await expect(txPage.processButton).toBeEnabled();
 
       // Do a processing run (handle alert)
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise1 = page.waitForEvent('dialog');
       await txPage.clickProcess();
-      const dialog = await dialogPromise;
+      const dialog1 = await dialogPromise;
       expect(dialog.message()).toBe('All transactions processed successfully!');
       await dialog.dismiss();
 
@@ -223,7 +223,7 @@ test.describe('Transaction Concept Demonstration - FSM behavior', () => {
       await expect(txPage.processButton).toBeEnabled();
 
       // Transactions remain present and counts unchanged
-      const count = await txPage.getTransactionCount();
+      const count1 = await txPage.getTransactionCount();
       expect(count).toBe(4);
 
       // No uncaught page errors were thrown

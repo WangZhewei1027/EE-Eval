@@ -128,7 +128,7 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
 
   test('ShowAdjacency event: clicking button displays adjacency list (S0_Idle -> S0_Idle)', async ({ page }) => {
     // Validate clicking #showAdjacency displays adjacency list text in <pre>
-    const gp = new GraphPage(page);
+    const gp1 = new GraphPage(page);
     await gp.goto();
 
     // Click the button to show adjacency list
@@ -147,7 +147,7 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
     expect(text).toContain('F → C');
 
     // Ensure clicking the adjacency button did not change the info text (still idle)
-    const infoText = await gp.getInfoText();
+    const infoText1 = await gp.getInfoText();
     expect(infoText.trim()).toBe('Click a node to see its outgoing edges.');
   });
 
@@ -155,18 +155,18 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
     // Validate clicking on node A triggers Node Highlighted state:
     // - drawGraph(clickedNode.id) should change node color and outgoing edges color
     // - updateInfo(clickedNode.id) should update info text
-    const gp = new GraphPage(page);
+    const gp2 = new GraphPage(page);
     await gp.goto();
 
     // Click node A at known canvas coordinates (120, 100)
     await gp.clickCanvasAt(120, 100);
 
     // Validate info updated for node A (A has edges to B and D)
-    const infoText = await gp.getInfoText();
+    const infoText2 = await gp.getInfoText();
     expect(infoText).toBe('Node A has edges to: B, D.');
 
     // Validate the pixel at node A center changed to highlighted color "#2c7be5" (~ rgb(44,123,229))
-    const pixelA = await gp.getCanvasPixelRGBA(120, 100);
+    const pixelA1 = await gp.getCanvasPixelRGBA(120, 100);
     const highlightedRGB = [44, 123, 229, 255];
     const dist = colorDistRGBA(pixelA, highlightedRGB);
     // Use tolerant threshold to account for anti-aliasing
@@ -186,7 +186,7 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
 
   test('Click outside of any node resets to Idle (S1_NodeHighlighted -> S0_Idle)', async ({ page }) => {
     // Validate clicking on empty canvas area causes drawGraph(null) and updateInfo(null)
-    const gp = new GraphPage(page);
+    const gp3 = new GraphPage(page);
     await gp.goto();
 
     // First click a node to ensure we are in highlighted state
@@ -197,11 +197,11 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
     await gp.clickCanvasAt(10, 10);
 
     // Info should revert to initial idle message
-    const infoText = await gp.getInfoText();
+    const infoText3 = await gp.getInfoText();
     expect(infoText.trim()).toBe('Click a node to see its outgoing edges.');
 
     // Pixel at node A center should revert to the default node color (~ rgb(105,163,243))
-    const pixelA = await gp.getCanvasPixelRGBA(120, 100);
+    const pixelA2 = await gp.getCanvasPixelRGBA(120, 100);
     const defaultRGB = [105, 163, 243, 255];
     const distDefault = colorDistRGBA(pixelA, defaultRGB);
     expect(distDefault).toBeLessThan(80); // tolerant threshold for anti-aliasing
@@ -209,7 +209,7 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
 
   test('Multiple canvas clicks: selecting different nodes updates info and highlights accordingly', async ({ page }) => {
     // Validate transitions: S0 -> S1 (A), S1 -> S1 (B), S1 -> S0 (click empty)
-    const gp = new GraphPage(page);
+    const gp4 = new GraphPage(page);
     await gp.goto();
 
     // Click node B at (320, 80)
@@ -222,7 +222,7 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
 
     // Ensure pixel at C center approximates highlight color
     const pixelC = await gp.getCanvasPixelRGBA(500, 100);
-    const highlightedRGB = [44, 123, 229, 255];
+    const highlightedRGB1 = [44, 123, 229, 255];
     expect(colorDistRGBA(pixelC, highlightedRGB)).toBeLessThan(60);
 
     // Click empty area to reset
@@ -232,7 +232,7 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
 
   test('Edge cases: clicking near but outside node boundary should not select node', async ({ page }) => {
     // Validate that clicks just outside the node radius do not select node
-    const gp = new GraphPage(page);
+    const gp5 = new GraphPage(page);
     await gp.goto();
 
     // Click just outside node A's radius. Node A at (120,100), radius 20.
@@ -240,19 +240,19 @@ test.describe('Directed Graph Demonstration - FSM validation', () => {
     await gp.clickCanvasAt(142, 100);
 
     // Should still be idle (no node selected)
-    const infoText = await gp.getInfoText();
+    const infoText4 = await gp.getInfoText();
     expect(infoText.trim()).toBe('Click a node to see its outgoing edges.');
 
     // Pixel at (142,100) should not be the highlight color, likely background or edge color
     const sample = await gp.getCanvasPixelRGBA(142, 100);
     // Ensure it's not strongly matching the highlighted node color
-    const highlightedRGB = [44, 123, 229, 255];
+    const highlightedRGB2 = [44, 123, 229, 255];
     expect(colorDistRGBA(sample, highlightedRGB)).toBeGreaterThan(80);
   });
 
   test('No uncaught exceptions or console.error messages were produced during interactions', async ({ page }) => {
     // This test exercises several interactions and then asserts no console errors or page errors were recorded.
-    const gp = new GraphPage(page);
+    const gp6 = new GraphPage(page);
     await gp.goto();
 
     // Perform a set of interactions

@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Refactoring Playground</title>
+<style>
+/* Minimal styling just to provide basic layout; visual design is intentionally plain */
+html,body { height:100%; margin:8px; font-family: monospace; color: black; background: white; }
+.container { display:flex; gap:8px; height: calc(100% - 16px); }
+.panel { border: 1px solid #000; padding:6px; box-sizing:border-box; overflow:auto; background: white; }
+.left { width: 18%; min-width:200px; }
+.center { width: 46%; min-width:360px; display:flex; flex-direction:column; }
+.right { width: 36%; min-width:320px; }
+textarea { width:100%; height:320px; box-sizing:border-box; font-family: monospace; font-size:12px; }
+input[type="text"], input[type="number"], select { width:100%; box-sizing:border-box; font-family: monospace; margin-top:4px; margin-bottom:4px;}
+button { margin:2px 0; display:block; width:100%; }
+.smallbtn { width:auto; display:inline-block; margin-right:4px; }
+.flexrow { display:flex; gap:6px; align-items:center; }
+.kv { margin:2px 0; }
+.mini { font-size:11px; }
+.diff { white-space: pre; font-family: monospace; font-size:12px; border:1px solid #000; padding:4px; }
+.history-list { max-height:180px; overflow:auto; border:1px solid #000; padding:4px; }
+.op-queue { max-height:160px; overflow:auto; border:1px solid #000; padding:4px; }
+.note { font-size:12px; margin-top:6px; }
+</style>
+</head>
+<body>
+<h2>Refactoring Playground (Minimal UI)</h2>
+<p class="note">This is an interactive sandbox to explore refactoring operations: rename, extract, inline, split/merge files, branches, snapshots, diffs, suggestions, tests, and transformation scripting. Use the controls to manipulate files and apply refactors. The UI is intentionally plain.</p>
+<div class="container">
+  <div class="panel left">
+    <h3>Files</h3>
+    <div id="fileList"></div>
+    <div class="kv">
+      <button id="newFileBtn">New File</button>
+      <button id="cloneFileBtn">Clone File</button>
+      <button id="deleteFileBtn">Delete File</button>
+      <button id="renameFileBtn">Rename File</button>
+    </div>
+    <div class="kv">
+      <label>Open file version (snapshot id, optional):</label>
+      <input type="text" id="openSnapshotId" placeholder="leave empty for current branch">
+      <button id="openSnapshotBtn">Open Snapshot File View</button>
+    </div>
+
+    <h3>Branches & Snapshots</h3>
+    <div class="kv">
+      <input type="text" id="branchNameInput" placeholder="branch name">
+      <button id="createBranchBtn">Create Branch</button>
+      <button id="switchBranchBtn">Switch Branch</button>
+    </div>
+    <div class="kv">
+      <button id="saveSnapshotBtn">Save Snapshot</button>
+      <button id="listSnapshotsBtn">List Snapshots</button>
+    </div>
+    <div class="kv">
+      <label>Merge branch into current:</label>
+      <select id="mergeBranchSelect"></select>
+      <button id="mergeBtn">Merge</button>
+    </div>
+    <h4>Snapshot History</h4>
+    <div id="snapshots" class="history-list"></div>
+  </div>
+
+  <div class="panel center">
+    <h3>Editor</h3>
+    <div class="flexrow">
+      <label>Open: <span id="currentFileLabel"></span></label>
+      <div style="flex:1"></div>
+      <button id="saveBtn" class="smallbtn">Save</button>
+      <button id="revertBtn" class="smallbtn">Revert</button>
+    </div>
+    <textarea id="editor" spellcheck="false"></textarea>
+    <div class="flexrow">
+      <label>Selection lines:</label>
+      <span id="selInfo" style="width:120px"></span>
+      <button id="selectLinesBtn" class="smallbtn">Describe Selection</button>
+      <button id="commentSelectionBtn" class="smallbtn">Toggle Comment</button>
+    </div>
+
+    <h3>Operation Queue (Plan & Replay)</h3>
+    <div>
+      <select id="opType">
+        <option value="rename">Rename Symbol</option>
+        <option value="extract">Extract Function</option>
+        <option value="inline">Inline Variable</option>
+        <option value="replace">Regex Replace</option>
+        <option value="split">Split File</option>
+        <option value="mergeFiles">Merge Files Into New</option>
+      </select>
+      <button id="prepareOpBtn" class="smallbtn">Prepare Operation</button>
+      <button id="applyNextOpBtn" class="smallbtn">Apply Next</button>
+      <button id="applyAllOpsBtn" class="smallbtn">Apply All</button>
+      <button id="clearOpsBtn" class="smallbtn">Clear Queue</button>
+    </div>
+    <div id="opQueue" class="op-queue"></div>
+    <div class="flexrow">
+      <button id="undoBtn" class="smallbtn">Undo</button>
+      <button id="redoBtn" class="smallbtn">Redo</button>
+      <button id="replayBtn" class="smallbtn">Replay Timeline</button>
+    </div>
+  </div>
+
+  <div class="panel right">
+    <h3>Refactor Tools</h3>
+
+    <div>
+      <h4>Rename Symbol</h4>
+      <label>Old name:</label>
+      <input id="renameOld" type="text">
+      <label>New name:</label>
+      <input id="renameNew" type="text">
+      <label>Scope:
+        <select id="renameScope">
+          <option value="file">Current File</option>
+          <option value="project">Entire Project</option>
+          <option value="function">Current Function</option>
+        </select>
+      </label>
+      <button id="previewRenameBtn">Preview Rename</button>
+      <button id="applyRenameBtn">Apply Rename</button>
+      <div id="previewRenameDiff" class="diff"></div>
+    </div>
+
+    <div>
+      <h4>Extract Function</h4>
+      <label>New function name:</label>
+      <input id="extractName" type="text" placeholder="extractedFunc">
+      <label>Destination file:</label>
+      <select id="extractDest"></select>
+      <button id="previewExtractBtn">Preview Extract</button>
+      <button id="applyExtractBtn">Apply Extract</button>
+      <div id="previewExtractDiff" class="diff"></div>
+    </div>
+
+    <div>
+      <h4>Inline Variable</h4>
+      <label>Variable name to inline:</label>
+      <input id="inlineVar" type="text">
+      <label>Scope:</label>
+      <select id="inlineScope">
+        <option value="file">Current File</option>
+        <option value="project">Project-wide</option>
+      </select>
+      <button id="previewInlineBtn">Preview Inline</button>
+      <button id="applyInlineBtn">Apply Inline</button>
+      <div id="previewInlineDiff" class="diff"></div>
+    </div>
+
+    <div>
+      <h4>Find Duplicates & Suggestions</h4>
+      <label>Minimum block lines:</label>
+      <input id="dupMinLines" type="number" value="3">
+      <button id="runAnalysisBtn">Run Analysis</button>
+      <div id="analysisOutput" class="diff"></div>
+    </div>
+
+    <div>
+      <h4>Split / Merge</h4>
+      <label>Split at line (current file):</label>
+      <input id="splitLineNo" type="number" value="10">
+      <label>New file name:</label>
+      <input id="splitNewName" type="text" placeholder="part.js">
+      <button id="previewSplitBtn">Preview Split</button>
+      <button id="applySplitBtn">Apply Split</button>
+      <div id="previewSplitDiff" class="diff"></div>
+    </div>
+
+    <div>
+      <h4>Transformation Script</h4>
+      <label>Simple DSL (one command per line):</label>
+      <textarea id="transformScript" style="height:80px;">replace util.js /console\.log\(/console.info(/g
+replace app.js /foo\(/bar(/g</textarea>
+      <button id="runScriptBtn">Run Script (Preview)</button>
+      <button id="applyScriptBtn">Apply Script</button>
+      <div id="scriptPreview" class="diff"></div>
+    </div>
+
+    <h3>Merge Conflict Resolver</h3>
+    <div>
+      <label>Conflict editor (choose lines to keep):</label>
+      <div id="mergeEditor" class="diff" contenteditable="true"></div>
+      <div class="flexrow">
+        <button id="useLeftBtn" class="smallbtn">Use Left</button>
+        <button id="useRightBtn" class="smallbtn">Use Right</button>
+        <button id="acceptMergeBtn" class="smallbtn">Accept Merge</button>
+      </div>
+    </div>
+
+    <h3>Tests</h3>
+    <div>
+      <label>Test name:</label>
+      <input id="testName" type="text" placeholder="contains foo">
+      <label>File to check:</label>
+      <select id="testFileSelect"></select>
+      <label>Type:</label>
+      <select id="testType">
+        <option value="contains">Contains substring</option>
+        <option value="regex">Regex match</option>
+        <option value="runjs">Run JS (return true/false)</option>
+      </select>
+      <label>Pattern/code:</label>
+      <input id="testPattern" type="text" placeholder="pattern or JS">
+      <button id="addTestBtn">Add Test</button>
+      <button id="runTestsBtn">Run Tests</button>
+      <div id="testsOutput" class="diff"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Project state
+let project = {
+  branches: { master: { currentSnapshot: null, head: null, name: 'master' } },
+  currentBranch: 'master',
+  snapshots: {}, // id: {id, parent, branch, files}
+  nextSnapshotId: 1
+};
+
+let working = {
+  files: {}, // filename: content
+  fileOrder: [],
+  currentFile: null,
+  history: [], // undo stack per branch; we'll maintain keyed by branch name
+  redo: []
+};
+
+let opQueue = []; // planned refactor operations for current branch
+let timeline = []; // sequence of applied operations (for replay)
+// Initialize a sample project
+function initSample() {
+  working.files = {
+    "util.js": [
+      "function log(msg) {",
+      "  console.log(msg);",
+      "}",
+      "",
+      "function flatten(arr) {",
+      "  var res = [];",
+      "  for (var i=0;i<arr.length;i++) {",
+      "    if (Array.isArray(arr[i])) res = res.concat(flatten(arr[i]));",
+      "    else res.push(arr[i]);",
+      "  }",
+      "  return res;",
+      "}"
+    ].join("\n"),
+    "math.js": [
+      "function add(a,b) { return a+b; }",
+      "function mul(a,b) { return a*b; }",
+      "function factorial(n) {",
+      "  if (n <= 1) return 1;",
+      "  return n * factorial(n-1);",
+      "}"
+    ].join("\n"),
+    "app.js": [
+      "function main() {",
+      "  var x = add(2,3);",
+      "  console.log('x', x);",
+      "  var vals = [1, [2,3], 4];",
+      "  var flat = flatten(vals);",
+      "  console.log(flat);",
+      "}",
+      "",
+      "main();"
+    ].join("\n")
+  };
+  working.fileOrder = ["util.js","math.js","app.js"];
+  working.currentFile = "app.js";
+  project.branches['master'].head = null;
+  project.branches['master'].currentSnapshot = null;
+  project.currentBranch = 'master';
+  project.nextSnapshotId = 1;
+  project.snapshots = {};
+  project.branches = { master: { name: 'master', head: null, currentSnapshot: null } };
+  saveSnapshot("Initial sample");
+  pushHistorySnapshot(); // set initial undo state
+}
+initSample();
+
+// Utilities
+function getCurrentFileContent() { return working.files[working.currentFile] ?? ""; }
+function setCurrentFileContent(text) {
+  working.files[working.currentFile] = text;
+  updateEditor();
+}
+function updateEditor() {
+  document.getElementById('editor').value = getCurrentFileContent();
+  document.getElementById('currentFileLabel').textContent = working.currentFile || "(none)";
+  populateSelects();
+}
+function populateSelects() {
+  let fileList = document.getElementById('fileList');
+  fileList.innerHTML = '';
+  working.fileOrder.forEach(fn=>{
+    let btn = document.createElement('button');
+    btn.textContent = fn;
+    btn.onclick = ()=>{ working.currentFile = fn; updateEditor(); };
+    fileList.appendChild(btn);
+  });
+  // populate some selects
+  let extractDest = document.getElementById('extractDest');
+  let testFile = document.getElementById('testFileSelect');
+  let mergeBranchSelect = document.getElementById('mergeBranchSelect');
+  extractDest.innerHTML = ''; testFile.innerHTML = ''; mergeBranchSelect.innerHTML = '';
+  working.fileOrder.forEach(fn=>{
+    let o1=document.createElement('option'); o1.value=fn; o1.textContent=fn; extractDest.appendChild(o1);
+    let o2=document.createElement('option'); o2.value=fn; o2.textContent=fn; testFile.appendChild(o2);
+  });
+  Object.keys(project.branches).forEach(b=>{
+    let o=document.createElement('option'); o.value=b; o.textContent=b; mergeBranchSelect.appendChild(o);
+  });
+  populateSnapshotList();
+}
+function populateSnapshotList() {
+  let cont = document.getElementById('snapshots'); cont.innerHTML = '';
+  let ids = Object.keys(project.snapshots).map(Number).sort((a,b)=>b-a);
+  ids.forEach(id=>{
+    let s = project.snapshots[id];
+    let d=document.createElement('div'); d.textContent = `#${id} (${s.branch}) - ${s.message || ''}`; d.style.cursor='pointer';
+    d.onclick = ()=>{ alert('Snapshot ' + id + ' details:\\n' + Object.keys(s.files).join('\\n')); };
+    cont.appendChild(d);
+  });
+}
+
+// Snapshot / Branching
+function saveSnapshot(message) {
+  let id = project.nextSnapshotId++;
+  let snap = { id, parent: project.branches[project.currentBranch].currentSnapshot, branch: project.currentBranch, files: JSON.parse(JSON.stringify(working.files)), message: message || ('snapshot '+id), time: Date.now() };
+  project.snapshots[id]=snap;
+  project.branches[project.currentBranch].currentSnapshot = id;
+  project.branches[project.currentBranch].head = id;
+  populateSelects();
+  return id;
+}
+function pushHistorySnapshot() {
+  // store a shallow undo state keyed by branch
+  let b = project.currentBranch;
+  project.branches[b].history = project.branches[b].history || [];
+  project.branches[b].redo = project.branches[b].redo || [];
+  project.branches[b].history.push(JSON.parse(JSON.stringify(working.files)));
+  if (project.branches[b].history.length>100) project.branches[b].history.shift();
+  project.branches[b].redo = [];
+}
+function undo() {
+  let b = project.currentBranch;
+  let H = project.branches[b].history || [];
+  if (H.length<=1) { alert('Nothing to undo'); return; }
+  let last = H.pop();
+  project.branches[b].redo = project.branches[b].redo || [];
+  project.branches[b].redo.push(last);
+  let prev = H[H.length-1];
+  working.files = JSON.parse(JSON.stringify(prev));
+  working.fileOrder = Object.keys(working.files);
+  working.currentFile = working.fileOrder[0] || null;
+  updateEditor();
+}
+function redo() {
+  let b = project.currentBranch;
+  let R = project.branches[b].redo || [];
+  if (!R || R.length===0) { alert('Nothing to redo'); return; }
+  let state = R.pop();
+  project.branches[b].history.push(JSON.parse(JSON.stringify(state)));
+  working.files = JSON.parse(JSON.stringify(state));
+  working.fileOrder = Object.keys(working.files);
+  working.currentFile = working.fileOrder[0] || null;
+  updateEditor();
+}
+function createBranch(name) {
+  if (!name) { alert('Provide branch name'); return; }
+  if (project.branches[name]) { alert('Branch exists'); return; }
+  project.branches[name] = { name, head: project.branches[project.currentBranch].head, currentSnapshot: project.branches[project.currentBranch].currentSnapshot, history: [], redo: [] };
+  populateSelects();
+  alert('Branch created: ' + name);
+}
+function switchBranch(name) {
+  if (!project.branches[name]) { alert('No such branch'); return; }
+  // load head snapshot if exists
+  project.currentBranch = name;
+  let snapId = project.branches[name].currentSnapshot;
+  if (snapId && project.snapshots[snapId]) {
+    working.files = JSON.parse(JSON.stringify(project.snapshots[snapId].files));
+    working.fileOrder = Object.keys(working.files);
+    working.currentFile = working.fileOrder[0] || null;
+    project.branches[name].history = project.branches[name].history || [];
+    project.branches[name].redo = project.branches[name].redo || [];
+  } else {
+    // start with empty workspace if branch new
+    working.files = {}; working.fileOrder = []; working.currentFile = null;
+  }
+  updateEditor();
+}
+function findCommonAncestor(aId,bId) {
+  let visited = new Set();
+  while (aId) { visited.add(aId); aId = project.snapshots[aId] ? project.snapshots[aId].parent : null; }
+  while (bId) {
+    if (visited.has(bId)) return bId;
+    bId = project.snapshots[bId] ? project.snapshots[bId].parent : null;
+  }
+  return null;
+}
+function mergeBranchIntoCurrent(sourceBranch) {
+  if (sourceBranch === project.currentBranch) { alert('Cannot merge same branch'); return; }
+  if (!project.branches[sourceBranch]) { alert('No such branch'); return; }
+  let dest = project.currentBranch;
+  let A = project.branches[dest].currentSnapshot;
+  let B = project.branches[sourceBranch].currentSnapshot;
+  let ancestor = findCommonAncestor(A,B);
+  if (!ancestor) ancestor = null;
+  // create merged files starting from ancestor
+  let base = ancestor ? project.snapshots[ancestor].files : {};
+  let left = A ? project.snapshots[A].files : {};
+  let right = B ? project.snapshots[B].files : {};
+  let conflicts = [];
+  let merged = JSON.parse(JSON.stringify(base));
+  let allFiles = new Set([...Object.keys(base), ...Object.keys(left), ...Object.keys(right)]);
+  allFiles.forEach(fn=>{
+    let baseC = base[fn] ?? null;
+    let leftC = left[fn] ?? null;
+    let rightC = right[fn] ?? null;
+    if (leftC === rightC) {
+      merged[fn] = leftC ?? rightC;
+    } else if (leftC === baseC) {
+      merged[fn] = rightC;
+    } else if (rightC === baseC) {
+      merged[fn] = leftC;
+    } else {
+      // conflict!
+      conflicts.push({file:fn,left:leftC,right:rightC,base:baseC});
+    }
+  });
+  if (conflicts.length===0) {
+    // accept merge
+    pushHistorySnapshot();
+    working.files = merged;
+    working.fileOrder = Object.keys(working.files);
+    saveSnapshot(`merge ${sourceBranch} into ${dest}`);
+    alert('Merged cleanly');
+    updateEditor();
+  } else {
+    // show first conflict in merge editor for manual resolution
+    let c = conflicts[0];
+    document.getElementById('mergeEditor').textContent = `<<<<<<< LEFT (${sourceBranch})\n${c.left ?? ''}\n=======\n${c.right ?? ''}\n>>>>>>> RIGHT (${dest})`;
+    // store conflict state for resolution
+    pendingMerge = { conflicts, index:0, destBranch:dest, sourceBranch, base, left, right };
+    alert('Merge conflict detected. Use the resolver to resolve first conflict.');
+  }
+}
+let pendingMerge = null;
+function acceptMergeResolution(resolvedText) {
+  if (!pendingMerge) { alert('No pending merge'); return; }
+  let c = pendingMerge.conflicts[pendingMerge.index];
+  let mergedFiles = JSON.parse(JSON.stringify(pendingMerge.base));
+  // start from left and right and replace conflicts with resolution chosen + others as earlier logic
+  Object.keys(pendingMerge.left || {}).forEach(fn=>{ mergedFiles[fn] = pendingMerge.left[fn]; });
+  Object.keys(pendingMerge.right || {}).forEach(fn=>{ 
+    if (mergedFiles[fn] && mergedFiles[fn] !== pendingMerge.left[fn]) {
+      // if conflict we will replace below
+    } else {
+      mergedFiles[fn] = pendingMerge.right[fn];
+    }
+  });
+  // apply resolution for this conflict
+  mergedFiles[c.file] = resolvedText;
+  // remove this conflict and continue merging remaining ones using simple rule: favor left for others
+  pendingMerge.conflicts.splice(pendingMerge.index,1);
+  if (pendingMerge.conflicts.length===0) {
+    // finish merge
+    pushHistorySnapshot();
+    working.files = mergedFiles;
+    working.fileOrder = Object.keys(working.files);
+    saveSnapshot(`merge ${pendingMerge.sourceBranch} into ${pendingMerge.destBranch} (manual resolve)`);
+    pendingMerge = null;
+    alert('Merge completed after conflict resolution.');
+    updateEditor();
+  } else {
+    pendingMerge.index = 0;
+    let next = pendingMerge.conflicts[0];
+    document.getElementById('mergeEditor').textContent = `<<<<<<< LEFT (${pendingMerge.sourceBranch})\n${next.left ?? ''}\n=======\n${next.right ?? ''}\n>>>>>>> RIGHT (${pendingMerge.destBranch})`;
+    alert('Next conflict presented.');
+  }
+}
+
+// Diffs (simple line-by-line)
+function simpleDiff(a,b) {
+  let A = (a||'').split('\n');
+  let B = (b||'').split('\n');
+  let out = [];
+  let max = Math.max(A.length,B.length);
+  for (let i=0;i<max;i++) {
+    if (A[i]===B[i]) out.push(' '+(A[i]||''));
+    else {
+      if (A[i]!==undefined) out.push('-'+(A[i]||''));
+      if (B[i]!==undefined) out.push('+'+(B[i]||''));
+    }
+  }
+  return out.join('\n');
+}
+
+// Editor events
+document.getElementById('editor').addEventListener('select', updateSelectionInfo);
+document.getElementById('editor').addEventListener('keyup', updateSelectionInfo);
+function updateSelectionInfo() {
+  let ta = document.getElementById('editor');
+  let selStart = ta.selectionStart;
+  let selEnd = ta.selectionEnd;
+  let text = ta.value;
+  let before = text.slice(0, selStart);
+  let sel = text.slice(selStart, selEnd);
+  let startLine = before.split('\n').length;
+  let endLine = sel.length ? startLine + sel.split('\n').length - 1 : startLine;
+  document.getElementById('selInfo').textContent = `${startLine}:${endLine} chars ${sel.length}`;
+}
+document.getElementById('selectLinesBtn').onclick = ()=>{
+  updateSelectionInfo();
+  alert('Selection described above.');
+}
+
+// File actions
+document.getElementById('newFileBtn').onclick = ()=>{
+  let name = prompt('New file name:','newfile.js');
+  if (!name) return;
+  if (working.files[name]) { alert('File exists'); return; }
+  pushHistorySnapshot();
+  working.files[name] = '// new file';
+  working.fileOrder.push(name);
+  working.currentFile = name;
+  updateEditor();
+};
+document.getElementById('cloneFileBtn').onclick = ()=>{
+  let name = prompt('New clone name:','clone.js');
+  if (!name) return;
+  if (!working.currentFile) { alert('No current file'); return; }
+  if (working.files[name]) { alert('File exists'); return; }
+  pushHistorySnapshot();
+  working.files[name] = working.files[working.currentFile];
+  working.fileOrder.push(name);
+  working.currentFile = name;
+  updateEditor();
+};
+document.getElementById('deleteFileBtn').onclick = ()=>{
+  if (!working.currentFile) { alert('No file'); return; }
+  if (!confirm('Delete '+working.currentFile+'?')) return;
+  pushHistorySnapshot();
+  delete working.files[working.currentFile];
+  working.fileOrder = working.fileOrder.filter(f=>f!==working.currentFile);
+  working.currentFile = working.fileOrder[0] || null;
+  updateEditor();
+};
+document.getElementById('renameFileBtn').onclick = ()=>{
+  if (!working.currentFile) { alert('No file'); return; }
+  let newName = prompt('New name:', working.currentFile);
+  if (!newName) return;
+  if (working.files[newName]) { alert('Name exists'); return; }
+  pushHistorySnapshot();
+  working.files[newName] = working.files[working.currentFile];
+  delete working.files[working.currentFile];
+  working.fileOrder = working.fileOrder.map(fn=>fn===working.currentFile?newName:fn);
+  working.currentFile = newName;
+  updateEditor();
+};
+document.getElementById('saveBtn').onclick = ()=>{
+  pushHistorySnapshot();
+  working.files[working.currentFile] = document.getElementById('editor').value;
+  updateEditor();
+};
+document.getElementById('revertBtn').onclick = ()=>{
+  if (!confirm('Revert unsaved changes to last saved?')) return;
+  updateEditor();
+};
+
+// Snapshot / Branch UI
+document.getElementById('saveSnapshotBtn').onclick = ()=> {
+  let msg = prompt('Snapshot message:','manual save');
+  saveSnapshot(msg);
+  alert('Snapshot saved.');
+};
+document.getElementById('listSnapshotsBtn').onclick = ()=>{
+  populateSnapshotList();
+  alert('Snapshots listed.');
+};
+document.getElementById('createBranchBtn').onclick = ()=>{
+  let name = document.getElementById('branchNameInput').value.trim();
+  createBranch(name);
+};
+document.getElementById('switchBranchBtn').onclick = ()=>{
+  let name = document.getElementById('branchNameInput').value.trim();
+  if (!name) { alert('Enter branch to switch to'); return; }
+  switchBranch(name);
+};
+document.getElementById('mergeBtn').onclick = ()=>{
+  let src = document.getElementById('mergeBranchSelect').value;
+  mergeBranchIntoCurrent(src);
+};
+document.getElementById('openSnapshotBtn').onclick = ()=>{
+  let id = document.getElementById('openSnapshotId').value.trim();
+  if (!id) { alert('No id'); return; }
+  let s = project.snapshots[id];
+  if (!s) { alert('No snapshot'); return; }
+  alert('Snapshot files:\\n' + Object.keys(s.files).join('\\n'));
+};
+
+// Undo/Redo
+document.getElementById('undoBtn').onclick = ()=>undo();
+document.getElementById('redoBtn').onclick = ()=>redo();
+
+// Operation Queue
+document.getElementById('prepareOpBtn').onclick = ()=> {
+  let type = document.getElementById('opType').value;
+  let op = { type, file: working.currentFile, id: Date.now()+'-'+Math.random().toString(36).slice(2) };
+  // collect parameters
+  if (type==='rename') {
+    op.old = document.getElementById('renameOld').value;
+    op.new = document.getElementById('renameNew').value;
+    op.scope = document.getElementById('renameScope').value;
+  } else if (type==='extract') {
+    op.name = document.getElementById('extractName').value || 'extracted';
+    op.dest = document.getElementById('extractDest').value;
+    let ta = document.getElementById('editor');
+    op.sel = { start: ta.selectionStart, end: ta.selectionEnd, file: working.currentFile };
+  } else if (type==='inline') {
+    op.var = document.getElementById('inlineVar').value;
+    op.scope = document.getElementById('inlineScope').value;
+  } else if (type==='replace') {
+    let script = document.getElementById('transformScript').value.split('\n')[0] || '';
+    op.scriptLine = script;
+  } else if (type==='split') {
+    op.line = Number(document.getElementById('splitLineNo').value||0);
+    op.newname = document.getElementById('splitNewName').value || ('split_'+Date.now()+'.js');
+  } else if (type==='mergeFiles') {
+    // prompt for two files
+    let f1 = prompt('File 1:','util.js');
+    let f2 = prompt('File 2:','app.js');
+    if (!f1 || !f2) return;
+    op.f1=f1; op.f2=f2; op.newfile = prompt('New filename:','merged.js');
+  }
+  opQueue.push(op);
+  renderOpQueue();
+};
+function renderOpQueue() {
+  let el = document.getElementById('opQueue');
+  el.innerHTML = '';
+  opQueue.forEach((op,i)=>{
+    let d = document.createElement('div');
+    d.textContent = `${i+1}. ${op.type} ${op.file || ''} ${op.name || ''} ${op.var||''}`;
+    let up = document.createElement('button'); up.textContent='↑'; up.className='smallbtn'; up.onclick=()=>{
+      if (i>0) { [opQueue[i-1],opQueue[i]]=[opQueue[i],opQueue[i-1]]; renderOpQueue(); }
+    };
+    let down = document.createElement('button'); down.textContent='↓'; down.className='smallbtn'; down.onclick=()=>{
+      if (i<opQueue.length-1) { [opQueue[i+1],opQueue[i]]=[opQueue[i],opQueue[i+1]]; renderOpQueue(); }
+    };
+    let del = document.createElement('button'); del.textContent='Delete'; del.className='smallbtn'; del.onclick=()=>{
+      opQueue.splice(i,1); renderOpQueue();
+    };
+    d.appendChild(up); d.appendChild(down); d.appendChild(del);
+    el.appendChild(d);
+  });
+}
+document.getElementById('applyNextOpBtn').onclick = ()=>{ if (opQueue.length===0) { alert('No ops'); return;} applyOperation(opQueue.shift()); renderOpQueue(); };
+document.getElementById('applyAllOpsBtn').onclick = ()=>{ while(opQueue.length) { applyOperation(opQueue.shift()); } renderOpQueue(); };
+document.getElementById('clearOpsBtn').onclick = ()=>{ opQueue=[]; renderOpQueue(); };
+document.getElementById('replayBtn').onclick = ()=>{ replayTimeline(); };
+
+function applyOperation(op) {
+  // dispatch by type
+  pushHistorySnapshot();
+  if (op.type==='rename') doRename(op);
+  else if (op.type==='extract') doExtract(op);
+  else if (op.type==='inline') doInline(op);
+  else if (op.type==='replace') { applyScriptLine(op.scriptLine); }
+  else if (op.type==='split') doSplit(op);
+  else if (op.type==='mergeFiles') {
+    let content = (working.files[op.f1]||'') + '\n' + (working.files[op.f2]||'');
+    working.files[op.newfile] = content;
+    if (!working.fileOrder.includes(op.newfile)) working.fileOrder.push(op.newfile);
+  }
+  saveSnapshot(`op ${op.type}`);
+  timeline.push(op);
+  updateEditor();
+}
+
+// Rename symbol functions (naive)
+function previewRename(oldName,newName,scope) {
+  let diffs = {};
+  let filesToCheck = [];
+  if (scope==='file') filesToCheck = [working.currentFile];
+  else filesToCheck = Object.keys(working.files);
+  filesToCheck.forEach(fn=>{
+    let txt = working.files[fn] || '';
+    let replaced = txt.split(oldName).join(newName);
+    if (replaced !== txt) diffs[fn] = simpleDiff(txt,replaced);
+  });
+  return diffs;
+}
+function doRename(op) {
+  let diffs = previewRename(op.old,op.new,op.scope);
+  Object.keys(diffs).forEach(fn=>{
+    working.files[fn] = working.files[fn].split(op.old).join(op.new);
+  });
+}
+
+// Extract function (naive)
+function previewExtract(name,dest,sel) {
+  let diffs = {};
+  let file = sel.file;
+  let text = working.files[file]||'';
+  let before = text.slice(0, sel.start);
+  let selection = text.slice(sel.start, sel.end);
+  let after = text.slice(sel.end);
+  let call = `${name}();`;
+  // detect return in selection
+  let willReturn = /return\s+/.test(selection);
+  let fnDecl = `function ${name}() {\n${selection}\n}`;
+  if (willReturn) {
+    // if selection includes return, keep as-is
+  }
+  let newSourceFile = (working.files[dest]||'') + '\n\n' + fnDecl;
+  diffs[file] = simpleDiff(working.files[file], before + call + after);
+  diffs[dest] = simpleDiff(working.files[dest]||'', newSourceFile);
+  return diffs;
+}
+function doExtract(op) {
+  let sel = op.sel;
+  let file = sel.file;
+  let text = working.files[file] || '';
+  let before = text.slice(0, sel.start);
+  let selection = text.slice(sel.start, sel.end);
+  let after = text.slice(sel.end);
+  let call = `${op.name}();`;
+  working.files[file] = before + call + after;
+  let fnDecl = `function ${op.name}() {\n${selection}\n}`;
+  working.files[op.dest] = (working.files[op.dest]||'') + '\n\n' + fnDecl;
+  if (!working.fileOrder.includes(op.dest)) working.fileOrder.push(op.dest);
+}
+
+// Inline variable
+function previewInline(varName, scope) {
+  let diffs = {};
+  let files = scope==='project' ? Object.keys(working.files) : [working.currentFile];
+  files.forEach(fn=>{
+    let txt = working.files[fn] || '';
+    // naive: find assignment like "varName = expr;" or "var varName = expr;" or "let varName = expr;" or "const varName = expr;"
+    let m = txt.match(new RegExp('(?:var|let|const)?\\s*'+escapeRegExp(varName)+'\\s*=\\s*([^;\\n]+);'));
+    if (m) {
+      let expr = m[1].trim();
+      let replaced = txt.replace(new RegExp('\\b'+escapeRegExp(varName)+'\\b','g'), `(${expr})`);
+      // but avoid replacing the declaration; remove the declaration line
+      replaced = replaced.replace(new RegExp('(?:var|let|const)?\\s*'+escapeRegExp(varName)+'\\s*=\\s*[^;\\n]+;\\s*'), '');
+      if (replaced !== txt) diffs[fn] = simpleDiff(txt,replaced);
+    }
+  });
+  return diffs;
+}
+function doInline(op) {
+  let diffs = previewInline(op.var, op.scope);
+  Object.keys(diffs).forEach(fn=>{
+    // apply similar logic as preview
+    let txt = working.files[fn];
+    let m = txt.match(new RegExp('(?:var|let|const)?\\s*'+escapeRegExp(op.var)+'\\s*=\\s*([^;\\n]+);'));
+    if (!m) return;
+    let expr = m[1].trim();
+    let replaced = txt.replace(new RegExp('\\b'+escapeRegExp(op.var)+'\\b','g'), `(${expr})`);
+    replaced = replaced.replace(new RegExp('(?:var|let|const)?\\s*'+escapeRegExp(op.var)+'\\s*=\\s*[^;\\n]+;\\s*'), '');
+    working.files[fn] = replaced;
+  });
+}
+
+// Replace via simple script line
+function applyScriptLine(line) {
+  // DSL: replace <file> /pattern/replace/flags
+  let parts = line.split(' ');
+  if (parts[0] === 'replace') {
+    let file = parts[1];
+    let rest = line.slice(line.indexOf(parts[2]));
+    // parse /pattern/replacement/flags
+    let m = rest.match(/^\/(.+)\/(.*)\/([gimuy]*)$/);
+    if (!m) { alert('Bad replace syntax'); return; }
+    let pattern = m[1];
+    let replacement = m[2];
+    let flags = m[3];
+    let re = new RegExp(pattern, flags || 'g');
+    if (!working.files[file]) { alert('File not found: '+file); return; }
+    let old = working.files[file];
+    working.files[file] = old.replace(re, replacement);
+  }
+}
+function applyScript(script) {
+  pushHistorySnapshot();
+  let lines = script.split('\n').map(s=>s.trim()).filter(Boolean);
+  lines.forEach(line=>applyScriptLine(line));
+  saveSnapshot('script applied');
+  updateEditor();
+}
+
+// Split file
+function previewSplit(lineNo,newname) {
+  let file = working.currentFile;
+  let text = working.files[file] || '';
+  let lines = text.split('\n');
+  let a = lines.slice(0,lineNo).join('\n');
+  let b = lines.slice(lineNo).join('\n');
+  let diffs = {};
+  diffs[file] = simpleDiff(text,a);
+  diffs[newname] = simpleDiff('',b);
+  return diffs;
+}
+function doSplit(op) {
+  let file = working.currentFile;
+  let text = working.files[file] || '';
+  let lines = text.split('\n');
+  let a = lines.slice(0,op.line).join('\n');
+  let b = lines.slice(op.line).join('\n');
+  working.files[file] = a;
+  working.files[op.newname] = b;
+  if (!working.fileOrder.includes(op.newname)) working.fileOrder.push(op.newname);
+}
+
+// Analysis
+function runAnalysis(minLines) {
+  let out = [];
+  Object.keys(working.files).forEach(fn=>{
+    let text = working.files[fn];
+    let lines = text.split('\n');
+    // long functions naive: find function ... { ... } blocks
+    let funcs = text.match(/function\s+[a-zA-Z0-9_]*\s*\([^)]*\)\s*\{[\s\S]*?\}/g) || [];
+    funcs.forEach(f=>{
+      let ll = f.split('\n').length;
+      if (ll >= minLines) out.push(`${fn}: long function of ${ll} lines -> consider extract/simplify`);
+    });
+    // duplicates: we'll do simple repeated blocks detection below separately
+  });
+  // duplicate detection across files and within file
+  let blocks = {}; // block text -> occurrences
+  Object.keys(working.files).forEach(fn=>{
+    let lines = working.files[fn].split('\n');
+    for (let i=0;i<lines.length;i++){
+      for (let size=2; size<=Math.min(12, lines.length-i); size++){
+        let block = lines.slice(i,i+size).join('\n').trim();
+        if (block.split('\n').length < minLines) continue;
+        if (!block) continue;
+        blocks[block] = blocks[block] || [];
+        blocks[block].push({file:fn,line:i+1});
+      }
+    }
+  });
+  Object.keys(blocks).forEach(b=>{
+    if (blocks[b].length>1) {
+      out.push(`Duplicate block (${blocks[b].length} occurrences) starting at ${blocks[b].map(x=>x.file+':'+x.line).join(', ')}`);
+    }
+  });
+  return out.join('\n') || 'No suggestions';
+}
+
+// Rename UI handlers
+document.getElementById('previewRenameBtn').onclick = ()=>{
+  let oldName = document.getElementById('renameOld').value;
+  let newName = document.getElementById('renameNew').value;
+  let scope = document.getElementById('renameScope').value;
+  if (!oldName || !newName) { alert('Enter names'); return; }
+  let diffs = previewRename(oldName,newName,scope);
+  let out = Object.keys(diffs).map(fn=>`=== ${fn} ===\n${diffs[fn]}`).join('\n\n');
+  document.getElementById('previewRenameDiff').textContent = out || 'No changes';
+};
+document.getElementById('applyRenameBtn').onclick = ()=>{
+  let oldName = document.getElementById('renameOld').value;
+  let newName = document.getElementById('renameNew').value;
+  let scope = document.getElementById('renameScope').value;
+  if (!oldName || !newName) { alert('Enter names'); return; }
+  pushHistorySnapshot();
+  doRename({old:oldName,new:newName,scope});
+  saveSnapshot(`rename ${oldName} -> ${newName}`);
+  updateEditor();
+};
+
+// Extract UI
+document.getElementById('previewExtractBtn').onclick = ()=>{
+  let name = document.getElementById('extractName').value || 'extracted';
+  let dest = document.getElementById('extractDest').value;
+  let ta = document.getElementById('editor');
+  let sel = {start: ta.selectionStart, end: ta.selectionEnd, file: working.currentFile};
+  if (!sel.start || sel.start===sel.end) {
+    // allow extracting entire current function if no selection
+    alert('Select the code to extract in the editor first.');
+    return;
+  }
+  let diffs = previewExtract(name,dest,sel);
+  let out = Object.keys(diffs).map(fn=>`=== ${fn} ===\n${diffs[fn]}`).join('\n\n');
+  document.getElementById('previewExtractDiff').textContent = out;
+};
+document.getElementById('applyExtractBtn').onclick = ()=>{
+  let name = document.getElementById('extractName').value || 'extracted';
+  let dest = document.getElementById('extractDest').value;
+  let ta = document.getElementById('editor');
+  let sel = {start: ta.selectionStart, end: ta.selectionEnd, file: working.currentFile};
+  if (!sel.start || sel.start===sel.end) { alert('Select code first.'); return; }
+  pushHistorySnapshot();
+  doExtract({name,dest,sel});
+  saveSnapshot(`extract ${name}`);
+  updateEditor();
+};
+
+// Inline UI
+document.getElementById('previewInlineBtn').onclick = ()=>{
+  let v = document.getElementById('inlineVar').value;
+  let scope = document.getElementById('inlineScope').value;
+  if (!v) { alert('Enter var'); return; }
+  let diffs = previewInline(v,scope);
+  document.getElementById('previewInlineDiff').textContent = Object.keys(diffs).map(fn=>`=== ${fn} ===\n${diffs[fn]}`).join('\n\n') || 'No inlining candidates';
+};
+document.getElementById('applyInlineBtn').onclick = ()=>{
+  let v = document.getElementById('inlineVar').value;
+  let scope = document.getElementById('inlineScope').value;
+  if (!v) return;
+  pushHistorySnapshot();
+  doInline({var:v,scope});
+  saveSnapshot(`inline ${v}`);
+  updateEditor();
+};
+
+// Analysis
+document.getElementById('runAnalysisBtn').onclick = ()=>{
+  let min = Number(document.getElementById('dupMinLines').value||3);
+  let out = runAnalysis(min);
+  document.getElementById('analysisOutput').textContent = out;
+};
+
+// Split UI
+document.getElementById('previewSplitBtn').onclick = ()=>{
+  let ln = Number(document.getElementById('splitLineNo').value||0);
+  let name = document.getElementById('splitNewName').value || ('split_'+Date.now()+'.js');
+  let diffs = previewSplit(ln,name);
+  document.getElementById('previewSplitDiff').textContent = Object.keys(diffs).map(fn=>`=== ${fn} ===\n${diffs[fn]}`).join('\n\n');
+};
+document.getElementById('applySplitBtn').onclick = ()=>{
+  let ln = Number(document.getElementById('splitLineNo').value||0);
+  let name = document.getElementById('splitNewName').value || ('split_'+Date.now()+'.js');
+  pushHistorySnapshot();
+  doSplit({line:ln,newname:name});
+  saveSnapshot('split file');
+  updateEditor();
+};
+
+// Transformation script
+document.getElementById('runScriptBtn').onclick = ()=>{
+  let script = document.getElementById('transformScript').value;
+  let lines = script.split('\n').map(s=>s.trim()).filter(Boolean);
+  let preview = [];
+  lines.forEach(line=>{
+    try {
+      let tmp = JSON.parse(JSON.stringify(working.files));
+      // apply line on tmp using same logic
+      let parts = line.split(' ');
+      if (parts[0] === 'replace') {
+        let file = parts[1];
+        let rest = line.slice(line.indexOf(parts[2]));
+        let m = rest.match(/^\/(.+)\/(.*)\/([gimuy]*)$/);
+        if (!m) { preview.push('Bad line: '+line); return; }
+        let re = new RegExp(m[1], m[3] || 'g');
+        tmp[file] = (tmp[file]||'').replace(re, m[2]);
+        preview.push(`Line: ${line}\nPreview diff for ${file}:\n${simpleDiff(working.files[file]||'', tmp[file]||'')}`);
+      } else preview.push('Unknown command: '+line);
+    } catch(e){ preview.push('Error processing: '+line+' -> '+e.message); }
+  });
+  document.getElementById('scriptPreview').textContent = preview.join('\n\n');
+};
+document.getElementById('applyScriptBtn').onclick = ()=>{
+  let script = document.getElementById('transformScript').value;
+  applyScript(script);
+};
+
+// Merge resolver controls
+document.getElementById('useLeftBtn').onclick = ()=>{
+  let me = document.getElementById('mergeEditor');
+  let content = me.textContent;
+  // take left part
+  let m = content.match(/<<<<<<< LEFT[\\s\\S]*?\\n([\\s\\S]*?)\\n=======/);
+  if (m) me.textContent = m[1];
+};
+document.getElementById('useRightBtn').onclick = ()=>{
+  let me = document.getElementById('mergeEditor');
+  let content = me.textContent;
+  let m = content.match(/=======\\n([\\s\\S]*?)\\n>>>>>>>/);
+  if (m) me.textContent = m[1];
+};
+document.getElementById('acceptMergeBtn').onclick = ()=>{
+  let resolved = document.getElementById('mergeEditor').textContent;
+  acceptMergeResolution(resolved);
+};
+
+// Tests
+let tests = [];
+document.getElementById('addTestBtn').onclick = ()=>{
+  let name = document.getElementById('testName').value || ('test'+(tests.length+1));
+  let file = document.getElementById('testFileSelect').value;
+  let type = document.getElementById('testType').value;
+  let pattern = document.getElementById('testPattern').value;
+  tests.push({name,file,type,pattern});
+  document.getElementById('testsOutput').textContent = 'Added test: '+name;
+};
+document.getElementById('runTestsBtn').onclick = ()=>{
+  let out = [];
+  tests.forEach(t=>{
+    let content = working.files[t.file] || '';
+    if (t.type==='contains') {
+      out.push(`${t.name}: ${content.includes(t.pattern) ? 'PASS' : 'FAIL'}`);
+    } else if (t.type==='regex') {
+      let re = new RegExp(t.pattern);
+      out.push(`${t.name}: ${re.test(content) ? 'PASS' : 'FAIL'}`);
+    } else if (t.type==='runjs') {
+      // Evaluate code: concatenate all files and then run test.code
+      try {
+        let all = Object.keys(working.files).map(k=>working.files[k]).join('\n');
+        let fn = new Function(all + '\nreturn ('+t.pattern+');');
+        let res = fn();
+        out.push(`${t.name}: ${res ? 'PASS' : 'FAIL'}`);
+      } catch(e) { out.push(`${t.name}: ERROR - ${e.message}`); }
+    }
+  });
+  document.getElementById('testsOutput').textContent = out.join('\n');
+};
+
+// Simple utility functions
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Script apply button mapping
+document.getElementById('runScriptBtn');
+document.getElementById('applyScriptBtn');
+
+// Analysis run
+document.getElementById('runAnalysisBtn');
+
+// Open & save preview diffs for operations queue too (not required but available via previews above)
+
+// Replay timeline
+function replayTimeline() {
+  if (timeline.length===0) { alert('No timeline'); return; }
+  let copyProject = JSON.parse(JSON.stringify(project));
+  let copyWorking = JSON.parse(JSON.stringify(working));
+  // start from snapshot at beginning (initial)
+  let i = 0;
+  // allow stepping
+  let step = confirm('Replay timeline stepwise? OK for stepwise, Cancel to apply all quickly.');
+  if (!step) {
+    // quick replay: just reapply recorded ops in a fresh copy of initial snapshot
+    alert('Quick replay will reapply operations on current workspace as a simulation.');
+    let simulated = JSON.parse(JSON.stringify(copyWorking));
+    timeline.forEach(op=>{
+      try {
+        // naive simulation: only apply a few op types
+        if (op.type==='rename') {
+          Object.keys(simulated.files).forEach(fn=> simulated.files[fn] = simulated.files[fn].split(op.old).join(op.new));
+        } else if (op.type==='extract') {
+          // ignore if selection invalid
+        } else if (op.type==='inline') {
+          // ignore
+        }
+      } catch(e){}
+    });
+    alert('Replay complete (simulation).');
+  } else {
+    // interactive step-through
+    let idx = 0;
+    function doStep() {
+      if (idx>=timeline.length) { alert('Replay finished'); return; }
+      let op = timeline[idx];
+      if (!confirm(`Apply op ${idx+1}/${timeline.length}: ${op.type} ?`)) { alert('Replay halted'); return; }
+      applyOperation(op);
+      idx++;
+      setTimeout(doStep,0);
+    }
+    doStep();
+  }
+}
+
+// Simple initialization of UI
+updateEditor();
+renderOpQueue();
+
+// Other UI wiring
+document.getElementById('runAnalysisBtn').onclick = ()=> {
+  let out = runAnalysis(Number(document.getElementById('dupMinLines').value || 3));
+  document.getElementById('analysisOutput').textContent = out;
+};
+
+// Expose some functions for quick console debugging (not necessary but helpful)
+window._project = project;
+window._working = working;
+window._saveSnapshot = saveSnapshot;
+window._pushHistory = pushHistorySnapshot;
+
+</script>
+</body>
+</html>

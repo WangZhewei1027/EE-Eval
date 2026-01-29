@@ -94,7 +94,7 @@ test.describe('HTTPS Example FSM Tests - 520acd90-fa76-11f0-a09b-87751f540fd8', 
     expect(recordedPageErrors.length).toBeGreaterThanOrEqual(1);
 
     // Provide diagnostics: record console.error messages if present (not required, but useful)
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter(m => m.type === 'error');
     // We don't assert a specific count here because console errors may or may not be emitted,
     // but ensure that the structures were captured without throwing in the test harness.
     expect(Array.isArray(errorConsoleMessages)).toBe(true);
@@ -132,7 +132,7 @@ test.describe('HTTPS Example FSM Tests - 520acd90-fa76-11f0-a09b-87751f540fd8', 
     expect(pageErrors.length).toBeGreaterThanOrEqual(1);
 
     // Console diagnostics (non-deterministic). Ensure we did not cause the test harness to crash.
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages2 = consoleMessages.filter(m => m.type === 'error');
     expect(Array.isArray(errorConsoleMessages)).toBe(true);
   });
 

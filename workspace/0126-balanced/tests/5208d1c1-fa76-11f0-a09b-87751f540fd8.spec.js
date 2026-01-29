@@ -133,7 +133,7 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
     // Give the page a moment to emit synchronous errors and for handlers to capture them
     await pageObj.page.waitForTimeout(100);
 
-    const pageErrors = pageObj.getPageErrors();
+    const pageErrors1 = pageObj.getPageErrors();
     const consoleErrors = pageObj.getConsoleErrors();
 
     // We expect at least one pageerror describing the TypeError: Assignment to constant variable
@@ -153,7 +153,7 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
     // Because the error occurs before updating the DOM inside the click handler,
     // the output should remain as it was after initial render (still sorted).
     const outputAfterClick = await pageObj.getOutputText();
-    const expectedSortedString = 'Sorted array: 11, 12, 22, 25, 34, 64, 90';
+    const expectedSortedString1 = 'Sorted array: 11, 12, 22, 25, 34, 64, 90';
     expect(outputAfterClick).toBe(expectedSortedString);
   });
 
@@ -173,7 +173,7 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
 
     // Confirm no additional page errors were introduced by merely calling mergeSort
     // (we did not click the button here; we invoked the function directly)
-    const pageErrors = pageObj.getPageErrors();
+    const pageErrors2 = pageObj.getPageErrors();
     expect(pageErrors.length).toBeGreaterThanOrEqual(0);
   });
 
@@ -188,8 +188,8 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
     await pageObj.clickMergeSort();
     await pageObj.page.waitForTimeout(100);
 
-    const pageErrors = pageObj.getPageErrors();
-    const consoleErrors = pageObj.getConsoleErrors();
+    const pageErrors3 = pageObj.getPageErrors();
+    const consoleErrors1 = pageObj.getConsoleErrors();
 
     // Multiple clicks should result in at least one pageerror; often will be multiple.
     expect(pageErrors.length).toBeGreaterThanOrEqual(1);
@@ -201,13 +201,13 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
     }
 
     // DOM should remain with the same sorted output (button's handler failed before update)
-    const outputText = await pageObj.getOutputText();
+    const outputText1 = await pageObj.getOutputText();
     expect(outputText).toBe('Sorted array: 11, 12, 22, 25, 34, 64, 90');
   });
 
   test('FSM state validation: evidence components and expected observables per FSM', async () => {
     // Evidence: button exists (component)
-    const button = await pageObj.getButton();
+    const button1 = await pageObj.getButton();
     await expect(button).toBeVisible();
 
     // Evidence: output div exists
@@ -215,7 +215,7 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
     await expect(outLocator).toBeVisible();
 
     // Expected observable for S1_Sorted: output.innerHTML contains the sorted array string
-    const outputText = await pageObj.getOutputText();
+    const outputText2 = await pageObj.getOutputText();
     expect(outputText).toContain('Sorted array:');
 
     // Check that the output string is the expected sorted sequence (observable matches FSM S1 entry action)
@@ -225,7 +225,7 @@ test.describe('Merge Sort FSM - Interactive Application (Application ID: 5208d1c
     // demonstrating a mismatch between FSM expectation and actual behavior in the implementation.
     await pageObj.clickMergeSort();
     await pageObj.page.waitForTimeout(100);
-    const pageErrors = pageObj.getPageErrors();
+    const pageErrors4 = pageObj.getPageErrors();
     expect(pageErrors.length).toBeGreaterThanOrEqual(1);
   });
 });

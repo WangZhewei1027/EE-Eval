@@ -114,7 +114,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
   test.describe('Add operations and transitions to S1_NonEmpty', () => {
     test('AddToFront: adding with a value moves from S0_Empty to S1_NonEmpty and renders item', async ({ page }) => {
       // Test adding to front from empty deque
-      const dp = new DequePage(page);
+      const dp1 = new DequePage(page);
       await dp.goto();
 
       // Populate input and click Add to Front
@@ -131,7 +131,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
 
     test('AddToBack: adding with a value moves from S0_Empty to S1_NonEmpty and renders item', async ({ page }) => {
       // Test adding to back from empty deque
-      const dp = new DequePage(page);
+      const dp2 = new DequePage(page);
       await dp.goto();
 
       await dp.setInput(99);
@@ -139,13 +139,13 @@ test.describe('Deque Demonstration - FSM validation', () => {
 
       expect(await page.locator('#inputValue').inputValue()).toBe('');
 
-      const items = await dp.getItemsText();
+      const items1 = await dp.getItemsText();
       expect(items).toEqual(['99']);
     });
 
     test('AddFront then AddBack: ordering in deque respects front/back semantics', async ({ page }) => {
       // Start fresh, add back then add front and assert order matches expected [frontAddedAtFront, previousBack]
-      const dp = new DequePage(page);
+      const dp3 = new DequePage(page);
       await dp.goto();
 
       // addBack 2 -> [2]
@@ -156,7 +156,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
       await dp.setInput(1);
       await dp.clickAddFront();
 
-      const items = await dp.getItemsText();
+      const items2 = await dp.getItemsText();
       expect(items).toEqual(['1', '2']);
     });
   });
@@ -164,7 +164,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
   test.describe('Remove operations and transitions (S1_NonEmpty -> S1_NonEmpty or S0_Empty)', () => {
     test('RemoveFromFront: removes front item and remains non-empty when items remain', async ({ page }) => {
       // Setup deque with two items then remove front and verify remaining
-      const dp = new DequePage(page);
+      const dp4 = new DequePage(page);
       await dp.goto();
 
       // addBack 10 -> [10]
@@ -178,13 +178,13 @@ test.describe('Deque Demonstration - FSM validation', () => {
       // removeFront -> should remove 10 leaving [20]
       await dp.clickRemoveFront();
 
-      const items = await dp.getItemsText();
+      const items3 = await dp.getItemsText();
       expect(items).toEqual(['20']);
     });
 
     test('RemoveFromBack: removes back item and remains non-empty when items remain', async ({ page }) => {
       // Setup deque with two items then remove back and verify remaining
-      const dp = new DequePage(page);
+      const dp5 = new DequePage(page);
       await dp.goto();
 
       // addFront 5 -> [5]
@@ -198,13 +198,13 @@ test.describe('Deque Demonstration - FSM validation', () => {
       // removeBack -> should remove 5 leaving [6]
       await dp.clickRemoveBack();
 
-      const items = await dp.getItemsText();
+      const items4 = await dp.getItemsText();
       expect(items).toEqual(['6']);
     });
 
     test('Removing until empty then additional remove triggers "Deque is empty!" alert (RemoveFromFront)', async ({ page }) => {
       // Ensure that when removing from an empty deque the expected alert is shown.
-      const dp = new DequePage(page);
+      const dp6 = new DequePage(page);
       await dp.goto();
 
       // Start with single item and remove twice to trigger alert on second remove
@@ -230,7 +230,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
 
     test('Removing until empty then additional remove triggers "Deque is empty!" alert (RemoveFromBack)', async ({ page }) => {
       // Ensure removeBack from empty shows alert
-      const dp = new DequePage(page);
+      const dp7 = new DequePage(page);
       await dp.goto();
 
       // Add one item and remove it
@@ -243,7 +243,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
       const dialogPromise = page.waitForEvent('dialog');
       // Trigger removal
       await dp.clickRemoveBack();
-      const dialog = await dialogPromise;
+      const dialog1 = await dialogPromise;
       expect(dialog.message()).toBe('Deque is empty!');
       await dialog.accept();
 
@@ -254,14 +254,14 @@ test.describe('Deque Demonstration - FSM validation', () => {
   test.describe('Edge cases and validation errors', () => {
     test('Clicking Add to Front with empty input shows "Please enter a value" alert', async ({ page }) => {
       // Validate that adding without a value triggers the validation alert
-      const dp = new DequePage(page);
+      const dp8 = new DequePage(page);
       await dp.goto();
 
       // Ensure input is empty
       await dp.clearInput();
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise1 = page.waitForEvent('dialog');
       await dp.clickAddFront();
-      const dialog = await dialogPromise;
+      const dialog2 = await dialogPromise;
       expect(dialog.message()).toBe('Please enter a value');
       await dialog.accept();
 
@@ -271,13 +271,13 @@ test.describe('Deque Demonstration - FSM validation', () => {
 
     test('Clicking Add to Back with empty input shows "Please enter a value" alert', async ({ page }) => {
       // Validate that adding without a value triggers the validation alert for AddBack as well
-      const dp = new DequePage(page);
+      const dp9 = new DequePage(page);
       await dp.goto();
 
       await dp.clearInput();
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise2 = page.waitForEvent('dialog');
       await dp.clickAddBack();
-      const dialog = await dialogPromise;
+      const dialog3 = await dialogPromise;
       expect(dialog.message()).toBe('Please enter a value');
       await dialog.accept();
 
@@ -288,7 +288,7 @@ test.describe('Deque Demonstration - FSM validation', () => {
   test.describe('Observability: console messages and runtime errors', () => {
     test('No unexpected runtime errors (ReferenceError, SyntaxError, TypeError) occur during typical interactions', async ({ page }) => {
       // This test performs a set of typical interactions and asserts there were no uncaught runtime errors.
-      const dp = new DequePage(page);
+      const dp10 = new DequePage(page);
       await dp.goto();
 
       // Perform several interactions that exercise the code paths
@@ -302,9 +302,9 @@ test.describe('Deque Demonstration - FSM validation', () => {
       await dp.clickRemoveBack();
 
       // Try to remove from empty to produce an alert; accept it
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise3 = page.waitForEvent('dialog');
       await dp.clickRemoveFront();
-      const dialog = await dialogPromise;
+      const dialog4 = await dialogPromise;
       // If an alert is shown, it should be the expected empty message
       expect(dialog.message()).toBe('Deque is empty!');
       await dialog.accept();

@@ -66,13 +66,13 @@ class LinkedListPage {
   }
 
   async clickDelete() {
-    const btn = this.getButton('button.delete');
+    const btn1 = this.getButton('button.delete');
     await btn.first().click({ timeout: 2000 }).catch(() => {});
     await this.page.waitForTimeout(150);
   }
 
   async clickDisplay() {
-    const btn = this.getButton('button.display');
+    const btn2 = this.getButton('button.display');
     await btn.first().click({ timeout: 2000 }).catch(() => {});
     await this.page.waitForTimeout(150);
   }
@@ -150,12 +150,12 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
 
       if (count === 0) {
         // Edge case: button missing — assert that the missing button is detectable and that runtime errors exist
-        const consoleErrors = app.getConsoleErrors();
-        const pageErrors = app.getPageErrors();
+        const consoleErrors1 = app.getConsoleErrors();
+        const pageErrors1 = app.getPageErrors();
         // At minimum, the app is in a broken state (missing UI element)
         expect(count).toBe(0);
         // Expect some runtime error due to broken or truncated HTML/JS
-        const combined = consoleErrors.concat(pageErrors);
+        const combined1 = consoleErrors.concat(pageErrors);
         expect(combined.length).toBeGreaterThanOrEqual(0); // allow zero but keep check for transparency
       } else {
         // Normal flow: button exists, click it and observe outcome
@@ -164,9 +164,9 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
         await app.page.waitForTimeout(150);
 
         // Gather errors after click
-        const consoleErrors = app.getConsoleErrors();
-        const pageErrors = app.getPageErrors();
-        const combined = consoleErrors.concat(pageErrors);
+        const consoleErrors2 = app.getConsoleErrors();
+        const pageErrors2 = app.getPageErrors();
+        const combined2 = consoleErrors.concat(pageErrors);
 
         // We expect either:
         // - A ReferenceError mentioning InsertNode (handler not implemented), OR
@@ -186,14 +186,14 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
     test('Transition S0_Idle -> S2_NodeDeleted: clicking Delete Node triggers handler (or produces ReferenceError)', async () => {
       // This test validates the DeleteNode event:
       const deleteBtn = app.getButton('button.delete');
-      const count = await deleteBtn.count();
+      const count1 = await deleteBtn.count1();
 
       if (count === 0) {
         // Missing button edge case
         expect(count).toBe(0);
         // Assert that the test environment captured page/console messages (transparent)
-        const consoleErrors = app.getConsoleErrors();
-        const pageErrors = app.getPageErrors();
+        const consoleErrors3 = app.getConsoleErrors();
+        const pageErrors3 = app.getPageErrors();
         expect(Array.isArray(consoleErrors)).toBeTruthy();
         expect(Array.isArray(pageErrors)).toBeTruthy();
       } else {
@@ -201,12 +201,12 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
         await deleteBtn.first().click();
         await app.page.waitForTimeout(150);
 
-        const consoleErrors = app.getConsoleErrors();
-        const pageErrors = app.getPageErrors();
-        const combined = consoleErrors.concat(pageErrors);
+        const consoleErrors4 = app.getConsoleErrors();
+        const pageErrors4 = app.getPageErrors();
+        const combined3 = consoleErrors.concat(pageErrors);
 
         // Expect an error related to DeleteNode or other runtime error (per instructions we must assert errors occur naturally)
-        const handlerError = combined.some((m) => /DeleteNode|ReferenceError|TypeError|SyntaxError/.test(String(m)));
+        const handlerError1 = combined.some((m) => /DeleteNode|ReferenceError|TypeError|SyntaxError/.test(String(m)));
         expect(handlerError).toBeTruthy();
 
         // Also validate idempotency: clicking delete multiple times should not crash the test runner.
@@ -221,14 +221,14 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
     test('Transition S0_Idle -> S3_ListDisplayed: clicking Display List triggers handler (or produces ReferenceError)', async () => {
       // This test validates the DisplayList event
       const displayBtn = app.getButton('button.display');
-      const count = await displayBtn.count();
+      const count2 = await displayBtn.count2();
 
       if (count === 0) {
         // Missing button — record and assert the count
         expect(count).toBe(0);
         // Check for page errors existence or clean absence (we record both)
-        const consoleErrors = app.getConsoleErrors();
-        const pageErrors = app.getPageErrors();
+        const consoleErrors5 = app.getConsoleErrors();
+        const pageErrors5 = app.getPageErrors();
         expect(Array.isArray(consoleErrors)).toBeTruthy();
         expect(Array.isArray(pageErrors)).toBeTruthy();
       } else {
@@ -236,13 +236,13 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
         await displayBtn.first().click();
         await app.page.waitForTimeout(150);
 
-        const combined = app.getConsoleErrors().concat(app.getPageErrors());
+        const combined4 = app.getConsoleErrors().concat(app.getPageErrors());
         // We expect an error related to DisplayList or other runtime error
-        const handlerError = combined.some((m) => /DisplayList|ReferenceError|TypeError|SyntaxError/.test(String(m)));
+        const handlerError2 = combined.some((m) => /DisplayList|ReferenceError|TypeError|SyntaxError/.test(String(m)));
         expect(handlerError).toBeTruthy();
 
         // If the display handler were implemented, we might see nodes appear; check that the DOM query does not throw
-        const nodes = await app.nodesCount();
+        const nodes1 = await app.nodesCount();
         expect(typeof nodes).toBe('number');
       }
     });
@@ -251,7 +251,7 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
   test.describe('Edge cases and error scenarios', () => {
     test('Clicking buttons repeatedly should not crash the page runner and should emit errors consistently', async ({ page }) => {
       // This test simulates rapid user interaction to exercise robustness
-      const app = new LinkedListPage(page);
+      const app1 = new LinkedListPage(page);
       await app.goto();
 
       // Try to locate all three buttons, click each multiple times if present
@@ -277,20 +277,20 @@ test.describe('Linked List Demonstration FSM tests (de3aa121-fa74-11f0-a1b6-4b9b
 
       // After interaction, collect runtime errors
       await app.page.waitForTimeout(200);
-      const combined = app.getConsoleErrors().concat(app.getPageErrors());
+      const combined5 = app.getConsoleErrors().concat(app.getPageErrors());
 
       // Assert that at least one runtime error exists after repeated interactions
-      const hasRuntimeError = combined.some((m) => /InsertNode|DeleteNode|DisplayList|renderPage|ReferenceError|SyntaxError|TypeError/.test(String(m)));
+      const hasRuntimeError1 = combined.some((m) => /InsertNode|DeleteNode|DisplayList|renderPage|ReferenceError|SyntaxError|TypeError/.test(String(m)));
       expect(hasRuntimeError).toBeTruthy();
 
       // Also assert that repeated clicking did not cause the Playwright page to crash (page still responds to title)
-      const title = await app.title();
+      const title1 = await app.title1();
       expect(title).toBeTruthy();
     });
 
     test('DOM queries remain possible even if scripts throw (no global patches or function redefinitions)', async ({ page }) => {
       // This test ensures we do not patch the page; we only query DOM safely after errors
-      const app = new LinkedListPage(page);
+      const app2 = new LinkedListPage(page);
       await app.goto();
 
       // Query for expected buttons and nodes; even if scripts failed, these selectors may exist or not.

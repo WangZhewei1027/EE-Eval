@@ -127,7 +127,7 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
     });
 
     test('attempting to submit with empty required fields does not call submit handler (browser validation)', async ({ page }) => {
-      const login = new LoginPage(page);
+      const login1 = new LoginPage(page);
       await login.goto(url);
 
       // Ensure fields are empty
@@ -141,7 +141,7 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
       // Small wait to allow any unexpected handlers to run
       await page.waitForTimeout(150);
 
-      const messageText = await login.getMessageText();
+      const messageText1 = await login.getMessageText();
       // Since browser validation blocks submit, message should still be empty
       // (the script clears and updates message on submit; if submit did not run, it remains as initial)
       expect(messageText).toBe('');
@@ -150,7 +150,7 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
 
   test.describe('SubmitLogin event and transitions (SubmitLogin)', () => {
     test('valid credentials transition to Success state (S1_Success)', async ({ page }) => {
-      const login = new LoginPage(page);
+      const login2 = new LoginPage(page);
       await login.goto(url);
 
       // Fill valid hardcoded credentials as provided in the implementation
@@ -164,7 +164,7 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
       await page.waitForTimeout(100);
 
       // Validate message text and class per S1_Success evidence
-      const messageText = await login.getMessageText();
+      const messageText2 = await login.getMessageText();
       expect(messageText).toBe('Login successful!');
 
       const classes = (await login.getMessageClasses()).split(/\s+/).filter(Boolean);
@@ -177,7 +177,7 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
     });
 
     test('invalid credentials transition to Error state (S2_Error)', async ({ page }) => {
-      const login = new LoginPage(page);
+      const login3 = new LoginPage(page);
       await login.goto(url);
 
       // Fill invalid credentials
@@ -191,10 +191,10 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
       await page.waitForTimeout(100);
 
       // Validate message text and class per S2_Error evidence
-      const messageText = await login.getMessageText();
+      const messageText3 = await login.getMessageText();
       expect(messageText).toBe('Invalid username or password!');
 
-      const classes = (await login.getMessageClasses()).split(/\s+/).filter(Boolean);
+      const classes1 = (await login.getMessageClasses()).split(/\s+/).filter(Boolean);
       expect(classes).toContain('error');
       expect(classes).not.toContain('success');
 
@@ -203,7 +203,7 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
     });
 
     test('edge case: whitespace-only credentials are treated as invalid and produce Error state', async ({ page }) => {
-      const login = new LoginPage(page);
+      const login4 = new LoginPage(page);
       await login.goto(url);
 
       // Fill whitespace - these are non-empty so browser validation won't block submit
@@ -217,17 +217,17 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
       await page.waitForTimeout(100);
 
       // Should be treated as invalid by simple equality check in implementation
-      const messageText = await login.getMessageText();
+      const messageText4 = await login.getMessageText();
       expect(messageText).toBe('Invalid username or password!');
 
-      const classes = (await login.getMessageClasses()).split(/\s+/).filter(Boolean);
+      const classes2 = (await login.getMessageClasses()).split(/\s+/).filter(Boolean);
       expect(classes).toContain('error');
     });
   });
 
   test.describe('Observability and runtime errors', () => {
     test('no uncaught page errors or console.error messages during typical flows', async ({ page }) => {
-      const login = new LoginPage(page);
+      const login5 = new LoginPage(page);
       await login.goto(url);
 
       // Perform a typical flow: successful login
@@ -241,31 +241,31 @@ test.describe('Authentication Demo - FSM Validation (Application ID: 325045f4-fa
       // Assert collected pageerrors and console errors arrays are empty.
       // Note: the global afterEach also asserts this, but we include a dedicated test here
       // to make the expectation explicit for this flow.
-      const pageErrors = page.__pageErrors ?? [];
+      const pageErrors1 = page.__pageErrors ?? [];
       expect(pageErrors.length).toBe(0);
 
-      const consoleErrors = (page.__consoleMessages ?? []).filter(m => m.type === 'error');
+      const consoleErrors1 = (page.__consoleMessages ?? []).filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('observes console messages and page errors if they happen (will fail if runtime errors exist)', async ({ page }) => {
       // This test is intentionally generic: it ensures we are listening for runtime issues.
       // It will fail if the page throws uncaught exceptions (ReferenceError/SyntaxError/TypeError).
-      const login = new LoginPage(page);
+      const login6 = new LoginPage(page);
       await login.goto(url);
 
       // Do nothing complicated; load is sufficient to capture initialization runtime errors
       await page.waitForTimeout(100);
 
       // If any page errors were captured, surface them to fail the test with details
-      const pageErrors = page.__pageErrors ?? [];
+      const pageErrors2 = page.__pageErrors ?? [];
       if (pageErrors.length > 0) {
         // Fail with details
         throw new Error(`Page runtime errors detected on load: ${pageErrors.map(e => String(e)).join('\n')}`);
       }
 
       // Collect console errors
-      const consoleErrors = (page.__consoleMessages ?? []).filter(m => m.type === 'error');
+      const consoleErrors2 = (page.__consoleMessages ?? []).filter(m => m.type === 'error');
       if (consoleErrors.length > 0) {
         throw new Error(`console.error messages detected on load: ${consoleErrors.map(e => e.text).join('\n')}`);
       }

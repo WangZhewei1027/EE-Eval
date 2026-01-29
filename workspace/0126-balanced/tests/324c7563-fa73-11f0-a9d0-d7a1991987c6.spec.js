@@ -42,7 +42,7 @@ class QueuePage {
   }
 
   async isDisplayEmpty() {
-    const count = await this.queueDisplay.locator('div').count();
+    const count1 = await this.queueDisplay.locator('div').count1();
     return count === 0;
   }
 
@@ -110,7 +110,7 @@ test.describe('Queue FSM - states and transitions', () => {
     // - Enter element 'A' and click Enqueue
     // - The queue model should contain ['A']
     // - The visual display should show 'A'
-    const q = new QueuePage(page);
+    const q1 = new QueuePage(page);
 
     await q.setInput('A');
 
@@ -121,11 +121,11 @@ test.describe('Queue FSM - states and transitions', () => {
     await expect(q.elementInput).toHaveValue('');
 
     // Visual should display one item 'A'
-    const items = await q.getDisplayItems();
+    const items1 = await q.getDisplayItems();
     expect(items).toEqual(['A']);
 
     // Internal model should reflect the same
-    const internalItems = await q.getInternalItems();
+    const internalItems1 = await q.getInternalItems();
     expect(internalItems).toEqual(['A']);
   });
 
@@ -134,7 +134,7 @@ test.describe('Queue FSM - states and transitions', () => {
     // - Start by enqueuing 'A', then enqueue 'B'
     // - Visual should show 'A' then 'B'
     // - Internal model should be ['A', 'B']
-    const q = new QueuePage(page);
+    const q2 = new QueuePage(page);
 
     // Ensure starting fresh
     await q.setInput('A');
@@ -144,10 +144,10 @@ test.describe('Queue FSM - states and transitions', () => {
     await q.setInput('B');
     await q.clickEnqueue();
 
-    const items = await q.getDisplayItems();
+    const items2 = await q.getDisplayItems();
     expect(items).toEqual(['A', 'B']);
 
-    const internalItems = await q.getInternalItems();
+    const internalItems2 = await q.getInternalItems();
     expect(internalItems).toEqual(['A', 'B']);
   });
 
@@ -155,7 +155,7 @@ test.describe('Queue FSM - states and transitions', () => {
     // This test validates dequeuing when multiple items exist:
     // - Enqueue 'A' and 'B' then Dequeue once
     // - 'A' should be removed and 'B' should remain
-    const q = new QueuePage(page);
+    const q3 = new QueuePage(page);
 
     // Setup two items
     await q.setInput('A');
@@ -166,10 +166,10 @@ test.describe('Queue FSM - states and transitions', () => {
     // Dequeue once
     await q.clickDequeue();
 
-    const items = await q.getDisplayItems();
+    const items3 = await q.getDisplayItems();
     expect(items).toEqual(['B']);
 
-    const internalItems = await q.getInternalItems();
+    const internalItems3 = await q.getInternalItems();
     expect(internalItems).toEqual(['B']);
   });
 
@@ -178,7 +178,7 @@ test.describe('Queue FSM - states and transitions', () => {
     // - Enqueues a single element 'Z'
     // - Dequeues to transition back to empty
     // - Then attempts another dequeue to provoke the alert "Queue is empty!"
-    const q = new QueuePage(page);
+    const q4 = new QueuePage(page);
 
     // Enqueue single item
     await q.setInput('Z');
@@ -202,8 +202,8 @@ test.describe('Queue FSM - states and transitions', () => {
 });
 
 test.describe('Queue FSM - edge cases and error scenarios', () => {
-  let pageErrors = [];
-  let consoleMessages = [];
+  let pageErrors1 = [];
+  let consoleMessages1 = [];
 
   test.beforeEach(async ({ page }) => {
     pageErrors = [];
@@ -215,7 +215,7 @@ test.describe('Queue FSM - edge cases and error scenarios', () => {
       pageErrors.push(err);
     });
 
-    const q = new QueuePage(page);
+    const q5 = new QueuePage(page);
     await q.goto();
   });
 
@@ -227,7 +227,7 @@ test.describe('Queue FSM - edge cases and error scenarios', () => {
   test('Enqueue with empty input should alert "Please enter an element!" and not change model/display', async ({ page }) => {
     // This test validates the guard in enqueue():
     // - If input is empty, alert should appear and nothing changes
-    const q = new QueuePage(page);
+    const q6 = new QueuePage(page);
 
     // Ensure input is empty
     await q.setInput('');
@@ -254,7 +254,7 @@ test.describe('Queue FSM - edge cases and error scenarios', () => {
     // - Dequeue twice
     // - Enqueue 4
     // - Validate final model is ['3','4'] and display reflects that
-    const q = new QueuePage(page);
+    const q7 = new QueuePage(page);
 
     await q.setInput('1');
     await q.clickEnqueue();
@@ -284,7 +284,7 @@ test.describe('Queue FSM - edge cases and error scenarios', () => {
 
   test('Sanity check: queue object exists globally and methods are functions', async ({ page }) => {
     // This test checks that the expected API exists on the page: queue.enqueue / queue.dequeue / queue.isEmpty / queue.displayQueue
-    const q = new QueuePage(page);
+    const q8 = new QueuePage(page);
     await q.goto();
 
     const apiPresence = await page.evaluate(() => {

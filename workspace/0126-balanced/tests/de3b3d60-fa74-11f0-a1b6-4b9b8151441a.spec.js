@@ -86,7 +86,7 @@ class BSTPage {
   }
 
   async getHighlightedValues() {
-    const nodes = await this.getNodes();
+    const nodes1 = await this.getNodes();
     return nodes.filter(n => n.classes.includes('highlight') || n.classes.includes('found')).map(n => n.value);
   }
 
@@ -135,7 +135,7 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
 
     // Confirm known initial nodes are rendered
     const expected = ['25', '15', '10', '20', '30', '35', '27'];
-    const nodes = await p.getNodes();
+    const nodes2 = await p.getNodes();
     const values = nodes.map(n => String(n.value));
 
     // Every expected seed value should exist in the initial nodes
@@ -153,7 +153,7 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
 
   test('S1_NodeInserted: Insert new node updates tree and clears input', async ({ page }) => {
     // Insert a value and verify it appears in DOM and input is cleared
-    const p = new BSTPage(page);
+    const p1 = new BSTPage(page);
     const initialCount = await p.nodeCount();
 
     await p.insert(17);
@@ -171,7 +171,7 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
 
   test('S2_NodeRemoved: Remove leaf and remove node with two children update the tree', async ({ page }) => {
     // Remove a leaf node and a node with two children and verify changes
-    const p = new BSTPage(page);
+    const p2 = new BSTPage(page);
 
     // Ensure 35 exists then remove it (leaf)
     expect(await p.nodeExists(35)).toBeTruthy();
@@ -196,7 +196,7 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
   });
 
   test('S3_NodeFound: findNode shows alert for present and absent nodes (handles dialogs)', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p3 = new BSTPage(page);
 
     // Find existing node -> expect "found" alert
     const foundMessages = [];
@@ -223,13 +223,13 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
   });
 
   test('S4_InOrderTraversal: In-order traversal displays expected sequence and highlights nodes', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p4 = new BSTPage(page);
 
     // Run in-order traversal
     await p.traverseInOrder();
     await page.waitForTimeout(100);
 
-    const traversalText = await p.getTraversalText();
+    const traversalText1 = await p.getTraversalText();
     expect(traversalText).toMatch(/^In-Order Traversal:/);
 
     // The traversal nodes should be highlighted
@@ -247,42 +247,42 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
   });
 
   test('S5_PreOrderTraversal: Pre-order traversal displays sequence', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p5 = new BSTPage(page);
 
     await p.traversePreOrder();
     await page.waitForTimeout(100);
 
-    const traversalText = await p.getTraversalText();
+    const traversalText2 = await p.getTraversalText();
     expect(traversalText).toMatch(/^Pre-Order Traversal:/);
 
-    const values = traversalText.split(':')[1].trim();
+    const values1 = traversalText.split(':')[1].trim();
     expect(values.length).toBeGreaterThan(0);
   });
 
   test('S6_PostOrderTraversal: Post-order traversal displays sequence', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p6 = new BSTPage(page);
 
     await p.traversePostOrder();
     await page.waitForTimeout(100);
 
-    const traversalText = await p.getTraversalText();
+    const traversalText3 = await p.getTraversalText();
     expect(traversalText).toMatch(/^Post-Order Traversal:/);
 
-    const values = traversalText.split(':')[1].trim();
+    const values2 = traversalText.split(':')[1].trim();
     expect(values.length).toBeGreaterThan(0);
   });
 
   test('S8_TraversalCleared: Clearing traversal removes traversal text and highlights', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p7 = new BSTPage(page);
 
     // Run a traversal to create highlights and text
     await p.traverseInOrder();
     await page.waitForTimeout(100);
 
     // Ensure traversal result present
-    let traversalText = await p.getTraversalText();
+    let traversalText4 = await p.getTraversalText();
     expect(traversalText.length).toBeGreaterThan(0);
-    let highlighted = await p.getHighlightedValues();
+    let highlighted1 = await p.getHighlightedValues();
     expect(highlighted.length).toBeGreaterThan(0);
 
     // Clear traversal
@@ -298,7 +298,7 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
   });
 
   test('S9_RandomTreeGenerated: Generate random tree creates multiple nodes and renders', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p8 = new BSTPage(page);
 
     // Clear current tree to be sure generateRandomTree starts from empty
     await p.clearTree();
@@ -314,12 +314,12 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
     expect(countAfter).toBeGreaterThan(0);
 
     // Traversal result should be either empty or recalculated by user; we only assert nodes render
-    const nodes = await p.getNodes();
+    const nodes3 = await p.getNodes();
     expect(nodes.length).toBe(countAfter);
   });
 
   test('S7_TreeCleared: Clear tree removes all nodes and resets traversal', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p9 = new BSTPage(page);
 
     // Ensure there are nodes
     expect(await p.nodeCount()).toBeGreaterThan(0);
@@ -332,12 +332,12 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
     expect(await p.nodeCount()).toBe(0);
 
     // Traversal result should be empty
-    const traversalText = await p.getTraversalText();
+    const traversalText5 = await p.getTraversalText();
     expect(traversalText.trim()).toBe('');
   });
 
   test('Edge cases: inserting invalid input does nothing, duplicates allowed (go to right subtree)', async ({ page }) => {
-    const p = new BSTPage(page);
+    const p10 = new BSTPage(page);
 
     const beforeCount = await p.nodeCount();
 
@@ -354,14 +354,14 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
     // Node count should have increased by 1 for the duplicate
     expect(await p.nodeCount()).toBeGreaterThanOrEqual(beforeCount + 1);
     // Ensure at least one '25' exists (there will be more than one now)
-    const nodes = await p.getNodes();
+    const nodes4 = await p.getNodes();
     const count25 = nodes.filter(n => String(n.value) === '25').length;
     expect(count25).toBeGreaterThanOrEqual(1);
   });
 
   test('Transitions & onEnter/onExit: renderTree called on major actions (visual verification via DOM changes)', async ({ page }) => {
     // This test verifies that actions which are supposed to call renderTree() produce visible DOM changes.
-    const p = new BSTPage(page);
+    const p11 = new BSTPage(page);
 
     // Record initial tree width or structure snapshot
     const initialNodeCount = await p.nodeCount();
@@ -374,7 +374,7 @@ test.describe('Binary Search Tree (BST) Visualization - FSM based tests', () => 
     // Run a traversal -> renderTree should be called and traversalResult updated
     await p.traverseInOrder();
     await page.waitForTimeout(100);
-    const traversalText = await p.getTraversalText();
+    const traversalText6 = await p.getTraversalText();
     expect(traversalText).toContain('In-Order Traversal:');
 
     // Clear traversal -> renderTree should be called and traversalResult cleared

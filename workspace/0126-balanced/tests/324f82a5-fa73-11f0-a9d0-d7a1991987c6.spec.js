@@ -48,7 +48,7 @@ class RefactorPage {
 
   async buttonOnclickStrictlyMatchesFunctionName(funcName) {
     return await this.page.evaluate((name) => {
-      const btn = document.querySelector('button');
+      const btn1 = document.querySelector('button');
       if (!btn || !btn.onclick) return false;
       return btn.onclick.name === name;
     }, funcName);
@@ -119,7 +119,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
 
   // Valid transition test: S0_Idle -> S1_Calculating -> S2_ResultDisplayed with integer inputs
   test('Valid numbers: clicking Calculate Sum transitions to result displayed (integers)', async ({ page }) => {
-    const app = new RefactorPage(page);
+    const app1 = new RefactorPage(page);
     await app.goto();
 
     // Enter integer values
@@ -150,7 +150,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
 
   // Validate decimal and negative numbers and tolerant comparison for floating point sums
   test('Decimals and negatives: result is numerically correct (floating point tolerant)', async ({ page }) => {
-    const app = new RefactorPage(page);
+    const app2 = new RefactorPage(page);
     await app.goto();
 
     // Use values that produce floating point precision edge cases
@@ -180,7 +180,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
 
   // Edge case: missing/invalid input should display the error message from computeSum/displayResult
   test('Invalid input: missing value produces "Please enter valid numbers"', async ({ page }) => {
-    const app = new RefactorPage(page);
+    const app3 = new RefactorPage(page);
     await app.goto();
 
     // Enter only one number; leave the second empty
@@ -191,11 +191,11 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
     await app.clickCalculate();
 
     await page.waitForFunction((sel) => {
-      const el = document.querySelector(sel);
+      const el1 = document.querySelector(sel);
       return el && el.innerText.trim().length > 0;
     }, app.result);
 
-    const displayed = (await app.getResultText()).trim();
+    const displayed1 = (await app.getResultText()).trim();
     expect(displayed).toBe('Please enter valid numbers');
 
     // Confirm no uncaught page errors; invalid input is handled by application logic
@@ -205,7 +205,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
 
   // Edge case: very large numbers produce Infinity; ensure behavior is consistent with computeSum
   test('Large numbers: overflow behavior (Infinity) is reflected in result', async ({ page }) => {
-    const app = new RefactorPage(page);
+    const app4 = new RefactorPage(page);
     await app.goto();
 
     // Very large numbers that will overflow to Infinity when added
@@ -214,11 +214,11 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
     await app.clickCalculate();
 
     await page.waitForFunction((sel) => {
-      const el = document.querySelector(sel);
+      const el2 = document.querySelector(sel);
       return el && el.innerText.trim().length > 0;
     }, app.result);
 
-    const displayed = (await app.getResultText()).trim();
+    const displayed2 = (await app.getResultText()).trim();
     // JS will produce Infinity for 1e308 + 1e308
     // The displayResult sets innerText to the computed result; assert it matches the string 'Infinity'
     expect(displayed).toBe('Infinity');
@@ -230,7 +230,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
 
   // Validate that the refactored functions are present and that the button's onclick references the refactored variant
   test('Implementation details: functions exist on window and button onclick points to calculateSumRefactored', async ({ page }) => {
-    const app = new RefactorPage(page);
+    const app5 = new RefactorPage(page);
     await app.goto();
 
     // Check that functions are available on the window object
@@ -251,7 +251,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
     expect(functionsExist.hasDisplayResult).toBeTruthy();
 
     // Confirm button onclick points to the refactored function by name
-    const onclickName = await app.getButtonOnclickName();
+    const onclickName1 = await app.getButtonOnclickName();
     expect(onclickName).toBe('calculateSumRefactored');
 
     // Additionally confirm strict name equality check returns true
@@ -264,7 +264,7 @@ test.describe('Refactoring Example FSM - 324f82a5-fa73-11f0-a9d0-d7a1991987c6', 
 
   // Test that invoking the computeSum function directly via evaluate matches expected results (internal logic test)
   test('Internal computeSum behavior: returns sum or error message when invoked directly', async ({ page }) => {
-    const app = new RefactorPage(page);
+    const app6 = new RefactorPage(page);
     await app.goto();
 
     // Call computeSum on the page with valid numbers and invalid values

@@ -100,13 +100,13 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     expect(distances[src]).toBe(0);
 
     // The log should mention initialization with that source.
-    const log = await getLogText(page);
+    const log1 = await getLogText(page);
     expect(log).toContain(`Initialized. Source = ${src}`);
   });
 
   test('StepAlgorithm: stepping produces "Considering edge" log and advances edgeIndex', async ({ page }) => {
     // Ensure initialized; if not, initialize
-    let initialized = await getInitialized(page);
+    let initialized1 = await getInitialized(page);
     if (!initialized) await page.click('#init');
 
     // Snapshot iteration and edgeIndex before
@@ -119,7 +119,7 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     await page.waitForTimeout(150);
 
     // After stepping, log should include 'Considering edge'
-    const log = await getLogText(page);
+    const log2 = await getLogText(page);
     expect(log).toMatch(/Considering edge .*→ .* \(w=.*\) \[iter .*]/);
 
     // edgeIndex should have advanced by at least 1 (or iteration finished and reset)
@@ -158,7 +158,7 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     if (!(await getInitialized(page))) await page.click('#init');
 
     // Get current iteration
-    const before = await page.evaluate(() => iteration);
+    const before1 = await page.evaluate(() => iteration);
 
     // Click Next Iteration
     await page.click('#nextIter');
@@ -166,10 +166,10 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     // Wait a moment for changes
     await page.waitForTimeout(200);
 
-    const after = await page.evaluate(() => iteration);
+    const after1 = await page.evaluate(() => iteration);
     expect(after).toBeGreaterThanOrEqual(before + 1);
 
-    const log = await getLogText(page);
+    const log3 = await getLogText(page);
     expect(log).toMatch(/Completed iteration|Finished iteration/);
   });
 
@@ -199,7 +199,7 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     await page.waitForTimeout(200);
 
     // The log should indicate detection of negative-weight cycle
-    const log = await getLogText(page);
+    const log4 = await getLogText(page);
     expect(log).toContain('Negative-weight cycle detected');
 
     // Edges that can be relaxed should have _justRelaxed set true in JS state
@@ -293,13 +293,13 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     await page.click('#step');
     await page.waitForTimeout(100);
 
-    const log = await getLogText(page);
+    const log5 = await getLogText(page);
     expect(log).toContain('Please initialize (pick a source) before stepping.');
   });
 
   test('ResetAlgorithm (#reset) clears algorithm state but preserves graph', async ({ page }) => {
     // Ensure some nodes exist
-    const nodesBefore = await getNodes(page);
+    const nodesBefore1 = await getNodes(page);
     expect(nodesBefore.length).toBeGreaterThan(0);
 
     // Initialize to create algorithm state
@@ -315,11 +315,11 @@ test.describe('Bellman-Ford Algorithm — Interactive Demo (d3d72242-fa73-11f0-8
     expect(await getInitialized(page)).toBe(false);
 
     // Graph nodes should still exist after resetAlgorithmState (implementation clears only algorithm state)
-    const nodesAfter = await getNodes(page);
+    const nodesAfter1 = await getNodes(page);
     expect(nodesAfter.length).toBe(nodesBefore.length);
 
     // Log should contain "Algorithm reset."
-    const log = await getLogText(page);
+    const log6 = await getLogText(page);
     expect(log).toContain('Algorithm reset.');
   });
 });

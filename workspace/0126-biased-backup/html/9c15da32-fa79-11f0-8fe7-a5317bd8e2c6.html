@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DNS Interactive Simulator</title>
+  <style>
+    /* Minimal, plain layout only. Black text on white background. No colors, no animations. */
+    html,body { height:100%; margin:0; padding:0; font-family: system-ui, sans-serif; color: #000; background: #fff; }
+    .app { display:flex; height:100vh; box-sizing:border-box; padding:8px; gap:8px; }
+    .col { flex:1 1 0; display:flex; flex-direction:column; gap:6px; }
+    .controls, .panels { border:1px solid #000; padding:6px; overflow:auto; }
+    .controls { max-height:70vh; }
+    label { display:block; margin-top:6px; }
+    input[type=text], input[type=number], select, textarea { width:100%; box-sizing:border-box; }
+    button { margin-top:6px; }
+    pre { white-space:pre-wrap; word-wrap:break-word; margin:0; }
+    table { border-collapse:collapse; width:100%; }
+    td, th { border:1px solid #000; padding:4px; font-size:12px; }
+    .small { font-size:12px; }
+    .log-entry { border-top:1px dashed #000; padding-top:4px; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="col">
+      <div class="controls" id="controls">
+        <h3>DNS Query Controls</h3>
+        <label>Domain to query:
+          <input type="text" id="queryDomain" value="www.example.com">
+        </label>
+        <label>Type:
+          <select id="queryType">
+            <option>A</option>
+            <option>AAAA</option>
+            <option>CNAME</option>
+            <option>NS</option>
+            <option>MX</option>
+            <option>TXT</option>
+            <option>PTR</option>
+            <option>SRV</option>
+            <option>AXFR</option>
+            <option>ANY</option>
+          </select>
+        </label>
+        <label>Resolver Mode:
+          <select id="resolverMode">
+            <option value="recursive">Recursive resolver (classic)</option>
+            <option value="iterative">Iterative (manual root/TLD walk)</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="rdFlag" checked> RD (Recursion Desired)</label>
+        <label><input type="checkbox" id="doFlag"> DO (DNSSEC OK)</label>
+        <label>EDNS payload size:
+          <input type="range" id="ednsSize" min="512" max="4096" step="16" value="1232">
+          <span id="ednsValue">1232</span>
+        </label>
+        <label>Network latency (ms slider):
+          <input type="range" id="latency" min="0" max="2000" step="10" value="50">
+          <span id="latencyValue">50</span>
+        </label>
+        <label>Packet loss (%):
+          <input type="range" id="loss" min="0" max="80" step="1" value="0">
+          <span id="lossValue">0</span>
+        </label>
+        <label>Resolver timeout (ms):
+          <input type="range" id="timeout" min="100" max="5000" step="50" value="1500">
+          <span id="timeoutValue">1500</span>
+        </label>
+        <label>Query ID (0 = randomize):
+          <input type="number" id="queryId" value="0" min="0" max="65535">
+        </label>
+
+        <div style="margin-top:8px;">
+          <button id="runQuery">Run Query (auto)</button>
+          <button id="stepModeToggle">Enable Step Mode</button>
+          <button id="nextStep" disabled>Next Step</button>
+          <button id="stopRun" disabled>Stop</button>
+        </div>
+
+        <h4>Quick Scenarios</h4>
+        <button class="scenario" data-scenario="trace">dig +trace</button>
+        <button class="scenario" data-scenario="cname">CNAME chain (long)</button>
+        <button class="scenario" data-scenario="nxdomain">NXDOMAIN</button>
+        <button class="scenario" data-scenario="ttl">TTL caching demo</button>
+        <button class="scenario" data-scenario="axfr">AXFR zone transfer</button>
+        <button class="scenario" data-scenario="dnssec">DNSSEC validation demo</button>
+
+        <h4>Time controls</h4>
+        <label>Advance simulated time (seconds):
+          <input type="number" id="advanceSeconds" value="30" min="1">
+        </label>
+        <button id="advanceTime">Advance time</button>
+        <button id="purgeCache">Purge resolver cache</button>
+
+        <h4>Manual Tools</h4>
+        <label>Send query directly to specific server (IP):
+          <input type="text" id="directServer" placeholder="e.g., 198.51.100.1">
+        </label>
+        <button id="sendDirect">Send query directly</button>
+
+        <h4>Zone / Server Editor</h4>
+        <div id="zoneEditor">
+          <label>New zone name:
+            <input type="text" id="newZoneName" placeholder="example.com">
+          </label>
+          <label>Authoritative server IP:
+            <input type="text" id="newZoneIP" placeholder="198.51.100.1">
+          </label>
+          <button id="createZone">Create zone (primary)</button>
+
+          <div id="zonesList"></div>
+
+          <div id="selectedZoneControls"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panels" id="logPanel">
+        <h3>Packet Log & Step Trace</h3>
+        <div id="log"></div>
+      </div>
+
+      <div class="panels" id="statePanel">
+        <h3>Resolution State</h3>
+        <pre id="state">Idle</pre>
+      </div>
+
+    </div>
+
+    <div class="col">
+      <div class="panels" id="cachePanel">
+        <h3>Resolver Cache</h3>
+        <div id="cacheView"></div>
+      </div>
+
+      <div class="panels" id="serversPanel">
+        <h3>Known Servers & Zones</h3>
+        <div id="serversView"></div>
+      </div>
+
+      <div class="panels" id="rootPanel">
+        <h3>Root & TLD Hints</h3>
+        <div id="rootView"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  DNS Interactive Simulator
+  - Minimal visual design, maximum interactivity
+  - Simulates recursive and iterative resolution, caching, TTL, AXFR, DNSSEC (simplified), CNAMEs, NXDOMAIN, packet loss/timeouts
+  - Allows creating zones and editing records
+  - Step-by-step mode and automated runs
+*/
+
+/* Utility */
+function nowMs() { return simulator.currentTimeMs; }
+function logAppend(html) {
+  const ln = document.createElement('div');
+  ln.className = 'log-entry';
+  ln.innerHTML = html;
+  document.getElementById('log').appendChild(ln);
+  document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+}
+
+/* Simulator core state */
+const simulator = {
+  currentTimeMs: 0,
+  servers: {}, // ip -> server object
+  rootServers: [], // list of root server IPs
+  resolver: { // the "recursive resolver" instance
+    cache: {}, // key -> {type, value, ttlExpiryMs, origin}
+    mode: 'recursive',
+    timeoutMs: 1500,
+    rd: true,
+    do: false,
+    ednsSize: 1232,
+    retryCount: 1
+  },
+  stepMode: false,
+  stepQueue: [],
+  running: false,
+  scenario: null,
+  /* Create initial topology */
+  init: function() {
+    this.currentTimeMs = 0;
+    this.servers = {};
+    this.rootServers = [];
+    this.stepQueue = [];
+    this.running = false;
+
+    // Create root server
+    this.addServer('198.51.100.1', {name: 'a.root', isRoot:true});
+    // TLD servers
+    // For com and org and example special zones
+    this.addServer('198.51.100.2', {name:'tld-com', tlds:['com']});
+    this.addServer('198.51.100.3', {name:'tld-org', tlds:['org']});
+    this.addServer('198.51.100.4', {name:'tld-net', tlds:['net']});
+
+    // Authoritative servers for example.com and example.org and longer-cname example
+    this.addZone('example.com', '198.51.100.10', [
+      {name:'example.com', type:'NS', value:'ns1.example.com', ttl:86400},
+      {name:'ns1.example.com', type:'A', value:'198.51.100.10', ttl:86400},
+      {name:'www.example.com', type:'A', value:'203.0.113.10', ttl:300},
+      {name:'alias.example.com', type:'CNAME', value:'www.example.com', ttl:300},
+      {name:'longchain.example.com', type:'CNAME', value:'step1.chain.example.com', ttl:300},
+      {name:'step1.chain.example.com', type:'CNAME', value:'step2.chain.example.com', ttl:300},
+      {name:'step2.chain.example.com', type:'CNAME', value:'step3.chain.example.com', ttl:300},
+      {name:'step3.chain.example.com', type:'A', value:'203.0.113.55', ttl:300},
+      {name:'zone-signed.example.com', type:'A', value:'203.0.113.99', ttl:600, signed:true}
+    ], {primary:true});
+
+    this.addZone('example.org', '198.51.100.20', [
+      {name:'example.org', type:'NS', value:'ns1.example.org', ttl:86400},
+      {name:'ns1.example.org', type:'A', value:'198.51.100.20', ttl:86400},
+      {name:'www.example.org', type:'A', value:'203.0.113.20', ttl:120},
+      {name:'mail.example.org', type:'MX', value:'10 mail.example.org', ttl:3600},
+      {name:'mail.example.org', type:'A', value:'203.0.113.30', ttl:3600}
+    ], {primary:true});
+
+    // Add glue entries to root/tld as delegations
+    // Root knows tlds via NS -> attach NS records at root
+    // Root server returns NS for com/org with glue to tld servers IPs
+    this.servers['198.51.100.1'].tldDelegations = {
+      'com': [{ns:'tld-com', ip:'198.51.100.2'}],
+      'org': [{ns:'tld-org', ip:'198.51.100.3'}],
+      'net': [{ns:'tld-net', ip:'198.51.100.4'}]
+    };
+
+    // tld-com knows about example.com and delegates to its authoritative server (glue provided)
+    this.servers['198.51.100.2'].delegations = {
+      'example.com': [{ns:'ns1.example.com', ip:'198.51.100.10'}]
+    };
+    this.servers['198.51.100.3'].delegations = {
+      // nothing prepopulated for org, but tld can be asked
+    };
+
+    // Keep root hints list
+    this.rootServers = ['198.51.100.1'];
+
+    // Create a secondary server to demonstrate AXFR/zone transfer possibility
+    this.addServer('198.51.100.11', {name:'secondary-example-com', acceptsAxfr:false});
+    // Add simple "secondary pulls" not automated unless user triggers transfer
+    this.updateAllViews();
+  },
+
+  addServer: function(ip, opts={}) {
+    this.servers[ip] = {
+      ip, name: opts.name || ('srv-'+ip), zones: {}, isRoot: !!opts.isRoot,
+      tldDelegations: opts.tldDelegations || null,
+      delegations: opts.delegations || null,
+      acceptsAxfr: opts.acceptsAxfr !== undefined ? opts.acceptsAxfr : true,
+      primaryFor: opts.primaryFor || []
+    };
+    if (this.servers[ip].isRoot) {
+      if (!this.rootServers.includes(ip)) this.rootServers.push(ip);
+    }
+    return this.servers[ip];
+  },
+
+  addZone: function(zoneName, serverIp, records=[], opts={primary:false}) {
+    if (!this.servers[serverIp]) this.addServer(serverIp, {name:'auth-'+serverIp});
+    const server = this.servers[serverIp];
+    server.zones[zoneName] = server.zones[zoneName] || {};
+    server.zones[zoneName].records = {};
+    server.zones[zoneName].soaSerial = 1;
+    server.zones[zoneName].primary = !!opts.primary;
+    for (const r of records) {
+      const key = r.name + '|' + r.type;
+      server.zones[zoneName].records[key] = Object.assign({}, r);
+    }
+    server.primaryFor.push(zoneName);
+    // register delegation at tld if possible: simplistic: for zone 'example.com' put into tld server delegations.
+    const parts = zoneName.split('.');
+    if (parts.length >= 2) {
+      const tld = parts.slice(-1)[0];
+      // find tld server with matching tlds property
+      for (let ip in this.servers) {
+        const s = this.servers[ip];
+        if (s.tlds && s.tlds.includes(tld)) {
+          s.delegations = s.delegations || {};
+          s.delegations[zoneName] = s.delegations[zoneName] || [];
+          s.delegations[zoneName].push({ns: 'ns1.'+zoneName, ip: serverIp});
+        }
+      }
+    }
+    this.updateAllViews();
+  },
+
+  getAuthoritativeServerForZone: function(zone) {
+    for (const ip in this.servers) {
+      const s = this.servers[ip];
+      if (s.zones && s.zones[zone]) return {ip, server:s};
+    }
+    return null;
+  },
+
+  findDelegation: function(currentServer, qname) {
+    // For tld or root servers: return delegation info if known
+    const parts = qname.split('.');
+    const tld = parts.slice(-1)[0];
+    // if currentServer has delegations map, check for any zone suffix that matches qname
+    if (currentServer.delegations) {
+      // find the longest matching zone suffix in delegations keys
+      let matched = null;
+      for (let zone in currentServer.delegations) {
+        if (qname === zone || qname.endsWith('.' + zone)) {
+          if (!matched || zone.length > matched.length) matched = zone;
+        }
+      }
+      if (matched) {
+        return {zone: matched, nslist: currentServer.delegations[matched]};
+      }
+    }
+    // root server has tldDelegations
+    if (currentServer.tldDelegations) {
+      // try tld
+      const tldDeleg = currentServer.tldDelegations[tld];
+      if (tldDeleg) return {zone: tld, nslist: tldDeleg};
+    }
+    return null;
+  },
+
+  /* Simulate sending a UDP DNS query to a server IP; returns a Promise that resolves to a response object or rejects on timeout/loss */
+  sendQuery: function({toIp, id, qname, qtype, rd, doFlag, ednsSize}) {
+    const sim = this;
+    const latency = parseInt(document.getElementById('latency').value,10);
+    const loss = parseInt(document.getElementById('loss').value,10);
+    const timeout = parseInt(document.getElementById('timeout').value,10);
+    const startMs = nowMs();
+    function rnd(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+    return new Promise((resolve, reject) => {
+      // simulate packet loss
+      if (Math.random()*100 < loss) {
+        setTimeout(() => {
+          reject({type:'timeout', reason:'simulated packet loss'});
+        }, Math.min(timeout, latency + 20));
+        return;
+      }
+      // simulate network latency
+      const delay = latency + rnd(0, Math.min(200, latency));
+      setTimeout(() => {
+        const server = sim.servers[toIp];
+        if (!server) {
+          reject({type:'servfail', reason:'no such server'});
+          return;
+        }
+        // Build a response object simulating logic:
+        // If server is root: return delegation for tld
+        // If server has delegations matching qname: return delegation info
+        // If server is authoritative for zone covering qname: return answer or NXDOMAIN
+        // If qtype AXFR and server supports zone transfer, return zone
+        // If server has no info, return referral if possible or NXDOMAIN
+        const response = {
+          id, from: toIp, to: 'client', qname, qtype, rd, doFlag, ednsSize,
+          rcode: 'NOERROR', answers: [], authority: [], additional: [], flags: {AA:false, RA:false, TC:false}
+        };
+
+        // Special: if server has zone data authoritative for a matching zone
+        let authZone = null;
+        for (let z in server.zones) {
+          if (qname === z || qname.endsWith('.' + z)) {
+            // choose longest matching zone
+            if (!authZone || z.length > authZone.length) authZone = z;
+          }
+        }
+        if (authZone) {
+          // server is authoritative for authZone
+          response.flags.AA = true;
+          const zone = server.zones[authZone];
+          // lookup records matching the qname and qtype
+          const matches = [];
+          for (let k in zone.records) {
+            const rec = zone.records[k];
+            if (rec.name === qname && (rec.type === qtype || qtype === 'ANY')) matches.push(rec);
+          }
+          if (qtype === 'AXFR') {
+            // simulate AXFR: if server accepts axfr, return all records for zone in answers
+            if (server.acceptsAxfr) {
+              for (let k in zone.records) response.answers.push(zone.records[k]);
+              resolve({response, rtt: nowMs()-startMs});
+              return;
+            } else {
+              response.rcode = 'REFUSED';
+              reject({type:'refused', info:response});
+              return;
+            }
+          }
+
+          if (matches.length === 0) {
+            // Maybe there is a CNAME for a parent or other type
+            // Check for CNAME record for qname
+            for (let k in zone.records) {
+              const rec = zone.records[k];
+              if (rec.name === qname && rec.type === 'CNAME') {
+                // Return CNAME in answers
+                response.answers.push(rec);
+                // Also attempt to resolve target in-situ if server has it
+                const target = rec.value;
+                // find records for target of requested type (A/AAAA etc)
+                for (let kk in zone.records) {
+                  const rec2 = zone.records[kk];
+                  if (rec2.name === target) {
+                    if (rec2.type === qtype || qtype === 'ANY') response.answers.push(rec2);
+                  }
+                }
+                // Mark AA true and return
+                resolve({response, rtt: nowMs()-startMs});
+                return;
+              }
+            }
+
+            // If no matching record and no CNAME found, NXDOMAIN
+            response.rcode = 'NXDOMAIN';
+            response.authority.push({type:'SOA', value:`${authZone} SOA dummy`, ttl:3600});
+            resolve({response, rtt: nowMs()-startMs});
+            return;
+          } else {
+            // Found matches; push them into answers
+            for (const m of matches) response.answers.push(m);
+            if (zone.records) {
+              // attach NS records for zone
+              for (let k in zone.records) {
+                const rec = zone.records[k];
+                if (rec.type === 'NS' && rec.name === authZone) response.authority.push(rec);
+                if (rec.type === 'A' && rec.name && rec.name.startsWith('ns1.')) {
+                  response.additional.push(rec); // glue
+                }
+              }
+            }
+            // DNSSEC simplified: include RRSIG if signed flag present
+            if (doFlag) {
+              // if any answer has signed property true, response includes "RRSIG" (simplified)
+              for (const a of response.answers) {
+                if (a.signed) {
+                  response.additional.push({type:'RRSIG', name:a.name, value:'<sig>', ttl: a.ttl || 300});
+                }
+              }
+            }
+            resolve({response, rtt: nowMs()-startMs});
+            return;
+          }
+        }
+
+        // Not authoritative: check if server has delegation info
+        const deleg = this.findDelegation(server, qname);
+        if (deleg) {
+          // return referral with NS names and glue if available
+          response.rcode = 'NOERROR';
+          response.authority = [];
+          for (const d of deleg.nslist) {
+            response.authority.push({type:'NS', name: deleg.zone, value: d.ns, ttl:86400});
+            if (d.ip) response.additional.push({type:'A', name: d.ns, value:d.ip, ttl:86400});
+          }
+          resolve({response, rtt: nowMs()-startMs});
+          return;
+        }
+
+        // fallback: return NXDOMAIN
+        response.rcode = 'NXDOMAIN';
+        resolve({response, rtt: nowMs()-startMs});
+      }, delay);
+      // implement timeout rejection if delay > timeout
+      setTimeout(() => {
+        reject({type:'timeout', reason:'simulated timeout'});
+      }, timeout);
+    });
+  },
+
+  /* High-level query orchestrator */
+  query: async function({domain, type, mode, id, directIp=null}) {
+    // Clear stepQueue for this query
+    this.stepQueue = [];
+    this.resolver.mode = mode;
+    this.resolver.timeoutMs = parseInt(document.getElementById('timeout').value,10);
+    this.resolver.rd = document.getElementById('rdFlag').checked;
+    this.resolver.do = document.getElementById('doFlag').checked;
+    this.resolver.ednsSize = parseInt(document.getElementById('ednsSize').value,10);
+
+    const chosenId = (id && id>0) ? id : Math.floor(Math.random()*65536);
+    const queryCtx = {
+      id: chosenId, qname: domain, qtype: type, rd: this.resolver.rd, doFlag: this.resolver.do, ednsSize: this.resolver.ednsSize,
+      tracePath: [], steps: [], final: null, cached: false, startTime: nowMs()
+    };
+
+    // check cache first if recursive resolver and not AXFR/ANY perhaps
+    const cacheKey = domain + '|' + type;
+    const cached = this.resolver.cache[cacheKey];
+    if (cached && cached.ttlExpiryMs > nowMs()) {
+      // cache hit
+      queryCtx.cached = true;
+      const remaining = Math.round((cached.ttlExpiryMs - nowMs())/1000);
+      const entry = {
+        step: 'CACHE_HIT',
+        info: `Cache hit: ${domain} ${type} -> ${JSON.stringify(cached.value)} (ttl ${remaining}s)`,
+        time: nowMs()
+      };
+      queryCtx.steps.push(entry);
+      this.logStep(entry);
+      queryCtx.final = {rcode:'NOERROR', answers:[cached.value], authority:[], additional:[], cache:true};
+      this.finishQuery(queryCtx);
+      return queryCtx.final;
+    }
+
+    // If directIp is provided, send directly and return
+    if (directIp) {
+      const sendStep = {step:'SEND_DIRECT', to: directIp, qname: domain, qtype: type, id: chosenId, time: nowMs()};
+      this.logStep(sendStep);
+      try {
+        const resp = await this.sendQuery({toIp: directIp, id: chosenId, qname: domain, qtype: type, rd:this.resolver.rd, doFlag:this.resolver.do, ednsSize:this.resolver.ednsSize});
+        queryCtx.steps.push({step:'RECV', resp:resp.response, rtt:resp.rtt, time:nowMs()});
+        this.logStep({step:'RECV', resp:resp.response, rtt:resp.rtt, time:nowMs()});
+        // If recursive RD bit was set and server is not recursive we still get the server's response only
+        this.finishQuery(queryCtx, resp.response);
+        return resp.response;
+      } catch(err) {
+        queryCtx.steps.push({step:'ERROR', err});
+        this.logStep({step:'ERROR', err});
+        this.finishQuery(queryCtx, err);
+        return err;
+      }
+    }
+
+    // If mode is recursive: send query to resolver's configured recursive resolver (pick first root server as a simple resolver)
+    if (mode === 'recursive') {
+      // We simulate a recursive resolver by selecting one server acting as resolver (root server acts as stub resolver)? For clarity we have a "recursive resolver" instance: choose rootServers[0] as front-end recursive
+      const resolverFrontIp = this.rootServers[0];
+      const sendStep = {step:'SEND_TO_RESOLVER', to: resolverFrontIp, id:chosenId, qname: domain, qtype:type, time:nowMs()};
+      queryCtx.steps.push(sendStep);
+      this.logStep(sendStep);
+      // The "resolver" will do iterative queries on our behalf. We'll simulate it by calling an iterative driver that uses root server hints.
+      try {
+        const resp = await this.iterativeResolve(domain, type, {id:chosenId, rd:this.resolver.rd, doFlag:this.resolver.do, ednsSize:this.resolver.ednsSize, queryCtx});
+        // If successful, cache answers
+        if (resp && resp.rcode === 'NOERROR' && resp.answers && resp.answers.length>0) {
+          // cache only first answer with its TTL
+          for (const a of resp.answers) {
+            const ttl = a.ttl !== undefined ? a.ttl : 300;
+            this.resolver.cache[domain+'|'+a.type] = {type:a.type, value:a, ttlExpiryMs: nowMs() + ttl*1000, origin: resp.from};
+          }
+        }
+        this.finishQuery(queryCtx, resp);
+        return resp;
+      } catch(err) {
+        this.finishQuery(queryCtx, err);
+        return err;
+      }
+    } else {
+      // Iterative mode: simulate client performing the walk: start at root and query down the chain, showing each hop
+      const res = await this.iterativeResolve(domain, type, {id:chosenId, rd:this.resolver.rd, doFlag:this.resolver.do, ednsSize:this.resolver.ednsSize, queryCtx});
+      this.finishQuery(queryCtx, res);
+      return res;
+    }
+  },
+
+  iterativeResolve: async function(domain, type, opts={}) {
+    // Walk from root -> TLD -> auth
+    const parts = domain.split('.');
+    const labelList = [];
+    for (let i=0;i<parts.length;i++){
+      labelList.push(parts.slice(i).join('.'));
+    }
+    // Starting server: pick a root server hint
+    let currentServers = this.rootServers.slice();
+    const trace = [];
+    const queryCtx = opts.queryCtx;
+    // For each label from top-level to full domain, query a server from currentServers for delegation/answer
+    for (let i=labelList.length-1;i>=0;i--) {
+      const suffix = labelList[i]; // e.g., com then example.com then www.example.com
+      // Query one of currentServers (pick random among available)
+      if (currentServers.length === 0) {
+        const err = {rcode:'SERVFAIL', reason:'no servers to query'};
+        this.logStep({step:'ERROR', err});
+        throw err;
+      }
+      const toIp = currentServers[Math.floor(Math.random()*currentServers.length)];
+      // send query to toIp
+      this.logStep({step:'HOP_QUERY', to:toIp, qname: domain, askingForSuffix: suffix, qtype:type, time:nowMs()});
+      try {
+        const respWrap = await this.sendQuery({toIp, id:opts.id, qname:domain, qtype:type, rd:opts.rd, doFlag:opts.doFlag, ednsSize:opts.ednsSize});
+        const resp = respWrap.response;
+        resp.from = toIp;
+        // Log response
+        this.logStep({step:'HOP_RECV', from:toIp, resp, rtt:respWrap.rtt, time:nowMs()});
+        trace.push({from:toIp, resp});
+        // If server is authoritative and returned answer or NXDOMAIN, return it
+        if (resp.flags && resp.flags.AA) {
+          // If AA and NOERROR with answers: done
+          if (resp.rcode === 'NOERROR' && resp.answers.length>0) {
+            return resp;
+          } else {
+            return resp; // NXDOMAIN etc
+          }
+        }
+        // If this server returned a referral in authority, use that NS list and glue additional to get next servers
+        if (resp.authority && resp.authority.length>0) {
+          const nsRecords = resp.authority.filter(a=>a.type==='NS');
+          const additionalA = resp.additional.filter(a=>a.type==='A' || a.type==='AAAA');
+          let nextServers = [];
+          for (const a of additionalA) nextServers.push(a.value);
+          // If glue not available, use NS names and try to resolve their A by asking root or tld (not implemented deep: we can attempt to find glue by searching known servers)
+          if (nextServers.length === 0) {
+            for (const ns of nsRecords) {
+              // try to find a server with matching name in our known servers (search by server.name or zone records)
+              for (let ip in this.servers) {
+                const s = this.servers[ip];
+                if (s.name === ns.value || Object.keys(s.zones||{}).some(z=>('ns1.'+z)===ns.value)) {
+                  nextServers.push(ip);
+                } else {
+                  // also check if server has A record for ns.value
+                  for (let z in s.zones) {
+                    const zone = s.zones[z];
+                    for (let k in zone.records) {
+                      const rec = zone.records[k];
+                      if ((rec.name === ns.value) && (rec.type === 'A' || rec.type === 'AAAA')) nextServers.push(rec.value);
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // If still none, fall back to root hints
+          if (nextServers.length === 0) nextServers = this.rootServers.slice();
+          currentServers = nextServers;
+          continue; // Next iteration: ask nextServers about the same qname
+        } else {
+          // No authority info: if no answer, return whatever this server returned
+          return resp;
+        }
+      } catch(err) {
+        // error contacting server - remove server from currentServers and try next if available
+        this.logStep({step:'HOP_ERROR', server:toIp, err, time:nowMs()});
+        currentServers = currentServers.filter(ip=>ip!==toIp);
+        // if none left, throw failure
+        if (currentServers.length === 0) {
+          throw {rcode:'SERVFAIL', reason:'all servers failed', details:err};
+        } else {
+          i++; // stay on same suffix for next server
+          continue;
+        }
+      }
+    }
+    // If we exit loop return SERVFAIL
+    return {rcode:'SERVFAIL'};
+  },
+
+  logStep: function(entry) {
+    // if stepMode is on, push into stepQueue, else render immediately
+    this.stepQueue.push(entry);
+    if (!this.stepMode) {
+      // flush queue immediately: render all
+      while (this.stepQueue.length>0) {
+        const e = this.stepQueue.shift();
+        this.renderStep(e);
+      }
+      updateState('Idle');
+    } else {
+      // only render first step as "queued" summary
+      updateState('Step mode enabled. ' + this.stepQueue.length + ' steps queued.');
+    }
+  },
+
+  renderStep: function(e) {
+    // Render various step entry types into the log panel
+    if (!e) return;
+    if (e.step === 'CACHE_HIT') {
+      logAppend(`<b>[CACHE]</b> ${escapeHtml(e.info)} <div class="small">at ${msToHuman(nowMs())}</div>`);
+      return;
+    }
+    if (e.step === 'SEND_DIRECT') {
+      logAppend(`<b>Send direct</b> -> ${e.to} : ${e.qname} ${e.qtype} (id ${e.id})`);
+      return;
+    }
+    if (e.step === 'SEND_TO_RESOLVER') {
+      logAppend(`<b>Send to resolver</b> -> ${e.to} : ${e.qname} ${e.qtype} (id ${e.id})`);
+      return;
+    }
+    if (e.step === 'HOP_QUERY') {
+      logAppend(`<b>Query hop</b> to ${e.to} asking for suffix ${e.askingForSuffix} (${e.qname})`);
+      return;
+    }
+    if (e.step === 'HOP_RECV') {
+      const resp = e.resp;
+      let s = `<b>Reply from ${e.from}</b> rcode=${resp.rcode} AA=${resp.flags.AA} answers=${resp.answers.length} authority=${resp.authority.length} additional=${resp.additional.length} (rtt ${e.rtt}ms)`;
+      s += `<div class="small">Answers: ${escapeHtml(JSON.stringify(resp.answers))}</div>`;
+      s += `<div class="small">Authority: ${escapeHtml(JSON.stringify(resp.authority))}</div>`;
+      s += `<div class="small">Additional: ${escapeHtml(JSON.stringify(resp.additional))}</div>`;
+      logAppend(s);
+      return;
+    }
+    if (e.step === 'HOP_ERROR') {
+      logAppend(`<b>Query error</b> contacting ${e.server}: ${escapeHtml(JSON.stringify(e.err))}`);
+      return;
+    }
+    if (e.step === 'RECV') {
+      const resp = e.resp;
+      logAppend(`<b>Received</b> from ${resp.from} rcode=${resp.rcode} answers=${resp.answers.length} <div class="small">${escapeHtml(JSON.stringify(resp.answers))}</div>`);
+      return;
+    }
+    if (e.step === 'ERROR') {
+      logAppend(`<b>Error</b> ${escapeHtml(JSON.stringify(e.err))}`);
+      return;
+    }
+    // fallback generic
+    logAppend(`<pre>${escapeHtml(JSON.stringify(e,null,2))}</pre>`);
+  },
+
+  finishQuery: function(queryCtx, resp) {
+    // push a final summary into logs and possibly cache
+    if (resp && resp.rcode === 'NOERROR' && resp.answers && resp.answers.length>0) {
+      this.logStep({step:'FINAL', info:`Answer: ${queryCtx.qname} ${queryCtx.qtype} -> ${JSON.stringify(resp.answers)}`, time: nowMs()});
+    } else if (resp && resp.rcode) {
+      this.logStep({step:'FINAL', info:`Final rcode: ${resp.rcode}`, time: nowMs()});
+    } else if (resp && resp.type === 'refused') {
+      this.logStep({step:'FINAL', info:`Refused`, time: nowMs()});
+    } else {
+      this.logStep({step:'FINAL', info:`No answer or error: ${JSON.stringify(resp)}`, time: nowMs()});
+    }
+    // Render any remaining queued steps immediately if not stepMode
+    if (!this.stepMode) {
+      while (this.stepQueue.length>0) {
+        const e = this.stepQueue.shift();
+        this.renderStep(e);
+      }
+    }
+    // Update UI views
+    this.updateAllViews();
+  },
+
+  /* Step controls */
+  peekStep: function() {
+    if (this.stepQueue.length === 0) return null;
+    return this.stepQueue[0];
+  },
+  nextStep: function() {
+    if (this.stepQueue.length === 0) return null;
+    const e = this.stepQueue.shift();
+    this.renderStep(e);
+    updateState('Step executed. ' + this.stepQueue.length + ' steps remain.');
+    return e;
+  },
+
+  /* Time progression */
+  advanceTime: function(seconds) {
+    const ms = seconds*1000;
+    this.currentTimeMs += ms;
+    // Expire cache entries as appropriate
+    for (const k in this.resolver.cache) {
+      const ent = this.resolver.cache[k];
+      if (ent.ttlExpiryMs <= nowMs()) {
+        delete this.resolver.cache[k];
+      }
+    }
+    this.updateAllViews();
+    logAppend(`<b>Simulated time advanced by ${seconds}s. Current simulated time: ${msToHuman(nowMs())}</b>`);
+  },
+
+  purgeCache: function() {
+    this.resolver.cache = {};
+    this.updateAllViews();
+    logAppend(`<b>Resolver cache purged</b>`);
+  },
+
+  updateAllViews: function() {
+    // Render cache
+    const cacheView = document.getElementById('cacheView');
+    cacheView.innerHTML = '';
+    const rows = [];
+    for (const k in this.resolver.cache) {
+      const ent = this.resolver.cache[k];
+      const ttl = Math.max(0, Math.round((ent.ttlExpiryMs - nowMs())/1000));
+      rows.push(`<div>${escapeHtml(k)} -> ${escapeHtml(JSON.stringify(ent.value))} (ttl ${ttl}s)</div>`);
+    }
+    cacheView.innerHTML = rows.join('') || '<div>(empty)</div>';
+
+    // Servers view
+    const sv = document.getElementById('serversView');
+    sv.innerHTML = '';
+    for (const ip in this.servers) {
+      const s = this.servers[ip];
+      let out = `<div><b>${s.name}</b> (${ip})`;
+      if (Object.keys(s.zones||{}).length>0) out += `<div class="small">Zones: ${Object.keys(s.zones).join(', ')}</div>`;
+      out += `</div>`;
+      sv.innerHTML += out;
+    }
+
+    // Root view
+    const rv = document.getElementById('rootView');
+    rv.innerHTML = '';
+    rv.innerHTML += `<div>Root servers: ${this.rootServers.join(', ')}</div>`;
+    // show delegations on the root server
+    const root = this.servers[this.rootServers[0]];
+    if (root && root.tldDelegations) {
+      rv.innerHTML += `<div class="small">TLD delegations known by root:</div>`;
+      for (const tld in root.tldDelegations) {
+        rv.innerHTML += `<div class="small">${tld} -> ${JSON.stringify(root.tldDelegations[tld])}</div>`;
+      }
+    }
+    // Zones list in zone editor
+    renderZonesEditor();
+  }
+};
+
+/* Helper functions for UI */
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/[&<>"']/g, function(m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);});
+}
+function msToHuman(ms) {
+  return String(Math.floor(ms/1000)) + 's';
+}
+function updateState(text) {
+  document.getElementById('state').textContent = text;
+}
+
+/* UI wiring */
+document.getElementById('ednsSize').addEventListener('input', (e)=>{document.getElementById('ednsValue').textContent = e.target.value;});
+document.getElementById('latency').addEventListener('input', (e)=>{document.getElementById('latencyValue').textContent = e.target.value;});
+document.getElementById('loss').addEventListener('input', (e)=>{document.getElementById('lossValue').textContent = e.target.value;});
+document.getElementById('timeout').addEventListener('input', (e)=>{document.getElementById('timeoutValue').textContent = e.target.value;});
+
+document.getElementById('runQuery').addEventListener('click', async ()=>{
+  clearLog();
+  simulator.stepMode = false;
+  document.getElementById('stepModeToggle').textContent = 'Enable Step Mode';
+  const domain = document.getElementById('queryDomain').value.trim();
+  const type = document.getElementById('queryType').value;
+  const mode = document.getElementById('resolverMode').value;
+  const id = parseInt(document.getElementById('queryId').value,10);
+  updateState('Running query...');
+  document.getElementById('stopRun').disabled = false;
+  await simulator.query({domain, type, mode, id});
+  document.getElementById('stopRun').disabled = true;
+});
+
+document.getElementById('stepModeToggle').addEventListener('click', ()=>{
+  simulator.stepMode = !simulator.stepMode;
+  document.getElementById('stepModeToggle').textContent = simulator.stepMode ? 'Disable Step Mode' : 'Enable Step Mode';
+  document.getElementById('nextStep').disabled = !simulator.stepMode;
+  updateState(simulator.stepMode ? 'Step mode enabled. Ready.' : 'Step mode disabled.');
+});
+
+document.getElementById('nextStep').addEventListener('click', ()=>{
+  const s = simulator.nextStep();
+  if (!s) updateState('No steps queued.');
+});
+
+document.getElementById('stopRun').addEventListener('click', ()=>{
+  // simple stop: clear stepQueue and set running false
+  simulator.stepQueue = [];
+  simulator.running = false;
+  updateState('Run stopped by user.');
+  document.getElementById('stopRun').disabled = true;
+});
+
+document.querySelectorAll('.scenario').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const sc = btn.getAttribute('data-scenario');
+    runScenario(sc);
+  });
+});
+
+document.getElementById('advanceTime').addEventListener('click', ()=>{
+  const s = parseInt(document.getElementById('advanceSeconds').value,10) || 0;
+  simulator.advanceTime(s);
+});
+
+document.getElementById('purgeCache').addEventListener('click', ()=>{
+  simulator.purgeCache();
+});
+
+document.getElementById('sendDirect').addEventListener('click', async ()=>{
+  const ip = document.getElementById('directServer').value.trim();
+  const domain = document.getElementById('queryDomain').value.trim();
+  const type = document.getElementById('queryType').value;
+  clearLog();
+  updateState('Sending direct query...');
+  await simulator.query({domain, type, mode:'iterative', id:0, directIp:ip});
+});
+
+document.getElementById('createZone').addEventListener('click', ()=>{
+  const zone = document.getElementById('newZoneName').value.trim();
+  const ip = document.getElementById('newZoneIP').value.trim();
+  if (!zone || !ip) {
+    alert('Enter zone name and server IP');
+    return;
+  }
+  simulator.addZone(zone, ip, [
+    {name: zone, type:'NS', value: 'ns1.'+zone, ttl:86400},
+    {name:'ns1.'+zone, type:'A', value: ip, ttl:86400}
+  ], {primary:true});
+  simulator.updateAllViews();
+});
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+}
+
+/* Zones editor rendering and interactions */
+function renderZonesEditor() {
+  const zonesDiv = document.getElementById('zonesList');
+  zonesDiv.innerHTML = '<h5>Existing zones</h5>';
+  const list = [];
+  for (const ip in simulator.servers) {
+    const s = simulator.servers[ip];
+    for (const z in s.zones) {
+      list.push({zone:z, serverIp:ip, serverName:s.name});
+    }
+  }
+  if (list.length === 0) zonesDiv.innerHTML += '<div>(none)</div>';
+  for (const item of list) {
+    const div = document.createElement('div');
+    div.innerHTML = `<div><b>${item.zone}</b> on ${item.serverName} (${item.serverIp}) <button data-zone="${item.zone}" data-ip="${item.serverIp}" class="editZone">Edit</button> <button data-zone="${item.zone}" data-ip="${item.serverIp}" class="axfrBtn">AXFR</button></div>`;
+    zonesDiv.appendChild(div);
+  }
+  // attach listeners
+  document.querySelectorAll('.editZone').forEach(b=>{
+    b.addEventListener('click', (ev)=>{
+      const z = ev.target.getAttribute('data-zone');
+      const ip = ev.target.getAttribute('data-ip');
+      openZoneEditor(z, ip);
+    });
+  });
+  document.querySelectorAll('.axfrBtn').forEach(b=>{
+    b.addEventListener('click', async (ev)=>{
+      const z = ev.target.getAttribute('data-zone');
+      const ip = ev.target.getAttribute('data-ip');
+      clearLog();
+      updateState(`Attempting AXFR from ${ip} for zone ${z}`);
+      try {
+        const r = await simulator.sendQuery({toIp: ip, id:0, qname:z, qtype:'AXFR', rd:false, doFlag:false, ednsSize: simulator.resolver.ednsSize});
+        logAppend(`<b>AXFR result from ${ip}:</b> ${JSON.stringify(r.response.answers)}`);
+        // allow storing zone on a secondary server if desired - simplistic: copy zone to 198.51.100.11
+        if (confirm('Copy zone into secondary server 198.51.100.11? (simulate AXFR)')) {
+          const secondary = '198.51.100.11';
+          simulator.addServer(secondary, {name:'secondary-'+secondary});
+          // create zone on secondary from answers
+          const recs = r.response.answers.map(a=>Object.assign({},a));
+          simulator.addZone(z, secondary, recs, {primary:false});
+          logAppend(`<b>Zone ${z} copied to ${secondary}</b>`);
+        }
+      } catch(err) {
+        logAppend(`<b>AXFR failed:</b> ${JSON.stringify(err)}`);
+      }
+      simulator.updateAllViews();
+    });
+  });
+}
+
+function openZoneEditor(zone, ip) {
+  const container = document.getElementById('selectedZoneControls');
+  container.innerHTML = '';
+  const server = simulator.servers[ip];
+  const zoneObj = server.zones[zone];
+  if (!zoneObj) {
+    container.innerHTML = '<div>(zone not found)</div>';
+    return;
+  }
+  container.innerHTML = `<h5>Edit ${zone} on ${ip}</h5>`;
+  const table = document.createElement('table');
+  const thead = document.createElement('tr');
+  thead.innerHTML = '<th>Name</th><th>Type</th><th>Value</th><th>TTL</th><th>Signed</th><th>Actions</th>';
+  table.appendChild(thead);
+  for (let k in zoneObj.records) {
+    const r = zoneObj.records[k];
+    const row = document.createElement('tr');
+    row.innerHTML = `<td><input type="text" class="recName" value="${escapeAttr(r.name)}"></td>
+      <td><input type="text" class="recType" value="${escapeAttr(r.type)}"></td>
+      <td><input type="text" class="recVal" value="${escapeAttr(r.value)}"></td>
+      <td><input type="number" class="recTtl" value="${r.ttl||300}"></td>
+      <td><input type="checkbox" class="recSigned" ${r.signed?'checked':''}></td>
+      <td><button class="delRec">Delete</button></td>`;
+    table.appendChild(row);
+    // attach delete after appended
+  }
+  // add new record row
+  const newRow = document.createElement('tr');
+  newRow.innerHTML = `<td><input type="text" class="recName" placeholder="name"></td>
+    <td><input type="text" class="recType" placeholder="A/CNAME/NS/MX/TXT"></td>
+    <td><input type="text" class="recVal" placeholder="value"></td>
+    <td><input type="number" class="recTtl" value="300"></td>
+    <td><input type="checkbox" class="recSigned"></td>
+    <td><button id="addRec">Add</button></td>`;
+  table.appendChild(newRow);
+  container.appendChild(table);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save changes';
+  container.appendChild(saveBtn);
+  saveBtn.addEventListener('click', ()=>{
+    // collect rows from table except header and new-row
+    const rows = Array.from(table.querySelectorAll('tr')).slice(1, -1);
+    const newRecords = {};
+    for (const row of rows) {
+      const name = row.querySelector('.recName').value.trim();
+      const type = row.querySelector('.recType').value.trim().toUpperCase();
+      const val = row.querySelector('.recVal').value.trim();
+      const ttl = parseInt(row.querySelector('.recTtl').value,10) || 300;
+      const signed = row.querySelector('.recSigned').checked;
+      if (!name || !type) continue;
+      const key = name + '|' + type;
+      newRecords[key] = {name, type, value:val, ttl, signed};
+    }
+    // add new record row if present
+    const newName = newRow.querySelector('.recName').value.trim();
+    if (newName) {
+      const type = newRow.querySelector('.recType').value.trim().toUpperCase();
+      const val = newRow.querySelector('.recVal').value.trim();
+      const ttl = parseInt(newRow.querySelector('.recTtl').value,10) || 300;
+      const signed = newRow.querySelector('.recSigned').checked;
+      if (newName && type) {
+        newRecords[newName+'|'+type] = {name:newName, type, value:val, ttl, signed};
+      }
+    }
+    // Replace zone records
+    server.zones[zone].records = newRecords;
+    server.zones[zone].soaSerial += 1;
+    simulator.updateAllViews();
+    logAppend(`<b>Zone ${zone} updated on ${ip}. SOA serial ${server.zones[zone].soaSerial}</b>`);
+  });
+
+  // add handler for Add button and delete buttons dynamically
+  table.querySelector('#addRec').addEventListener('click', ()=>{
+    const name = newRow.querySelector('.recName').value.trim();
+    const type = newRow.querySelector('.recType').value.trim().toUpperCase();
+    const val = newRow.querySelector('.recVal').value.trim();
+    const ttl = parseInt(newRow.querySelector('.recTtl').value,10) || 300;
+    const signed = newRow.querySelector('.recSigned').checked;
+    if (!name || !type) return;
+    server.zones[zone].records[name+'|'+type] = {name,type,value:val,ttl,signed};
+    // refresh editor
+    openZoneEditor(zone, ip);
+    simulator.updateAllViews();
+  });
+
+  // attach delete handlers
+  table.querySelectorAll('.delRec').forEach((b, idx)=>{
+    b.addEventListener('click', (ev)=>{
+      const rows = Array.from(table.querySelectorAll('tr')).slice(1, -1);
+      const row = rows[idx];
+      const name = row.querySelector('.recName').value.trim();
+      const type = row.querySelector('.recType').value.trim().toUpperCase();
+      if (name && type) {
+        delete server.zones[zone].records[name+'|'+type];
+        openZoneEditor(zone, ip);
+        simulator.updateAllViews();
+      }
+    });
+  });
+}
+
+function escapeAttr(s) {
+  return s ? s.replace(/"/g,'&quot;') : '';
+}
+
+/* Scenarios */
+async function runScenario(name) {
+  clearLog();
+  simulator.stepMode = false;
+  document.getElementById('stepModeToggle').textContent = 'Enable Step Mode';
+  document.getElementById('nextStep').disabled = true;
+
+  if (name === 'trace') {
+    // simulates dig +trace by doing iterative resolution and logging hops
+    document.getElementById('queryDomain').value = 'www.example.com';
+    document.getElementById('queryType').value = 'A';
+    updateState('Running +trace simulation...');
+    // manually perform iterativeResolve but ensure we log each hop
+    try {
+      const resp = await simulator.iterativeResolve('www.example.com', 'A', {id:0, rd:false, doFlag:false, ednsSize:simulator.resolver.ednsSize, queryCtx:{}});
+      logAppend(`<b>+trace completed. Final rcode=${resp.rcode} answers=${JSON.stringify(resp.answers)}</b>`);
+    } catch(err) {
+      logAppend(`<b>+trace failed: ${JSON.stringify(err)}</b>`);
+    }
+  } else if (name === 'cname') {
+    document.getElementById('queryDomain').value = 'longchain.example.com';
+    document.getElementById('queryType').value = 'A';
+    updateState('Simulating long CNAME chain...');
+    await document.getElementById('runQuery').click();
+  } else if (name === 'nxdomain') {
+    document.getElementById('queryDomain').value = 'no-such-host.example.com';
+    document.getElementById('queryType').value = 'A';
+    updateState('Simulating NXDOMAIN...');
+    await document.getElementById('runQuery').click();
+  } else if (name === 'ttl') {
+    // Query, then advance time less than TTL, query again (cache hit), advance beyond TTL, query again (miss)
+    clearLog();
+    document.getElementById('queryDomain').value = 'www.example.com';
+    document.getElementById('queryType').value = 'A';
+    await document.getElementById('runQuery').click();
+    logAppend('<b>Now advancing time by 60s and querying again (expect cache hit)</b>');
+    simulator.advanceTime(60);
+    await document.getElementById('runQuery').click();
+    logAppend('<b>Now advancing time by 300s and querying again (expect cache miss/refresh)</b>');
+    simulator.advanceTime(300);
+    await document.getElementById('runQuery').click();
+  } else if (name === 'axfr') {
+    document.getElementById('queryDomain').value = 'example.com';
+    document.getElementById('queryType').value = 'AXFR';
+    // Simulate an AXFR attempt to its authoritative server
+    const auth = simulator.getAuthoritativeServerForZone('example.com');
+    if (!auth) {
+      logAppend('<b>No authoritative server found for example.com</b>');
+      return;
+    }
+    clearLog();
+    updateState('Attempting AXFR...');
+    try {
+      const r = await simulator.sendQuery({toIp: auth.ip, id:0, qname:'example.com', qtype:'AXFR', rd:false, doFlag:false, ednsSize:simulator.resolver.ednsSize});
+      logAppend(`<b>AXFR success:</b> ${JSON.stringify(r.response.answers)}`);
+    } catch(err) {
+      logAppend(`<b>AXFR failed:</b> ${JSON.stringify(err)}`);
+    }
+  } else if (name === 'dnssec') {
+    // Query a signed name with DO set and simulate validation
+    document.getElementById('queryDomain').value = 'zone-signed.example.com';
+    document.getElementById('queryType').value = 'A';
+    document.getElementById('doFlag').checked = true;
+    clearLog();
+    updateState('Simulating DNSSEC validation (simplified) ...');
+    // run and then perform validation check on 'signed' property
+    await document.getElementById('runQuery').click();
+    // Check cache entry
+    const ck = 'zone-signed.example.com|A';
+    const ent = simulator.resolver.cache[ck];
+    if (ent && ent.value && ent.value.signed) {
+      logAppend('<b>DNSSEC: RRSIG present - validation simulated as OK</b>');
+    } else {
+      logAppend('<b>DNSSEC: No RRSIG - validation would be inconclusive</b>');
+    }
+    document.getElementById('doFlag').checked = false;
+  }
+}
+
+/* Initialization */
+simulator.init();
+simulator.updateAllViews();
+updateState('Idle - ready.');
+
+/* Expose some functions to window for debugging */
+window.simulator = simulator;
+
+/* Small helpers to ensure safe rendering */
+function initEventHandlers() {
+  // nothing else
+}
+initEventHandlers();
+
+</script>
+</body>
+</html>

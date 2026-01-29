@@ -66,9 +66,9 @@ test.describe('Multiset Interactive Application - FSM validation and runtime err
       await page.goto(APP_URL, { waitUntil: 'load' });
 
       // Ensure UI present
-      const input = page.locator('#elementInput');
-      const addButton = page.locator("button[onclick='addElement()']");
-      const output = page.locator('#output');
+      const input1 = page.locator('#elementInput');
+      const addButton1 = page.locator("button[onclick='addElement()']");
+      const output1 = page.locator('#output1');
 
       await expect(input).toBeVisible();
       await expect(addButton).toBeVisible();
@@ -93,9 +93,9 @@ test.describe('Multiset Interactive Application - FSM validation and runtime err
     test('RemoveElement: clicking Remove Element triggers missing function error and output remains unchanged', async ({ page }) => {
       await page.goto(APP_URL, { waitUntil: 'load' });
 
-      const input = page.locator('#elementInput');
-      const removeButton = page.locator("button[onclick='removeElement()']");
-      const output = page.locator('#output');
+      const input2 = page.locator('#elementInput');
+      const removeButton1 = page.locator("button[onclick='removeElement()']");
+      const output2 = page.locator('#output2');
 
       await expect(removeButton).toBeVisible();
       await input.fill('banana');
@@ -116,9 +116,9 @@ test.describe('Multiset Interactive Application - FSM validation and runtime err
     test('CheckCount: clicking Check Count triggers missing function error and does not reveal counts', async ({ page }) => {
       await page.goto(APP_URL, { waitUntil: 'load' });
 
-      const input = page.locator('#elementInput');
-      const checkButton = page.locator("button[onclick='checkCount()']");
-      const output = page.locator('#output');
+      const input3 = page.locator('#elementInput');
+      const checkButton1 = page.locator("button[onclick='checkCount()']");
+      const output3 = page.locator('#output3');
 
       await expect(checkButton).toBeVisible();
       await input.fill('apple');
@@ -142,10 +142,10 @@ test.describe('Multiset Interactive Application - FSM validation and runtime err
     test('Edge case: clicking Add/Remove/Check with empty input triggers missing function errors', async ({ page }) => {
       await page.goto(APP_URL, { waitUntil: 'load' });
 
-      const addButton = page.locator("button[onclick='addElement()']");
-      const removeButton = page.locator("button[onclick='removeElement()']");
-      const checkButton = page.locator("button[onclick='checkCount()']");
-      const output = page.locator('#output');
+      const addButton2 = page.locator("button[onclick='addElement()']");
+      const removeButton2 = page.locator("button[onclick='removeElement()']");
+      const checkButton2 = page.locator("button[onclick='checkCount()']");
+      const output4 = page.locator('#output4');
 
       // Click Add with empty input
       const addErrorPromise = page.waitForEvent('pageerror', { timeout: 2000 });
@@ -171,7 +171,7 @@ test.describe('Multiset Interactive Application - FSM validation and runtime err
 
     // Validate that updateOutput was attempted at page initialization and produced an error (onEnter action in FSM).
     test('Initialization attempted updateOutput() - expect updateOutput related error on page load', async ({ page }) => {
-      const pageErrors = [];
+      const pageErrors1 = [];
 
       page.on('pageerror', (err) => {
         pageErrors.push(String(err.message || err));

@@ -60,7 +60,7 @@ class MultisetPage {
   }
 
   async getDistinctSize() {
-    const t = (await this.distinctSize.textContent()).trim();
+    const t1 = (await this.distinctSize.textContent()).trim();
     return t;
   }
 }
@@ -107,7 +107,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Test AddElement event and transition (S0_Idle -> S0_Idle)
   test('Add element with default count updates display and stats', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app1 = new MultisetPage(page);
 
     // Add "apple" with default count (empty count input -> defaults to 1)
     await app.add('apple', '');
@@ -119,7 +119,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
   });
 
   test('Add element with explicit count increments multiplicity correctly', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app2 = new MultisetPage(page);
 
     // Start with an add to ensure we have existing state
     await app.add('apple', '');
@@ -134,7 +134,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Test RemoveElement event and transition (S0_Idle -> S0_Idle)
   test('Remove element partially and then fully clears that element', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app3 = new MultisetPage(page);
 
     // Prepare state: add apple count 3
     await app.add('apple', '3');
@@ -154,7 +154,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Test ClearMultiset event (S0_Idle -> S0_Idle) including both dismiss and accept of confirm dialog
   test('Clear multiset: dismissing confirm keeps state, accepting clears', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app4 = new MultisetPage(page);
 
     // Add two different elements
     await app.add('banana', '2');
@@ -193,7 +193,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Edge case: clicking Add without entering element -> alert should appear and nothing changes
   test('Adding without element shows alert and does not change multiset', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app5 = new MultisetPage(page);
 
     // Ensure starting empty
     await expect(app.elementsList).toHaveText('(empty)');
@@ -214,7 +214,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Edge case: clicking Remove without entering element -> alert should appear and nothing changes
   test('Removing without element shows alert and does not change multiset', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app6 = new MultisetPage(page);
 
     // Prepare some state
     await app.add('pear', '2');
@@ -222,9 +222,9 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
     await expect(app.totalSize).toHaveText('2');
 
     // Click remove with empty element input
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise1 = page.waitForEvent('dialog');
     await app.remove('', '');
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     expect(dialog.type()).toBe('alert');
     expect(dialog.message()).toBe('Please enter an element to remove.');
     await dialog.accept();
@@ -236,7 +236,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Edge cases for count parsing: negative, zero, and non-number should default to 1
   test('Invalid count inputs default to 1 when adding and removing', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app7 = new MultisetPage(page);
 
     // Negative count -> should be treated as default 1
     await app.add('fig', '-5');
@@ -260,7 +260,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
 
   // Combined interactions to ensure entries() and toString() reflect correct multiset state
   test('Multiple adds and removes produce expected toString ordering and stats', async ({ page }) => {
-    const app = new MultisetPage(page);
+    const app8 = new MultisetPage(page);
 
     // Clear any previous state by accepting confirm
     const dlg1 = page.waitForEvent('dialog');
@@ -274,7 +274,7 @@ test.describe('Multiset Demonstration - FSM and UI interactions', () => {
     await app.add('c', '5');
 
     // toString should contain each element with its count
-    const display = await app.getDisplayText();
+    const display1 = await app.getDisplayText();
     expect(display.includes('a: 3')).toBeTruthy();
     expect(display.includes('b: 1')).toBeTruthy();
     expect(display.includes('c: 5')).toBeTruthy();

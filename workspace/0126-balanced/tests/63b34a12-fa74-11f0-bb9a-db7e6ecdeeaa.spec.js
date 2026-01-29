@@ -113,7 +113,7 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
 
   test('Clicking simulate enters Handshake In Progress (S1_HandshakeInProgress) and disables button', async ({ page }) => {
     // Validate transition S0 -> S1: clicking the button disables it and sets the message visible with starting text.
-    const demo = new HttpsDemoPage(page);
+    const demo1 = new HttpsDemoPage(page);
     await demo.goto();
 
     // Click the simulate button to trigger handshake
@@ -121,14 +121,14 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
 
     // Immediately after click, button should be disabled (transition action: btn.disabled = true)
     await page.waitForFunction(() => document.querySelector('#simulateBtn')?.disabled === true, {}, { timeout: 2000 }).catch(() => {});
-    const disabled = await demo.isButtonDisabled();
+    const disabled1 = await demo.isButtonDisabled();
     expect(disabled).toBe(true);
 
     // Message should be visible and show the starting handshake text (S1 entry action)
     await demo.waitForMessageText('Starting HTTPS handshake...', 3000);
     const visible = await demo.isMessageVisible();
     expect(visible).toBe(true);
-    const msgText = await demo.getMessageText();
+    const msgText1 = await demo.getMessageText();
     expect(msgText).toBe('Starting HTTPS handshake...');
 
     // Ensure no uncaught exceptions happened on click/initial transition
@@ -140,7 +140,7 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
     // - messages transition through the steps array in order,
     // - the final message matches the secure established text,
     // - the button becomes re-enabled at the end (S2 -> S0 transition action).
-    const demo = new HttpsDemoPage(page);
+    const demo2 = new HttpsDemoPage(page);
     await demo.goto();
 
     // Fetch the steps from the page so we know expected texts and can time waits accordingly.
@@ -183,7 +183,7 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
 
   test('Clicking disabled button during handshake does not break flow (edge case)', async ({ page }) => {
     // Edge case: Attempt to click the button while it's disabled; this should not reset or break the handshake.
-    const demo = new HttpsDemoPage(page);
+    const demo3 = new HttpsDemoPage(page);
     await demo.goto();
 
     // Start handshake
@@ -206,11 +206,11 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
     });
 
     // Ensure handshake continues to the final state unchanged
-    const steps = await demo.getSteps();
+    const steps1 = await demo.getSteps();
     for (let i = 0; i < steps.length; i++) {
       await demo.waitForMessageText(steps[i].text, Math.max(5000, steps[i].delay + 1500));
     }
-    const finalText = '🔐 Secure HTTPS connection established! All data is now encrypted.';
+    const finalText1 = '🔐 Secure HTTPS connection established! All data is now encrypted.';
     await demo.waitForMessageText(finalText, 7000);
 
     // No unexpected page errors should have occurred from the attempted click
@@ -222,7 +222,7 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
 
   test('Reloading mid-handshake resets to Idle (S0_Idle) - edge case', async ({ page }) => {
     // Start handshake, then reload the page mid-way and ensure the app returns to Idle state with clean UI.
-    const demo = new HttpsDemoPage(page);
+    const demo4 = new HttpsDemoPage(page);
     await demo.goto();
 
     // Start handshake
@@ -247,7 +247,7 @@ test.describe('HTTPS Concept Demo - FSM validation', () => {
   test('Console output and runtime error observation', async ({ page }) => {
     // This test demonstrates observation of console messages and page errors.
     // It asserts that no ReferenceError/SyntaxError/TypeError occurred during normal operations.
-    const demo = new HttpsDemoPage(page);
+    const demo5 = new HttpsDemoPage(page);
     await demo.goto();
 
     // Perform a short interaction

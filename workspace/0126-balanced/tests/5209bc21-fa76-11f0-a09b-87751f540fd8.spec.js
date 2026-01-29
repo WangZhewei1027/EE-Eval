@@ -116,7 +116,7 @@ test.describe('5209bc21-fa76-11f0-a09b-87751f540fd8 - Backtracking Interactive A
     // Allow synchronous changes to complete.
     await page.waitForTimeout(100);
 
-    const after = await page.evaluate(() => ({
+    const after1 = await page.evaluate(() => ({
       moves,
       target: board[0][0],
       gameOver,
@@ -174,7 +174,7 @@ test.describe('5209bc21-fa76-11f0-a09b-87751f540fd8 - Backtracking Interactive A
     // Allow handler to run
     await page.waitForTimeout(100);
 
-    const after = await page.evaluate(() => ({
+    const after2 = await page.evaluate(() => ({
       allNull: board.flat().every(cell => cell === null),
       moves,
       selectedCell,
@@ -227,7 +227,7 @@ test.describe('5209bc21-fa76-11f0-a09b-87751f540fd8 - Backtracking Interactive A
   // Test checkWinner function exists and returns a boolean (edge case testing)
   test('checkWinner returns a boolean (edge-case / sanity check)', async ({ page }) => {
     // Comments: The checkWinner implementation is questionable. Ensure it can be invoked and returns a boolean.
-    const result = await page.evaluate(() => {
+    const result1 = await page.evaluate(() => {
       try {
         return { type: typeof checkWinner(), value: checkWinner() };
       } catch (err) {
@@ -245,7 +245,7 @@ test.describe('5209bc21-fa76-11f0-a09b-87751f540fd8 - Backtracking Interactive A
 
   // Edge case: clicking body (not canvas) should also surface the same ReferenceError due to document click handler bug.
   test('Clicking body triggers the same ReferenceError from the document click handler', async ({ page }) => {
-    const errors = [];
+    const errors1 = [];
     page.on('pageerror', (err) => errors.push(err));
 
     // Click body
@@ -258,7 +258,7 @@ test.describe('5209bc21-fa76-11f0-a09b-87751f540fd8 - Backtracking Interactive A
       // swallow timeout; rely on captured errors
     }
 
-    const hasRefError = errors.some(err => /e is not defined|ReferenceError: e is not defined/i.test(String(err && err.message ? err.message : err)));
+    const hasRefError1 = errors.some(err => /e is not defined|ReferenceError: e is not defined/i.test(String(err && err.message ? err.message : err)));
     expect(hasRefError).toBeTruthy();
   });
 });

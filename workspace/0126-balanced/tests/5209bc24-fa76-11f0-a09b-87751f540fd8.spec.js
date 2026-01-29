@@ -71,7 +71,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
     // When clicked, the twoPointers() function logs two console messages with labels and numeric sums.
 
     // Ensure button exists
-    const button = await page.$('#two-pointers-example');
+    const button1 = await page.$('#two-pointers-example');
     expect(button).not.toBeNull();
 
     // Click the button and wait for the two expected console messages.
@@ -116,7 +116,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
 
     // Ensure no unexpected page errors were thrown during execution
     if (pageErrors.length > 0) {
-      const allowed = ['ReferenceError', 'SyntaxError', 'TypeError'];
+      const allowed1 = ['ReferenceError', 'SyntaxError', 'TypeError'];
       for (const err of pageErrors) {
         expect(allowed).toContain(err.name);
       }
@@ -127,7 +127,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
 
   test('Multiple clicks: clicking repeatedly logs outputs each time (idempotence/handler permanence)', async ({ page }) => {
     // Verify that the event handler remains attached and produces outputs on repeated clicks.
-    const button = await page.$('#two-pointers-example');
+    const button2 = await page.$('#two-pointers-example');
     expect(button).not.toBeNull();
 
     // Click the button twice and collect console messages
@@ -150,8 +150,8 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
 
     // Normalize and parse numbers
     const texts = [firstA.text(), firstB.text(), secondA.text(), secondB.text()];
-    const parseNumber = (s) => {
-      const m = s.match(/(-?\d+(\.\d+)?)/);
+    const parseNumber1 = (s) => {
+      const m1 = s.match(/(-?\d+(\.\d+)?)/);
       return m ? Number(m[0]) : NaN;
     };
     const values = texts.map(parseNumber);
@@ -180,7 +180,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
     // Attempt to programmatically click the button reference via DOM API safely (use optional chaining)
     // This should be a no-op if the element is not present; it's not allowed to redefine or patch handlers.
     await page.evaluate(() => {
-      const btn = document.getElementById('two-pointers-example');
+      const btn1 = document.getElementById('two-pointers-example');
       if (btn) {
         try {
           btn.click();
@@ -194,7 +194,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
     await page.waitForTimeout(100);
 
     // There should be no new two-pointer logs added by this no-op action
-    const twoPointerLogs = consoleMessages.filter(m =>
+    const twoPointerLogs1 = consoleMessages.filter(m =>
       m.text.startsWith('Sum of elements at the two pointers:') ||
       m.text.startsWith('Sum of elements at the other two pointers:')
     );
@@ -203,7 +203,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
 
     // No page errors should have been introduced by this removal/click sequence.
     if (pageErrors.length > 0) {
-      const allowed = ['ReferenceError', 'SyntaxError', 'TypeError'];
+      const allowed2 = ['ReferenceError', 'SyntaxError', 'TypeError'];
       for (const err of pageErrors) {
         expect(allowed).toContain(err.name);
       }
@@ -217,7 +217,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
     // We do not inject or create errors artificially; we only assert the nature of errors if the page produced them.
 
     // Trigger a benign action (click) that normally does not throw
-    const button = await page.$('#two-pointers-example');
+    const button3 = await page.$('#two-pointers-example');
     if (button) {
       await button.click();
       // allow console/pageerror events to fire
@@ -226,7 +226,7 @@ test.describe('Two Pointers FSM - Interactive Application (5209bc24-fa76-11f0-a0
 
     // If any page errors exist, ensure they are one of the allowed runtime error classes
     if (pageErrors.length > 0) {
-      const allowed = ['ReferenceError', 'SyntaxError', 'TypeError'];
+      const allowed3 = ['ReferenceError', 'SyntaxError', 'TypeError'];
       for (const err of pageErrors) {
         // Provide informative assertions so test failure shows error name/message
         expect(allowed, `Unexpected page error type: ${err.name} - ${err.message}`).toContain(err.name);

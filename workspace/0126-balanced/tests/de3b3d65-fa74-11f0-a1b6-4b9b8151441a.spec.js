@@ -137,7 +137,7 @@ test.describe('Min Heap Visualization - FSM validation', () => {
 
   test('InsertValue transition: inserting a new smaller value updates heap size and structure', async ({ page }) => {
     // This test validates insert transition from S0_HeapInitialized to S0_HeapInitialized
-    const heap = new HeapPage(page);
+    const heap1 = new HeapPage(page);
 
     const { consoleMessages, pageErrors } = await captureErrorsDuring(page, async () => {
       await heap.goto();
@@ -155,18 +155,18 @@ test.describe('Min Heap Visualization - FSM validation', () => {
     const arr = await heap.getHeapArrayText();
     expect(arr).toBe('[2, 5, 3, 10, 7, 15]');
 
-    const nodes = await heap.getHeapNodeTexts();
+    const nodes1 = await heap.getHeapNodeTexts();
     expect(nodes.length).toBe(6);
     expect(nodes[0]).toBe('2'); // new min at the root
 
     // Ensure no console errors were emitted during insert
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('InsertValue edge case: inserting invalid input shows alert and does not change heap', async ({ page }) => {
     // This test validates the invalid input guard and alert behavior
-    const heap = new HeapPage(page);
+    const heap2 = new HeapPage(page);
     await heap.goto();
 
     // Ensure starting size is 5
@@ -182,13 +182,13 @@ test.describe('Min Heap Visualization - FSM validation', () => {
 
     // Heap should remain unchanged after invalid insert
     await expect(heap.heapSize).toHaveText('5');
-    const arrText = await heap.getHeapArrayText();
+    const arrText1 = await heap.getHeapArrayText();
     expect(arrText).toBe('[3, 5, 15, 10, 7]');
   });
 
   test('ExtractMin transition: extracting when non-empty returns the min and updates visualization', async ({ page }) => {
     // This test validates ExtractMin transition when heap is non-empty
-    const heap = new HeapPage(page);
+    const heap3 = new HeapPage(page);
     await heap.goto();
 
     // The min at initialization should be 3
@@ -202,17 +202,17 @@ test.describe('Min Heap Visualization - FSM validation', () => {
 
     // After extraction, heap size should decrease to 4 and array changed accordingly
     await expect(heap.heapSize).toHaveText('4');
-    const arrText = await heap.getHeapArrayText();
+    const arrText2 = await heap.getHeapArrayText();
     expect(arrText).toBe('[5, 7, 15, 10]');
 
-    const nodes = await heap.getHeapNodeTexts();
+    const nodes2 = await heap.getHeapNodeTexts();
     expect(nodes.length).toBe(4);
     expect(nodes).toEqual(['5', '7', '15', '10']);
   });
 
   test('ExtractMin on Empty (S1_HeapEmpty): clearing then extracting triggers empty-heap alert', async ({ page }) => {
     // This test validates guard behavior that leads to S1_HeapEmpty with an alert
-    const heap = new HeapPage(page);
+    const heap4 = new HeapPage(page);
     await heap.goto();
 
     // Clear the heap first
@@ -239,7 +239,7 @@ test.describe('Min Heap Visualization - FSM validation', () => {
 
   test('GenerateRandomHeap transition: populates heap with random values and updates visualization', async ({ page }) => {
     // This test validates generation of a random heap (size between 5 and 14)
-    const heap = new HeapPage(page);
+    const heap5 = new HeapPage(page);
 
     await heap.goto();
 
@@ -253,12 +253,12 @@ test.describe('Min Heap Visualization - FSM validation', () => {
       return el && Number(el.textContent) >= 5;
     });
 
-    const size = await heap.getHeapSizeNumber();
+    const size1 = await heap.getHeapSizeNumber();
     expect(size).toBeGreaterThanOrEqual(5);
     expect(size).toBeLessThanOrEqual(14);
 
     // The heap array should contain 'size' comma-separated numbers
-    const arrText = await heap.getHeapArrayText();
+    const arrText3 = await heap.getHeapArrayText();
     // Basic sanity checks on the array string
     expect(arrText.startsWith('[')).toBeTruthy();
     expect(arrText.endsWith(']')).toBeTruthy();
@@ -284,7 +284,7 @@ test.describe('Min Heap Visualization - FSM validation', () => {
 
   test('No unexpected runtime errors emitted during typical interactions', async ({ page }) => {
     // Grouped test to perform a sequence of typical interactions and assert no page errors occur
-    const heap = new HeapPage(page);
+    const heap6 = new HeapPage(page);
 
     const { consoleMessages, pageErrors } = await captureErrorsDuring(page, async () => {
       await heap.goto();
@@ -315,7 +315,7 @@ test.describe('Min Heap Visualization - FSM validation', () => {
     expect(pageErrors.length).toBe(0);
 
     // No console.error messages
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ACID Properties Interactive Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .container { margin-bottom: 20px; border: 1px solid #ccc; padding: 15px; }
+        button, select, input { margin: 5px; }
+        .transaction { border: 1px solid #000; padding: 10px; margin: 10px 0; }
+        .account { margin: 10px 0; padding: 10px; border: 1px dashed #999; }
+        .log { font-family: monospace; height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+        table { border-collapse: collapse; width: 100%; }
+        td, td { border: 1px solid #000; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>ACID Properties Interactive Demo</h1>
+    
+    <div class="container">
+        <h2>Bank Account Simulation</h2>
+        <div>
+            <button id="createAccount">Create New Account</button>
+            <span>Initial Balance: <input type="number" id="initialBalance" value="100"></span>
+        </div>
+        
+        <div id="accountsContainer"></div>
+        
+        <div>
+            <h3>Transaction Controls</h3>
+            <div>
+                From Account: <select id="fromAccount"></select>
+                To Account: <select id="toAccount"></select>
+                Amount: <input type="number" id="transferAmount" value="50">
+                <button id="transfer">Transfer</button>
+            </div>
+            <div>
+                <button id="deposit">Deposit</button>
+                <input type="number" id="depositAmount" value="50">
+                to Account: <select id="depositAccount"></select>
+            </div>
+            <div>
+                <button id="withdraw">Withdraw</button>
+                <input type="number" id="withdrawAmount" value="50">
+                from Account: <select id="withdrawAccount"></select>
+            </div>
+        </div>
+        
+        <div>
+            <h3>ACID Property Controls</h3>
+            <label><input type="checkbox" id="atomicity" checked> Atomicity (Complete or fail entirely)</label><br>
+            <label><input type="checkbox" id="consistency" checked> Consistency (Maintain constraints)</label><br>
+            <label><input type="checkbox" id="isolation" checked> Isolation (No interference)</label><br>
+            <label><input type="checkbox" id="durability" checked> Durability (Persist changes)</label><br>
+            <button id="toggleAll">Toggle All ACID Properties</button>
+            <button id="failRandom">Simulate Random Failure</button>
+            <button id="concurrentTx">Run Concurrent Transactions</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Transaction Log</h2>
+        <div class="log" id="transactionLog"></div>
+        <button id="clearLog">Clear Log</button>
+    </div>
+    
+    <div class="container">
+        <h2>ACID Property Explanations</h2>
+        <div>
+            <h3>Atomicity</h3>
+            <p>Transactions are all-or-nothing. Try disabling atomicity and see partial transactions.</p>
+            <button id="testAtomicity">Test Atomicity</button>
+        </div>
+        
+        <div>
+            <h3>Consistency</h3>
+            <p>Database remains in a consistent state before and after transactions. Try disabling consistency to allow negative balances.</p>
+            <button id="testConsistency">Test Consistency</button>
+        </div>
+        
+        <div>
+            <h3>Isolation</h3>
+            <p>Concurrent transactions don't interfere. Try running concurrent transactions with isolation on/off.</p>
+            <button id="testIsolation">Test Isolation</button>
+        </div>
+        
+        <div>
+            <h3>Durability</h3>
+            <p>Committed transactions persist even after failures. Simulate a crash to test.</p>
+            <button id="testDurability">Test Durability</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Current State</h2>
+        <table id="stateTable">
+            <tr>
+                <th>Account ID</th>
+                <th>Balance</th>
+                <th>Locked</th>
+            </tr>
+        </table>
+    </div>
+
+    <script>
+        // Database state
+        let accounts = [];
+        let transactionId = 0;
+        let isSystemFailed = false;
+        
+        // DOM elements
+        const accountsContainer = document.getElementById('accountsContainer');
+        const fromAccountSelect = document.getElementById('fromAccount');
+        const toAccountSelect = document.getElementById('toAccount');
+        const depositAccountSelect = document.getElementById('depositAccount');
+        const withdrawAccountSelect = document.getElementById('withdrawAccount');
+        const transactionLog = document.getElementById('transactionLog');
+        const stateTable = document.getElementById('stateTable');
+        
+        // ACID property toggles
+        const atomicityToggle = document.getElementById('atomicity');
+        const consistencyToggle = document.getElementById('consistency');
+        const isolationToggle = document.getElementById('isolation');
+        const durabilityToggle = document.getElementById('durability');
+        
+        // Initialize
+        function init() {
+            // Create some initial accounts
+            createAccount(1000);
+            createAccount(500);
+            createAccount(200);
+            
+            // Set up event listeners
+            document.getElementById('createAccount').addEventListener('click', () => {
+                const initialBalance = parseInt(document.getElementById('initialBalance').value);
+                createAccount(initialBalance);
+            });
+            
+            document.getElementById('transfer').addEventListener('click', performTransfer);
+            document.getElementById('deposit').addEventListener('click', performDeposit);
+            document.getElementById('withdraw').addEventListener('click', performWithdraw);
+            document.getElementById('toggleAll').addEventListener('click', toggleAllACID);
+            document.getElementById('failRandom').addEventListener('click', simulateRandomFailure);
+            document.getElementById('concurrentTx').addEventListener('click', runConcurrentTransactions);
+            document.getElementById('clearLog').addEventListener('click', () => {
+                transactionLog.innerHTML = '';
+            });
+            
+            // Test buttons
+            document.getElementById('testAtomicity').addEventListener('click', testAtomicity);
+            document.getElementById('testConsistency').addEventListener('click', testConsistency);
+            document.getElementById('testIsolation').addEventListener('click', testIsolation);
+            document.getElementById('testDurability').addEventListener('click', testDurability);
+            
+            updateUI();
+        }
+        
+        // Account management
+        function createAccount(initialBalance) {
+            const account = {
+                id: accounts.length + 1,
+                balance: initialBalance,
+                locked: false
+            };
+            accounts.push(account);
+            logEvent(`Account ${account.id} created with balance $${initialBalance}`);
+            updateUI();
+        }
+        
+        function updateUI() {
+            // Update account selects
+            updateAccountSelects();
+            
+            // Update state table
+            updateStateTable();
+        }
+        
+        function updateAccountSelects() {
+            const selects = [fromAccountSelect, toAccountSelect, depositAccountSelect, withdrawAccountSelect];
+            
+            selects.forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = '';
+                
+                accounts.forEach(account => {
+                    const option = document.createElement('option');
+                    option.value = account.id;
+                    option.textContent = `Account ${account.id} ($${account.balance})`;
+                    select.appendChild(option);
+                });
+                
+                if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
+                    select.value = currentValue;
+                }
+            });
+        }
+        
+        function updateStateTable() {
+            // Clear existing rows (except header)
+            while (stateTable.rows.length > 1) {
+                stateTable.deleteRow(1);
+            }
+            
+            // Add account rows
+            accounts.forEach(account => {
+                const row = stateTable.insertRow();
+                row.insertCell().textContent = account.id;
+                row.insertCell().textContent = `$${account.balance}`;
+                row.insertCell().textContent = account.locked ? 'Yes' : 'No';
+            });
+        }
+        
+        // Transaction functions
+        function performTransfer() {
+            const fromId = parseInt(fromAccountSelect.value);
+            const toId = parseInt(toAccountSelect.value);
+            const amount = parseInt(document.getElementById('transferAmount').value);
+            
+            if (fromId === toId) {
+                logEvent("Cannot transfer to the same account");
+                return;
+            }
+            
+            if (amount <= 0) {
+                logEvent("Amount must be positive");
+                return;
+            }
+            
+            const txId = ++transactionId;
+            logEvent(`[TX${txId}] Starting transfer of $${amount} from Account ${fromId} to Account ${toId}`);
+            
+            try {
+                // Begin transaction
+                if (isolationToggle.checked) {
+                    lockAccount(fromId);
+                    lockAccount(toId);
+                }
+                
+                const fromAccount = accounts.find(a => a.id === fromId);
+                const toAccount = accounts.find(a => a.id === toId);
+                
+                // Check consistency
+                if (consistencyToggle.checked && fromAccount.balance < amount) {
+                    throw new Error("Insufficient funds");
+                }
+                
+                // Perform transfer
+                fromAccount.balance -= amount;
+                logEvent(`[TX${txId}] Deducted $${amount} from Account ${fromId}`);
+                
+                // Simulate potential failure
+                if (!atomicityToggle.checked && Math.random() > 0.7) {
+                    throw new Error("Simulated failure during transfer");
+                }
+                
+                toAccount.balance += amount;
+                logEvent(`[TX${txId}] Added $${amount} to Account ${toId}`);
+                
+                // Commit
+                logEvent(`[TX${txId}] Transfer committed successfully`);
+                
+                if (durabilityToggle.checked) {
+                    // In a real system, this would persist to disk
+                    logEvent(`[TX${txId}] Changes made durable`);
+                }
+            } catch (error) {
+                logEvent(`[TX${txId}] Transaction failed: ${error.message}`);
+                
+                if (atomicityToggle.checked) {
+                    // Rollback
+                    logEvent(`[TX${txId}] Rolling back changes...`);
+                    const fromAccount = accounts.find(a => a.id === fromId);
+                    const toAccount = accounts.find(a => a.id === toId);
+                    
+                    fromAccount.balance += amount;
+                    toAccount.balance -= amount;
+                    logEvent(`[TX${txId}] Rollback complete`);
+                }
+            } finally {
+                if (isolationToggle.checked) {
+                    unlockAccount(fromId);
+                    unlockAccount(toId);
+                }
+                updateUI();
+            }
+        }
+        
+        function performDeposit() {
+            const accountId = parseInt(depositAccountSelect.value);
+            const amount = parseInt(document.getElementById('depositAmount').value);
+            
+            if (amount <= 0) {
+                logEvent("Amount must be positive");
+                return;
+            }
+            
+            const txId = ++transactionId;
+            logEvent(`[TX${txId}] Starting deposit of $${amount} to Account ${accountId}`);
+            
+            try {
+                if (isolationToggle.checked) {
+                    lockAccount(accountId);
+                }
+                
+                const account = accounts.find(a => a.id === accountId);
+                account.balance += amount;
+                
+                logEvent(`[TX${txId}] Deposit committed successfully`);
+                
+                if (durabilityToggle.checked) {
+                    logEvent(`[TX${txId}] Changes made durable`);
+                }
+            } catch (error) {
+                logEvent(`[TX${txId}] Transaction failed: ${error.message}`);
+            } finally {
+                if (isolationToggle.checked) {
+                    unlockAccount(accountId);
+                }
+                updateUI();
+            }
+        }
+        
+        function performWithdraw() {
+            const accountId = parseInt(withdrawAccountSelect.value);
+            const amount = parseInt(document.getElementById('withdrawAmount').value);
+            
+            if (amount <= 0) {
+                logEvent("Amount must be positive");
+                return;
+            }
+            
+            const txId = ++transactionId;
+            logEvent(`[TX${txId}] Starting withdrawal of $${amount} from Account ${accountId}`);
+            
+            try {
+                if (isolationToggle.checked) {
+                    lockAccount(accountId);
+                }
+                
+                const account = accounts.find(a => a.id === accountId);
+                
+                if (consistencyToggle.checked && account.balance < amount) {
+                    throw new Error("Insufficient funds");
+                }
+                
+                account.balance -= amount;
+                
+                logEvent(`[TX${txId}] Withdrawal committed successfully`);
+                
+                if (durabilityToggle.checked) {
+                    logEvent(`[TX${txId}] Changes made durable`);
+                }
+            } catch (error) {
+                logEvent(`[TX${txId}] Transaction failed: ${error.message}`);
+                
+                if (atomicityToggle.checked) {
+                    // No need here since we only modified one account
+                }
+            } finally {
+                if (isolationToggle.checked) {
+                    unlockAccount(accountId);
+                }
+                updateUI();
+            }
+        }
+        
+        // ACID test functions
+        function testAtomicity() {
+            const currentAtomicity = atomicityToggle.checked;
+            atomicityToggle.checked = false;
+            logEvent("Testing Atomicity - Disabled atomicity, will show partial transactions");
+            
+            // Perform a transfer that might fail
+            const fromId = accounts[0].id;
+            const toId = accounts[1].id;
+            fromAccountSelect.value = fromId;
+            toAccountSelect.value = toId;
+            document.getElementById('transferAmount').value = 200;
+            
+            setTimeout(() => {
+                performTransfer();
+                setTimeout(() => {
+                    atomicityToggle.checked = currentAtomicity;
+                    logEvent("Atomicity testing complete. Atomicity re-enabled.");
+                }, 1000);
+            }, 500);
+        }
+        
+        function testConsistency() {
+            const currentConsistency = consistencyToggle.checked;
+            consistencyToggle.checked = false;
+            logEvent("Testing Consistency - Disabled consistency, will allow negative balances");
+            
+            // Try to withdraw more than available
+            const accountId = accounts[0].id;
+            withdrawAccountSelect.value = accountId;
+            document.getElementById('withdrawAmount').value = accounts[0].balance + 100;
+            
+            setTimeout(() => {
+                performWithdraw();
+                setTimeout(() => {
+                    consistencyToggle.checked = currentConsistency;
+                    logEvent("Consistency testing complete. Consistency re-enabled.");
+                }, 1000);
+            }, 500);
+        }
+        
+        function testIsolation() {
+            logEvent("Testing Isolation - Running concurrent transactions...");
+            isolationToggle.checked = false;
+            
+            // Set up two concurrent transfers between the same accounts
+            const account1 = accounts[0].id;
+            const account2 = accounts[1].id;
+            
+            fromAccountSelect.value = account1;
+            toAccountSelect.value = account2;
+            document.getElementById('transferAmount').value = 100;
+            
+            // First transfer
+            setTimeout(() => {
+                performTransfer();
+            }, 100);
+            
+            // Second transfer with slight delay
+            setTimeout(() => {
+                performTransfer();
+                setTimeout(() => {
+                    isolationToggle.checked = true;
+                    logEvent("Isolation testing complete. Isolation re-enabled.");
+                }, 1000);
+            }, 200);
+        }
+        
+        function testDurability() {
+            logEvent("Testing Durability - Simulating system crash...");
+            durabilityToggle.checked = false;
+            
+            // Perform a transaction that won't be durable
+            const accountId = accounts[0].id;
+            depositAccountSelect.value = accountId;
+            document.getElementById('depositAmount').value = 100;
+            
+            setTimeout(() => {
+                performDeposit();
+                setTimeout(() => {
+                    logEvent("System crashed and restarted. Checking account balances...");
+                    durabilityToggle.checked = true;
+                    logEvent("Durability testing complete. Durability re-enabled.");
+                }, 1000);
+            }, 500);
+        }
+        
+        // Utility functions
+        function logEvent(message) {
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            transactionLog.appendChild(entry);
+            transactionLog.scrollTop = transactionLog.scrollHeight;
+        }
+        
+        function lockAccount(accountId) {
+            const account = accounts.find(a => a.id === accountId);
+            if (account) {
+                account.locked = true;
+                logEvent(`Account ${accountId} locked for transaction`);
+            }
+        }
+        
+        function unlockAccount(accountId) {
+            const account = accounts.find(a => a.id === accountId);
+            if (account) {
+                account.locked = false;
+                logEvent(`Account ${accountId} unlocked`);
+            }
+        }
+        
+        function toggleAllACID() {
+            const allChecked = !atomicityToggle.checked && !consistencyToggle.checked && 
+                              !isolationToggle.checked && !durabilityToggle.checked;
+            
+            atomicityToggle.checked = allChecked;
+            consistencyToggle.checked = allChecked;
+            isolationToggle.checked = allChecked;
+            durabilityToggle.checked = allChecked;
+            
+            logEvent(`All ACID properties ${allChecked ? 'enabled' : 'disabled'}`);
+        }
+        
+        function simulateRandomFailure() {
+            isSystemFailed = true;
+            logEvent("SYSTEM FAILURE SIMULATED - Transactions may fail");
+            
+            setTimeout(() => {
+                isSystemFailed = false;
+                logEvent("System recovered from failure");
+            }, 3000);
+        }
+        
+        function runConcurrentTransactions() {
+            logEvent("Starting 5 concurrent transactions...");
+            
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    const from = Math.floor(Math.random() * accounts.length);
+                    let to;
+                    do {
+                        to = Math.floor(Math.random() * accounts.length);
+                    } while (to === from);
+                    
+                    fromAccountSelect.value = accounts[from].id;
+                    toAccountSelect.value = accounts[to].id;
+                    document.getElementById('transferAmount').value = Math.floor(Math.random() * 100) + 1;
+                    
+                    performTransfer();
+                }, i * 300);
+            }
+        }
+        
+        // Initialize the application
+        init();
+    </script>
+</body>
+</html>

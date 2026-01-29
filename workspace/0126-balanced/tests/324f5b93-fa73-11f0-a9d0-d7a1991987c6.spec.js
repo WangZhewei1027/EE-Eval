@@ -73,7 +73,7 @@ test.describe('Version Control Demonstration - FSM tests (Application ID: 324f5b
     await expect(page.locator('#current-version')).toHaveText('1.0.1');
 
     // Validate the in-page variable matches the displayed version
-    const windowVersion = await page.evaluate(() => window.version);
+    const windowVersion1 = await page.evaluate(() => window.version);
     expect(windowVersion).toBe('1.0.1');
 
     // Confirm no runtime console errors were produced by the handler
@@ -113,7 +113,7 @@ test.describe('Version Control Demonstration - FSM tests (Application ID: 324f5b
     await expect(page.locator('#current-version')).toHaveText('1.0.0');
 
     // And global variable should reflect reset
-    const windowVersion = await page.evaluate(() => window.version);
+    const windowVersion2 = await page.evaluate(() => window.version);
     expect(windowVersion).toBe('1.0.0');
 
     // Verify that subsequent ResetVersion from the reset state (S2) retains S0's value (idempotency)
@@ -138,7 +138,7 @@ test.describe('Version Control Demonstration - FSM tests (Application ID: 324f5b
     await expect(page.locator('#current-version')).toHaveText('1.0.0');
 
     // Confirm stability of the global variable
-    const windowVersion = await page.evaluate(() => window.version);
+    const windowVersion3 = await page.evaluate(() => window.version);
     expect(windowVersion).toBe('1.0.0');
 
     // No runtime errors should have occurred
@@ -158,7 +158,7 @@ test.describe('Version Control Demonstration - FSM tests (Application ID: 324f5b
     await expect(page.locator('#current-version')).toHaveText('1.0.5');
 
     // Validate programmatic reading of version matches expectation
-    const windowVersion = await page.evaluate(() => window.version);
+    const windowVersion4 = await page.evaluate(() => window.version);
     expect(windowVersion).toBe('1.0.5');
 
     // Ensure no runtime errors were produced during rapid interaction
@@ -168,7 +168,7 @@ test.describe('Version Control Demonstration - FSM tests (Application ID: 324f5b
 
   test('Edge case: Very large patch increments continue to behave numerically', async ({ page }) => {
     // Click increment 12 times to reach 1.0.12 to ensure patch grows beyond single digit
-    const clicks = 12;
+    const clicks1 = 12;
     for (let i = 0; i < clicks; i++) {
       await page.click('#increment-version');
     }

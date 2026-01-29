@@ -112,7 +112,7 @@ test.describe('Floyd-Warshall FSM - de3c27c0-fa74-11f0-a1b6-4b9b8151441a', () =>
     await page.click(createButton);
 
     // Validate DOM structure: (n+1)^2 = 9 children for size 2
-    const childrenCount = await page.$eval(graphContainer, el => el.children.length);
+    const childrenCount1 = await page.$eval(graphContainer, el => el.children.length);
     expect(childrenCount).toBe(9);
 
     // Call the page's getInputGraph() function via evaluate to extract the graph object

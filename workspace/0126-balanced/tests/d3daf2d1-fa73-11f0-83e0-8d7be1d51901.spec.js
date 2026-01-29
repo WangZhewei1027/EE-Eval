@@ -141,7 +141,7 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
 
   // Test initial parse (note: the page script triggers parseAndRender() on load)
   test('Initial load should render AST (Parsed state) and set status accordingly', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast1 = new ASTPage(page);
 
     // The script auto-parses on load. Confirm parsed state evidence:
     const status = await ast.getStatusText();
@@ -165,13 +165,13 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
   });
 
   test('ParseCode event (Parse ↔ Generate button) re-parses and updates UI', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast2 = new ASTPage(page);
 
     // Click parse button explicitly
     await ast.clickParse();
 
     // After parsing, status should be 'Parsed successfully'
-    const status = await ast.getStatusText();
+    const status1 = await ast.getStatusText();
     expect(status).toBe('Status: Parsed successfully');
 
     // AST tree should contain at least one node-label
@@ -179,13 +179,13 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     expect(hasLabel).toBeGreaterThan(0);
 
     // Generated code should contain key fragments from the default program
-    const generated = await ast.getGeneratedText();
+    const generated1 = await ast.getGeneratedText();
     expect(generated).toContain('let x');
     expect(generated).toContain('print(');
   });
 
   test('EvaluateCode event runs program and appends to output (Evaluated state)', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast3 = new ASTPage(page);
 
     // Ensure AST exists
     await ast.clickParse();
@@ -195,7 +195,7 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     await ast.clickEval();
 
     // After evaluation, status set to 'Evaluated'
-    const status = await ast.getStatusText();
+    const status2 = await ast.getStatusText();
     expect(status).toBe('Status: Evaluated');
 
     // Output should contain expected print results: 15 and 24 (from the default program)
@@ -209,7 +209,7 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
   });
 
   test('ConstantFold transition updates AST and generated code (Constant-fold applied)', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast4 = new ASTPage(page);
 
     // Ensure parsed
     await ast.clickParse();
@@ -218,20 +218,20 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     await ast.clickFold();
 
     // Status should reflect the fold
-    const status = await ast.getStatusText();
+    const status3 = await ast.getStatusText();
     expect(status).toBe('Status: Constant-fold applied');
 
     // Generated code should now contain folded literal for x (2 + 3 * 4 => 14)
-    const generated = await ast.getGeneratedText();
+    const generated2 = await ast.getGeneratedText();
     expect(generated).toMatch(/let\s+x\s*=\s*14;/);
 
     // AST JSON should reflect literals for folded nodes
-    const astJson = await ast.getAstJsonText();
+    const astJson1 = await ast.getAstJsonText();
     expect(astJson).toContain('"value": 14');
   });
 
   test('RenameIdentifier transition updates identifiers and status (Renamed state)', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast5 = new ASTPage(page);
 
     // Ensure parsed
     await ast.clickParse();
@@ -241,20 +241,20 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     await ast.clickRename();
 
     // The page sets status like 'Renamed x → z'
-    const status = await ast.getStatusText();
+    const status4 = await ast.getStatusText();
     expect(status).toBe('Status: Renamed x → z');
 
     // Generated code should now reference 'z' instead of 'x'
-    const generated = await ast.getGeneratedText();
+    const generated3 = await ast.getGeneratedText();
     expect(generated).toContain('let z').or.toContain('z =');
 
     // AST JSON should include the renamed identifier
-    const astJson = await ast.getAstJsonText();
+    const astJson2 = await ast.getAstJsonText();
     expect(astJson).toContain('"name": "z"');
   });
 
   test('ResetCode transition uses confirm dialog and resets to original source (Reset state)', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast6 = new ASTPage(page);
 
     // Modify code (rename or fold) to ensure reset actually changes things
     await ast.setRenameInputs('x', 'tempName');
@@ -273,20 +273,20 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     expect(dialogSeen).toBe(true);
 
     // After reset, status should be 'Reset code'
-    const status = await ast.getStatusText();
+    const status5 = await ast.getStatusText();
     expect(status).toBe('Status: Reset code');
 
     // Generated code should contain the original snippet 'let x = 2 + 3 * 4;'
-    const generated = await ast.getGeneratedText();
+    const generated4 = await ast.getGeneratedText();
     expect(generated).toContain('let x = 2 + 3 * 4;');
 
     // Output should be cleared on reset
-    const output = await ast.getOutputText();
+    const output1 = await ast.getOutputText();
     expect(output).toBe('');
   });
 
   test('TraversePre, TraversePost, and StopTraversal events work and change status appropriately', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast7 = new ASTPage(page);
 
     // Ensure parsed
     await ast.clickParse();
@@ -294,7 +294,7 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     // Start pre-order traversal
     await ast.clickTraversePre();
     // Should set status to traversing
-    let status = await ast.getStatusText();
+    let status6 = await ast.getStatusText();
     expect(status).toBe('Status: Traversing (pre-order)...');
 
     // Wait enough time for at least one traversal callback to run (traverseAnimate uses 600ms interval).
@@ -329,7 +329,7 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
   }, { timeout: 20000 }); // allow extra time for traversal waits
 
   test('Selecting a node updates node details and highlights source region', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast8 = new ASTPage(page);
 
     // Ensure parsed
     await ast.clickParse();
@@ -348,7 +348,7 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
   });
 
   test('Edge case: clicking rename with empty inputs triggers alert and does not change status', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast9 = new ASTPage(page);
 
     // Ensure parsed
     await ast.clickParse();
@@ -371,12 +371,12 @@ test.describe('AST Demo - FSM & Interaction Tests (d3daf2d1-fa73-11f0-83e0-8d7be
     expect(alertSeen).toBe(true);
 
     // Status should remain as parsed (or whatever current status is), but must not be renamed
-    const status = await ast.getStatusText();
+    const status7 = await ast.getStatusText();
     expect(status).not.toMatch(/Renamed/);
   });
 
   test('Observe console and page errors over typical interactions (no uncaught errors expected)', async ({ page }) => {
-    const ast = new ASTPage(page);
+    const ast10 = new ASTPage(page);
 
     // Perform a set of interactions to surface runtime errors if any
     await ast.clickParse();

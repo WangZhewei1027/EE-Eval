@@ -115,7 +115,7 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
 
   test.describe('S1_ElementAdded - Add Element and its effects', () => {
     test('Clicking "Add Element" creates a dynamic button which when clicked adds an element to the array', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app1 = new DynamicArrayPage(page);
       await app.goto();
 
       // Ensure no prior page errors
@@ -159,7 +159,7 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
 
   test.describe('S2_ElementRemoved & S3_ElementUpdated - Error scenarios due to missing inputs', () => {
     test('Clicking "Remove Element" triggers a runtime error because required input is missing', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app2 = new DynamicArrayPage(page);
       await app.goto();
 
       // Clear any previously collected page errors
@@ -185,7 +185,7 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
     });
 
     test('Clicking "Update Element" triggers a runtime error because required input is missing', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app3 = new DynamicArrayPage(page);
       await app.goto();
 
       pageErrors.length = 0;
@@ -198,8 +198,8 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
 
       expect(pageErrors.length).toBeGreaterThan(0);
 
-      const messages = pageErrors.map(e => (e && e.message) ? e.message : String(e));
-      const hasExpectedPattern = messages.some(m =>
+      const messages1 = pageErrors.map(e => (e && e.message) ? e.message : String(e));
+      const hasExpectedPattern1 = messages.some(m =>
         /Cannot read properties of null|Cannot read properties of undefined|reading 'value'|reading \"value\"/i.test(m)
       );
       expect(hasExpectedPattern).toBeTruthy();
@@ -208,7 +208,7 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
 
   test.describe('S4_ArrayCleared - Clear Array behavior', () => {
     test('Clicking "Clear Array" clears displayed array items (updateDisplay called)', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app4 = new DynamicArrayPage(page);
       await app.goto();
 
       // Ensure array has items before clearing
@@ -231,11 +231,11 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
 
   test.describe('Interactive item clicks - edge cases and runtime errors', () => {
     test('Clicking a displayed array item triggers a runtime error due to invalid removal logic', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app5 = new DynamicArrayPage(page);
       await app.goto();
 
       // Ensure there's at least one displayed item to click.
-      const count = await app.getArrayItemCount();
+      const count1 = await app.getArrayItemCount();
       expect(count).toBeGreaterThanOrEqual(1);
 
       // Reset collected errors
@@ -254,7 +254,7 @@ test.describe('Dynamic Array - FSM-based end-to-end tests', () => {
       expect(pageErrors.length).toBeGreaterThan(0);
 
       // Assert the error message indicates inability to read properties or call removeChild
-      const messages = pageErrors.map(e => (e && e.message) ? e.message : String(e));
+      const messages2 = pageErrors.map(e => (e && e.message) ? e.message : String(e));
       const hasTypeError = messages.some(m =>
         /Cannot read properties of null|Cannot read properties of undefined|removeChild|parentNode/i.test(m)
       );

@@ -22,7 +22,7 @@ class BinaryTreePage {
 
   // Get the raw text inside the <pre><code> block
   async getCodeBlockText() {
-    const el = await this.page.locator('.tree pre code');
+    const el1 = await this.page.locator('.tree pre code');
     return el.textContent();
   }
 
@@ -112,7 +112,7 @@ test.describe('52085c90-fa76-11f0-a09b-87751f540fd8 - Binary Tree Interactive Ap
   test('FSM "Idle" - no event handlers present in the DOM or scripts', async ({ page }) => {
     // Validate that the page contains no inline onclick handlers and no addEventListener occurrences,
     // consistent with the extracted FSM that detected no event handlers.
-    const app = new BinaryTreePage(page);
+    const app1 = new BinaryTreePage(page);
     await app.goto();
 
     const content = await app.getPageContent();
@@ -129,7 +129,7 @@ test.describe('52085c90-fa76-11f0-a09b-87751f540fd8 - Binary Tree Interactive Ap
     // The page's visible <code> snippet is not executed, but a separate script calls printNode(root)
     // where root is not defined in the global scope. We must assert that a ReferenceError (or similar)
     // is raised and observed via pageerror.
-    const app = new BinaryTreePage(page);
+    const app2 = new BinaryTreePage(page);
     await app.goto();
 
     // Give the page a moment to emit errors during load
@@ -155,7 +155,7 @@ test.describe('52085c90-fa76-11f0-a09b-87751f540fd8 - Binary Tree Interactive Ap
   test('Interacting with static elements does not change state or produce additional errors', async ({ page }) => {
     // Edge case: clicking the container should not create new errors or change the DOM,
     // since the application is static and expected to remain in Idle.
-    const app = new BinaryTreePage(page);
+    const app3 = new BinaryTreePage(page);
     await app.goto();
 
     // Snapshot current errors and messages
@@ -172,26 +172,26 @@ test.describe('52085c90-fa76-11f0-a09b-87751f540fd8 - Binary Tree Interactive Ap
     // (At load we already expect the ReferenceError; ensure no additional errors were triggered by user click.)
     expect(pageErrors.length).toBeLessThanOrEqual(initialErrors.length + 1); // allow the original error if not already captured
     // Ensure console logs did not suddenly include printed node values
-    const combinedConsole = consoleMessages.join('\n');
+    const combinedConsole1 = consoleMessages.join('\n');
     expect(combinedConsole).not.toContain('2');
     expect(combinedConsole).not.toContain('4');
     expect(combinedConsole).not.toContain('6');
     expect(combinedConsole).not.toContain('8');
 
     // Verify DOM still contains the static code block and heading (no state change)
-    const heading = await app.getHeadingText();
+    const heading1 = await app.getHeadingText();
     expect(heading.trim()).toContain('Binary Tree');
-    const codeText = await app.getCodeBlockText();
+    const codeText1 = await app.getCodeBlockText();
     expect(codeText).toContain('function createNode');
   });
 
   test('Sanity: ensure no transitions or onEnter/onExit actions exist per FSM extraction', async ({ page }) => {
     // This test ensures that the application has no signs of transitions or lifecycle actions that would
     // be required for a multi-state interactive FSM. We check for common patterns that would suggest transitions.
-    const app = new BinaryTreePage(page);
+    const app4 = new BinaryTreePage(page);
     await app.goto();
 
-    const content = await app.getPageContent();
+    const content1 = await app.getPageContent();
 
     // No explicit state machine libraries or common lifecycle hooks are present
     expect(content).not.toMatch(/xstate|stateMachine|onEnter|onExit|onExit\s*\(|onEnter\s*\(/i);

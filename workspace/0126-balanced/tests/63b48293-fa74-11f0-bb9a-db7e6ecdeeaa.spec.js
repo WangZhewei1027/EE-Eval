@@ -132,7 +132,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     // - degreeValue text updates promptly
     // - error display (training & true MSE) updates (numeric)
     // - canvases are redrawn (sampled pixel changes)
-    const p = new OverfittingPage(page);
+    const p1 = new OverfittingPage(page);
     await p.goto();
 
     // Capture baseline MSE and pixel values
@@ -175,7 +175,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     expect(Number.isFinite(mses12.truth)).toBeTruthy();
 
     // Check that after several slider changes there were no uncaught exceptions or console errors
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -185,13 +185,13 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     // Validate specific edge cases required by the FSM and implementation:
     // - degree = 0 should compute the mean (single coefficient) and display valid MSEs
     // - degree = max (15) should be accepted and not produce unhandled exceptions
-    const p = new OverfittingPage(page);
+    const p2 = new OverfittingPage(page);
     await p.goto();
 
     // degree 0
     await p.setDegree(0);
     await expect(p.degreeValue).toHaveText('0');
-    const mses0 = await p.getMSEs();
+    const mses01 = await p.getMSEs();
     expect(Number.isFinite(mses0.training)).toBeTruthy();
     expect(Number.isFinite(mses0.truth)).toBeTruthy();
 
@@ -211,7 +211,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     }
 
     // Confirm no page errors or console errors emitted
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -220,7 +220,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     // Comments:
     // Simulate rapid slider changes (scrubbing) to ensure the update handler is robust under frequent input events.
     // Verifies degreeValue consistency and absence of uncaught exceptions.
-    const p = new OverfittingPage(page);
+    const p3 = new OverfittingPage(page);
     await p.goto();
 
     // Rapidly change degree across a sequence
@@ -230,13 +230,13 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
       // Ensure the displayed degree matches
       await expect(p.degreeValue).toHaveText(String(val));
       // Ensure MSEs are present and numeric
-      const mses = await p.getMSEs();
+      const mses1 = await p.getMSEs();
       expect(Number.isFinite(mses.training)).toBeTruthy();
       expect(Number.isFinite(mses.truth)).toBeTruthy();
     }
 
     // After rapid interactions, ensure no uncaught runtime errors
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -245,7 +245,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     // Comments:
     // This test explicitly demonstrates observation of console messages and page errors.
     // According to the testing guidance, we must observe console logs and page errors and assert their presence/absence.
-    const p = new OverfittingPage(page);
+    const p4 = new OverfittingPage(page);
     await p.goto();
 
     // Trigger a benign interaction to exercise code paths
@@ -253,7 +253,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
 
     // Now assert that there were no uncaught page errors or console.error messages.
     // If there were any, we will fail the test and print them for diagnostics.
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter((m) => m.type === 'error');
 
     if (pageErrors.length > 0) {
       // Fail with detailed info on pageErrors
@@ -262,7 +262,7 @@ test.describe('Overfitting Demonstration - FSM tests (Idle state + SliderChange 
     }
 
     if (consoleErrors.length > 0) {
-      const msgs = consoleErrors.map((m) => `[console.${m.type}] ${m.text}`).join('\n');
+      const msgs1 = consoleErrors.map((m) => `[console.${m.type}] ${m.text}`).join('\n');
       throw new Error('Console error messages were detected:\n' + msgs);
     }
 

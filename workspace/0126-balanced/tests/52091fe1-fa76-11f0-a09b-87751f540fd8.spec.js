@@ -135,7 +135,7 @@ test.describe('Exponential Search FSM - Application 52091fe1-fa76-11f0-a09b-8775
       expect(found).toBe(true);
 
       // The application may not update the output due to the thrown error; assert that it did not show the success message
-      const outputText = await page.textContent('#search-output');
+      const outputText1 = await page.textContent('#search-output');
       // It should not be the 'Result Found' message from the FSM (which contains 'found in the list' + a number other than initial empty)
       // We assert that either the output is empty or does not include expected 'found' phrase in the successful format.
       expect(outputText).not.toContain('Number');

@@ -106,7 +106,7 @@ test.describe('Selection Sort Visualization - FSM states and transitions', () =>
     // This test validates clicking the Start Sorting button triggers the Sorting state S1_Sorting
     // and runs selectionSort() (entry action), which should disable controls and highlight bars.
 
-    const app = new SelectionSortPage(page);
+    const app1 = new SelectionSortPage(page);
     await app.goto();
 
     // Capture array snapshot prior to starting
@@ -160,7 +160,7 @@ test.describe('Selection Sort Visualization - FSM states and transitions', () =>
   test('ResetArray event during sorting is ignored (edge case) and does not reinitialize array', async ({ page }) => {
     // This test validates the FSM behavior when Reset is triggered during Sorting:
     // Implementation prevents initialize() when sorting is true.
-    const app = new SelectionSortPage(page);
+    const app2 = new SelectionSortPage(page);
     await app.goto();
 
     // Start sorting
@@ -197,7 +197,7 @@ test.describe('Selection Sort Visualization - FSM states and transitions', () =>
 
   test('ResetArray event when idle transitions to Idle and reinitializes the array', async ({ page }) => {
     // This test validates clicking Reset when not sorting calls initialize() and produces a (likely) different array.
-    const app = new SelectionSortPage(page);
+    const app3 = new SelectionSortPage(page);
     await app.goto();
 
     // Ensure we are idle: buttons enabled
@@ -244,7 +244,7 @@ test.describe('Selection Sort Visualization - FSM states and transitions', () =>
 
   test('Observes console logs and page errors during interactions (no unexpected runtime errors)', async ({ page }) => {
     // This test explicitly collects console messages and page errors during multiple interactions
-    const app = new SelectionSortPage(page);
+    const app4 = new SelectionSortPage(page);
     await app.goto();
 
     // Interact: start -> short wait -> attempt reset (ignored) -> do nothing else

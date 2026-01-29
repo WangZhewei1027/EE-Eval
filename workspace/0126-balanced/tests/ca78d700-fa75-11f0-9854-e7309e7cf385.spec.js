@@ -94,8 +94,8 @@ test.describe('FSM: Floyd-Warshall Application (ca78d700-fa75-11f0-9854-e7309e7c
   // Test the transition triggered by clicking the Print Distance button (PrintDistance event)
   test('Transition: clicking Print Distance invokes printDistance() and results in a page error due to missing DOM nodes (S0_Idle -> S1_DistancePrinted)', async ({ page }) => {
     // Collect page errors and console messages
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors1 = [];
+    const consoleMessages1 = [];
     page.on('pageerror', (err) => {
       pageErrors.push(err);
     });
@@ -103,7 +103,7 @@ test.describe('FSM: Floyd-Warshall Application (ca78d700-fa75-11f0-9854-e7309e7c
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
 
-    const pageModel = new FloydWarshallPage(page);
+    const pageModel1 = new FloydWarshallPage(page);
     await pageModel.goto();
 
     // Ensure printDistance function exists on the page (the onclick attribute points to it)
@@ -150,14 +150,14 @@ test.describe('FSM: Floyd-Warshall Application (ca78d700-fa75-11f0-9854-e7309e7c
 
   // Edge case: clicking the other Print Distance button (the one without onclick) should NOT invoke printDistance nor cause errors
   test('Edge case: clicking the table Print Distance button (no onclick) does not invoke printDistance and causes no page errors', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const pageModel = new FloydWarshallPage(page);
+    const pageModel2 = new FloydWarshallPage(page);
     await pageModel.goto();
 
     // Confirm the table button exists
-    const tableButtonCount = await pageModel.hasTablePrintButton();
+    const tableButtonCount1 = await pageModel.hasTablePrintButton();
     expect(tableButtonCount).toBeGreaterThanOrEqual(1);
 
     // Record current page error count
@@ -176,7 +176,7 @@ test.describe('FSM: Floyd-Warshall Application (ca78d700-fa75-11f0-9854-e7309e7c
 
   // Verify that invoking the missing renderPage() on enter would produce a ReferenceError (the FSM mentioned renderPage on enter)
   test('FSM onEnter action renderPage(): invoking missing renderPage() throws ReferenceError', async ({ page }) => {
-    const pageModel = new FloydWarshallPage(page);
+    const pageModel3 = new FloydWarshallPage(page);
     await pageModel.goto();
 
     // Attempt to call renderPage() in page context and capture the thrown error
@@ -202,7 +202,7 @@ test.describe('FSM: Floyd-Warshall Application (ca78d700-fa75-11f0-9854-e7309e7c
 
   // Direct invocation of printDistance should reproduce the same runtime error as clicking the button (TypeError due to missing #output_node)
   test('Direct invocation of printDistance() throws a runtime TypeError due to missing output_node', async ({ page }) => {
-    const pageModel = new FloydWarshallPage(page);
+    const pageModel4 = new FloydWarshallPage(page);
     await pageModel.goto();
 
     // Sanity: ensure printDistance exists
@@ -210,7 +210,7 @@ test.describe('FSM: Floyd-Warshall Application (ca78d700-fa75-11f0-9854-e7309e7c
     expect(exists).toBe(true);
 
     // Invoke printDistance directly and capture exception details
-    const result = await page.evaluate(() => {
+    const result1 = await page.evaluate(() => {
       try {
         printDistance();
         return { succeeded: true };

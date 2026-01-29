@@ -104,10 +104,10 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('Initial state (S0_Idle): deque renders empty and no errors', async ({ page }) => {
     // This test validates the Idle state's entry action renderDeque() and initial UI
-    const dp = new DequePage(page);
+    const dp1 = new DequePage(page);
 
     // Deque should indicate it is empty (the app renders an <em> with text 'Deque is empty')
-    const items = await dp.getDequeItems();
+    const items1 = await dp.getDequeItems();
     expect(items).toEqual([]); // empty representation
 
     // Log should be empty initially
@@ -122,18 +122,18 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('AddFront transition (S0_Idle -> S1_ValueAdded): adds value to front and logs it', async ({ page }) => {
     // Validate AddFront event and the resulting state and DOM/log changes
-    const dp = new DequePage(page);
+    const dp2 = new DequePage(page);
     const value = 'Alpha';
 
     await dp.setInput(value);
     await dp.addFrontBtn.click();
 
     // After adding to front, deque should contain the value as the first item
-    const items = await dp.getDequeItems();
+    const items2 = await dp.getDequeItems();
     expect(items).toEqual([value]);
 
     // The operations log should contain the corresponding message
-    const log = await dp.getLogText();
+    const log1 = await dp.getLogText();
     expect(log).toContain(`Added '${value}' to front`);
 
     // Input should be cleared and focused again by the app (value becomes empty)
@@ -145,16 +145,16 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('AddBack transition (S0_Idle -> S1_ValueAdded): adds value to back and logs it', async ({ page }) => {
     // Validate AddBack event
-    const dp = new DequePage(page);
-    const value = 'Beta';
+    const dp3 = new DequePage(page);
+    const value1 = 'Beta';
 
     await dp.setInput(value);
     await dp.addBackBtn.click();
 
-    const items = await dp.getDequeItems();
+    const items3 = await dp.getDequeItems();
     expect(items).toEqual([value]);
 
-    const log = await dp.getLogText();
+    const log2 = await dp.getLogText();
     expect(log).toContain(`Added '${value}' to back`);
 
     expect(await dp.input.inputValue()).toBe('');
@@ -163,7 +163,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('RemoveFront transition (S1_ValueAdded -> S2_ValueRemoved): removes front item and logs it', async ({ page }) => {
     // Add two values then remove from front; check that the first inserted (front-most) is removed.
-    const dp = new DequePage(page);
+    const dp4 = new DequePage(page);
 
     await dp.addBack('one');
     await dp.addBack('two');
@@ -177,7 +177,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
     // After removal, deque should have only 'two'
     expect(await dp.getDequeItems()).toEqual(['two']);
 
-    const log = await dp.getLogText();
+    const log3 = await dp.getLogText();
     expect(log).toContain(`Removed 'one' from front`);
 
     expect(pageErrors.length).toBe(0);
@@ -185,7 +185,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('RemoveBack transition (S1_ValueAdded -> S2_ValueRemoved): removes back item and logs it', async ({ page }) => {
     // Add two values then remove from back; check that the last inserted (back-most) is removed.
-    const dp = new DequePage(page);
+    const dp5 = new DequePage(page);
 
     await dp.addFront('first'); // deque: first
     await dp.addBack('last');  // deque: first, last
@@ -196,7 +196,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
     await dp.removeBackBtn.click();
 
     expect(await dp.getDequeItems()).toEqual(['first']);
-    const log = await dp.getLogText();
+    const log4 = await dp.getLogText();
     expect(log).toContain(`Removed 'last' from back`);
 
     expect(pageErrors.length).toBe(0);
@@ -204,7 +204,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('ClearDeque transition (S1_ValueAdded -> S3_DequeCleared): clears deque and logs it', async ({ page }) => {
     // Add some items then clear and validate that deque is empty and log contains "Deque cleared"
-    const dp = new DequePage(page);
+    const dp6 = new DequePage(page);
 
     await dp.addBack('x');
     await dp.addBack('y');
@@ -215,7 +215,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
     // Deque should render empty state
     expect(await dp.getDequeItems()).toEqual([]);
 
-    const log = await dp.getLogText();
+    const log5 = await dp.getLogText();
     expect(log).toContain('Deque cleared');
 
     expect(pageErrors.length).toBe(0);
@@ -223,7 +223,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('S2_ValueRemoved -> S1_ValueAdded transitions: after removal, adding again works (both front/back)', async ({ page }) => {
     // Add, remove, then add again to verify transitions back to ValueAdded
-    const dp = new DequePage(page);
+    const dp7 = new DequePage(page);
 
     // Start with adding and removing to reach S2
     await dp.addBack('a');
@@ -247,7 +247,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('S3_DequeCleared -> S0_Idle via AddFront/AddBack: after clearing, adding items works', async ({ page }) => {
     // Ensure that after clearing (S3), adding returns to Idle/Add states as expected
-    const dp = new DequePage(page);
+    const dp8 = new DequePage(page);
 
     // Populate and clear
     await dp.addBack('m');
@@ -274,7 +274,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('Edge case: adding empty value shows alert and does not change deque or log (AddFront)', async ({ page }) => {
     // Validate the application properly handles empty input for AddFront with an alert.
-    const dp = new DequePage(page);
+    const dp9 = new DequePage(page);
 
     // Ensure input is empty
     await dp.setInput('');
@@ -294,12 +294,12 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('Edge case: adding empty value shows alert and does not change deque or log (AddBack)', async ({ page }) => {
     // Validate empty input handling for AddBack
-    const dp = new DequePage(page);
+    const dp10 = new DequePage(page);
 
     await dp.setInput('');
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise1 = page.waitForEvent('dialog');
     await dp.addBackBtn.click();
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     expect(dialog.message()).toBe('Please enter a value to add to the back.');
     await dialog.accept();
 
@@ -310,7 +310,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
 
   test('Edge case: removing from empty deque shows alert (RemoveFront and RemoveBack)', async ({ page }) => {
     // Validate alerts when trying to remove from an empty deque
-    const dp = new DequePage(page);
+    const dp11 = new DequePage(page);
 
     // Remove front when empty
     const dialogFrontPromise = page.waitForEvent('dialog');
@@ -335,7 +335,7 @@ test.describe('Deque Demo - FSM states and transitions', () => {
   test('Verify operations log accumulates entries in chronological order and renderDeque() updates DOM on each action', async ({ page }) => {
     // This test validates that renderDeque() is effectively called (entry action evidence)
     // by checking DOM updates after several actions and that the log aggregates messages.
-    const dp = new DequePage(page);
+    const dp12 = new DequePage(page);
 
     await dp.addFront('1'); // log: Added '1' to front
     await dp.addBack('2');  // log: Added '2' to back

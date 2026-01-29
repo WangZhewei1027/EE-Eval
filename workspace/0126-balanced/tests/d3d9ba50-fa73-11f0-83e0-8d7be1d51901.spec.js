@@ -52,9 +52,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
 
   test.describe('Transactions lifecycle and transitions (S0 -> S1 -> S2/S3)', () => {
     test('Start Transaction -> select it -> ApplyOperation -> Commit (serializable) -> db updated (S0 -> S1 -> S2)', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles1 = [];
+      const pageErrors1 = [];
+      const dialogs1 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -111,7 +111,7 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
       expect(bob).toContain('$90.00');
 
       // Total should remain $230.00 (consistency)
-      const totalText = await page.locator('#totalSum').textContent();
+      const totalText1 = await page.locator('#totalSum').textContent();
       expect(totalText).toBe('$230.00');
 
       // No uncaught runtime errors
@@ -122,9 +122,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
     });
 
     test('Start Transaction -> ApplyOperation -> Rollback -> transaction becomes aborted and DB unchanged (S1 -> S3)', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles2 = [];
+      const pageErrors2 = [];
+      const dialogs2 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -170,8 +170,8 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
     });
 
     test('Attempt to ApplyOperation without selecting a transaction shows alert (edge case)', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
+      const dialogs3 = [];
+      const pageErrors3 = [];
 
       page.on('dialog', async (dialog) => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
@@ -198,8 +198,8 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
     });
 
     test('Applying invalid operation (from == to) triggers alert and is not applied', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
+      const dialogs4 = [];
+      const pageErrors4 = [];
 
       page.on('dialog', async (dialog) => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
@@ -234,9 +234,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
 
   test.describe('CloseAllTransactions, ResetDatabase, SimulateCrash flows', () => {
     test('CloseAllTransactions closes all in-memory transactions (S1 -> S0)', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles3 = [];
+      const pageErrors5 = [];
+      const dialogs5 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -272,9 +272,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
     });
 
     test('ResetDatabase resets committed DB to initial values (S0 -> S0)', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles4 = [];
+      const pageErrors6 = [];
+      const dialogs6 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -315,9 +315,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
     });
 
     test('SimulateCrash reloads the page and uncommitted transactions are lost; committed persists', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles5 = [];
+      const pageErrors7 = [];
+      const dialogs7 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -363,7 +363,7 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
 
       // Committed DB changes should persist (Alice had 100 -> after committed 10 withdrawn => 90)
       // Because we reset then committed an Alice->Bob 10 earlier, Alice should be $90.00
-      const alice = await page.locator('#accounts .acct').nth(0).textContent();
+      const alice1 = await page.locator('#accounts .acct').nth(0).textContent();
       expect(alice).toContain('$90.00');
 
       // There should be a console log about simulating crash (the log is written before reload)
@@ -376,9 +376,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
 
   test.describe('Concurrency and isolation behaviors', () => {
     test('Serializable mode prevents committing a transaction that conflicts with interim commits', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles6 = [];
+      const pageErrors8 = [];
+      const dialogs8 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -433,9 +433,9 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
     });
 
     test('No Isolation mode allows last-writer-wins anomalies', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
-      const dialogs = [];
+      const consoles7 = [];
+      const pageErrors9 = [];
+      const dialogs9 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -477,7 +477,7 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
 
       // After both commits, the final Alice balance should reflect the last committed workspace (T2's change)
       // Starting from $100, T1 => $90, T2 => $80, so expect $80
-      const alice = await page.locator('#accounts .acct').nth(0).textContent();
+      const alice2 = await page.locator('#accounts .acct').nth(0).textContent();
       expect(alice).toContain('$80.00');
 
       // No uncaught page errors
@@ -487,8 +487,8 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
 
   test.describe('Observability: console and runtime errors', () => {
     test('captures console logs and ensures no uncaught exceptions during normal operations', async ({ page }) => {
-      const consoles = [];
-      const pageErrors = [];
+      const consoles8 = [];
+      const pageErrors10 = [];
 
       page.on('console', (msg) => consoles.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
@@ -505,7 +505,7 @@ test.describe('ACID Properties Demo — end-to-end (d3d9ba50-fa73-11f0-83e0-8d7b
       await page.click('#commitTxn');
 
       // Ensure some console entries recorded (start, applied op, committed)
-      const joined = consoles.map(c => c.text).join('||');
+      const joined1 = consoles.map(c => c.text).join('||');
       expect(joined).toContain('Started transaction');
       expect(joined).toContain('Applied op');
       expect(joined).toContain('committed');

@@ -164,7 +164,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('Attempting to pop or peek in empty state shows error messages', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack1 = new StackPage(page);
       await stack.goto();
 
       // Click Pop when empty -> error message
@@ -185,7 +185,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('Push with empty input shows validation error (edge case)', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack2 = new StackPage(page);
       await stack.goto();
 
       // Ensure input is empty and click push
@@ -205,7 +205,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('EnterKeyEvent pushes value from input (S0_Empty -> S1_NonEmpty)', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack3 = new StackPage(page);
       await stack.goto();
 
       // Use Enter to push value
@@ -235,7 +235,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('Push multiple values then verify visual stack and top marker', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack4 = new StackPage(page);
       await stack.goto();
 
       // Push three values
@@ -252,7 +252,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
       expect(await top.textContent()).toBe('three');
 
       // Visual order: top first in DOM (implementation appends top at top)
-      const texts = await stack.getElementsTextTopToBottom(); // top to bottom
+      const texts1 = await stack.getElementsTextTopToBottom(); // top to bottom
       expect(texts[0]).toBe('three');
       expect(texts[1]).toBe('two');
       expect(texts[2]).toBe('one');
@@ -265,7 +265,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('PopEvent reduces stack size and shows popped value message', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack5 = new StackPage(page);
       await stack.goto();
 
       // Start with three elements
@@ -286,7 +286,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     });
 
     test('PeekEvent shows top value without removing it', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack6 = new StackPage(page);
       await stack.goto();
 
       // Push values
@@ -310,7 +310,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('ClearEvent clears the stack and returns to empty state S0_Empty', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack7 = new StackPage(page);
       await stack.goto();
 
       // Push some items
@@ -337,7 +337,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
 
   test.describe('Edge cases & robustness', () => {
     test('Pushing duplicate values and popping respects LIFO', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack8 = new StackPage(page);
       await stack.goto();
 
       // Push duplicates
@@ -360,7 +360,7 @@ test.describe('Stack Data Structure Demo - FSM validation (63afeeb1-fa74-11f0-bb
     test('Rapid push/pop sequences maintain correct state (stress path)', async ({
       page,
     }) => {
-      const stack = new StackPage(page);
+      const stack9 = new StackPage(page);
       await stack.goto();
 
       // Rapid sequence

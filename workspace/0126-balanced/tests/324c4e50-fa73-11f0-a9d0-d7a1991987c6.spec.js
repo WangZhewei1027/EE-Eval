@@ -104,7 +104,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
     // - Clicking Add Element with valid input adds the element to the dynamic array
     // - The displayed output updates accordingly (updateOutput run on entry)
     // - The input is cleared after adding
-    const app = new DynamicArrayPage(page);
+    const app1 = new DynamicArrayPage(page);
 
     // Add 'foo' and assert DOM updates
     await app.addElement('foo');
@@ -125,7 +125,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
     // This test validates the edge case described in the FSM:
     // - If Add is clicked with empty input, an alert with specific text is shown
     // - The array output remains unchanged
-    const app = new DynamicArrayPage(page);
+    const app2 = new DynamicArrayPage(page);
 
     // Ensure input is empty
     await app.input.fill('');
@@ -152,7 +152,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
 
   test('Multiple AddElement events - transitions S1 -> S0 (adding when array non-empty) and array accumulates values', async ({ page }) => {
     // Validate adding multiple elements in sequence updates the array appropriately.
-    const app = new DynamicArrayPage(page);
+    const app3 = new DynamicArrayPage(page);
 
     // Add first element
     await app.addElement('alpha');
@@ -175,7 +175,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
     // This test validates:
     // - Removing when there are elements pops the last
     // - updateOutput is called and DOM updated
-    const app = new DynamicArrayPage(page);
+    const app4 = new DynamicArrayPage(page);
 
     // Prepare by adding two elements
     await app.addElement('one');
@@ -197,7 +197,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
 
   test('RemoveElement event - removing when empty triggers alert (edge case)', async ({ page }) => {
     // Validate the FSM's edge case: removing when dynamicArray.length === 0 shows an alert
-    const app = new DynamicArrayPage(page);
+    const app5 = new DynamicArrayPage(page);
 
     // Ensure array is empty at start
     await expect(app.output).toHaveText('Dynamic Array: []');
@@ -226,7 +226,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
   test('Sequence test: Add and Remove repeatedly to exercise all transitions', async ({ page }) => {
     // This comprehensive test performs a sequence of operations to exercise FSM transitions:
     // S0 (idle) -> S1 (add) -> S0 -> S1 -> S0 -> S2 (remove) -> S0 etc.
-    const app = new DynamicArrayPage(page);
+    const app6 = new DynamicArrayPage(page);
 
     // Start idle
     await expect(app.output).toHaveText('Dynamic Array: []');
@@ -271,7 +271,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
   test('DOM integrity and updateOutput behavior verification (indirect onEnter assertions)', async ({ page }) => {
     // This test indirectly verifies the entry action updateOutput() by asserting
     // that after each modifying event the #array-output content is consistent with the internal operations.
-    const app = new DynamicArrayPage(page);
+    const app7 = new DynamicArrayPage(page);
 
     // Add different types of values (numbers, text)
     await app.addElement('123');
@@ -289,7 +289,7 @@ test.describe('Dynamic Array Demo - FSM state & transition tests', () => {
     expect(inputVal).toBe('');
 
     // Ensure the output DOM node exists and has expected formatting
-    const outputText = await app.getOutputText();
+    const outputText1 = await app.getOutputText();
     expect(outputText.startsWith('Dynamic Array: [')).toBeTruthy();
 
     // No console/page errors expected

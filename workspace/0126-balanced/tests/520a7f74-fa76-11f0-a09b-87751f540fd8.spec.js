@@ -146,7 +146,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
 
   test('Verify console logs for atomicity, consistency, isolation, and durability were produced', async ({ page }) => {
     // This test checks that the inline script executed and logged the expected messages.
-    const acid = new AcidPage(page);
+    const acid1 = new AcidPage(page);
     await acid.goto();
 
     // Wait a short moment for console messages to be emitted and captured
@@ -175,7 +175,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
   test('FSM entry action renderPage() is declared in FSM but missing in implementation (reporting mismatch)', async ({ page }) => {
     // The FSM lists renderPage() as an entry action. The HTML does not define renderPage.
     // This test asserts that renderPage is undefined in the page context, highlighting the mismatch.
-    const acid = new AcidPage(page);
+    const acid2 = new AcidPage(page);
     await acid.goto();
 
     // Check whether renderPage exists on the window
@@ -191,7 +191,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
 
   test('There are no interactive elements or transitions to trigger — edge case validation', async ({ page }) => {
     // The FSM states/transitions indicate no interactions; implementation indeed is static.
-    const acid = new AcidPage(page);
+    const acid3 = new AcidPage(page);
     await acid.goto();
 
     const interactiveCount = await acid.countInteractiveElements();
@@ -217,7 +217,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
   test('Edge case: calling ACID check functions with a non-existent transaction should log "No transaction found"', async ({ page }) => {
     // This test manipulates db.currentTransactionId in the page context and invokes the existing functions
     // to validate the "No transaction found" branch is reachable.
-    const acid = new AcidPage(page);
+    const acid4 = new AcidPage(page);
     await acid.goto();
 
     // Set currentTransactionId to a non-existent id and then call functions that exist on the page.
@@ -241,7 +241,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
       await page.waitForTimeout(50);
     }
 
-    const msgs = acid.getConsoleMessages();
+    const msgs1 = acid.getConsoleMessages();
 
     // For each property, expect a "No transaction found" log to exist
     const expectedNoTx = [
@@ -262,7 +262,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
 
   test('Sanity check: verify implementation’s transaction splitting behavior for transaction with comma-separated parts', async ({ page }) => {
     // This test changes a transaction's data to include commas and verifies success/failure logic by calling atomicity.
-    const acid = new AcidPage(page);
+    const acid5 = new AcidPage(page);
     await acid.goto();
 
     // Modify the first transaction's data to include an empty segment to force a Failure path
@@ -284,7 +284,7 @@ test.describe('ACID Properties interactive application - FSM and implementation 
 
     // Wait for console capture
     await page.waitForTimeout(50);
-    const msgs = acid.getConsoleMessages();
+    const msgs2 = acid.getConsoleMessages();
 
     // Given the empty segment between commas, the implementation's logic should result in "Atomicity: Failure"
     expect(msgs.some(m => m.includes('Atomicity: Failure')), `Expected to see Atomicity: Failure in console, console: ${JSON.stringify(msgs)}`).toBeTruthy();
@@ -298,13 +298,13 @@ test.describe('ACID Properties interactive application - FSM and implementation 
   test('Implementation does not throw ReferenceError / SyntaxError / TypeError on load (validate runtime stability)', async ({ page }) => {
     // This test ensures that the page loads without producing uncaught runtime errors.
     // Note: We do not patch or modify page environment; we only observe runtime errors.
-    const acid = new AcidPage(page);
+    const acid6 = new AcidPage(page);
     await acid.goto();
 
     // Wait briefly to allow any asynchronous runtime errors to surface
     await page.waitForTimeout(100);
 
-    const pageErrors = acid.getPageErrors();
+    const pageErrors1 = acid.getPageErrors();
 
     // Expect no uncaught ReferenceError, SyntaxError, or TypeError events during page load
     // (the inline script should run cleanly as provided)

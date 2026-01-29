@@ -174,14 +174,14 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
     await trie.insertWord('hello');
 
     // After insertion, status should indicate insertion and lastOp updated
-    const status = await trie.getStatusText();
+    const status1 = await trie.getStatusText();
     expect(status).toContain('Inserted "hello"');
 
     const lastOp = await trie.getLastOpText();
     expect(lastOp).toContain('Inserted "hello"');
 
     // Stats should reflect at least 1 word and nodes > 0
-    const stats = await trie.getStatsText();
+    const stats1 = await trie.getStatsText();
     expect(stats).toMatch(/Words:\s*1/);
     expect(stats).toMatch(/Nodes:\s*\d+/);
 
@@ -201,16 +201,16 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
     await trie.bulkInsert('cat,dog,can\ncar');
 
     // Status should indicate number of words inserted
-    const status = await trie.getStatusText();
+    const status2 = await trie.getStatusText();
     expect(status).toContain('Inserted 4 words');
 
     // Stats should reflect word count 4
-    const stats = await trie.getStatsText();
+    const stats2 = await trie.getStatsText();
     expect(stats).toMatch(/Words:\s*4/);
 
     // Bulk insert with empty input should show error message
     await page.click('#bulkBtn');
-    const statusAfterEmpty = await trie.getStatusText();
+    const statusAfterEmpty1 = await trie.getStatusText();
     expect(statusAfterEmpty).toContain('Enter at least one word to bulk insert.');
   });
 
@@ -219,11 +219,11 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
     await trie.loadExamples();
 
     // Status should indicate examples loaded
-    const status = await trie.getStatusText();
+    const status3 = await trie.getStatusText();
     expect(status).toContain('Loaded example words');
 
     // Stats should show words > 0
-    const stats = await trie.getStatsText();
+    const stats3 = await trie.getStatsText();
     const match = stats.match(/Words:\s*(\d+)/);
     expect(match).not.toBeNull();
     const words = Number(match[1]);
@@ -237,7 +237,7 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
 
     // Searching exact present word
     await trie.searchExact('apple');
-    let status = await trie.getStatusText();
+    let status4 = await trie.getStatusText();
     expect(status).toContain('"apple" is present (exact match)');
 
     // The path for 'apple' should have highlight class applied to node-labels
@@ -263,7 +263,7 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
 
     // Prefix that exists
     await trie.checkPrefix('he');
-    let status = await trie.getStatusText();
+    let status5 = await trie.getStatusText();
     expect(status).toContain('There is at least one word starting with "he"');
 
     // prefix that does not exist
@@ -285,7 +285,7 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
     await trie.insertWord('toremove');
     // ensure present
     await trie.searchExact('toremove');
-    let status = await trie.getStatusText();
+    let status6 = await trie.getStatusText();
     expect(status).toContain('"toremove" is present (exact match)');
 
     // remove by filling wordInput and clicking remove
@@ -319,12 +319,12 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
     // Allow UI to update suggestions
     await page.waitForTimeout(100);
 
-    const suggestions = await trie.getSuggestionTexts();
+    const suggestions1 = await trie.getSuggestionTexts();
     // check that suggestions contain words like 'app' or 'apple' etc, or "No suggestions" message
     expect(suggestions.length).toBeGreaterThanOrEqual(1);
 
     // If there is a chip suggestion, click the first chip and validate behavior
-    const chips = await page.$$('#suggestList .chip');
+    const chips1 = await page.$$('#suggestList .chip');
     if (chips.length > 0) {
       const firstText = (await chips[0].textContent()).trim();
       await chips[0].click();
@@ -332,7 +332,7 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
       const searchVal = await page.inputValue('#searchInput');
       expect(searchVal).toBe(firstText);
 
-      const status = await trie.getStatusText();
+      const status7 = await trie.getStatusText();
       expect(status).toContain(`Autocomplete selected "${firstText}"`);
     } else {
       // if no chips, ensure 'No suggestions' is present
@@ -346,11 +346,11 @@ test.describe('Trie (Prefix Tree) — Interactive Demo (FSM coverage)', () => {
     await trie.clickSampleChipByIndex(0);
 
     // After clicking a sample chip, status should mention inserted sample
-    const status = await trie.getStatusText();
+    const status8 = await trie.getStatusText();
     expect(status).toContain('Inserted sample');
 
     // Stats should show words count increased
-    const stats = await trie.getStatsText();
+    const stats4 = await trie.getStatsText();
     expect(stats).toMatch(/Words:\s*\d+/);
   });
 

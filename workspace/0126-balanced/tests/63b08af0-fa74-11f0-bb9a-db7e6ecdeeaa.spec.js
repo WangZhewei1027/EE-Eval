@@ -57,7 +57,7 @@ test.describe('Red-Black Tree Visualization & FSM tests (63b08af0-fa74-11f0-bb9a
     await expect(page.locator('#message')).toHaveText('Please enter a number.');
 
     // Ensure SVG still empty
-    const svgChildCount = await page.$eval('#treeSVG', (el) => el.children.length);
+    const svgChildCount1 = await page.$eval('#treeSVG', (el) => el.children.length);
     expect(svgChildCount).toBe(0);
   });
 
@@ -72,7 +72,7 @@ test.describe('Red-Black Tree Visualization & FSM tests (63b08af0-fa74-11f0-bb9a
     await expect(page.locator('#message')).toHaveText('Please enter an integer value.');
 
     // Ensure SVG still empty
-    const svgChildCount = await page.$eval('#treeSVG', (el) => el.children.length);
+    const svgChildCount2 = await page.$eval('#treeSVG', (el) => el.children.length);
     expect(svgChildCount).toBe(0);
   });
 
@@ -87,7 +87,7 @@ test.describe('Red-Black Tree Visualization & FSM tests (63b08af0-fa74-11f0-bb9a
     await expect(page.locator('#message')).toHaveText('Please enter a number between -999999 and 999999.');
 
     // Ensure SVG still empty
-    const svgChildCount = await page.$eval('#treeSVG', (el) => el.children.length);
+    const svgChildCount3 = await page.$eval('#treeSVG', (el) => el.children.length);
     expect(svgChildCount).toBe(0);
   });
 
@@ -139,7 +139,7 @@ test.describe('Red-Black Tree Visualization & FSM tests (63b08af0-fa74-11f0-bb9a
     await expect(page.locator('#message')).toHaveText('Inserted value: 5');
 
     // Ensure SVG has some children
-    let svgChildCount = await page.$eval('#treeSVG', (el) => el.children.length);
+    let svgChildCount4 = await page.$eval('#treeSVG', (el) => el.children.length);
     expect(svgChildCount).toBeGreaterThan(0);
 
     // Click Clear Tree
@@ -167,7 +167,7 @@ test.describe('Red-Black Tree Visualization & FSM tests (63b08af0-fa74-11f0-bb9a
     await expect(page.locator('#message')).toHaveText('Inserted value: 20');
 
     // Validate node with text '20' exists in SVG
-    const texts = await page.$$eval('#treeSVG text', (nodes) => nodes.map((n) => n.textContent.trim()));
+    const texts1 = await page.$$eval('#treeSVG text', (nodes) => nodes.map((n) => n.textContent.trim()));
     expect(texts.includes('20')).toBeTruthy();
   });
 
@@ -180,7 +180,7 @@ test.describe('Red-Black Tree Visualization & FSM tests (63b08af0-fa74-11f0-bb9a
     await page.fill('#inputValue', '-15');
     await page.click('#insertBtn');
     await expect(page.locator('#message')).toHaveText('Inserted value: -15');
-    let texts = await page.$$eval('#treeSVG text', (nodes) => nodes.map((n) => n.textContent.trim()));
+    let texts2 = await page.$$eval('#treeSVG text', (nodes) => nodes.map((n) => n.textContent.trim()));
     expect(texts.includes('-15')).toBeTruthy();
 
     // Insert another positive value 7

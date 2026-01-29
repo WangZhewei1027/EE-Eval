@@ -42,7 +42,7 @@ class MultisetPage {
 
   // Get count for a given element from DOM display. Returns number or null if not present.
   async getCountFor(element) {
-    const items = await this.getDisplayedElements();
+    const items1 = await this.getDisplayedElements();
     for (const item of items) {
       const [name, countStr] = item.split(':').map(p => p.trim());
       if (name === element) {
@@ -136,7 +136,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     // Collect console/page errors
     const { consoleMessages, pageErrors } = attachErrorCollectors(page);
 
-    const app = new MultisetPage(page);
+    const app1 = new MultisetPage(page);
     await app.goto();
 
     // Add a single element "apple"
@@ -148,11 +148,11 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     await expect(app.getInputValue()).resolves.toBe('');
 
     // Display should show "apple: 1"
-    const displayed = await app.getDisplayedElements();
+    const displayed1 = await app.getDisplayedElements();
     expect(displayed).toContain('apple: 1');
 
     // Internal state should reflect the same
-    const internal = await app.getInternalElementsSnapshot();
+    const internal1 = await app.getInternalElementsSnapshot();
     expect(internal['apple']).toBe(1);
 
     // Add the same element again to verify incrementing behavior
@@ -170,7 +170,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     expect(await app.getCountFor('apple')).toBe(2);
 
     // Verify no console errors or page errors occurred
-    const errorConsoles = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoles1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoles.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -178,7 +178,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
   test('Remove Element transition (S0_Idle -> S2_ElementRemoved): removing elements decrements and deletes when count reaches zero', async ({ page }) => {
     const { consoleMessages, pageErrors } = attachErrorCollectors(page);
 
-    const app = new MultisetPage(page);
+    const app2 = new MultisetPage(page);
     await app.goto();
 
     // Prepare state: add "banana" twice
@@ -200,7 +200,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     expect(countAfter).toBeNull(); // entry deleted
 
     // Internal snapshot should not have banana property
-    const internal = await app.getInternalElementsSnapshot();
+    const internal2 = await app.getInternalElementsSnapshot();
     expect(internal.hasOwnProperty('banana')).toBe(false);
 
     // Removing a non-existent element should not throw and should not change display
@@ -210,7 +210,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     await expect(app.getInputValue()).resolves.toBe('');
 
     // Ensure no console/page errors
-    const errorConsoles = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoles2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoles.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -218,7 +218,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
   test('Edge cases: whitespace input, empty input, and removing non-existent elements', async ({ page }) => {
     const { consoleMessages, pageErrors } = attachErrorCollectors(page);
 
-    const app = new MultisetPage(page);
+    const app3 = new MultisetPage(page);
     await app.goto();
 
     // Whitespace-only input should not add (trimmed to empty)
@@ -252,7 +252,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     expect(await app.getCountFor('cherry')).toBe(1);
 
     // Verify no console errors occurred during these edge-case interactions
-    const errorConsoles = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoles3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoles.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -260,7 +260,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
   test('Implementation sanity checks: display() and internal state coherence after mixed operations', async ({ page }) => {
     const { consoleMessages, pageErrors } = attachErrorCollectors(page);
 
-    const app = new MultisetPage(page);
+    const app4 = new MultisetPage(page);
     await app.goto();
 
     // Mixed sequence: add a, add b, add a, remove a, remove b, remove a (last should remove a entirely)
@@ -281,12 +281,12 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     expect((await app.getDisplayedElements()).length).toBe(0);
 
     // Internal state should be empty object (no enumerable properties)
-    const internal = await app.getInternalElementsSnapshot();
+    const internal3 = await app.getInternalElementsSnapshot();
     // internal could be {} or null if not present; we've already tested myMultiset exists earlier, so here expect object with no keys
     expect(Object.keys(internal).length).toBe(0);
 
     // Check for console/page errors
-    const errorConsoles = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoles4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoles.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -295,7 +295,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     // This test focuses on collecting any runtime errors that the page emits naturally during typical interactions.
     const { consoleMessages, pageErrors } = attachErrorCollectors(page);
 
-    const app = new MultisetPage(page);
+    const app5 = new MultisetPage(page);
     await app.goto();
 
     // Perform a few interactions to exercise functionality
@@ -322,7 +322,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
   test('FSM onEnter/onExit validation (no actions expected)', async ({ page }) => {
     const { consoleMessages, pageErrors } = attachErrorCollectors(page);
 
-    const app = new MultisetPage(page);
+    const app6 = new MultisetPage(page);
     await app.goto();
 
     // FSM entry/exit actions list in the provided FSM is empty for all states.
@@ -334,7 +334,7 @@ test.describe('Multiset Demonstration - FSM behavior and UI tests', () => {
     expect(await app.getCountFor('z')).toBe(1);
 
     // Confirm no console errors
-    const errorConsoles = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoles5 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoles.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });

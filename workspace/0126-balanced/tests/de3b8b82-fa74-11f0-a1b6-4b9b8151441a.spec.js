@@ -116,7 +116,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       await expect(model.reset()).toBeVisible();
 
       // Validate initial internal vars and DOM classes reflect Idle
-      const vars = await model.getStateVars();
+      const vars1 = await model.getStateVars();
       // initial array length is 10 per initialization logic
       expect(vars.arrayLength).toBe(10);
       expect(vars.currentIndex).toBe(1);
@@ -137,7 +137,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
 
   test.describe('Randomize Array Event (RandomizeArray)', () => {
     test('clicking Randomize reinitializes array and keeps Idle state', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model1 = new InsertionSortPage(page);
       await model.goto();
 
       // capture previous values
@@ -148,7 +148,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       await page.waitForTimeout(50);
 
       // After randomize, array should still have 10 elements and state reset
-      const vars = await model.getStateVars();
+      const vars2 = await model.getStateVars();
       expect(vars.arrayLength).toBe(10);
       expect(vars.currentIndex).toBe(1);
       expect(vars.comparingIndex).toBe(0);
@@ -164,7 +164,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
 
   test.describe('Step-by-Step Sorting (S1_Sorting)', () => {
     test('clicking Sort starts sorting (isSorting=true) and performs steps until Sorted (S3_Sorted)', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model2 = new InsertionSortPage(page);
       await model.goto();
 
       // Start sorting with step-by-step mode
@@ -173,7 +173,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       await page.waitForTimeout(20);
 
       // After initiating, isSorting should be true (entry action)
-      let vars = await model.getStateVars();
+      let vars3 = await model.getStateVars();
       expect(vars.isSorting).toBe(true);
 
       // Continue stepping until sorted or until we hit a safe max iterations
@@ -188,7 +188,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       expect(await model.autoSort().isDisabled()).toBe(true);
 
       // All array elements should have the 'sorted' class in DOM (index < currentIndex)
-      const classes = await model.getArrayClasses();
+      const classes1 = await model.getArrayClasses();
       for (let i = 0; i < classes.length; i++) {
         // after completion currentIndex >= length, so each element should have sorted class
         expect(classes[i]).toEqual(expect.arrayContaining(['array-element', 'sorted']));
@@ -196,7 +196,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
     });
 
     test('clicking Sort while isSorting=true should be ignored (no duplicate starts)', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model3 = new InsertionSortPage(page);
       await model.goto();
 
       // Start auto sorting to set isSorting true quickly
@@ -204,7 +204,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       await page.waitForTimeout(30);
 
       // Ensure isSorting is true
-      let vars = await model.getStateVars();
+      let vars4 = await model.getStateVars();
       expect(vars.isSorting).toBe(true);
 
       // Capture interval id before clicking sort (if any)
@@ -230,7 +230,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
 
   test.describe('Auto Sorting (S2_AutoSorting)', () => {
     test('clicking Auto Sort starts interval-driven sorting and Reset clears it', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model4 = new InsertionSortPage(page);
       await model.goto();
 
       // Start auto sort
@@ -238,7 +238,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       await page.waitForTimeout(50);
 
       // Entry evidence: isSorting should be true and autoSortInterval should be set (non-null/undefined)
-      let vars = await model.getStateVars();
+      let vars5 = await model.getStateVars();
       expect(vars.isSorting).toBe(true);
       // autoSortInterval can be numeric id; it should not be null/undefined right after start
       expect(vars.autoSortInterval === null || typeof vars.autoSortInterval === 'number').toBe(true);
@@ -264,14 +264,14 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
 
   test.describe('Reset Transition from Sorted (S3_Sorted -> S0_Idle)', () => {
     test('after fully sorting, Reset returns application to Idle state', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model5 = new InsertionSortPage(page);
       await model.goto();
 
       // Fully sort using step clicks
       await model.sortStep().click();
       await page.waitForTimeout(20);
       // step until sorted
-      let vars = await stepUntilSorted(model, 1000);
+      let vars6 = await stepUntilSorted(model, 1000);
 
       expect(vars.currentIndex >= vars.arrayLength).toBe(true);
       expect(vars.isSorting).toBe(false);
@@ -289,7 +289,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       expect(await model.autoSort().isDisabled()).toBe(false);
 
       // DOM should reflect idle classes again: index 0 sorted+comparing, index1 current
-      const classes = await model.getArrayClasses();
+      const classes2 = await model.getArrayClasses();
       expect(classes[0]).toEqual(expect.arrayContaining(['array-element', 'sorted', 'comparing']));
       expect(classes[1]).toEqual(expect.arrayContaining(['array-element', 'current']));
     }, { timeout: 20000 });
@@ -297,7 +297,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
 
   test.describe('Edge cases and robustness checks', () => {
     test('rapid clicks on Randomize do not crash and keep application in Idle', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model6 = new InsertionSortPage(page);
       await model.goto();
 
       // Rapidly click randomize multiple times
@@ -307,7 +307,7 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
       await page.waitForTimeout(30);
 
       // State should remain idle
-      const vars = await model.getStateVars();
+      const vars7 = await model.getStateVars();
       expect(vars.isSorting).toBe(false);
       expect(vars.currentIndex).toBe(1);
 
@@ -316,19 +316,19 @@ test.describe('Insertion Sort Visualization - FSM and UI tests', () => {
     });
 
     test('pressing Reset when already idle should be safe and keep Idle', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model7 = new InsertionSortPage(page);
       await model.goto();
 
       await model.reset().click();
       await page.waitForTimeout(20);
 
-      const vars = await model.getStateVars();
+      const vars8 = await model.getStateVars();
       expect(vars.isSorting).toBe(false);
       expect(vars.currentIndex).toBe(1);
     });
 
     test('application should not produce console errors or uncaught exceptions during interactions', async ({ page }) => {
-      const model = new InsertionSortPage(page);
+      const model8 = new InsertionSortPage(page);
       await model.goto();
 
       // perform a sequence of interactions

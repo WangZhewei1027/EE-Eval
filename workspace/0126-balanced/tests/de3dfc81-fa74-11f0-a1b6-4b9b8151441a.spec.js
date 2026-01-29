@@ -311,7 +311,7 @@ test.describe('Logistic Regression Visualization - FSM states and events', () =>
     const edgeResult = await page.evaluate(() => {
       const costEntries = window.costHistory.length;
       const scatterCount = window.scatterChart.data.datasets.length;
-      const decisionSet = scatterCount > 2 ? window.scatterChart.data.datasets[window.scatterChart.data.datasets.length - 1] : null;
+      const decisionSet1 = scatterCount > 2 ? window.scatterChart.data.datasets[window.scatterChart.data.datasets.length - 1] : null;
       return {
         costEntries,
         scatterCount,

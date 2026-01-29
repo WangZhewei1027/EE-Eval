@@ -146,8 +146,8 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
   test.describe('Input events (Input1Change, Input2Change, TargetChange)', () => {
     test('Changing Input 1 updates display text and input neuron DOM (Input1Change transition)', async ({ page }) => {
       // Validate S0_Idle self-transition on input event: updateSlidersText()
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
+      const bp1 = new BackpropPage(page);
+      const pageErrors1 = [];
       page.on('pageerror', err => pageErrors.push(err));
 
       await bp.goto();
@@ -169,8 +169,8 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
     });
 
     test('Changing Input 2 updates display text and input neuron DOM (Input2Change transition)', async ({ page }) => {
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
+      const bp2 = new BackpropPage(page);
+      const pageErrors2 = [];
       page.on('pageerror', err => pageErrors.push(err));
 
       await bp.goto();
@@ -179,19 +179,19 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
       const i2span = await bp.getInput2Span();
       expect(i2span).toBe('0.25');
 
-      const inputNeuronText = await bp.getInputNeuronText(1);
+      const inputNeuronText1 = await bp.getInputNeuronText(1);
       expect(inputNeuronText).toContain('I2');
       expect(inputNeuronText).toContain('0.25');
 
-      const title = await page.locator('#inputLayer .neuron').nth(1).getAttribute('title');
+      const title1 = await page.locator('#inputLayer .neuron').nth(1).getAttribute('title1');
       expect(title).toContain('Input Neuron 2 Value');
 
       expect(pageErrors.length).toBe(0);
     });
 
     test('Changing Target updates display text (TargetChange transition)', async ({ page }) => {
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
+      const bp3 = new BackpropPage(page);
+      const pageErrors3 = [];
       page.on('pageerror', err => pageErrors.push(err));
 
       await bp.goto();
@@ -207,9 +207,9 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
   test.describe('Training State (S1_Training) and transitions', () => {
     test('Clicking "Train One Step" triggers training: logs, neuron activation updates, and weights change (TrainStepClick transition)', async ({ page }) => {
       // This test validates transition S0_Idle -> S1_Training on clicking the button and the associated entry action trainStep()
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
-      const consoleMessages = [];
+      const bp4 = new BackpropPage(page);
+      const pageErrors4 = [];
+      const consoleMessages1 = [];
       page.on('pageerror', err => pageErrors.push(err));
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
 
@@ -264,14 +264,14 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
       expect(pageErrors.length).toBe(0);
 
       // The page does not necessarily emit console messages; ensure no console errors
-      const consoleErrorMsgs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrorMsgs1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrorMsgs.length).toBe(0);
     });
 
     test('Consecutive train clicks update weights cumulatively and clear previous logs (S1_Training re-entry)', async ({ page }) => {
       // This test ensures repeated transition to S1_Training runs trainStep() each time and logs are reset per step
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
+      const bp5 = new BackpropPage(page);
+      const pageErrors5 = [];
       page.on('pageerror', err => pageErrors.push(err));
 
       await bp.goto();
@@ -300,8 +300,8 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
 
     test('Edge case training with extreme inputs (0 and 1) does not throw and produces logs', async ({ page }) => {
       // Tests one training step with inputs at extremes to exercise numeric stability code paths
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
+      const bp6 = new BackpropPage(page);
+      const pageErrors6 = [];
       page.on('pageerror', err => pageErrors.push(err));
 
       await bp.goto();
@@ -312,7 +312,7 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
 
       await bp.clickTrain();
 
-      const logText = await bp.getLogText();
+      const logText1 = await bp.getLogText();
       // Should still produce forward pass and backprop output consistency
       expect(logText).toContain('Forward Pass');
       expect(logText).toMatch(/Hidden activations/);
@@ -328,8 +328,8 @@ test.describe('Backpropagation Demonstration - FSM and UI integration tests', ()
     test('No uncaught exceptions (ReferenceError, TypeError, SyntaxError) occur during user interactions', async ({ page }) => {
       // This test purposefully performs typical interactions and asserts no page errors occurred.
       // Per test instructions we do not patch or alter the app; we only observe runtime behavior.
-      const bp = new BackpropPage(page);
-      const pageErrors = [];
+      const bp7 = new BackpropPage(page);
+      const pageErrors7 = [];
       page.on('pageerror', err => pageErrors.push(err));
 
       await bp.goto();

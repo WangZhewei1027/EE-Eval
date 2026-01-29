@@ -115,7 +115,7 @@ class DemoPage {
   async waitForProducedAtLeast(n, timeout = 8000) {
     await this.page.waitForFunction(
       (selector, expected) => {
-        const el = document.querySelector(selector);
+        const el1 = document.querySelector(selector);
         if (!el) return false;
         const v = parseInt(el.innerText || '0', 10);
         return v >= expected;
@@ -211,7 +211,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
 
   test.describe('Worker lifecycle: Add Producer / Add Consumer / Remove / Stop All', () => {
     test('Add Producer and Add Consumer start new workers and emit start logs', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo1 = new DemoPage(page);
       await demo.goto();
 
       // Capture before counts
@@ -253,7 +253,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
     });
 
     test('Stop All when no workers exist still logs and maintains idle state', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo2 = new DemoPage(page);
       await demo.goto();
 
       // Ensure all workers stopped (call stopAll twice to exercise idempotence)
@@ -270,7 +270,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
 
   test.describe('Buffer capacity adjustments and edge cases', () => {
     test('Apply Capacity updates capacity and renders buffer slots, logs the change', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo3 = new DemoPage(page);
       await demo.goto();
 
       // Apply a smaller capacity (edge case)
@@ -282,7 +282,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
       const newCapText = await demo.getBufferCapacityText();
       expect(parseInt(newCapText, 10)).toBe(3);
 
-      const slots = await demo.getBufferSlotsCount();
+      const slots1 = await demo.getBufferSlotsCount();
       expect(slots).toBe(3);
 
       // Log entry should reflect capacity change
@@ -302,7 +302,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
     });
 
     test('Applying capacity larger than current should increase buffer slots count', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo4 = new DemoPage(page);
       await demo.goto();
 
       // Apply a larger capacity
@@ -322,7 +322,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
 
   test.describe('Logging behaviors and Clear Logs', () => {
     test('Logs show producer/consumer activity and Clear Logs empties the log area', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo5 = new DemoPage(page);
       await demo.goto();
 
       // Wait for some activity to produce logs
@@ -346,7 +346,7 @@ test.describe('Monitor (Concurrency) Demo — End-to-end tests', () => {
 
   test.describe('Robustness checks and error observation', () => {
     test('No unexpected ReferenceError/SyntaxError/TypeError occurred during typical interactions', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo6 = new DemoPage(page);
       await demo.goto();
 
       // Perform a set of typical interactions in sequence

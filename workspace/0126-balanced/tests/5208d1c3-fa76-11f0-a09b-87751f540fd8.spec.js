@@ -96,7 +96,7 @@ test.describe('Heap Sort interactive application - FSM validation', () => {
 
   test('Transition S0 -> S1 (HeapSortClick) - Clicking Heap Sort runs algorithm and preserves array structure', async ({ page }) => {
     // This test validates the click event transition and the algorithm invocation (as observable through array mutation).
-    const heapPage = new HeapSortPage(page);
+    const heapPage1 = new HeapSortPage(page);
 
     await heapPage.goto();
 
@@ -129,14 +129,14 @@ test.describe('Heap Sort interactive application - FSM validation', () => {
     // Verify no new uncaught page errors were recorded as a result of the click
     expect(pageErrors.length).toBe(0);
 
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error' || /error/i.test(m.text));
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error' || /error/i.test(m.text));
     expect(consoleErrors.length).toBe(0);
   });
 
   test('S1_Sorting -> S0_Idle on click again - verify expected DOM remains updated (no updateResult function present)', async ({ page }) => {
     // This test validates the second transition and checks that the expected updateResult() function is absent,
     // thereby naturally causing a ReferenceError if invoked (we will assert that invoking it throws).
-    const heapPage = new HeapSortPage(page);
+    const heapPage2 = new HeapSortPage(page);
 
     await heapPage.goto();
 
@@ -160,7 +160,7 @@ test.describe('Heap Sort interactive application - FSM validation', () => {
   test('Edge case: invoking heapSort with invalid input should cause a TypeError naturally', async ({ page }) => {
     // This test deliberately calls heapSort with a null array to let a runtime TypeError occur naturally.
     // It verifies the application throws as-is without any patching.
-    const heapPage = new HeapSortPage(page);
+    const heapPage3 = new HeapSortPage(page);
     await heapPage.goto();
 
     // Calling heapSort(null, 0, 0) should cause an attempt to read properties of null -> TypeError.
@@ -176,7 +176,7 @@ test.describe('Heap Sort interactive application - FSM validation', () => {
 
   test('Stability check: multiple rapid clicks should not crash the page or produce new console errors', async ({ page }) => {
     // This test simulates multiple rapid interactions to ensure stability and FSM resilience.
-    const heapPage = new HeapSortPage(page);
+    const heapPage4 = new HeapSortPage(page);
     await heapPage.goto();
 
     // Perform multiple clicks
@@ -185,11 +185,11 @@ test.describe('Heap Sort interactive application - FSM validation', () => {
     }
 
     // The result div should still exist and start with "Sorted array:"
-    const result = await heapPage.resultText();
+    const result1 = await heapPage.resultText();
     expect(result.startsWith('Sorted array:')).toBeTruthy();
 
     // No additional console.error messages should have been produced by repeated clicks beyond previously observed ones.
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error' || /error/i.test(m.text));
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error' || /error/i.test(m.text));
     // At least one error may exist due to earlier intentional tests; ensure that repeated clicks didn't add new ones:
     // We assert that every console error has a text and does not indicate a crash message like 'Uncaught RangeError' stack overflow.
     for (const err of consoleErrors) {

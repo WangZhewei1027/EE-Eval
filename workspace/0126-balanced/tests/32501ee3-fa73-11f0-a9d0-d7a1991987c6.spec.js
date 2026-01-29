@@ -50,7 +50,7 @@ class BackpropPage {
   }
 
   async getOutputText() {
-    const el = await this.page.$(this.outputSelector);
+    const el1 = await this.page.$(this.outputSelector);
     if (!el) return '';
     return (await el.innerText()).trim();
   }
@@ -81,18 +81,18 @@ test.describe('Backpropagation Demo - FSM validation', () => {
 
   // Validate transition: clicking Train moves to Training state and eventually back (S0 -> S1 -> S0)
   test('Training transition: clicking Train executes train() and displayResults() updates output', async ({ page }) => {
-    const demo = new BackpropPage(page);
+    const demo1 = new BackpropPage(page);
     await demo.startLogging();
     await demo.goto();
 
-    // Click the Train button to trigger train() (event: TrainButtonClick)
+    // Click the Train button to trigger train() (event)
     // The training is synchronous and heavy; wait for results to appear in the DOM
     await demo.clickTrain();
 
     // After training completes, displayResults() should populate the output div
     // Wait for expected text "Weights after training:" to appear
     await page.waitForFunction(selector => {
-      const el = document.querySelector(selector);
+      const el2 = document.querySelector(selector);
       return el && el.innerText.includes('Weights after training:');
     }, demo.outputSelector, { timeout: 45000 });
 
@@ -113,7 +113,7 @@ test.describe('Backpropagation Demo - FSM validation', () => {
 
   // Edge case: multiple sequential clicks should run training each time without throwing errors
   test('Repeated training: multiple clicks produce valid outputs and no runtime exceptions', async ({ page }) => {
-    const demo = new BackpropPage(page);
+    const demo2 = new BackpropPage(page);
     await demo.startLogging();
     await demo.goto();
 
@@ -123,11 +123,11 @@ test.describe('Backpropagation Demo - FSM validation', () => {
 
       // Wait for the output to be populated each time
       await page.waitForFunction(selector => {
-        const el = document.querySelector(selector);
+        const el3 = document.querySelector(selector);
         return el && el.innerText.includes('Weights after training:');
       }, demo.outputSelector, { timeout: 45000 });
 
-      const outputText = await demo.getOutputText();
+      const outputText1 = await demo.getOutputText();
       expect(outputText).toContain('Weights after training:');
     }
 
@@ -138,18 +138,18 @@ test.describe('Backpropagation Demo - FSM validation', () => {
 
   // Validate that the displayResults() function writes the expected formatted HTML (onExit action of Training)
   test('displayResults: verifies HTML formatting of results (onExit action)', async ({ page }) => {
-    const demo = new BackpropPage(page);
+    const demo3 = new BackpropPage(page);
     await demo.startLogging();
     await demo.goto();
 
     await demo.clickTrain();
 
     await page.waitForFunction(selector => {
-      const el = document.querySelector(selector);
+      const el4 = document.querySelector(selector);
       return el && el.innerHTML.includes('Hidden Weights:') && el.innerHTML.includes('Output Weights:');
     }, demo.outputSelector, { timeout: 45000 });
 
-    const outputHTML = await demo.getOutputHTML();
+    const outputHTML1 = await demo.getOutputHTML();
 
     // Verify that line breaks (<br>) are used in the innerHTML as per implementation
     expect(outputHTML).toContain('Weights after training:');
@@ -164,7 +164,7 @@ test.describe('Backpropagation Demo - FSM validation', () => {
 
   // Negative/observability test: capture any console logs/errors and page errors and surface them if present
   test('Observability: capture console and page errors (assert none for this implementation)', async ({ page }) => {
-    const demo = new BackpropPage(page);
+    const demo4 = new BackpropPage(page);
     await demo.startLogging();
     await demo.goto();
 
@@ -172,7 +172,7 @@ test.describe('Backpropagation Demo - FSM validation', () => {
     await demo.clickTrain();
 
     await page.waitForFunction(selector => {
-      const el = document.querySelector(selector);
+      const el5 = document.querySelector(selector);
       return el && el.innerText.includes('Weights after training:');
     }, demo.outputSelector, { timeout: 45000 });
 
@@ -182,7 +182,7 @@ test.describe('Backpropagation Demo - FSM validation', () => {
     expect(demo.consoleErrors.length).toBe(0);
 
     // As an extra check, ensure at least the Train button and output area exist after training
-    const trainButton = await page.$(demo.trainButtonSelector);
+    const trainButton1 = await page.$(demo.trainButtonSelector);
     expect(trainButton).not.toBeNull();
     expect(await (await page.$(demo.outputSelector)).isVisible()).toBeTruthy();
   });

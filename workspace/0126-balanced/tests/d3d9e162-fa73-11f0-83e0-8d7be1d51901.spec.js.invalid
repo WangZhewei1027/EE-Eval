@@ -1,0 +1,182 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3d9e162-fa73-11f0-83e0-8d7be1d51901.html';
+
+test.describe('HTTP Interactive Demo — FSM and UI verification', () => {
+  // Capture console messages and page errors for each test
+  test.beforeEach(async ({ page }) => {
+    page.setDefaultTimeout(10000);
+  });
+
+  // Helper to load page and wire listeners for console/pageerror/dialog
+  async function setupPage(page) {
+    const consoleMessages = [];
+    const pageErrors = [];
+    const dialogs = [];
+
+    page.on('console', msg => {
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+    page.on('pageerror', err => {
+      pageErrors.push(err);
+    });
+    page.on('dialog', async dialog => {
+      dialogs.push({ message: dialog.message(), type: dialog.type() });
+      // Accept dialogs to not block tests (the page triggers an alert on dblclick of path)
+      await dialog.accept();
+    });
+
+    await page.goto(APP_URL, { waitUntil: 'load' });
+
+    // Return the collected arrays and convenience helpers
+    return {
+      consoleMessages,
+      pageErrors,
+      dialogs,
+      // DOM helpers
+      async getText(selector) { return page.locator(selector).textContent(); },
+      async getValue(selector) { return page.locator(selector).evaluate(el => el.value); },
+      page
+    };
+  }
+
+  test.describe('Initial state and S0_Idle (populateHeaders)', () => {
+    test('S0_Idle: initial headers populated, UI initial texts, and no uncaught errors', async ({ page }) => {
+      // This test verifies the Idle state: populateHeaders() ran, initial UI content set, and no page errors.
+      const { consoleMessages, pageErrors, page: p } = await setupPage(page);
+
+      // Check that headersList contains rows and Host header matches host input
+      const hostValue = await p.locator('#host').inputValue();
+      // Find header rows and ensure one has key 'Host' with the host value
+      const headerRows = p.locator('#headersList .header-row');
+      await expect(headerRows).toHaveCountGreaterThan(0);
+      // find any header row whose first input lowercased equals 'host'
+      const hostRowExists = await p.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#headersList .header-row'));
+        return rows.some(r => r.querySelectorAll('input')[0].value.trim().toLowerCase() === 'host' && r.querySelectorAll('input')[1].value === document.getElementById('host').value);
+      });
+      expect(hostRowExists).toBe(true);
+
+      // Check initial rawRequest text content and event log initialised to 'Ready'
+      const rawRequestText = await p.locator('#rawRequest').textContent();
+      expect(rawRequestText).toContain('— build a request on the left and press Send —');
+      const eventLog = await p.locator('#eventLog').textContent();
+      expect(eventLog).toContain('Ready');
+
+      // timeDetails should show Idle
+      const timeDetails = await p.locator('#timeDetails').textContent();
+      expect(timeDetails).toContain('Idle');
+
+      // Ensure no uncaught page errors occurred during load
+      expect(pageErrors.length).toBe(0);
+
+      // Ensure no console error messages were emitted
+      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      expect(consoleErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('UI controls and small interactions', () => {
+    test('Add header button adds a header row; delete button removes it', async ({ page }) => {
+      // Verify Add header creates a new row and its delete button removes it
+      const { page: p } = await setupPage(page);
+
+      const headerRows1 = p.locator('#headersList .header-row');
+      const initialCount = await headerRows.count();
+
+      await p.click('#addHeader');
+      await expect(headerRows).toHaveCount(initialCount + 1);
+
+      // Click the delete button (✕) in the last added header row
+      const lastRow = headerRows.nth(initialCount); // zero-based
+      const delBtn = lastRow.locator('button');
+      await expect(delBtn).toBeVisible();
+      await delBtn.click();
+
+      // Count should be back to initialCount
+      await expect(headerRows).toHaveCount(initialCount);
+    });
+
+    test('Host input change updates Host header row value', async ({ page }) => {
+      // Verify host input change propagates to Host header row's value
+      const { page: p } = await setupPage(page);
+
+      // Ensure there's a Host header row
+      const rows1 = p.locator('#headersList .header-row');
+      const count = await rows.count();
+      expect(count).toBeGreaterThan(0);
+
+      // Set host to a new value
+      await p.fill('#host', 'new.example.local');
+      // Trigger input event is automatic via fill; now check Host header value
+      const hostHeaderValue = await p.evaluate(() => {
+        const rows2 = Array.from(document.querySelectorAll('#headersList .header-row'));
+        const hostRow = rows.find(r => r.querySelectorAll('input')[0].value.trim().toLowerCase() === 'host');
+        return hostRow ? hostRow.querySelectorAll('input')[1].value : null;
+      });
+      expect(hostHeaderValue).toBe('new.example.local');
+    });
+
+    test('Latency slider updates latency label display', async ({ page }) => {
+      // Verify the latency range input updates the displayed latencyVal
+      const { page: p } = await setupPage(page);
+
+      await p.fill('#latency', '500'); // set value
+      // Fire input event by evaluating
+      await p.evaluate(() => {
+        const latency = document.getElementById('latency');
+        latency.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      const latencyText = await p.locator('#latencyVal').textContent();
+      expect(latencyText.trim()).toBe('500ms');
+    });
+
+    test('Double-clicking path shows helpful alert dialog', async ({ page }) => {
+      // Verify dblclick triggers alert with expected message and is auto-accepted
+      const { page: p, dialogs } = await setupPage(page);
+
+      // dblclick on path input
+      await p.dblclick('#path');
+
+      // A dialog should have been recorded and accepted by our handler
+      expect(dialogs.length).toBeGreaterThanOrEqual(1);
+      expect(dialogs[0].message).toContain('Double-click helpful paths');
+    });
+  });
+
+  test.describe('FSM transitions: Send (simulated) & Response handling', () => {
+    test('Send (simulated) moves from Idle -> Request Sent (S1) -> Response Received (S2) for /time', async ({ page }) => {
+      // This test validates:
+      // - Built request is logged (S1 entry action)
+      // - sendArrow becomes visible while sending
+      // - Response is received and recvArrow becomes visible (S2 entry actions)
+      const { page: p } = await setupPage(page);
+
+      // Ensure path is /time
+      await p.fill('#path', '/time');
+
+      // Reduce latency and server delay to speed up test
+      await p.fill('#latency', '0');
+      await p.evaluate(() => {
+        document.getElementById('latency').dispatchEvent(new Event('input', { bubbles: true }));
+        document.getElementById('serverDelay').value = '0';
+      });
+
+      // Click Send (simulated)
+      await p.click('#sendBtn');
+
+      // Immediately after sending, "Built request" should be added to eventLog and sendArrow set visible
+      await expect.poll(async () => {
+        const log = await p.locator('#eventLog').textContent();
+        return log;
+      }, { timeout: 3000 }).toContain('Built request');
+
+      // sendArrow should be visible (style.display not 'none')
+      await p.waitForFunction(() => {
+        const el = document.getElementById('sendArrow');
+        return el && el.style.display !== 'none';
+      });
+
+      // Wait until recvArrow becomes visible and parsedStatus shows 200
+      await p.waitForFunction(() => {
+        const recv = document.getElementById('recv

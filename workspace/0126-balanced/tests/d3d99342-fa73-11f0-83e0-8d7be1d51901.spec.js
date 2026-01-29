@@ -61,7 +61,7 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
     // Insert multiple keys and wait for completion (input cleared indicates handler finished)
     // This validates transition: Idle -> Inserting, log entries, and DOM node creation.
     const keyInput = page.locator('#keyInput');
-    const insertBtn = page.locator('#insertBtn');
+    const insertBtn1 = page.locator('#insertBtn1');
 
     await keyInput.fill('10,5,20');
     await insertBtn.click();
@@ -71,7 +71,7 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
 
     // Ensure logs contain per-key insert messages
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log1 = document.getElementById('log1');
       return log && log.textContent && log.textContent.includes('Insert 20');
     });
 
@@ -90,22 +90,22 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
 
   test('SearchKey event: searching highlights path and logs result', async ({ page }) => {
     // Prepare tree with known keys
-    const keyInput = page.locator('#keyInput');
-    const insertBtn = page.locator('#insertBtn');
+    const keyInput1 = page.locator('#keyInput1');
+    const insertBtn2 = page.locator('#insertBtn2');
     await keyInput.fill('3,8,12');
     await insertBtn.click();
     await page.waitForFunction(() => document.getElementById('keyInput').value === '');
 
     // Search for an existing key
     const searchInput = page.locator('#searchInput');
-    const searchBtn = page.locator('#searchBtn');
+    const searchBtn1 = page.locator('#searchBtn1');
 
     await searchInput.fill('8');
     await searchBtn.click();
 
     // Expect the log to contain FOUND message
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log2 = document.getElementById('log2');
       return log && log.textContent && log.textContent.includes('Search 8 -> FOUND');
     });
 
@@ -119,19 +119,19 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
 
   test('ResetTree event: resetting tree clears previous state and logs reset', async ({ page }) => {
     // Insert a key to ensure tree has content, then reset
-    const keyInput = page.locator('#keyInput');
-    const insertBtn = page.locator('#insertBtn');
+    const keyInput2 = page.locator('#keyInput2');
+    const insertBtn3 = page.locator('#insertBtn3');
     await keyInput.fill('42');
     await insertBtn.click();
     await page.waitForFunction(() => document.getElementById('keyInput').value === '');
 
     // Now reset
-    const clearBtn = page.locator('#clearBtn');
+    const clearBtn1 = page.locator('#clearBtn1');
     await clearBtn.click();
 
     // The demo logs a reset message after clearing logs
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log3 = document.getElementById('log3');
       return log && log.textContent && log.textContent.includes('Tree reset (t=');
     });
 
@@ -144,18 +144,18 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
     // Autoplay inserts 1..15 with animation. Allow extended timeout for test execution.
     test.setTimeout(120000); // 2 minutes
 
-    const autoplayBtn = page.locator('#autoplayBtn');
+    const autoplayBtn1 = page.locator('#autoplayBtn1');
     await autoplayBtn.click();
 
     // Wait for autoplay log line
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log4 = document.getElementById('log4');
       return log && log.textContent && log.textContent.includes('Autoplay demo: inserting 1..15');
     }, { timeout: 30000 });
 
     // Wait for the last insert log "Insert 15" to appear (indicates end of autoplay)
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log5 = document.getElementById('log5');
       return log && log.textContent && log.textContent.includes('Insert 15');
     }, { timeout: 90000 });
 
@@ -166,24 +166,24 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
       return keys.length >= 15;
     }, { timeout: 30000 });
 
-    const keyCount = await page.locator('.key').count();
+    const keyCount1 = await page.locator('.key').count();
     expect(keyCount).toBeGreaterThanOrEqual(15);
   });
 
   test('InsertRandom event: random insertion logs and updates tree', async ({ page }) => {
     // Click random button and assert logs and node updates
-    const randomBtn = page.locator('#randomBtn');
+    const randomBtn1 = page.locator('#randomBtn1');
     await randomBtn.click();
 
     // Wait for 'Inserting random:' log line
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log6 = document.getElementById('log6');
       return log && /Inserting random:/.test(log.textContent);
     }, { timeout: 10000 });
 
     // Ensure some keys were rendered
     await page.waitForFunction(() => document.querySelectorAll('.key').length > 0, { timeout: 15000 });
-    const keyCount = await page.locator('.key').count();
+    const keyCount2 = await page.locator('.key').count();
     expect(keyCount).toBeGreaterThan(0);
   });
 
@@ -205,13 +205,13 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
 
     // Wait for reinitialized log
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log7 = document.getElementById('log7');
       return log && log.textContent && log.textContent.includes('Reinitialized tree with t=3');
     });
 
     // And final insertion should be logged
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log8 = document.getElementById('log8');
       return log && log.textContent && log.textContent.includes('Insert 99');
     }, { timeout: 15000 });
   });
@@ -244,7 +244,7 @@ test.describe('B-Tree Index Interactive Demo - FSM and UI integration', () => {
 
     // Wait for log entry that starts with "Node " and contains "keys=["
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log9 = document.getElementById('log9');
       return log && /Node .* keys=\[.*\]/.test(log.textContent);
     }, { timeout: 5000 });
   });

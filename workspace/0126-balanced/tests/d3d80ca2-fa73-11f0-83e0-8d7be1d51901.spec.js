@@ -181,7 +181,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
 
   test.describe('FSM transitions and controls', () => {
     test('RandomizeClick transitions to Randomized (S1_Randomized) and updates capacity and items', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app1 = new KnapsackPage(page);
       await app.goto();
 
       // Capture capacity before randomize
@@ -199,12 +199,12 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
       expect(Number(afterCap)).toBeGreaterThan(0);
 
       // Items list should still be populated and reflect the configured numItems
-      const itemsCount = await app.getItemsCount();
-      const numItemsValue = Number(await page.locator('#numItems').inputValue());
+      const itemsCount1 = await app.getItemsCount();
+      const numItemsValue1 = Number(await page.locator('#numItems').inputValue());
       expect(itemsCount).toBe(numItemsValue);
 
       // PQ should be non-empty after randomize (root pushed)
-      const pqText = await app.getPQText();
+      const pqText1 = await app.getPQText();
       expect(pqText.toLowerCase()).not.toContain('priority queue empty');
 
       // No fatal page errors
@@ -212,7 +212,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('ResetClick transitions to Reset (S2_Reset) and re-initializes problem', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app2 = new KnapsackPage(page);
       await app.goto();
 
       // Change inputs then reset
@@ -224,11 +224,11 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
       await app.waitForLogContains('Problem initialized');
 
       // number of items in UI should equal 4 now
-      const itemsCount = await app.getItemsCount();
+      const itemsCount2 = await app.getItemsCount();
       expect(itemsCount).toBe(4);
 
       // Best profit should be reset to >= 0
-      const bestProfit = await app.getBestProfit();
+      const bestProfit1 = await app.getBestProfit();
       expect(bestProfit).toBeGreaterThanOrEqual(0);
 
       // No uncaught page errors
@@ -236,7 +236,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('StepClick transitions to Step (S3_Step) and performs one iteration', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app3 = new KnapsackPage(page);
       await app.goto();
 
       // Count initial nodes in svg
@@ -260,7 +260,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('PlayClick & PauseClick start and stop Auto Play (S4_AutoPlay entry/exit actions)', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app4 = new KnapsackPage(page);
       await app.goto();
 
       // Initially play visible, pause hidden
@@ -295,7 +295,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('RunToEndClick transitions to Run to End (S5_RunToEnd) and empties PQ', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app5 = new KnapsackPage(page);
       await app.goto();
 
       // Click run to end: this starts a fast interval that runs step() repeatedly
@@ -305,11 +305,11 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
       await app.waitForPQEmpty(10000);
 
       // PQ box should reflect empty
-      const pqText = await app.getPQText();
+      const pqText2 = await app.getPQText();
       expect(pqText.toLowerCase()).toContain('priority queue empty');
 
       // Best profit should be set (>= 0)
-      const bestProfit = await app.getBestProfit();
+      const bestProfit2 = await app.getBestProfit();
       expect(bestProfit).toBeGreaterThanOrEqual(0);
 
       // No uncaught page errors
@@ -317,7 +317,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('Solve fast (S5_RunToEnd via solveFast) completes without animation', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app6 = new KnapsackPage(page);
       await app.goto();
 
       // Click solve fast
@@ -331,7 +331,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
       // (solveFast pushes nodes and empties pq in the loop)
       // We allow that the UI might not show PQ empty because pushPQ added some nodes for visualization,
       // but at least bestProfit is updated or remains >= 0
-      const bestProfit = await app.getBestProfit();
+      const bestProfit3 = await app.getBestProfit();
       expect(bestProfit).toBeGreaterThanOrEqual(0);
 
       // No uncaught page errors
@@ -339,7 +339,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('ExplainStepClick (S6_ExplainStep) shows explanation for top node; handles finished case', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app7 = new KnapsackPage(page);
       await app.goto();
 
       // Intercept dialog and capture its message
@@ -381,7 +381,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
 
   test.describe('Edge cases and UI/visual feedback', () => {
     test('Hovering a node shows tooltip with node details; tooltip hides on mouseleave', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app8 = new KnapsackPage(page);
       await app.goto();
 
       // Ensure there is at least one node to hover
@@ -408,7 +408,7 @@ test.describe('Branch and Bound — 0/1 Knapsack (Interactive Demo)', () => {
     });
 
     test('Clicking Step when PQ empty logs completion message (edge case)', async ({ page }) => {
-      const app = new KnapsackPage(page);
+      const app9 = new KnapsackPage(page);
       await app.goto();
 
       // Run to end to empty PQ

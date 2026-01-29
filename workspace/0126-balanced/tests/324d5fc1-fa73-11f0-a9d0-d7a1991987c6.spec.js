@@ -89,13 +89,13 @@ test.describe('Heap Sort Visualization (FSM states & transitions)', () => {
 
     // It's possible (though extremely unlikely) that random generation produces identical markup.
     // Assert at least there are bars and count remains expected.
-    const bars = page.locator('#array .bar');
+    const bars1 = page.locator('#array .bar');
     await expect(bars).toHaveCount(20);
 
     // Preferably the markup changed; assert that either it changed or at least the content exists.
     if (beforeHTML === afterHTML) {
       // If it didn't change, ensure that bars exist and have valid heights (defensive)
-      const heights = await page.evaluate(() => {
+      const heights1 = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('#array .bar')).map(n => n.style.height);
       });
       expect(heights.length).toBe(20);
@@ -154,7 +154,7 @@ test.describe('Heap Sort Visualization (FSM states & transitions)', () => {
 
     // Now wait for the final sorted state. The final state should be non-decreasing heights (ascending).
     const isSorted = await page.waitForFunction(() => {
-      const heights = Array.from(document.querySelectorAll('#array .bar')).map(b => parseInt(b.style.height, 10));
+      const heights2 = Array.from(document.querySelectorAll('#array .bar')).map(b => parseInt(b.style.height, 10));
       if (heights.length === 0) return false;
       for (let i = 1; i < heights.length; i++) {
         if (heights[i] < heights[i - 1]) return false;
@@ -180,7 +180,7 @@ test.describe('Heap Sort Visualization (FSM states & transitions)', () => {
     // This test checks robustness: invoking startHeapSort repeatedly (user spamming button)
     // should not produce unhandled exceptions on the page.
 
-    const startButton = page.locator("button[onclick='startHeapSort()']");
+    const startButton1 = page.locator("button[onclick='startHeapSort()']");
     await expect(startButton).toBeVisible();
 
     // Click the button several times in quick succession
@@ -195,7 +195,7 @@ test.describe('Heap Sort Visualization (FSM states & transitions)', () => {
     expect(pageErrors.length).toBe(0);
 
     // Also assert that the DOM is still responsive (bars still present)
-    const bars = page.locator('#array .bar');
+    const bars2 = page.locator('#array .bar');
     await expect(bars).toHaveCount(20, { timeout: 5000 });
   });
 

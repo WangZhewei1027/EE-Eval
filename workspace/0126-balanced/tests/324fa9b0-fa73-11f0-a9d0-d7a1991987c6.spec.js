@@ -83,10 +83,10 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
   test.describe('S1_Compiled (Compiled) state - successful compilations', () => {
     test('compiles a valid arithmetic expression and shows numeric result', async ({ page }) => {
       // This test validates the transition from Idle -> Compiled on a successful eval
-      const pageErrors = [];
+      const pageErrors1 = [];
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app1 = new CompilerPage(page);
       await app.goto();
 
       const output = await app.compileExpression('2 + 2 * (3 - 1)');
@@ -100,13 +100,13 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
 
     test('compiles an empty input and shows Result: undefined', async ({ page }) => {
       // Edge case: empty input should evaluate to undefined and be shown as such
-      const pageErrors = [];
+      const pageErrors2 = [];
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app2 = new CompilerPage(page);
       await app.goto();
 
-      const output = await app.compileExpression('');
+      const output1 = await app.compileExpression('');
       expect(output).toContain('Result:');
       // eval('') yields undefined in JS
       expect(output).toContain('undefined');
@@ -118,13 +118,13 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
   test.describe('S1_Compiled (Compiled) state - error scenarios', () => {
     test('shows a SyntaxError message when compiling incomplete expression', async ({ page }) => {
       // This test triggers a SyntaxError naturally via invalid input and asserts the error is presented in the output.
-      const pageErrors = [];
+      const pageErrors3 = [];
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app3 = new CompilerPage(page);
       await app.goto();
 
-      const output = await app.compileExpression('2 +'); // incomplete expression -> SyntaxError
+      const output2 = await app.compileExpression('2 +'); // incomplete expression -> SyntaxError
       // Application wraps eval in try/catch and sets output to "Error: <message>"
       expect(output).toMatch(/^Error:\s*/);
       // Message content may vary across engine versions, so check for common SyntaxError indicators
@@ -136,14 +136,14 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
 
     test('shows a ReferenceError message when referencing an undefined variable', async ({ page }) => {
       // This test triggers a ReferenceError naturally and asserts the DOM displays the error message.
-      const pageErrors = [];
+      const pageErrors4 = [];
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app4 = new CompilerPage(page);
       await app.goto();
 
       const varName = 'thisVariableDoesNotExist123';
-      const output = await app.compileExpression(`${varName} + 1`);
+      const output3 = await app.compileExpression(`${varName} + 1`);
       expect(output).toMatch(/^Error:\s*/);
       // ReferenceError messages usually indicate "is not defined" or include the variable name
       expect(/not defined|is not defined|ReferenceError|undefined/i.test(output)).toBeTruthy();
@@ -153,14 +153,14 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
 
     test('shows a TypeError message when attempting to call a property on null', async ({ page }) => {
       // This test triggers a TypeError naturally (null.f()) and asserts error presentation in the DOM.
-      const pageErrors = [];
+      const pageErrors5 = [];
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app5 = new CompilerPage(page);
       await app.goto();
 
       // Attempt to call a property on null which should raise a TypeError
-      const output = await app.compileExpression('null.f()');
+      const output4 = await app.compileExpression('null.f()');
       expect(output).toMatch(/^Error:\s*/);
       // TypeError messages vary; check for common tokens
       expect(/Cannot read|cannot read|TypeError|is not a function|reading/i.test(output)).toBeTruthy();
@@ -170,10 +170,10 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
 
     test('after an error, a subsequent valid compile transitions to result correctly', async ({ page }) => {
       // This test validates the FSM transition behavior across multiple compile attempts.
-      const pageErrors = [];
+      const pageErrors6 = [];
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app6 = new CompilerPage(page);
       await app.goto();
 
       // Trigger an error first
@@ -193,12 +193,12 @@ test.describe('Simple Compiler Demonstration - FSM Validation', () => {
   test.describe('Additional observability checks', () => {
     test('observes console messages and ensures no uncaught exceptions bubble up', async ({ page }) => {
       // Attach listeners to capture console events and page errors that may arise during interactions.
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages1 = [];
+      const pageErrors7 = [];
       page.on('console', (msg) => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', (err) => pageErrors.push(err));
 
-      const app = new CompilerPage(page);
+      const app7 = new CompilerPage(page);
       await app.goto();
 
       // Perform a few interactions to generate potential messages

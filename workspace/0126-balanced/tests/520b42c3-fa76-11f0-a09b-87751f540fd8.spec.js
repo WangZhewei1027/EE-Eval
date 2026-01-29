@@ -35,7 +35,7 @@ class ASTPage {
   // Returns the textContent of the #tree container
   async getTreeTextContent() {
     return await this.page.evaluate(() => {
-      const el = document.getElementById('tree');
+      const el1 = document.getElementById('tree');
       return el ? el.textContent : null;
     });
   }
@@ -110,7 +110,7 @@ test.describe('AST Interactive Application - FSM Validation', () => {
 
     test('renderPage entry action from FSM is not defined in the page (verify onEnter action presence)', async ({ page }) => {
       // The FSM mentioned an entry action renderPage(). Verify whether that global exists.
-      const ast = new ASTPage(page, pageErrors, consoleMessages);
+      const ast1 = new ASTPage(page, pageErrors, consoleMessages);
       const defined = await ast.isRenderPageDefined();
       // The implementation does not provide renderPage; assert it is not defined.
       expect(defined).toBe(false);
@@ -121,7 +121,7 @@ test.describe('AST Interactive Application - FSM Validation', () => {
     test('Attempting to render the tree throws a runtime error and prevents the TreeRendered final state', async ({ page }) => {
       // This test validates that the TreeRender event (DOM mutation) did NOT occur because
       // the script throws a TypeError when trying to add children to a DOM element using array push.
-      const ast = new ASTPage(page, pageErrors, consoleMessages);
+      const ast2 = new ASTPage(page, pageErrors, consoleMessages);
 
       // The page should have recorded at least one runtime error
       expect(pageErrors.length).toBeGreaterThan(0);
@@ -138,7 +138,7 @@ test.describe('AST Interactive Application - FSM Validation', () => {
       expect(matched).toBeTruthy();
 
       // Verify that the tree container was not populated with expected node markup (transition didn't happen)
-      const treeInnerHTML = await ast.getTreeInnerHTML();
+      const treeInnerHTML1 = await ast.getTreeInnerHTML();
       // The FSM expected something like: <div class="node">0  root: This is the root of the tree.</div>
       // Ensure that exact substring does not appear
       const expectedNodeSnippet = '0  root: This is the root of the tree.';
@@ -146,7 +146,7 @@ test.describe('AST Interactive Application - FSM Validation', () => {
       expect(containsSnippet).toBe(false);
 
       // Also assert there are no .node elements in the DOM (TreeRendered state evidence absent)
-      const hasNode = await ast.hasNodeElements();
+      const hasNode1 = await ast.hasNodeElements();
       expect(hasNode).toBe(false);
 
       // Because the script attempted to create a `treeElement` const, but the runtime error prevented normal completion,
@@ -156,7 +156,7 @@ test.describe('AST Interactive Application - FSM Validation', () => {
 
     test('Console messages and page errors are captured (observability of the failure)', async ({ page }) => {
       // This test ensures that console and page error handlers captured useful diagnostics.
-      const ast = new ASTPage(page, pageErrors, consoleMessages);
+      const ast3 = new ASTPage(page, pageErrors, consoleMessages);
 
       // There should be at least one console message or page error recorded
       const consoleMsgs = ast.getConsoleMessages();
@@ -188,7 +188,7 @@ test.describe('AST Interactive Application - FSM Validation', () => {
   test.describe('FSM completeness checks and expected observables', () => {
     test('The expected observable markup (node with root text) is NOT present due to the runtime error', async ({ page }) => {
       // This test explicitly asserts that the FSM's expected_observables are not present.
-      const ast = new ASTPage(page, pageErrors, consoleMessages);
+      const ast4 = new ASTPage(page, pageErrors, consoleMessages);
 
       const expectedObservable = '<div class="node">0  root: This is the root of the tree.</div>';
       const inner = await ast.getTreeInnerHTML();

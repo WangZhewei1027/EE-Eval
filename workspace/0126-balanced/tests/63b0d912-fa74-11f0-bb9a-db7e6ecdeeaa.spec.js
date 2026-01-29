@@ -56,24 +56,24 @@ class GraphPage {
 
   // Simulate mouse move at canvas-relative coordinates
   async mouseMoveToCanvas(x, y) {
-    const box = await this.canvasBox();
-    const px = box.x + x;
-    const py = box.y + y;
+    const box1 = await this.canvasBox();
+    const px1 = box.x + x;
+    const py1 = box.y + y;
     await this.page.mouse.move(px, py);
   }
 
   // Simulate mouse up at canvas-relative coordinates
   async mouseUpAtCanvas(x, y) {
-    const box = await this.canvasBox();
-    const px = box.x + x;
-    const py = box.y + y;
+    const box2 = await this.canvasBox();
+    const px2 = box.x + x;
+    const py2 = box.y + y;
     await this.page.mouse.move(px, py);
     await this.page.mouse.up();
   }
 
   // Helper to click outside the canvas to trigger mouseleave (move beyond bounds)
   async moveMouseOutsideCanvas() {
-    const box = await this.canvasBox();
+    const box3 = await this.canvasBox();
     // Move to just outside bottom-right
     await this.page.mouse.move(box.x + box.width + 50, box.y + box.height + 50);
   }
@@ -89,7 +89,7 @@ class GraphPage {
   // Get adjacency list text content
   async getAdjListText() {
     return await this.page.evaluate(sel => {
-      const el = document.querySelector(sel);
+      const el1 = document.querySelector(sel);
       return el ? el.textContent.trim() : null;
     }, this.adjListSelector);
   }
@@ -204,7 +204,7 @@ test.describe('Undirected Graph Demonstration - FSM integration tests', () => {
       await graphPage.mouseDownAtCanvas(startPos.x, startPos.y);
 
       // Ensure dragNode is set
-      let dragNode = await graphPage.getDragNode();
+      let dragNode1 = await graphPage.getDragNode();
       expect(dragNode).toBe('A');
 
       // Move mouse to a new position; target canvas-relative coordinates
@@ -243,7 +243,7 @@ test.describe('Undirected Graph Demonstration - FSM integration tests', () => {
       expect(bPos).not.toBeNull();
 
       await graphPage.mouseDownAtCanvas(bPos.x, bPos.y);
-      let dragNode = await graphPage.getDragNode();
+      let dragNode2 = await graphPage.getDragNode();
       expect(dragNode).toBe('B');
 
       // Move somewhat, then mouseup
@@ -266,7 +266,7 @@ test.describe('Undirected Graph Demonstration - FSM integration tests', () => {
       expect(cPos).not.toBeNull();
 
       await graphPage.mouseDownAtCanvas(cPos.x, cPos.y);
-      let dragNode = await graphPage.getDragNode();
+      let dragNode3 = await graphPage.getDragNode();
       expect(dragNode).toBe('C');
 
       // Move a bit then move outside the canvas to trigger mouseleave
@@ -290,7 +290,7 @@ test.describe('Undirected Graph Demonstration - FSM integration tests', () => {
       await graphPage.mouseDownAtCanvas(10, 10);
 
       // dragNode should remain null/undefined because getNodeAtPosition returns null
-      const dragNode = await graphPage.getDragNode();
+      const dragNode4 = await graphPage.getDragNode();
       // Implementation uses dragNode declared globally; if not set it should be null (initialized at top)
       expect(dragNode).toBeNull();
 
@@ -332,7 +332,7 @@ test.describe('Undirected Graph Demonstration - FSM integration tests', () => {
       await graphPage.mouseUpAtCanvas(fPos.x - 20, fPos.y + 15);
 
       // Adjacency list is derived from the graph structure which is static; verify it didn't mutate
-      const expectedAdjList = [
+      const expectedAdjList1 = [
         'A -> B, C',
         'B -> A, D',
         'C -> A, D, E',
@@ -342,7 +342,7 @@ test.describe('Undirected Graph Demonstration - FSM integration tests', () => {
         'G -> F'
       ].join('\n');
 
-      const actualAdj = await graphPage.getAdjListText();
+      const actualAdj1 = await graphPage.getAdjListText();
       expect(actualAdj).toBe(expectedAdjList);
     });
 

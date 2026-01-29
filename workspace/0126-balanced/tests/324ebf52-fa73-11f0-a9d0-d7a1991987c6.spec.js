@@ -105,7 +105,7 @@ test.describe('Semaphore FSM - Interactive Application (324ebf52-fa73-11f0-a9d0-
   test('Start Semaphore: immediate Red onEnter then cycles to Yellow and Green every ~2s', async ({ page }) => {
     // This test validates the FSM transitions:
     // S0_Red -> S1_Yellow -> S2_Green -> S0_Red when user clicks Start Semaphore
-    const s = new SemaphorePage(page);
+    const s1 = new SemaphorePage(page);
 
     // Ensure helper functions exist in the page environment (onEnter actions refer to setLight)
     const hasSetLight = await page.evaluate(() => typeof setLight === 'function');
@@ -121,9 +121,9 @@ test.describe('Semaphore FSM - Interactive Application (324ebf52-fa73-11f0-a9d0-
     // Give a short delay to allow the immediate setLight(0) to apply (should be synchronous but we wait a tick)
     await page.waitForTimeout(50);
 
-    let redOpacity = await s.redOpacity();
-    let yellowOpacity = await s.yellowOpacity();
-    let greenOpacity = await s.greenOpacity();
+    let redOpacity1 = await s.redOpacity1();
+    let yellowOpacity1 = await s.yellowOpacity1();
+    let greenOpacity1 = await s.greenOpacity1();
 
     expect(redOpacity).toBe('1');
     expect(yellowOpacity).toBe('0.3');
@@ -171,7 +171,7 @@ test.describe('Semaphore FSM - Interactive Application (324ebf52-fa73-11f0-a9d0-
   test('Edge case: Clicking Start multiple times should not crash the page (may create multiple intervals)', async ({ page }) => {
     // This test validates that repeated user action (clicking Start) does not cause runtime exceptions.
     // Note: The implementation will create another setInterval on each click; we only assert stability.
-    const s = new SemaphorePage(page);
+    const s2 = new SemaphorePage(page);
 
     // Click once, then again quickly
     await s.clickStart();
@@ -202,7 +202,7 @@ test.describe('Semaphore FSM - Interactive Application (324ebf52-fa73-11f0-a9d0-
     // There are no explicit exit actions defined in the provided FSM; we still validate that state transitions
     // result in expected visual changes (which implies setLight was invoked as intended).
 
-    const s = new SemaphorePage(page);
+    const s3 = new SemaphorePage(page);
 
     // Spy whether setLight changes the DOM by toggling opacities. We cannot redefine setLight in the page.
     // Instead, we call startSemaphore and verify opacities as evidence of setLight execution.
@@ -228,7 +228,7 @@ test.describe('Semaphore FSM - Interactive Application (324ebf52-fa73-11f0-a9d0-
     // This test explicitly collects console messages and page errors while interacting with the app.
     // It validates that normal operation is quiet (no errors), and documents any console messages.
 
-    const s = new SemaphorePage(page);
+    const s4 = new SemaphorePage(page);
 
     // Clear any previously captured messages (from beforeEach)
     consoleMessages = [];

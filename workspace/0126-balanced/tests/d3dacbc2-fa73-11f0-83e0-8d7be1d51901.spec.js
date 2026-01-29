@@ -66,8 +66,8 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
   test('Lex event (S0_Idle -> S1_Lexed): clicking Lex shows tokens and logs success', async ({ page }) => {
     // Click the Lex button and assert tokens appear and messages show success
     const btnLex = page.locator('#btnLex');
-    const tokens = page.locator('#tokens');
-    const messages = page.locator('#messages');
+    const tokens1 = page.locator('#tokens1');
+    const messages1 = page.locator('#messages1');
 
     await btnLex.click();
 
@@ -84,9 +84,9 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
 
   test('Parse event (S1_Lexed -> S2_Parsed): clicking Parse produces AST and log', async ({ page }) => {
     const btnParse = page.locator('#btnParse');
-    const ast = page.locator('#ast');
-    const tokens = page.locator('#tokens');
-    const messages = page.locator('#messages');
+    const ast1 = page.locator('#ast1');
+    const tokens2 = page.locator('#tokens2');
+    const messages2 = page.locator('#messages2');
 
     // Parse button runs lex internally; click it
     await btnParse.click();
@@ -100,15 +100,15 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     expect(astText).toContain('"type": "Program"');
 
     // messages should indicate parsing succeeded
-    const msgs = await messages.textContent();
+    const msgs1 = await messages.textContent();
     expect(msgs).toContain('Parsing succeeded');
   });
 
   test('Optimize event (S2_Parsed -> S3_Optimized): clicking Optimize shows optimized AST with folded literals', async ({ page }) => {
     const btnOptimize = page.locator('#btnOptimize');
-    const optAst = page.locator('#optAst');
-    const ast = page.locator('#ast');
-    const messages = page.locator('#messages');
+    const optAst1 = page.locator('#optAst1');
+    const ast2 = page.locator('#ast2');
+    const messages3 = page.locator('#messages3');
 
     // Click Optimize (it runs lex+parse internally)
     await btnOptimize.click();
@@ -122,15 +122,15 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     // The optimizer does constant folding/proagation; ensure we see "Literal" nodes serialized in optimized AST
     expect(optText).toContain('"type": "Literal"');
     // Ensure there's an optimization success info
-    const msgs = await messages.textContent();
+    const msgs2 = await messages.textContent();
     expect(msgs).toContain('Optimization applied');
   });
 
   test('Generate JS event (S3_Optimized -> S4_JS_Generated): clicking Generate JS fills generated code', async ({ page }) => {
     const btnGen = page.locator('#btnGen');
-    const jsEl = page.locator('#js');
-    const optAst = page.locator('#optAst');
-    const messages = page.locator('#messages');
+    const jsEl1 = page.locator('#js');
+    const optAst2 = page.locator('#optAst2');
+    const messages4 = page.locator('#messages4');
 
     await btnGen.click();
 
@@ -144,14 +144,14 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     expect(jsText).toContain('let '); // variable declarations present
 
     // messages should indicate code generation
-    const msgs = await messages.textContent();
+    const msgs3 = await messages.textContent();
     expect(msgs).toContain('Code generation completed');
   });
 
   test('Execute event (S4_JS_Generated -> S5_Executed): clicking Execute runs program and captures output', async ({ page }) => {
     const btnRun = page.locator('#btnRun');
-    const output = page.locator('#output');
-    const messages = page.locator('#messages');
+    const output1 = page.locator('#output1');
+    const messages5 = page.locator('#messages5');
 
     // Click Run which will lex/parse/opt/gen/run
     await btnRun.click();
@@ -163,18 +163,18 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     expect(outText.trim()).toBe('115\n121');
 
     // messages should indicate successful execution
-    const msgs = await messages.textContent();
+    const msgs4 = await messages.textContent();
     expect(msgs).toContain('Program executed successfully');
   });
 
   test('Run All event (S0_Idle -> S6_All_Ran): clicking Run All populates tokens, ast, optAst, js, output and logs OKs', async ({ page }) => {
     const btnAll = page.locator('#btnAll');
-    const tokens = page.locator('#tokens');
-    const ast = page.locator('#ast');
-    const optAst = page.locator('#optAst');
-    const jsEl = page.locator('#js');
-    const output = page.locator('#output');
-    const messages = page.locator('#messages');
+    const tokens3 = page.locator('#tokens3');
+    const ast3 = page.locator('#ast3');
+    const optAst3 = page.locator('#optAst3');
+    const jsEl2 = page.locator('#js');
+    const output2 = page.locator('#output2');
+    const messages6 = page.locator('#messages6');
 
     // Ensure starting from idle (clear any previous state)
     await page.reload();
@@ -195,7 +195,7 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     expect((await jsEl.textContent()).includes('__print')).toBeTruthy();
 
     // Messages should include the OK messages for each stage
-    const msgs = await messages.textContent();
+    const msgs5 = await messages.textContent();
     expect(msgs).toContain('Lexing OK') || expect(msgs).toContain('Lexing OK.');
     expect(msgs).toContain('Parsing OK');
     expect(msgs).toContain('Optimization OK');
@@ -204,14 +204,14 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
   });
 
   test('Reset sample (S0_Idle -> S7_Reset): clicking Reset sample sets source to first sample and clears outputs', async ({ page }) => {
-    const source = page.locator('#source');
+    const source1 = page.locator('#source1');
     const btnReset = page.locator('#btnReset');
-    const tokens = page.locator('#tokens');
-    const ast = page.locator('#ast');
-    const optAst = page.locator('#optAst');
-    const jsEl = page.locator('#js');
-    const output = page.locator('#output');
-    const messages = page.locator('#messages');
+    const tokens4 = page.locator('#tokens4');
+    const ast4 = page.locator('#ast4');
+    const optAst4 = page.locator('#optAst4');
+    const jsEl3 = page.locator('#js');
+    const output3 = page.locator('#output3');
+    const messages7 = page.locator('#messages7');
 
     // Modify source to something else
     await source.fill('print(999);');
@@ -247,7 +247,7 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     // Click the chip: it sets the source textarea value to the sample code and clears outputs
     await errorChip.click();
 
-    const source = page.locator('#source');
+    const source2 = page.locator('#source2');
     const value = await source.inputValue();
     expect(value).toContain('let x = 2 + ;'); // sample program's code snippet should be present
 
@@ -261,20 +261,20 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
 
   test('Error scenario: Parse error sample produces parse error message and AST remains empty', async ({ page }) => {
     // Click the "Errors: parse" chip to load broken sample
-    const errorChip = page.locator('.chip', { hasText: 'Errors: parse' });
+    const errorChip1 = page.locator('.chip', { hasText: 'Errors: parse' });
     await errorChip.click();
 
     // Click Parse to trigger parsing error
     await page.locator('#btnParse').click();
 
-    const messages = page.locator('#messages');
-    const ast = page.locator('#ast');
+    const messages8 = page.locator('#messages8');
+    const ast5 = page.locator('#ast5');
 
     // AST should be cleared on error
     await expect(ast).toHaveText('');
 
     // messages should contain '[Error]' and mention ParseError
-    const msgs = await messages.textContent();
+    const msgs6 = await messages.textContent();
     expect(msgs).toContain('[Error]');
     expect(msgs).toMatch(/ParseError|Unexpected token|Expected/);
 
@@ -285,10 +285,10 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
 
   // Additional edge-case: running the app with a manual tiny program that triggers runtime error
   test('Runtime error scenario: executing code with thrown error is reported in messages', async ({ page }) => {
-    const source = page.locator('#source');
-    const btnRun = page.locator('#btnRun');
-    const messages = page.locator('#messages');
-    const output = page.locator('#output');
+    const source3 = page.locator('#source3');
+    const btnRun1 = page.locator('#btnRun1');
+    const messages9 = page.locator('#messages9');
+    const output4 = page.locator('#output4');
 
     // Provide a source that will raise a runtime ReferenceError in generated JS (use undeclared identifier in expression)
     await source.fill('print(notDeclared);\n');
@@ -299,7 +299,7 @@ test.describe('Tiny Compiler — FSM end-to-end tests (d3dacbc2-fa73-11f0-83e0-8
     // Output should be empty (runtime error prevented successful output)
     await expect(output).toHaveText('');
 
-    const msgs = await messages.textContent();
+    const msgs7 = await messages.textContent();
     // Should include [Error] and something mentioning ReferenceError or runtime error
     expect(msgs).toContain('[Error]');
     expect(msgs).toMatch(/ReferenceError|RuntimeError|error/i);

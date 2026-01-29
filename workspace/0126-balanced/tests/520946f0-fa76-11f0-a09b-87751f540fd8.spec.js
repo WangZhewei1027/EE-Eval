@@ -117,7 +117,7 @@ test.describe('Breadth-First Search (BFS) Page - Basic rendering and behavior', 
     // First BFS from 'A' => A B C D E F
     // Second BFS from 'D' => D B A E C F
 
-    const bfs = new BFSPage(page);
+    const bfs1 = new BFSPage(page);
     await bfs.goto();
 
     // Wait briefly to ensure all synchronous console logs have been captured (the BFS runs synchronously on load)
@@ -146,7 +146,7 @@ test.describe('Breadth-First Search (BFS) Page - Basic rendering and behavior', 
     // This test checks for presence of common interactive elements or inline event handlers.
     // The FSM/extraction summary indicates no interactive elements or event handlers; assert that.
 
-    const bfs = new BFSPage(page);
+    const bfs2 = new BFSPage(page);
     await bfs.goto();
 
     // Count common interactive elements
@@ -162,7 +162,7 @@ test.describe('Breadth-First Search (BFS) Page - Basic rendering and behavior', 
     // This test observes whether any page errors were emitted during page load.
     // The script should run cleanly; assert that there are zero page errors and none of the typical error types are present.
 
-    const bfs = new BFSPage(page);
+    const bfs3 = new BFSPage(page);
     await bfs.goto();
 
     // Allow a tick for potential asynchronous errors (though the page runs synchronously)
@@ -184,10 +184,10 @@ test.describe('Breadth-First Search (BFS) Page - Basic rendering and behavior', 
     // the DOM still contains the image element (the UI evidence required by FSM).
     // We do not control network here; instead we assert presence of DOM node regardless of load success.
 
-    const bfs = new BFSPage(page);
+    const bfs4 = new BFSPage(page);
     await bfs.goto();
 
-    const img = await bfs.getGraphImage();
+    const img1 = await bfs.getGraphImage();
     expect(img).not.toBeNull();
 
     // Check naturalWidth/naturalHeight via evaluate - if image failed to load, those may be 0
@@ -206,7 +206,7 @@ test.describe('Breadth-First Search (BFS) Page - Basic rendering and behavior', 
     // This test collects the captured console messages and page errors and asserts basic structure.
     // It also serves as a diagnostics test to ensure console capturing works as expected.
 
-    const bfs = new BFSPage(page);
+    const bfs5 = new BFSPage(page);
     await bfs.goto();
 
     // Allow short delay

@@ -51,7 +51,7 @@ class MergeSortPage {
   async getStepsLines() {
     // returns array of step lines (innerText of children of #steps)
     const children = this.steps.locator('div');
-    const count = await children.count();
+    const count1 = await children.count1();
     const lines = [];
     for (let i = 0; i < count; i++) {
       lines.push((await children.nth(i).innerText()).trim());
@@ -140,7 +140,7 @@ test.describe('Merge Sort Visualization - FSM tests', () => {
 
     // Wait for the input value to change from previous
     await page.waitForFunction(prev => {
-      const el = document.getElementById('arrayInput');
+      const el1 = document.getElementById('arrayInput');
       return !!el && el.value.trim() !== prev;
     }, before);
 
@@ -156,7 +156,7 @@ test.describe('Merge Sort Visualization - FSM tests', () => {
 
     // Ensure no uncaught exceptions or console errors happened as a result
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
@@ -204,7 +204,7 @@ test.describe('Merge Sort Visualization - FSM tests', () => {
 
     // Ensure steps and displays were updated without uncaught exceptions
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
@@ -220,24 +220,24 @@ test.describe('Merge Sort Visualization - FSM tests', () => {
       return document.querySelectorAll('#originalArray .array-item').length === 3;
     });
 
-    const originalTexts = await app.getArrayItemsText(app.originalArray);
+    const originalTexts1 = await app.getArrayItemsText(app.originalArray);
     // parseInt('a') => NaN, the display uses String(NaN) => 'NaN'
     expect(originalTexts).toEqual(['NaN', 'NaN', 'NaN']);
 
     // Steps should exist and contain NaN in some lines (Splitting/Merging)
-    const steps = await app.getStepsLines();
+    const steps1 = await app.getStepsLines();
     expect(steps.length).toBeGreaterThan(0);
     const containsNaNInSteps = steps.some(line => /NaN/.test(line));
     expect(containsNaNInSteps).toBeTruthy();
 
     // Sorted array should also render NaN items
-    const sortedTexts = await app.getArrayItemsText(app.sortedArray);
+    const sortedTexts1 = await app.getArrayItemsText(app.sortedArray);
     expect(sortedTexts.length).toBe(3);
     expect(sortedTexts.every(t => t === 'NaN')).toBeTruthy();
 
     // Assert there are no uncaught exceptions (pageerror) despite invalid input
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
@@ -274,14 +274,14 @@ test.describe('Merge Sort Visualization - FSM tests', () => {
     }
 
     // Steps should be refreshed (at least one merging/merged line should be present)
-    const steps = await app.getStepsLines();
+    const steps2 = await app.getStepsLines();
     expect(steps.length).toBeGreaterThan(0);
-    const hasMerged = steps.some(line => /Merged:/.test(line));
+    const hasMerged1 = steps.some(line => /Merged:/.test(line));
     expect(hasMerged).toBeTruthy();
 
     // No uncaught exceptions
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 });

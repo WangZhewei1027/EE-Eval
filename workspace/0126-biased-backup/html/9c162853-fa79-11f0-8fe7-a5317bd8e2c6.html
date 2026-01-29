@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Unit Testing Interactive Sandbox</title>
+<style>
+  /* Extremely minimal styling - plain black text on white background */
+  html,body { height:100%; margin:0; font-family: sans-serif; color: #000; background:#fff; }
+  .container { display:flex; height:100vh; gap:8px; padding:8px; box-sizing:border-box; }
+  .col { flex:1; display:flex; flex-direction:column; gap:6px; }
+  textarea { width:100%; height:200px; box-sizing:border-box; font-family: monospace; font-size:13px; }
+  input[type="text"], input[type="number"], select { width:120px; }
+  .toolbar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .tests-list { height:200px; overflow:auto; border:1px solid #ccc; padding:4px; }
+  .test-item { padding:4px; border-bottom:1px dashed #ddd; display:flex; align-items:center; gap:6px; }
+  button { padding:4px 6px; }
+  .log { height:260px; overflow:auto; border:1px solid #ccc; padding:6px; font-family: monospace; white-space:pre-wrap; }
+  label { font-size:13px; }
+  .small { font-size:12px; }
+  .row { display:flex; gap:6px; align-items:center; }
+  .flex { flex:1; }
+  .meta { font-size:12px; }
+  details { margin-top:6px; }
+</style>
+</head>
+<body>
+<div style="padding:8px;">
+  <h2>Interactive Unit Testing Sandbox (Minimal UI)</h2>
+  <p class="small">Edit source and tests, run suites, step through generator tests, use spies, snapshots, property tests, mutation toggle, and more. Interface is intentionally plain.</p>
+</div>
+
+<div class="container">
+  <!-- Left column: Source + Controls + Test List -->
+  <div class="col">
+    <label>Source Code (exports.* to expose functions)</label>
+    <textarea id="sourceArea"></textarea>
+
+    <div class="toolbar">
+      <button id="compileBtn">Compile Source</button>
+      <button id="resetSourceBtn">Load Example Source</button>
+      <label>Coverage:</label>
+      <progress id="coverageBar" value="0" max="100" style="width:120px;"></progress>
+      <span id="coveragePct" class="meta">0%</span>
+      <label style="margin-left:8px">Mutation:</label><input type="checkbox" id="mutationToggle">
+      <label style="margin-left:8px">Auto-compile on Run:</label><input type="checkbox" id="autoCompile" checked>
+    </div>
+
+    <details open>
+      <summary>Tests (create, select, edit)</summary>
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <input id="newTestName" placeholder="New test name" type="text">
+        <select id="newTestSuite"><option>default</option><option>math</option><option>strings</option></select>
+        <button id="addTestBtn">Add Test</button>
+        <button id="duplicateTestBtn">Duplicate</button>
+        <button id="deleteTestBtn">Delete</button>
+      </div>
+
+      <div class="row" style="margin-top:6px; gap:12px;">
+        <label>Filter:</label><input id="filterInput" type="text" placeholder="filter tests">
+        <label>Only/Skip Buttons act on selected</label>
+      </div>
+
+      <div class="tests-list" id="testsList"></div>
+
+      <div class="toolbar">
+        <label>Concurrency:</label>
+        <input id="concurrency" type="range" min="1" max="6" value="1">
+        <span id="concurrencyVal" class="meta">1</span>
+        <label style="margin-left:8px">Timeout(ms):</label>
+        <input id="testTimeout" type="number" value="2000" min="0">
+        <label style="margin-left:8px">Seed:</label>
+        <input id="rngSeed" type="number" value="1" style="width:80px">
+        <label style="margin-left:8px">Iterations:</label>
+        <input id="iterations" type="number" value="1" min="1" max="10000" style="width:80px">
+      </div>
+    </details>
+
+    <div class="toolbar">
+      <button id="runAllBtn">Run All</button>
+      <button id="runSelectedBtn">Run Selected</button>
+      <button id="runPropertyBtn">Run Property</button>
+      <button id="stepBtn">Step</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="resumeBtn">Resume</button>
+      <button id="stopBtn">Stop</button>
+      <button id="exportBtn">Export</button>
+      <button id="importBtn">Import</button>
+      <input type="file" id="importFile" style="display:none;">
+    </div>
+
+    <div class="toolbar">
+      <button id="clearLogsBtn">Clear Logs</button>
+      <button id="clearSnapshotsBtn">Clear Snapshots</button>
+      <button id="saveStateBtn">Save Workspace</button>
+      <button id="loadStateBtn">Load Workspace</button>
+    </div>
+
+  </div>
+
+  <!-- Right column: Test Editor, Assertions, Logs -->
+  <div class="col">
+    <label>Test Editor (function signature: async function(exports, assert, helpers) { ... } or generator function* )</label>
+    <textarea id="testArea"></textarea>
+
+    <div class="toolbar">
+      <button id="updateTestBtn">Update Test</button>
+      <button id="markSkipBtn">Toggle Skip</button>
+      <button id="markOnlyBtn">Toggle Only</button>
+      <button id="markFlakyBtn">Toggle Flaky</button>
+      <button id="snapshotBtn">Snapshot</button>
+      <button id="updateSnapshotBtn">Update Snapshot</button>
+      <button id="spyBtn">Create Spy for selected fn</button>
+    </div>
+
+    <div class="toolbar small">
+      <label>Assertion Helpers Visible:</label>
+      <label><input type="checkbox" id="liveAssertionShow" checked> show assert results in logs</label>
+      <label style="margin-left:8px">Mutation Strength:</label>
+      <input id="mutationStrength" type="range" min="0" max="10" value="2">
+    </div>
+
+    <label>Logs & Results</label>
+    <div class="log" id="logArea"></div>
+
+    <div class="toolbar">
+      <label>Snapshot Count:</label><span id="snapshotCount" class="meta">0</span>
+      <label style="margin-left:8px">History Size:</label><span id="historyCount" class="meta">0</span>
+    </div>
+
+    <details>
+      <summary>Test Execution Details</summary>
+      <div id="detailsArea" class="meta" style="white-space:pre-wrap; padding:6px;"></div>
+    </details>
+  </div>
+</div>
+
+<script>
+/*
+  Interactive Unit Testing Sandbox
+  - Minimal UI
+  - Features: compile/expose exports, create/edit tests, run, step-through generators, spies, snapshots, property testing, mutation toggle, coverage counts.
+*/
+
+/* ---------- State ---------- */
+let workspace = {
+  source: '',
+  tests: [],
+  snapshots: {},
+  history: [],
+  coverage: {},
+  compiledExports: {},
+  spies: {}
+};
+let runtime = {
+  paused: false,
+  stepping: false,
+  running: false,
+  stopRequested: false,
+  currentRun: null,
+  rngState: 1,
+  concurrency: 1
+};
+
+/* ---------- Utilities ---------- */
+
+function log(...args) {
+  const area = document.getElementById('logArea');
+  area.textContent += args.map(a => {
+    if (typeof a === 'object') try { return JSON.stringify(a, null, 2); } catch(e){ return String(a); }
+    return String(a);
+  }).join(' ') + '\n';
+  area.scrollTop = area.scrollHeight;
+}
+
+function clearLogs() {
+  document.getElementById('logArea').textContent = '';
+}
+
+function now() { return Date.now(); }
+
+function rng(seed) {
+  let s = seed >>> 0;
+  return function() {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- Compile Source ---------- */
+
+function compileSource() {
+  clearLogs();
+  workspace.coverage = {};
+  workspace.compiledExports = {};
+  workspace.spies = {};
+  const code = document.getElementById('sourceArea').value;
+  try {
+    // Create a wrapper function that receives an 'exports' object and optionally helper functions.
+    const wrapper = new Function('exports','console','createSpy','__coverage','__wrap','__helpers', code + '\n; return exports;');
+    const localConsole = {
+      log: function(...a){ // capture logs with context
+        workspace.lastConsole = workspace.lastConsole || [];
+        workspace.lastConsole.push({time:now(), args:a});
+        log('[console]', ...a);
+      }
+    };
+    const createSpyLocal = (name, fn) => {
+      return createSpy(name, fn);
+    };
+    // coverage registry: will be incremented by wrappers when functions are called
+    const coverage = workspace.coverage;
+    // helper to wrap functions for instrumentation
+    function __wrap(name, fn) {
+      if (typeof fn !== 'function') return fn;
+      coverage[name] = 0;
+      const wrapped = function(...args) {
+        coverage[name] = (coverage[name] || 0) + 1;
+        return fn.apply(this, args);
+      };
+      // copy properties
+      try { Object.keys(fn).forEach(k => wrapped[k]=fn[k]); } catch(e){}
+      wrapped.__orig = fn;
+      return wrapped;
+    }
+    const helpers = {
+      makeSpy: createSpyLocal,
+      env: { mutation: document.getElementById('mutationToggle').checked }
+    };
+    const exportsObj = {};
+    const compiled = wrapper(exportsObj, localConsole, createSpyLocal, coverage, __wrap, helpers);
+    // instrument discovered functions automatically
+    Object.keys(compiled).forEach(k => {
+      if (typeof compiled[k] === 'function') {
+        compiled[k] = __wrap(k, compiled[k]);
+      }
+    });
+    workspace.compiledExports = compiled;
+    log('Source compiled successfully. Exposed:', Object.keys(compiled).join(', ') || '(none)');
+    updateCoverageUI();
+    return true;
+  } catch (e) {
+    log('Compile error:', e && e.stack ? e.stack : e);
+    return false;
+  }
+}
+
+/* ---------- Example initial content ---------- */
+
+const defaultSource = `// Example source: expose functions by assigning to exports.<br>// Use: exports.add = function(a,b) { return a+b }<br>exports.add = function(a,b) { return a + b; }<br>exports.div = function(a,b) { if(b===0) throw new Error('divide by zero'); return a/b; }<br>exports.asyncDouble = async function(n) { return new Promise(resolve => setTimeout(() => resolve(n*2), 100)); }<br>exports.generatorCounter = function*(start, step, count) { let v = start; for(let i=0;i<count;i++){ yield v; v += step; } return v; }`;
+
+const defaultTest = `// Example test. Use assert helpers. This test uses exports.add\nasync function(exports, assert, helpers) {\n  // synchronous assertion\n  assert.equal(exports.add(1,2), 3, '1+2=3');\n  // async test awaits\n  const d = await exports.asyncDouble(5);\n  assert.equal(d, 10, 'async double');\n  // generator stepping example\n  const gen = exports.generatorCounter(0,2,3);\n  assert.deepEqual(Array.from(gen), [0,2,4], 'generator yields');\n}`;
+
+(function init() {
+  document.getElementById('sourceArea').value = defaultSource;
+  document.getElementById('testArea').value = defaultTest;
+  loadWorkspaceFromLocal();
+  refreshTestsList();
+  updateUIState();
+})();
+
+/* ---------- Tests Management ---------- */
+
+function addTest(name = 'test'+(workspace.tests.length+1), suite='default', code = '') {
+  const t = {
+    id: String(Math.random()).slice(2),
+    name,
+    suite,
+    code: code || document.getElementById('testArea').value,
+    status: 'idle',
+    result: null,
+    only: false,
+    skip: false,
+    flaky: false,
+    timeout: Number(document.getElementById('testTimeout').value) || 2000
+  };
+  workspace.tests.push(t);
+  refreshTestsList();
+  selectTestById(t.id);
+  saveWorkspaceToLocal();
+  return t;
+}
+
+function updateSelectedTest() {
+  const id = getSelectedTestId();
+  if (!id) return;
+  const t = workspace.tests.find(x=>x.id===id);
+  if (!t) return;
+  t.code = document.getElementById('testArea').value;
+  t.name = document.getElementById('newTestName').value || t.name;
+  t.suite = document.getElementById('newTestSuite').value || t.suite;
+  refreshTestsList();
+  saveWorkspaceToLocal();
+}
+
+function deleteSelectedTest() {
+  const id = getSelectedTestId();
+  if (!id) return;
+  workspace.tests = workspace.tests.filter(x=>x.id!==id);
+  refreshTestsList();
+  document.getElementById('testArea').value = '';
+  saveWorkspaceToLocal();
+}
+
+function duplicateSelectedTest() {
+  const id = getSelectedTestId();
+  if (!id) return;
+  const t = workspace.tests.find(x=>x.id===id);
+  if (!t) return;
+  addTest(t.name + ' (copy)', t.suite, t.code);
+}
+
+function toggleFlagSelected(flag) {
+  const id = getSelectedTestId();
+  if (!id) return;
+  const t = workspace.tests.find(x=>x.id===id);
+  if (!t) return;
+  t[flag] = !t[flag];
+  refreshTestsList();
+  saveWorkspaceToLocal();
+}
+
+function selectTestById(id) {
+  const list = document.getElementById('testsList');
+  Array.from(list.querySelectorAll('.test-item')).forEach(el => {
+    el.style.background = '';
+  });
+  const el = list.querySelector(`[data-id="${id}"]`);
+  if (el) el.style.background = '#f0f0f0';
+  // set editor content
+  const t = workspace.tests.find(x=>x.id===id);
+  if (t) {
+    document.getElementById('testArea').value = t.code;
+    document.getElementById('newTestName').value = t.name;
+    document.getElementById('newTestSuite').value = t.suite;
+  }
+}
+
+function getSelectedTestId() {
+  const list = document.getElementById('testsList');
+  const sel = list.querySelector('.test-item.selected');
+  if (sel) return sel.getAttribute('data-id');
+  // fallback to first checked
+  const chk = list.querySelector('input[type="radio"]:checked');
+  if (chk) return chk.closest('.test-item').getAttribute('data-id');
+  return null;
+}
+
+function refreshTestsList() {
+  const list = document.getElementById('testsList');
+  list.innerHTML = '';
+  const filter = (document.getElementById('filterInput').value || '').toLowerCase();
+  workspace.tests.forEach(t => {
+    if (filter && !((t.name + ' ' + t.suite + ' ' + t.code).toLowerCase().includes(filter))) return;
+    const div = document.createElement('div');
+    div.className = 'test-item';
+    div.setAttribute('data-id', t.id);
+    div.innerHTML = `
+      <input type="radio" name="sel" ${t === workspace._lastSelected ? 'checked' : ''}>
+      <div class="flex"><strong>${escapeHtml(t.name)}</strong> <span class="meta">[${escapeHtml(t.suite)}]</span></div>
+      <div class="meta">${t.status}</div>
+      <div class="meta">${t.result ? t.result : ''}</div>
+      <button class="btnEdit small">Edit</button>
+    `;
+    div.querySelector('input[type=radio]').addEventListener('change', (e) => {
+      Array.from(list.querySelectorAll('.test-item')).forEach(x => x.classList.remove('selected'));
+      div.classList.add('selected');
+      workspace._lastSelected = t;
+      selectTestById(t.id);
+    });
+    div.querySelector('.btnEdit').addEventListener('click', ()=> {
+      Array.from(list.querySelectorAll('.test-item')).forEach(x => x.classList.remove('selected'));
+      div.classList.add('selected');
+      workspace._lastSelected = t;
+      selectTestById(t.id);
+    });
+    // meta buttons small
+    const meta = document.createElement('div');
+    meta.style.marginLeft = '8px';
+    meta.style.display = 'flex';
+    meta.style.gap = '4px';
+    const onlyBtn = document.createElement('button');
+    onlyBtn.textContent = t.only ? 'only' : 'o';
+    onlyBtn.title = 'toggle only';
+    onlyBtn.addEventListener('click', (e)=>{ t.only=!t.only; refreshTestsList(); });
+    const skipBtn = document.createElement('button');
+    skipBtn.textContent = t.skip ? 'skip' : 's';
+    skipBtn.title = 'toggle skip';
+    skipBtn.addEventListener('click', ()=>{ t.skip=!t.skip; refreshTestsList(); });
+    const flakyBtn = document.createElement('button');
+    flakyBtn.textContent = t.flaky ? 'flaky' : 'f';
+    flakyBtn.title = 'toggle flaky';
+    flakyBtn.addEventListener('click', ()=>{ t.flaky=!t.flaky; refreshTestsList(); });
+    div.appendChild(meta);
+    meta.appendChild(onlyBtn);
+    meta.appendChild(skipBtn);
+    meta.appendChild(flakyBtn);
+    list.appendChild(div);
+  });
+  document.getElementById('historyCount').textContent = workspace.history.length || 0;
+}
+
+/* ---------- Assertions ---------- */
+
+const assert = {
+  equal(a,b,msg){
+    if (a !== b) throw new Error((msg?msg+': ':'') + `expected ${JSON.stringify(a)} === ${JSON.stringify(b)}`);
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.equal] OK', msg || '');
+  },
+  deepEqual(a,b,msg){
+    if (!deepEqual(a,b)) throw new Error((msg?msg+': ':'') + `deepEqual failed: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`);
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.deepEqual] OK', msg || '');
+  },
+  throws(fn, msg){
+    let threw=false;
+    try{ fn(); } catch(e){ threw=true; }
+    if (!threw) throw new Error((msg?msg+': ':'') + 'expected function to throw');
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.throws] OK', msg || '');
+  },
+  ok(v,msg){
+    if(!v) throw new Error((msg?msg+': ':'') + 'expected truthy value');
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.ok] OK', msg || '');
+  },
+  notOk(v,msg){
+    if(v) throw new Error((msg?msg+': ':'') + 'expected falsy value');
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.notOk] OK', msg || '');
+  },
+  approx(a,b,eps=1e-6,msg){
+    if (Math.abs(a-b)>eps) throw new Error((msg?msg+': ':'') + `approx failed ${a} !== ${b}`);
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.approx] OK', msg || '');
+  },
+  contains(hay,needle,msg){
+    if (!String(hay).includes(String(needle))) throw new Error((msg?msg+': ':'') + 'expected to contain');
+    if (document.getElementById('liveAssertionShow').checked) log('[assert.contains] OK', msg || '');
+  }
+};
+
+function deepEqual(a,b) {
+  if (a===b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a && b && typeof a === 'object') {
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) {
+      if (a.length !== b.length) return false;
+      for (let i=0;i<a.length;i++) if (!deepEqual(a[i], b[i])) return false;
+      return true;
+    } else {
+      const ak = Object.keys(a).sort();
+      const bk = Object.keys(b).sort();
+      if (ak.length !== bk.length) return false;
+      for (let k of ak) if (!deepEqual(a[k], b[k])) return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ---------- Spies & Mocks ---------- */
+
+function createSpy(name, origFn) {
+  const record = {calls: []};
+  const spy = function(...args) {
+    record.calls.push({args, time: now()});
+    if (typeof origFn === 'function') {
+      return origFn.apply(this,args);
+    }
+    return undefined;
+  };
+  spy.getCalls = ()=>record.calls;
+  spy.reset = ()=>{ record.calls=[]; };
+  workspace.spies[name] = spy;
+  return spy;
+}
+
+/* ---------- Snapshots ---------- */
+
+function snapshotTest(name, value, update=false) {
+  const key = name;
+  const existing = workspace.snapshots[key];
+  if (existing && !update) {
+    if (!deepEqual(existing, value)) throw new Error('Snapshot mismatch for ' + name + '\nExpected: ' + JSON.stringify(existing) + '\nReceived: ' + JSON.stringify(value));
+    log('[snapshot] OK', name);
+  } else {
+    workspace.snapshots[key] = value;
+    log('[snapshot] saved', name);
+  }
+  document.getElementById('snapshotCount').textContent = Object.keys(workspace.snapshots).length;
+}
+
+/* ---------- Test Runner (supports async, generator stepping) ---------- */
+
+async function runAllTests(opts={selectedOnly:false, property:false}) {
+  if (document.getElementById('autoCompile').checked) {
+    if (!compileSource()) {
+      log('Aborting run: compile failed');
+      return;
+    }
+  }
+  runtime.running = true;
+  runtime.stopRequested = false;
+  runtime.paused = false;
+  runtime.stepping = false;
+  runtime.currentRun = {results:[], start:now()};
+  const concurrency = Number(document.getElementById('concurrency').value) || 1;
+  runtime.concurrency = concurrency;
+  const iterations = Number(document.getElementById('iterations').value) || 1;
+  const seed = Number(document.getElementById('rngSeed').value) || 1;
+  const rngFn = rng(seed);
+
+  // choose tests
+  let testsToRun = workspace.tests.filter(t => !t.skip);
+  const only = workspace.tests.some(t=>t.only);
+  if (only) testsToRun = testsToRun.filter(t=>t.only);
+  if (opts.selectedOnly) {
+    const sel = getSelectedTestId();
+    if (sel) testsToRun = testsToRun.filter(t=>t.id===sel);
+  }
+  // start concurrency pool
+  const pool = [];
+  let idx = 0;
+  const results = [];
+  const runNext = async () => {
+    if (runtime.stopRequested) return;
+    const i = idx++;
+    if (i >= testsToRun.length) return;
+    const t = testsToRun[i];
+    const res = await runSingleTest(t, {rngFn, iterations});
+    results.push(res);
+    if (runtime.stopRequested) return;
+    await runNext();
+  };
+  for (let i=0;i<concurrency;i++) pool.push(runNext());
+  await Promise.all(pool);
+  runtime.running = false;
+  runtime.currentRun.end = now();
+  workspace.history.push({time:now(), results});
+  if (workspace.history.length > 100) workspace.history.shift();
+  saveWorkspaceToLocal();
+  updateUIState();
+  log('Run complete. Results:', results.map(r=>({name:r.name,status:r.status,time:r.duration})));
+  return results;
+}
+
+async function runSingleTest(test, opts={rngFn:()=>Math.random(), iterations:1}) {
+  const res = {name:test.name, id:test.id, status:'unknown', duration:0, error:null};
+  const start = now();
+  test.status = 'running';
+  updateUIState();
+  try {
+    // build test function from code
+    const wrapper = new Function('exports','assert','helpers','snapshot','rng','createSpy','mutation','require','setTimeout','setInterval','clearTimeout','clearInterval', test.code + '\n; return (typeof test === "function") ? test : (typeof exports === "function" ? exports : null);');
+    // We call the test as a function that expects (exports, assert, helpers)
+    const sandboxExports = workspace.compiledExports || {};
+    const helpers = {
+      rng: opts.rngFn,
+      seed: document.getElementById('rngSeed').value,
+      mutation: document.getElementById('mutationToggle').checked,
+      createSpy
+    };
+    // The user's test code might define a function directly (async function(...) {}) or return one.
+    const ret = wrapper(sandboxExports, assert, helpers, (v,update)=> snapshotTest(test.name + (update?'.updated':''), v, update), opts.rngFn, createSpy, workspace.mutation);
+    let testFn = null;
+    if (typeof ret === 'function') testFn = ret;
+    else {
+      // try evaluating test.code as an expression that returns a function
+      if (typeof ret === 'object' && ret !== null && typeof ret.default === 'function') testFn = ret.default;
+      else {
+        // fallback: try to create a function wrapper around code that is itself a function body
+        try {
+          testFn = wrapper; // if wrapper returns a callable, use it
+        } catch(e) {}
+      }
+    }
+    if (!testFn) {
+      // try to create from test.code by wrapping as an async function
+      testFn = new Function('exports','assert','helpers', test.code);
+    }
+    // allow generator functions: call and see if returns iterator
+    let out;
+    let timedOut = false;
+    const timeoutMs = test.timeout || Number(document.getElementById('testTimeout').value) || 2000;
+    const timeoutPromise = new Promise((_, rej) => {
+      const id = setTimeout(()=>{ timedOut=true; rej(new Error('Test timed out after ' + timeoutMs + 'ms')); }, timeoutMs);
+      // clear on finish
+      timeoutPromise._clear = ()=>clearTimeout(id);
+    });
+
+    const exec = async () => {
+      try {
+        out = testFn(sandboxExports, assert, helpers);
+        if (isGenerator(out)) {
+          // step through generator fully by default; if stepping enabled we pause on yields.
+          const gen = out;
+          let last;
+          while(true) {
+            if (runtime.stopRequested) throw new Error('Run stopped');
+            if (runtime.paused) {
+              // wait for resume or step
+              log(`[paused] Test ${test.name} paused before next yield.`);
+              await waitFor(() => !runtime.paused || runtime.stopRequested);
+            }
+            const r = gen.next(last);
+            if (r.done) { last = r.value; break; }
+            // yielded value logged and optionally used by user
+            log(`[yield] ${test.name}:`, r.value);
+            last = r.value;
+            if (runtime.stepping) {
+              runtime.paused = true;
+            }
+            if (runtime.paused) {
+              await waitFor(() => !runtime.paused || runtime.stopRequested);
+            }
+          }
+          return last;
+        } else if (isPromise(out)) {
+          return await out;
+        } else {
+          return out;
+        }
+      } catch(e) {
+        throw e;
+      }
+    };
+
+    const result = await Promise.race([exec(), timeoutPromise]).finally(()=> {
+      if (timeoutPromise._clear) timeoutPromise._clear();
+    });
+    res.status = 'passed';
+    test.status = 'passed';
+    test.result = 'ok';
+    res.duration = now() - start;
+    runtime.currentRun && runtime.currentRun.results && runtime.currentRun.results.push(res);
+    updateCoverageUI();
+    updateUIState();
+    return res;
+  } catch (e) {
+    res.status = 'failed';
+    res.error = e && (e.stack || e.message || e);
+    test.status = 'failed';
+    test.result = e && (e.message || String(e));
+    res.duration = now() - start;
+    runtime.currentRun && runtime.currentRun.results && runtime.currentRun.results.push(res);
+    log('Test failed:', test.name, res.error);
+    updateUIState();
+    return res;
+  } finally {
+    updateUIState();
+  }
+}
+
+function isGenerator(obj) {
+  return obj && typeof obj.next === 'function' && typeof obj.throw === 'function';
+}
+function isPromise(obj) {
+  return obj && typeof obj.then === 'function';
+}
+
+function waitFor(cond) {
+  return new Promise(resolve => {
+    const id = setInterval(()=>{ if (cond()) { clearInterval(id); resolve(); } }, 20);
+  });
+}
+
+/* ---------- UI & Wiring ---------- */
+
+document.getElementById('compileBtn').addEventListener('click', ()=>{ compileSource(); saveWorkspaceToLocal(); });
+document.getElementById('resetSourceBtn').addEventListener('click', ()=>{ document.getElementById('sourceArea').value = defaultSource; compileSource(); });
+document.getElementById('addTestBtn').addEventListener('click', ()=>{ addTest(document.getElementById('newTestName').value || 'newTest', document.getElementById('newTestSuite').value || 'default', document.getElementById('testArea').value); });
+document.getElementById('updateTestBtn').addEventListener('click', ()=>{ updateSelectedTest(); });
+document.getElementById('deleteTestBtn').addEventListener('click', ()=>{ deleteSelectedTest(); });
+document.getElementById('duplicateTestBtn').addEventListener('click', ()=>{ duplicateSelectedTest(); });
+document.getElementById('markSkipBtn').addEventListener('click', ()=>{ toggleFlagSelected('skip'); });
+document.getElementById('markOnlyBtn').addEventListener('click', ()=>{ toggleFlagSelected('only'); });
+document.getElementById('markFlakyBtn').addEventListener('click', ()=>{ toggleFlagSelected('flaky'); });
+document.getElementById('runAllBtn').addEventListener('click', ()=>{ runAllTests({selectedOnly:false}); });
+document.getElementById('runSelectedBtn').addEventListener('click', ()=>{ runAllTests({selectedOnly:true}); });
+document.getElementById('runPropertyBtn').addEventListener('click', ()=>{ runAllTests({selectedOnly:true, property:true}); });
+document.getElementById('stepBtn').addEventListener('click', ()=>{ runtime.paused = false; runtime.stepping = true; runtime.currentRun && log('[runner] step pressed'); });
+document.getElementById('pauseBtn').addEventListener('click', ()=>{ runtime.paused = true; log('[runner] paused'); });
+document.getElementById('resumeBtn').addEventListener('click', ()=>{ runtime.paused = false; runtime.stepping = false; log('[runner] resumed'); });
+document.getElementById('stopBtn').addEventListener('click', ()=>{ runtime.stopRequested = true; runtime.paused = false; log('[runner] stop requested'); });
+document.getElementById('clearLogsBtn').addEventListener('click', ()=>{ clearLogs(); });
+document.getElementById('concurrency').addEventListener('input', (e)=>{ document.getElementById('concurrencyVal').textContent = e.target.value; saveWorkspaceToLocal(); });
+document.getElementById('filterInput').addEventListener('input', ()=>{ refreshTestsList(); });
+document.getElementById('exportBtn').addEventListener('click', ()=>{ const data = JSON.stringify({source:document.getElementById('sourceArea').value, tests:workspace.tests, snapshots:workspace.snapshots}, null, 2); download('tests-workspace.json', data); });
+document.getElementById('importBtn').addEventListener('click', ()=>{ document.getElementById('importFile').click(); });
+document.getElementById('importFile').addEventListener('change', (e)=>{ const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = ()=>{ try{ const parsed = JSON.parse(r.result); if (parsed.source) document.getElementById('sourceArea').value = parsed.source; if (parsed.tests) { workspace.tests = parsed.tests; refreshTestsList(); } if (parsed.snapshots) workspace.snapshots = parsed.snapshots; log('Imported workspace'); } catch(err){ log('Import error', err); } }; r.readAsText(f); });
+document.getElementById('clearSnapshotsBtn').addEventListener('click', ()=>{ workspace.snapshots = {}; document.getElementById('snapshotCount').textContent = 0; saveWorkspaceToLocal(); log('Snapshots cleared'); });
+document.getElementById('saveStateBtn').addEventListener('click', ()=>{ saveWorkspaceToLocal(); log('Saved workspace to localStorage'); });
+document.getElementById('loadStateBtn').addEventListener('click', ()=>{ loadWorkspaceFromLocal(); refreshTestsList(); log('Loaded workspace from localStorage'); });
+document.getElementById('snapshotBtn').addEventListener('click', ()=>{ const id = getSelectedTestId(); if (!id) return; const t = workspace.tests.find(x=>x.id===id); try{ const wrapper = new Function('exports','assert','helpers', t.code + '\n; return (typeof test === "function") ? test : null;'); const fn = wrapper(workspace.compiledExports, assert, {}); // execute to obtain snapshot value - best effort
+  let val;
+  try { val = (typeof fn === 'function') ? fn(workspace.compiledExports, assert, {}) : null; } catch(e){ val = null; }
+  snapshotTest(t.name, val, false); } catch(e){ log('Snapshot error', e); } });
+document.getElementById('updateSnapshotBtn').addEventListener('click', ()=>{ const id = getSelectedTestId(); if (!id) return; const t = workspace.tests.find(x=>x.id===id); try{ const wrapper = new Function('exports','assert','helpers', t.code + '\n; return (typeof test === "function") ? test : null;'); const fn = wrapper(workspace.compiledExports, assert, {}); let val; try { val = (typeof fn === 'function') ? fn(workspace.compiledExports, assert, {}) : null; } catch(e){ val = null; } snapshotTest(t.name, val, true); } catch(e){ log('Snapshot update error', e); } });
+document.getElementById('spyBtn').addEventListener('click', ()=> {
+  const id = getSelectedTestId();
+  const name = prompt('Enter function name in exports to spy on (e.g. add):');
+  if (!name) return;
+  const orig = workspace.compiledExports[name];
+  const sp = createSpy(name, orig);
+  workspace.compiledExports[name] = sp;
+  log('Spy created for', name);
+});
+
+/* ---------- Storage ---------- */
+
+function saveWorkspaceToLocal() {
+  try {
+    const payload = {
+      source: document.getElementById('sourceArea').value,
+      tests: workspace.tests,
+      snapshots: workspace.snapshots
+    };
+    localStorage.setItem('unitTestWorkspace', JSON.stringify(payload));
+  } catch(e){}
+}
+function loadWorkspaceFromLocal() {
+  try {
+    const raw = localStorage.getItem('unitTestWorkspace');
+    if (!raw) {
+      document.getElementById('sourceArea').value = defaultSource;
+      workspace.tests = [{ id:'t1', name:'example test', suite:'default', code: document.getElementById('testArea').value, status:'idle', result:null, only:false, skip:false, flaky:false }];
+      refreshTestsList();
+      compileSource();
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed.source) document.getElementById('sourceArea').value = parsed.source;
+    if (parsed.tests) workspace.tests = parsed.tests;
+    if (parsed.snapshots) workspace.snapshots = parsed.snapshots;
+    refreshTestsList();
+    compileSource();
+  } catch(e){ log('Load workspace error', e); }
+}
+
+/* ---------- Helpers ---------- */
+
+function updateUIState() {
+  document.getElementById('historyCount').textContent = workspace.history.length;
+  document.getElementById('snapshotCount').textContent = Object.keys(workspace.snapshots).length;
+  document.getElementById('coveragePct').textContent = computeCoveragePct() + '%';
+  document.getElementById('coverageBar').value = computeCoveragePct();
+  refreshTestsList();
+}
+
+function computeCoveragePct() {
+  const c = workspace.coverage || {};
+  const keys = Object.keys(c);
+  if (keys.length === 0) return 0;
+  const executed = keys.filter(k => c[k] > 0).length;
+  return Math.round((executed/keys.length)*100);
+}
+
+function updateCoverageUI() {
+  const pct = computeCoveragePct();
+  document.getElementById('coveragePct').textContent = pct + '%';
+  document.getElementById('coverageBar').value = pct;
+}
+
+function download(filename, text) {
+  const a = document.createElement('a');
+  a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(text);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function escapeHtml(s){ return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ---------- Misc Controls ---------- */
+
+document.getElementById('newTestName').addEventListener('input', ()=>{});
+document.getElementById('testArea').addEventListener('input', ()=>{});
+document.getElementById('mutationToggle').addEventListener('change', ()=>{ log('[mutation] set to', document.getElementById('mutationToggle').checked); });
+
+/* ---------- Final touches: create initial test if none ---------- */
+if (!workspace.tests || workspace.tests.length === 0) {
+  addTest('example', 'default', defaultTest);
+  saveWorkspaceToLocal();
+}
+
+refreshTestsList();
+updateUIState();
+
+</script>
+</body>
+</html>

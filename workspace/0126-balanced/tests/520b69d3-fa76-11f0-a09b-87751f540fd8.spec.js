@@ -103,7 +103,7 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
   test.describe('LoadData Event and S1_DataLoaded state behaviors', () => {
     test('Clicking "Load Data" triggers the page script and results in a runtime TypeError (as implemented)', async ({ page }) => {
       // This test validates the LoadData transition and observes the runtime error produced by the implementation.
-      const app = new LinearRegressionPage(page);
+      const app1 = new LinearRegressionPage(page);
       await app.goto();
 
       // Listen for pageerror (uncaught exceptions) emitted by the page.
@@ -120,8 +120,8 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
       expect(pageError.name).toBe('TypeError');
 
       // After the error, verify that xData and yData remain unchanged (empty arrays) because handler aborted early.
-      const xDataInfo = await app.evalGlobal('xData');
-      const yDataInfo = await app.evalGlobal('yData');
+      const xDataInfo1 = await app.evalGlobal('xData');
+      const yDataInfo1 = await app.evalGlobal('yData');
       expect(Array.isArray(xDataInfo.value)).toBe(true);
       expect(xDataInfo.value.length).toBe(0);
       expect(Array.isArray(yDataInfo.value)).toBe(true);
@@ -136,7 +136,7 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
 
     test('Clicking "Load Data" multiple times generates multiple runtime errors (edge-case of repeated listener firing)', async ({ page }) => {
       // This test validates an edge case: repeated user clicks will retrigger the faulty listener
-      const app = new LinearRegressionPage(page);
+      const app2 = new LinearRegressionPage(page);
       await app.goto();
 
       // First click -> expect an error
@@ -154,7 +154,7 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
       expect(secondErr.name).toBe('TypeError');
 
       // Confirm still no rects appended to the graph due to handler failing each time
-      const rectCount = await app.hasRectElements();
+      const rectCount1 = await app.hasRectElements();
       expect(rectCount).toBe(0);
     });
   });
@@ -163,7 +163,7 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
     test('Clicking "Plot Regression Line" does not plot when LoadData failed; graph remains empty and no new errors expected from plot click alone', async ({ page }) => {
       // Validate the plot transition. The implementation does not attach a click handler to plotBtn,
       // so clicking it should not produce errors nor modify the graph in this implementation.
-      const app = new LinearRegressionPage(page);
+      const app3 = new LinearRegressionPage(page);
       await app.goto();
 
       // Ensure graph is empty to start
@@ -189,7 +189,7 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
 
     test('Plot button still does not produce regression visualization even after attempted load (integration check)', async ({ page }) => {
       // Click load (which is faulty) and then click plot to assert the graph remains empty and FSM cannot reach final plotted state.
-      const app = new LinearRegressionPage(page);
+      const app4 = new LinearRegressionPage(page);
       await app.goto();
 
       // Trigger the faulty load; expect a TypeError
@@ -203,8 +203,8 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
       expect(await app.hasRectElements()).toBe(0);
 
       // Also confirm xData and yData still not populated due to earlier failure
-      const xDataInfo = await app.evalGlobal('xData');
-      const yDataInfo = await app.evalGlobal('yData');
+      const xDataInfo2 = await app.evalGlobal('xData');
+      const yDataInfo2 = await app.evalGlobal('yData');
       expect(Array.isArray(xDataInfo.value)).toBe(true);
       expect(xDataInfo.value.length).toBe(0);
       expect(Array.isArray(yDataInfo.value)).toBe(true);
@@ -216,10 +216,10 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
     test('Verify loadData() exists and was invoked on page load (onEnter action verification for S0 exit->S1 transition)', async ({ page }) => {
       // The HTML script calls loadData() on load; we ensure the function exists in global scope.
       // We don't re-invoke or modify it; just confirm presence and that it registered the click listener.
-      const app = new LinearRegressionPage(page);
+      const app5 = new LinearRegressionPage(page);
       await app.goto();
 
-      const loadDataInfo = await app.evalGlobal('loadData');
+      const loadDataInfo1 = await app.evalGlobal('loadData');
       expect(loadDataInfo.type).toBe('function');
 
       // We can inspect if the load button has any click listeners indirectly by performing a click
@@ -230,10 +230,10 @@ test.describe('Linear Regression FSM - Application Integration Tests', () => {
     });
 
     test('Confirm FSM-declared renderPage() is not present - onEnter action missing (expected negative case)', async ({ page }) => {
-      const app = new LinearRegressionPage(page);
+      const app6 = new LinearRegressionPage(page);
       await app.goto();
 
-      const renderPageInfo = await app.evalGlobal('renderPage');
+      const renderPageInfo1 = await app.evalGlobal('renderPage');
       // FSM mentions renderPage in entry actions for S0, but implementation does not provide it.
       // Validate that it is indeed undefined.
       expect(renderPageInfo.type).toBe('undefined');

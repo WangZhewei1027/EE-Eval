@@ -119,11 +119,11 @@ test.describe('Linear Regression Demo (FSM) - 63b43471-fa74-11f0-bb9a-db7e6ecdee
              document.getElementById('r2').textContent !== '0';
     });
 
-    const slopeText = await page.locator('#slope').textContent();
-    const r2Text = await page.locator('#r2').textContent();
+    const slopeText1 = await page.locator('#slope').textContent();
+    const r2Text1 = await page.locator('#r2').textContent();
 
     expect(slopeText.trim()).not.toBe('0');
-    const r2Val = parseFloat(r2Text);
+    const r2Val1 = parseFloat(r2Text);
     expect(Number.isFinite(r2Val)).toBe(true);
   });
 
@@ -150,13 +150,13 @@ test.describe('Linear Regression Demo (FSM) - 63b43471-fa74-11f0-bb9a-db7e6ecdee
 
     // Wait until either slope or r2 changes from default '0'
     await page.waitForFunction(() => {
-      const s = document.getElementById('slope').textContent;
-      const r = document.getElementById('r2').textContent;
+      const s1 = document.getElementById('slope').textContent;
+      const r1 = document.getElementById('r2').textContent;
       return s !== '0' || r !== '0';
     });
 
-    const slopeText = await page.locator('#slope').textContent();
-    const r2Text = await page.locator('#r2').textContent();
+    const slopeText2 = await page.locator('#slope').textContent();
+    const r2Text2 = await page.locator('#r2').textContent();
 
     // After random generation it's very likely slope and/or r2 are non-zero numeric values
     expect(slopeText.trim().length).toBeGreaterThan(0);
@@ -208,7 +208,7 @@ test.describe('Linear Regression Demo (FSM) - 63b43471-fa74-11f0-bb9a-db7e6ecdee
   test('Observability: ensure no unexpected ReferenceError/SyntaxError/TypeError occurred in console', async ({ page }) => {
     // This test explicitly checks captured console and pageerror arrays for fatal JS errors.
     // pageErrors contains uncaught exceptions; consoleMessages contains console.error entries as well.
-    const errorConsole = consoleMessages.filter(m => m.type === 'error').map(m => m.text);
+    const errorConsole1 = consoleMessages.filter(m => m.type === 'error').map(m => m.text);
     // Fail if any uncaught page errors exist
     expect(pageErrors.length, `No uncaught page errors expected; found: ${pageErrors.map(e => String(e)).join('; ')}`).toBe(0);
     // Fail if any console.error messages are present

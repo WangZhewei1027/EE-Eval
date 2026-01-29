@@ -121,7 +121,7 @@ test.describe('Digital Signatures (FSM) - 520c0611-fa76-11f0-a09b-87751f540fd8',
     await page.waitForTimeout(100);
 
     // signatureData should still be the empty string
-    const signatureData = await page.evaluate(() => {
+    const signatureData1 = await page.evaluate(() => {
       return typeof signatureData !== 'undefined' ? signatureData : null;
     });
     expect(signatureData).toBe('');
@@ -145,7 +145,7 @@ test.describe('Digital Signatures (FSM) - 520c0611-fa76-11f0-a09b-87751f540fd8',
     await page.waitForTimeout(50);
 
     // The implementation sets the signature element to 'Signature verification failed!' when verification doesn't match
-    const signatureText = await page.locator('#signature').innerText();
+    const signatureText1 = await page.locator('#signature').innerText();
     expect(signatureText).toBe('Signature verification failed!');
 
     // No runtime errors are expected for this flow
@@ -161,7 +161,7 @@ test.describe('Digital Signatures (FSM) - 520c0611-fa76-11f0-a09b-87751f540fd8',
       await dialog.accept('Another message');
     });
     // Wait for pageerror
-    const errorPromise = page.waitForEvent('pageerror').catch(() => null);
+    const errorPromise1 = page.waitForEvent('pageerror').catch(() => null);
     await page.click('#generate-signature');
     await errorPromise;
     await page.waitForTimeout(50);
@@ -170,7 +170,7 @@ test.describe('Digital Signatures (FSM) - 520c0611-fa76-11f0-a09b-87751f540fd8',
     await page.click('#verify-signature');
     await page.waitForTimeout(50);
 
-    const signatureText = await page.locator('#signature').innerText();
+    const signatureText2 = await page.locator('#signature').innerText();
     expect(signatureText).toBe('Signature verification failed!');
 
     // Confirm that the implementation never reaches a verified state: 'Signature verified!' should not appear
@@ -221,7 +221,7 @@ test.describe('Digital Signatures (FSM) - 520c0611-fa76-11f0-a09b-87751f540fd8',
 
     // Trigger the known-bad generate path
     page.once('dialog', async (dialog) => await dialog.accept('Cause error'));
-    const errPromise = page.waitForEvent('pageerror').catch(() => null);
+    const errPromise1 = page.waitForEvent('pageerror').catch(() => null);
     await page.click('#generate-signature');
     const err = await errPromise;
     await page.waitForTimeout(30);

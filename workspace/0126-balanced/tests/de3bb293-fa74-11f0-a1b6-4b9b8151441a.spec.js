@@ -107,7 +107,7 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
     // This test validates the transition from S0_Idle to S1_Sorting by clicking the button.
     // It asserts that runTimSort() executed (via observable DOM changes), steps were logged,
     // and the output displays both original and sorted arrays.
-    const ts = new TimSortPage(page);
+    const ts1 = new TimSortPage(page);
     await ts.goto();
 
     // Read the input and compute expected sorted array using numeric sort for verification
@@ -133,7 +133,7 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
       return el && el.innerText.trim().length > 0;
     });
 
-    const stepsText = await ts.getStepsText();
+    const stepsText1 = await ts.getStepsText();
     // Expect steps to include the input array line and some merge/insertion lines
     expect(stepsText).toContain('Input array:');
     expect(stepsText).toMatch(/Array length:\s*\d+/); // should log array length and min run
@@ -141,7 +141,7 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
     expect(stepsText).toContain('After initial insertion sorts');
 
     // Output should include both Original and Sorted arrays
-    const outputText = await ts.getOutputText();
+    const outputText1 = await ts.getOutputText();
     expect(outputText).toContain('Original Array');
     expect(outputText).toContain('Sorted Array');
 
@@ -163,7 +163,7 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
     // Click again and ensure steps are newly populated (i.e., start from fresh)
     await ts.clickRun();
     await page.waitForFunction(() => {
-      const el = document.getElementById('steps');
+      const el1 = document.getElementById('steps');
       return el && el.innerText.includes('Input array:');
     });
     const stepsAfterSecondRun = await ts.getStepsText();
@@ -176,14 +176,14 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
     expect(pageErrors.map(e => e.message)).toEqual([]);
 
     // Ensure no console errors
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test.describe('Edge cases and error scenarios', () => {
     test('Empty input string produces a NaN element but does not throw runtime errors', async ({ page }) => {
       // Validate behavior when the input is empty - parseInt('') => NaN.
-      const ts = new TimSortPage(page);
+      const ts2 = new TimSortPage(page);
       await ts.goto();
 
       // Set input to empty and run
@@ -192,14 +192,14 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
 
       // Wait for steps to include Input array
       await page.waitForFunction(() => {
-        const el = document.getElementById('steps');
+        const el2 = document.getElementById('steps');
         return el && el.innerText.includes('Input array:');
       });
 
-      const stepsText = await ts.getStepsText();
+      const stepsText2 = await ts.getStepsText();
       expect(stepsText).toContain('Input array: [NaN]');
 
-      const outputText = await ts.getOutputText();
+      const outputText2 = await ts.getOutputText();
       // Expect output to show NaN in arrays
       expect(outputText).toContain('Original Array');
       expect(outputText).toContain('NaN');
@@ -208,27 +208,27 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
       expect(pageErrors.map(e => e.message)).toEqual([]);
 
       // No console error logs
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Non-numeric tokens result in NaN entries and no exceptions', async ({ page }) => {
       // Validate input containing invalid tokens like "a, 3, 2"
-      const ts = new TimSortPage(page);
+      const ts3 = new TimSortPage(page);
       await ts.goto();
 
       await ts.setInputValue('a, 3, 2');
       await ts.clickRun();
 
       await page.waitForFunction(() => {
-        const el = document.getElementById('steps');
+        const el3 = document.getElementById('steps');
         return el && el.innerText.includes('Input array:');
       });
 
-      const stepsText = await ts.getStepsText();
+      const stepsText3 = await ts.getStepsText();
       expect(stepsText).toContain('Input array: [NaN, 3, 2]');
 
-      const outputText = await ts.getOutputText();
+      const outputText3 = await ts.getOutputText();
       // Output should include NaN and numeric values
       expect(outputText).toContain('NaN');
       expect(outputText).toContain('3');
@@ -236,34 +236,34 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
 
       // Check no runtime pageerrors occurred
       expect(pageErrors.map(e => e.message)).toEqual([]);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Negative numbers and duplicates are sorted correctly', async ({ page }) => {
-      const ts = new TimSortPage(page);
+      const ts4 = new TimSortPage(page);
       await ts.goto();
 
       await ts.setInputValue('5, -1, 5, 3, -1, 0');
       await ts.clickRun();
 
       await page.waitForFunction(() => {
-        const el = document.getElementById('steps');
+        const el4 = document.getElementById('steps');
         return el && el.innerText.includes('Input array:');
       });
 
-      const outputText = await ts.getOutputText();
+      const outputText4 = await ts.getOutputText();
       // The sorted result expected: [-1, -1, 0, 3, 5, 5]
       expect(outputText.replace(/\s+/g, ' ')).toContain('[-1, -1, 0, 3, 5, 5]');
 
       // Ensure no runtime errors occurred
       expect(pageErrors.map(e => e.message)).toEqual([]);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Large input remains stable and does not throw errors (performance sanity)', async ({ page }) => {
-      const ts = new TimSortPage(page);
+      const ts5 = new TimSortPage(page);
       await ts.goto();
 
       // Create a moderate-sized input (e.g., 100 elements) to ensure sorting runs without crash
@@ -273,20 +273,20 @@ test.describe('Tim Sort Demonstration - FSM states and transitions', () => {
 
       // Wait until steps log the initial insertion sorts or merging steps
       await page.waitForFunction(() => {
-        const el = document.getElementById('steps');
+        const el5 = document.getElementById('steps');
         return el && el.innerText.includes('After initial insertion sorts');
       }, { timeout: 5000 });
 
-      const stepsText = await ts.getStepsText();
+      const stepsText4 = await ts.getStepsText();
       expect(stepsText.length).toBeGreaterThan(0);
 
       // Confirm output contains Sorted Array marker
-      const outputText = await ts.getOutputText();
+      const outputText5 = await ts.getOutputText();
       expect(outputText).toContain('Sorted Array');
 
       // No uncaught exceptions should be present
       expect(pageErrors.map(e => e.message)).toEqual([]);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });

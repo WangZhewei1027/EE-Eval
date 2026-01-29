@@ -181,7 +181,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
 
   test.describe('Initial state and reset (S0_Idle / S1_TreeReset)', () => {
     test('renders initial seeded keys and shows order value', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app1 = new BPlusPage(page);
 
       // Order value should match the slider default (4)
       await expect(app.orderVal).toHaveText('4');
@@ -195,7 +195,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('clear tree (ClearTree -> S1_TreeReset) resets tree when confirmed', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app2 = new BPlusPage(page);
 
       // Before clearing, ensure some key exists
       expect(await app.hasSvgText('10')).toBe(true);
@@ -213,7 +213,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
 
   test.describe('Insert (S2_KeyInserted) behaviors', () => {
     test('insert a single key and verify it appears in the DOM', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app3 = new BPlusPage(page);
 
       // Insert a fresh value unlikely to be in the seeded set
       const key = 42;
@@ -231,7 +231,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('insert invalid input triggers an alert and does not crash', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app4 = new BPlusPage(page);
 
       // Ensure empty input and click insert - should trigger alert 'Enter a number to insert'
       // Clear any previous dialog messages
@@ -250,7 +250,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('Insert 8 random keys (InsertRandomKeys) increases key count', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app5 = new BPlusPage(page);
 
       const beforeCount = await app.countSvgKeyTexts();
 
@@ -271,7 +271,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('Insert sequence (InsertSequence) produces expected known values', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app6 = new BPlusPage(page);
 
       // Insert bulk sequence via button
       await app.clickBulkInsert();
@@ -286,10 +286,10 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
 
   test.describe('Search (S3_KeySearched) behaviors', () => {
     test('search for an existing key highlights path', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app7 = new BPlusPage(page);
 
       // Insert a unique key and then search it
-      const key = 77;
+      const key1 = 77;
       await app.insertKey(key);
       await app.waitForSvgText(String(key));
 
@@ -305,10 +305,10 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('search for a non-existing key still renders and does not crash', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app8 = new BPlusPage(page);
 
       // Choose a value likely not present
-      const key = 9999;
+      const key2 = 9999;
       // Ensure not present initially
       if (await app.hasSvgText(String(key))) {
         // if present for some reason delete it first
@@ -326,10 +326,10 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
 
   test.describe('Delete (S4_KeyDeleted) behaviors and rebalancing', () => {
     test('delete an existing key removes it from DOM', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app9 = new BPlusPage(page);
 
       // Insert and then delete a key
-      const key = 99;
+      const key3 = 99;
       await app.insertKey(key);
       await app.waitForSvgText(String(key));
 
@@ -337,8 +337,8 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
       await app.deleteKey(key);
 
       // Wait briefly for render / delete completion
-      const maxWait = 3000;
-      const start = Date.now();
+      const maxWait1 = 3000;
+      const start1 = Date.now();
       let stillPresent = true;
       while (Date.now() - start < maxWait) {
         stillPresent = await app.hasSvgText(String(key));
@@ -350,7 +350,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('delete invalid input triggers an alert and no crash occurs', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app10 = new BPlusPage(page);
 
       // Ensure delInput empty and click delete
       dialogEvents.length = 0;
@@ -360,12 +360,12 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
       // Wait briefly for dialog to be captured
       await page.waitForTimeout(200);
 
-      const alertMsg = dialogEvents.find(d => /Enter a number to delete/i.test(d.message));
+      const alertMsg1 = dialogEvents.find(d => /Enter a number to delete/i.test(d.message));
       expect(alertMsg).toBeTruthy();
     });
 
     test('clicking node rect shows node details alert (UI click handler)', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app11 = new BPlusPage(page);
 
       // Click first rectangle to show an alert with node details
       dialogEvents.length = 0;
@@ -382,7 +382,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
 
   test.describe('Change order (ChangeOrder -> TreeReset)', () => {
     test('changing order prompts confirmation and resets tree (S1_TreeReset)', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app12 = new BPlusPage(page);
 
       // Choose a different order value than current (default 4). Set to 5.
       dialogEvents.length = 0;
@@ -400,7 +400,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('cancelling change order leaves tree intact', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app13 = new BPlusPage(page);
 
       // To test canceling, we need to attach a temporary dialog handler that dismisses the confirm
       const localDialogs = [];
@@ -436,7 +436,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
 
   test.describe('Edge cases and robustness', () => {
     test('multiple rapid inserts do not cause uncaught exceptions', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app14 = new BPlusPage(page);
 
       // Rapidly insert multiple keys
       const keys = [111, 222, 333, 444, 555];
@@ -454,7 +454,7 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
     });
 
     test('bulk inserts and deletes combined keep the tree stable', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app15 = new BPlusPage(page);
 
       // Bulk insert known sequence
       await app.clickBulkInsert();
@@ -466,9 +466,9 @@ test.describe('B+ Tree Interactive Demo - FSM and UI end-to-end tests', () => {
       await app.deleteKey(12);
 
       // Wait for removal
-      const maxWait = 3000;
-      const start = Date.now();
-      let present = true;
+      const maxWait2 = 3000;
+      const start2 = Date.now();
+      let present1 = true;
       while (Date.now() - start < maxWait) {
         present = await app.hasSvgText('12');
         if (!present) break;

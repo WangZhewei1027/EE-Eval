@@ -108,7 +108,7 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
     // - Output text shows the enqueued element and priority (S1_Enqueued evidence)
     // - Queue display updates to include the item
     // - After enqueue, inputs are cleared per exit action
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage1 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Enqueue element "A" priority 2
@@ -119,7 +119,7 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
 
     // Queue display should list the element at index 0
     const queueText = await pqPage.getQueueText();
-    expect(queueText).toContain('[0] A (priority: 2)');
+    expect(queueText).toContain('[0] A (priority)');
 
     // Inputs should be cleared after enqueue
     const inputs = await pqPage.getInputValues();
@@ -130,13 +130,13 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
     expect(pageErrors.length, `Expected no page errors, got: ${pageErrors.map(e=>e.message).join('; ')}`).toBe(0);
 
     // Ensure no console errors were emitted
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length, `Expected no console errors, got: ${consoleErrors.map(m=>m.text()).join('; ')}`).toBe(0);
   });
 
   test('Enqueue multiple elements preserves priority ordering (min-priority)', async ({ page }) => {
     // Validate ordering: lower numeric priority comes out first / is shown first on display
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage2 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Enqueue several elements with different priorities
@@ -148,22 +148,22 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
     await expect(pqPage.output).toHaveText('Enqueued: "Z" with priority 3');
 
     // Queue display ordering expected: Y (1), Z (3), X (5)
-    const queueText = await pqPage.getQueueText();
+    const queueText1 = await pqPage.getQueueText();
     const lines = queueText.split('\n').map(l => l.trim()).filter(Boolean);
     expect(lines.length).toBeGreaterThanOrEqual(3);
-    expect(lines[0]).toContain('Y (priority: 1)');
-    expect(lines[1]).toContain('Z (priority: 3)');
-    expect(lines[2]).toContain('X (priority: 5)');
+    expect(lines[0]).toContain('Y (priority)');
+    expect(lines[1]).toContain('Z (priority)');
+    expect(lines[2]).toContain('X (priority)');
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Dequeue transition (S0 -> S2): removes and returns highest priority element', async ({ page }) => {
     // Validate dequeue behavior and S2_Dequeued evidence
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage3 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Set up queue: enqueue two items
@@ -176,19 +176,19 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
     await expect(pqPage.output).toHaveText('Dequeued: "Urgent" with priority 0');
 
     // Queue display should no longer include 'Urgent' and should include 'First'
-    const queueText = await pqPage.getQueueText();
-    expect(queueText).toContain('First (priority: 10)');
-    expect(queueText).not.toContain('Urgent (priority: 0)');
+    const queueText2 = await pqPage.getQueueText();
+    expect(queueText).toContain('First (priority)');
+    expect(queueText).not.toContain('Urgent (priority)');
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Dequeue when empty - edge case and error message handling', async ({ page }) => {
     // Validate behavior when attempting to dequeue an empty queue (edge case)
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage4 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Ensure queue is empty initially
@@ -202,13 +202,13 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Peek transition (S0 -> S3): shows front element without removing it', async ({ page }) => {
     // Validate peek behavior: returns front element and does not modify the queue
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage5 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Enqueue some items
@@ -220,19 +220,19 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
     await expect(pqPage.output).toHaveText('Front element: "Beta" with priority 2');
 
     // Ensure that the queue still contains both items in same order
-    const queueText = await pqPage.getQueueText();
-    expect(queueText).toContain('Beta (priority: 2)');
-    expect(queueText).toContain('Alpha (priority: 4)');
+    const queueText3 = await pqPage.getQueueText();
+    expect(queueText).toContain('Beta (priority)');
+    expect(queueText).toContain('Alpha (priority)');
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors5 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Peek when empty - edge case', async ({ page }) => {
     // Validate peek on an empty queue returns appropriate message
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage6 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Ensure queue is empty
@@ -246,13 +246,13 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors6 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Clear transition (S0 -> S4): clears the queue and updates display and output', async ({ page }) => {
     // Validate clear behavior per FSM: pq.clear(), updateDisplay(), output "Queue cleared."
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage7 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // Enqueue items then clear
@@ -270,7 +270,7 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors7 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -281,7 +281,7 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
     // - negative priority should trigger alert
     // Note: We cannot easily intercept native alert dialog text without handling dialogs,
     // so we will listen for dialog events and assert their messages.
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage8 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     // 1) Empty element: expect alert "Please enter an element value."
@@ -312,13 +312,13 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
 
     // Ensure no unexpected page errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors8 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Sanity: all buttons exist and are enabled', async ({ page }) => {
     // Basic DOM checks to ensure all interactive components required by FSM are present
-    const pqPage = new PriorityQueuePage(page);
+    const pqPage9 = new PriorityQueuePage(page);
     await pqPage.goto();
 
     await expect(pqPage.elementInput).toBeVisible();
@@ -336,7 +336,7 @@ test.describe('Priority Queue Demo - FSM states and transitions', () => {
 
     // Ensure no runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+    const consoleErrors9 = consoleMessages.filter(m => m.type() === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

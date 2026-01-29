@@ -124,7 +124,7 @@ test.describe('ACID Properties Demonstration - FSM tests', () => {
   });
 
   test('Transfer success transition (S1_Transfer_Success) - transfer(amount,false) commits and updates balances & logs', async ({ page }) => {
-    const app = new AcidDemoPage(page);
+    const app1 = new AcidDemoPage(page);
     await app.gotoAndResetBalances();
 
     // Set transfer amount and trigger a successful transfer
@@ -138,12 +138,12 @@ test.describe('ACID Properties Demonstration - FSM tests', () => {
     await app.waitForLogText('Transaction committed successfully.');
 
     // Verify balances updated in the DOM (A decreased by 100, B increased by 100)
-    const balances = await app.getBalances();
+    const balances1 = await app.getBalances();
     expect(balances.A).toBeCloseTo(900.00, 2);
     expect(balances.B).toBeCloseTo(600.00, 2);
 
     // Verify localStorage persisted the committed balances (Durability)
-    const stored = await app.getStoredBalances();
+    const stored1 = await app.getStoredBalances();
     expect(stored.A).toBeCloseTo(900.00, 2);
     expect(stored.B).toBeCloseTo(600.00, 2);
 
@@ -154,7 +154,7 @@ test.describe('ACID Properties Demonstration - FSM tests', () => {
   });
 
   test('Transfer failure transition (S2_Transfer_Failure) - transfer(amount,true) aborts and leaves balances unchanged', async ({ page }) => {
-    const app = new AcidDemoPage(page);
+    const app2 = new AcidDemoPage(page);
     await app.gotoAndResetBalances();
 
     // Use a mid-size amount and trigger simulated failure
@@ -168,23 +168,23 @@ test.describe('ACID Properties Demonstration - FSM tests', () => {
     await app.waitForLogText('No changes applied. Data remains consistent.');
 
     // After a simulated failure, ensure balances in the DOM remain unchanged from initial values
-    const balances = await app.getBalances();
+    const balances2 = await app.getBalances();
     expect(balances.A).toBeCloseTo(1000.00, 2);
     expect(balances.B).toBeCloseTo(500.00, 2);
 
     // And localStorage should also remain unchanged (no commit)
-    const stored = await app.getStoredBalances();
+    const stored2 = await app.getStoredBalances();
     expect(stored.A).toBeCloseTo(1000.00, 2);
     expect(stored.B).toBeCloseTo(500.00, 2);
 
     // Check that error messages are styled with the error class in the log
-    const logHtml = await page.locator('#log').innerHTML();
+    const logHtml1 = await page.locator('#log').innerHTML();
     expect(logHtml).toContain('Transaction aborted: Simulated failure during transaction.');
     expect(logHtml).toMatch(/class="[^"]*error[^"]*"/);
   });
 
   test('Edge case: Invalid transfer amount (NaN/empty) logs error and does not call transfer()', async ({ page }) => {
-    const app = new AcidDemoPage(page);
+    const app3 = new AcidDemoPage(page);
     await app.gotoAndResetBalances();
 
     // Clear the amount input to simulate invalid amount, then click transfer
@@ -193,18 +193,18 @@ test.describe('ACID Properties Demonstration - FSM tests', () => {
 
     // Expect an immediate invalid amount error message and no further transfer logs
     await app.waitForLogText('Invalid transfer amount.');
-    const logText = await app.getLogText();
+    const logText1 = await app.getLogText();
     expect(logText).toContain('Invalid transfer amount.');
     expect(logText).not.toContain('Starting transfer of $');
 
     // Balances should remain unchanged
-    const balances = await app.getBalances();
+    const balances3 = await app.getBalances();
     expect(balances.A).toBeCloseTo(1000.00, 2);
     expect(balances.B).toBeCloseTo(500.00, 2);
   });
 
   test('Edge case: Insufficient funds aborts transaction with appropriate message and no commit', async ({ page }) => {
-    const app = new AcidDemoPage(page);
+    const app4 = new AcidDemoPage(page);
     await app.gotoAndResetBalances();
 
     // Attempt to transfer more than Account A has
@@ -217,12 +217,12 @@ test.describe('ACID Properties Demonstration - FSM tests', () => {
     await app.waitForLogText('No changes applied. Data remains consistent.');
 
     // Balances should remain unchanged
-    const balances = await app.getBalances();
+    const balances4 = await app.getBalances();
     expect(balances.A).toBeCloseTo(1000.00, 2);
     expect(balances.B).toBeCloseTo(500.00, 2);
 
     // localStorage untouched
-    const stored = await app.getStoredBalances();
+    const stored3 = await app.getStoredBalances();
     expect(stored.A).toBeCloseTo(1000.00, 2);
     expect(stored.B).toBeCloseTo(500.00, 2);
   });

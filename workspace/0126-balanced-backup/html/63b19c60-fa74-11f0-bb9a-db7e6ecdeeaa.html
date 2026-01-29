@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bellman-Ford Algorithm Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #fefefe;
+  }
+  h1 {
+    text-align: center;
+  }
+  #graph, #distances, #logs {
+    margin-top: 20px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #graph svg {
+    border: 1px solid #ccc;
+    background: #fafafa;
+    display: block;
+    margin: 0 auto;
+  }
+  .node circle {
+    fill: #4285F4;
+    stroke: #2a56c6;
+    stroke-width: 2;
+    cursor: pointer;
+  }
+  .node text {
+    fill: white;
+    font-weight: bold;
+    pointer-events: none;
+    user-select: none;
+  }
+  .edge path {
+    stroke: #999;
+    stroke-width: 2;
+    fill: none;
+    marker-end: url(#arrowhead);
+  }
+  .edge text {
+    font-size: 12px;
+    fill: #555;
+    user-select: none;
+  }
+  .highlight-edge path {
+    stroke: #E53935;
+    stroke-width: 3;
+  }
+  .highlight-node circle {
+    fill: #E53935;
+  }
+  #controls {
+    text-align: center;
+    margin-top: 30px;
+  }
+  select, button {
+    font-size: 16px;
+    padding: 6px 12px;
+    margin: 0 5px;
+  }
+  #distances table {
+    margin: 0 auto;
+    border-collapse: collapse;
+  }
+  #distances th, #distances td {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+  }
+  #logs {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #eee;
+    border: 1px solid #ccc;
+    padding: 10px;
+    font-family: monospace;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+<h1>Bellman-Ford Algorithm Visualization</h1>
+<div id="controls">
+  <label for="sourceNode">Select Source Node: </label>
+  <select id="sourceNode"></select>
+  <button id="startBtn">Start Algorithm</button>
+  <button id="stepBtn" disabled>Next Step</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<div id="graph"></div>
+
+<div id="distances">
+  <h3>Current Distance Estimates</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Distance from Source</th></tr>
+    </thead>
+    <tbody id="distanceTableBody"></tbody>
+  </table>
+</div>
+
+<div id="logs">
+  <h3>Algorithm Logs</h3>
+  <div id="logContent"></div>
+</div>
+
+<script>
+// Graph definition - edges as {from, to, weight}
+// We create a graph with 5 nodes (A-E) and some edges with positive and negative weights (but no negative cycle)
+const nodes = [
+  { id: 'A', x: 150, y: 80 },
+  { id: 'B', x: 400, y: 80 },
+  { id: 'C', x: 650, y: 80 },
+  { id: 'D', x: 275, y: 250 },
+  { id: 'E', x: 525, y: 250 }
+];
+const edges = [
+  { from: 'A', to: 'B', weight: 6 },
+  { from: 'A', to: 'D', weight: 6 },
+  { from: 'B', to: 'C', weight: 5 },
+  { from: 'B', to: 'D', weight: 2 },
+  { from: 'C', to: 'E', weight: -1 },
+  { from: 'D', to: 'B', weight: -2 },
+  { from: 'D', to: 'E', weight: 1 },
+  { from: 'E', to: 'C', weight: 3 }
+];
+
+// Variables for Bellman-Ford
+let distances = {};
+let predecessors = {};
+let iteration = 0;
+let edgeIndex = 0;
+let sourceNode = null;
+let relaxationOccurred = false;
+let totalIterations = nodes.length - 1;
+let edgesCount = edges.length;
+let isFinished = false;
+
+// DOM references
+const graphDiv = document.getElementById('graph');
+const distanceTableBody = document.getElementById('distanceTableBody');
+const logContent = document.getElementById('logContent');
+const sourceSelect = document.getElementById('sourceNode');
+const startBtn = document.getElementById('startBtn');
+const stepBtn = document.getElementById('stepBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+// Initialize source select options
+function initSourceSelect() {
+  sourceSelect.innerHTML = '';
+  nodes.forEach(n => {
+    let opt = document.createElement('option');
+    opt.value = n.id;
+    opt.textContent = n.id;
+    sourceSelect.appendChild(opt);
+  });
+}
+
+// Draw graph using SVG
+function drawGraph() {
+  graphDiv.innerHTML = '';
+  const svgNS = "http://www.w3.org/2000/svg";
+  const width = 800;
+  const height = 350;
+  let svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+
+  // Define arrowhead marker
+  let defs = document.createElementNS(svgNS, 'defs');
+  let marker = document.createElementNS(svgNS, 'marker');
+  marker.setAttribute('id', 'arrowhead');
+  marker.setAttribute('markerWidth', '10');
+  marker.setAttribute('markerHeight', '7');
+  marker.setAttribute('refX', '10');
+  marker.setAttribute('refY', '3.5');
+  marker.setAttribute('orient', 'auto');
+  let polygon = document.createElementNS(svgNS, 'polygon');
+  polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+  polygon.setAttribute('fill', '#999');
+  marker.appendChild(polygon);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Edges group
+  const edgesGroup = document.createElementNS(svgNS, 'g');
+  edgesGroup.setAttribute('id', 'edgesGroup');
+
+  edges.forEach((e, i) => {
+    let edgeGroup = document.createElementNS(svgNS, 'g');
+    edgeGroup.classList.add('edge');
+    edgeGroup.setAttribute('data-edge-index', i);
+
+    const fromNode = nodes.find(n => n.id === e.from);
+    const toNode = nodes.find(n => n.id === e.to);
+
+    // Calculate line with arrow from fromNode to toNode
+    // Adjust line from center of fromNode circle to center of toNode circle, offset to avoid overlapping circles
+    let dx = toNode.x - fromNode.x;
+    let dy = toNode.y - fromNode.y;
+    let angle = Math.atan2(dy, dx);
+    const radius = 20; // circle radius
+
+    let startX = fromNode.x + radius * Math.cos(angle);
+    let startY = fromNode.y + radius * Math.sin(angle);
+    let endX = toNode.x - radius * Math.cos(angle);
+    let endY = toNode.y - radius * Math.sin(angle);
+
+    let path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', `M${startX},${startY} L${endX},${endY}`);
+    path.setAttribute('stroke', '#999');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('marker-end', 'url(#arrowhead)');
+
+    // Edge weight label midpoint
+    let midX = (startX + endX) / 2 + 10 * Math.sin(angle);
+    let midY = (startY + endY) / 2 - 10 * Math.cos(angle);
+
+    let weightLabel = document.createElementNS(svgNS, 'text');
+    weightLabel.setAttribute('x', midX);
+    weightLabel.setAttribute('y', midY);
+    weightLabel.textContent = e.weight;
+    weightLabel.style.fontSize = '14px';
+    weightLabel.style.fill = '#555';
+    weightLabel.style.userSelect = 'none';
+
+    edgeGroup.appendChild(path);
+    edgeGroup.appendChild(weightLabel);
+    edgesGroup.appendChild(edgeGroup);
+  });
+
+  svg.appendChild(edgesGroup);
+
+  // Nodes group
+  const nodesGroup = document.createElementNS(svgNS, 'g');
+  nodesGroup.setAttribute('id', 'nodesGroup');
+
+  nodes.forEach(n => {
+    let nodeGroup = document.createElementNS(svgNS, 'g');
+    nodeGroup.classList.add('node');
+    nodeGroup.setAttribute('data-node-id', n.id);
+    nodeGroup.setAttribute('transform', `translate(${n.x},${n.y})`);
+
+    let circle = document.createElementNS(svgNS, 'circle');
+    circle.setAttribute('r', 20);
+    circle.style.fill = '#4285F4';
+    circle.style.stroke = '#2a56c6';
+    circle.style.strokeWidth = 2;
+    nodeGroup.appendChild(circle);
+
+    let text = document.createElementNS(svgNS, 'text');
+    text.setAttribute('x', 0);
+    text.setAttribute('y', 5);
+    text.setAttribute('text-anchor', 'middle');
+    text.style.fill = 'white';
+    text.style.fontWeight = 'bold';
+    text.textContent = n.id;
+    nodeGroup.appendChild(text);
+
+    nodesGroup.appendChild(nodeGroup);
+  });
+
+  svg.appendChild(nodesGroup);
+
+  graphDiv.appendChild(svg);
+}
+
+// Initialize distances and predecessors to infinity/-1 except source
+function initAlgorithm(src) {
+  distances = {};
+  predecessors = {};
+  nodes.forEach(n => {
+    distances[n.id] = Infinity;
+    predecessors[n.id] = null;
+  });
+  distances[src] = 0;
+  iteration = 0;
+  edgeIndex = 0;
+  relaxationOccurred = false;
+  isFinished = false;
+  updateDistancesTable();
+  logContent.textContent = `Algorithm initialized with source = ${src}\n`;
+  highlightDistances();
+  updateGraphHighlights(null, null);
+}
+
+// Update distance table UI
+function updateDistancesTable() {
+  distanceTableBody.innerHTML = '';
+  nodes.forEach(n => {
+    let tr = document.createElement('tr');
+    let tdNode = document.createElement('td');
+    tdNode.textContent = n.id;
+    let tdDist = document.createElement('td');
+    tdDist.textContent = distances[n.id] === Infinity ? '∞' : distances[n.id];
+    tr.appendChild(tdNode);
+    tr.appendChild(tdDist);
+    distanceTableBody.appendChild(tr);
+  });
+  highlightDistances();
+}
+
+// Highlight distances in the table that changed in last relaxation
+function highlightDistances() {
+  // No special highlight persisted, but could be enhanced
+}
+
+// Log a line
+function log(msg) {
+  logContent.textContent += msg + '\n';
+  logContent.scrollTop = logContent.scrollHeight;
+}
+
+// Perform one relaxation step over one edge, manage iterations and edgeIndex
+function performStep() {
+  if (isFinished) {
+    log(`Algorithm completed.`);
+    stepBtn.disabled = true;
+    return;
+  }
+
+  if (iteration >= totalIterations) {
+    // One more iteration to check for negative cycle
+    if (edgeIndex === edgesCount) {
+      // No relaxation in last pass: no negative cycle
+      if (!relaxationOccurred) {
+        log("No further relaxation; no negative weight cycle detected.");
+        isFinished = true;
+        stepBtn.disabled = true;
+        return;
+      } else {
+        // Reset for next pass
+        iteration++;
+        edgeIndex = 0;
+        relaxationOccurred = false;
+        log(`Iteration ${iteration} started to check negative cycle...`);
+      }
+    }
+  }
+
+  if (edgeIndex < edgesCount) {
+    const e = edges[edgeIndex];
+    const u = e.from;
+    const v = e.to;
+    const w = e.weight;
+
+    log(`Checking edge (${u} → ${v}) with weight ${w}`);
+    let relaxed = false;
+    if (distances[u] !== Infinity && distances[u] + w < distances[v]) {
+      let oldDist = distances[v];
+      distances[v] = distances[u] + w;
+      predecessors[v] = u;
+      relaxationOccurred = true;
+      relaxed = true;
+      log(`Relaxed: distance to ${v} updated from ${oldDist} to ${distances[v]} via ${u}`);
+    } else {
+      log(`No relaxation needed for edge (${u} → ${v})`);
+    }
+
+    highlightCurrentEdge(edgeIndex, relaxed);
+    updateDistancesTable();
+
+    edgeIndex++;
+
+  } else {
+    iteration++;
+    if (iteration >= totalIterations) {
+      // check for negative cycle in one last iteration
+      if (!relaxationOccurred) {
+        log('Algorithm finished: no negative weight cycles detected.');
+        isFinished = true;
+        stepBtn.disabled = true;
+      } else {
+        log('Negative weight cycle detected! Algorithm stops.');
+        isFinished = true;
+        stepBtn.disabled = true;
+      }
+      return;
+    }
+    relaxationOccurred = false;
+    edgeIndex = 0;
+    log(`Starting iteration ${iteration + 1}...`);
+  }
+}
+
+// Highlight the current edge that is being relaxed
+function highlightCurrentEdge(edgeI, relaxed) {
+  const svg = graphDiv.querySelector('svg');
+  if (!svg) return;
+  // Remove all highlights
+  svg.querySelectorAll('.highlight-edge').forEach(el => {
+    el.classList.remove('highlight-edge');
+  });
+  svg.querySelectorAll('.highlight-node').forEach(el => {
+    el.classList.remove('highlight-node');
+  });
+
+  if (edgeI === null) return;
+
+  const edgeGroup = svg.querySelector(`.edge[data-edge-index='${edgeI}']`);
+  if (edgeGroup) {
+    edgeGroup.classList.add('highlight-edge');
+  }
+
+  // Also highlight the from node in red and to node in orange if relaxed; else blue.
+  if (edgeGroup) {
+    const fromId = edges[edgeI].from;
+    const toId = edges[edgeI].to;
+    const nodesGroup = svg.querySelectorAll('.node');
+    nodesGroup.forEach(nodeGrp => {
+      let id = nodeGrp.getAttribute('data-node-id');
+      if (id === fromId) {
+        if (relaxed) {
+          nodeGrp.classList.add('highlight-node');
+          nodeGrp.querySelector('circle').style.fill = '#E53935'; // Red for from node relaxation
+        } else {
+          nodeGrp.querySelector('circle').style.fill = '#3949AB'; // Darker Blue
+        }
+      }
+      if (id === toId) {
+        if (relaxed) {
+          nodeGrp.classList.add('highlight-node');
+          nodeGrp.querySelector('circle').style.fill = '#FB8C00'; // Orange for to node relaxation
+        } else {
+          nodeGrp.querySelector('circle').style.fill = '#4285F4'; // Normal blue
+        }
+      }
+      if (id !== toId && id !== fromId) {
+        nodeGrp.querySelector('circle').style.fill = '#4285F4';
+      }
+    });
+  }
+}
+
+// Reset everything
+function reset() {
+  sourceNode = sourceSelect.value;
+  initAlgorithm(sourceNode);
+  stepBtn.disabled = false;
+  startBtn.disabled = false;
+  logContent.textContent = '';
+  drawGraph();
+}
+
+// Start run (instant run demonstration - we do stepwise only here)
+function startAlgorithm() {
+  startBtn.disabled = true;
+  stepBtn.disabled = false;
+  sourceNode = sourceSelect.value;
+  initAlgorithm(sourceNode);
+  log(`Press "Next Step" to run the algorithm step-by-step.`);
+}
+
+// Event listeners
+startBtn.addEventListener('click', () => {
+  startAlgorithm();
+});
+stepBtn.addEventListener('click', () => {
+  performStep();
+});
+resetBtn.addEventListener('click', () => {
+  reset();
+});
+
+// Initialize
+initSourceSelect();
+drawGraph();
+initAlgorithm(nodes[0].id);
+stepBtn.disabled = true;
+</script>
+</body>
+</html>

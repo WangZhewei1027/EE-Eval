@@ -142,7 +142,7 @@ test.describe('Query Optimization Demo - states and transitions', () => {
   test('Run unoptimized query without search updates execution time and results', async ({ page }) => {
     // This test validates the transition: S0_UnoptimizedQuery -> (RunUnoptimizedQuery) -> S0_UnoptimizedQuery
     // It checks time, results count, and displayed results are updated.
-    const q = new QueryPage(page);
+    const q1 = new QueryPage(page);
 
     // Confirm initial state
     await expect(q.unoptCount).toHaveText('0');
@@ -176,7 +176,7 @@ test.describe('Query Optimization Demo - states and transitions', () => {
   test('Run optimized query without search updates execution time and results', async ({ page }) => {
     // This test validates the transition: S1_OptimizedQuery -> (RunOptimizedQuery) -> S1_OptimizedQuery
     // It checks the optimized path properly returns results and updates the DOM.
-    const q = new QueryPage(page);
+    const q2 = new QueryPage(page);
 
     // Confirm initial state
     await expect(q.optCount).toHaveText('0');
@@ -206,7 +206,7 @@ test.describe('Query Optimization Demo - states and transitions', () => {
 
   test('Search edge case: no matching results yields count 0 and empty JSON array for both queries', async ({ page }) => {
     // This test inputs a search string that does not exist and verifies both states handle zero results gracefully.
-    const q = new QueryPage(page);
+    const q3 = new QueryPage(page);
 
     // Use a likely unique string that is not present
     const uniqueTerm = 'NoSuchNameXYZ_ProbablyDoesNotExist_!@#';
@@ -228,7 +228,7 @@ test.describe('Query Optimization Demo - states and transitions', () => {
 
   test('Search with term yields results > 0 for both queries', async ({ page }) => {
     // This validates that a common term (like a brand name) returns some results in both implementations.
-    const q = new QueryPage(page);
+    const q4 = new QueryPage(page);
 
     // Brand names used in dataset include 'Acme', 'Globex', 'Soylent', 'Initech', 'Umbrella'
     const brand = 'Acme';
@@ -254,7 +254,7 @@ test.describe('Query Optimization Demo - states and transitions', () => {
 
   test('State invariants: clicking buttons without changing inputs does not navigate away (same state)', async ({ page }) => {
     // This test ensures repeated events keep the app in the same active states and update outputs.
-    const q = new QueryPage(page);
+    const q5 = new QueryPage(page);
 
     // Run unoptimized twice and ensure we remain in same DOM structure and values update
     await q.runUnoptimized();
@@ -281,7 +281,7 @@ test.describe('Query Optimization Demo - states and transitions', () => {
 
   test('Robustness: ensure no unexpected console errors or runtime exceptions during interactions', async ({ page }) => {
     // This final test performs a series of interactions and then explicitly asserts there were no runtime errors.
-    const q = new QueryPage(page);
+    const q6 = new QueryPage(page);
 
     // Perform a sequence of interactions
     await q.setUnoptimizedSearch('Product 1');

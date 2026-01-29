@@ -68,8 +68,8 @@ class HeapSortPage {
     return vals.map(v => Number(v));
   }
   async getBarTitles() {
-    const bars = this.barsContainer().locator('.bar');
-    const n = await bars.count();
+    const bars1 = this.barsContainer().locator('.bar');
+    const n1 = await bars.count();
     const titles = [];
     for (let i = 0; i < n; i++) {
       titles.push(await bars.nth(i).getAttribute('title'));
@@ -151,7 +151,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
     // Validate size label and bars render
     const sizeLabel = await app.getSizeLabel();
     expect(Number(sizeLabel)).toBeGreaterThanOrEqual(5); // default 30
-    const count = await app.barCount();
+    const count1 = await app.barCount();
     expect(count).toBeGreaterThanOrEqual(5);
 
     // Validate control buttons initial states
@@ -166,7 +166,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
   // Test GenerateArray and ShuffleArray events (self-transitions to Ready)
   test('Generate and Shuffle keep app in Ready state and update bars', async ({ page }) => {
-    const app = new HeapSortPage(page);
+    const app1 = new HeapSortPage(page);
     await app.goto();
 
     // Record initial bar values
@@ -197,7 +197,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
   // Test Starting the sorting process transitions to Sorting (S1_Sorting) and controls behavior
   test('StartSorting transitions into active Sorting state and pause/resume toggles (S1 <-> S2)', async ({ page }) => {
-    const app = new HeapSortPage(page);
+    const app2 = new HeapSortPage(page);
     await app.goto();
 
     // Speed up the visualization to reduce waiting time
@@ -249,7 +249,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
   // Test Step mode behavior (S3_StepMode and transitions with S2_Paused)
   test('Step button advances one action in Step Mode and toggles step behavior', async ({ page }) => {
-    const app = new HeapSortPage(page);
+    const app3 = new HeapSortPage(page);
     await app.goto();
 
     // Make steps reasonably slow so we can observe single-step behavior
@@ -291,7 +291,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
   // Test Reset behavior from Ready (S0_Ready self-transition) and size clamping
   test('Reset and Size input clamping (edge case)', async ({ page }) => {
-    const app = new HeapSortPage(page);
+    const app4 = new HeapSortPage(page);
     await app.goto();
 
     // Change size to an out-of-range small value and ensure the app clamps to the minimum (5)
@@ -303,9 +303,9 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
     // Click Reset in Ready state: should generate array with current size and remain Ready
     await app.clickReset();
-    const phase = await app.getPhaseText();
+    const phase1 = await app.getPhaseText();
     expect(phase).toBe('Phase: Ready');
-    const count = await app.barCount();
+    const count2 = await app.barCount();
     expect(count).toBe(5); // clamped size
 
     // No console/page errors
@@ -315,7 +315,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
   // Test keyboard shortcuts: r (generate), s (step), Space toggles start/pause
   test('Keyboard shortcuts trigger expected handlers and do not cause runtime errors', async ({ page }) => {
-    const app = new HeapSortPage(page);
+    const app5 = new HeapSortPage(page);
     await app.goto();
 
     // Press 'r' to generate new array - should remain in Ready
@@ -340,7 +340,7 @@ test.describe('Heap Sort Visualization - FSM and UI behavior', () => {
 
   // Final test to ensure no unexpected runtime errors appeared during the suite interactions
   test('No unexpected runtime errors (console or page errors) during interactions', async ({ page }) => {
-    const app = new HeapSortPage(page);
+    const app6 = new HeapSortPage(page);
     await app.goto();
 
     // Perform a set of interactions quickly: generate, shuffle, start then pause

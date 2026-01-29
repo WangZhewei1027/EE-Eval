@@ -101,7 +101,7 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
     expect(barCount).toBe(pageArray.length);
 
     // The inline style height should be value * 300 as per implementation - validate a few exact heights
-    const heights = await app.getBarHeights();
+    const heights1 = await app.getBarHeights();
     // Compute expected heights from the pageArray
     const expectedHeights = pageArray.map(v => v * 300);
 
@@ -115,8 +115,8 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
   // Test clicking the Sort Array button triggers the transition to S1_Sorted and renders a sorted array
   test('SortArray event transitions to S1_Sorted: clicking Sort Array renders the sorted array', async ({ page }) => {
     // Collect console messages and page errors so we can assert none occurred during the action
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -124,7 +124,7 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
       pageErrors.push(error);
     });
 
-    const app = new BucketSortPage(page);
+    const app1 = new BucketSortPage(page);
     await app.goto();
 
     // Capture initial state
@@ -160,18 +160,18 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
 
     // Verify no page errors or console.error during the sort transition
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   // Edge case: clicking Sort Array multiple times should be idempotent / not throw and remain sorted
   test('Clicking Sort Array multiple times remains stable and does not produce errors', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', error => pageErrors.push(error));
 
-    const app = new BucketSortPage(page);
+    const app2 = new BucketSortPage(page);
     await app.goto();
 
     // Click multiple times
@@ -180,17 +180,17 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
     await app.clickSort();
 
     // Bars still same count and remain in sorted order
-    const barCount = await app.getBarCount();
+    const barCount1 = await app.getBarCount();
     expect(barCount).toBe(10);
 
-    const heights = await app.getBarHeights();
+    const heights2 = await app.getBarHeights();
     for (let i = 1; i < heights.length; i++) {
       expect(heights[i] + 0.0001).toBeGreaterThanOrEqual(heights[i - 1]);
     }
 
     // No page errors and no console.error messages
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
@@ -198,12 +198,12 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
   // - S0 entry: initial renderArray(array) -> verified by initial DOM state
   // - Transition actions: renderArray(array) then renderArray(sortedArray) -> verified by DOM before/after click
   test('FSM observables: initial render and sorted render are both observable in the DOM', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', error => pageErrors.push(error));
 
-    const app = new BucketSortPage(page);
+    const app3 = new BucketSortPage(page);
     await app.goto();
 
     // Initial snapshot of heights
@@ -223,19 +223,19 @@ test.describe('Bucket Sort Visualization - FSM tests (S0_Idle -> S1_Sorted)', ()
 
     // No page errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   // Negative/robustness test: ensure bucketSort function exists and returns expected length/type
   test('bucketSort function exists on the page and returns an array of correct length', async ({ page }) => {
-    const app = new BucketSortPage(page);
+    const app4 = new BucketSortPage(page);
     await app.goto();
 
     const hasBucketSort = await page.evaluate(() => typeof bucketSort === 'function');
     expect(hasBucketSort).toBe(true);
 
-    const originalArray = await app.getPageArray();
+    const originalArray1 = await app.getPageArray();
     const result = await app.getSortedArrayFromPage();
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(originalArray.length);

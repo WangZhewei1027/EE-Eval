@@ -131,7 +131,7 @@ test.describe('Initial State (Idle) and rendering', () => {
 */
 test.describe('Reference Counting Example (Create & Clear reference)', () => {
   test('Create object sets refStatus to "Object created with reference"', async ({ page }) => {
-    const app = new GCPage(page);
+    const app1 = new GCPage(page);
 
     // Click create and assert state message updates
     await app.clickCreateRef();
@@ -143,7 +143,7 @@ test.describe('Reference Counting Example (Create & Clear reference)', () => {
   });
 
   test('Clear reference after creation sets refStatus to cleared message', async ({ page }) => {
-    const app = new GCPage(page);
+    const app2 = new GCPage(page);
 
     // Ensure we're in created state first
     await app.clickCreateRef();
@@ -158,7 +158,7 @@ test.describe('Reference Counting Example (Create & Clear reference)', () => {
   });
 
   test('Clearing reference when none created still updates status (edge case)', async ({ page }) => {
-    const app = new GCPage(page);
+    const app3 = new GCPage(page);
 
     // Click clear before any create - ensure idempotent and results are correct
     await app.clickClearRef();
@@ -170,7 +170,7 @@ test.describe('Reference Counting Example (Create & Clear reference)', () => {
   });
 
   test('Multiple creates overwrite previous reference state', async ({ page }) => {
-    const app = new GCPage(page);
+    const app4 = new GCPage(page);
 
     // Create twice and ensure still in created state
     await app.clickCreateRef();
@@ -189,7 +189,7 @@ test.describe('Reference Counting Example (Create & Clear reference)', () => {
 */
 test.describe('Circular References Example', () => {
   test('Creating circular references updates circularStatus accordingly', async ({ page }) => {
-    const app = new GCPage(page);
+    const app5 = new GCPage(page);
 
     await app.clickCreateCircular();
     await expect(app.circularStatus).toHaveText('Circular references created between Object A and B');
@@ -200,7 +200,7 @@ test.describe('Circular References Example', () => {
   });
 
   test('Clearing circular references updates status to cleared message', async ({ page }) => {
-    const app = new GCPage(page);
+    const app6 = new GCPage(page);
 
     // Create then clear
     await app.clickCreateCircular();
@@ -214,7 +214,7 @@ test.describe('Circular References Example', () => {
   });
 
   test('Clearing circular references before creation behaves gracefully (edge case)', async ({ page }) => {
-    const app = new GCPage(page);
+    const app7 = new GCPage(page);
 
     // Clear before create - should still show cleared text
     await app.clickClearCircular();
@@ -231,7 +231,7 @@ test.describe('Circular References Example', () => {
 */
 test.describe('Memory Monitoring', () => {
   test('Check Memory Usage updates memoryInfo with either memory data or fallback message', async ({ page }) => {
-    const app = new GCPage(page);
+    const app8 = new GCPage(page);
 
     // Ensure initial content present
     await expect(app.memoryInfo).toHaveText('Memory info will appear here');
@@ -259,7 +259,7 @@ test.describe('Memory Monitoring', () => {
   });
 
   test('Repeated memory checks do not crash and update memoryInfo', async ({ page }) => {
-    const app = new GCPage(page);
+    const app9 = new GCPage(page);
 
     // Perform multiple checks
     await app.clickCheckMemory();
@@ -285,7 +285,7 @@ test.describe('Memory Monitoring', () => {
 */
 test.describe('Memory Leak Simulation', () => {
   test('Start memory leak activates and increments leaked objects', async ({ page }) => {
-    const app = new GCPage(page);
+    const app10 = new GCPage(page);
 
     // Start memory leak
     await app.clickStartLeak();
@@ -314,7 +314,7 @@ test.describe('Memory Leak Simulation', () => {
   });
 
   test('Starting leak twice does not create duplicate intervals (idempotent start)', async ({ page }) => {
-    const app = new GCPage(page);
+    const app11 = new GCPage(page);
 
     // Start leak first time
     await app.clickStartLeak();
@@ -340,7 +340,7 @@ test.describe('Memory Leak Simulation', () => {
   });
 
   test('Stop memory leak clears interval and shows stopped message', async ({ page }) => {
-    const app = new GCPage(page);
+    const app12 = new GCPage(page);
 
     // Start leak
     await app.clickStartLeak();
@@ -374,7 +374,7 @@ test.describe('Memory Leak Simulation', () => {
   });
 
   test('Stopping leak when none active behaves gracefully (edge case)', async ({ page }) => {
-    const app = new GCPage(page);
+    const app13 = new GCPage(page);
 
     // Ensure leak is stopped
     await app.clickStopLeak();
@@ -400,7 +400,7 @@ test.describe('Memory Leak Simulation', () => {
   According to "observe console logs and page errors", we capture them and assert that none occurred.
 */
 test('Observe console and page errors throughout interactions (no uncaught ReferenceError/SyntaxError/TypeError)', async ({ page }) => {
-  const app = new GCPage(page);
+  const app14 = new GCPage(page);
 
   // Perform a sequence of interactions to reveal potential runtime errors
   await app.clickCreateRef();

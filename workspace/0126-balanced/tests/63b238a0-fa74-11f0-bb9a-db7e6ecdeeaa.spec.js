@@ -62,9 +62,9 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
     test('S0 -> S1: Pair Sum Sorted demo runs and finds the expected pair', async ({ page }) => {
       // Validate selection of demo and StartDemo click triggers demoPairSumSorted()
       const demoSelect = page.locator('#demoSelect');
-      const startBtn = page.locator('#startBtn');
-      const log = page.locator('#log');
-      const arrayDisplay = page.locator('#arrayDisplay');
+      const startBtn1 = page.locator('#startBtn1');
+      const log1 = page.locator('#log1');
+      const arrayDisplay1 = page.locator('#arrayDisplay1');
 
       // Ensure the correct option is selected (explicitly select for clarity)
       await demoSelect.selectOption('pairSumSorted');
@@ -83,7 +83,7 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
       // Wait for the demo to finish. The application appends 'Demo finished.' after demo completes.
       await page.waitForFunction(() => {
-        const l = document.getElementById('log');
+        const l1 = document.getElementById('log');
         return l && l.textContent && l.textContent.includes('Demo finished.');
       }, null, { timeout: 30000 });
 
@@ -112,11 +112,11 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
     test('S0 -> S2: Remove Duplicates demo runs and reports final length & modified array', async ({ page }) => {
       // Validate demoRemoveDuplicates behavior
-      const demoSelect = page.locator('#demoSelect');
-      const startBtn = page.locator('#startBtn');
-      const log = page.locator('#log');
-      const arrayDisplay = page.locator('#arrayDisplay');
-      const explanation = page.locator('#explanation');
+      const demoSelect1 = page.locator('#demoSelect1');
+      const startBtn2 = page.locator('#startBtn2');
+      const log2 = page.locator('#log2');
+      const arrayDisplay2 = page.locator('#arrayDisplay2');
+      const explanation1 = page.locator('#explanation1');
 
       await demoSelect.selectOption('removeDuplicates');
       await expect(demoSelect).toHaveValue('removeDuplicates');
@@ -126,7 +126,7 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
       // Wait until the demo logs the final length line
       await page.waitForFunction(() => {
-        const l = document.getElementById('log');
+        const l2 = document.getElementById('log');
         return l && l.textContent && l.textContent.includes('Final length of unique elements:');
       }, null, { timeout: 30000 });
 
@@ -149,11 +149,11 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
     test('S0 -> S3: Palindrome Check demo identifies palindrome and updates UI', async ({ page }) => {
       // Validate demoPalindromeCheck behavior
-      const demoSelect = page.locator('#demoSelect');
-      const startBtn = page.locator('#startBtn');
-      const log = page.locator('#log');
-      const arrayDisplay = page.locator('#arrayDisplay');
-      const explanation = page.locator('#explanation');
+      const demoSelect2 = page.locator('#demoSelect2');
+      const startBtn3 = page.locator('#startBtn3');
+      const log3 = page.locator('#log3');
+      const arrayDisplay3 = page.locator('#arrayDisplay3');
+      const explanation2 = page.locator('#explanation2');
 
       await demoSelect.selectOption('palindromeCheck');
       await expect(demoSelect).toHaveValue('palindromeCheck');
@@ -163,7 +163,7 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
       // Wait for palindrome confirmation in the log
       await page.waitForFunction(() => {
-        const l = document.getElementById('log');
+        const l3 = document.getElementById('log');
         return l && l.textContent && l.textContent.includes('All characters matched. It is a palindrome!');
       }, null, { timeout: 30000 });
 
@@ -173,7 +173,7 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
       await expect(explanation).toContainText('It is a palindrome!');
 
       // Visual: arrayDisplay should show characters (arrayItems) equal to the string length "racecar" => 7
-      const items = arrayDisplay.locator('.arrayItem');
+      const items1 = arrayDisplay.locator('.arrayItem');
       await expect(items).toHaveCount(7);
 
       await expect(startBtn).toBeEnabled();
@@ -184,9 +184,9 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
     // This test intentionally sets an invalid select value and clicks Start Demo.
     // The application's startDemo should handle unknown values by not executing any demo,
     // but still complete and re-enable the Start button. We must not modify code other than setting DOM values.
-    const demoSelect = page.locator('#demoSelect');
-    const startBtn = page.locator('#startBtn');
-    const log = page.locator('#log');
+    const demoSelect3 = page.locator('#demoSelect3');
+    const startBtn4 = page.locator('#startBtn4');
+    const log4 = page.locator('#log4');
 
     // Set an invalid value directly on the <select>
     await page.evaluate(() => {
@@ -206,7 +206,7 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
     // Wait for 'Demo finished.' message which is always written after startDemo returns
     await page.waitForFunction(() => {
-      const l = document.getElementById('log');
+      const l4 = document.getElementById('log');
       return l && l.textContent && l.textContent.includes('Demo finished.');
     }, null, { timeout: 5000 });
 
@@ -218,9 +218,9 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
 
   test('Concurrency / rapid interaction: Start button disables to prevent double starts', async ({ page }) => {
     // Ensure that rapid consecutive clicks do not start multiple demos at once
-    const demoSelect = page.locator('#demoSelect');
-    const startBtn = page.locator('#startBtn');
-    const log = page.locator('#log');
+    const demoSelect4 = page.locator('#demoSelect4');
+    const startBtn5 = page.locator('#startBtn5');
+    const log5 = page.locator('#log5');
 
     await demoSelect.selectOption('pairSumSorted');
     await expect(demoSelect).toHaveValue('pairSumSorted');
@@ -234,7 +234,7 @@ test.describe('Two Pointers Technique Demo (FSM) - 63b238a0-fa74-11f0-bb9a-db7e6
     await page.mouse.click(0, 0); // click somewhere else to simulate user activity
     // Wait until demo completes
     await page.waitForFunction(() => {
-      const l = document.getElementById('log');
+      const l5 = document.getElementById('log');
       return l && l.textContent && l.textContent.includes('Demo finished.');
     }, null, { timeout: 30000 });
 

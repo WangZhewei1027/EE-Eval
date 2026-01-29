@@ -106,7 +106,7 @@ test.describe('520a7f70-fa76-11f0-a09b-87751f540fd8 - SQL Demo (FSM S0_Initial)'
   // Edge case: If the inline script threw early, later operations like console.log(rows) wouldn't execute.
   // We assert that the "rows" output was not logged and that no success messages indicating DB work exist.
   test('Edge case: no DB operation success logs are present due to early runtime failure', async ({ page }) => {
-    const consoleMessages = [];
+    const consoleMessages1 = [];
     page.on('console', msg => {
       try {
         consoleMessages.push(msg.text());
@@ -116,7 +116,7 @@ test.describe('520a7f70-fa76-11f0-a09b-87751f540fd8 - SQL Demo (FSM S0_Initial)'
     });
 
     // Navigate and wait for the expected runtime error to ensure script executed
-    const pageErrorPromise = page.waitForEvent('pageerror');
+    const pageErrorPromise1 = page.waitForEvent('pageerror');
     await page.goto(URL);
     await pageErrorPromise;
 

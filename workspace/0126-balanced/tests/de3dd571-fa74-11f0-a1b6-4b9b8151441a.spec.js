@@ -109,7 +109,7 @@ test.describe('Runtime Environment Demo - FSM states and transitions', () => {
 
   test('S1_EnvironmentFeatures: clicking Detect Environment Features shows browser features', async ({ page }) => {
     // This test validates the DetectEnvironmentFeatures event and S0 -> S1 transition
-    const app = new RuntimeDemoPage(page);
+    const app1 = new RuntimeDemoPage(page);
     app.attachErrorListeners();
     await app.goto();
 
@@ -117,7 +117,7 @@ test.describe('Runtime Environment Demo - FSM states and transitions', () => {
     await app.clickDetect();
 
     // Assert - output contains the Browser Environment features header and expected items
-    const outputHTML = await app.getOutputHTML();
+    const outputHTML1 = await app.getOutputHTML();
     expect(outputHTML).toContain('Browser Environment Features:');
     // Check that some specific feature lines are present and truthy for a browser context
     expect(outputHTML).toContain('Window object: true');
@@ -133,7 +133,7 @@ test.describe('Runtime Environment Demo - FSM states and transitions', () => {
 
   test('S2_MemoryAllocation: clicking Simulate Memory Allocation displays stack and heap details', async ({ page }) => {
     // Validates the SimulateMemoryAllocation event and S0 -> S2 transition
-    const app = new RuntimeDemoPage(page);
+    const app2 = new RuntimeDemoPage(page);
     app.attachErrorListeners();
     await app.goto();
 
@@ -157,7 +157,7 @@ test.describe('Runtime Environment Demo - FSM states and transitions', () => {
 
   test('S3_EventLoopDemonstrated: clicking Demonstrate Event Loop shows synchronous, microtask, and macrotask behavior in order', async ({ page }) => {
     // Validates the DemonstrateEventLoop event and S0 -> S3 transition, including event loop ordering
-    const app = new RuntimeDemoPage(page);
+    const app3 = new RuntimeDemoPage(page);
     app.attachErrorListeners();
     await app.goto();
 
@@ -197,7 +197,7 @@ test.describe('Runtime Environment Demo - FSM states and transitions', () => {
 
   test('Edge case: rapid repeated clicks on each button do not cause uncaught errors and update output', async ({ page }) => {
     // This test triggers edge-case interactions (rapid clicks) to ensure resilience
-    const app = new RuntimeDemoPage(page);
+    const app4 = new RuntimeDemoPage(page);
     app.attachErrorListeners();
     await app.goto();
 
@@ -232,8 +232,8 @@ test.describe('Runtime Environment Demo - FSM states and transitions', () => {
   test('Error observation: capture any console.error or uncaught page exceptions during navigation and interactions', async ({ page }) => {
     // This test explicitly demonstrates collection of console and page errors.
     // It does not assert that errors must exist; instead it asserts that our listeners captured whatever occurred
-    // and fails if unexpected errors occurred (we treat unexpected as any occurrences).
-    const app = new RuntimeDemoPage(page);
+    // and fails if unexpected errors occurred (we treat unexpected occurrences).
+    const app5 = new RuntimeDemoPage(page);
     app.attachErrorListeners();
     await app.goto();
 

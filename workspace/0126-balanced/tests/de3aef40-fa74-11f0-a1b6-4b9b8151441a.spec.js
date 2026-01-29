@@ -124,14 +124,14 @@ test.describe('Deque (Double-ended Queue) Demonstration - E2E', () => {
   });
 
   test('AddFront and AddRear transition to Non-empty (S1_NonEmpty) and display items in correct order', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors1 = [];
+    const consoleErrors1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg);
     });
 
-    const app = new DequePage(page);
+    const app1 = new DequePage(page);
     await app.goto();
 
     // Ensure starting empty
@@ -170,14 +170,14 @@ test.describe('Deque (Double-ended Queue) Demonstration - E2E', () => {
   });
 
   test('RemoveFront, RemoveRear behaviors and transitions back to empty (S1_NonEmpty -> S0_Empty)', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors2 = [];
+    const consoleErrors2 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg);
     });
 
-    const app = new DequePage(page);
+    const app2 = new DequePage(page);
     await app.goto();
 
     // Prepare deque with C, A, B (as in previous test)
@@ -220,14 +220,14 @@ test.describe('Deque (Double-ended Queue) Demonstration - E2E', () => {
   });
 
   test('PeekFront and PeekRear show correct items and handle empty deque', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors3 = [];
+    const consoleErrors3 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg);
     });
 
-    const app = new DequePage(page);
+    const app3 = new DequePage(page);
     await app.goto();
 
     // Peeking when empty should inform the user
@@ -259,14 +259,14 @@ test.describe('Deque (Double-ended Queue) Demonstration - E2E', () => {
   });
 
   test('CheckSize returns accurate sizes throughout operations', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors4 = [];
+    const consoleErrors4 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg);
     });
 
-    const app = new DequePage(page);
+    const app4 = new DequePage(page);
     await app.goto();
 
     // Initially size should be 0
@@ -298,14 +298,14 @@ test.describe('Deque (Double-ended Queue) Demonstration - E2E', () => {
   });
 
   test('Edge case: adding empty input should be ignored', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors5 = [];
+    const consoleErrors5 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg);
     });
 
-    const app = new DequePage(page);
+    const app5 = new DequePage(page);
     await app.goto();
 
     // Ensure empty initially

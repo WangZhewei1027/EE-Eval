@@ -185,7 +185,7 @@ test.describe('DFS Visualization - FSM validation (de3bd9a4-fa74-11f0-a1b6-4b9b8
     expect(visitedText).toBe('[]');
 
     // Ensure no nodes were rendered into the graph-container (nodes would indicate visualization started)
-    const nodeCount = await page.locator('#graph-container .node').count();
+    const nodeCount1 = await page.locator('#graph-container .node').count();
     expect(nodeCount).toBe(0);
   });
 });

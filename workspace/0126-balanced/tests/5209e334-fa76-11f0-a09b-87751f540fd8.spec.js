@@ -54,7 +54,7 @@ class NPPage {
   // Call the page's haltingProblem with a program that throws to test error handling
   async callHaltingProblemWithThrowingProgram() {
     return this.page.evaluate(() => {
-      const program = () => { throw new Error('program-threw'); };
+      const program1 = () => { throw new Error('program1-threw'); };
       return haltingProblem(program, 'test-input');
     });
   }
@@ -124,9 +124,9 @@ test.describe('NP-Completeness Example - FSM S0_Idle validation', () => {
   test('There are no interactive elements or transitions present (as extracted)', async ({ page }) => {
     // This test asserts that the page contains no interactive elements (buttons, inputs, links, forms),
     // matching the FSM extraction that detected no event handlers or interactive components.
-    const npPage = new NPPage(page, consoleMessages);
+    const npPage1 = new NPPage(page, consoleMessages);
 
-    const counts = await npPage.countInteractiveElements();
+    const counts1 = await npPage.countInteractiveElements();
     expect(counts.buttons).toBe(0);
     expect(counts.inputs).toBe(0);
     expect(counts.links).toBe(0);
@@ -140,14 +140,14 @@ test.describe('NP-Completeness Example - FSM S0_Idle validation', () => {
   test('Entry action renderPage: verify it is not defined on the page', async ({ page }) => {
     // FSM entry action mentions renderPage(). The implementation does not define it.
     // We verify that renderPage is not present (so the entry action is not executed by the page).
-    const npPage = new NPPage(page, consoleMessages);
+    const npPage2 = new NPPage(page, consoleMessages);
     const defined = await npPage.isRenderPageDefined();
     expect(defined).toBe(false);
   });
 
   test('haltingProblem behavior: returns true for program outputs 0 and 1, false otherwise', async ({ page }) => {
     // This validates the haltingProblem function logic as implemented in the page script.
-    const npPage = new NPPage(page, consoleMessages);
+    const npPage3 = new NPPage(page, consoleMessages);
 
     // Program that returns number 0 -> should return true
     const res0 = await npPage.callHaltingProblemWithReturn(0);
@@ -173,7 +173,7 @@ test.describe('NP-Completeness Example - FSM S0_Idle validation', () => {
   test('Console output from the example usage should include "true"', async ({ page }) => {
     // The inline script in the page logs the result of haltingProblem(program, input) for a program that returns 0.
     // Verify that a console.log with "true" was emitted during page load.
-    const npPage = new NPPage(page, consoleMessages);
+    const npPage4 = new NPPage(page, consoleMessages);
     const messages = npPage.getConsoleMessages();
 
     // There may be other console messages, but we expect at least one 'true' message as a string.
@@ -189,7 +189,7 @@ test.describe('NP-Completeness Example - FSM S0_Idle validation', () => {
   test('Edge case: haltingProblem should propagate exceptions when program throws', async ({ page }) => {
     // Ensure that if the provided program throws, haltingProblem invocation results in an exception.
     // This is an error scenario test to confirm the function does not swallow exceptions.
-    const npPage = new NPPage(page, consoleMessages);
+    const npPage5 = new NPPage(page, consoleMessages);
 
     // Expect the evaluate that triggers a thrown error to reject
     let threw = false;
@@ -206,10 +206,10 @@ test.describe('NP-Completeness Example - FSM S0_Idle validation', () => {
   test('Consistency check: extraction summary expectation (no detected components/handlers)', async ({ page }) => {
     // This test asserts that the page structure aligns with the FSM extraction summary:
     // no components, no detected event handlers.
-    const npPage = new NPPage(page, consoleMessages);
+    const npPage6 = new NPPage(page, consoleMessages);
 
-    const counts = await npPage.countInteractiveElements();
-    const hasInlineEvents = await npPage.hasInlineEventAttributes();
+    const counts2 = await npPage.countInteractiveElements();
+    const hasInlineEvents1 = await npPage.hasInlineEventAttributes();
 
     // All interactive counts should be zero and no inline events present
     expect(counts.buttons + counts.inputs + counts.links + counts.forms).toBe(0);

@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Floyd-Warshall Interactive Demonstration</title>
+<style>
+  /* Extremely minimal styling: keep plain black text on white background and basic layout */
+  body { margin: 12px; font-family: monospace; color: black; background: white; }
+  input, button, select, textarea { font-family: monospace; }
+  table { border-collapse: collapse; }
+  td, th { padding: 2px 4px; vertical-align: middle; }
+  .matrix-input { width: 64px; }
+  .small { width: 40px; }
+  .tight { padding: 1px 3px; }
+  .section { margin-bottom: 12px; }
+  textarea { width: 100%; height: 80px; }
+</style>
+</head>
+<body>
+
+<h3>Floyd-Warshall Algorithm — Interactive Demonstration</h3>
+
+<div class="section">
+  Controls (very plain):
+  <div>
+    Nodes:
+    <input id="nodeCount" type="range" min="2" max="10" value="5"> <input id="nodeCountNum" class="small" type="number" min="2" max="10" value="5">
+    Directed:
+    <input id="directed" type="checkbox" checked>
+    Make symmetric (undirected helper):
+    <button id="symmetrize">Symmetrize (copy i→j to j→i)</button>
+  </div>
+  <div style="margin-top:6px;">
+    Initialize:
+    <button id="initDefault">Default (0, INF diag)</button>
+    <button id="randomize">Randomize</button>
+    Edge probability:
+    <input id="edgeProb" type="range" min="0" max="100" value="50"> <input id="edgeProbNum" class="small" type="number" min="0" max="100" value="50"> 
+    Weight range:
+    <input id="minWeight" class="small" type="number" value="-5"> to <input id="maxWeight" class="small" type="number" value="10">
+    Random integer weights.
+    <button id="clearAll">Clear (all INF)</button>
+    <button id="completePos">Complete non-negative</button>
+    <button id="presetNegCycle">Preset: Negative Cycle</button>
+  </div>
+
+</div>
+
+<div class="section">
+  Adjacency matrix (edit weights or "INF" or leave blank):
+  <div id="adjContainer"></div>
+  <div style="margin-top:6px;">
+    Auto-update matrices from adjacency: <button id="applyAdj">Apply Adjacency</button>
+    Read matrices into adjacency (overwrite): <button id="captureAsAdj">Capture Current Matrices to Adjacency</button>
+    Auto-symmetric on edit:
+    <input id="autoSym" type="checkbox">
+  </div>
+</div>
+
+<div class="section">
+  Floyd-Warshall controls:
+  <div>
+    Step controls:
+    <button id="toStart">|&lt; Start</button>
+    <button id="stepBack">&lt; Step</button>
+    <button id="stepForward">Step &gt;</button>
+    <button id="toEnd">End &gt;|</button>
+    Play:
+    <button id="playPause">Play</button>
+    Speed (ms per step):
+    <input id="speed" type="range" min="50" max="2000" value="400"> <input id="speedNum" class="small" type="number" min="50" max="2000" value="400">
+    Run full (compute all states):
+    <button id="runFull">Run Full</button>
+    Run until negative cycle:
+    <button id="runUntilNeg">Run Until Negative Cycle</button>
+  </div>
+  <div style="margin-top:6px;">
+    Manual triple application: k (0-based)
+    <input id="manualK" class="small" type="number" min="0" value="0">
+    i:
+    <input id="manualI" class="small" type="number" min="0" value="0">
+    j:
+    <input id="manualJ" class="small" type="number" min="0" value="0">
+    <button id="applyTriple">Apply single (i,j,k)</button>
+    Commit current matrices as new base snapshot:
+    <button id="commitSnapshot">Commit Snapshot</button>
+    Undo/Redo:
+    <button id="undo">Undo</button> <button id="redo">Redo</button>
+  </div>
+  <div style="margin-top:6px;">
+    Show changes only:
+    <input id="showChangesOnly" type="checkbox">
+    Show predecessor/next:
+    <input id="showNext" type="checkbox" checked>
+    Show log verbose:
+    <input id="verboseLog" type="checkbox">
+  </div>
+</div>
+
+<div class="section">
+  Matrices / State display:
+  <div id="stateInfo"></div>
+  <div style="display:flex; gap:12px;">
+    <div>
+      Distance matrix (current):
+      <div id="distContainer"></div>
+    </div>
+    <div>
+      Next matrix (for reconstructing paths):
+      <div id="nextContainer"></div>
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    Reconstruct path:
+    From <input id="pathFrom" class="small" type="number" min="0" value="0"> To <input id="pathTo" class="small" type="number" min="0" value="1">
+    <button id="reconstructPath">Show Path</button>
+    <div id="pathResult"></div>
+  </div>
+</div>
+
+<div class="section">
+  Logs and history:
+  <div>Step index: <span id="stepIndex">0</span> / <span id="stepCount">0</span></div>
+  <div style="height:150px; overflow:auto; border:1px solid #000; padding:6px;">
+    <pre id="logArea" style="margin:0; white-space:pre-wrap;"></pre>
+  </div>
+  <div style="margin-top:6px;">
+    Save/Load state:
+    <button id="exportJson">Export JSON</button>
+    <button id="importJsonBtn">Import JSON (overwrite)</button>
+    <textarea id="jsonArea" placeholder="State JSON appears here when exporting or paste JSON here to import"></textarea>
+  </div>
+</div>
+
+<div class="section">
+  Misc tools:
+  <button id="dijkstraCompare">Compare with Dijkstra (single-source)</button>
+  Source:
+  <input id="dijSrc" class="small" type="number" min="0" value="0">
+  <div id="dijkstraResult"></div>
+</div>
+
+<script>
+(function(){
+  const INF = 1e12;
+  let n = 5;
+  let directed = true;
+  let history = []; // snapshots
+  let histIndex = -1; // current index
+  let playing = false;
+  let playTimer = null;
+
+  // Each snapshot: {dist:[][], next:[][], meta:{k,i,j,comp,updated,old,new,via}, description}
+  // Initial snapshot at histIndex = 0 is the initial state (k = -1)
+  const adjContainer = document.getElementById('adjContainer');
+  const distContainer = document.getElementById('distContainer');
+  const nextContainer = document.getElementById('nextContainer');
+  const nodeCount = document.getElementById('nodeCount');
+  const nodeCountNum = document.getElementById('nodeCountNum');
+  const directedChk = document.getElementById('directed');
+  const autoSymChk = document.getElementById('autoSym');
+  const edgeProb = document.getElementById('edgeProb');
+  const edgeProbNum = document.getElementById('edgeProbNum');
+  const speed = document.getElementById('speed');
+  const speedNum = document.getElementById('speedNum');
+
+  function label(i){ return String.fromCharCode(65 + i); }
+
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+  function makeEmptyMatrices(size){
+    const dist = Array.from({length:size}, (_,i)=> Array.from({length:size}, (_,j)=> i===j?0:INF));
+    const next = Array.from({length:size}, ()=> Array.from({length:size}, ()=> null));
+    return {dist,next};
+  }
+
+  function copyMatrix(m){
+    return m.map(row => row.slice());
+  }
+
+  // Build adjacency editable table
+  function buildAdjTable(){
+    adjContainer.innerHTML = '';
+    const table = document.createElement('table');
+    const header = document.createElement('tr');
+    header.appendChild(document.createElement('th'));
+    for(let j=0;j<n;j++){
+      const th = document.createElement('th');
+      th.textContent = label(j);
+      header.appendChild(th);
+    }
+    table.appendChild(header);
+    for(let i=0;i<n;i++){
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = label(i);
+      tr.appendChild(th);
+      for(let j=0;j<n;j++){
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.className = 'matrix-input';
+        input.dataset.i = i;
+        input.dataset.j = j;
+        input.value = (i===j)? '0' : '';
+        input.addEventListener('change', onAdjChanged);
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    adjContainer.appendChild(table);
+  }
+
+  function onAdjChanged(e){
+    if(autoSymChk.checked){
+      const i = parseInt(e.target.dataset.i,10);
+      const j = parseInt(e.target.dataset.j,10);
+      if(i!==j){
+        // copy to symmetric cell
+        const inputs = adjContainer.querySelectorAll('input');
+        for(const inp of inputs){
+          if(parseInt(inp.dataset.i,10)===j && parseInt(inp.dataset.j,10)===i){
+            inp.value = e.target.value;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  function readAdjacency(){
+    const inputs = adjContainer.querySelectorAll('input');
+    const mat = Array.from({length:n}, ()=> Array.from({length:n}, ()=> INF));
+    for(const inp of inputs){
+      const i = parseInt(inp.dataset.i,10);
+      const j = parseInt(inp.dataset.j,10);
+      let v = inp.value.trim();
+      if(v === '' || v.toUpperCase()==='INF') {
+        mat[i][j] = INF;
+      } else {
+        const num = Number(v);
+        if(Number.isFinite(num)) mat[i][j] = num;
+        else mat[i][j] = INF;
+      }
+    }
+    for(let i=0;i<n;i++) mat[i][i]=0;
+    return mat;
+  }
+
+  function writeAdjacencyFromMatrices(dist){
+    const inputs = adjContainer.querySelectorAll('input');
+    for(const inp of inputs){
+      const i = parseInt(inp.dataset.i,10);
+      const j = parseInt(inp.dataset.j,10);
+      let v = dist[i][j];
+      if(i===j) inp.value = '0';
+      else inp.value = (Math.abs(v) > INF/2)? 'INF' : String(Number.isFinite(v)? v : 'INF');
+    }
+  }
+
+  function initFromAdj(){
+    const mat = readAdjacency();
+    const next = Array.from({length:n}, ()=> Array.from({length:n}, ()=> null));
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i!==j && Math.abs(mat[i][j]) < INF/2){
+          next[i][j] = j;
+        } else if(i===j){
+          next[i][j] = i;
+        } else {
+          next[i][j] = null;
+        }
+      }
+    }
+    const snap = {dist: mat, next: next, meta:{k:-1}, description:'Initial from adjacency'};
+    history = [serializeSnapshot(snap)];
+    histIndex = 0;
+    rebuildStateUI();
+  }
+
+  function initDefault(){
+    const {dist,next} = makeEmptyMatrices(n);
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i!==j) dist[i][j] = INF;
+        next[i][j] = (i===j)? i : null;
+      }
+    }
+    const snap = {dist, next, meta:{k:-1}, description:'Default empty (no edges)'};
+    history = [serializeSnapshot(snap)];
+    histIndex = 0;
+    writeAdjacencyFromMatrices(dist);
+    rebuildStateUI();
+  }
+
+  function randomizeGraph(){
+    const prob = Number(edgeProbNum.value)/100;
+    const minW = Number(document.getElementById('minWeight').value);
+    const maxW = Number(document.getElementById('maxWeight').value);
+    const dist = Array.from({length:n}, (_,i)=> Array.from({length:n}, (_,j)=> i===j?0:INF));
+    const next = Array.from({length:n}, ()=> Array.from({length:n}, ()=> null));
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i===j) continue;
+        if(Math.random() < prob){
+          const w = Math.floor(Math.random()*(maxW - minW +1)) + minW;
+          dist[i][j] = w;
+          next[i][j] = j;
+        } else {
+          dist[i][j] = INF;
+          next[i][j] = null;
+        }
+      }
+    }
+    if(!directed){
+      for(let i=0;i<n;i++){
+        for(let j=i+1;j<n;j++){
+          if(Math.random() < prob){
+            const w = Math.floor(Math.random()*(maxW - minW +1)) + minW;
+            dist[i][j] = w; dist[j][i] = w;
+            next[i][j] = j; next[j][i] = i;
+          }
+        }
+      }
+    }
+    const snap = {dist, next, meta:{k:-1}, description:'Randomized graph'};
+    history = [serializeSnapshot(snap)];
+    histIndex = 0;
+    writeAdjacencyFromMatrices(dist);
+    rebuildStateUI();
+  }
+
+  function presetNegativeCycle(){
+    // small 4-node graph with negative cycle
+    n = 4;
+    nodeCount.value = n; nodeCountNum.value = n;
+    buildAdjTable();
+    const dist = [
+      [0, 1, INF, INF],
+      [INF, 0, -2, INF],
+      [INF, INF, 0, -2],
+      [-1, INF, INF, 0]
+    ];
+    const next = Array.from({length:n}, ()=> Array.from({length:n}, ()=> null));
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i===j){ next[i][j]=i; continue;}
+        if(Math.abs(dist[i][j])<INF/2) next[i][j]=j;
+      }
+    }
+    history = [serializeSnapshot({dist,next,meta:{k:-1}, description:'Preset negative cycle'})];
+    histIndex = 0;
+    writeAdjacencyFromMatrices(dist);
+    rebuildStateUI();
+  }
+
+  function completeNonNegative(){
+    const dist = Array.from({length:n}, (_,i)=> Array.from({length:n}, (_,j)=> i===j?0: Math.floor(Math.random()*10+1)));
+    const next = Array.from({length:n}, ()=> Array.from({length:n}, ()=> null));
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i!==j) next[i][j]=j;
+        else next[i][j]=i;
+      }
+    }
+    history = [serializeSnapshot({dist,next,meta:{k:-1}, description:'Complete non-negative'})];
+    histIndex = 0;
+    writeAdjacencyFromMatrices(dist);
+    rebuildStateUI();
+  }
+
+  function clearAll(){
+    const {dist,next} = makeEmptyMatrices(n);
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i===j) next[i][j] = i;
+        else next[i][j] = null;
+      }
+    }
+    history = [serializeSnapshot({dist,next,meta:{k:-1}, description:'Cleared'})];
+    histIndex = 0;
+    writeAdjacencyFromMatrices(dist);
+    rebuildStateUI();
+  }
+
+  function serializeSnapshot(snap){
+    // ensure deep copy of arrays
+    const dist = copyMatrix(snap.dist);
+    const next = copyMatrix(snap.next);
+    return {dist,next,meta:Object.assign({}, snap.meta), description: snap.description || ''};
+  }
+
+  function pushSnapshot(snap){
+    // push snapshot, truncate any redo branch
+    history = history.slice(0, histIndex+1);
+    history.push(serializeSnapshot(snap));
+    histIndex = history.length - 1;
+  }
+
+  function rebuildStateUI(){
+    // Update info, matrices, logs (log area should reflect from meta)
+    const stateInfo = document.getElementById('stateInfo');
+    stateInfo.innerHTML = 'Nodes: ' + n + ' | Directed: ' + (directed ? 'Yes' : 'No') + '<br>' +
+      'Current: ' + (histIndex+1) + ' / ' + history.length + ' | Description: ' + (history[histIndex]?.description || '');
+    document.getElementById('stepIndex').textContent = String(histIndex);
+    document.getElementById('stepCount').textContent = String(history.length-1);
+    renderDistNext();
+    renderLog();
+  }
+
+  function renderDistNext(){
+    const snap = history[histIndex];
+    if(!snap) return;
+    const dist = snap.dist;
+    const next = snap.next;
+    // Distance matrix
+    distContainer.innerHTML = '';
+    const table = document.createElement('table');
+    const header = document.createElement('tr');
+    header.appendChild(document.createElement('th'));
+    for(let j=0;j<n;j++){ const th=document.createElement('th'); th.textContent=label(j); header.appendChild(th); }
+    table.appendChild(header);
+    for(let i=0;i<n;i++){
+      const tr=document.createElement('tr');
+      const th=document.createElement('th'); th.textContent = label(i);
+      tr.appendChild(th);
+      for(let j=0;j<n;j++){
+        const td=document.createElement('td');
+        const val = dist[i][j];
+        const txt = (Math.abs(val) > INF/2 || !Number.isFinite(val)) ? 'INF' : String(val);
+        const span = document.createElement('span');
+        span.textContent = txt;
+        td.appendChild(span);
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    distContainer.appendChild(table);
+
+    // Next matrix
+    nextContainer.innerHTML = '';
+    if(document.getElementById('showNext').checked){
+      const t2 = document.createElement('table');
+      const h2 = document.createElement('tr');
+      h2.appendChild(document.createElement('th'));
+      for(let j=0;j<n;j++){ const th=document.createElement('th'); th.textContent=label(j); h2.appendChild(th); }
+      t2.appendChild(h2);
+      for(let i=0;i<n;i++){
+        const tr = document.createElement('tr');
+        const th = document.createElement('th'); th.textContent=label(i);
+        tr.appendChild(th);
+        for(let j=0;j<n;j++){
+          const td = document.createElement('td');
+          const v = next[i][j];
+          td.textContent = (v===null || v===undefined) ? '-' : label(v);
+          tr.appendChild(td);
+        }
+        t2.appendChild(tr);
+      }
+      nextContainer.appendChild(t2);
+    } else {
+      nextContainer.textContent = '(hidden)';
+    }
+  }
+
+  function renderLog(){
+    const logArea = document.getElementById('logArea');
+    const snap = history[histIndex];
+    if(!snap){ logArea.textContent=''; return; }
+    // Build a log by scanning history entries up to current index, optionally verbose
+    const verbose = document.getElementById('verboseLog').checked;
+    let lines = [];
+    for(let idx=0; idx<=histIndex; idx++){
+      const s = history[idx];
+      const m = s.meta || {};
+      if(m.k === -1 || m.k === undefined){
+        lines.push((idx) + ': Initial state. ' + (s.description || ''));
+      } else {
+        const changed = m.updated ? 'UPDATED' : 'checked';
+        const detail = `k=${m.k}, i=${label(m.i)}, j=${label(m.j)} => ${changed}`;
+        if(m.updated){
+          lines.push(idx + ': ' + detail + (verbose ? ` | old=${formatVal(m.old)} new=${formatVal(m.new)} via=${label(m.via)}` : ''));
+        } else {
+          lines.push(idx + ': ' + detail);
+        }
+      }
+    }
+    logArea.textContent = lines.join('\n');
+  }
+
+  function formatVal(v){
+    return (Math.abs(v) > INF/2 || !Number.isFinite(v)) ? 'INF' : String(v);
+  }
+
+  function computeFullHistory(){
+    // Run the Floyd-Warshall algorithm starting from current base snapshot (histIndex)
+    // We'll produce snapshots for every comparison (k,i,j) and any updates.
+    const base = history[histIndex];
+    const dist = copyMatrix(base.dist);
+    const next = copyMatrix(base.next);
+    const newHistory = [];
+    // initial snapshot copy
+    newHistory.push(serializeSnapshot({dist: copyMatrix(dist), next: copyMatrix(next), meta:{k:-1}, description: 'Start of run'}));
+    for(let k=0;k<n;k++){
+      for(let i=0;i<n;i++){
+        for(let j=0;j<n;j++){
+          const oldVal = dist[i][j];
+          const viaVal = (Math.abs(dist[i][k]) < INF/2 && Math.abs(dist[k][j]) < INF/2) ? dist[i][k] + dist[k][j] : INF;
+          let updated = false;
+          if(viaVal + 0 < oldVal){
+            dist[i][j] = viaVal;
+            next[i][j] = next[i][k];
+            updated = true;
+          }
+          const meta = {k,k,i:i,j:j,updated:updated, old:oldVal, new:dist[i][j], via:k};
+          newHistory.push(serializeSnapshot({dist: copyMatrix(dist), next: copyMatrix(next), meta, description: `After k=${k}, i=${i}, j=${j}`}));
+        }
+      }
+    }
+    // Replace history branch after current index with newHistory appended to base
+    // We will keep snapshots up to histIndex then append newHistory (excluding initial base duplicate)
+    history = history.slice(0, histIndex+1).concat(newHistory.slice(1)); // remove duplicate starting snapshot
+    histIndex = history.length - 1;
+    rebuildStateUI();
+  }
+
+  function runUntilNegativeCycle(){
+    const base = history[histIndex];
+    const dist = copyMatrix(base.dist);
+    const next = copyMatrix(base.next);
+    const newHistory = [];
+    newHistory.push(serializeSnapshot({dist: copyMatrix(dist), next: copyMatrix(next), meta:{k:-1}, description:'Start runUntilNeg'}));
+    let foundNeg = false;
+    for(let k=0;k<n && !foundNeg;k++){
+      for(let i=0;i<n && !foundNeg;i++){
+        for(let j=0;j<n;j++){
+          const oldVal = dist[i][j];
+          const viaVal = (Math.abs(dist[i][k])<INF/2 && Math.abs(dist[k][j])<INF/2) ? dist[i][k] + dist[k][j] : INF;
+          let updated = false;
+          if(viaVal + 0 < oldVal){
+            dist[i][j] = viaVal;
+            next[i][j] = next[i][k];
+            updated = true;
+          }
+          const meta = {k,k,i:i,j:j,updated:updated,old:oldVal,new:dist[i][j],via:k};
+          newHistory.push(serializeSnapshot({dist: copyMatrix(dist), next: copyMatrix(next), meta, description:`k=${k},i=${i},j=${j}`}));
+          // check negative cycle
+          for(let x=0;x<n;x++){
+            if(dist[x][x] < 0){
+              foundNeg = true;
+              newHistory.push(serializeSnapshot({dist: copyMatrix(dist), next: copyMatrix(next), meta:{k:k, note:'negcycle'}, description:'Negative cycle detected'}));
+              break;
+            }
+          }
+          if(foundNeg) break;
+        }
+      }
+    }
+    history = history.slice(0, histIndex+1).concat(newHistory.slice(1));
+    histIndex = history.length - 1;
+    rebuildStateUI();
+    if(foundNeg) alert('Negative cycle detected in the run (check dist[x][x] < 0).');
+  }
+
+  function stepForward(){
+    if(histIndex < history.length - 1){
+      histIndex++;
+      rebuildStateUI();
+    } else {
+      // nothing to step, optionally compute full
+    }
+  }
+
+  function stepBack(){
+    if(histIndex > 0){
+      histIndex--;
+      rebuildStateUI();
+    }
+  }
+
+  function toStart(){
+    histIndex = 0;
+    rebuildStateUI();
+  }
+
+  function toEnd(){
+    histIndex = history.length - 1;
+    rebuildStateUI();
+  }
+
+  function playPause(){
+    if(playing){
+      playing = false;
+      clearInterval(playTimer);
+      playTimer = null;
+      document.getElementById('playPause').textContent = 'Play';
+    } else {
+      playing = true;
+      document.getElementById('playPause').textContent = 'Pause';
+      const interval = Number(speed.value);
+      playTimer = setInterval(()=> {
+        if(histIndex < history.length - 1) stepForward();
+        else { playPause(); }
+      }, interval);
+    }
+  }
+
+  function applySingleTriple(k,i,j){
+    const base = history[histIndex];
+    const dist = copyMatrix(base.dist);
+    const next = copyMatrix(base.next);
+    if(k < 0 || k >= n || i<0 || i>=n || j<0 || j>=n) { alert('Indices out of range'); return; }
+    const oldVal = dist[i][j];
+    const viaVal = (Math.abs(dist[i][k])<INF/2 && Math.abs(dist[k][j])<INF/2) ? dist[i][k] + dist[k][j] : INF;
+    let updated = false;
+    if(viaVal + 0 < oldVal){
+      dist[i][j] = viaVal;
+      next[i][j] = next[i][k];
+      updated = true;
+    }
+    const meta = {k:k,i:i,j:j,updated:updated,old:oldVal,new:dist[i][j],via:k};
+    pushSnapshot({dist: copyMatrix(dist), next: copyMatrix(next), meta, description:`Manual triple k=${k},i=${i},j=${j}`});
+    rebuildStateUI();
+  }
+
+  function commitSnapshot(){
+    // commit current snapshot as new base and truncate history leaving only this state
+    const snap = serializeSnapshot(history[histIndex]);
+    history = [snap];
+    histIndex = 0;
+    rebuildStateUI();
+  }
+
+  function reconstructPath(u,v){
+    const snap = history[histIndex];
+    const next = snap.next;
+    const dist = snap.dist;
+    if(Math.abs(dist[u][v])>INF/2) return {path:null, distance: Infinity};
+    if(next[u][v] === null) return {path:null, distance: Infinity};
+    const path = [u];
+    let cur = u;
+    while(cur !== v){
+      cur = next[cur][v];
+      if(cur === null || path.length > n+5) { return {path:null,distance:Infinity}; }
+      path.push(cur);
+    }
+    return {path, distance: Math.abs(dist[u][v])>INF/2? Infinity: dist[u][v]};
+  }
+
+  function reconstructPathText(){
+    const from = Number(document.getElementById('pathFrom').value);
+    const to = Number(document.getElementById('pathTo').value);
+    if(isNaN(from) || isNaN(to) || from <0 || to <0 || from>=n || to>=n){ alert('Out of range'); return; }
+    const res = reconstructPath(from,to);
+    const out = document.getElementById('pathResult');
+    if(!res.path) out.textContent = 'No path (distance INF)';
+    else out.textContent = 'Path: ' + res.path.map(label).join(' -> ') + ' | Distance: ' + res.distance;
+  }
+
+  function applyAdjToMatrices(){
+    const mat = readAdjacency();
+    const next = Array.from({length:n}, ()=> Array.from({length:n}, ()=> null));
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i===j) next[i][j]=i;
+        else if(Math.abs(mat[i][j]) < INF/2) next[i][j]=j;
+        else next[i][j]=null;
+      }
+    }
+    pushSnapshot({dist: mat, next, meta:{k:-1}, description:'Applied adjacency inputs'});
+    rebuildStateUI();
+  }
+
+  function captureMatricesToAdj(){
+    const snap = history[histIndex];
+    writeAdjacencyFromMatrices(snap.dist);
+  }
+
+  function symmetrizeAdj(){
+    const inputs = adjContainer.querySelectorAll('input');
+    const map = {};
+    for(const inp of inputs){
+      const key = inp.dataset.i + ',' + inp.dataset.j;
+      map[key] = inp;
+    }
+    for(const key in map){
+      const [i,j] = key.split(',').map(Number);
+      if(i<j){
+        map[j+','+i].value = map[key].value;
+      }
+    }
+  }
+
+  function exportJson(){
+    const data = {
+      n: n,
+      directed: directed,
+      history: history.map(snap => ({
+        dist: snap.dist.map(row => row.map(v => (Math.abs(v)>INF/2 || !Number.isFinite(v))? 'INF' : v)),
+        next: snap.next.map(row => row.map(v => (v===null || v===undefined)? null : v)),
+        meta: snap.meta,
+        description: snap.description
+      })),
+      histIndex: histIndex
+    };
+    document.getElementById('jsonArea').value = JSON.stringify(data, null, 2);
+  }
+
+  function importJson(){
+    try {
+      const txt = document.getElementById('jsonArea').value;
+      if(!txt) { alert('Paste JSON into textarea first'); return; }
+      const data = JSON.parse(txt);
+      if(!data || !data.n) { alert('Invalid JSON'); return; }
+      n = data.n;
+      nodeCount.value = n; nodeCountNum.value = n;
+      directed = data.directed;
+      directedChk.checked = directed;
+      buildAdjTable();
+      history = data.history.map(snap => {
+        const dist = snap.dist.map(row => row.map(v => (v==='INF' || v===null)? INF : Number(v)));
+        const next = snap.next.map(row => row.map(v => (v===null)? null : v));
+        return {dist,next,meta:snap.meta, description: snap.description};
+      });
+      histIndex = clamp(Number(data.histIndex)||0, 0, history.length-1);
+      writeAdjacencyFromMatrices(history[histIndex].dist);
+      rebuildStateUI();
+    } catch(e){
+      alert('Failed to import JSON: ' + e.message);
+    }
+  }
+
+  function undo(){
+    // go to previous snapshot if available
+    if(histIndex > 0){
+      histIndex--;
+      rebuildStateUI();
+    }
+  }
+
+  function redo(){
+    if(histIndex < history.length - 1){
+      histIndex++;
+      rebuildStateUI();
+    }
+  }
+
+  function dijkstraCompare(){
+    const src = Number(document.getElementById('dijSrc').value);
+    if(isNaN(src) || src<0 || src>=n){ alert('Invalid source'); return; }
+    // We only run if no negative weights present (Dijkstra requires nonnegative edges)
+    const snap = history[histIndex];
+    const dist = snap.dist;
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(i!==j && Math.abs(dist[i][j])<INF/2 && dist[i][j] < 0){
+          alert('Negative edge present; Dijkstra is not valid');
+          return;
+        }
+      }
+    }
+    // Build adjacency list
+    const adj = Array.from({length:n}, ()=> []);
+    for(let i=0;i<n;i++){
+      for(let j=0;j<n;j++){
+        if(Math.abs(dist[i][j])<INF/2){
+          adj[i].push({to:j, w: dist[i][j]});
+        }
+      }
+    }
+    // run Dijkstra
+    const d = Array(n).fill(Infinity);
+    const prev = Array(n).fill(null);
+    d[src] = 0;
+    const visited = Array(n).fill(false);
+    for(let t=0;t<n;t++){
+      let u=-1; let best=Infinity;
+      for(let i=0;i<n;i++) if(!visited[i] && d[i]<best){ best=d[i]; u=i; }
+      if(u===-1) break;
+      visited[u]=true;
+      for(const e of adj[u]){
+        if(d[e.to] > d[u] + e.w){
+          d[e.to] = d[u] + e.w;
+          prev[e.to] = u;
+        }
+      }
+    }
+    // compare with Floyd-Warshall result for same source
+    const fw = snap.dist[src];
+    let lines = [];
+    for(let i=0;i<n;i++){
+      const fwv = fw[i];
+      const dv = d[i];
+      lines.push(label(i) + ': Dijkstra=' + (dv===Infinity? 'INF' : dv) + ' | Floyd=' + ((Math.abs(fwv)>INF/2) ? 'INF' : fwv) + ((Math.abs(fwv - dv) > 1e-6) ? ' <-- mismatch' : ''));
+    }
+    document.getElementById('dijkstraResult').textContent = lines.join('\n');
+  }
+
+  // Utility to build compute-full and then step through via play; but we already have computeFullHistory()
+
+  // Setup event listeners
+  nodeCount.addEventListener('input', ()=> {
+    n = Number(nodeCount.value);
+    nodeCountNum.value = n;
+    buildAdjTable();
+    initDefault();
+  });
+  nodeCountNum.addEventListener('change', ()=> {
+    let v = clamp(Number(nodeCountNum.value) || 2, 2, 10);
+    n = v;
+    nodeCount.value = v;
+    nodeCountNum.value = v;
+    buildAdjTable();
+    initDefault();
+  });
+  directedChk.addEventListener('change', ()=> {
+    directed = directedChk.checked;
+  });
+  edgeProb.addEventListener('input', ()=> { edgeProbNum.value = edgeProb.value; });
+  edgeProbNum.addEventListener('change', ()=> { const v = clamp(Number(edgeProbNum.value)||0,0,100); edgeProb.value = v; edgeProbNum.value = v; });
+
+  speed.addEventListener('input', ()=> { speedNum.value = speed.value; if(playing){ playPause(); playPause(); }});
+  speedNum.addEventListener('change', ()=> { const v = clamp(Number(speedNum.value)||400, 50, 2000); speed.value = v; speedNum.value = v; if(playing){ playPause(); playPause(); }});
+
+  document.getElementById('initDefault').addEventListener('click', initDefault);
+  document.getElementById('randomize').addEventListener('click', randomizeGraph);
+  document.getElementById('applyAdj').addEventListener('click', applyAdjToMatrices);
+  document.getElementById('captureAsAdj').addEventListener('click', captureMatricesToAdj);
+  document.getElementById('symmetrize').addEventListener('click', symmetrizeAdj);
+  document.getElementById('clearAll').addEventListener('click', clearAll);
+  document.getElementById('completePos').addEventListener('click', completeNonNegative);
+  document.getElementById('presetNegCycle').addEventListener('click', presetNegativeCycle);
+
+  document.getElementById('toStart').addEventListener('click', toStart);
+  document.getElementById('toEnd').addEventListener('click', toEnd);
+  document.getElementById('stepForward').addEventListener('click', ()=> { stepForward(); });
+  document.getElementById('stepBack').addEventListener('click', ()=> { stepBack(); });
+  document.getElementById('playPause').addEventListener('click', playPause);
+  document.getElementById('runFull').addEventListener('click', computeFullHistory);
+  document.getElementById('runUntilNeg').addEventListener('click', runUntilNegativeCycle);
+
+  document.getElementById('applyTriple').addEventListener('click', ()=> {
+    const k = Number(document.getElementById('manualK').value);
+    const i = Number(document.getElementById('manualI').value);
+    const j = Number(document.getElementById('manualJ').value);
+    applySingleTriple(k,i,j);
+  });
+
+  document.getElementById('commitSnapshot').addEventListener('click', commitSnapshot);
+  document.getElementById('undo').addEventListener('click', undo);
+  document.getElementById('redo').addEventListener('click', redo);
+
+  document.getElementById('reconstructPath').addEventListener('click', reconstructPathText);
+
+  document.getElementById('exportJson').addEventListener('click', exportJson);
+  document.getElementById('importJsonBtn').addEventListener('click', importJson);
+
+  document.getElementById('applyAdj').addEventListener('dblclick', ()=> { alert('Double-click detected: quick tip: edit adjacency entries and click Apply Adjacency to load into algorithm.'); });
+
+  document.getElementById('dijkstraCompare').addEventListener('click', dijkstraCompare);
+
+  // Keyboard stepping
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'ArrowRight') stepForward();
+    if(e.key === 'ArrowLeft') stepBack();
+    if(e.key === ' ') { e.preventDefault(); playPause(); }
+  });
+
+  // Initialize UI
+  buildAdjTable();
+  initDefault();
+
+  // Extra: allow user to change adjacency element types by clicking to cycle INF/<number> - left minimal behavior
+  adjContainer.addEventListener('dblclick', (e)=>{
+    const t = e.target;
+    if(t.tagName === 'INPUT'){
+      if(t.value.trim()==='') t.value = 'INF';
+      else if(t.value.trim().toUpperCase()==='INF') t.value = '1';
+      else t.value = '';
+      onAdjChanged({target:t});
+    }
+  });
+
+  // Expose some state to window for debugging in console (allowed minimal)
+  window.fwState = {
+    getHistory: ()=> history,
+    getIndex: ()=> histIndex,
+    stepForward,
+    stepBack,
+    computeFullHistory,
+    reconstructPath: reconstructPath
+  };
+
+})();
+</script>
+
+</body>
+</html>

@@ -163,7 +163,7 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
 
   test('InsertKey transition -> S1_KeyInserted: inserting a key updates the DOM', async ({ page }) => {
     // This test validates inserting a key transitions to "Key Inserted" state by updating DOM
-    const app = new BTreePage(page);
+    const app1 = new BTreePage(page);
     await app.goto();
 
     const beforeKeys = await app.getAllKeyTexts();
@@ -188,15 +188,15 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
 
   test('FindKey -> S2_KeyFound: finding an existing key shows alert and highlights the key', async ({ page }) => {
     // Validate that finding an existing key triggers alert and highlights key in the DOM
-    const app = new BTreePage(page);
+    const app2 = new BTreePage(page);
     await app.goto();
 
     // The initial setup inserted '10' so find 10
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise1 = page.waitForEvent('dialog');
     await app.setKeyInput(10);
     // click find; we expect a dialog
     await app.clickFind();
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     expect(dialog).not.toBeNull();
     expect(dialog.message()).toBe('Found key 10 in the tree');
     await dialog.accept();
@@ -210,28 +210,28 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
 
   test('FindKey -> S3_KeyNotFound: finding a missing key shows not-found alert and no highlight', async ({ page }) => {
     // Validate searching for a key that doesn't exist triggers "not found" alert and no highlights
-    const app = new BTreePage(page);
+    const app3 = new BTreePage(page);
     await app.goto();
 
     // Choose a key very unlikely present (e.g., 123456)
     const missingKey = 123456;
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise2 = page.waitForEvent('dialog');
     await app.setKeyInput(missingKey);
     await app.clickFind();
-    const dialog = await dialogPromise;
+    const dialog2 = await dialogPromise;
     expect(dialog).not.toBeNull();
     expect(dialog.message()).toBe(`Key ${missingKey} not found in the tree`);
     await dialog.accept();
 
     // There should be no highlight for that key
-    const highlights = await app.getHighlightedKeyTexts();
+    const highlights1 = await app.getHighlightedKeyTexts();
     // Either no highlights or highlights that don't contain the missing key
     expect(highlights).not.toContain(String(missingKey));
   });
 
   test('RandomTree -> S5_RandomTreeGenerated: generates a random tree and renders nodes', async ({ page }) => {
     // Validate clicking Random Tree generates a new tree and re-renders DOM
-    const app = new BTreePage(page);
+    const app4 = new BTreePage(page);
     await app.goto();
 
     // Ensure order is valid (>=2)
@@ -248,13 +248,13 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
     expect(afterNodeCount).toBeGreaterThan(0);
 
     // Ensure the container is not the textual "Tree is empty"
-    const containerText = await app.getTreeContainerText();
+    const containerText1 = await app.getTreeContainerText();
     expect(containerText).not.toBe('Tree is empty');
   });
 
   test('ResetTree -> S4_TreeReset: reset clears the tree and renders "Tree is empty"', async ({ page }) => {
     // Validate that reset sets root to null and renders empty message
-    const app = new BTreePage(page);
+    const app5 = new BTreePage(page);
     await app.goto();
 
     // Ensure order is valid (>=2)
@@ -264,24 +264,24 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
     await app.clickResetTree();
 
     // After reset, treeContainer should display 'Tree is empty'
-    const containerText = (await app.getTreeContainerText()) || '';
+    const containerText2 = (await app.getTreeContainerText()) || '';
     expect(containerText.trim()).toBe('Tree is empty');
 
     // No .node elements should be present after reset
-    const nodeCount = await app.countNodes();
+    const nodeCount1 = await app.countNodes();
     expect(nodeCount).toBe(0);
   });
 
   test('Edge case: InsertKey with invalid/no input shows validation alert', async ({ page }) => {
     // Validate that attempting to insert without a valid number shows the correct alert
-    const app = new BTreePage(page);
+    const app6 = new BTreePage(page);
     await app.goto();
 
     // Ensure key input is empty
     await app.setKeyInput('');
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise3 = page.waitForEvent('dialog');
     await app.clickInsert();
-    const dialog = await dialogPromise;
+    const dialog3 = await dialogPromise;
     expect(dialog).not.toBeNull();
     expect(dialog.message()).toBe('Please enter a valid number');
     await dialog.accept();
@@ -289,7 +289,7 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
 
   test('Edge case: RandomTree and ResetTree with invalid order (<2) show order validation alert', async ({ page }) => {
     // Validate order validation both for randomTree and resetTree
-    const app = new BTreePage(page);
+    const app7 = new BTreePage(page);
     await app.goto();
 
     // Set invalid order = 1
@@ -314,7 +314,7 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
 
   test('Split behavior and resilience: inserting many keys creates additional nodes without runtime errors', async ({ page }) => {
     // This test inserts many keys via the UI to trigger splits (splitChild) and validates DOM updates and no exceptions
-    const app = new BTreePage(page);
+    const app8 = new BTreePage(page);
     await app.goto();
 
     // Reset to a clean state first
@@ -327,7 +327,7 @@ test.describe('B-Tree Index Visualization - FSM states and transitions', () => {
     }
 
     // After many inserts, there should be multiple node elements
-    const nodeCount = await app.countNodes();
+    const nodeCount2 = await app.countNodes();
     expect(nodeCount).toBeGreaterThan(1);
 
     // Validate that keys we inserted appear in the DOM

@@ -72,10 +72,10 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
     // Give a short time for state change caused by startSim()
     await page.waitForTimeout(150);
 
-    const startText = await page.locator('#startBtn').innerText();
+    const startText1 = await page.locator('#startBtn').innerText();
     expect(startText).toBe('Stop');
 
-    const running = await page.evaluate(() => window.LBSim ? window.LBSim.state.running : undefined);
+    const running1 = await page.evaluate(() => window.LBSim ? window.LBSim.state.running1 : undefined);
     expect(running).toBe(true);
 
     // tickMs label should reflect state.tickMs
@@ -97,8 +97,8 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
     await page.click('#startBtn');
     await page.waitForTimeout(120);
 
-    let running = await page.evaluate(() => window.LBSim ? window.LBSim.state.running : undefined);
-    let startText = await page.locator('#startBtn').innerText();
+    let running2 = await page.evaluate(() => window.LBSim ? window.LBSim.state.running2 : undefined);
+    let startText2 = await page.locator('#startBtn').innerText();
     expect(running).toBe(false);
     expect(startText).toBe('Start');
 
@@ -135,8 +135,8 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
     await page.waitForTimeout(150);
 
     // Check state.running false and UI label
-    const running = await page.evaluate(() => window.LBSim ? window.LBSim.state.running : undefined);
-    const startText = await page.locator('#startBtn').innerText();
+    const running3 = await page.evaluate(() => window.LBSim ? window.LBSim.state.running3 : undefined);
+    const startText3 = await page.locator('#startBtn').innerText();
     expect(running).toBe(false);
     expect(startText).toBe('Start');
 
@@ -206,7 +206,7 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
   test('RateChange updates spawnRate and the visible rateVal', async ({ page }) => {
     // Set rate to 15 via dispatching input event
     await page.evaluate(() => {
-      const rate = document.getElementById('rate');
+      const rate1 = document.getElementById('rate1');
       rate.value = '15';
       rate.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -309,7 +309,7 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
 
     // Start simulation and set a non-zero spawn rate to force drops
     await page.evaluate(() => {
-      const rate = document.getElementById('rate');
+      const rate2 = document.getElementById('rate2');
       rate.value = '8';
       rate.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -348,7 +348,7 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
 
     // Set a higher spawn rate
     await page.evaluate(() => {
-      const rate = document.getElementById('rate');
+      const rate3 = document.getElementById('rate3');
       rate.value = '20';
       rate.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -359,7 +359,7 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
     await page.waitForTimeout(800);
 
     // Validate some requests were generated
-    const totals = await page.evaluate(() => {
+    const totals1 = await page.evaluate(() => {
       if (!window.LBSim) return null;
       return {
         totalGenerated: window.LBSim.state.totalGenerated,
@@ -385,7 +385,7 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
   test('Edge cases: changing inputs programmatically without event dispatch should not incorrectly update state', async ({ page }) => {
     // Directly set the DOM value without firing the expected events, which should not update state
     await page.evaluate(() => {
-      const rate = document.getElementById('rate');
+      const rate4 = document.getElementById('rate4');
       rate.value = '33';
       // intentionally do NOT dispatch 'input'
     });
@@ -394,7 +394,7 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
     await page.waitForTimeout(80);
 
     // spawnRate should remain unchanged (initial was 8 or last set). Read the numeric value and ensure it's not 33 unless change was dispatched
-    const spawnRate = await page.evaluate(() => window.LBSim ? window.LBSim.state.spawnRate : undefined);
+    const spawnRate1 = await page.evaluate(() => window.LBSim ? window.LBSim.state.spawnRate1 : undefined);
     const rawRateValue = await page.evaluate(() => document.getElementById('rate').value);
     // If the app responded automatically to input value change (some browsers may fire input on programmatic change rarely),
     // accept either: spawnRate equals ui value OR remains previous. We assert no unexpected exceptions occurred,
@@ -414,8 +414,8 @@ test.describe('Load Balancing Simulator (FSM validation)', () => {
     await page.click('#removeServer');
     await page.selectOption('#algo', 'leastconn');
     await page.evaluate(() => {
-      const sm = document.getElementById('serviceMean'); sm.value = '700'; sm.dispatchEvent(new Event('change', { bubbles: true }));
-      const sv = document.getElementById('serviceVar'); sv.value = '150'; sv.dispatchEvent(new Event('change', { bubbles: true }));
+      const sm1 = document.getElementById('serviceMean'); sm1.value = '700'; sm1.dispatchEvent(new Event('change', { bubbles: true }));
+      const sv1 = document.getElementById('serviceVar'); sv1.value = '150'; sv1.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await page.click('#startBtn');
     await page.waitForTimeout(300);

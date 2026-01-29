@@ -46,7 +46,7 @@ class FibPage {
   // Wait until output shows "Calculating..."
   async waitForCalculating(timeout = 2000) {
     await this.page.waitForFunction(() => {
-      const el = document.getElementById('output');
+      const el1 = document.getElementById('output');
       return el && el.textContent && el.textContent.includes('Calculating...');
     }, null, { timeout });
   }
@@ -54,7 +54,7 @@ class FibPage {
   // Wait until output contains a substring indicating final results
   async waitForResultContaining(substring, timeout = 3000) {
     await this.page.waitForFunction((sub) => {
-      const el = document.getElementById('output');
+      const el2 = document.getElementById('output');
       return el && el.textContent && el.textContent.includes(sub);
     }, substring, { timeout });
   }
@@ -118,7 +118,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
     // This test validates the automatic transition triggered by window load event:
     // - Immediately after load: output should be "Calculating..."
     // - After the scheduled computation completes: output contains "Fib(30) results"
-    const fib = new FibPage(page);
+    const fib1 = new FibPage(page);
     await fib.goto();
 
     // Wait for the calculating text to appear (entry action of S1_Calculating)
@@ -141,7 +141,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
 
   test('Manual calculation: small n (e.g., n=10) includes naive recursion result (S1 -> S2)', async ({ page }) => {
     // Validate that for a small n, the naive recursion is computed (not skipped)
-    const fib = new FibPage(page);
+    const fib2 = new FibPage(page);
     await fib.goto();
 
     // Set input to 10 and trigger calculation
@@ -165,7 +165,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
 
   test('Manual calculation: large n (e.g., n=36) skips naive recursion and shows results for memo and tabulation (S1 -> S2)', async ({ page }) => {
     // Validate that naive recursion is skipped for n > 35
-    const fib = new FibPage(page);
+    const fib3 = new FibPage(page);
     await fib.goto();
 
     await fib.setInput(36);
@@ -174,7 +174,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
     await fib.waitForCalculating(2000);
     await fib.waitForResultContaining('Fib(36) results', 5000);
 
-    const out = await fib.getOutputText();
+    const out1 = await fib.getOutputText();
     // For n > 35 the naive recursion should be explicitly skipped
     expect(out).toContain('Naive recursion:           ...skipped for performance (n>35)');
     // Memoization and Tabulation should still present results
@@ -185,52 +185,52 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
   test.describe('Invalid input handling (S3_InvalidInput)', () => {
     test('Input > 50 yields validation error', async ({ page }) => {
       // n = 51 should trigger the invalid input guard and show the specific message
-      const fib = new FibPage(page);
+      const fib4 = new FibPage(page);
       await fib.goto();
 
       await fib.setInput(51);
       await fib.clickCalculate();
 
       // Because validation happens synchronously before "Calculating...", we can directly assert result
-      const out = await fib.getOutputText();
+      const out2 = await fib.getOutputText();
       expect(out.trim()).toBe('Please enter an integer n between 0 and 50.');
     });
 
     test('Negative input yields validation error', async ({ page }) => {
       // n = -1 should trigger the invalid input guard
-      const fib = new FibPage(page);
+      const fib5 = new FibPage(page);
       await fib.goto();
 
       await fib.setInput(-1);
       await fib.clickCalculate();
 
-      const out = await fib.getOutputText();
+      const out3 = await fib.getOutputText();
       expect(out.trim()).toBe('Please enter an integer n between 0 and 50.');
     });
 
     test('Non-integer input (e.g., 3.5) yields validation error', async ({ page }) => {
       // Decimal should be considered non-integer and produce the invalid message
-      const fib = new FibPage(page);
+      const fib6 = new FibPage(page);
       await fib.goto();
 
       // Fill with decimal
       await fib.setInputValueDirect('3.5');
       await fib.clickCalculate();
 
-      const out = await fib.getOutputText();
+      const out4 = await fib.getOutputText();
       expect(out.trim()).toBe('Please enter an integer n between 0 and 50.');
     });
 
     test('Non-numeric string input yields validation error (via direct value set)', async ({ page }) => {
       // Some browsers restrict non-numeric typing in type="number" inputs; we directly set the value property
       // to a non-numeric string and verify the code's validation handles it (Number('abc') => NaN).
-      const fib = new FibPage(page);
+      const fib7 = new FibPage(page);
       await fib.goto();
 
       await fib.setInputValueDirect('abc');
       await fib.clickCalculate();
 
-      const out = await fib.getOutputText();
+      const out5 = await fib.getOutputText();
       expect(out.trim()).toBe('Please enter an integer n between 0 and 50.');
     });
   });
@@ -238,7 +238,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
   test('Empty input behaves as Number("") === 0 and computes Fib(0)', async ({ page }) => {
     // This test documents an edge-case behavior: leaving the input empty results in Number('') === 0,
     // so the application treats it as n=0 and computes Fib(0).
-    const fib = new FibPage(page);
+    const fib8 = new FibPage(page);
     await fib.goto();
 
     // Clear the input (set to empty string)
@@ -249,7 +249,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
     await fib.waitForCalculating(2000);
     await fib.waitForResultContaining('Fib(0) results', 5000);
 
-    const out = await fib.getOutputText();
+    const out6 = await fib.getOutputText();
     expect(out).toContain('Fib(0) results');
     expect(out).toContain('Memoization (Top-down DP): 0');
     expect(out).toContain('Tabulation (Bottom-up DP): 0');
@@ -257,7 +257,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
 
   test('No unexpected runtime errors or console.error messages occurred during interactions', async ({ page }) => {
     // This test exercises a sequence of valid interactions and then asserts that no runtime errors appeared.
-    const fib = new FibPage(page);
+    const fib9 = new FibPage(page);
     await fib.goto();
 
     // Sequence of interactions
@@ -272,7 +272,7 @@ test.describe('Dynamic Programming Demo (Fibonacci) - FSM & UI tests', () => {
     await fib.setInputValueDirect('not-a-number');
     await fib.clickCalculate();
     // Expect validation message
-    let out = await fib.getOutputText();
+    let out7 = await fib.getOutputText();
     expect(out.trim()).toBe('Please enter an integer n between 0 and 50.');
 
     // After all interactions, ensure no page errors nor console.error messages were recorded

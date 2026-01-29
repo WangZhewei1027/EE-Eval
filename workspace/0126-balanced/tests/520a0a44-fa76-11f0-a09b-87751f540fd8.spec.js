@@ -45,7 +45,7 @@ class ContextPage {
   // Get computed background-color as array [r,g,b]
   async getBackgroundColorRGB(selector) {
     return await this.page.evaluate((sel) => {
-      const el = document.querySelector(sel);
+      const el1 = document.querySelector(sel);
       if (!el) return null;
       const style = window.getComputedStyle(el).backgroundColor;
       // Extract numbers e.g. "rgb(201, 228, 202)" or "rgba(201, 228, 202, 1)"
@@ -151,16 +151,16 @@ test.describe('Context Switching FSM - 520a0a44-fa76-11f0-a09b-87751f540fd8', ()
     expect(currentAfter).toBe('context2');
 
     // After the function runs, inline styles set background colors:
-    const bg1 = await ctxPage.getBackgroundColorRGB(ctxPage.context1Selector);
-    const bg2 = await ctxPage.getBackgroundColorRGB(ctxPage.context2Selector);
+    const bg11 = await ctxPage.getBackgroundColorRGB(ctxPage.context1Selector);
+    const bg21 = await ctxPage.getBackgroundColorRGB(ctxPage.context2Selector);
 
     // The implementation sets contextElements[0] to #c9e4ca and contextElements[1] to #ff9900
     expect(bg1).toEqual([201, 228, 202]);
     expect(bg2).toEqual([255, 153, 0]);
 
     // Check that class lists include expected indicators (classList.add was used)
-    const classes1 = await ctxPage.getClasses(ctxPage.context1Selector);
-    const classes2 = await ctxPage.getClasses(ctxPage.context2Selector);
+    const classes11 = await ctxPage.getClasses(ctxPage.context1Selector);
+    const classes21 = await ctxPage.getClasses(ctxPage.context2Selector);
 
     // context1 should have 'success' (already present or added)
     expect(classes1).toContain('success');
@@ -176,7 +176,7 @@ test.describe('Context Switching FSM - 520a0a44-fa76-11f0-a09b-87751f540fd8', ()
     await ctxPage.clickSwitch(); // 1st click: to context2
     await ctxPage.clickSwitch(); // 2nd click: back to context1
 
-    const currentAfter = await ctxPage.getCurrentContext();
+    const currentAfter1 = await ctxPage.getCurrentContext();
     expect(currentAfter).toBe('context1'); // code sets currentContext = 'context1' in else branch
 
     // In the else branch the code sets:
@@ -184,14 +184,14 @@ test.describe('Context Switching FSM - 520a0a44-fa76-11f0-a09b-87751f540fd8', ()
     // contextElements[0].classList.add("error");
     // contextElements[1].style.backgroundColor = "#c9e4ca"; // context2 becomes #c9e4ca
     // contextElements[1].classList.add("success");
-    const bg1 = await ctxPage.getBackgroundColorRGB(ctxPage.context1Selector);
-    const bg2 = await ctxPage.getBackgroundColorRGB(ctxPage.context2Selector);
+    const bg12 = await ctxPage.getBackgroundColorRGB(ctxPage.context1Selector);
+    const bg22 = await ctxPage.getBackgroundColorRGB(ctxPage.context2Selector);
 
     expect(bg1).toEqual([255, 153, 0]); // context1 now #ff9900
     expect(bg2).toEqual([201, 228, 202]); // context2 now #c9e4ca
 
-    const classes1 = await ctxPage.getClasses(ctxPage.context1Selector);
-    const classes2 = await ctxPage.getClasses(ctxPage.context2Selector);
+    const classes12 = await ctxPage.getClasses(ctxPage.context1Selector);
+    const classes22 = await ctxPage.getClasses(ctxPage.context2Selector);
 
     // The implementation uses classList.add, so classes may accumulate.
     // context1 should include 'error' (added on second click) and likely still have 'success'
@@ -215,7 +215,7 @@ test.describe('Context Switching FSM - 520a0a44-fa76-11f0-a09b-87751f540fd8', ()
       await ctxPage.clickSwitch();
     }
 
-    const current = await ctxPage.getCurrentContext();
+    const current1 = await ctxPage.getCurrentContext();
     // After odd number of clicks, expected 'context2'
     expect(current).toBe(clicks % 2 === 1 ? 'context2' : 'context1');
 
@@ -223,8 +223,8 @@ test.describe('Context Switching FSM - 520a0a44-fa76-11f0-a09b-87751f540fd8', ()
     expect(pageErrors.length).toBe(0);
 
     // Also assert that both context elements still exist and have classes
-    const classes1 = await ctxPage.getClasses(ctxPage.context1Selector);
-    const classes2 = await ctxPage.getClasses(ctxPage.context2Selector);
+    const classes13 = await ctxPage.getClasses(ctxPage.context1Selector);
+    const classes23 = await ctxPage.getClasses(ctxPage.context2Selector);
     expect(classes1).not.toBeNull();
     expect(classes2).not.toBeNull();
   });
@@ -237,7 +237,7 @@ test.describe('Context Switching FSM - 520a0a44-fa76-11f0-a09b-87751f540fd8', ()
     expect(hasRenderPage).toBe(false);
 
     // Also confirm that the application still initialized currentContext properly
-    const current = await ctxPage.getCurrentContext();
+    const current2 = await ctxPage.getCurrentContext();
     expect(current).toBe('context1');
 
     // No uncaught errors result from missing renderPage (we did not call it)

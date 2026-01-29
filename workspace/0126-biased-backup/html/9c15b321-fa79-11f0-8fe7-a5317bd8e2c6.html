@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Transaction Simulator</title>
+<style>
+/* Intentionally minimal: no styling beyond basic layout reset */
+/* Keep interface plain: black text on white background, default fonts */
+body { margin: 12px; font-family: sans-serif; color: black; background: white; }
+section { margin-bottom: 18px; padding: 6px; border: 1px solid #00000010; }
+label { display: inline-block; margin-right: 6px; }
+input, select, button, textarea { margin: 2px 6px 6px 0; }
+textarea { width: 100%; height: 140px; }
+pre { white-space: pre-wrap; word-wrap: break-word; }
+</style>
+</head>
+<body>
+<h2>Transaction Simulator (Plain Interface)</h2>
+<p>This simulator demonstrates transaction concepts: begin/commit/rollback, nested transactions, savepoints, isolation levels, locking modes, concurrency scheduling, two-phase commit, crash & recovery, and many interactive controls. The design is intentionally plain.</p>
+
+<section>
+  <h3>Accounts</h3>
+  <div>
+    <label>Account name: <input id="acctName" value="A"/></label>
+    <label>Initial balance: <input id="acctBal" type="number" value="100"/></label>
+    <button id="addAcct">Add Account</button>
+    <button id="resetAccounts">Reset to defaults</button>
+  </div>
+  <div>
+    <label>Select account: 
+      <select id="acctSelect"></select>
+    </label>
+    <button id="viewAcct">View details</button>
+    <button id="depositDirect">Deposit (direct commit)</button>
+    <input id="depositAmt" type="number" value="10" style="width:80px;">
+    <button id="withdrawDirect">Withdraw (direct commit)</button>
+    <input id="withdrawAmt" type="number" value="5" style="width:80px;">
+  </div>
+  <div>
+    <strong>Accounts (committed balances):</strong>
+    <pre id="accountsView"></pre>
+  </div>
+</section>
+
+<section>
+  <h3>Transactions</h3>
+  <div>
+    <label>Transaction name: <input id="txName" value="T1"/></label>
+    <label>Isolation:
+      <select id="isolationSelect">
+        <option>READ UNCOMMITTED</option>
+        <option>READ COMMITTED</option>
+        <option>REPEATABLE READ</option>
+        <option>SERIALIZABLE</option>
+      </select>
+    </label>
+    <label>Locking:
+      <select id="lockingMode">
+        <option>OPTIMISTIC</option>
+        <option>PESSIMISTIC</option>
+      </select>
+    </label>
+    <button id="beginTx">Begin Transaction</button>
+    <button id="beginNested">Begin Nested Transaction (child)</button>
+    <label>Parent TX ID: <input id="parentTxId" style="width:60px;"></label>
+  </div>
+
+  <div>
+    <label>Select transaction: <select id="txSelect"></select></label>
+    <button id="refreshTx">Refresh</button>
+    <button id="commitTx">Commit</button>
+    <button id="rollbackTx">Rollback</button>
+    <button id="prepareTx">Prepare (2PC)</button>
+    <button id="commitPreparedTx">Commit Prepared</button>
+    <button id="abortPreparedTx">Abort Prepared</button>
+  </div>
+
+  <div>
+    <h4>Add Operation to Selected Transaction</h4>
+    <label>Type:
+      <select id="opType">
+        <option value="transfer">Transfer</option>
+        <option value="deposit">Deposit</option>
+        <option value="withdraw">Withdraw</option>
+        <option value="custom">Custom Script (JS)</option>
+      </select>
+    </label>
+    <label>From:
+      <select id="opFrom"></select>
+    </label>
+    <label>To:
+      <select id="opTo"></select>
+    </label>
+    <label>Amount: <input id="opAmount" type="number" value="10" style="width:80px;"></label>
+    <button id="addOp">Add Operation (staged)</button>
+    <div>
+      <label>Savepoint name: <input id="savepointName" style="width:120px;"></label>
+      <button id="createSavepoint">Create Savepoint</button>
+      <button id="rollbackToSavepoint">Rollback to Savepoint</button>
+    </div>
+    <div>
+      <label>Custom script (JS):</label><br>
+      <textarea id="customScript" placeholder="Example: staged['A'] = (staged['A']||snap['A']) + 50;"></textarea>
+      <button id="addCustomOp">Add Custom Operation (staged)</button>
+    </div>
+  </div>
+
+  <div>
+    <h4>Transaction Details</h4>
+    <pre id="txDetails"></pre>
+  </div>
+</section>
+
+<section>
+  <h3>Concurrency Scheduler & Execution</h3>
+  <div>
+    <label>Auto-step delay (ms): <input id="autoDelay" type="range" min="0" max="2000" value="200"></label>
+    <span id="autoDelayVal">200</span>
+    <button id="stepOnce">Step Once (execute next op of each selected tx)</button>
+    <button id="runAuto">Run Auto</button>
+    <button id="stopAuto">Stop Auto</button>
+    <label>Pick txs to step (comma list of tx ids): <input id="stepList" placeholder="all"></label>
+  </div>
+  <div>
+    <h4>Locks</h4>
+    <pre id="locksView"></pre>
+  </div>
+</section>
+
+<section>
+  <h3>Two-Phase Commit Simulator</h3>
+  <div>
+    <label>Participant nodes: <input id="nodeCount" type="number" value="2" min="1" style="width:60px;"></label>
+    <button id="createNodes">Create Nodes</button>
+    <label>Distributed TX Name: <input id="distTxName" value="DT1"></label>
+    <button id="beginDistributed">Begin Distributed Transaction</button>
+    <div>
+      <label>Fail participant on prepare (node id): <input id="failNodePrepare" style="width:40px"></label>
+      <label>Fail participant on commit (node id): <input id="failNodeCommit" style="width:40px"></label>
+    </div>
+    <div>
+      <button id="prepareDistributed">Prepare Distributed TX</button>
+      <button id="commitDistributed">Commit Distributed TX (coordinator)</button>
+      <button id="abortDistributed">Abort Distributed TX (coordinator)</button>
+    </div>
+    <pre id="nodesView"></pre>
+  </div>
+</section>
+
+<section>
+  <h3>Crash & Recovery</h3>
+  <div>
+    <button id="simulateCrash">Simulate Crash (clear runtime, keep log)</button>
+    <button id="recover">Recover from log</button>
+    <button id="clearLog">Clear transaction log (danger)</button>
+    <div>
+      <strong>Committed Transaction Log:</strong>
+      <pre id="logView"></pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h3>Random / Stress Tools</h3>
+  <div>
+    <label>Random tx count: <input id="randCount" type="number" value="5" style="width:60px;"></label>
+    <label>Ops per tx: <input id="randOps" type="number" value="4" style="width:60px;"></label>
+    <label>Max amount: <input id="randMaxAmt" type="number" value="25" style="width:60px;"></label>
+    <button id="generateRandom">Generate Random Transactions</button>
+    <button id="runRandomAuto">Run All Random Auto</button>
+  </div>
+</section>
+
+<section>
+  <h3>Utilities</h3>
+  <div>
+    <button id="exportLog">Export Log (copy to clipboard)</button>
+    <button id="importLogBtn">Import Log (paste below)</button>
+    <button id="showState">Show Full State</button>
+    <textarea id="importArea" placeholder="Paste exported log JSON here"></textarea>
+  </div>
+  <div>
+    <strong>Console / Activity</strong>
+    <pre id="consoleView"></pre>
+  </div>
+</section>
+
+<script>
+/*
+  Transaction Simulator - Plain Interface
+  Features implemented:
+  - Accounts add/reset, direct deposit/withdraw (committed immediately)
+  - Begin transactions (with isolation levels and locking mode)
+  - Nested transactions and savepoints
+  - Staged operations: transfer, deposit, withdraw, custom JS script
+  - Pessimistic locking (exclusive locks per account)
+  - Optimistic locking (conflict detection on commit)
+  - Prepare/Commit for 2PC (simple simulation)
+  - Scheduler to step operations across transactions and auto-run
+  - Crash simulation and recovery from committed log
+  - Random transaction generator and stress runner
+  - Logs, export/import
+  - Many interaction paths and states
+*/
+
+(function(){
+  // Core state
+  let accounts = {}; // committed balances
+  let txCounter = 1;
+  let transactions = {}; // active and prepared, keyed by txId
+  let committedLog = []; // array of committed transaction entries (persisted across crash)
+  let locks = {}; // account -> txId (exclusive)
+  let nodes = {}; // for 2PC simulation: nodeId -> {accounts, log}
+  let distributedTxs = {}; // id -> {coordinator, participants, state}
+  let autoTimer = null;
+  let generatedTxs = [];
+  const consoleEl = document.getElementById('consoleView');
+
+  // Utilities
+  function log(msg) {
+    const time = new Date().toISOString().slice(11,23);
+    consoleEl.textContent = time + " - " + msg + "\n" + consoleEl.textContent;
+  }
+
+  function updateAccountsView() {
+    const el = document.getElementById('accountsView');
+    let s = '';
+    Object.keys(accounts).sort().forEach(k => s += k + ': ' + accounts[k] + '\n');
+    el.textContent = s || '(no accounts)';
+    updateAccountSelectors();
+    updateLocksView();
+  }
+
+  function updateAccountSelectors() {
+    const sel = document.getElementById('acctSelect');
+    const from = document.getElementById('opFrom');
+    const to = document.getElementById('opTo');
+    const acctList = [Object.keys(accounts)].flat()[0] ? Object.keys(accounts).sort() : [];
+    [sel, from, to].forEach(s => {
+      const current = s.value;
+      s.innerHTML = '';
+      acctList.forEach(a => {
+        const opt = document.createElement('option'); opt.value = a; opt.textContent = a;
+        s.appendChild(opt);
+      });
+      if (acctList.includes(current)) s.value = current;
+    });
+  }
+
+  function updateTxSelect() {
+    const sel = document.getElementById('txSelect');
+    const current = sel.value;
+    sel.innerHTML = '';
+    const ids = Object.keys(transactions).sort((a,b)=>a-b);
+    ids.forEach(id => {
+      const t = transactions[id];
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = id + (t.name ? ' ('+t.name+')' : '') + ' ['+t.state+']';
+      sel.appendChild(opt);
+    });
+    if (ids.includes(current)) sel.value = current;
+    updateTxDetails();
+  }
+
+  function updateTxDetails() {
+    const sel = document.getElementById('txSelect');
+    const id = sel.value;
+    const el = document.getElementById('txDetails');
+    if (!id || !transactions[id]) { el.textContent = '(no transaction selected)'; return; }
+    const t = transactions[id];
+    let s = 'Transaction ID: ' + id + '\n';
+    s += 'Name: ' + (t.name||'') + '\n';
+    s += 'State: ' + t.state + '\n';
+    s += 'Isolation: ' + t.isolation + ' | Locking: ' + t.locking + '\n';
+    s += 'Parent: ' + (t.parent||'none') + ' | Nested children: ' + (t.children.length) + '\n';
+    s += 'Snapshot: ' + JSON.stringify(t.snapshot) + '\n';
+    s += 'Staged balances: ' + JSON.stringify(t.staged) + '\n';
+    s += 'Operations (' + t.operations.length + '):\n';
+    t.operations.forEach((op,i) => {
+      s += '  ['+i+'] ' + JSON.stringify(op) + '\n';
+    });
+    s += 'Savepoints: ' + JSON.stringify(t.savepoints) + '\n';
+    el.textContent = s;
+  }
+
+  function updateLocksView() {
+    const el = document.getElementById('locksView');
+    let s = '';
+    Object.keys(locks).forEach(acc => s += acc + ' -> TX ' + locks[acc] + '\n');
+    el.textContent = s || '(no locks)';
+  }
+
+  function updateLogView() {
+    const el = document.getElementById('logView');
+    el.textContent = JSON.stringify(committedLog, null, 2);
+  }
+
+  function showNodes() {
+    const el = document.getElementById('nodesView');
+    let s = 'Nodes:\n';
+    Object.keys(nodes).forEach(id => {
+      s += 'Node ' + id + ' accounts: ' + JSON.stringify(nodes[id].accounts) + '\n';
+    });
+    el.textContent = s;
+  }
+
+  // Account management
+  function addAccount(name, bal) {
+    accounts[name] = Number(bal);
+    log('Added account ' + name + ' = ' + bal);
+    updateAccountsView();
+  }
+
+  function resetAccounts() {
+    accounts = { A:100, B:100, C:100 };
+    transactions = {};
+    txCounter = 1;
+    locks = {};
+    committedLog = [];
+    nodes = {};
+    distributedTxs = {};
+    generatedTxs = [];
+    log('Reset accounts to default (A,B,C = 100)');
+    updateAccountsView(); updateTxSelect(); updateLogView(); showNodes();
+  }
+
+  function directDeposit(account, amount) {
+    if (!(account in accounts)) { alert('Account not found'); return; }
+    accounts[account] += Number(amount);
+    const entry = {type:'direct_deposit', account, amount:Number(amount), timestamp: Date.now()};
+    committedLog.push(entry);
+    log('Direct deposit ' + amount + ' to ' + account);
+    updateAccountsView(); updateLogView();
+  }
+
+  function directWithdraw(account, amount) {
+    if (!(account in accounts)) { alert('Account not found'); return; }
+    accounts[account] -= Number(amount);
+    const entry = {type:'direct_withdraw', account, amount:Number(amount), timestamp: Date.now()};
+    committedLog.push(entry);
+    log('Direct withdraw ' + amount + ' from ' + account);
+    updateAccountsView(); updateLogView();
+  }
+
+  // Transaction model
+  function beginTransaction(opts={name:'', isolation:'READ COMMITTED', locking:'OPTIMISTIC', parent:null}) {
+    const id = String(txCounter++);
+    const snapshot = JSON.parse(JSON.stringify(accounts)); // copy committed snapshot
+    const t = {
+      id, name: opts.name||('tx'+id), state: 'active',
+      isolation: opts.isolation, locking: opts.locking,
+      snapshot, staged: {}, operations: [], parent: opts.parent || null,
+      children: [], savepoints: {},
+      prepared: false
+    };
+    transactions[id] = t;
+    if (t.parent) {
+      if (transactions[t.parent]) transactions[t.parent].children.push(id);
+      else log('Warning: parent tx not found: ' + t.parent);
+    }
+    log('Begin transaction ' + id + ' name=' + t.name + ' isolation=' + t.isolation + ' locking=' + t.locking + (t.parent?(' parent='+t.parent):''));
+    updateTxSelect();
+    return id;
+  }
+
+  function beginNestedTransaction() {
+    const parent = document.getElementById('parentTxId').value;
+    if (!parent || !transactions[parent]) { alert('Parent tx id invalid'); return; }
+    const name = document.getElementById('txName').value || '';
+    const isolation = transactions[parent].isolation;
+    const locking = transactions[parent].locking;
+    const id = beginTransaction({name, isolation, locking, parent});
+    updateTxSelect();
+    document.getElementById('txSelect').value = id;
+    updateTxDetails();
+  }
+
+  function addOperationToTx(txId, op) {
+    const t = transactions[txId];
+    if (!t) { alert('Transaction not found'); return; }
+    if (t.state !== 'active') { alert('Cannot add op: transaction not active'); return; }
+    t.operations.push(op);
+    // For convenience: apply to staged immediately in transaction view (not the committed state)
+    // But in pessimistic locking, acquire locks now if needed.
+    if (t.locking === 'PESSIMISTIC') {
+      const accts = opAccounts(op);
+      for (let a of accts) {
+        if (!locks[a]) {
+          locks[a] = txId;
+        } else if (locks[a] !== txId) {
+          // conflict: block and mark
+          t.blocked = true;
+          log('TX ' + txId + ' blocked acquiring lock on ' + a + ' (held by ' + locks[a] + ')');
+        }
+      }
+      updateLocksView();
+    }
+    // update staged view if possible
+    applyOpToStaged(t, op);
+    log('Added operation to TX ' + txId + ': ' + JSON.stringify(op));
+    updateTxDetails();
+  }
+
+  function opAccounts(op) {
+    if (op.type === 'transfer') return [op.from, op.to].filter(Boolean);
+    if (op.type === 'deposit' || op.type === 'withdraw') return [op.account];
+    if (op.type === 'custom') return []; // custom might target anything
+    return [];
+  }
+
+  function applyOpToStaged(t, op) {
+    // staged holds changes applied on top of snapshot
+    // For reads, resolution depends on isolation, but staged reflects transaction's own writes.
+    if (op.type === 'transfer') {
+      const from = op.from, to = op.to, amount = Number(op.amount);
+      // ensure base balances
+      const baseFrom = resolveRead(t, from);
+      const baseTo = resolveRead(t, to);
+      // staged modifications
+      t.staged[from] = (t.staged[from] !== undefined ? t.staged[from] : baseFrom) - amount;
+      t.staged[to] = (t.staged[to] !== undefined ? t.staged[to] : baseTo) + amount;
+    } else if (op.type === 'deposit') {
+      const a = op.account, amount = Number(op.amount);
+      const base = resolveRead(t, a);
+      t.staged[a] = (t.staged[a] !== undefined ? t.staged[a] : base) + amount;
+    } else if (op.type === 'withdraw') {
+      const a = op.account, amount = Number(op.amount);
+      const base = resolveRead(t, a);
+      t.staged[a] = (t.staged[a] !== undefined ? t.staged[a] : base) - amount;
+    } else if (op.type === 'custom') {
+      // execute JS code in a sandboxed way with staged, snap, accounts
+      try {
+        const staged = t.staged, snap = t.snapshot, committed = accounts;
+        const fn = new Function('staged','snap','committed','op','txId', op.script || '');
+        fn(staged, snap, committed, op, t.id);
+      } catch (e) {
+        log('Error in custom op script: ' + e);
+      }
+    }
+  }
+
+  function resolveRead(t, acct) {
+    // based on isolation level, determine what read returns
+    if (t.staged[acct] !== undefined) return t.staged[acct];
+    if (t.isolation === 'READ UNCOMMITTED') {
+      // include latest committed and also uncommitted changes from other txs (pessimistic)
+      // we'll check other transactions' staged values and merge last writer based on ops order
+      for (let id of Object.keys(transactions)) {
+        if (id === t.id) continue;
+        const other = transactions[id];
+        if (other && other.staged[acct] !== undefined) {
+          return other.staged[acct];
+        }
+      }
+      return accounts[acct];
+    } else if (t.isolation === 'READ COMMITTED') {
+      return accounts[acct];
+    } else if (t.isolation === 'REPEATABLE READ' || t.isolation === 'SERIALIZABLE') {
+      return t.snapshot[acct];
+    } else {
+      return accounts[acct];
+    }
+  }
+
+  function commitTransaction(txId) {
+    const t = transactions[txId];
+    if (!t) { alert('Transaction not found'); return; }
+    if (t.state !== 'active') { alert('Cannot commit: tx not active'); return; }
+
+    // If pessimistic locking: ensure locks are held as needed
+    if (t.locking === 'PESSIMISTIC') {
+      // verify no conflicting locks
+      for (let a in locks) {
+        if (locks[a] && locks[a] !== txId && t.operations.some(op=>opAccounts(op).includes(a))) {
+          alert('Cannot commit: lock conflict on ' + a + ' held by ' + locks[a]);
+          return;
+        }
+      }
+    }
+
+    // If optimistic: conflict detection
+    if (t.locking === 'OPTIMISTIC') {
+      // If any account we wrote has changed in committed state since snapshot, it's a write-write conflict
+      const writeAccounts = Object.keys(t.staged);
+      for (let a of writeAccounts) {
+        if (accounts[a] !== t.snapshot[a]) {
+          // conflict
+          log('Optimistic commit conflict for TX ' + txId + ' on account ' + a + ' (committed changed)');
+          alert('Optimistic commit failed due to conflict on ' + a + '. Transaction will be rolled back.');
+          rollbackTransaction(txId);
+          return;
+        }
+      }
+    }
+
+    // Apply staged modifications to committed state
+    for (let a in t.staged) {
+      accounts[a] = (accounts[a]!==undefined ? accounts[a] : 0) + (t.staged[a] - (t.snapshot[a]!==undefined ? t.snapshot[a] : 0));
+      // Another way: replace by staged absolute value if snapshot used as base:
+      // For our model, staged holds absolute values relative to snapshot; we'll compute delta
+    }
+
+    t.state = 'committed';
+    const entry = {id:txId, name:t.name, operations:t.operations, staged:t.staged, timestamp: Date.now()};
+    committedLog.push(entry);
+    // release locks held by this tx
+    for (let a in locks) if (locks[a] === txId) delete locks[a];
+    log('Committed TX ' + txId);
+    delete transactions[txId]; // remove from active map
+    updateTxSelect(); updateAccountsView(); updateLogView();
+  }
+
+  function rollbackTransaction(txId) {
+    const t = transactions[txId];
+    if (!t) { alert('Transaction not found'); return; }
+    // release locks
+    for (let a in locks) if (locks[a] === txId) delete locks[a];
+    t.state = 'rolledback';
+    log('Rolled back TX ' + txId);
+    delete transactions[txId];
+    updateTxSelect(); updateAccountsView();
+  }
+
+  function createSavepoint(txId, name) {
+    const t = transactions[txId];
+    if (!t) return;
+    t.savepoints[name] = {opsLen: t.operations.length, staged: JSON.parse(JSON.stringify(t.staged))};
+    log('Created savepoint ' + name + ' in TX ' + txId);
+    updateTxDetails();
+  }
+
+  function rollbackToSavepoint(txId, name) {
+    const t = transactions[txId];
+    if (!t) { alert('TX not found'); return; }
+    const sp = t.savepoints[name];
+    if (!sp) { alert('Savepoint not found'); return; }
+    t.operations = t.operations.slice(0, sp.opsLen);
+    t.staged = JSON.parse(JSON.stringify(sp.staged));
+    log('Rolled back TX ' + txId + ' to savepoint ' + name);
+    updateTxDetails();
+  }
+
+  // Prepare/2PC on single transaction in this simple model (marks prepared)
+  function prepareTransaction(txId) {
+    const t = transactions[txId];
+    if (!t) { alert('TX not found'); return; }
+    if (t.state !== 'active') { alert('TX not active'); return; }
+    // Do local checks similar to commit but do not apply to committed state
+    if (t.locking === 'OPTIMISTIC') {
+      const writeAccounts = Object.keys(t.staged);
+      for (let a of writeAccounts) {
+        if (accounts[a] !== t.snapshot[a]) {
+          alert('Prepare failed due to conflict on ' + a);
+          return;
+        }
+      }
+    }
+    // For pessimistic, assume locks were acquired earlier
+    t.prepared = true;
+    t.state = 'prepared';
+    log('Prepared TX ' + txId);
+    updateTxSelect();
+  }
+
+  function commitPreparedTransaction(txId) {
+    const t = transactions[txId];
+    if (!t) { alert('TX not found'); return; }
+    if (!t.prepared && t.state !== 'prepared') { alert('TX not prepared'); return; }
+    // Apply staged
+    for (let a in t.staged) {
+      accounts[a] = (accounts[a]!==undefined ? accounts[a] : 0) + (t.staged[a] - (t.snapshot[a]!==undefined ? t.snapshot[a] : 0));
+    }
+    t.state = 'committed';
+    committedLog.push({id:txId, name:t.name, staged:t.staged, prepared:true, timestamp:Date.now()});
+    for (let a in locks) if (locks[a] === txId) delete locks[a];
+    delete transactions[txId];
+    log('Committed prepared TX ' + txId);
+    updateAccountsView(); updateLogView(); updateTxSelect();
+  }
+
+  function abortPreparedTransaction(txId) {
+    const t = transactions[txId];
+    if (!t) { alert('TX not found'); return; }
+    for (let a in locks) if (locks[a] === txId) delete locks[a];
+    t.state = 'rolledback';
+    delete transactions[txId];
+    log('Aborted prepared TX ' + txId);
+    updateTxSelect(); updateAccountsView();
+  }
+
+  // Scheduler
+  function stepOnce() {
+    const listText = document.getElementById('stepList').value.trim();
+    let toStep = [];
+    if (!listText) {
+      toStep = Object.keys(transactions).filter(id => transactions[id].state==='active');
+    } else {
+      toStep = listText.split(',').map(s=>s.trim()).filter(Boolean).filter(id=>transactions[id] && transactions[id].state==='active');
+    }
+    if (toStep.length === 0) { log('No transactions to step'); return; }
+    toStep.forEach(id => {
+      const t = transactions[id];
+      if (!t) return;
+      // execute next op (we interpret operations array as staged operations added but can be "executed" one by one)
+      if (t.operations.length === 0) {
+        log('TX ' + id + ' has no operations to execute (staged)');
+        return;
+      }
+      // For our simulation, operations are staged upon addition. But to show scheduler interleaving, we'll allow "apply op index" semantics:
+      // We'll keep an execution pointer on transaction
+      t.execPtr = t.execPtr||0;
+      if (t.execPtr >= t.operations.length) {
+        log('TX ' + id + ' has no more ops to execute');
+        return;
+      }
+      const op = t.operations[t.execPtr];
+      // In pessimistic mode, ensure lock available now (acquire if free)
+      if (t.locking === 'PESSIMISTIC') {
+        const accts = opAccounts(op);
+        let blocked = false;
+        for (let a of accts) {
+          if (!locks[a]) locks[a] = id;
+          else if (locks[a] !== id) { blocked = true; log('TX ' + id + ' blocked executing op due to lock on ' + a); }
+        }
+        if (blocked) { t.blocked = true; return; }
+      }
+      // Apply op to staged representation and advance pointer
+      applyOpToStaged(t, op);
+      log('TX ' + id + ' executed op ['+t.execPtr+'] ' + JSON.stringify(op));
+      t.execPtr++;
+      updateTxDetails();
+      updateLocksView();
+    });
+  }
+
+  function runAuto() {
+    if (autoTimer) return;
+    const delay = Number(document.getElementById('autoDelay').value);
+    autoTimer = setInterval(() => {
+      stepOnce();
+    }, delay);
+    log('Auto-run started');
+  }
+
+  function stopAuto() {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      log('Auto-run stopped');
+    }
+  }
+
+  // Two-phase commit simulation with multiple nodes
+  function createNodes(count) {
+    nodes = {};
+    for (let i=1;i<=count;i++) {
+      nodes[String(i)] = {accounts: JSON.parse(JSON.stringify(accounts)), log: []};
+    }
+    log('Created ' + count + ' nodes (cloned current committed accounts into each node)');
+    showNodes();
+  }
+
+  function beginDistributed(txName) {
+    const id = 'dtx' + Date.now();
+    // coordinator creates a distributed tx with participants
+    const parts = Object.keys(nodes);
+    if (parts.length === 0) { alert('No nodes; create nodes first'); return null; }
+    distributedTxs[id] = {id, name: txName, participants: {}, coordinator: 'coord', state: 'active'};
+    parts.forEach(p => {
+      const txId = 'p' + id + '_' + p;
+      // create a local transaction on node: simulated as simple structure
+      distributedTxs[id].participants[p] = {node:p, txId, operations: [], prepared:false, state:'active'};
+    });
+    log('Begin distributed TX ' + id + ' participants: ' + parts.join(','));
+    showNodes();
+    return id;
+  }
+
+  function addOpToDistributed(dtxId, nodeId, op) {
+    const d = distributedTxs[dtxId];
+    if (!d) { alert('Distributed TX not found'); return; }
+    if (!d.participants[nodeId]) { alert('Participant not found'); return; }
+    d.participants[nodeId].operations.push(op);
+    log('Added op to distributed TX ' + dtxId + ' on node ' + nodeId + ': ' + JSON.stringify(op));
+  }
+
+  function prepareDistributed(dtxId, failNode=null) {
+    const d = distributedTxs[dtxId];
+    if (!d) { alert('Distributed TX not found'); return; }
+    // Coordinator asks each participant to prepare
+    let ok = true;
+    const parts = Object.keys(d.participants);
+    for (let p of parts) {
+      const part = d.participants[p];
+      // On node p, simulate checking operations for conflicts with node committed state
+      const node = nodes[p];
+      if (!node) { ok = false; part.state='aborted'; continue; }
+      // Apply operations tentatively to node snapshot to see if any negative balances (simple check)
+      const temp = JSON.parse(JSON.stringify(node.accounts));
+      try {
+        for (let op of part.operations) {
+          if (op.type === 'transfer') {
+            temp[op.from] = (temp[op.from]||0) - Number(op.amount);
+            temp[op.to] = (temp[op.to]||0) + Number(op.amount);
+          } else if (op.type === 'deposit') {
+            temp[op.account] = (temp[op.account]||0) + Number(op.amount);
+          } else if (op.type === 'withdraw') {
+            temp[op.account] = (temp[op.account]||0) - Number(op.amount);
+          }
+        }
+      } catch(e) { ok=false; }
+      // Check negative balances
+      const neg = Object.keys(temp).find(k=>temp[k] < 0);
+      if (neg) {
+        ok = false;
+        part.state = 'aborted';
+        log('Participant ' + p + ' refused prepare due to negative balance on ' + neg);
+      } else {
+        if (failNode && String(failNode) === String(p)) {
+          ok = false;
+          part.state = 'aborted';
+          log('Participant ' + p + ' simulated failure on prepare');
+        } else {
+          part.state = 'prepared';
+          part.temp = temp; // store tentative state
+          log('Participant ' + p + ' prepared successfully');
+        }
+      }
+    }
+    d.state = ok ? 'prepared' : 'aborted';
+    log('Distributed prepare completed: coordinator decision ' + (ok ? 'YES' : 'NO'));
+    return ok;
+  }
+
+  function commitDistributed(dtxId, failNodeCommit=null) {
+    const d = distributedTxs[dtxId];
+    if (!d) { alert('Distributed TX not found'); return; }
+    if (d.state !== 'prepared') { alert('Distributed TX not ready to commit (not prepared)'); return; }
+    const parts = Object.keys(d.participants);
+    for (let p of parts) {
+      const part = d.participants[p];
+      if (part.state !== 'prepared') { log('Skipping participant ' + p + ' (state='+part.state+')'); continue; }
+      // commit temp state to node accounts
+      if (failNodeCommit && String(failNodeCommit) === String(p)) {
+        // simulate crash during commit, participant does not apply and goes down
+        part.state = 'failed_on_commit';
+        log('Participant ' + p + ' failed during commit (simulated)');
+        continue;
+      }
+      nodes[p].accounts = part.temp;
+      nodes[p].log.push({dtxId, committed:true});
+      part.state = 'committed';
+      log('Participant ' + p + ' committed distributed changes');
+    }
+    d.state = 'committed';
+    log('Distributed TX ' + dtxId + ' committed by coordinator');
+    showNodes();
+  }
+
+  function abortDistributed(dtxId) {
+    const d = distributedTxs[dtxId];
+    if (!d) { alert('Distributed TX not found'); return; }
+    const parts = Object.keys(d.participants);
+    for (let p of parts) {
+      const part = d.participants[p];
+      part.state = 'aborted';
+      log('Participant ' + p + ' aborted distributed TX ' + dtxId);
+    }
+    d.state = 'aborted';
+    log('Distributed TX ' + dtxId + ' aborted by coordinator');
+  }
+
+  // Crash & recovery
+  function simulateCrash() {
+    // Simulate clearing volatile memory: transactions, locks, nodes etc remain but may lose in-memory runtime except committedLog
+    transactions = {}; locks = {}; nodes = {}; distributedTxs = {};
+    txCounter = 1;
+    log('Simulated crash: cleared active transactions, locks, nodes. Committed log remains.');
+    updateTxSelect(); updateLocksView(); updateAccountsView(); showNodes();
+  }
+
+  function recoverFromLog() {
+    // Rebuild accounts from committedLog
+    accounts = {};
+    committedLog.forEach(entry => {
+      if (entry.type === 'direct_deposit') accounts[entry.account] = (accounts[entry.account]||0) + entry.amount;
+      else if (entry.type === 'direct_withdraw') accounts[entry.account] = (accounts[entry.account]||0) - entry.amount;
+      else {
+        // transaction entries with staged deltas: staged holds absolute or deltas depending on model; we'll simplify:
+        if (entry.staged) {
+          // if staged holds absolute values relative to snapshot, compute as apply staged absolute over previous snapshot unknown.
+          // Simpler: if staged holds deltas relative to snapshot (as computed earlier), apply as delta by summing staged - snapshot isn't stored.
+          // To keep recovery simple: if staged contains numeric values, we will merge them into accounts (overwrite)
+          Object.keys(entry.staged).forEach(a => {
+            accounts[a] = entry.staged[a]; // best-effort recovery
+          });
+        }
+      }
+    });
+    log('Recovered committed state from log (best-effort)');
+    updateAccountsView(); updateLogView();
+  }
+
+  // Random generator
+  function generateRandomTransactions(count, opsPerTx, maxAmt) {
+    const acctNames = Object.keys(accounts);
+    generatedTxs = [];
+    for (let i=0;i<count;i++) {
+      const name = 'rand' + (i+1);
+      const id = beginTransaction({name, isolation: ['READ UNCOMMITTED','READ COMMITTED','REPEATABLE READ','SERIALIZABLE'][Math.floor(Math.random()*4)], locking: Math.random()<0.5?'OPTIMISTIC':'PESSIMISTIC'});
+      const t = transactions[id];
+      for (let j=0;j<opsPerTx;j++) {
+        const type = Math.random() < 0.6 ? 'transfer' : (Math.random()<0.5?'withdraw':'deposit');
+        if (type === 'transfer') {
+          const from = acctNames[Math.floor(Math.random()*acctNames.length)];
+          let to = acctNames[Math.floor(Math.random()*acctNames.length)];
+          if (to === from) to = acctNames[(acctNames.indexOf(to)+1)%acctNames.length] || to;
+          const amount = Math.ceil(Math.random()*maxAmt);
+          addOperationToTx(id, {type:'transfer', from, to, amount});
+        } else if (type === 'deposit') {
+          const a = acctNames[Math.floor(Math.random()*acctNames.length)];
+          const amount = Math.ceil(Math.random()*maxAmt);
+          addOperationToTx(id, {type:'deposit', account:a, amount});
+        } else {
+          const a = acctNames[Math.floor(Math.random()*acctNames.length)];
+          const amount = Math.ceil(Math.random()*maxAmt);
+          addOperationToTx(id, {type:'withdraw', account:a, amount});
+        }
+      }
+      generatedTxs.push(id);
+    }
+    log('Generated ' + count + ' random transactions: ' + generatedTxs.join(','));
+    updateTxSelect();
+    return generatedTxs;
+  }
+
+  function runAllRandomAuto() {
+    if (!generatedTxs || generatedTxs.length === 0) { alert('No generated transactions'); return; }
+    // set stepList to comma list and run auto
+    document.getElementById('stepList').value = generatedTxs.join(',');
+    runAuto();
+    // Let auto run and stop after many steps
+    setTimeout(() => { stopAuto(); log('Random auto run complete (timed stop)'); }, 5000);
+  }
+
+  // Export / Import
+  function exportLogToClipboard() {
+    const text = JSON.stringify(committedLog, null, 2);
+    navigator.clipboard && navigator.clipboard.writeText(text).then(()=>alert('Log copied to clipboard'), ()=>{ prompt('Copy the log JSON', text);});
+  }
+
+  function importLogFromArea() {
+    try {
+      const txt = document.getElementById('importArea').value;
+      const arr = JSON.parse(txt);
+      if (!Array.isArray(arr)) throw new Error('Expecting array');
+      committedLog = arr;
+      updateLogView();
+      log('Imported log from area (overwrote committed log)');
+    } catch(e) {
+      alert('Import failed: ' + e);
+    }
+  }
+
+  // UI wiring
+  document.getElementById('addAcct').addEventListener('click', ()=>{
+    const name = document.getElementById('acctName').value.trim();
+    const bal = Number(document.getElementById('acctBal').value);
+    if (!name) { alert('Name required'); return; }
+    addAccount(name, bal);
+  });
+  document.getElementById('resetAccounts').addEventListener('click', resetAccounts);
+
+  document.getElementById('viewAcct').addEventListener('click', ()=>{
+    const a = document.getElementById('acctSelect').value;
+    alert('Account: ' + a + ' balance: ' + (accounts[a]!==undefined ? accounts[a] : '(not found)'));
+  });
+
+  document.getElementById('depositDirect').addEventListener('click', ()=>{
+    const a = document.getElementById('acctSelect').value;
+    const amt = Number(document.getElementById('depositAmt').value);
+    directDeposit(a, amt);
+  });
+  document.getElementById('withdrawDirect').addEventListener('click', ()=>{
+    const a = document.getElementById('acctSelect').value;
+    const amt = Number(document.getElementById('withdrawAmt').value);
+    directWithdraw(a, amt);
+  });
+
+  document.getElementById('beginTx').addEventListener('click', ()=>{
+    const name = document.getElementById('txName').value;
+    const isolation = document.getElementById('isolationSelect').value;
+    const locking = document.getElementById('lockingMode').value;
+    const id = beginTransaction({name, isolation, locking});
+    document.getElementById('txSelect').value = id;
+    updateTxSelect();
+    updateTxDetails();
+  });
+
+  document.getElementById('beginNested').addEventListener('click', beginNestedTransaction);
+
+  document.getElementById('addOp').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    if (!txId) { alert('No tx selected'); return; }
+    const type = document.getElementById('opType').value;
+    if (type === 'transfer') {
+      const from = document.getElementById('opFrom').value;
+      const to = document.getElementById('opTo').value;
+      const amount = Number(document.getElementById('opAmount').value);
+      if (!from || !to) { alert('Select from and to'); return; }
+      addOperationToTx(txId, {type:'transfer', from, to, amount});
+    } else if (type === 'deposit') {
+      const account = document.getElementById('opTo').value;
+      const amount = Number(document.getElementById('opAmount').value);
+      addOperationToTx(txId, {type:'deposit', account, amount});
+    } else if (type === 'withdraw') {
+      const account = document.getElementById('opFrom').value;
+      const amount = Number(document.getElementById('opAmount').value);
+      addOperationToTx(txId, {type:'withdraw', account, amount});
+    } else {
+      alert('For custom use the custom script area');
+    }
+    updateTxDetails();
+  });
+
+  document.getElementById('txSelect').addEventListener('change', updateTxDetails);
+  document.getElementById('refreshTx').addEventListener('click', updateTxDetails);
+
+  document.getElementById('commitTx').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    if (!txId) { alert('No tx selected'); return; }
+    commitTransaction(txId);
+  });
+  document.getElementById('rollbackTx').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    if (!txId) { alert('No tx selected'); return; }
+    rollbackTransaction(txId);
+  });
+  document.getElementById('prepareTx').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    prepareTransaction(txId);
+  });
+  document.getElementById('commitPreparedTx').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    commitPreparedTransaction(txId);
+  });
+  document.getElementById('abortPreparedTx').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    abortPreparedTransaction(txId);
+  });
+
+  document.getElementById('createSavepoint').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    const name = document.getElementById('savepointName').value;
+    if (!txId || !name) { alert('Tx and savepoint name required'); return; }
+    createSavepoint(txId, name);
+  });
+
+  document.getElementById('rollbackToSavepoint').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    const name = document.getElementById('savepointName').value;
+    if (!txId || !name) { alert('Tx and savepoint name required'); return; }
+    rollbackToSavepoint(txId, name);
+  });
+
+  document.getElementById('addCustomOp').addEventListener('click', ()=>{
+    const txId = document.getElementById('txSelect').value;
+    const script = document.getElementById('customScript').value;
+    if (!txId || !script) { alert('TX and script required'); return; }
+    addOperationToTx(txId, {type:'custom', script});
+    updateTxDetails();
+  });
+
+  document.getElementById('autoDelay').addEventListener('input', (e)=>{ document.getElementById('autoDelayVal').textContent = e.target.value; });
+
+  document.getElementById('stepOnce').addEventListener('click', stepOnce);
+  document.getElementById('runAuto').addEventListener('click', runAuto);
+  document.getElementById('stopAuto').addEventListener('click', stopAuto);
+
+  // Nodes / 2PC
+  document.getElementById('createNodes').addEventListener('click', ()=>{
+    const c = Number(document.getElementById('nodeCount').value) || 1;
+    createNodes(c);
+  });
+  document.getElementById('beginDistributed').addEventListener('click', ()=>{
+    const name = document.getElementById('distTxName').value;
+    const id = beginDistributed(name);
+    if (id) alert('Distributed TX created: ' + id);
+  });
+  document.getElementById('prepareDistributed').addEventListener('click', ()=>{
+    const failNode = document.getElementById('failNodePrepare').value || null;
+    const dtxs = Object.keys(distributedTxs);
+    if (dtxs.length===0) { alert('No distributed transactions'); return; }
+    const id = dtxs[dtxs.length-1];
+    prepareDistributed(id, failNode);
+    showNodes();
+  });
+  document.getElementById('commitDistributed').addEventListener('click', ()=>{
+    const failNode = document.getElementById('failNodeCommit').value || null;
+    const dtxs = Object.keys(distributedTxs);
+    if (dtxs.length===0) { alert('No distributed transactions'); return; }
+    const id = dtxs[dtxs.length-1];
+    commitDistributed(id, failNode);
+    showNodes();
+  });
+  document.getElementById('abortDistributed').addEventListener('click', ()=>{
+    const dtxs = Object.keys(distributedTxs);
+    if (dtxs.length===0) { alert('No distributed transactions'); return; }
+    const id = dtxs[dtxs.length-1];
+    abortDistributed(id);
+    showNodes();
+  });
+
+  // Crash & recovery
+  document.getElementById('simulateCrash').addEventListener('click', simulateCrash);
+  document.getElementById('recover').addEventListener('click', recoverFromLog);
+  document.getElementById('clearLog').addEventListener('click', ()=>{
+    if (!confirm('Clear committed log? This is destructive')) return;
+    committedLog = [];
+    updateLogView();
+    log('Committed log cleared');
+  });
+
+  // Random
+  document.getElementById('generateRandom').addEventListener('click', ()=>{
+    const count = Number(document.getElementById('randCount').value);
+    const ops = Number(document.getElementById('randOps').value);
+    const maxAmt = Number(document.getElementById('randMaxAmt').value);
+    generateRandomTransactions(count, ops, maxAmt);
+  });
+  document.getElementById('runRandomAuto').addEventListener('click', runAllRandomAuto);
+
+  // Utilities
+  document.getElementById('exportLog').addEventListener('click', exportLogToClipboard);
+  document.getElementById('importLogBtn').addEventListener('click', importLogFromArea);
+  document.getElementById('showState').addEventListener('click', ()=>{
+    alert('Accounts: ' + JSON.stringify(accounts) + '\nTransactions: ' + Object.keys(transactions).join(',') + '\nLog size: ' + committedLog.length);
+  });
+
+  // Init
+  resetAccounts();
+  updateTxSelect();
+  updateLogView();
+  updateLocksView();
+
+  // Expose some test helper to console for advanced exploration
+  window._sim = {
+    accounts, transactions, committedLog, beginTransaction, addOperationToTx, commitTransaction, rollbackTransaction, locks, nodes, distributedTxs
+  };
+
+  log('Simulator ready. Start by adding accounts or begin transactions.');
+})();
+</script>
+</body>
+</html>

@@ -115,7 +115,7 @@ test.describe('Multiset (Bag) — FSM states and transitions', () => {
       await expect(page.locator('#b-size')).toHaveText('0');
 
       // The log should have clear entries
-      const log = await page.locator('#log').textContent();
+      const log1 = await page.locator('#log1').textContent();
       expect(log).toContain('A cleared');
       expect(log).toContain('B cleared');
 
@@ -155,7 +155,7 @@ test.describe('Multiset (Bag) — FSM states and transitions', () => {
       // A should have apple^2, banana, cherry^3
       await expect(page.locator('#a-distinct')).toHaveText('3');
       await expect(page.locator('#a-size')).toHaveText('6');
-      const aListText = await page.locator('#a-list').textContent();
+      const aListText1 = await page.locator('#a-list').textContent();
       expect(aListText).toContain('apple');
       expect(aListText).toContain('2'); // apple^2
       expect(aListText).toContain('banana');
@@ -170,7 +170,7 @@ test.describe('Multiset (Bag) — FSM states and transitions', () => {
       expect(bListText).toContain('4'); // date^4
 
       // Logs should mention the preset loads
-      const log = await page.locator('#log').textContent();
+      const log2 = await page.locator('#log2').textContent();
       expect(log).toContain('Preset A loaded');
       expect(log).toContain('Preset B loaded');
 
@@ -205,7 +205,7 @@ test.describe('Multiset (Bag) — FSM states and transitions', () => {
       await expect(page.locator('#result-view')).toHaveText('{ apple, banana, cherry, date^4 }');
 
       // Ensure logs were appended for these operations
-      const log = await page.locator('#log').textContent();
+      const log3 = await page.locator('#log3').textContent();
       expect(log).toContain('Union (max counts) computed');
       expect(log).toContain('Intersection (min counts) computed');
       expect(log).toContain('Sum (add counts) computed');

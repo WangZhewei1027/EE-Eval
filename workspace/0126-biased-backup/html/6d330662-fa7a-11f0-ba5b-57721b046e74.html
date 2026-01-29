@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>K-Means Clustering Interactive Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        canvas {
+            border: 1px solid #000;
+            margin: 10px 0;
+        }
+        .control-panel {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #000;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        button, input, select {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>K-Means Clustering Interactive Demo</h1>
+    
+    <div class="control-panel">
+        <div class="control-group">
+            <button id="generateRandom">Generate Random Points</button>
+            <label>Points: <input type="number" id="pointCount" value="100" min="10" max="500"></label>
+            <label>Clusters: <input type="number" id="clusterCount" value="3" min="1" max="10"></label>
+        </div>
+        
+        <div class="control-group">
+            <button id="runAlgorithm">Run One Step</button>
+            <button id="runFull">Run Full Algorithm</button>
+            <button id="reset">Reset</button>
+            <label>Max Iterations: <input type="number" id="maxIterations" value="10" min="1" max="50"></label>
+        </div>
+        
+        <div class="control-group">
+            <label>Point Distribution:</label>
+            <select id="distributionType">
+                <option value="random">Random</option>
+                <option value="gaussian">Gaussian Clusters</option>
+                <option value="rings">Concentric Rings</option>
+                <option value="spiral">Spiral</option>
+            </select>
+            <label>Cluster Variance: <input type="range" id="clusterVariance" min="1" max="50" value="20"></label>
+        </div>
+        
+        <div class="control-group">
+            <label>Initialization Method:</label>
+            <select id="initMethod">
+                <option value="random">Random Points</option>
+                <option value="kmeans++">K-Means++</option>
+                <option value="manual">Manual Placement</option>
+            </select>
+            <button id="placeCenters" style="display:none;">Place Centers</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Distance Metric:</label>
+            <select id="distanceMetric">
+                <option value="euclidean">Euclidean</option>
+                <option value="manhattan">Manhattan</option>
+            </select>
+        </div>
+    </div>
+    
+    <canvas id="canvas" width="600" height="400"></canvas>
+    
+    <div>
+        <p>Iteration: <span id="iterationCount">0</span></p>
+        <p>Status: <span id="status">Ready</span></p>
+    </div>
+    
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // State variables
+        let points = [];
+        let centers = [];
+        let clusters = [];
+        let iteration = 0;
+        let isRunning = false;
+        let isManualPlacement = false;
+        let animationId = null;
+        
+        // DOM elements
+        const generateRandomBtn = document.getElementById('generateRandom');
+        const runAlgorithmBtn = document.getElementById('runAlgorithm');
+        const runFullBtn = document.getElementById('runFull');
+        const resetBtn = document.getElementById('reset');
+        const pointCountInput = document.getElementById('pointCount');
+        const clusterCountInput = document.getElementById('clusterCount');
+        const maxIterationsInput = document.getElementById('maxIterations');
+        const distributionTypeSelect = document.getElementById('distributionType');
+        const clusterVarianceInput = document.getElementById('clusterVariance');
+        const initMethodSelect = document.getElementById('initMethod');
+        const placeCentersBtn = document.getElementById('placeCenters');
+        const distanceMetricSelect = document.getElementById('distanceMetric');
+        const iterationCountSpan = document.getElementById('iterationCount');
+        const statusSpan = document.getElementById('status');
+        
+        // Event listeners
+        generateRandomBtn.addEventListener('click', generatePoints);
+        runAlgorithmBtn.addEventListener('click', runOneStep);
+        runFullBtn.addEventListener('click', runFullAlgorithm);
+        resetBtn.addEventListener('click', reset);
+        initMethodSelect.addEventListener('change', toggleManualPlacement);
+        placeCentersBtn.addEventListener('click', finishManualPlacement);
+        canvas.addEventListener('click', handleCanvasClick);
+        
+        // Initialize
+        reset();
+        
+        // Functions
+        function reset() {
+            points = [];
+            centers = [];
+            clusters = [];
+            iteration = 0;
+            isRunning = false;
+            isManualPlacement = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            updateUI();
+            clearCanvas();
+            statusSpan.textContent = "Ready";
+        }
+        
+        function generatePoints() {
+            reset();
+            const count = parseInt(pointCountInput.value);
+            const distribution = distributionTypeSelect.value;
+            const variance = parseInt(clusterVarianceInput.value) / 10;
+            
+            points = [];
+            
+            if (distribution === 'random') {
+                for (let i = 0; i < count; i++) {
+                    points.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height
+                    });
+                }
+            } else if (distribution === 'gaussian') {
+                const k = parseInt(clusterCountInput.value);
+                const pointsPerCluster = Math.floor(count / k);
+                
+                for (let c = 0; c < k; c++) {
+                    const centerX = 50 + Math.random() * (width - 100);
+                    const centerY = 50 + Math.random() * (height - 100);
+                    
+                    for (let i = 0; i < pointsPerCluster; i++) {
+                        points.push({
+                            x: centerX + (Math.random() - 0.5) * variance * 50,
+                            y: centerY + (Math.random() - 0.5) * variance * 50
+                        });
+                    }
+                }
+                
+                // Add remaining points
+                while (points.length < count) {
+                    points.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height
+                    });
+                }
+            } else if (distribution === 'rings') {
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const maxRadius = Math.min(width, height) / 2 - 20;
+                
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = (Math.floor(Math.random() * 3) + 1) * (maxRadius / 3);
+                    const offset = (Math.random() - 0.5) * variance * 10;
+                    
+                    points.push({
+                        x: centerX + Math.cos(angle) * (radius + offset),
+                        y: centerY + Math.sin(angle) * (radius + offset)
+                    });
+                }
+            } else if (distribution === 'spiral') {
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const maxRadius = Math.min(width, height) / 2 - 20;
+                
+                for (let i = 0; i < count; i++) {
+                    const t = Math.random() * Math.PI * 6;
+                    const radius = maxRadius * (t / (Math.PI * 6));
+                    const offset = (Math.random() - 0.5) * variance * 5;
+                    
+                    points.push({
+                        x: centerX + Math.cos(t) * (radius + offset),
+                        y: centerY + Math.sin(t) * (radius + offset)
+                    });
+                }
+            }
+            
+            initializeCenters();
+            updateUI();
+            draw();
+        }
+        
+        function initializeCenters() {
+            const k = parseInt(clusterCountInput.value);
+            centers = [];
+            
+            if (initMethodSelect.value === 'random') {
+                // Random initialization
+                for (let i = 0; i < k; i++) {
+                    centers.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height,
+                        color: getRandomColor()
+                    });
+                }
+            } else if (initMethodSelect.value === 'kmeans++') {
+                // K-Means++ initialization
+                if (points.length === 0) return;
+                
+                // First center is random
+                centers.push({
+                    ...points[Math.floor(Math.random() * points.length)],
+                    color: getRandomColor()
+                });
+                
+                // Subsequent centers are chosen with probability proportional to D(x)^2
+                while (let centers.length < k) {
+                    const distances = points.map(p => {
+                        return Math.min(...centers.map(c => distance(p, c)));
+                    });
+                    
+                    const sum = distances.reduce((a, b) => a + b * b, 0);
+                    let threshold = Math.random() * sum;
+                    let i = 0;
+                    let runningSum = 0;
+                    
+                    while (i < points.length && runningSum < threshold) {
+                        runningSum += distances[i] * distances[i];
+                        i++;
+                    }
+                    
+                    centers.push({
+                        ...points[Math.max(0, i - 1)],
+                        color: getRandomColor()
+                    });
+                }
+            } else if (initMethodSelect.value === 'manual') {
+                isManualPlacement = true;
+                statusSpan.textContent = "Click on canvas to place centers";
+            }
+            
+            if (!isManualPlacement) {
+                assignPointsToClusters();
+            }
+        }
+        
+        function toggleManualPlacement() {
+            isManualPlacement = initMethodSelect.value === 'manual';
+            placeCentersBtn.style.display = isManualPlacement ? 'inline-block' : 'none';
+            
+            if (isManualPlacement && points.length > 0) {
+                statusSpan.textContent = "Click on canvas to place centers";
+            }
+        }
+        
+        function handleCanvasClick(e) {
+            if (!isManualPlacement) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (centers.length < parseInt(clusterCountInput.value)) {
+                centers.push({
+                    x: x,
+                    y: y,
+                    color: getRandomColor()
+                });
+                
+                draw();
+                statusSpan.textContent = `Placed center ${centers.length} of ${clusterCountInput.value}`;
+            }
+        }
+        
+        function finishManualPlacement() {
+            if (centers.length > 0) {
+                isManualPlacement = false;
+                assignPointsToClusters();
+                updateUI();
+            }
+        }
+        
+        function assignPointsToClusters() {
+            if (centers.length === 0) return;
+            
+            clusters = [];
+            for (let i = 0; i < centers.length; i++) {
+                clusters.push([]);
+            }
+            
+            for (const point of points) {
+                let minDist = Infinity;
+                let bestCluster = 0;
+                
+                for (let i = 0; i < centers.length; i++) {
+                    const dist = distance(point, centers[i]);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestCluster = i;
+                    }
+                }
+                
+                clusters[bestCluster].push(point);
+            }
+            
+            iteration++;
+            iterationCountSpan.textContent = iteration;
+            statusSpan.textContent = "Points assigned to clusters";
+        }
+        
+        function updateCenters() {
+            let changed = false;
+            
+            for (let i = 0; i < centers.length; i++) {
+                if (clusters[i].length === 0) continue;
+                
+                const sum = clusters[i].reduce((acc, p) => {
+                    return { x: acc.x + p.x, y: acc.y + p.y };
+                }, { x: 0, y: 0 });
+                
+                const newX = sum.x / clusters[i].length;
+                const newY = sum.y / clusters[i].length;
+                
+                if (Math.abs(centers[i].x - newX) > 0.1 || Math.abs(centers[i].y - newY) > 0.1) {
+                    changed = true;
+                }
+                
+                centers[i].x = newX;
+                centers[i].y = newY;
+            }
+            
+            return changed;
+        }
+        
+        function runOneStep() {
+            if (points.length === 0 || centers.length === 0) {
+                statusSpan.textContent = "Generate points first";
+                return;
+            }
+            
+            if (isRunning) return;
+            isRunning = true;
+            
+            const changed = updateCenters();
+            assignPointsToClusters();
+            
+            draw();
+            
+            if (!changed) {
+                statusSpan.textContent = "Converged - centers didn't change";
+            } else {
+                statusSpan.textContent = "Completed one iteration";
+            }
+            
+            isRunning = false;
+        }
+        
+        function runFullAlgorithm() {
+            if (points.length === 0 || centers.length === 0) {
+                statusSpan.textContent = "Generate points first";
+                return;
+            }
+            
+            if (isRunning) return;
+            isRunning = true;
+            
+            const maxIterations = parseInt(maxIterationsInput.value);
+            let changed = true;
+            let iterations = 0;
+            
+            function step() {
+                if (!changed || iterations >= maxIterations) {
+                    isRunning = false;
+                    statusSpan.textContent = iterations >= maxIterations ? 
+                        "Reached max iterations" : "Converged - centers didn't change";
+                    return;
+                }
+                
+                changed = updateCenters();
+                assignPointsToClusters();
+                iterations++;
+                
+                draw();
+                animationId = requestAnimationFrame(step);
+            }
+            
+            animationId = requestAnimationFrame(step);
+        }
+        
+        function distance(a, b) {
+            if (distanceMetricSelect.value === 'euclidean') {
+                return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+            } else { // manhattan
+                return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+            }
+        }
+        
+        function draw() {
+            clearCanvas();
+            
+            // Draw points
+            for (let i = 0; i < clusters.length; i++) {
+                const color = centers[i]?.color || '#000000';
+                
+                for (const point of clusters[i]) {
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw centers
+            for (const center of centers) {
+                ctx.fillStyle = center.color';
+                ctx.beginPath();
+                ctx.arc(center.x, center.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+        
+        function clearCanvas() {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, width, height);
+        }
+        
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+        
+        function updateUI() {
+            iterationCountSpan.textContent = iteration;
+            placeCentersBtn.style.display = isManualPlacement ? 'inline-block' : 'none';
+        }
+    </script>
+</body>
+</html>

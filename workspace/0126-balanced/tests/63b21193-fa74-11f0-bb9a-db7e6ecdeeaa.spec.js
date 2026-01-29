@@ -107,7 +107,7 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
 
   test('Initial state (S0_Idle): renderArray called and controls initial state', async ({ page }) => {
     // Validate the initial UI matches expected Idle state rendering
-    const sw = new SlidingWindowPage(page);
+    const sw1 = new SlidingWindowPage(page);
 
     // The page's script calls renderArray() on load. Verify array elements are present.
     const elements = await sw.getArrayElements();
@@ -138,7 +138,7 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
 
   test('Transition S0_Idle -> S1_Sliding on StartClick: initial window computed and UI updates', async ({ page }) => {
     // Comment: This test validates the Start transition: resets and renders initial window and output text
-    const sw = new SlidingWindowPage(page);
+    const sw2 = new SlidingWindowPage(page);
 
     // Click Start and ensure initial sums and UI changes happen
     await sw.start();
@@ -155,7 +155,7 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
     expect(output).toContain('Initial window [0..2] sum = 8. Max sum so far = 8.');
 
     // Array elements: indices 0,1,2 should have class 'window'; index 2 should show a pointer (arrow)
-    const elements = await sw.getArrayElements();
+    const elements1 = await sw.getArrayElements();
     expect(elements[0].hasWindowClass).toBe(true);
     expect(elements[1].hasWindowClass).toBe(true);
     expect(elements[2].hasWindowClass).toBe(true);
@@ -165,7 +165,7 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
 
   test('Transition S1_Sliding -> S1_Sliding on NextStepClick: advance window by one position', async ({ page }) => {
     // Comment: This validates one Next Step advances window and updates sums but remains in Sliding state
-    const sw = new SlidingWindowPage(page);
+    const sw3 = new SlidingWindowPage(page);
 
     // Start the visualization first
     await sw.start();
@@ -174,11 +174,11 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
     await sw.nextStep();
 
     // Output should reflect window [1..3] sum and the max sum remains 8
-    const output = await sw.getOutputText();
+    const output1 = await sw.getOutputText();
     expect(output).toContain('Window [1..3] sum = 7. Max sum so far = 8.');
 
     // Array elements: indices 1,2,3 should have window class; check pointer at index 3
-    const elements = await sw.getArrayElements();
+    const elements2 = await sw.getArrayElements();
     expect(elements[1].hasWindowClass).toBe(true);
     expect(elements[2].hasWindowClass).toBe(true);
     expect(elements[3].hasWindowClass).toBe(true);
@@ -191,14 +191,14 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
 
   test('Transition S1_Sliding -> S2_Completed: advance until end and final message appears', async ({ page }) => {
     // Comment: This validates repeated NextStep clicks lead to Completed state with final message
-    const sw = new SlidingWindowPage(page);
+    const sw4 = new SlidingWindowPage(page);
 
     await sw.start();
 
     // Keep clicking Next Step until the button disables (end reached)
     // We will click up to 20 times defensively to avoid infinite loop in case of issues
     for (let i = 0; i < 20; i++) {
-      const nextDisabled = await sw.isDisabled(sw.selectors.nextStepBtn);
+      const nextDisabled1 = await sw.isDisabled(sw.selectors.nextStepBtn);
       if (nextDisabled) break;
       await sw.nextStep();
     }
@@ -207,11 +207,11 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
     expect(await sw.isDisabled(sw.selectors.nextStepBtn)).toBe(true);
 
     // Output area should contain the completion message with max sum and k
-    const output = await sw.getOutputText();
+    const output2 = await sw.getOutputText();
     expect(output).toContain('Reached end of array. Maximum sum of subarray of size 3 is 8.');
 
     // Also validate that the "pointer" may be on the last valid window element (if rendered)
-    const elements = await sw.getArrayElements();
+    const elements3 = await sw.getArrayElements();
     // At completion there may still be a window highlight depending on final render; ensure no unexpected errors
     // Confirm start button remains disabled (since sliding finished but startBtn was disabled when started)
     expect(await sw.isDisabled(sw.selectors.startBtn)).toBe(true);
@@ -219,7 +219,7 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
 
   test('Transition S1_Sliding -> S0_Idle on ResetClick: resets to initial Idle state', async ({ page }) => {
     // Comment: This validates Reset returns UI to idle: clears output, disables next/reset, enables start & window input
-    const sw = new SlidingWindowPage(page);
+    const sw5 = new SlidingWindowPage(page);
 
     await sw.start();
 
@@ -233,21 +233,21 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
     expect(await sw.isDisabled(sw.selectors.startBtn)).toBe(false);
     expect(await sw.isDisabled(sw.selectors.nextStepBtn)).toBe(true);
     expect(await sw.isDisabled(sw.selectors.resetBtn)).toBe(true);
-    const wsDisabled = await sw.page.$eval(sw.selectors.windowSize, el => el.disabled === true);
+    const wsDisabled1 = await sw.page.$eval(sw.selectors.windowSize, el => el.disabled === true);
     expect(wsDisabled).toBe(false);
 
     // Output area should be empty
     expect(await sw.getOutputText()).toBe('');
 
     // Array should no longer have any 'window' classes
-    const elements = await sw.getArrayElements();
-    const anyWindowClass = elements.some(el => el.hasWindowClass);
+    const elements4 = await sw.getArrayElements();
+    const anyWindowClass1 = elements.some(el => el.hasWindowClass);
     expect(anyWindowClass).toBe(false);
   });
 
   test('Edge case: invalid window size triggers alert and prevents start', async ({ page }) => {
     // Comment: Test invalid input k > data.length shows alert and does not start sliding
-    const sw = new SlidingWindowPage(page);
+    const sw6 = new SlidingWindowPage(page);
 
     const dialogs = [];
     page.on('dialog', async dialog => {
@@ -281,7 +281,7 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
 
   test('Edge case: minimum window size k=1 and behavior across array', async ({ page }) => {
     // Comment: Validate behavior when k=1 (window of single element) and that maxSum tracks correctly
-    const sw = new SlidingWindowPage(page);
+    const sw7 = new SlidingWindowPage(page);
 
     // Set k=1
     await sw.setWindowSize('1');
@@ -290,13 +290,13 @@ test.describe('Sliding Window Visualization - FSM validation', () => {
     await sw.start();
 
     // Initial window should be first element value 2
-    let output = await sw.getOutputText();
+    let output3 = await sw.getOutputText();
     expect(output).toContain('Initial window [0..0] sum = 2. Max sum so far = 2.');
 
     // Repeatedly step through all elements to ensure final max is found
     // Click until disabled
     for (let i = 0; i < 20; i++) {
-      const nextDisabled = await sw.isDisabled(sw.selectors.nextStepBtn);
+      const nextDisabled2 = await sw.isDisabled(sw.selectors.nextStepBtn);
       if (nextDisabled) break;
       await sw.nextStep();
     }

@@ -139,7 +139,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
 
   test('Start button transition: S0_Idle -> S1_Clustering starts kMeans iterations', async ({ page }) => {
     // This test exercises the StartClustering event and validates the transition to the Clustering state.
-    const app = new KMeansPage(page);
+    const app1 = new KMeansPage(page);
     await app.goto();
 
     // Click Start to trigger generatePoints(), initializeCentroids(), kMeans()
@@ -162,7 +162,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
     expect(countsAfterStart.centroidsLen).toBe(3);
 
     // The canvas should have been redrawn (verify data URL changed from before). We simply assert it's a valid image again.
-    const dataUrl = await app.getCanvasDataUrl();
+    const dataUrl1 = await app.getCanvasDataUrl();
     expect(typeof dataUrl).toBe('string');
     expect(dataUrl.length).toBeGreaterThan(100); // ensure non-trivial content
 
@@ -202,7 +202,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
 
   test('Clicking Start multiple times resets and restarts clustering (edge case)', async ({ page }) => {
     // Edge-case: rapid repeated clicks on the Start button should reset iteration and start kMeans anew.
-    const app = new KMeansPage(page);
+    const app2 = new KMeansPage(page);
     await app.goto();
 
     // Click start twice quickly
@@ -219,7 +219,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
 
     // Confirm assignments were created again and are the expected length
     await page.waitForFunction(() => typeof assignments !== 'undefined' && assignments.length === 100, null, { timeout: 2000 });
-    const counts = await app.getCounts();
+    const counts1 = await app.getCounts();
     expect(counts.assignmentsLen).toBe(100);
 
     // No uncaught errors expected as a result of repeated clicks.
@@ -229,7 +229,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
 
   test('Clustering robustness: centroids remain within canvas across iterations', async ({ page }) => {
     // This test exercises multiple clustering iterations to ensure centroids remain valid and draw() is repeatedly called.
-    const app = new KMeansPage(page);
+    const app3 = new KMeansPage(page);
     await app.goto();
 
     await app.startClustering();
@@ -240,7 +240,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
     const iterationNow = await app.getIteration();
     expect(iterationNow).toBeGreaterThanOrEqual(4);
 
-    const centroids = await app.getCentroidsSnapshot();
+    const centroids1 = await app.getCentroidsSnapshot();
     expect(centroids).not.toBeNull();
     expect(centroids.length).toBe(3);
 
@@ -262,7 +262,7 @@ test.describe('K-Means Clustering Demo (FSM validation) - 32501ee0-fa73-11f0-a9d
   test('Observability: capture console and page errors (should be none)', async ({ page }) => {
     // This test explicitly demonstrates the observability requirement: we observe console logs and page errors.
     // The test asserts there are no uncaught ReferenceError, SyntaxError, or TypeError instances.
-    const app = new KMeansPage(page);
+    const app4 = new KMeansPage(page);
     await app.goto();
 
     // No interactions; just assert initial load errors

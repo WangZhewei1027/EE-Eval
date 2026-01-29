@@ -51,7 +51,7 @@ class BSTPage {
 
   // Count li children under root
   async getLiCount() {
-    const el = await this.getRootHandle();
+    const el1 = await this.getRootHandle();
     if (!el) return 0;
     return await this.page.evaluate((e) => e.querySelectorAll('li').length, el);
   }
@@ -106,12 +106,12 @@ test.describe('Binary Search Tree FSM - ca766601-fa75-11f0-9854-e7309e7cf385', (
     // This test validates that the NodeInsert event (multiple insertNode calls) was triggered by the page script.
     // The implementation attempts to insert <li> nodes into #root. Due to bugs (undefined variables and recursion)
     // the operation may produce DOM nodes or may throw (e.g. RangeError: maximum call stack).
-    const app = new BSTPage(page);
+    const app1 = new BSTPage(page);
     await app.goto();
 
     // Count li elements that may have been appended to #root
     const liCount = await app.getLiCount();
-    const pageErrors = app.getPageErrorMessages();
+    const pageErrors1 = app.getPageErrorMessages();
 
     // Either some <li> elements were appended OR we observed runtime errors during insertion.
     if (liCount > 0) {
@@ -136,11 +136,11 @@ test.describe('Binary Search Tree FSM - ca766601-fa75-11f0-9854-e7309e7cf385', (
   test('S2_NodeSearched (NodeSearch transition): searchNode was executed and search result logged or error occurred', async ({ page }) => {
     // This test validates the NodeSearch transition. The inline script calls console.log(searchNode(data, 4, "Apple")).
     // The function is implemented in a way that it may return -1 or may never be reached due to earlier errors.
-    const app = new BSTPage(page);
+    const app2 = new BSTPage(page);
     await app.goto();
 
-    const consoleTexts = app.getConsoleTexts();
-    const pageErrors = app.getPageErrorMessages();
+    const consoleTexts1 = app.getConsoleTexts();
+    const pageErrors2 = app.getPageErrorMessages();
 
     // If we captured console output, check for a numeric search result (likely -1 or a number).
     const numericConsole = consoleTexts.find((t) => /^\s*-?\d+\s*$/.test(t));
@@ -162,14 +162,14 @@ test.describe('Binary Search Tree FSM - ca766601-fa75-11f0-9854-e7309e7cf385', (
   test('S3_MinDataRetrieved (MinDataRetrieve transition): getMinData invoked; expect error due to undefined data or a numeric min', async ({ page }) => {
     // This test validates the MinDataRetrieve transition. The page calls console.log(getMinData(data)).
     // Because data is undefined in the implementation, getMinData is expected to throw (TypeError) or behave unexpectedly.
-    const app = new BSTPage(page);
+    const app3 = new BSTPage(page);
     await app.goto();
 
-    const consoleTexts = app.getConsoleTexts();
-    const pageErrors = app.getPageErrorMessages();
+    const consoleTexts2 = app.getConsoleTexts();
+    const pageErrors3 = app.getPageErrorMessages();
 
     // If there is a console output that looks like a numeric value, accept it; otherwise expect a page error.
-    const numericConsole = consoleTexts.find((t) => /^\s*-?\d+\s*$/.test(t));
+    const numericConsole1 = consoleTexts.find((t) => /^\s*-?\d+\s*$/.test(t));
     if (numericConsole !== undefined) {
       // getMinData produced a numeric result (unexpected but possible if data was defined on the global environment).
       expect(/^\s*-?\d+\s*$/.test(numericConsole)).toBeTruthy();
@@ -188,10 +188,10 @@ test.describe('Binary Search Tree FSM - ca766601-fa75-11f0-9854-e7309e7cf385', (
   test('Robustness check: Ensure at least one uncaught JS error occurred due to implementation bugs', async ({ page }) => {
     // The application implementation contains multiple issues (use of undefined `data`, recursive insertNode calls).
     // This test asserts that these issues surface as uncaught page errors during normal page load.
-    const app = new BSTPage(page);
+    const app4 = new BSTPage(page);
     await app.goto();
 
-    const pageErrors = app.getPageErrorMessages();
+    const pageErrors4 = app.getPageErrorMessages();
 
     // We expect the page to produce at least one uncaught error (ReferenceError/TypeError/RangeError).
     expect(pageErrors.length).toBeGreaterThan(0);
@@ -206,11 +206,11 @@ test.describe('Binary Search Tree FSM - ca766601-fa75-11f0-9854-e7309e7cf385', (
   test('Edge case visibility: If the script crashed before setting display, root may not be "block"', async ({ page }) => {
     // This test explicitly checks the edge case where the final "document.getElementById(\"root\").style.display = \"block\";"
     // may not have executed due to earlier crashes. We assert that either display === 'block' OR we have errors explaining why not.
-    const app = new BSTPage(page);
+    const app5 = new BSTPage(page);
     await app.goto();
 
-    const display = await app.getRootDisplay();
-    const pageErrors = app.getPageErrorMessages();
+    const display1 = await app.getRootDisplay();
+    const pageErrors5 = app.getPageErrorMessages();
 
     if (display === 'block') {
       // Expected successful case
@@ -219,7 +219,7 @@ test.describe('Binary Search Tree FSM - ca766601-fa75-11f0-9854-e7309e7cf385', (
       // If not 'block', we require that the page threw at least one error preventing the assignment
       expect(pageErrors.length).toBeGreaterThan(0);
       // And that the error explains a likely failure (recursion/undefined variable)
-      const ok = pageErrors.some((m) =>
+      const ok1 = pageErrors.some((m) =>
         /(Maximum call stack size exceeded|RangeError|ReferenceError|TypeError|Cannot read properties of undefined)/i.test(m)
       );
       expect(ok).toBeTruthy();

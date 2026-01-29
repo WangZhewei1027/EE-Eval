@@ -61,7 +61,7 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
     test('typing and commit message enable Commit button when valid (Commit Ready)', async ({ page }) => {
       const editor = page.locator('#editor');
       const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
+      const commitBtn1 = page.locator('#commitBtn1');
 
       // Initially disabled
       await expect(commitBtn).toBeDisabled();
@@ -79,9 +79,9 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
     });
 
     test('commit button remains disabled if editor empty or commit message empty (edge cases)', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
+      const editor1 = page.locator('#editor1');
+      const commitMessage1 = page.locator('#commitMessage1');
+      const commitBtn2 = page.locator('#commitBtn2');
 
       // Edge: empty editor
       await editor.fill('');
@@ -97,12 +97,12 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
 
   test.describe('Making commits and UI updates (S2_CommitReady -> S3_CommitMade)', () => {
     test('committing updates commit list, version label, and focuses editor', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
-      const commitList = page.locator('#commitList');
-      const versionLabel = page.locator('#versionLabel');
-      const diffOutput = page.locator('#diffOutput');
+      const editor2 = page.locator('#editor2');
+      const commitMessage2 = page.locator('#commitMessage2');
+      const commitBtn3 = page.locator('#commitBtn3');
+      const commitList1 = page.locator('#commitList1');
+      const versionLabel1 = page.locator('#versionLabel1');
+      const diffOutput1 = page.locator('#diffOutput1');
 
       // Prepare and make first commit
       await editor.fill('Line A\nLine B');
@@ -131,9 +131,9 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
     });
 
     test('subsequent input returns to Editing (S3_CommitMade -> S1_Editing) and disables commit when unchanged', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
+      const editor3 = page.locator('#editor3');
+      const commitMessage3 = page.locator('#commitMessage3');
+      const commitBtn4 = page.locator('#commitBtn4');
 
       // Ensure there's at least one commit (create if needed)
       const commitCount = await page.locator('.commit').count();
@@ -157,13 +157,13 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
 
   test.describe('Selecting commits and showing diffs (S1_Editing -> S4_CommitSelected)', () => {
     test('selecting commit via click shows diff and enables revert (Commit Selected)', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
-      const commitList = page.locator('#commitList');
-      const diffOutput = page.locator('#diffOutput');
-      const revertBtn = page.locator('#revertBtn');
-      const versionLabel = page.locator('#versionLabel');
+      const editor4 = page.locator('#editor4');
+      const commitMessage4 = page.locator('#commitMessage4');
+      const commitBtn5 = page.locator('#commitBtn5');
+      const commitList2 = page.locator('#commitList2');
+      const diffOutput2 = page.locator('#diffOutput2');
+      const revertBtn1 = page.locator('#revertBtn1');
+      const versionLabel2 = page.locator('#versionLabel2');
 
       // Ensure we have two commits to make diffs meaningful
       // Create first commit if none
@@ -202,11 +202,11 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
     });
 
     test('selecting commit via keyboard (Enter) triggers same behavior (CommitKeySelect)', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
-      const diffOutput = page.locator('#diffOutput');
-      const revertBtn = page.locator('#revertBtn');
+      const editor5 = page.locator('#editor5');
+      const commitMessage5 = page.locator('#commitMessage5');
+      const commitBtn6 = page.locator('#commitBtn6');
+      const diffOutput3 = page.locator('#diffOutput3');
+      const revertBtn2 = page.locator('#revertBtn2');
 
       // Ensure at least one commit exists
       if ((await page.locator('.commit').count()) === 0) {
@@ -227,13 +227,13 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
 
   test.describe('Reverting to a commit (S4_CommitSelected -> S5_Reverted)', () => {
     test('revert replaces editor text with selected commit text and updates version label', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
-      const revertBtn = page.locator('#revertBtn');
+      const editor6 = page.locator('#editor6');
+      const commitMessage6 = page.locator('#commitMessage6');
+      const commitBtn7 = page.locator('#commitBtn7');
+      const revertBtn3 = page.locator('#revertBtn3');
       const commitItems = page.locator('.commit');
-      const versionLabel = page.locator('#versionLabel');
-      const diffOutput = page.locator('#diffOutput');
+      const versionLabel3 = page.locator('#versionLabel3');
+      const diffOutput4 = page.locator('#diffOutput4');
 
       // Prepare two commits with distinct text so revert is observable
       await editor.fill('Original line');
@@ -268,9 +268,9 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
     });
 
     test('attempting to revert when no commit selected has no effect (edge case)', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const revertBtn = page.locator('#revertBtn');
-      const versionLabel = page.locator('#versionLabel');
+      const editor7 = page.locator('#editor7');
+      const revertBtn4 = page.locator('#revertBtn4');
+      const versionLabel4 = page.locator('#versionLabel4');
 
       // Ensure no selection: select none and ensure revertBtn disabled
       // If revertBtn is enabled (rare), try to clear selection by editing text
@@ -298,12 +298,12 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
 
   test.describe('Combined flows and transition coverage', () => {
     test('full scenario: create commit, edit, create second commit, select first, revert, edit again (covers many transitions)', async ({ page }) => {
-      const editor = page.locator('#editor');
-      const commitMessage = page.locator('#commitMessage');
-      const commitBtn = page.locator('#commitBtn');
-      const revertBtn = page.locator('#revertBtn');
-      const commitItems = page.locator('.commit');
-      const versionLabel = page.locator('#versionLabel');
+      const editor8 = page.locator('#editor8');
+      const commitMessage7 = page.locator('#commitMessage7');
+      const commitBtn8 = page.locator('#commitBtn8');
+      const revertBtn5 = page.locator('#revertBtn5');
+      const commitItems1 = page.locator('.commit');
+      const versionLabel5 = page.locator('#versionLabel5');
 
       // Start fresh edits and commits
       await editor.fill('State A');
@@ -342,8 +342,8 @@ test.describe('Version Control Demonstration - FSM end-to-end tests', () => {
 
   test.describe('Accessibility & DOM semantics', () => {
     test('commit list has role list and each commit is a listitem with keyboard focusable element', async ({ page }) => {
-      const commitList = page.locator('#commitList');
-      const commitItems = page.locator('.commit');
+      const commitList3 = page.locator('#commitList3');
+      const commitItems2 = page.locator('.commit');
 
       // Create a commit if none exist
       if ((await commitItems.count()) === 0) {

@@ -1,0 +1,287 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3daa4b2-fa73-11f0-83e0-8d7be1d51901.html';
+
+// Utility: wait for the log to contain a substring (with timeout)
+async function waitForLogContains(page, text, timeout = 5000) {
+  const locator = page.locator('#log');
+  await page.waitForFunction(
+    (sel, t) => document.querySelector(sel) && document.querySelector(sel).innerText.includes(t),
+    '#log',
+    text,
+    { timeout }
+  );
+  return locator;
+}
+
+test.describe('Integration Testing Demo — FSM & UI interactions', () => {
+  let consoleErrors;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    // Capture console errors and page errors to assert no unexpected runtime errors occur
+    consoleErrors = [];
+    pageErrors = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push({ text: msg.text(), location: msg.location() });
+      }
+    });
+
+    page.on('pageerror', (err) => {
+      pageErrors.push(err);
+    });
+
+    await page.goto(APP_URL, { waitUntil: 'load' });
+    // Wait a short moment to allow initial scripts (render, demoWalkthrough) to append initial logs
+    await page.waitForTimeout(120);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Assert that no uncaught page errors were emitted during the test scenario.
+    // If any page errors are present, include them in assertion message for debugging.
+    expect(pageErrors.length, `unexpected page errors: ${pageErrors.map(e => e.message).join(' | ')}`).toBe(0);
+    expect(consoleErrors.length, `unexpected console.error logs: ${consoleErrors.map(e => e.text).join(' | ')}`).toBe(0);
+    // Close page handled by Playwright automatically
+  });
+
+  test('Initial Idle state: page title, controls present, and initial log contains Ready', async ({ page }) => {
+    // Verify the page title matches FSM evidence for Idle state
+    await expect(page).toHaveTitle('Integration Testing Demo (Single File)');
+
+    // Verify main controls exist
+    await expect(page.locator('#runAll')).toBeVisible();
+    await expect(page.locator('#runSelected')).toBeVisible();
+    await expect(page.locator('#resetEnv')).toBeVisible();
+
+    // The initial log should include the demo walkthrough "Ready." message
+    const log = page.locator('#log');
+    await expect(log).toContainText('Ready. Use the controls on the left to run integration tests.');
+    // Summary shows number of tests from renderTestList; expect "3 tests"
+    await expect(page.locator('#summaryTotal')).toHaveText(/tests$/);
+  });
+
+  test.describe('Events and transitions', () => {
+    test('Run All Tests: transitions to TestRunning and completes with all tests passed', async ({ page }) => {
+      // Click Run All to trigger TestRunner.run()
+      await page.click('#runAll');
+      // Wait for 'Test run started' to appear in the log (S1 entry action evidence)
+      await waitForLogContains(page, 'Test run started', 3000);
+
+      // Wait for completion line and ensure it reports 3 passed (the bundled tests are deterministic)
+      await waitForLogContains(page, 'Test run complete', 10000);
+
+      const logText = await page.locator('#log').innerText();
+      // Verify evidence lines appear: passed markers for tests
+      expect(logText).toMatch(/✓ Passed:/);
+      expect(logText).toMatch(/Test run complete — \d+ tests — \d+ passed, \d+ failed./);
+
+      // Summary badges should reflect passing tests (summaryPass visible and summaryFail hidden if 0 failed)
+      const passVisible = await page.locator('#summaryPass').isVisible();
+      const failVisible = await page.locator('#summaryFail').isVisible();
+      expect(passVisible).toBeTruthy();
+      // It's possible there are zero failed tests, so fail badge may be hidden (ok either way)
+      // Ensure runTime has been updated (not '-')
+      await expect(page.locator('#runTime')).not.toHaveText('-');
+      // Ensure test list items have been marked as pass (UI marking)
+      const passedItems = await page.locator('label.test-item.pass').count();
+      expect(passedItems).toBeGreaterThanOrEqual(1);
+    });
+
+    test('Run Selected: run one specific test and verify pass flow and UI marking', async ({ page }) => {
+      // Ensure test list rendered
+      await expect(page.locator('#testsList')).toBeVisible();
+
+      // Uncheck all checkboxes first
+      await page.evaluate(() => {
+        document.querySelectorAll('#testsList input[type="checkbox"]').forEach(c => c.checked = false);
+      });
+
+      // Find the label for "Login Success Flow" and check its checkbox
+      const labelLocator = page.locator('label.test-item', { hasText: 'Login Success Flow' }).first();
+      await expect(labelLocator).toBeVisible();
+      await labelLocator.locator('input[type="checkbox"]').check();
+
+      // Click "Run Selected"
+      await page.click('#runSelected');
+
+      // Wait for single test run to start and complete
+      await waitForLogContains(page, 'Running:', 3000);
+      await waitForLogContains(page, 'Test run complete', 8000);
+
+      const logText1 = await page.locator('#log').innerText();
+      // Verify that the single selected test ran and passed
+      expect(logText).toContain('Running: Login Success Flow');
+      expect(logText).toMatch(/✓ Passed: Login Success Flow/);
+
+      // The specific label should have been updated with the 'pass' class and have a details block appended
+      const passClass = await labelLocator.getAttribute('class');
+      expect(passClass).toContain('pass');
+      await expect(labelLocator.locator('.test-details')).toBeVisible();
+    });
+
+    test('Run Selected with no selection shows an alert (edge case)', async ({ page }) => {
+      // Uncheck all checkboxes
+      await page.evaluate(() => {
+        document.querySelectorAll('#testsList input[type="checkbox"]').forEach(c => c.checked = false);
+      });
+
+      // Listen for dialog and capture its message
+      let dialogMessage = null;
+      page.once('dialog', async dialog => {
+        dialogMessage = dialog.message();
+        await dialog.dismiss();
+      });
+
+      // Click Run Selected; should trigger an alert
+      await page.click('#runSelected');
+
+      // Give some time for the dialog to appear
+      await page.waitForTimeout(200);
+      expect(dialogMessage).toBe('Select at least one test');
+    });
+
+    test('Reset Environment resets latency, checkboxes and clears UI, logs reset', async ({ page }) => {
+      // Change latency and toggle force error to non-defaults
+      await page.locator('#latencyRange').evaluate((el) => { el.value = '1000'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+      await expect(page.locator('#latencyValue')).toHaveText('1000ms');
+      await page.locator('#forceError').check();
+      expect(await page.locator('#forceError').isChecked()).toBeTruthy();
+
+      // Click Reset Environment
+      await page.click('#resetEnv');
+
+      // The environment reset action appends 'Environment reset.' to log
+      await waitForLogContains(page, 'Environment reset.', 1000);
+
+      // Latency should be restored to default 250 and latencyValue should show '250ms'
+      const latencyVal = await page.locator('#latencyRange').evaluate(el => el.value);
+      expect(latencyVal).toBe('250');
+      await expect(page.locator('#latencyValue')).toHaveText('250ms');
+
+      // forceError should be unchecked and useStorage checked
+      expect(await page.locator('#forceError').isChecked()).toBeFalsy();
+      expect(await page.locator('#useStorage').isChecked()).toBeTruthy();
+    });
+  });
+
+  test.describe('Controls affecting async behavior & module display', () => {
+    test('Changing API latency updates displayed value and influences test duration', async ({ page }) => {
+      // Set latency to 700ms
+      await page.locator('#latencyRange').evaluate((el) => { el.value = '700'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+      await expect(page.locator('#latencyValue')).toHaveText('700ms');
+
+      // Run a single test (Login Success Flow) to observe runTime >= latency
+      // Select only that test
+      await page.evaluate(() => {
+        document.querySelectorAll('#testsList input[type="checkbox"]').forEach(c => c.checked = false);
+        const ch = Array.from(document.querySelectorAll('#testsList input[type="checkbox"]')).find(i => i.dataset.testName === 'Login Success Flow');
+        if (ch) ch.checked = true;
+      });
+
+      // Click Run Selected
+      await page.click('#runSelected');
+
+      // Wait for completion
+      await waitForLogContains(page, 'Test run complete', 8000);
+
+      // Grab runTime text and parse ms
+      const rtText = (await page.locator('#runTime').innerText()).trim();
+      // runTime could be in ms or seconds; normalize to milliseconds
+      let ms = 0;
+      if (rtText.endsWith('ms')) {
+        ms = parseFloat(rtText.replace('ms', ''));
+      } else if (rtText.endsWith('s')) {
+        ms = parseFloat(rtText.replace('s', '')) * 1000;
+      }
+      // Expect runtime to be at least the latency we set (allow small overhead)
+      expect(ms).toBeGreaterThanOrEqual(650);
+    });
+
+    test('Toggle Force API Error checkbox toggles state and is reflected in DOM', async ({ page }) {
+      // Toggle the checkbox on
+      await page.locator('#forceError').check();
+      expect(await page.locator('#forceError').isChecked()).toBeTruthy();
+
+      // Toggle off
+      await page.locator('#forceError').uncheck();
+      expect(await page.locator('#forceError').isChecked()).toBeFalsy();
+    });
+
+    test('Clicking module buttons displays the module source in codeView', async ({ page }) => {
+      // The modules area contains multiple buttons; clicking one should populate #codeView with source text
+      const modulesCount = await page.locator('#modules button').count();
+      expect(modulesCount).toBeGreaterThanOrEqual(1);
+
+      // Click the first module button and assert code view contains a recognizable token like "class"
+      await page.locator('#modules button').first().click();
+      await expect(page.locator('#codeView')).toContainText('class');
+    });
+  });
+
+  test.describe('Single-test run UI interaction & log assertions', () => {
+    test('Clicking the "Run" control on a test label runs that test and updates UI details', async ({ page }) => {
+      // Find the label for "Session Persistence (loadFromStorage)" and click its Run button.
+      const label = page.locator('label.test-item', { hasText: 'Session Persistence (loadFromStorage)' }).first();
+      await expect(label).toBeVisible();
+
+      // Click the "Run" button inside the label
+      const runBtn = label.locator('button', { hasText: 'Run' });
+      await expect(runBtn).toBeVisible();
+      await runBtn.click();
+
+      // Wait for the log to indicate single test run started and complete
+      await waitForLogContains(page, 'Running single test:', 3000).catch(() => {});
+      await waitForLogContains(page, 'Test run complete', 8000);
+
+      // Ensure the label now contains a .test-details element describing the result
+      await expect(label.locator('.test-details')).toBeVisible();
+      const detailsText = await label.locator('.test-details').innerText();
+      expect(detailsText).toMatch(/(Passed|Failed)/);
+    });
+  });
+
+  test.describe('Sanity checks for state evidence and onEnter/onExit behaviors', () => {
+    test('S0 Idle evidence: title and initial render text present', async ({ page }) => {
+      // Confirm page title and initial log "Ready." per Idle state's evidence
+      await expect(page).toHaveTitle('Integration Testing Demo (Single File)');
+      await expect(page.locator('#log')).toContainText('Ready. Use the controls on the left to run integration tests.');
+    });
+
+    test('S1 TestRunning onEnter behavior: clearLog and append "Test run started" when running tests', async ({ page }) => {
+      // Pre-populate log with a marker to observe clearLog effect
+      await page.evaluate(() => {
+        const l = document.getElementById('log');
+        const d = document.createElement('div');
+        d.textContent = 'PREVIOUS LOG LINE';
+        l.appendChild(d);
+      });
+
+      // Run all tests to trigger clearLog and start
+      await page.click('#runAll');
+
+      // Wait for 'Test run started' to appear and ensure the previous marker is not present (clearLog worked)
+      await waitForLogContains(page, 'Test run started', 3000);
+      const logText2 = await page.locator('#log').innerText();
+      expect(logText).not.toContain('PREVIOUS LOG LINE');
+      expect(logText).toContain('Test run started');
+    });
+
+    test('S1 -> S3 transition evidence: log contains ✓ Passed lines for passed tests', async ({ page }) => {
+      // Run all tests
+      await page.click('#runAll');
+      await waitForLogContains(page, 'Test run complete', 10000);
+      const text = await page.locator('#log').innerText();
+      // Ensure at least one passed test evidence exists
+      expect(text).toMatch(/✓ Passed: /);
+    });
+
+    test('Reset environment onExit actions are observable via log (Environment reset.)', async ({ page }) => {
+      // Perform a reset
+      await page.click('#resetEnv');
+      await waitForLogContains(page, 'Environment reset.', 1000);
+      await expect(page.locator('#log')).toContainText('Environment reset.');
+    });
+  });
+});

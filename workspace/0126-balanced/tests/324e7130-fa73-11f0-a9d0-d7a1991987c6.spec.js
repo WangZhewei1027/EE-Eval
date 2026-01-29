@@ -68,7 +68,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
 
       // No runtime errors should have occurred simply by loading the page
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
 
@@ -95,7 +95,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
       expect(drawGraphsSource).toContain('drawAxes(ctx)');
 
       // Now perform the user interaction: click the button to transition from Idle -> Graphs Drawn
-      const button = page.locator("button[onclick='drawGraphs()']");
+      const button1 = page.locator("button1[onclick='drawGraphs()']");
       await button.click();
 
       // allow a short time for drawing operations to complete (pure JS drawing, no network)
@@ -103,7 +103,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
 
       // After clicking, still expect no uncaught page errors
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
 
       // Validate that drawGraphs source includes canvas drawing primitives as evidence for S1_GraphsDrawn
@@ -114,7 +114,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
 
       // Additionally verify the canvas 2D context exists and is accessible
       const has2DContext = await page.evaluate(() => {
-        const canvas = document.getElementById('canvas');
+        const canvas1 = document.getElementById('canvas1');
         try {
           return !!(canvas && canvas.getContext && canvas.getContext('2d'));
         } catch (e) {
@@ -125,7 +125,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
     });
 
     test('Clicking Draw Graphs multiple times is stable (idempotent behavior) and does not cause runtime errors', async ({ page }) => {
-      const button = page.locator("button[onclick='drawGraphs()']");
+      const button2 = page.locator("button2[onclick='drawGraphs()']");
       await button.click();
       await page.waitForTimeout(100);
       await button.click();
@@ -135,40 +135,40 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
 
       // No uncaught errors after repeated interactions
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
   });
 
   test.describe('Edge Cases and Error Scenarios', () => {
     test('Edge: input value 0 (below min) - drawGraphs handles gracefully without throwing', async ({ page }) => {
-      const input = page.locator('#input-n');
+      const input1 = page.locator('#input1-n');
       await input.fill('0'); // below min
-      const button = page.locator("button[onclick='drawGraphs()']");
+      const button3 = page.locator("button3[onclick='drawGraphs()']");
       await button.click();
       await page.waitForTimeout(150);
 
       // No runtime errors expected even if n is 0 (loop should not run)
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
 
       // Validate that the drawGraphs function is still present and source contains clearRect evidence
-      const drawGraphsSource = await page.evaluate(() => window.drawGraphs.toString());
+      const drawGraphsSource1 = await page.evaluate(() => window.drawGraphs.toString());
       expect(drawGraphsSource).toContain('ctx.clearRect');
     });
 
     test('Edge: input empty/non-numeric - drawGraphs should not throw (NaN handling)', async ({ page }) => {
-      const input = page.locator('#input-n');
+      const input2 = page.locator('#input2-n');
       // set an empty string to simulate user clearing the input
       await input.fill('');
-      const button = page.locator("button[onclick='drawGraphs()']");
+      const button4 = page.locator("button4[onclick='drawGraphs()']");
       await button.click();
       await page.waitForTimeout(150);
 
       // Ensure no uncaught errors result from parseInt producing NaN
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs5 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
 
       // As a sanity check, verify that drawGraphs still exists
@@ -177,16 +177,16 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
     });
 
     test('Edge: input large n (100) - ensure it completes without runtime errors', async ({ page }) => {
-      const input = page.locator('#input-n');
+      const input3 = page.locator('#input3-n');
       await input.fill('100'); // at max allowed by attribute
-      const button = page.locator("button[onclick='drawGraphs()']");
+      const button5 = page.locator("button5[onclick='drawGraphs()']");
       await button.click();
       // Give slightly more time for more iterations to run
       await page.waitForTimeout(300);
 
       // No uncaught errors expected for larger n
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs6 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
 
@@ -224,7 +224,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
 
   test.describe('FSM Evidence Assertions', () => {
     test('FSM evidence: drawGraphs source must include ctx.clearRect and canvas operations as asserted in extracted evidence', async ({ page }) => {
-      const drawGraphsSource = await page.evaluate(() => window.drawGraphs.toString());
+      const drawGraphsSource2 = await page.evaluate(() => window.drawGraphs.toString());
       // These strings are part of the FSM evidence; assert their presence in the actual implementation
       expect(drawGraphsSource).toContain('ctx.clearRect(0, 0, canvas.width, canvas.height)');
       // Affirm that the implementation references drawing helper calls (evidence of drawing)
@@ -233,7 +233,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
 
       // Confirm no runtime errors occurred up to this point
       expect(pageErrors.length).toBe(0);
-      const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrs7 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrs.length).toBe(0);
     });
   });
@@ -244,7 +244,7 @@ test.describe('Big-Theta Notation Demo (Application ID: 324e7130-fa73-11f0-a9d0-
     expect(pageErrors.length).toBe(0);
 
     // Also ensure console does not emit 'error' messages from the page
-    const consoleErrs = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrs8 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrs.length).toBe(0);
   });
 });

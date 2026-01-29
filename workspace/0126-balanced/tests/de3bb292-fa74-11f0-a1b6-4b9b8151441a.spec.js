@@ -128,11 +128,11 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
     expect(afterText).not.toEqual(beforeText);
 
     // Parse and assert array length and content format
-    const parsed = await model.parseNumberList(model.inputArray);
+    const parsed1 = await model.parseNumberList(model.inputArray);
     expect(parsed.length).toBeGreaterThanOrEqual(20);
 
     // sortedArray should be reset to 'Not sorted yet' after generating a new array
-    const sortedText = (await model.sortedArray.textContent()) || '';
+    const sortedText1 = (await model.sortedArray.textContent()) || '';
     expect(sortedText.trim()).toMatch(/Not sorted yet/i);
 
     // Buckets and steps remain cleared after generation
@@ -141,7 +141,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
 
     // Ensure no runtime errors occurred during generation
     expect(pageErrors).toHaveLength(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -158,7 +158,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
     await model.runBtn.click();
 
     // After running, sortedArray should contain comma-separated numbers
-    const sortedText = (await model.sortedArray.textContent()) || '';
+    const sortedText2 = (await model.sortedArray.textContent()) || '';
     expect(sortedText.trim()).not.toMatch(/Not sorted yet/i);
 
     // Parse sorted array and validate length and sorting order
@@ -192,7 +192,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
 
     // Ensure no runtime page errors occurred during sorting
     expect(pageErrors).toHaveLength(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -202,7 +202,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
 
     // Generate a fresh array and run sort once
     await model.generateBtn.click();
-    const original = await model.parseNumberList(model.inputArray);
+    const original1 = await model.parseNumberList(model.inputArray);
     expect(original.length).toBeGreaterThanOrEqual(20);
 
     await model.runBtn.click();
@@ -227,7 +227,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
 
     // Verify no runtime errors during repeated sort
     expect(pageErrors).toHaveLength(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -259,7 +259,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
 
     // No runtime errors observed
     expect(pageErrors).toHaveLength(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -275,7 +275,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
       await model.runBtn.click();
 
       // After each run, ensure sortedArray is present and sorted
-      const sortedParsed = await model.parseNumberList(model.sortedArray);
+      const sortedParsed1 = await model.parseNumberList(model.sortedArray);
       if (sortedParsed.length > 0) {
         expect(model.isSorted(sortedParsed)).toBeTruthy();
       } else {
@@ -286,7 +286,7 @@ test.describe('Bucket Sort Demonstration - FSM validation and UI tests', () => {
 
     // Confirm no page errors across these repeated operations
     expect(pageErrors).toHaveLength(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toHaveLength(0);
   });
 });

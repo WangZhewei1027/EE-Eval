@@ -114,7 +114,7 @@ test.describe('Big-Theta Interactive Application (FSM tests)', () => {
   test('Transition: clicking "Show Big-Theta" triggers showBigTheta() and results in a runtime error due to missing #bigTheta', async ({ page }) => {
     // Purpose: validate transition S0_Idle -> S1_ShowBigTheta on ShowBigThetaClick
     // We intentionally allow runtime error to occur and assert that it does occur (per instructions).
-    const p = new BigThetaPage(page);
+    const p1 = new BigThetaPage(page);
 
     // Ensure the function exists on window
     const source = await p.getShowBigThetaSource();
@@ -152,7 +152,7 @@ test.describe('Big-Theta Interactive Application (FSM tests)', () => {
 
   test('Edge case: multiple clicks produce repeated runtime errors (one per invocation)', async ({ page }) => {
     // Purpose: verify repeated triggering of the transition causes repeated runtime errors
-    const p = new BigThetaPage(page);
+    const p2 = new BigThetaPage(page);
 
     // Click twice and wait for two pageerror events
     const errorEvents = [];
@@ -184,9 +184,9 @@ test.describe('Big-Theta Interactive Application (FSM tests)', () => {
   test('FSM observables: verify showBigTheta function source contains expected observable assignment', async ({ page }) => {
     // Purpose: assert that the function body contains the observable described in the FSM:
     // expected_observables: "bigTheta.innerHTML = 'O(1)';"
-    const p = new BigThetaPage(page);
+    const p3 = new BigThetaPage(page);
 
-    const source = await p.getShowBigThetaSource();
+    const source1 = await p.getShowBigThetaSource();
     expect(source).not.toBeNull();
 
     // The function should contain the constant assignment and attempt to set innerHTML to 'O(1)'
@@ -197,7 +197,7 @@ test.describe('Big-Theta Interactive Application (FSM tests)', () => {
 
   test('Robustness: clicking the button does not create a #bigTheta element implicitly (no fallback creation)', async ({ page }) => {
     // Purpose: ensure the page does not implicitly create the missing element; the function attempts to write to it only
-    const p = new BigThetaPage(page);
+    const p4 = new BigThetaPage(page);
 
     // Click and consume the resulting pageerror
     const [err] = await Promise.all([page.waitForEvent('pageerror'), p.clickShowBigTheta()]);

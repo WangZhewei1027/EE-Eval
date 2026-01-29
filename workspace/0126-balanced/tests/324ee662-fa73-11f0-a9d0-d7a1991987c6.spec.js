@@ -156,7 +156,7 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
 
   test.describe('S1_UserAdded state - AddDataClick transition and validations', () => {
     test('adds a user when both fields are filled and shows "User added." alert', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app1 = new NoSqlPage(page);
 
       // Ensure database is cleared for clean assertion
       await app.resetInternalDatabase();
@@ -173,13 +173,13 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
       expect(await (await app.emailInput()).inputValue()).toBe('');
 
       // Internal database should now contain the new user
-      const db = await app.getInternalDatabase();
+      const db1 = await app.getInternalDatabase();
       expect(db.users.length).toBe(1);
       expect(db.users[0]).toEqual({ name: 'Alice', email: 'alice@example.test' });
     });
 
     test('shows validation alert when attempting to add with missing fields', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app2 = new NoSqlPage(page);
 
       await app.resetInternalDatabase();
 
@@ -200,12 +200,12 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
       await dialog.accept();
 
       // Database should still be empty
-      const db = await app.getInternalDatabase();
+      const db2 = await app.getInternalDatabase();
       expect(db.users.length).toBe(0);
     });
 
     test('adds multiple users sequentially and preserves order', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app3 = new NoSqlPage(page);
 
       await app.resetInternalDatabase();
 
@@ -220,7 +220,7 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
       expect(alert).toBe('User added.');
 
       // Verify both users exist in order
-      const db = await app.getInternalDatabase();
+      const db3 = await app.getInternalDatabase();
       expect(db.users.length).toBe(2);
       expect(db.users[0]).toEqual({ name: 'Carol', email: 'carol@example.test' });
       expect(db.users[1]).toEqual({ name: 'Dave', email: 'dave@example.test' });
@@ -229,14 +229,14 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
 
   test.describe('S2_DataShown state - ShowDataClick transition and output rendering', () => {
     test('displays the stored data in #output when Show Data is clicked', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app4 = new NoSqlPage(page);
 
       // Prepare database with known users using UI to ensure realistic transition
       await app.resetInternalDatabase();
 
       // Add two users using the UI to ensure alerts and push to array
       await app.fillForm('Eve', 'eve@example.test');
-      let alert = await app.clickAddAndCaptureDialog();
+      let alert1 = await app.clickAddAndCaptureDialog();
       expect(alert).toBe('User added.');
 
       await app.fillForm('Frank', 'frank@example.test');
@@ -247,10 +247,10 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
       await app.clickShow();
 
       // Fetch the internal database and output text
-      const db = await app.getInternalDatabase();
+      const db4 = await app.getInternalDatabase();
       const expectedString = JSON.stringify(db, null, 2);
 
-      const outputText = await app.getOutputText();
+      const outputText1 = await app.getOutputText();
       // The page uses output.innerHTML = JSON.stringify(...); which will present the JSON string.
       expect(outputText.trim()).toBe(expectedString);
 
@@ -262,16 +262,16 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
     });
 
     test('show data when database is empty displays empty users array', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app5 = new NoSqlPage(page);
 
       // Ensure empty DB
       await app.resetInternalDatabase();
 
       // Click show and assert the output reflects empty users
       await app.clickShow();
-      const db = await app.getInternalDatabase();
-      const expectedString = JSON.stringify(db, null, 2);
-      const outputText = await app.getOutputText();
+      const db5 = await app.getInternalDatabase();
+      const expectedString1 = JSON.stringify(db, null, 2);
+      const outputText2 = await app.getOutputText();
       expect(outputText.trim()).toBe(expectedString);
       expect(outputText).toContain('"users": []');
     });
@@ -279,7 +279,7 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
 
   test.describe('Edge cases and robustness', () => {
     test('internal database is accessible from page context and can be modified (for edge-case testing)', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app6 = new NoSqlPage(page);
 
       // Directly mutate internal database from test context (simulating possible external changes)
       await app.resetInternalDatabase();
@@ -296,7 +296,7 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
     });
 
     test('adding user with extremely long input values', async ({ page }) => {
-      const app = new NoSqlPage(page);
+      const app7 = new NoSqlPage(page);
 
       await app.resetInternalDatabase();
 
@@ -304,12 +304,12 @@ test.describe('NoSQL Concept Demonstration - FSM states and transitions', () => 
       const longEmail = 'E'.repeat(5000) + '@example.test';
 
       await app.fillForm(longName, longEmail);
-      const alertMessage = await app.clickAddAndCaptureDialog();
+      const alertMessage1 = await app.clickAddAndCaptureDialog();
       expect(alertMessage).toBe('User added.');
 
       // Ensure stored and show works
       await app.clickShow();
-      const outputText = await app.getOutputText();
+      const outputText3 = await app.getOutputText();
       expect(outputText).toContain(longName);
       expect(outputText).toContain(longEmail);
     });

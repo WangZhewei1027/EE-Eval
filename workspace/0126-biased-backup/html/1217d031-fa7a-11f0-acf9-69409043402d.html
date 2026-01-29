@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hash Functions Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  textarea, input, select, button {
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 5em;
+  }
+  .hash-output {
+    width: 100%;
+    height: 3em;
+    font-family: monospace, monospace;
+    font-size: 1em;
+    overflow-wrap: break-word;
+  }
+  label {
+    user-select:none;
+  }
+  fieldset {
+    margin: 1em 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>Hash Functions Explorer</h1>
+
+<p>
+  Enter an input to see various hash computations, explore collision attempts,
+  tweak parameters, and understand hash function properties.
+</p>
+
+<fieldset>
+  <legend>Input Text</legend>
+  <textarea id="inputText" aria-label="Input Text for hashing" placeholder="Type text here..."></textarea>
+  <br/>
+  <label><input type="checkbox" id="inputHex" /> Interpret input as HEX string</label>
+</fieldset>
+
+<fieldset>
+  <legend>Hash Algorithm</legend>
+  <select id="hashAlgorithm" aria-label="Select hash algorithm">
+    <option value="simpleSum">Simple Sum (mod 2^32)</option>
+    <option value="xorBytes">XOR Bytes (mod 2^32)</option>
+    <option value="rot13Sum">ROT13 Sum (mod 2^32)</option>
+    <option value="jsHash">JS Hash (DJB2 variation)</option>
+    <option value="fnv1a32">FNV-1a 32-bit</option>
+    <option value="custom">Custom JavaScript Hash (User Code)</option>
+  </select>
+  <div id="customHashDiv" style="margin-top:0.5em; display:none;">
+    <label for="customHashCode">Define your custom hash function in JS:</label><br/>
+    <textarea id="customHashCode" rows="8" style="width:100%; font-family: monospace;" placeholder="function hash(bytes) { /* bytes is Uint8Array */ return 0; }"></textarea>
+    <small>Must define function <code>hash(bytes: Uint8Array): number</code> that returns 32-bit unsigned integer.</small>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Hash Output</legend>
+  <button id="computeHash">Compute Hash</button><br/><br/>
+  <label for="hashOutputDec">Decimal Output:</label><br/>
+  <textarea id="hashOutputDec" class="hash-output" readonly></textarea>
+  <label for="hashOutputHex">Hex Output:</label><br/>
+  <textarea id="hashOutputHex" class="hash-output" readonly></textarea>
+</fieldset>
+
+<fieldset>
+  <legend>Collision Exploration</legend>
+  <p>
+    Try to find collisions! Given a target value, try to generate inputs that hash to it.
+  </p>
+  <label for="targetCollisionDec">Target Decimal Hash:</label><br/>
+  <input id="targetCollisionDec" type="number" min="0" max="4294967295" step="1" placeholder="Unsigned 32-bit integer" autocomplete="off"/><br/>
+  <label for="collisionMaxLen">Max Length to guess (bytes):</label><br/>
+  <input id="collisionMaxLen" type="number" min="1" max="8" step="1" value="3"/><br/>
+  <button id="runCollisionSearch">Search for Collision</button>
+  <button id="stopCollisionSearch" disabled>Stop Search</button><br/>
+  <label><input id="collisionShowAll" type="checkbox"/> Show all collisions found (else show first 5)</label><br/>
+  <label><input id="collisionAsciiOnly" type="checkbox" checked/> Limit to ASCII chars 32-126</label><br/>
+  <label><input id="collisionUseHex" type="checkbox"/> Interpret target as Hex</label>
+  <pre id="collisionStatus" style="height:8em; overflow:auto; border: 1px solid black; white-space: pre-wrap;"></pre>
+  <label>Collision Inputs Found:</label><br/>
+  <textarea id="collisionResults" readonly rows="6" style="width:100%; font-family: monospace;"></textarea>
+</fieldset>
+
+<fieldset>
+  <legend>Hash Function Exploration</legend>
+  <label for="byteOffset">Byte Offset to extract (0-based):</label>
+  <input type="number" id="byteOffset" value="0" min="0" max="3" step="1" /> (Extract 1 byte of 32-bit output)<br/>
+  <button id="extractByteBtn">Extract Byte from Hash</button><br/>
+  <label for="extractedByte">Extracted Byte (decimal 0-255):</label><br/>
+  <input id="extractedByte" readonly type="number" value="" min="0" max="255"/><br/>
+</fieldset>
+
+<fieldset>
+  <legend>Hash Function Testing Workflow</legend>
+  <p>Step your input to see how hash value changes by single-byte edits.</p>
+  <label for="stepBy">Step by (number of bytes to edit per step):</label>
+  <input type="number" id="stepBy" value="1" min="1" max="4" step="1"/><br/>
+  <label for="stepRange">Number of steps to generate:</label>
+  <input type="number" id="stepRange" value="16" min="1" max="256"/><br/>
+  <button id="generateSteps">Generate Step Hashes</button><br/>
+  <pre id="stepsOutput" style="height:12em; overflow:auto; border:1px solid black; white-space: pre-wrap;"></pre>
+</fieldset>
+
+<script>
+(function(){
+  'use strict';
+
+  // Utilities for bytes conversions
+
+  function stringToUtf8Bytes(str) {
+    const encoder = new TextEncoder();
+    return encoder.encode(str);
+  }
+
+  function hexToBytes(hexStr) {
+    const clean = hexStr.replace(/\s+/g,'').toLowerCase();
+    if(clean.length % 2 !== 0) {
+      throw new Error('HEX input length must be even');
+    }
+    const result = new Uint8Array(clean.length / 2);
+    for(let i=0; i<result.length; i++) {
+      const byteStr = clean.substr(i*2,2);
+      const val = parseInt(byteStr,16);
+      if(isNaN(val)) {
+        throw new Error('Invalid HEX input at byte ' + i);
+      }
+      result[i] = val;
+    }
+    return result;
+  }
+
+  function uint32ToHex(u) {
+    return ('00000000' + u.toString(16)).slice(-8);
+  }
+
+  // Simple implementations of various hashes:
+
+  // 1) Simple Sum mod 2^32
+  function hashSimpleSum(bytes) {
+    let sum = 0 >>> 0;
+    for(const b of bytes) {
+      sum = (sum + b) >>> 0;
+    }
+    return sum >>> 0;
+  }
+
+  // 2) XOR Bytes mod 2^32 (XOR all bytes in 4-byte shifts, padded zero)
+  function hashXorBytes(bytes) {
+    // XOR each group of 4 bytes as uint32
+    let xor = 0 >>> 0;
+    for(let i=0; i<bytes.length; i+=4) {
+      let val = 0;
+      for(let j=0;j<4;j++){
+        val |= ((bytes[i+j]||0) << (8*j));
+      }
+      xor ^= val;
+    }
+    return xor >>> 0;
+  }
+
+  // 3) ROT13 Sum: rotate accumulator left 13 bits + add byte
+  function rotl(value, shift) {
+    return ((value << shift) | (value >>> (32-shift))) >>> 0;
+  }
+  function hashRot13Sum(bytes) {
+    let hash = 0 >>> 0;
+    for(const b of bytes) {
+      hash = rotl(hash,13);
+      hash = (hash + b) >>> 0;
+    }
+    return hash >>> 0;
+  }
+
+  // 4) JS Hash (DJB2 variation)
+  function hashJsHash(bytes) {
+    let hash = 5381 >>> 0;
+    for(const b of bytes){
+      hash = (((hash << 5) + hash) + b) >>> 0; // hash * 33 + b
+    }
+    return hash >>> 0;
+  }
+
+  // 5) FNV-1a 32-bit
+  function hashFNV1a32(bytes) {
+    let hash = 2166136261 >>> 0;
+    for(const b of bytes) {
+      hash ^= b;
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return hash >>> 0;
+  }
+
+  // Input parsing & Validation
+
+  const inputTextEl = document.getElementById('inputText');
+  const inputHexEl = document.getElementById('inputHex');
+  const hashAlgorithmEl = document.getElementById('hashAlgorithm');
+  const customHashDiv = document.getElementById('customHashDiv');
+  const customHashCodeEl = document.getElementById('customHashCode');
+  const computeHashBtn = document.getElementById('computeHash');
+  const hashOutputDecEl = document.getElementById('hashOutputDec');
+  const hashOutputHexEl = document.getElementById('hashOutputHex');
+
+  const collisionTargetDecEl = document.getElementById('targetCollisionDec');
+  const collisionMaxLenEl = document.getElementById('collisionMaxLen');
+  const collisionStatusEl = document.getElementById('collisionStatus');
+  const collisionResultsEl = document.getElementById('collisionResults');
+  const runCollisionSearchBtn = document.getElementById('runCollisionSearch');
+  const stopCollisionSearchBtn = document.getElementById('stopCollisionSearch');
+  const collisionShowAllEl = document.getElementById('collisionShowAll');
+  const collisionAsciiOnlyEl = document.getElementById('collisionAsciiOnly');
+  const collisionUseHexEl = document.getElementById('collisionUseHex');
+
+  const byteOffsetEl = document.getElementById('byteOffset');
+  const extractByteBtn = document.getElementById('extractByteBtn');
+  const extractedByteEl = document.getElementById('extractedByte');
+
+  const stepByEl = document.getElementById('stepBy');
+  const stepRangeEl = document.getElementById('stepRange');
+  const generateStepsBtn = document.getElementById('generateSteps');
+  const stepsOutputEl = document.getElementById('stepsOutput');
+
+  let currentHashValue = null;
+  let currentHashFunc = null;
+
+  // For collision search:
+  let collisionSearchRunning = false;
+  let collisionSearchAbortController = null;
+
+  // Display or hide custom hash textarea
+  hashAlgorithmEl.addEventListener('change',()=>{
+    if(hashAlgorithmEl.value === 'custom'){
+      customHashDiv.style.display = 'block';
+    } else {
+      customHashDiv.style.display = 'none';
+    }
+  });
+
+  /**
+   * Parse input text to Uint8Array bytes.
+   * If HEX mode is on, parse hex string.
+   * Else parse UTF-8 bytes.
+   * Throws error if invalid.
+   */
+  function parseInputToBytes(text, isHex) {
+    if(isHex){
+      return hexToBytes(text);
+    } else {
+      return stringToUtf8Bytes(text);
+    }
+  }
+
+  /**
+   * Get the hashing function by selection.
+   * If custom, try to compile user code.
+   * Returns function(bytes: Uint8Array): number
+   * or throws error.
+   */
+  function getHashFunction() {
+    const sel = hashAlgorithmEl.value;
+    switch(sel){
+      case 'simpleSum': return hashSimpleSum;
+      case 'xorBytes': return hashXorBytes;
+      case 'rot13Sum': return hashRot13Sum;
+      case 'jsHash': return hashJsHash;
+      case 'fnv1a32': return hashFNV1a32;
+      case 'custom':
+        const userCode = customHashCodeEl.value.trim();
+        if(!userCode){
+          throw new Error('Custom hash function code is empty');
+        }
+        // Build a function from user code
+        // We wrap in a Function to sandbox the code
+        // The code must define a function called "hash".
+        let func = null;
+        try {
+          const fullFuncCode = `(function(){
+            let hash;
+            ${userCode}
+            if(typeof hash !== 'function') throw new Error('Function "hash" not defined.');
+            return hash;
+          })()`;
+          func = eval(fullFuncCode);
+          if(typeof func !== 'function') throw new Error('Code did not return a function.');
+          // Test the function with an empty Uint8Array:
+          const testVal = func(new Uint8Array());
+          if(typeof testVal !== 'number' || !(Number.isInteger(testVal) || Number.isSafeInteger(testVal))) {
+            throw new Error('Hash function should return a number.');
+          }
+          return func;
+        } catch(e){
+          throw new Error('Error compiling custom hash function: '+e.message);
+        }
+      default:
+        throw new Error('Unknown hash function selected');
+    }
+  }
+
+  function updateHashOutputs() {
+    const inputText = inputTextEl.value;
+    try {
+      const bytes = parseInputToBytes(inputText, inputHexEl.checked);
+      currentHashFunc = getHashFunction();
+      const hashVal = currentHashFunc(bytes) >>> 0;
+      currentHashValue = hashVal;
+      hashOutputDecEl.value = String(hashVal);
+      hashOutputHexEl.value = uint32ToHex(hashVal);
+    } catch(e) {
+      currentHashValue = null;
+      hashOutputDecEl.value = e.message;
+      hashOutputHexEl.value = '';
+    }
+  }
+
+  computeHashBtn.addEventListener('click', ()=>{
+    updateHashOutputs();
+  });
+
+  // Support pressing enter in textarea to compute hash (no shift+enter)
+  inputTextEl.addEventListener('keydown', (evt)=>{
+    if(evt.key === 'Enter' && !evt.shiftKey){
+      evt.preventDefault();
+      updateHashOutputs();
+    }
+  });
+
+  inputHexEl.addEventListener('change', ()=>{
+    // Just recompute on mode change
+    updateHashOutputs();
+  });
+
+  hashAlgorithmEl.addEventListener('change', ()=>{
+    updateHashOutputs();
+  });
+
+  customHashCodeEl.addEventListener('input', ()=>{
+    if(hashAlgorithmEl.value === 'custom'){
+      // On user code change, clear outputs until compute button clicked
+      hashOutputDecEl.value = '';
+      hashOutputHexEl.value = '';
+      currentHashValue = null;
+    }
+  });
+
+  // Collision Search Implementation (exhaustive search up to max length)
+  // Generates all possible inputs of length 1..maxLen, tries to find those
+  // that hash to target value. Limited charset for performance.
+  // Warning: brute force can be slow even for small lengths.
+
+  // Characters to consider for input guessing:
+  function getCollisionCharset(asciiOnly) {
+    if(asciiOnly) {
+      // Printable ASCII 32..126
+      let arr = [];
+      for(let c=32; c<=126; c++) arr.push(c);
+      return arr;
+    } else {
+      // Full byte range 0..255
+      let arr = [];
+      for(let c=0; c<=255; c++) arr.push(c);
+      return arr;
+    }
+  }
+
+  function numberToBytesBigEndian(num, length) {
+    const arr = new Uint8Array(length);
+    for(let i=length-1;i>=0;i--) {
+      arr[i] = num & 0xFF;
+      num >>>=8;
+    }
+    return arr;
+  }
+
+  // Encode bytes to ASCII string or hex notation
+  function bytesToString(bytes, asciiOnly) {
+    if(asciiOnly){
+      try {
+        return String.fromCharCode(...bytes);
+      } catch (ex) {
+        // fallback if too long
+        return Array.from(bytes).map(b=>String.fromCharCode(b)).join('');
+      }
+    } else {
+      return Array.from(bytes).map(b=>('0'+b.toString(16)).slice(-2)).join(' ');
+    }
+  }
+
+  // Collision search worker function
+  // Use async/await with a generator-like to keep UI responsive and allow stop
+  async function* collisionSearchGenerator(target, maxLen, hashFunc, asciiOnly, onStatusUpdate) {
+    const charset = getCollisionCharset(asciiOnly);
+    // For each length from 1..maxLen
+    for(let length=1; length<=maxLen; length++){
+      if(collisionSearchRunning === false) return;
+
+      if(onStatusUpdate) onStatusUpdate(`Searching length ${length}...`);
+
+      // Total combos = charset.length ^ length may be huge...
+      // We cannot loop that naively, so we do an indexed loop from 0 to charset^length-1
+
+      // We'll do base conversion of a number from 0..limit-1 to length-positions with indexes in charset
+      const limit = Math.pow(charset.length, length);
+
+      // For performance: UTF-8 bytes array to fill:
+      const inputBytes = new Uint8Array(length);
+
+      // We break search into chunks for UI refresh
+      const chunkSize = 50000;
+      let count = 0;
+
+      for(let index=0; index<limit; index++) {
+        if(collisionSearchRunning === false) return;
+
+        // Convert index to base charset.length digits
+        let v = index;
+        for(let pos=length-1; pos>=0; pos--) {
+          inputBytes[pos] = charset[v % charset.length];
+          v = Math.floor(v / charset.length);
+        }
+
+        const val = hashFunc(inputBytes) >>> 0;
+        if(val === target){
+          // Yield this collision
+          yield inputBytes.slice(); // copy
+        }
+
+        count++;
+        if(count >= chunkSize){
+          count = 0;
+          await new Promise(r=>setTimeout(r,0));
+        }
+      }
+    }
+    if(onStatusUpdate) onStatusUpdate('Search finished.');
+  }
+
+  runCollisionSearchBtn.addEventListener('click', async ()=>{
+    if(collisionSearchRunning) return;
+    collisionResultsEl.value = '';
+    collisionStatusEl.textContent = 'Starting search...';
+
+    let targetRaw = collisionTargetDecEl.value.trim();
+    if(targetRaw.length === 0){
+      collisionStatusEl.textContent = 'Please enter the target hash value';
+      return;
+    }
+    let targetVal;
+    try {
+      if(collisionUseHexEl.checked){
+        // Accept hex input: convert to uint32
+        if(!/^[0-9a-fA-F]+$/.test(targetRaw)){
+          throw new Error('Invalid hex target input');
+        }
+        targetVal = Number.parseInt(targetRaw,16);
+        if(isNaN(targetVal) || targetVal < 0 || targetVal > 0xFFFFFFFF){
+          throw new Error('Target hex value out of uint32 range');
+        }
+      } else {
+        targetVal = Number(targetRaw);
+        if(!Number.isInteger(targetVal) || targetVal < 0 || targetVal > 0xFFFFFFFF){
+          throw new Error('Target decimal value out of uint32 range');
+        }
+      }
+    } catch(e){
+      collisionStatusEl.textContent = 'Invalid target input: ' + e.message;
+      return;
+    }
+
+    let maxLen = Number(collisionMaxLenEl.value);
+    if(!Number.isInteger(maxLen) || maxLen <1 || maxLen > 8){
+      collisionStatusEl.textContent = 'Max length must be an integer 1 to 8';
+      return;
+    }
+
+    try {
+      currentHashFunc = getHashFunction();
+    } catch(e){
+      collisionStatusEl.textContent = "Error with selected hash function: " + e.message;
+      return;
+    }
+
+    collisionSearchRunning = true;
+    runCollisionSearchBtn.disabled = true;
+    stopCollisionSearchBtn.disabled = false;
+    collisionResultsEl.value = '';
+    const showAll = collisionShowAllEl.checked;
+    const asciiOnly = collisionAsciiOnlyEl.checked;
+
+    // We'll accumulate collisions found:
+    const foundCollisions = [];
+
+    try {
+      for await (const collisionBytes of collisionSearchGenerator(targetVal, maxLen, currentHashFunc, asciiOnly,
+          (status)=>{
+            collisionStatusEl.textContent = status + ' | Found: '+foundCollisions.length;
+          })){
+        if(!collisionSearchRunning) break;
+        // Format collision found:
+        let strRep = bytesToString(collisionBytes, asciiOnly);
+        if(!asciiOnly){
+          // Also show ascii fallback with nonprint replaced
+          let asciiFallback = Array.from(collisionBytes).map(b=>{
+            return (b>=32 && b<=126) ? String.fromCharCode(b) : '.';
+          }).join('');
+          strRep += '  | ascii: "'+asciiFallback+'"';
+        }
+
+        if(showAll){
+          foundCollisions.push(strRep);
+        } else {
+          if(foundCollisions.length < 5){
+            foundCollisions.push(strRep);
+          }
+        }
+
+        collisionResultsEl.value = foundCollisions.join('\n');
+      }
+      if(collisionSearchRunning){
+        collisionStatusEl.textContent = 'Search finished. Found ' + foundCollisions.length + ' collisions.';
+      } else {
+        collisionStatusEl.textContent = 'Search stopped by user. Found ' + foundCollisions.length + ' collisions.';
+      }
+    } catch(e){
+      collisionStatusEl.textContent = 'Error during search: ' + e.message;
+    }
+    collisionSearchRunning = false;
+    runCollisionSearchBtn.disabled = false;
+    stopCollisionSearchBtn.disabled = true;
+  });
+
+  stopCollisionSearchBtn.addEventListener('click', ()=>{
+    collisionSearchRunning = false;
+    collisionStatusEl.textContent = 'Stopping search, please wait...';
+    stopCollisionSearchBtn.disabled = true;
+  });
+
+  // Byte extraction from hash output
+
+  extractByteBtn.addEventListener('click', ()=>{
+    if(currentHashValue === null){
+      extractedByteEl.value = '';
+      return;
+    }
+    const offset = Number(byteOffsetEl.value);
+    if(!Number.isInteger(offset) || offset < 0 || offset > 3){
+      extractedByteEl.value = '0';
+      return;
+    }
+    // Extract single byte from 0..3 (LSB=0)
+    const byteVal = (currentHashValue >>> (offset*8)) & 0xFF;
+    extractedByteEl.value = byteVal;
+  });
+
+  // Hash Function Testing Workflow:
+  // This generates a series of inputs by incrementing bytes and shows corresponding hash outputs.
+  // User controls number of steps and bytes stepped.
+
+  generateStepsBtn.addEventListener('click', ()=>{
+    stepsOutputEl.textContent = '';
+    let origText = inputTextEl.value;
+    let bytes;
+    try {
+      bytes = parseInputToBytes(origText, inputHexEl.checked);
+    } catch(e) {
+      stepsOutputEl.textContent = 'Error parsing input: ' + e.message;
+      return;
+    }
+    if(bytes.length === 0){
+      stepsOutputEl.textContent = 'Input byte length must be > 0';
+      return;
+    }
+
+    try {
+      currentHashFunc = getHashFunction();
+    } catch(e){
+      stepsOutputEl.textContent = 'Error with selected hash function: ' + e.message;
+      return;
+    }
+
+    let stepBy = Number(stepByEl.value);
+    let stepRange = Number(stepRangeEl.value);
+    if(!Number.isInteger(stepBy) || stepBy < 1 || stepBy > 4){
+      stepsOutputEl.textContent = 'Step by must be int 1-4';
+      return;
+    }
+    if(!Number.isInteger(stepRange) || stepRange < 1 || stepRange > 256){
+      stepsOutputEl.textContent = 'Step range must be int 1-256';
+      return;
+    }
+
+    // We'll generate a sequence of inputs in which first "stepBy" bytes are incremented from 0..stepRange-1
+    // If input shorter than stepBy, we pad with zeros for the steps?
+
+    // Clamp input to length at least stepBy
+    let inputLen = bytes.length;
+    if(inputLen < stepBy){
+      const padded = new Uint8Array(stepBy);
+      padded.set(bytes,0);
+      bytes = padded;
+      inputLen = stepBy;
+    } else {
+      // copy so we don't modify original
+      bytes = bytes.slice(0,inputLen);
+    }
+
+    let outputLines = [];
+    outputLines.push('Index | Input (hex bytes)                 | Hash Dec        | Hash Hex');
+    outputLines.push('-------------------------------------------------------------------------------');
+
+    for(let i=0; i<stepRange; i++){
+      // copy input bytes
+      const currInput = bytes.slice(0,inputLen);
+      // increment first stepBy bytes from i
+      for(let b=0; b<stepBy; b++){
+        let val = ((i + (b * Math.floor(stepRange / stepBy))) % 256);
+        currInput[b] = val;
+      }
+      // compute hash
+      let hval = currentHashFunc(currInput) >>> 0;
+      // format input hex
+      let inputHexStr = Array.from(currInput).map(x=>'0'+x.toString(16).toUpperCase()).map(x=>x.slice(-2)).join(' ');
+      outputLines.push(
+        ('' + i).padStart(5,' ') + ' | ' +
+        inputHexStr.padEnd(30,' ') + ' | ' +
+        String(hval).padEnd(15,' ') + ' | ' +
+        uint32ToHex(hval).toUpperCase()
+        );
+    }
+    stepsOutputEl.textContent = outputLines.join('\n');
+  });
+
+  // Initialize default hash output
+  updateHashOutputs();
+
+})();
+</script>
+
+</body>
+</html>

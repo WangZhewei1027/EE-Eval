@@ -146,7 +146,7 @@ test.describe("Prim's Algorithm Interactive Application - FSM verification", () 
   // Test for S0_Idle: drawGraph() should be called on load (Idle state's entry action).
   // The application attempts to draw edges and will trigger a runtime TypeError due to invalid indexing.
   test('S0_Idle: drawGraph() entry action executes and leads to a TypeError due to invalid edge indices', async ({ page }) => {
-    const primPage = new PrimPage(page);
+    const primPage1 = new PrimPage(page);
     await primPage.attachListeners();
 
     // Load the page
@@ -172,7 +172,7 @@ test.describe("Prim's Algorithm Interactive Application - FSM verification", () 
     expect(hasTypeError).toBeTruthy();
 
     // Also assert that the console logs contained the "Graph is connected" message produced earlier by prim
-    const consoleTexts = primPage.getConsoleTexts();
+    const consoleTexts1 = primPage.getConsoleTexts();
     expect(consoleTexts.some(t => t.includes('Graph is connected'))).toBeTruthy();
     expect(consoleTexts.some(t => t.includes('Edges:'))).toBeTruthy();
   });
@@ -180,7 +180,7 @@ test.describe("Prim's Algorithm Interactive Application - FSM verification", () 
   // Additional checks: canvas element presence and dimensions, and verification that
   // drawGraph contains the expected drawing operations (evidence of onEnter of Idle).
   test('Canvas exists with expected attributes and drawGraph contains drawing commands', async ({ page }) => {
-    const primPage = new PrimPage(page);
+    const primPage2 = new PrimPage(page);
     await primPage.attachListeners();
 
     await primPage.goto();
@@ -195,7 +195,7 @@ test.describe("Prim's Algorithm Interactive Application - FSM verification", () 
     expect(Number(canvasInfo.heightAttr)).toBeGreaterThan(0);
 
     // Verify drawGraph source also includes arc drawing (node drawing) evidence
-    const drawSrc = await primPage.drawGraphSource();
+    const drawSrc1 = await primPage.drawGraphSource();
     expect(drawSrc).toContain('ctx.arc');
     expect(drawSrc).toContain('ctx.strokeStyle');
   });
@@ -203,7 +203,7 @@ test.describe("Prim's Algorithm Interactive Application - FSM verification", () 
   // Test ordering and FSM-like transition evidence:
   // We verify that prim(graph) (Processing entry) logs occur before the page runtime error produced by drawGraph (Idle entry).
   test('FSM transition evidence: prim (Processing) logs precede drawGraph (Idle) runtime error', async ({ page }) => {
-    const primPage = new PrimPage(page);
+    const primPage3 = new PrimPage(page);
     // Collect timestamped events to assert order
     const events = [];
     await primPage.attachListeners();
@@ -235,12 +235,12 @@ test.describe("Prim's Algorithm Interactive Application - FSM verification", () 
 
   // Edge case / robustness: confirm that the prim source contains the BFS-like logic and evidence strings.
   test('prim() function source contains expected algorithmic structure (evidence of Processing state entry)', async ({ page }) => {
-    const primPage = new PrimPage(page);
+    const primPage4 = new PrimPage(page);
     await primPage.attachListeners();
 
     await primPage.goto();
 
-    const primSrc = await primPage.primSource();
+    const primSrc1 = await primPage.primSource();
     expect(primSrc).toBeTruthy();
 
     // Evidence strings from FSM definition

@@ -190,8 +190,8 @@ test.describe('Dynamic Programming Example (Application ID: 52099513-fa76-11f0-a
 
     await waitForConsoleCount(1, 1500);
     const textsAfterReload = consoleMessages.map((m) => m.text);
-    const containsLabel = textsAfterReload.some((t) => t.includes('Dynamic Programming Solution'));
-    const contains15 = textsAfterReload.some((t) => t.includes('15'));
+    const containsLabel1 = textsAfterReload.some((t) => t.includes('Dynamic Programming Solution'));
+    const contains151 = textsAfterReload.some((t) => t.includes('15'));
 
     expect(containsLabel).toBeTruthy();
     expect(contains15).toBeTruthy();

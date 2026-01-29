@@ -44,7 +44,7 @@ class TcpIpApp {
   async waitForOutputPredicate(predicateFn, options = { timeout: 5000 }) {
     await this.page.waitForFunction(
       (sel, predicateSerialized) => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         if (!el) return false;
         // Recreate predicate from source (predicateFn is serialized by Playwright)
         // We'll assume predicateFn is a simple function stringifiable by Playwright.
@@ -95,10 +95,10 @@ test.describe('TCP/IP Demonstration - FSM states and transitions', () => {
 
   test('Transition S0 -> S1: Clicking Initiate Connection shows client request immediately', async ({ page }) => {
     // Purpose: Validate InitiateConnection event causes client sending request message to appear
-    const app = new TcpIpApp(page);
+    const app1 = new TcpIpApp(page);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -123,10 +123,10 @@ test.describe('TCP/IP Demonstration - FSM states and transitions', () => {
 
   test('Transition S1 -> S2 -> S3: Server receives request and responds, client receives response', async ({ page }) => {
     // Purpose: Validate the timed transitions: after ~1s server processing message, after another ~1s response messages
-    const app = new TcpIpApp(page);
+    const app2 = new TcpIpApp(page);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -176,7 +176,7 @@ test.describe('TCP/IP Demonstration - FSM states and transitions', () => {
 
   test('Restarting connection clears previous output and replays the sequence', async ({ page }) => {
     // Purpose: Validate exit actions / re-entry behavior: initiateConnection() clears previous output
-    const app = new TcpIpApp(page);
+    const app3 = new TcpIpApp(page);
 
     await app.goto();
 
@@ -206,7 +206,7 @@ test.describe('TCP/IP Demonstration - FSM states and transitions', () => {
 
   test('Edge case: rapid double click - ensure final state still reached at least once', async ({ page }) => {
     // Purpose: Exercise potential race conditions: double-click immediately and ensure final messages are produced
-    const app = new TcpIpApp(page);
+    const app4 = new TcpIpApp(page);
 
     await app.goto();
 
@@ -229,10 +229,10 @@ test.describe('TCP/IP Demonstration - FSM states and transitions', () => {
 test.describe('Console and runtime errors observation', () => {
   test('There are no uncaught runtime errors (ReferenceError/SyntaxError/TypeError) during normal interactions', async ({ page }) => {
     // Purpose: Observe console and page errors while exercising the app and assert none occur.
-    const app = new TcpIpApp(page);
+    const app5 = new TcpIpApp(page);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
 
     page.on('console', (msg) => {
       // Collect error-level console messages; include exception stacks if any
@@ -262,10 +262,10 @@ test.describe('Console and runtime errors observation', () => {
   test('If runtime errors appear they should be observable via pageerror or console.error', async ({ page }) => {
     // Purpose: Demonstrate test is monitoring errors by intentionally verifying the monitoring mechanism is active.
     // Note: We DO NOT inject errors or modify the page; we simply assert that our collectors are functional.
-    const app = new TcpIpApp(page);
+    const app6 = new TcpIpApp(page);
 
     const consoleMessages = [];
-    const pageErrors = [];
+    const pageErrors4 = [];
 
     page.on('console', (msg) => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', (err) => pageErrors.push(String(err)));

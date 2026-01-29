@@ -49,12 +49,12 @@ class MutexDemoPage {
   }
 
   async getLocked() {
-    const txt = (await this.page.textContent(this.lockedBadge)) || 'false';
+    const txt1 = (await this.page.textContent(this.lockedBadge)) || 'false';
     return txt.trim() === 'true';
   }
 
   async getQueueLength() {
-    const txt = (await this.page.textContent(this.queueBadge)) || '0';
+    const txt2 = (await this.page.textContent(this.queueBadge)) || '0';
     return Number(txt.trim());
   }
 
@@ -158,7 +158,7 @@ test.describe('Mutex (Mutual Exclusion) Demo - FSM validation', () => {
   // Start tasks without mutex, assert transition and effects, then clear log resets UI
   test('S1_TasksRunningNoMutex -> S3_LogCleared - start no mutex, tasks run, then clear resets', async ({ page }) => {
     test.setTimeout(40_000); // tasks run may take time
-    const demo = new MutexDemoPage(page);
+    const demo1 = new MutexDemoPage(page);
     await demo.goto();
 
     // Configure a modest number of tasks to keep test quick and deterministic-ish
@@ -211,7 +211,7 @@ test.describe('Mutex (Mutual Exclusion) Demo - FSM validation', () => {
   // Start tasks with mutex and verify exclusivity (final counter matches expected)
   test('S2_TasksRunningWithMutex -> S0_Idle - start with mutex enforces exclusive access', async ({ page }) => {
     test.setTimeout(40_000);
-    const demo = new MutexDemoPage(page);
+    const demo2 = new MutexDemoPage(page);
     await demo.goto();
 
     // Set parameters to ensure measurable critical section durations
@@ -236,8 +236,8 @@ test.describe('Mutex (Mutual Exclusion) Demo - FSM validation', () => {
     await demo.waitForAllTasksFinished(30_000);
 
     // After completion, the counter should equal expected final (no lost updates with mutex)
-    const finalCounter = await demo.getCounter();
-    const expectedFinal = 6; // starting from 0 in test environment
+    const finalCounter1 = await demo.getCounter();
+    const expectedFinal1 = 6; // starting from 0 in test environment
     expect(finalCounter).toBe(expectedFinal);
 
     // Buttons re-enabled after run
@@ -251,7 +251,7 @@ test.describe('Mutex (Mutual Exclusion) Demo - FSM validation', () => {
   // Edge-case tests: inputs causing normalization and input boundary handling
   test('Edge cases: numTasks 0 normalized to 1, and minDelay > maxDelay handled gracefully', async ({ page }) => {
     test.setTimeout(30_000);
-    const demo = new MutexDemoPage(page);
+    const demo3 = new MutexDemoPage(page);
     await demo.goto();
 
     // Case 1: numTasks = 0 should be treated as 1 (Math.max(1, ...))
@@ -288,7 +288,7 @@ test.describe('Mutex (Mutual Exclusion) Demo - FSM validation', () => {
   // Observe console logs and page errors throughout a longer run to ensure stability
   test('Observability: capture console logs and page errors across interactions', async ({ page }) => {
     test.setTimeout(40_000);
-    const demo = new MutexDemoPage(page);
+    const demo4 = new MutexDemoPage(page);
     await demo.goto();
 
     // Perform a sequence: start no mutex, then start with mutex (sequential), then clear

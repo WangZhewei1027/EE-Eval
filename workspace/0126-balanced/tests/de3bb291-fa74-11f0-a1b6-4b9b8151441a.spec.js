@@ -186,12 +186,12 @@ test.describe('Radix Sort Visualization FSM - de3bb291-fa74-11f0-a1b6-4b9b815144
     // It's possible (though unlikely) that random generation produces identical arrays;
     // therefore do not assert inequality but assert that currentDigit was reset and isSorting is false.
     const currentDigit = await radix.getCurrentDigit();
-    const isSorting = await radix.getIsSorting();
+    const isSorting1 = await radix.getIsSorting();
     expect(currentDigit).toBe(0);
     expect(isSorting).toBe(false);
 
     // Verify maxDigits is recomputed and >= 1
-    const maxDigits = await radix.getMaxDigits();
+    const maxDigits1 = await radix.getMaxDigits();
     expect(Number.isInteger(maxDigits)).toBe(true);
     expect(maxDigits).toBeGreaterThanOrEqual(1);
   });
@@ -213,7 +213,7 @@ test.describe('Radix Sort Visualization FSM - de3bb291-fa74-11f0-a1b6-4b9b815144
 
     // After first performSortStep call, currentDigit should be at least 1 and isSorting should be true (until completion)
     await radix.waitForCurrentDigitAtLeast(1);
-    const isSorting = await radix.getIsSorting();
+    const isSorting2 = await radix.getIsSorting();
     expect(isSorting).toBe(true);
   });
 
@@ -225,7 +225,7 @@ test.describe('Radix Sort Visualization FSM - de3bb291-fa74-11f0-a1b6-4b9b815144
     await radix.waitForStepInfoContains('Step 1: Sorting by digit 1 from the right');
 
     // Determine how many digit-steps are required
-    const maxDigits = await radix.getMaxDigits();
+    const maxDigits2 = await radix.getMaxDigits();
     expect(Number.isInteger(maxDigits)).toBe(true);
     expect(maxDigits).toBeGreaterThanOrEqual(1);
 
@@ -240,7 +240,7 @@ test.describe('Radix Sort Visualization FSM - de3bb291-fa74-11f0-a1b6-4b9b815144
 
     while (clicks < maxClicks && !done) {
       // If sorting already completed, break
-      const isSorting = await radix.getIsSorting();
+      const isSorting3 = await radix.getIsSorting();
       if (!isSorting) {
         done = true;
         break;
@@ -260,7 +260,7 @@ test.describe('Radix Sort Visualization FSM - de3bb291-fa74-11f0-a1b6-4b9b815144
       }
 
       // Check if sorting completed
-      const stepText = await radix.getStepInfoText();
+      const stepText1 = await radix.getStepInfoText();
       if (stepText.includes('Sorting complete! The array is now sorted.')) {
         done = true;
         break;

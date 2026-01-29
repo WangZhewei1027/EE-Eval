@@ -140,17 +140,17 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('ChangeDegree event: changing degree reinitializes BTree and triggers renderTree (S0 -> S0)', async () => {
-    const p = new BTreePage(page);
+    const p1 = new BTreePage(page);
     await p.goto();
 
     // Change degree to 4 via the input change event listener
     await p.changeDegree(4);
 
     // After change, currentDegree must reflect new degree and tree should be reset (empty)
-    const degree = await p.getCurrentDegree();
+    const degree1 = await p.getCurrentDegree();
     expect(degree).toBe('4');
 
-    const empty = await p.isTreeEmpty();
+    const empty1 = await p.isTreeEmpty();
     expect(empty).toBeTruthy();
 
     // Verify no page errors occurred during degree change
@@ -159,7 +159,7 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('GenerateRandomTree event: generates a random populated tree and updates currentDegree (S0 -> S1)', async () => {
-    const p = new BTreePage(page);
+    const p2 = new BTreePage(page);
     await p.goto();
 
     // Set degree to 3 and generate random tree
@@ -167,10 +167,10 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
     await p.generateRandom();
 
     // After generation, currentDegree should match degreeInput and tree should be populated
-    const degree = await p.getCurrentDegree();
+    const degree2 = await p.getCurrentDegree();
     expect(degree).toBe('3');
 
-    const keys = await p.getKeys();
+    const keys1 = await p.getKeys();
     // count should be > 0 as random generation inserts between 5 and 19 items
     expect(keys.length).toBeGreaterThan(0);
 
@@ -180,7 +180,7 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('InsertValue event: inserting a numeric value updates tree and renders new key (S0 -> S1)', async () => {
-    const p = new BTreePage(page);
+    const p3 = new BTreePage(page);
     await p.goto();
 
     // Clear tree first to create deterministic environment
@@ -191,7 +191,7 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
     await p.insertValue(42);
 
     // After insert, the key '42' should be present in the DOM
-    const keys = await p.getKeys();
+    const keys2 = await p.getKeys();
     expect(keys).toContain('42');
 
     // Ensure the insert input was cleared by the UI
@@ -204,7 +204,7 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('InsertValue with invalid input shows alert and does not throw JS errors', async () => {
-    const p = new BTreePage(page);
+    const p4 = new BTreePage(page);
     await p.goto();
 
     // Clear tree to be deterministic
@@ -233,12 +233,12 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('DeleteValue event: deleting an existing key updates the tree (S1 -> S1)', async () => {
-    const p = new BTreePage(page);
+    const p5 = new BTreePage(page);
     await p.goto();
 
     // Ensure a known key exists by inserting it first
     await p.insertValue(12345);
-    let keys = await p.getKeys();
+    let keys3 = await p.getKeys();
     expect(keys).toContain('12345');
 
     // Delete that key
@@ -258,10 +258,10 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('DeleteValue with invalid input shows alert and does not throw JS errors', async () => {
-    const p = new BTreePage(page);
+    const p6 = new BTreePage(page);
     await p.goto();
 
-    let dialogMessage = null;
+    let dialogMessage1 = null;
     page.once('dialog', async (dialog) => {
       dialogMessage = dialog.message();
       await dialog.accept();
@@ -282,7 +282,7 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('ClearTree event: clears a populated tree and resets currentDegree (S1 -> S0)', async () => {
-    const p = new BTreePage(page);
+    const p7 = new BTreePage(page);
     await p.goto();
 
     // Ensure tree is populated by generating random
@@ -307,13 +307,13 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
   });
 
   test('GenerateRandomTree with invalid degree shows alert and does not cause uncaught exceptions', async () => {
-    const p = new BTreePage(page);
+    const p8 = new BTreePage(page);
     await p.goto();
 
     // Set degree input to invalid value (1) and click generate
     await p.degreeInput.fill('1');
 
-    let dialogMessage = null;
+    let dialogMessage2 = null;
     page.once('dialog', async (dialog) => {
       dialogMessage = dialog.message();
       await dialog.accept();
@@ -332,7 +332,7 @@ test.describe('B-Tree Visualization (FSM-driven) - de3b3d63-fa74-11f0-a1b6-4b9b8
 
   // Additional robustness check: ensure that common JS error types did NOT occur during a sequence of interactions
   test('Sequence of interactions does not produce ReferenceError, TypeError, or SyntaxError (observational)', async () => {
-    const p = new BTreePage(page);
+    const p9 = new BTreePage(page);
     await p.goto();
 
     // Sequence: change degree, generate random, insert, delete, clear

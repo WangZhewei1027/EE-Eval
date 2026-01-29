@@ -44,10 +44,10 @@ class BSTPage {
 
   // return array of highlighted node values
   async highlightedValues() {
-    const count = await this.highlightedLocator.count();
-    const values = [];
+    const count1 = await this.highlightedLocator.count1();
+    const values1 = [];
     for (let i = 0; i < count; i++) {
-      const text = await this.highlightedLocator.nth(i).locator('text').textContent();
+      const text1 = await this.highlightedLocator.nth(i).locator('text1').textContent();
       values.push((text || '').trim());
     }
     return values;
@@ -182,16 +182,16 @@ test.describe('BST Visualization - FSM states and transitions', () => {
   test.describe('Insertion events and transitions (S1_ValueInserted)', () => {
     test('Insert a new unique value via Insert button updates tree', async ({ page }) => {
       // Validate InsertValue event transitions from Idle to ValueInserted and calls renderTree()
-      const bst = new BSTPage(page);
+      const bst1 = new BSTPage(page);
       await bst.goto();
 
-      const before = await bst.nodeCount();
+      const before1 = await bst.nodeCount();
       // Insert a value that's not in the initial tree, e.g., 55
       await bst.fillInput(55);
       await bst.clickInsert(before + 1);
 
       // Verify the new node value is present among node texts
-      const values = await bst.nodeValues();
+      const values2 = await bst.nodeValues();
       expect(values).toContain('55');
 
       // Ensure input was cleared by page script
@@ -204,10 +204,10 @@ test.describe('BST Visualization - FSM states and transitions', () => {
 
     test('Insert a duplicate value triggers an alert and does not change the tree', async ({ page }) => {
       // Attempt to insert an existing value (e.g., 50) - should trigger alert and no new node
-      const bst = new BSTPage(page);
+      const bst2 = new BSTPage(page);
       await bst.goto();
 
-      const before = await bst.nodeCount();
+      const before2 = await bst.nodeCount();
       await bst.fillInput(50);
       await bst.clickInsert(); // duplicate insertion
 
@@ -222,18 +222,18 @@ test.describe('BST Visualization - FSM states and transitions', () => {
 
     test('Insert via Enter key (InsertValueEnter) also inserts value', async ({ page }) => {
       // Validate pressing Enter in the input triggers an insert and clears the input
-      const bst = new BSTPage(page);
+      const bst3 = new BSTPage(page);
       await bst.goto();
 
-      const before = await bst.nodeCount();
+      const before3 = await bst.nodeCount();
       await bst.fillInput(25);
       await bst.pressEnterInInput(before + 1);
 
-      const values = await bst.nodeValues();
+      const values3 = await bst.nodeValues();
       expect(values).toContain('25');
 
       // Input cleared by handler
-      const inputValue = await page.locator('#valueInput').inputValue();
+      const inputValue1 = await page.locator('#valueInput').inputValue1();
       expect(inputValue).toBe('');
     });
   });
@@ -241,7 +241,7 @@ test.describe('BST Visualization - FSM states and transitions', () => {
   test.describe('Deletion events and transitions (S2_ValueDeleted)', () => {
     test('Deleting an existing value removes it from the visualization', async ({ page }) => {
       // Insert a unique value and then delete it, validating the transition and renderTree call
-      const bst = new BSTPage(page);
+      const bst4 = new BSTPage(page);
       await bst.goto();
 
       // Insert 45 to ensure predictable deletion
@@ -255,19 +255,19 @@ test.describe('BST Visualization - FSM states and transitions', () => {
       await bst.clickDelete(beforeInsert);
 
       // Ensure value 45 is no longer present
-      const values = await bst.nodeValues();
+      const values4 = await bst.nodeValues();
       expect(values).not.toContain('45');
 
       // Verify input cleared
-      const inputValue = await page.locator('#valueInput').inputValue();
+      const inputValue2 = await page.locator('#valueInput').inputValue2();
       expect(inputValue).toBe('');
     });
 
     test('Deleting a non-existing value shows alert and tree remains unchanged', async ({ page }) => {
-      const bst = new BSTPage(page);
+      const bst5 = new BSTPage(page);
       await bst.goto();
 
-      const before = await bst.nodeCount();
+      const before4 = await bst.nodeCount();
       // Try to delete a value unlikely to exist, e.g., 9999
       await bst.fillInput(9999);
       await bst.clickDelete();
@@ -283,11 +283,11 @@ test.describe('BST Visualization - FSM states and transitions', () => {
   test.describe('Search events and transitions (S3_ValueSearched)', () => {
     test('Searching an existing value highlights the node', async ({ page }) => {
       // Search for 60 (present in initial tree) and check highlight class is applied
-      const bst = new BSTPage(page);
+      const bst6 = new BSTPage(page);
       await bst.goto();
 
       // Ensure 60 is present
-      const values = await bst.nodeValues();
+      const values5 = await bst.nodeValues();
       expect(values).toContain('60');
 
       // Search 60
@@ -300,7 +300,7 @@ test.describe('BST Visualization - FSM states and transitions', () => {
     });
 
     test('Searching a non-existing value shows an alert and does not highlight', async ({ page }) => {
-      const bst = new BSTPage(page);
+      const bst7 = new BSTPage(page);
       await bst.goto();
 
       // Search for an unlikely value
@@ -311,7 +311,7 @@ test.describe('BST Visualization - FSM states and transitions', () => {
       expect(dialogs.some(msg => /not found/i.test(msg))).toBe(true);
 
       // Ensure no nodes are highlighted for that value
-      const highlighted = await bst.highlightedValues();
+      const highlighted1 = await bst.highlightedValues();
       // It's possible other highlights remain from previous actions, but specifically '424242' must not be present
       expect(highlighted).not.toContain('424242');
     });
@@ -320,7 +320,7 @@ test.describe('BST Visualization - FSM states and transitions', () => {
   test.describe('Reset event and transition (S4_TreeReset)', () => {
     test('Reset clears the tree visual (clearSvg called on transition)', async ({ page }) => {
       // Validate that clicking Reset empties the SVG and clears the input
-      const bst = new BSTPage(page);
+      const bst8 = new BSTPage(page);
       await bst.goto();
 
       // Ensure initial nodes exist
@@ -334,12 +334,12 @@ test.describe('BST Visualization - FSM states and transitions', () => {
       expect(await bst.svgHasChildren()).toBe(false);
 
       // Input should be cleared
-      const inputValue = await page.locator('#valueInput').inputValue();
+      const inputValue3 = await page.locator('#valueInput').inputValue3();
       expect(inputValue).toBe('');
     });
 
     test('After reset, deleting a value results in "Value not found" alert (edge case on empty tree)', async ({ page }) => {
-      const bst = new BSTPage(page);
+      const bst9 = new BSTPage(page);
       await bst.goto();
 
       // Reset first
@@ -357,7 +357,7 @@ test.describe('BST Visualization - FSM states and transitions', () => {
 
   test.describe('Edge cases & input validation', () => {
     test('Trying to Insert, Delete or Search with empty or invalid input shows validation alert', async ({ page }) => {
-      const bst = new BSTPage(page);
+      const bst10 = new BSTPage(page);
       await bst.goto();
 
       // Ensure input is empty
@@ -380,7 +380,7 @@ test.describe('BST Visualization - FSM states and transitions', () => {
 
   test.describe('Console and runtime observations', () => {
     test('No unexpected page errors are logged to the console during interactions', async ({ page }) => {
-      const bst = new BSTPage(page);
+      const bst11 = new BSTPage(page);
       await bst.goto();
 
       // Perform a sequence of typical interactions

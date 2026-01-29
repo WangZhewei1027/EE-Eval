@@ -74,8 +74,8 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
   test('Clicking the Sort button should result in the Sorted state (transition: SortButtonClick)', async ({ page }) => {
     // Comments: According to FSM, clicking the button triggers quickSort on a default array.
     // The implementation already sorts on load; clicking should not produce errors and should leave the correct sorted result visible.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
 
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
@@ -87,7 +87,7 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
       pageErrors.push(err);
     });
 
-    const app = new QuickSortPage(page);
+    const app1 = new QuickSortPage(page);
     await app.goto();
 
     // Pre-click assertion: result already sorted
@@ -108,8 +108,8 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
 
   test('Multiple clicks (edge case) - idempotency: double-clicking Sort should keep the result stable', async ({ page }) => {
     // Comments: Validate that repeated user interactions don't destabilize the DOM or throw errors.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
 
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
@@ -121,14 +121,14 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
       pageErrors.push(err);
     });
 
-    const app = new QuickSortPage(page);
+    const app2 = new QuickSortPage(page);
     await app.goto();
 
     // Do two clicks rapidly to simulate aggressive user behavior
     await Promise.all([app.clickSort(), app.clickSort()]);
 
     // The result should remain the expected sorted text
-    const resultText = (await app.getResultText()).trim();
+    const resultText1 = (await app.getResultText()).trim();
     expect(resultText).toBe(EXPECTED_SORTED_TEXT);
 
     // No runtime errors should arise from multiple clicks
@@ -138,7 +138,7 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
 
   test('Sanity check: quickSort function handles empty array without throwing', async ({ page }) => {
     // Comments: Edge-case validation; calling quickSort([]) should return [] and not throw.
-    const app = new QuickSortPage(page);
+    const app3 = new QuickSortPage(page);
     await app.goto();
 
     // Evaluate quickSort([]) in the page context and ensure it returns an empty array
@@ -155,12 +155,12 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
     // Comments: Intentionally trigger an error scenario to validate that runtime exceptions are observable.
     // We will execute quickSort(null) inside a setTimeout to ensure the error is unhandled in the page context,
     // which should emit a pageerror event that Playwright can capture.
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', (err) => {
       pageErrors.push(err);
     });
 
-    const app = new QuickSortPage(page);
+    const app4 = new QuickSortPage(page);
     await app.goto();
 
     // Ensure quickSort exists before trying to call it
@@ -197,7 +197,7 @@ test.describe('Quick Sort interactive application (FSM verification)', () => {
   test('FSM evidence cross-check: both Idle and Sorted evidence are present in the DOM', async ({ page }) => {
     // Comments: FSM lists two pieces of evidence: presence of #sort-button (Idle) and assignment to #result (Sorted).
     // Verify both pieces of DOM evidence exist and reflect expected values.
-    const app = new QuickSortPage(page);
+    const app5 = new QuickSortPage(page);
     await app.goto();
 
     // Evidence 1: button exists in DOM

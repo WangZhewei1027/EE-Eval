@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Virtual Memory Simulator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { display: flex; flex-direction: column; gap: 20px; }
+        .panel { border: 1px solid #000; padding: 10px; }
+        .row { display: flex; gap: 20px; }
+        .memory-display { display: flex; flex-wrap: wrap; gap: 2px; }
+        .memory-cell { width: 50px; height: 50px; border: 1px solid #000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .page-table { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        .page-table-entry { border: 1px solid #000; padding: 5px; }
+        .active { background-color: #f0f0f0; }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button { padding: 5px 10px; }
+        select, textarea { width: 100%; }
+        .highlight { background-color: #e0e0e0; }
+    </style>
+</head>
+<body>
+    <h1>Virtual Memory Simulator</h1>
+    
+    <div class="container">
+        <div class="row">
+            <div class="panel" style="flex: 2;">
+                <h2>Physical Memory</h2>
+                <div class="memory-display" id="physical-memory"></div>
+                <div>
+                    <label>Memory Size: <input type="range" id="mem-size" min="4" max="32" value="16"> <span id="mem-size-value">16</span> frames</label>
+                </div>
+            </div>
+            
+            <div class="panel" style="flex: 1;">
+                <h2>Page Table</h2>
+                <div class="page-table" id="page-table"></div>
+                <div>
+                    <label>Page Replacement Algorithm:
+                        <select id="replacement-algo">
+                            <option value="FIFO">FIFO</option>
+                            <option value="LRU">LRU</option>
+                            <option value="OPT">OPT (Optimal)</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="panel" style="flex: 1;">
+                <h2>Process Control</h2>
+                <div class="controls">
+                    <div>
+                        <label>Process Size: <span id="process-size-value">8</span> pages
+                            <input type="range" id="process-size" min="4" max="32" value="8">
+                        </label>
+                    </div>
+                    <div>
+                        <button id="create-process">Create Process</button>
+                        <button id="terminate-process">Terminate Process</button>
+                    </div>
+                    <div>
+                        <label>Current Process: <span id="current-process">None</span></label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel" style="flex: 1;">
+                <h2>Memory Access</h2>
+                <div class="controls">
+                    <div>
+                        <label>Access Address: <input type="number" id="access-addr" min="0" value="0"></label>
+                        <button id="access-memory">Access</button>
+                    </div>
+                    <div>
+                        <label>Access Pattern:
+                            <select id="access-pattern">
+                                <option value="sequential">Sequential</option>
+                                <option value="random">Random</option>
+                                <option value="looping">Looping</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div id="custom-pattern-control" style="display: none;">
+                        <label>Custom Pattern (comma-separated): <input type="text" id="custom-pattern" value="0,1,2,3,4,5,6,7"></label>
+                    </div>
+                    <div>
+                        <button id="run-pattern">Run Pattern</button>
+                        <button id="stop-pattern">Stop</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Statistics</h2>
+            <div>
+                <p>Page Faults: <span id="page-faults">0</span></p>
+                <p>Page Hits: <span id="page-hits">0</span></p>
+                <p>Hit Ratio: <span id="hit-ratio">0%</span></p>
+                <p>Current Frame Queue: <span id="frame-queue"></span></p>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Event Log</h2>
+            <textarea id="event-log" rows="6" readonly style="width: 100%;"></textarea>
+            <button id="clear-log">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let physicalMemory = [];
+        let pageTable = [];
+        let currentProcess = null;
+        let pageFaults = 0;
+        let pageHits = 0;
+        let frameQueue = [];
+        let accessPatternInterval = null;
+        let lastAccessTime = {};
+        
+        // DOM elements
+        const physicalMemoryEl = document.getElementById('physical-memory');
+        const pageTableEl = document.getElementById('page-table');
+        const memSizeSlider = document.getElementById('mem-size');
+        const memSizeValue = document.getElementById('mem-size-value');
+        const processSizeSlider = document.getElementById('process-size');
+        const processSizeValue = document.getElementById('process-size-value');
+        const createProcessBtn = document.getElementById('create-process');
+        const terminateProcessBtn = document.getElementById('terminate-process');
+        const currentProcessEl = document.getElementById('current-process');
+        const accessAddrInput = document.getElementById('access-addr');
+        const accessMemoryBtn = document.getElementById('access-memory');
+        const accessPatternSelect = document.getElementById('access-pattern');
+        const customPatternControl = document.getElementById('custom-pattern-control');
+        const customPatternInput = document.getElementById('custom-pattern');
+        const runPatternBtn = document.getElementById('run-pattern');
+        const stopPatternBtn = document.getElementById('stop-pattern');
+        const pageFaultsEl = document.getElementById('page-faults');
+        const pageHitsEl = document.getElementById('page-hits');
+        const hitRatioEl = document.getElementById('hit-ratio');
+        const frameQueueEl = document.getElementById('frame-queue');
+        const eventLogEl = document.getElementById('event-log');
+        const clearLogBtn = document.getElementById('clear-log');
+        const replacementAlgoSelect = document.getElementById('replacement-algo');
+        
+        // Initialize
+        function init() {
+            updateMemorySize();
+            renderPageTable();
+            
+            // Event listeners
+            memSizeSlider.addEventListener('input', updateMemorySize);
+            processSizeSlider.addEventListener('input', () => {
+                processSizeValue.textContent = processSizeSlider.value;
+            });
+            
+            createProcessBtn.addEventListener('click', createProcess);
+            terminateProcessBtn.addEventListener('click', terminateProcess);
+            accessMemoryBtn.addEventListener('click', () => {
+                const addr = parseInt(accessAddrInput.value);
+                if (!isNaN(addr)) {
+                    accessMemory(addr);
+                }
+            });
+            
+            accessPatternSelect.addEventListener('change', () => {
+                if (accessPatternSelect.value === 'custom') {
+                    customPatternControl.style.display = 'block';
+                } else {
+                    customPatternControl.style.display = 'none';
+                }
+            });
+            
+            runPatternBtn.addEventListener('click', runAccessPattern);
+            stopPatternBtn.addEventListener('click', stopAccessPattern);
+            clearLogBtn.addEventListener('click', () => {
+                eventLogEl.value = '';
+            });
+        }
+        
+        // Update memory size based on slider
+        function updateMemorySize() {
+            const size = parseInt(memSizeSlider.value);
+            memSizeValue.textContent = size;
+            
+            physicalMemory = Array(size).fill(null);
+            frameQueue = [];
+            renderPhysicalMemory();
+        }
+        
+        // Create a new process
+        function createProcess() {
+            const processSize = parseInt(processSizeSlider.value);
+            currentProcess = {
+                id: Date.now(),
+                size: processSize,
+                pages: Array(processSize).fill(null).map((_, i) => ({
+                    pageNum: i,
+                    loaded: false,
+                    frame: null,
+                    referenced: false,
+                    modified: false
+                }))
+            };
+            
+            pageTable = [...currentProcess.pages];
+            currentProcessEl.textContent = `PID: ${currentProcess.id}`;
+            logEvent(`Process created with ${processSize} pages`);
+            renderPageTable();
+        }
+        
+        // Terminate current process
+        function terminateProcess() {
+            if (!currentProcess) return;
+            
+            // Free all frames
+            for (const page of pageTable) {
+                if (page.loaded) {
+                    physicalMemory[page.frame] = null;
+                }
+            }
+            
+            logEvent(`Process terminated, freed ${currentProcess.size} pages`);
+            currentProcess = null;
+            pageTable = [];
+            frameQueue = [];
+            currentProcessEl.textContent = 'None';
+            renderPhysicalMemory();
+            renderPageTable();
+        }
+        
+        // Access memory at virtual address
+        function accessMemory(virtualAddr) {
+            if (!currentProcess) {
+                logEvent('Error: No process created');
+                return;
+            }
+            
+            const pageNum = Math.floor(virtualAddr / 10); // Assuming 10 bytes per page
+            if (pageNum < 0 || pageNum >= currentProcess.size) {
+                logEvent(`Error: Invalid address ${virtualAddr} (page ${pageNum})`);
+                return;
+            }
+            
+            const page = pageTable[pageNum];
+            page.referenced = true;
+            lastAccessTime[pageNum] = Date.now();
+            
+            if (page.loaded) {
+                // Page hit
+                pageHits++;
+                pageHitsEl.textContent = pageHits;
+                updateHitRatio();
+                logEvent(`Access to address ${virtualAddr} (page ${pageNum}) - HIT in frame ${page.frame}`);
+                
+                // For LRU, move to end of queue
+                if (replacementAlgoSelect.value === 'LRU') {
+                    frameQueue = frameQueue.filter(f => f !== page.frame);
+                    frameQueue.push(page.frame);
+                    updateFrameQueueDisplay();
+                }
+            } else {
+                // Page fault
+                pageFaults++;
+                pageFaultsEl.textContent = pageFaults;
+                updateHitRatio();
+                logEvent(`Access to address ${virtualAddr} (page ${pageNum}) - FAULT`);
+                
+                handlePageFault(pageNum);
+            }
+            
+            renderPhysicalMemory();
+            renderPageTable();
+        }
+        
+        // Handle page fault
+        function handlePageFault(pageNum) {
+            const page = pageTable[pageNum];
+            let frameToUse = -1;
+            
+            // Find free frame
+            for (let i = 0; i < physicalMemory.length; i++) {
+                if (physicalMemory[i] === null) {
+                    frameToUse = i;
+                    break;
+                }
+            }
+            
+            // If no free frame, replace a page
+            if (frameToUse === -1) {
+                frameToUse = selectFrameToReplace();
+                const evictedPage = physicalMemory[frameToUse];
+                if (evictedPage) {
+                    evictedPage.loaded = false;
+                    evictedPage.frame = null;
+                    logEvent(`Evicted page ${evictedPage.pageNum} from frame ${frameToUse}`);
+                }
+            }
+            
+            // Load the page
+            page.loaded = true;
+            page.frame = frameToUse;
+            physicalMemory[frameToUse] = page;
+            frameQueue.push(frameToUse);
+            updateFrameQueueDisplay();
+            
+            logEvent(`Loaded page ${pageNum} into frame ${frameToUse}`);
+        }
+        
+        // Select frame to replace based on algorithm
+        function selectFrameToReplace() {
+            const algo = replacementAlgoSelect.value;
+            
+            if (algo === 'FIFO') {
+                return frameQueue[0];
+            } else if (algo === 'LRU') {
+                // Find frame with oldest access time
+                let oldestTime = Infinity;
+                let oldestFrame = frameQueue[0];
+                
+                for (const frame of frameQueue) {
+                    const page = physicalMemory[frame];
+                    if (lastAccessTime[page.pageNum] < oldestTime) {
+                        oldestTime = lastAccessTime[page.pageNum];
+                        oldestFrame = frame;
+                    }
+                }
+                
+                return oldestFrame;
+            } else if (algo === 'OPT') {
+                // Optimal - replace page that won't be used for longest time
+                // This is impractical in real systems but useful for simulation
+                let furthestUse = -1;
+                let selectedFrame = frameQueue[0];
+                
+                for (const frame of frameQueue) {
+                    const page = physicalMemory[frame];
+                    let nextUse = Infinity;
+                    
+                    // Check future accesses (limited to next 10 in our simulation)
+                    const nextAccesses = getNextAccesses(page.pageNum, 10);
+                    if (nextAccesses.length > 0) {
+                        nextUse = nextAccesses[0];
+                    }
+                    
+                    if (nextUse > furthestUse) {
+                        furthestUse = nextUse;
+                        selectedFrame = frame;
+                    }
+                }
+                
+                return selectedFrame;
+            }
+            
+            return frameQueue[0]; // Default to FIFO
+        }
+        
+        // Helper to get future accesses (simulated)
+        function getNextAccesses(pageNum, limit) {
+            const pattern = getCurrentPattern();
+            const currentAddr = parseInt(accessAddrInput.value);
+            let currentIndex = pattern.indexOf(currentAddr);
+            if (currentIndex === -1) currentIndex = 0;
+            
+            const accesses = [];
+            for (let i = currentIndex + 1; i < pattern.length && accesses.length < limit; i++) {
+                const addr = pattern[i];
+                const pn = Math.floor(addr / 10);
+                if (pn === pageNum) {
+                    accesses.push(i - currentIndex);
+                }
+            }
+            
+            return accesses;
+        }
+        
+        // Run access pattern
+        function runAccessPattern() {
+            stopAccessPattern();
+            
+            const pattern = getCurrentPattern();
+            let index = 0;
+            
+            accessPatternInterval = setInterval(() => {
+                if (index >= pattern.length) {
+                    index = 0;
+                }
+                
+                accessAddrInput.value = pattern[index];
+                accessMemory(pattern[index]);
+                index++;
+            }, 1000);
+        }
+        
+        // Stop access pattern
+        function stopAccessPattern() {
+            if (accessPatternInterval) {
+                clearInterval(accessPatternInterval);
+                accessPatternInterval = null;
+            }
+        }
+        
+        // Get current access pattern
+        function getCurrentPattern() {
+            const patternType = accessPatternSelect.value;
+            
+            if (patternType === 'custom') {
+                return customPatternInput.value.split(',').map(Number);
+            } else if (patternType === 'sequential') {
+                return Array.from({length: currentProcess ? currentProcess.size : 8}, (_, i) => i * 10);
+            } else if (patternType === 'random') {
+                return Array.from({length: 20}, () => Math.floor(Math.random() * (currentProcess ? currentProcess.size * 10 : 80)));
+            } else if (patternType === 'looping') {
+                return [0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 0].map(x => x * 10);
+            }
+            
+            return [];
+        }
+        
+        // Update hit ratio display
+        function updateHitRatio() {
+            const total = pageHits + pageFaults;
+            const ratio = total > 0 ? Math.round((pageHits / total) * 100) : 0;
+            hitRatioEl.textContent = `${ratio}%`;
+        }
+        
+        // Update frame queue display
+        function updateFrameQueueDisplay() {
+            frameQueueEl.textContent = frameQueue.join(', ');
+        }
+        
+        // Log event to event log
+        function logEvent(message) {
+            eventLogEl.value += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+            eventLogEl.scrollTop = eventLogEl.scrollHeight;
+        }
+        
+        // Render physical memory
+        function renderPhysicalMemory() {
+            physicalMemoryEl.innerHTML = '';
+            
+            for (let i = 0; i < physicalMemory.length; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'memory-cell';
+                
+                if (physicalMemory[i]) {
+                    const page = physicalMemory[i];
+                    cell.textContent = `P${page.pageNum}`;
+                    cell.title = `Page ${page.pageNum}\nFrame ${i}`;
+                    
+                    if (page.referenced) {
+                        cell.classList.add('highlight');
+                    }
+                } else {
+                    cell.textContent = `F${i}`;
+                    cell.title = `Frame ${i} (free)`;
+                }
+                
+                physicalMemoryEl.appendChild(cell);
+            }
+        }
+        
+        // Render page table
+        function renderPageTable() {
+            pageTableEl.innerHTML = '';
+            
+            if (!currentProcess) {
+                pageTableEl.innerHTML = '<div>No process</div>';
+                return;
+            }
+            
+            // Header
+            const header = document.createElement('div');
+            header.className = 'page-table-entry';
+            header.style.fontWeight = 'bold';
+            header.innerHTML = 'Page#<br>Frame#<br>Status';
+            pageTableEl.appendChild(header);
+            
+            // Entries
+            for (const page of pageTable) {
+                const entry = document.createElement('div');
+                entry.className = 'page-table-entry';
+                
+                let status = page.loaded ? 'Loaded' : 'Not loaded';
+                if (page.referenced) status += ', Referenced';
+                if (page.modified) status += ', Modified';
+                
+                entry.innerHTML = `${page.pageNum}<br>${page.loaded ? page.frame : '-'}<br>${status}`;
+                
+                if (page.referenced) {
+                    entry.classList.add('highlight');
+                }
+                
+                pageTableEl.appendChild(entry);
+            }
+        }
+        
+        // Initialize the simulator
+        init();
+    </script>
+</body>
+</html>

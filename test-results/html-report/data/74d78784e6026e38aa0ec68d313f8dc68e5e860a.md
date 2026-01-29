@@ -1,0 +1,116 @@
+# Page snapshot
+
+```yaml
+- main "Prim's Algorithm visualization" [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - heading "Prim's Algorithm" [level=1] [ref=e8]
+      - paragraph [ref=e9]: An animated, aesthetic depiction of building a Minimum Spanning Tree
+    - button [ref=e11] [cursor=pointer]: ▶ Replay
+  - img "Graph visualization" [ref=e13]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - generic: "8"
+      - generic [ref=e30]:
+        - generic: "11"
+      - generic [ref=e32]:
+        - generic: "7"
+      - generic [ref=e34]:
+        - generic: "2"
+      - generic [ref=e36]:
+        - generic: "6"
+      - generic [ref=e38]:
+        - generic: "9"
+      - generic [ref=e40]:
+        - generic: "5"
+      - generic [ref=e42]:
+        - generic: "4"
+      - generic [ref=e44]:
+        - generic: "10"
+      - generic [ref=e46]:
+        - generic: "1"
+      - generic [ref=e48]:
+        - generic: "14"
+      - generic [ref=e50]:
+        - generic: "7"
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - generic: A
+        - generic [ref=e55]: v0
+      - generic [ref=e56]:
+        - generic: B
+        - generic [ref=e58]: v1
+      - generic [ref=e59]:
+        - generic: C
+        - generic [ref=e61]: v2
+      - generic [ref=e62]:
+        - generic: D
+        - generic [ref=e64]: v3
+      - generic [ref=e65]:
+        - generic: E
+        - generic [ref=e67]: v4
+      - generic [ref=e68]:
+        - generic: F
+        - generic [ref=e70]: v5
+      - generic [ref=e71]:
+        - generic: G
+        - generic [ref=e73]: v6
+      - generic [ref=e74]:
+        - generic: H
+        - generic [ref=e76]: v7
+  - complementary [ref=e77]:
+    - heading [level=3] [ref=e78]: Algorithm Flow
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - generic [ref=e81]: Start vertex
+        - strong [ref=e82]: A
+      - generic [ref=e83]:
+        - generic [ref=e84]: MST Total Weight
+        - strong [ref=e85]: "7"
+    - generic [ref=e86]:
+      - img [ref=e87]
+      - generic [ref=e90]:
+        - generic [ref=e91]: Undirected weighted graph
+        - generic [ref=e92]: Watch the MST assemble edge by edge
+    - generic [ref=e93]: Prim's algorithm grows a tree by always choosing the smallest edge that connects the growing tree to a new vertex. This elegant demonstration highlights each chosen edge and shows the progressive accumulation of the minimum spanning tree.
+    - generic [ref=e94]:
+      - paragraph [ref=e97]:
+        - strong [ref=e98]: Start at vertex A
+        - text: Prim's algorithm will expand the tree by choosing the smallest connecting edges.
+      - paragraph [ref=e101]:
+        - text: "Chosen edge:"
+        - strong [ref=e102]: A — G
+        - text: (weight 7)
+      - paragraph [ref=e105]:
+        - text: "Chosen edge:"
+        - strong [ref=e106]: G — H
+        - text: (weight 1)
+      - paragraph [ref=e109]:
+        - text: "Chosen edge:"
+        - strong [ref=e110]: H — B
+        - text: (weight 2)
+      - paragraph [ref=e113]:
+        - text: "Chosen edge:"
+        - strong [ref=e114]: B — C
+        - text: (weight 7)
+      - paragraph [ref=e117]:
+        - text: "Chosen edge:"
+        - strong [ref=e118]: C — D
+        - text: (weight 6)
+      - paragraph [ref=e121]:
+        - text: "Chosen edge:"
+        - strong [ref=e122]: D — E
+        - text: (weight 5)
+      - paragraph [ref=e125]:
+        - text: "Chosen edge:"
+        - strong [ref=e126]: E — F
+        - text: (weight 4)
+      - paragraph [ref=e129]:
+        - strong [ref=e130]: MST Complete
+        - text: Total vertices connected and spanning tree assembled.
+  - generic [ref=e132]:
+    - img [ref=e133]
+    - generic [ref=e135]:
+      - generic [ref=e136]: Minimum Spanning Tree
+      - generic [ref=e137]: "Total: 7"
+```

@@ -142,7 +142,7 @@ class CircularListPage {
 
   // Return sequence ids
   async getSequenceIds() {
-    const debugObj = await this.getDebugObject();
+    const debugObj1 = await this.getDebugObject();
     if (!debugObj || !Array.isArray(debugObj.sequence)) return [];
     return debugObj.sequence.map(s => s.id);
   }
@@ -170,7 +170,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
       const app = new CircularListPage(page);
       await app.goto();
 
-      const debugObj = await app.getDebugObject();
+      const debugObj2 = await app.getDebugObject();
       expect(debugObj).toBeTruthy();
       // initial sample should have size >= 1 (implementation uses 6)
       expect(debugObj.size).toBeGreaterThan(0);
@@ -187,7 +187,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
     });
 
     test('Clearing list goes to Empty state (S0_Empty)', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app1 = new CircularListPage(page);
       await app.goto();
 
       // Accept the confirmation and clear
@@ -195,17 +195,17 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
 
       // After clearing, list details should be 'List is empty'
       await expect(app.locators.listDetails).toHaveText('List is empty');
-      const debugObj = await app.getDebugObject();
+      const debugObj3 = await app.getDebugObject();
       expect(debugObj).toBeTruthy();
       expect(debugObj.size).toBe(0);
 
       // The svg should show the "Empty Circular Linked List" text and zero circles
-      const circles = await app.nodeCircleCount();
+      const circles1 = await app.nodeCircleCount();
       expect(circles).toBe(0);
     });
 
     test('Traversal enters Traversal state (S2_Traversal) and highlights nodes', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app2 = new CircularListPage(page);
       await app.goto();
 
       // Ensure we have at least 3 nodes to test stepping
@@ -218,7 +218,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
 
       // listDetails should include 'current -> index 0'
       await app.waitForListDetailsContains('current -> index 0', 2000);
-      let details = await app.getListDetailsText();
+      let details1 = await app.getListDetailsText();
       expect(details).toContain('current -> index 0');
 
       // Record highlighted node id from debug sequence index 0
@@ -246,7 +246,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
 
   test.describe('Event/Transition tests (insert, delete, find, random, clear)', () => {
     test('Insert Head transitions from S1 -> S1 (or S0 -> S1 if empty) and updates head', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app3 = new CircularListPage(page);
       await app.goto();
 
       // get current size and sequence
@@ -265,58 +265,58 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
     });
 
     test('Insert Tail updates tail (size increases)', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app4 = new CircularListPage(page);
       await app.goto();
 
-      const before = await app.getDebugObject();
-      const beforeSize = before.size;
+      const before1 = await app.getDebugObject();
+      const beforeSize1 = before.size;
 
       await app.insertTail('TAIL-TEST-1');
 
-      const after = await app.getDebugObject();
+      const after1 = await app.getDebugObject();
       expect(after.size).toBe(beforeSize + 1);
-      const values = after.sequence.map(s => s.value);
+      const values1 = after.sequence.map(s => s.value);
       expect(values[values.length - 1]).toBe('TAIL-TEST-1');
     });
 
     test('Insert After inserts node after specified index', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app5 = new CircularListPage(page);
       await app.goto();
 
       // ensure at least 3 nodes
       await app.createRandom(4);
-      const before = await app.getDebugObject();
+      const before2 = await app.getDebugObject();
       const insertIndex = 1;
       const value = 'AFTER-VAL';
       await app.insertAfter(insertIndex, value);
 
-      const after = await app.getDebugObject();
+      const after2 = await app.getDebugObject();
       expect(after.size).toBe(before.size + 1);
-      const values = after.sequence.map(s => s.value);
+      const values2 = after.sequence.map(s => s.value);
       // new node should be at position insertIndex+1
       expect(values[insertIndex + 1]).toBe(value);
     });
 
     test('Delete at index removes the node and updates head when necessary', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app6 = new CircularListPage(page);
       await app.goto();
 
       // create a known small list
       await app.createRandom(3);
-      const before = await app.getDebugObject();
+      const before3 = await app.getDebugObject();
       expect(before.size).toBe(3);
 
       // delete head (index 0)
       await app.deleteAt(0);
 
-      const after = await app.getDebugObject();
+      const after3 = await app.getDebugObject();
       expect(after.size).toBe(2);
       // headId should correspond to new first sequence id
       expect(after.headId).toBe(after.sequence[0].id);
     });
 
     test('Delete by value removes first occurrence; unknown value alerts', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app7 = new CircularListPage(page);
       await app.goto();
 
       // Ensure list has at least one known value
@@ -324,9 +324,9 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
       // Delete that value - should succeed without alert (implementation deletes silently)
       await app.deleteByValue('DEL-VAL-1');
 
-      const after = await app.getDebugObject();
+      const after4 = await app.getDebugObject();
       // ensure value not present in sequence
-      const values = after.sequence.map(s => s.value);
+      const values3 = after.sequence.map(s => s.value);
       expect(values).not.toContain('DEL-VAL-1');
 
       // Now attempt to delete a value not present - expect alert 'Value not found'
@@ -339,13 +339,13 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
     });
 
     test('Find Value shows alert and highlights found node', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app8 = new CircularListPage(page);
       await app.goto();
 
       // Insert a distinct value at head then find it
       await app.insertHead('FINDME-123');
       // Listen for the alert triggered by findBtn
-      let dialogMessage = null;
+      let dialogMessage1 = null;
       page.once('dialog', d => { dialogMessage = d.message(); d.accept(); });
 
       await app.locators.deleteValueInput.fill('FINDME-123');
@@ -354,24 +354,24 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
       expect(dialogMessage).toMatch(/Value found at index \d+/);
 
       // After find, listDetails should have 'current -> index'
-      const details = await app.getListDetailsText();
+      const details2 = await app.getListDetailsText();
       expect(details).toContain('current -> index');
 
       // Ensure the highlighted circle corresponds to the found id (the debug sequence contains the id)
-      const debugObj = await app.getDebugObject();
+      const debugObj4 = await app.getDebugObject();
       const idx = debugObj.sequence.findIndex(n => n.value === 'FINDME-123');
       expect(idx).toBeGreaterThanOrEqual(0);
       const foundId = debugObj.sequence[idx].id;
-      const fill = await app.getCircleFillForNodeId(foundId);
+      const fill1 = await app.getCircleFillForNodeId(foundId);
       expect(fill.toLowerCase()).toBe('#fffbec');
     });
 
     test('Create Random populates requested number of nodes (bounded 0..12)', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app9 = new CircularListPage(page);
       await app.goto();
 
       await app.createRandom(3);
-      const debugObj = await app.getDebugObject();
+      const debugObj5 = await app.getDebugObject();
       expect(debugObj.size).toBe(3);
 
       // Request an out-of-range large value to ensure bounding works
@@ -382,7 +382,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
     });
 
     test('Clear button confirmation and clearing behavior', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app10 = new CircularListPage(page);
       await app.goto();
 
       // Trigger confirm and cancel first (simulate user cancelling)
@@ -405,7 +405,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
 
   test.describe('Traversal animation and controls', () => {
     test('Animate traversal runs and completes a full loop', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app11 = new CircularListPage(page);
       await app.goto();
 
       // create small list and set fast speed for test
@@ -423,14 +423,14 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
         { timeout: 6000 }
       );
 
-      const details = await app.getListDetailsText();
+      const details3 = await app.getListDetailsText();
       expect(details).toContain('current -> index 0');
     });
   });
 
   test.describe('Edge cases and error dialogs', () => {
     test('Adding with empty input triggers alert for Insert Head/Tail', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app12 = new CircularListPage(page);
       await app.goto();
 
       // Ensure input empty and click addHead
@@ -448,40 +448,40 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
     });
 
     test('Insert After with invalid index informs user', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app13 = new CircularListPage(page);
       await app.goto();
 
       // leave afterIndex empty and attempt insertAfter
       await app.locators.afterIndex.fill('');
       await app.locators.valueInput.fill('X');
-      let dialogMessage = null;
+      let dialogMessage2 = null;
       page.once('dialog', d => { dialogMessage = d.message(); d.accept(); });
       await app.locators.insertAfter.click();
       expect(dialogMessage).toBe('Enter index');
     });
 
     test('Delete at with missing index shows alert', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app14 = new CircularListPage(page);
       await app.goto();
 
       await app.locators.afterIndex.fill('');
-      let msg = null;
+      let msg1 = null;
       page.once('dialog', d => { msg = d.message(); d.accept(); });
       await app.locators.deleteAt.click();
       expect(msg).toBe('Enter index to delete in the same field');
     });
 
     test('Delete by value on empty list alerts "List empty"', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app15 = new CircularListPage(page);
       await app.goto();
 
       // Clear list
       await app.clearAccept();
-      const debugObj = await app.getDebugObject();
+      const debugObj6 = await app.getDebugObject();
       expect(debugObj.size).toBe(0);
 
       // Provide a value and attempt delete; should alert 'List empty'
-      let msg = null;
+      let msg2 = null;
       page.once('dialog', d => { msg = d.message(); d.accept(); });
       await app.locators.deleteValueInput.fill('whatever');
       await app.locators.deleteValBtn.click();
@@ -492,7 +492,7 @@ test.describe('Circular Linked List — FSM and UI integration tests', () => {
 
   test('No unexpected runtime errors logged to console or pageerror during full interaction sequence', async ({ page }) => {
     // This test runs through a sequence of interactions and verifies no uncaught errors occurred
-    const app = new CircularListPage(page);
+    const app16 = new CircularListPage(page);
     await app.goto();
 
     // Perform a variety of actions quickly

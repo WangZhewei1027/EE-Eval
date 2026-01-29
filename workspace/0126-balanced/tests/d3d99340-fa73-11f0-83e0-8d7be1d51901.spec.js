@@ -88,7 +88,7 @@ test.describe('NoSQL Concept Playground - FSM End-to-End Tests', () => {
   });
 
   test('Idle state: main menu and default Document Store rendered', async ({ page }) => {
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
 
     // Verify store buttons present and default active is "document"
     const active = await app.getActiveStoreName();
@@ -115,10 +115,10 @@ test.describe('NoSQL Concept Playground - FSM End-to-End Tests', () => {
 
   test.describe('Document Store interactions', () => {
     test('Insert document, clear input, run query, build index, explain and edit/delete flows', async ({ page }) => {
-      const app = new AppPage(page);
+      const app2 = new AppPage(page);
 
       // Ensure we're on Document Store
-      const active = await app.getActiveStoreName();
+      const active1 = await app.getActiveStoreName();
       if (active !== 'document') {
         await app.selectStore('document');
       }
@@ -239,7 +239,7 @@ test.describe('NoSQL Concept Playground - FSM End-to-End Tests', () => {
 
   test.describe('Key-Value Store interactions', () => {
     test('Set/Get/Scan/Clear KV entries and edge cases', async ({ page }) => {
-      const app = new AppPage(page);
+      const app3 = new AppPage(page);
 
       // Switch to KV
       await app.selectStore('kv');
@@ -305,7 +305,7 @@ test.describe('NoSQL Concept Playground - FSM End-to-End Tests', () => {
 
   test.describe('Column-Family Store interactions', () => {
     test('Set/Delete/Find/Dump rows and handle parse errors', async ({ page }) => {
-      const app = new AppPage(page);
+      const app4 = new AppPage(page);
 
       // Switch to Column-Family
       await app.selectStore('column');
@@ -363,7 +363,7 @@ test.describe('NoSQL Concept Playground - FSM End-to-End Tests', () => {
 
   test.describe('Graph Store interactions', () => {
     test('Add node, add edge, list nodes/edges, neighbors and traversal', async ({ page }) => {
-      const app = new AppPage(page);
+      const app5 = new AppPage(page);
 
       // Switch to Graph
       await app.selectStore('graph');

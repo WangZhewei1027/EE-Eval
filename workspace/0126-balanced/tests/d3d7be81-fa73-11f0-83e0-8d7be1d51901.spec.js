@@ -181,7 +181,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
 
   test.describe('Factorial interactions and S1_FactorialRunning state', () => {
     test('Run factorial with delay shows running... and disables controls then shows correct result', async () => {
-      const rp = new RecursionPage(page);
+      const rp1 = new RecursionPage(page);
       await rp.goto();
 
       // Use a small n so we can observe transitions reliably
@@ -241,7 +241,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     });
 
     test('Run factorial without delay (fast) completes quickly and returns correct result', async () => {
-      const rp = new RecursionPage(page);
+      const rp2 = new RecursionPage(page);
       await rp.goto();
 
       await rp.setFactorialN(6);
@@ -252,7 +252,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       // There might be very short delay before result updates but should complete fast
       await page.waitForFunction(
         async (sel) => {
-          const el = document.querySelector(sel);
+          const el1 = document.querySelector(sel);
           return el && el.textContent !== 'running...' && el.textContent !== '—';
         },
         rp.selectors.factResult,
@@ -263,7 +263,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       expect(Number(resultText)).toBe(factorial(6));
 
       // ensure stack returned to empty
-      const stackText = await rp.getStackText();
+      const stackText1 = await rp.getStackText();
       expect(stackText).toBe('(empty)');
 
       // no uncaught errors
@@ -272,7 +272,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     });
 
     test('Enter key on factorial input triggers run (accessibility behavior)', async () => {
-      const rp = new RecursionPage(page);
+      const rp3 = new RecursionPage(page);
       await rp.goto();
 
       await rp.setFactorialN(4);
@@ -283,7 +283,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       // Expect to see running... then result
       await page.waitForFunction(
         async (sel) => {
-          const el = document.querySelector(sel);
+          const el2 = document.querySelector(sel);
           return el && el.textContent !== 'running...' && el.textContent !== '—';
         },
         rp.selectors.factResult,
@@ -299,7 +299,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     });
 
     test('Edge case: extremely large input is clamped to allowed max (12)', async () => {
-      const rp = new RecursionPage(page);
+      const rp4 = new RecursionPage(page);
       await rp.goto();
 
       // Set value beyond the allowed max; implementation clamps to 12
@@ -309,14 +309,14 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       // wait for completion
       await page.waitForFunction(
         async (sel) => {
-          const el = document.querySelector(sel);
+          const el3 = document.querySelector(sel);
           return el && el.textContent !== 'running...' && el.textContent !== '—';
         },
         rp.selectors.factResult,
         { timeout: 5000 }
       );
 
-      const resultText = await rp.getFactorialResultText();
+      const resultText1 = await rp.getFactorialResultText();
       // Factorial(12) expected
       expect(Number(resultText)).toBe(factorial(12));
 
@@ -328,7 +328,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
 
   test.describe('Fibonacci interactions and S2_FibonacciDrawing state', () => {
     test('Draw Fibonacci tree updates call count and respects showValues checkbox', async () => {
-      const rp = new RecursionPage(page);
+      const rp5 = new RecursionPage(page);
       await rp.goto();
 
       // set to n=7 which is still reasonable
@@ -353,7 +353,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     });
 
     test('Enter key on fibN input triggers draw (accessibility)', async () => {
-      const rp = new RecursionPage(page);
+      const rp6 = new RecursionPage(page);
       await rp.goto();
 
       await rp.setFibN(5);
@@ -363,7 +363,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       // wait for fibCalls to update to expected
       await page.waitForFunction(
         (sel, expected) => {
-          const el = document.querySelector(sel);
+          const el4 = document.querySelector(sel);
           return el && Number(el.textContent) === expected;
         },
         rp.selectors.fibCalls,
@@ -371,7 +371,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
         { timeout: 2000 }
       );
 
-      const callsText = await rp.getFibCallsText();
+      const callsText1 = await rp.getFibCallsText();
       expect(Number(callsText)).toBe(fibCallCount(5));
 
       // no uncaught errors
@@ -380,7 +380,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     });
 
     test('Edge case: large n (>9) shows a guard message and avoids heavy draw', async () => {
-      const rp = new RecursionPage(page);
+      const rp7 = new RecursionPage(page);
       await rp.goto();
 
       // set n to 10 which triggers early guard message written in red (#900) at (20,20)
@@ -388,7 +388,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       await rp.clickDrawFib();
 
       // The implementation draws an early message at (20,20). Check that pixel at (20,20) is not white.
-      const px = await rp.getCanvasPixelColor('#fibCanvas', 20, 20);
+      const px1 = await rp.getCanvasPixelColor('#fibCanvas', 20, 20);
       // Some drawing should have occurred (the red text), alpha likely > 0
       expect(px).not.toBeNull();
       expect(px.a).toBeGreaterThan(0);
@@ -401,7 +401,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
 
   test.describe('Sierpinski interactions and S3_SierpinskiDrawing state', () => {
     test('Render Sierpinski triangle for a modest depth draws non-empty canvas', async () => {
-      const rp = new RecursionPage(page);
+      const rp8 = new RecursionPage(page);
       await rp.goto();
 
       await rp.setDepth(3);
@@ -422,7 +422,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     });
 
     test('Enter key on depth input triggers draw (accessibility)', async () => {
-      const rp = new RecursionPage(page);
+      const rp9 = new RecursionPage(page);
       await rp.goto();
 
       await rp.setDepth(2);
@@ -444,7 +444,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
 
   test.describe('Error and console monitoring', () => {
     test('No unexpected runtime errors or console.error calls during typical interactions', async () => {
-      const rp = new RecursionPage(page);
+      const rp10 = new RecursionPage(page);
       await rp.goto();
 
       // perform a series of typical interactions
@@ -452,7 +452,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
       await rp.clickRunFactFast();
       await page.waitForFunction(
         async (sel) => {
-          const el = document.querySelector(sel);
+          const el5 = document.querySelector(sel);
           return el && el.textContent !== 'running...' && el.textContent !== '—';
         },
         rp.selectors.factResult,
@@ -475,7 +475,7 @@ test.describe('Recursion Interactive Application - FSM validation', () => {
     test('If any runtime errors occur they will be captured as page errors (test will fail if present)', async () => {
       // This test demonstrates we observe page errors; it simply loads the page and checks the array.
       // If a ReferenceError/SyntaxError/TypeError happened during load or interactions above, the collected pageErrors would be non-empty and this assertion would fail intentionally.
-      const rp = new RecursionPage(page);
+      const rp11 = new RecursionPage(page);
       await rp.goto();
 
       // Basic sanity: there should be zero page errors on a healthy load

@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Graph (Undirected) Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 10px;
+    user-select: none;
+  }
+  #canvas {
+    border: 1px solid black;
+    touch-action: none;
+    display: block;
+    margin-bottom: 10px;
+  }
+  input[type="number"] {
+    width: 4em;
+  }
+  label {
+    display: inline-block;
+    min-width: 130px;
+  }
+  button {
+    min-width: 70px;
+  }
+  #messages {
+    white-space: pre-wrap;
+    font-size: 0.85em;
+    min-height: 5em;
+    border: 1px solid black;
+    margin-top: 10px;
+    padding: 4px;
+    overflow-y: auto;
+  }
+  .section {
+    margin-bottom: 15px;
+  }
+  fieldset {
+    margin-bottom: 15px;
+  }
+</style>
+</head>
+<body>
+<h1>Graph (Undirected) Interactive Demo</h1>
+
+<canvas id="canvas" width="600" height="400"></canvas>
+
+<div class="section">
+  <fieldset>
+    <legend>Node Controls</legend>
+    <label for="nodeNameInput">Node Name:</label>
+    <input id="nodeNameInput" type="text" maxlength="10" placeholder="e.g. A" />
+    <button id="addNodeBtn">Add Node</button>
+    <button id="deleteNodeBtn" disabled>Delete Node</button>
+    <button id="moveNodeModeBtn">Move Node Mode: OFF</button>
+  </fieldset>
+</div>
+
+<div class="section">
+  <fieldset>
+    <legend>Edge Controls</legend>
+    <label for="edgeNode1Input">Node 1:</label>
+    <input id="edgeNode1Input" type="text" maxlength="10" placeholder="e.g. A" />
+    <label for="edgeNode2Input">Node 2:</label>
+    <input id="edgeNode2Input" type="text" maxlength="10" placeholder="e.g. B" />
+    <button id="addEdgeBtn">Add Edge</button>
+    <button id="deleteEdgeBtn" disabled>Delete Edge</button>
+  </fieldset>
+</div>
+
+<div class="section">
+  <fieldset>
+    <legend>Graph Exploration & Algorithms</legend>
+    <label for="startNodeInput">Start Node:</label>
+    <input id="startNodeInput" type="text" maxlength="10" placeholder="e.g. A" />
+    <button id="bfsBtn">BFS Traversal</button>
+    <button id="dfsBtn">DFS Traversal</button>
+    <button id="clearHighlightsBtn">Clear Highlights</button>
+  </fieldset>
+</div>
+
+<div class="section">
+  <fieldset>
+    <legend>Graph Properties</legend>
+    <button id="checkConnectedBtn">Check Connected</button>
+    <button id="checkCycleBtn">Check Cycle</button>
+    <button id="clearGraphBtn">Clear Graph</button>
+  </fieldset>
+  <div id="resultOutput" aria-live="polite" style="margin-top:5px;min-height:3em;"></div>
+</div>
+
+<div class="section">
+  <fieldset>
+    <legend>Instructions & Tips</legend>
+    <ul>
+      <li>Click on canvas background to add nodes (same as Add Node button).</li>
+      <li>Node names must be unique, max 10 chars, case sensitive.</li>
+      <li>To move nodes, toggle "Move Node Mode" and drag nodes on canvas.</li>
+      <li>Select a node by clicking it to delete it or use in edges.</li>
+      <li>Edges are undirected and defined by two existing nodes.</li>
+      <li>Highlighted nodes/edges indicate traversal path or cycle detection.</li>
+    </ul>
+  </fieldset>
+</div>
+
+<div id="messages" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // Data structures
+  let nodes = {}; // key: name string, value: {x: number, y: number, name: string}
+  let edges = []; // each edge: {n1: string, n2: string, id: string}
+  // For convenience, edge id = n1<n2 sorted joined by '--'
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  // UI Elements
+  const nodeNameInput = document.getElementById("nodeNameInput");
+  const addNodeBtn = document.getElementById("addNodeBtn");
+  const deleteNodeBtn = document.getElementById("deleteNodeBtn");
+  const moveNodeModeBtn = document.getElementById("moveNodeModeBtn");
+
+  const edgeNode1Input = document.getElementById("edgeNode1Input");
+  const edgeNode2Input = document.getElementById("edgeNode2Input");
+  const addEdgeBtn = document.getElementById("addEdgeBtn");
+  const deleteEdgeBtn = document.getElementById("deleteEdgeBtn");
+
+  const startNodeInput = document.getElementById("startNodeInput");
+  const bfsBtn = document.getElementById("bfsBtn");
+  const dfsBtn = document.getElementById("dfsBtn");
+  const clearHighlightsBtn = document.getElementById("clearHighlightsBtn");
+
+  const checkConnectedBtn = document.getElementById("checkConnectedBtn");
+  const checkCycleBtn = document.getElementById("checkCycleBtn");
+  const clearGraphBtn = document.getElementById("clearGraphBtn");
+  const resultOutput = document.getElementById("resultOutput");
+
+  const messages = document.getElementById("messages");
+
+  // State
+  let selectedNodeName = null;
+  let selectedEdgeId = null;
+  let moveNodeMode = false;
+  let draggingNode = null;
+  let dragOffset = {x: 0, y:0};
+
+  // Highlight info: node and edge sets
+  let highlightNodes = new Set();
+  let highlightEdges = new Set();
+
+  // Constants for drawing
+  const NODE_RADIUS = 15;
+  const FONT_SIZE = 12;
+
+  // Utility functions
+  function logMessage(msg) {
+    messages.textContent = msg;
+  }
+
+  function edgeId(n1, n2) {
+    return [n1,n2].sort().join("--");
+  }
+
+  function addNode(name, x, y) {
+    if (!name || typeof name !== 'string') return false;
+    if (name in nodes) return false;
+    nodes[name] = {x, y, name};
+    return true;
+  }
+
+  function deleteNode(name) {
+    if (!(name in nodes)) return false;
+    delete nodes[name];
+    // remove all edges connected to this node
+    edges = edges.filter(e => e.n1 !== name && e.n2 !== name);
+    if (selectedNodeName === name) selectedNodeName = null;
+    return true;
+  }
+
+  function addEdge(n1, n2) {
+    if (!(n1 in nodes) || !(n2 in nodes)) return false;
+    if (n1 === n2) return false;
+    let id = edgeId(n1,n2);
+    if (edges.some(e => e.id === id)) return false;
+    edges.push({n1, n2, id});
+    return true;
+  }
+
+  function deleteEdge(id) {
+    let idx = edges.findIndex(e => e.id === id);
+    if (idx === -1) return false;
+    edges.splice(idx, 1);
+    if (selectedEdgeId === id) selectedEdgeId = null;
+    return true;
+  }
+
+  // redraw the whole canvas
+  function drawGraph() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.lineWidth = 1;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = FONT_SIZE + "px monospace";
+
+    // Draw edges
+    for (let e of edges) {
+      const {n1, n2, id} = e;
+      const pt1 = nodes[n1];
+      const pt2 = nodes[n2];
+      if (!pt1 || !pt2) continue;
+      ctx.beginPath();
+      ctx.moveTo(pt1.x, pt1.y);
+      ctx.lineTo(pt2.x, pt2.y);
+      ctx.strokeStyle = highlightEdges.has(id) ? "black" : "black";
+      ctx.lineWidth = highlightEdges.has(id) ? 3 : 1;
+      ctx.stroke();
+    }
+
+    // Draw nodes
+    for (let name in nodes) {
+      const node = nodes[name];
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI*2);
+      if (highlightNodes.has(name)) {
+        ctx.lineWidth = 3;
+      } else {
+        ctx.lineWidth = 1;
+      }
+      if (name === selectedNodeName) {
+        // thicker stroke for selected node
+        ctx.lineWidth = Math.max(ctx.lineWidth, 3);
+        ctx.stroke();
+      } else {
+        ctx.stroke();
+      }
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.fillStyle = "black";
+      ctx.fillText(name, node.x, node.y);
+    }
+  }
+
+  // Given pixel coordinates, find node name if inside a node circle
+  function getNodeAt(x,y) {
+    for (let name in nodes) {
+      const node = nodes[name];
+      let dx = x - node.x;
+      let dy = y - node.y;
+      if (dx*dx + dy*dy <= NODE_RADIUS*NODE_RADIUS) {
+        return name;
+      }
+    }
+    return null;
+  }
+
+  // Given pixel coordinates, find edge id if near an edge line (within 8px)
+  function getEdgeAt(x,y) {
+    for (let e of edges) {
+      const pt1 = nodes[e.n1];
+      const pt2 = nodes[e.n2];
+      if (!pt1 || !pt2) continue;
+      // Compute distance from point (x,y) to segment pt1-pt2
+      let dist = pointLineDistance(x, y, pt1.x, pt1.y, pt2.x, pt2.y);
+      if (dist <= 8) return e.id;
+    }
+    return null;
+  }
+
+  // Compute point-line segment distance helper
+  // (px, py) point, (x1,y1),(x2,y2) segment endpoints
+  function pointLineDistance(px, py, x1, y1, x2, y2) {
+    let A = px - x1;
+    let B = py - y1;
+    let C = x2 - x1;
+    let D = y2 - y1;
+
+    let dot = A*C + B*D;
+    let len_sq = C*C + D*D;
+    let param = -1;
+    if (len_sq !== 0) param = dot / len_sq;
+
+    let xx, yy;
+
+    if (param < 0) {
+      xx = x1;
+      yy = y1;
+    } else if (param > 1) {
+      xx = x2;
+      yy = y2;
+    } else {
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    let dx = px - xx;
+    let dy = py - yy;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  // UI event handlers
+
+  // Canvas click handler:
+  // If Move Node Mode ON and dragging: do nothing on click
+  // Else if click on node: select node and enable delete node button
+  // Else if click on edge: select edge and enable delete edge button
+  // Else (background): add node with input name if possible or prompt user
+  canvas.addEventListener("mousedown", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
+    if (moveNodeMode) {
+      let nodeName = getNodeAt(cx, cy);
+      if (nodeName) {
+        draggingNode = nodeName;
+        dragOffset.x = cx - nodes[nodeName].x;
+        dragOffset.y = cy - nodes[nodeName].y;
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Not move mode: selection or add node on background
+    let nodeName = getNodeAt(cx, cy);
+    if (nodeName) {
+      selectNode(nodeName);
+      selectEdge(null);
+      e.preventDefault();
+      return;
+    }
+
+    let edgeIdFound = getEdgeAt(cx, cy);
+    if (edgeIdFound) {
+      selectEdge(edgeIdFound);
+      selectNode(null);
+      e.preventDefault();
+      return;
+    }
+
+    // Clicked empty space: add node with default name or user input 
+    let proposedName = nodeNameInput.value.trim();
+    if (!proposedName) {
+      proposedName = generateNextNodeName();
+    }
+    if (nodes[proposedName]) {
+      logMessage("Node name '" + proposedName + "' already exists. Enter unique name.");
+      return;
+    }
+
+    if (!addNode(proposedName, cx, cy)) {
+      logMessage("Failed to add node. Name must be unique and non-empty.");
+      return;
+    }
+    logMessage("Node '" + proposedName + "' added at ("+Math.round(cx)+", "+Math.round(cy)+")");
+    nodeNameInput.value = "";
+    selectNode(proposedName);
+    selectEdge(null);
+    drawGraph();
+  });
+
+  canvas.addEventListener("mousemove", (e) => {
+    if (moveNodeMode && draggingNode) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      let nx = cx - dragOffset.x;
+      let ny = cy - dragOffset.y;
+      // constrain within canvas
+      nx = Math.min(Math.max(NODE_RADIUS, nx), canvas.width - NODE_RADIUS);
+      ny = Math.min(Math.max(NODE_RADIUS, ny), canvas.height - NODE_RADIUS);
+      nodes[draggingNode].x = nx;
+      nodes[draggingNode].y = ny;
+      drawGraph();
+      e.preventDefault();
+    }
+  });
+
+  canvas.addEventListener("mouseup", (e) => {
+    if (moveNodeMode && draggingNode) {
+      draggingNode = null;
+      e.preventDefault();
+    }
+  });
+
+  addNodeBtn.addEventListener("click", () => {
+    let name = nodeNameInput.value.trim();
+    if (!name) {
+      logMessage("Enter a unique node name in the input.");
+      return;
+    }
+    if (nodes[name]) {
+      logMessage("Node '" + name + "' already exists. Choose another name.");
+      return;
+    }
+    // Add in center-ish by default
+    let x = canvas.width / 2 + (Math.random()*80 - 40);
+    let y = canvas.height / 2 + (Math.random()*80 - 40);
+    addNode(name, x, y);
+    logMessage("Node '"+name+"' added.");
+    selectNode(name);
+    drawGraph();
+    nodeNameInput.value = "";
+  });
+
+  deleteNodeBtn.addEventListener("click", () => {
+    if (!selectedNodeName) {
+      logMessage("No node selected.");
+      return;
+    }
+    deleteNode(selectedNodeName);
+    logMessage("Node '"+selectedNodeName+"' deleted.");
+    selectedNodeName = null;
+    deleteNodeBtn.disabled = true;
+    drawGraph();
+  });
+
+  addEdgeBtn.addEventListener("click", () => {
+    let n1 = edgeNode1Input.value.trim();
+    let n2 = edgeNode2Input.value.trim();
+    if (!n1 || !n2) {
+      logMessage("Enter names of two nodes for the edge.");
+      return;
+    }
+    if (!(n1 in nodes)) {
+      logMessage("Node '"+n1+"' does not exist.");
+      return;
+    }
+    if (!(n2 in nodes)) {
+      logMessage("Node '"+n2+"' does not exist.");
+      return;
+    }
+    if (n1 === n2) {
+      logMessage("Cannot add edge between the same node.");
+      return;
+    }
+    if (edges.some(e => e.id === edgeId(n1,n2))) {
+      logMessage("Edge between '"+n1+"' and '"+n2+"' already exists.");
+      return;
+    }
+    if (addEdge(n1, n2)) {
+      logMessage("Edge added between '"+n1+"' and '"+n2+"'.");
+      drawGraph();
+      selectEdge(edgeId(n1,n2));
+      selectNode(null);
+    } else {
+      logMessage("Failed to add edge.");
+    }
+  });
+
+  deleteEdgeBtn.addEventListener("click", () => {
+    if (!selectedEdgeId) {
+      logMessage("No edge selected.");
+      return;
+    }
+    if (deleteEdge(selectedEdgeId)) {
+      logMessage("Edge '"+selectedEdgeId+"' deleted.");
+      selectedEdgeId = null;
+      deleteEdgeBtn.disabled = true;
+      drawGraph();
+    } else {
+      logMessage("Failed to delete edge.");
+    }
+  });
+
+  moveNodeModeBtn.addEventListener("click", () => {
+    moveNodeMode = !moveNodeMode;
+    moveNodeModeBtn.textContent = "Move Node Mode: " + (moveNodeMode ? "ON" : "OFF");
+    if (moveNodeMode) {
+      // disables selection deletes
+      selectNode(null);
+      selectEdge(null);
+      deleteNodeBtn.disabled = true;
+      deleteEdgeBtn.disabled = true;
+      logMessage("Move Node Mode enabled: drag nodes on canvas.");
+    } else {
+      logMessage("Move Node Mode disabled.");
+    }
+  });
+
+  bfsBtn.addEventListener("click", () => {
+    let start = startNodeInput.value.trim();
+    if (!(start in nodes)) {
+      logMessage("Start node '"+start+"' does not exist.");
+      return;
+    }
+    let order = bfsTraversal(start);
+    highlightTraversal(order);
+    logMessage("BFS Traversal order: " + order.join(" → "));
+  });
+
+  dfsBtn.addEventListener("click", () => {
+    let start = startNodeInput.value.trim();
+    if (!(start in nodes)) {
+      logMessage("Start node '"+start+"' does not exist.");
+      return;
+    }
+    let order = dfsTraversal(start);
+    highlightTraversal(order);
+    logMessage("DFS Traversal order: " + order.join(" → "));
+  });
+
+  clearHighlightsBtn.addEventListener("click", () => {
+    highlightNodes.clear();
+    highlightEdges.clear();
+    resultOutput.textContent = "";
+    logMessage("Highlights cleared.");
+    drawGraph();
+  });
+
+  checkConnectedBtn.addEventListener("click", () => {
+    if (Object.keys(nodes).length === 0) {
+      resultOutput.textContent = "Graph is empty.";
+      logMessage("Graph is empty.");
+      return;
+    }
+    // check connectivity from a random node
+    let start = Object.keys(nodes)[0];
+    let visited = new Set();
+    dfsVisit(start, visited);
+    let connected = (visited.size === Object.keys(nodes).length);
+    resultOutput.textContent = connected ? "Graph is connected." : "Graph is NOT connected.";
+    logMessage(resultOutput.textContent);
+    // highlight connected component of start node:
+    highlightNodes.clear();
+    highlightEdges.clear();
+    visited.forEach(n => highlightNodes.add(n));
+    // highlight edges in subgraph induced by visited nodes
+    edges.forEach(e => {
+      if (highlightNodes.has(e.n1) && highlightNodes.has(e.n2)) {
+        highlightEdges.add(e.id);
+      }
+    });
+    drawGraph();
+  });
+
+  checkCycleBtn.addEventListener("click", () => {
+    let cyclePath = detectCycle();
+    if (cyclePath === null) {
+      resultOutput.textContent = "No cycle detected.";
+      logMessage("No cycle detected.");
+      highlightNodes.clear();
+      highlightEdges.clear();
+    } else {
+      resultOutput.textContent = "Cycle detected: " + cyclePath.join(" → ") + " → " + cyclePath[0];
+      logMessage(resultOutput.textContent);
+      highlightNodes.clear();
+      highlightEdges.clear();
+      cyclePath.forEach(n => highlightNodes.add(n));
+      for(let i=0; i<cyclePath.length; i++) {
+        let n1 = cyclePath[i];
+        let n2 = cyclePath[(i+1)%cyclePath.length];
+        highlightEdges.add(edgeId(n1,n2));
+      }
+    }
+    drawGraph();
+  });
+
+  clearGraphBtn.addEventListener("click", () => {
+    nodes = {};
+    edges = [];
+    selectedNodeName = null;
+    selectedEdgeId = null;
+    highlightNodes.clear();
+    highlightEdges.clear();
+    deleteNodeBtn.disabled = true;
+    deleteEdgeBtn.disabled = true;
+    resultOutput.textContent = "";
+    logMessage("Graph cleared.");
+    drawGraph();
+  });
+
+  // Select node routine
+  function selectNode(name) {
+    if (moveNodeMode) return;
+    if (name && !(name in nodes)) {
+      name = null;
+    }
+    selectedNodeName = name;
+    deleteNodeBtn.disabled = !name;
+    if (name) {
+      // fill nodeNameInput with selected node name for convenience
+      nodeNameInput.value = name;
+    }
+    drawGraph();
+  }
+
+  // Select edge routine
+  function selectEdge(id) {
+    if (moveNodeMode) return;
+    if (id && !edges.some(e => e.id === id)) id = null;
+    selectedEdgeId = id;
+    deleteEdgeBtn.disabled = !id;
+    drawGraph();
+  }
+
+  // BFS returns array of nodes visited in order
+  function bfsTraversal(start) {
+    let visited = new Set();
+    let queue = [start];
+    let order = [];
+    visited.add(start);
+    while(queue.length) {
+      let u = queue.shift();
+      order.push(u);
+      let neighbors = getNeighbors(u);
+      for(let v of neighbors) {
+        if(!visited.has(v)) {
+          visited.add(v);
+          queue.push(v);
+        }
+      }
+    }
+    return order;
+  }
+
+  // DFS returns array of nodes visited in order
+  function dfsTraversal(start) {
+    let visited = new Set();
+    let order = [];
+    function dfs(u) {
+      visited.add(u);
+      order.push(u);
+      let neighbors = getNeighbors(u);
+      for(let v of neighbors) {
+        if (!visited.has(v)) dfs(v);
+      }
+    }
+    dfs(start);
+    return order;
+  }
+
+  // Highlight traversal path: nodes and edges
+  function highlightTraversal(order) {
+    highlightNodes.clear();
+    highlightEdges.clear();
+    for(let i=0; i<order.length; i++) {
+      highlightNodes.add(order[i]);
+      if (i > 0) {
+        let eId = edgeId(order[i-1], order[i]);
+        if (edges.some(e => e.id === eId)) highlightEdges.add(eId);
+      }
+    }
+    drawGraph();
+  }
+
+  // Get neighbors of a node
+  function getNeighbors(n) {
+    let neighbors = [];
+    for(let e of edges) {
+      if (e.n1 === n) neighbors.push(e.n2);
+      else if (e.n2 === n) neighbors.push(e.n1);
+    }
+    return neighbors;
+  }
+
+  // DFS visit for connectivity check
+  function dfsVisit(start, visited) {
+    visited.add(start);
+    for(let v of getNeighbors(start)) {
+      if (!visited.has(v)) dfsVisit(v, visited);
+    }
+  }
+
+  // Detect cycle in undirected graph: returns array of nodes forming cycle or null
+  function detectCycle() {
+    let visited = new Set();
+    let parent = {};
+
+    function dfs(u, p) {
+      visited.add(u);
+      for(let v of getNeighbors(u)) {
+        if (v === p) continue;
+        if (!visited.has(v)) {
+          parent[v] = u;
+          let res = dfs(v,u);
+          if (res) return res;
+        } else {
+          // cycle detected, backtrack path
+          let cyclePath = [v,u];
+          let cur = u;
+          while(cur !== v && cur !== undefined) {
+            cur = parent[cur];
+            if (cur !== undefined) cyclePath.push(cur);
+          }
+          cyclePath.reverse();
+          return cyclePath;
+        }
+      }
+      return null;
+    }
+
+    for(let n of Object.keys(nodes)) {
+      if (!visited.has(n)) {
+        parent[n] = null;
+        let c = dfs(n, null);
+        if (c) return c;
+      }
+    }
+    return null;
+  }
+
+  // Generate next node name: A-Z, then AA, AB, ...
+  function generateNextNodeName() {
+    let existing = new Set(Object.keys(nodes));
+    let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    // Try single letter
+    for(let i=0; i<chars.length; i++) {
+      if (!existing.has(chars[i])) return chars[i];
+    }
+    // Try two letters
+    for(let i=0; i<chars.length; i++) {
+      for(let j=0; j<chars.length; j++) {
+        let s = chars[i]+chars[j];
+        if (!existing.has(s)) return s;
+      }
+    }
+    return "N" + (Object.keys(nodes).length+1);
+  }
+
+  // Keyboard accessibility: Enter in nodeNameInput adds node, Enter in edgeNode inputs adds edge
+  nodeNameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      addNodeBtn.click();
+      e.preventDefault();
+    }
+  });
+  edgeNode1Input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      addEdgeBtn.click();
+      e.preventDefault();
+    }
+  });
+  edgeNode2Input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      addEdgeBtn.click();
+      e.preventDefault();
+    }
+  });
+  startNodeInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      bfsBtn.click();
+      e.preventDefault();
+    }
+  });
+
+  // Initial draw
+  drawGraph();
+  logMessage("Use canvas click or controls to add nodes and edges.");
+
+})();
+</script>
+
+</body>
+</html>

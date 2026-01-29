@@ -67,7 +67,7 @@ test.describe('FSM: JavaScript Array Demonstration (Application ID: 324c0030-fa7
     // This test exercises the FSM transition:
     // - Click the Run Array Demo button (RunArrayDemo_Click)
     // - Expect initializeArray() and displayOutput() to have run (observable: output text populated)
-    const runBtn = await page.waitForSelector('#run-array-demo', { state: 'visible' });
+    const runBtn1 = await page.waitForSelector('#run-array-demo', { state: 'visible' });
 
     // Click the button to trigger the array demo
     await runBtn.click();
@@ -110,8 +110,8 @@ Total number of fruits: 3`;
 
   test('Edge case: Clicking the Run Array Demo button multiple times yields consistent output and no cumulative side-effects', async ({ page }) => {
     // This test ensures idempotency of clicking the demo button multiple times (no unintended accumulation)
-    const runBtn = await page.waitForSelector('#run-array-demo', { state: 'visible' });
-    const outputEl = await page.waitForSelector('#output');
+    const runBtn2 = await page.waitForSelector('#run-array-demo', { state: 'visible' });
+    const outputEl1 = await page.waitForSelector('#output');
 
     // Click multiple times in quick succession
     await Promise.all([runBtn.click(), runBtn.click(), runBtn.click()]);
@@ -121,7 +121,7 @@ Total number of fruits: 3`;
 
     const resultAfterRapidClicks = await outputEl.innerText();
 
-    const expectedOutput =
+    const expectedOutput1 =
 `Original array: ["Apple","Banana","Cherry"]
 
 After adding Mango: ["Apple","Banana","Cherry","Mango"]
@@ -150,8 +150,8 @@ Total number of fruits: 3`;
     // The FSM evidence mentions: document.getElementById('run-array-demo').addEventListener('click', ...)
     // We cannot introspect event listeners reliably in a cross-browser way without altering page code,
     // so we assert the observable behavior: clicking changes the DOM.
-    const runBtn = await page.waitForSelector('#run-array-demo', { state: 'visible' });
-    const outputEl = await page.waitForSelector('#output');
+    const runBtn3 = await page.waitForSelector('#run-array-demo', { state: 'visible' });
+    const outputEl2 = await page.waitForSelector('#output');
 
     // Ensure output is empty before click
     expect(await outputEl.innerText()).toBe('');
@@ -161,7 +161,7 @@ Total number of fruits: 3`;
     await expect(outputEl).toHaveText(/Original array:/, { timeout: 2000 });
 
     // Confirm that the output contains the enumerated entries (verifying the loop ran)
-    const outputText = await outputEl.innerText();
+    const outputText1 = await outputEl.innerText();
     expect(outputText).toMatch(/All fruits:\n1: Apple\n2: Banana\n3: Cherry/);
 
     // Still no uncaught errors
@@ -171,8 +171,8 @@ Total number of fruits: 3`;
   test('Edge case: Ensure output element remains present and accessible even when interacting with unrelated elements', async ({ page }) => {
     // This is an artificial interaction: ensure that the output stays stable and accessible
     // We will focus on verifying DOM stability rather than modifying page code.
-    const runBtn = await page.waitForSelector('#run-array-demo', { state: 'visible' });
-    const outputEl = await page.waitForSelector('#output');
+    const runBtn4 = await page.waitForSelector('#run-array-demo', { state: 'visible' });
+    const outputEl3 = await page.waitForSelector('#output');
 
     // Click to populate output
     await runBtn.click();

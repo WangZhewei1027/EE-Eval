@@ -25,7 +25,7 @@ class KNNPage {
     return this.page.title();
   }
 
-  // Get the K input value as number
+  // Get the K input value
   async getKValue() {
     const val = await this.page.$eval(this.kInputSelector, el => el.value);
     return Number(val);
@@ -51,8 +51,8 @@ class KNNPage {
 
   // Move mouse to canvas-relative coordinates
   async moveMouseTo(x, y) {
-    const canvas = await this.page.$(this.canvasSelector);
-    const box = await canvas.boundingBox();
+    const canvas1 = await this.page.$(this.canvasSelector);
+    const box1 = await canvas.boundingBox();
     if (!box) throw new Error('Canvas bounding box not found');
     const moveX = box.x + x;
     const moveY = box.y + y;
@@ -171,7 +171,7 @@ test.describe('KNN Visualization - FSM and Interaction Tests', () => {
     expect(after).not.toEqual(before);
 
     // Title still should show Next class: A (no class cycle)
-    const title = await knn.title();
+    const title1 = await knn.title1();
     expect(title).toContain('Next class: A');
   });
 
@@ -196,11 +196,11 @@ test.describe('KNN Visualization - FSM and Interaction Tests', () => {
 
   test('Mouse move updates query point visualization (MouseMoveCanvas event)', async () => {
     // Move mouse to near center - this should cause redraw with a query point
-    const before = await knn.getCanvasDataURL();
+    const before1 = await knn.getCanvasDataURL();
     await knn.moveMouseTo(300, 200);
     await knn.waitForRedraw();
 
-    const after = await knn.getCanvasDataURL();
+    const after1 = await knn.getCanvasDataURL();
     expect(after).toBeTruthy();
     // There should be a visible change when moving the mouse (query point drawn)
     expect(after).not.toEqual(before);
@@ -225,7 +225,7 @@ test.describe('KNN Visualization - FSM and Interaction Tests', () => {
 
   test('Change K value via input triggers redraw and clamps out-of-range values (InputKChange)', async () => {
     // Record initial canvas
-    const before = await knn.getCanvasDataURL();
+    const before2 = await knn.getCanvasDataURL();
 
     // Set K to 5 and ensure value updated to 5
     await knn.setKValue(5);
@@ -249,14 +249,14 @@ test.describe('KNN Visualization - FSM and Interaction Tests', () => {
   });
 
   test('Add random points transitions to Random Points Added (S3_RandomPointsAdded)', async () => {
-    const before = await knn.getCanvasDataURL();
+    const before3 = await knn.getCanvasDataURL();
 
     // Click random button to add 15 random points
     await knn.clickRandom();
     // Wait a bit for looped pushes and redraw
     await knn.waitForRedraw(200);
 
-    const after = await knn.getCanvasDataURL();
+    const after2 = await knn.getCanvasDataURL();
     expect(after).toBeTruthy();
     // Canvas should definitely change when random points are added
     expect(after).not.toEqual(before);
@@ -284,7 +284,7 @@ test.describe('KNN Visualization - FSM and Interaction Tests', () => {
   test('Keyboard controls: cycle class (c) and add point (Enter/Space) (KeyDownCanvas)', async () => {
     // Focus canvas to send key events
     await knn.focusCanvas();
-    const titleBefore = await knn.title();
+    const titleBefore1 = await knn.title();
 
     // Press 'c' to cycle class
     await knn.pressKey('KeyC');
@@ -294,13 +294,13 @@ test.describe('KNN Visualization - FSM and Interaction Tests', () => {
     expect(titleAfterC).not.toEqual(titleBefore);
 
     // Capture canvas before adding with Enter
-    const before = await knn.getCanvasDataURL();
+    const before4 = await knn.getCanvasDataURL();
 
     // Press Enter to add point at current mousePos (initially center)
     await knn.pressKey('Enter');
     await knn.waitForRedraw(120);
 
-    const after = await knn.getCanvasDataURL();
+    const after3 = await knn.getCanvasDataURL();
     expect(after).toBeTruthy();
     expect(after).not.toEqual(before);
 

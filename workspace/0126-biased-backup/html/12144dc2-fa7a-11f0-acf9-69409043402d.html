@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Dijkstra's Algorithm Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    background: white;
+    color: black;
+  }
+  input[type=number], input[type=text] {
+    width: 50px;
+  }
+  table {
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+  td, th {
+    border: 1px solid black;
+    padding: 2px 4px;
+    text-align: center;
+  }
+  #graphTable td {
+    cursor: pointer;
+  }
+  .selected {
+    outline: 2px solid black;
+  }
+</style>
+</head>
+<body>
+
+<h1>Dijkstra's Algorithm Interactive Demonstration</h1>
+
+<div>
+  <h2>1. Define Graph</h2>
+  <p>
+    Number of nodes (1 to 26):
+    <input type="number" id="nodeCount" min="1" max="26" value="5" />
+    <button id="createGraphBtn">Create Graph</button>
+  </p>
+  <p>
+    Add or edit edges by clicking the cells in the adjacency matrix below.<br/>
+    Click a cell to edit weight (empty means no edge).<br/>
+    Directed edges only (from row node to column node).
+  </p>
+  <div id="graphContainer"></div>
+</div>
+
+<hr/>
+
+<div>
+  <h2>2. Choose Start Node</h2>
+  <select id="startNodeSelect" disabled>
+    <option value="">-- Select Start Node --</option>
+  </select>
+  <button id="initializeBtn" disabled>Initialize Dijkstra</button>
+</div>
+
+<hr/>
+
+<div>
+  <h2>3. Run Dijkstra's Algorithm Step-by-Step</h2>
+  <p>Current step status:</p>
+  <pre id="statusOutput">No algorithm initialized.</pre>
+  <button id="nextStepBtn" disabled>Next Step</button>
+  <button id="autoRunBtn" disabled>Auto Run</button>
+  <button id="pauseAutoBtn" disabled>Pause Auto Run</button>
+  <button id="resetAlgorithmBtn" disabled>Reset Algorithm</button>
+</div>
+
+<hr/>
+
+<div>
+  <h2>4. Explore All States</h2>
+  <p>
+    Current node set: <span id="currentNodeSet">N/A</span><br/>
+    <button id="showDistancesBtn" disabled>Show Distances Table</button>
+    <button id="showPredecessorsBtn" disabled>Show Predecessors Table</button>
+  </p>
+  <div id="tablesContainer"></div>
+</div>
+
+<hr/>
+
+<div>
+  <h2>5. Custom Query</h2>
+  <p>
+    Enter destination node to find path from start:<br/>
+    <input type="text" id="destinationInput" maxlength="1" style="width:30px;" disabled />
+    <button id="findPathBtn" disabled>Find Shortest Path</button>
+  </p>
+  <div id="pathOutput"></div>
+</div>
+
+<hr/>
+
+<div>
+  <h2>6. Controls</h2>
+  <button id="clearAllBtn">Clear All & Start Over</button>
+</div>
+
+
+<script>
+(function(){
+  // Variables for graph representation:
+  // Nodes labeled from 0 to n-1 corresponding to letters A-Z
+  let nodeCount = 0;
+  let adjacencyMatrix = []; // 2D array [nodeCount][nodeCount], numbers or null for no edge
+
+  // Algorithm state variables:
+  let distances = [];
+  let predecessors = [];
+  let visitedSet = new Set();
+  let unvisitedSet = new Set();
+  let startNode = null;
+
+  // For stepwise operation:
+  let algorithmInitialized = false;
+  let finished = false;
+
+  // Elements references
+  const nodeCountInput = document.getElementById('nodeCount');
+  const createGraphBtn = document.getElementById('createGraphBtn');
+  const graphContainer = document.getElementById('graphContainer');
+  const startNodeSelect = document.getElementById('startNodeSelect');
+  const initializeBtn = document.getElementById('initializeBtn');
+  const statusOutput = document.getElementById('statusOutput');
+  const nextStepBtn = document.getElementById('nextStepBtn');
+  const autoRunBtn = document.getElementById('autoRunBtn');
+  const pauseAutoBtn = document.getElementById('pauseAutoBtn');
+  const resetAlgorithmBtn = document.getElementById('resetAlgorithmBtn');
+  const currentNodeSetSpan = document.getElementById('currentNodeSet');
+  const showDistancesBtn = document.getElementById('showDistancesBtn');
+  const showPredecessorsBtn = document.getElementById('showPredecessorsBtn');
+  const tablesContainer = document.getElementById('tablesContainer');
+  const destinationInput = document.getElementById('destinationInput');
+  const findPathBtn = document.getElementById('findPathBtn');
+  const pathOutput = document.getElementById('pathOutput');
+  const clearAllBtn = document.getElementById('clearAllBtn');
+
+  // Auto run interval variable
+  let autoRunInterval = null;
+  const AUTO_RUN_SPEED_MS = 1000;
+
+  // Utility functions
+  function indexToNode(i){
+    return String.fromCharCode(65 + i);
+  }
+  function nodeToIndex(c){
+    return c.charCodeAt(0) - 65;
+  }
+
+  function createEmptyMatrix(size){
+    let mat = [];
+    for(let i=0;i<size;i++){
+      mat[i] = [];
+      for(let j=0;j<size;j++){
+        mat[i][j] = null;
+      }
+    }
+    return mat;
+  }
+
+  // Graph Input / Editing Functions
+
+  // Create matrix HTML table for adjacency matrix input
+  function createGraphTable(){
+    while(graphContainer.firstChild) graphContainer.removeChild(graphContainer.firstChild);
+    if(nodeCount < 1 || nodeCount > 26) return;
+
+    let table = document.createElement('table');
+    table.id = 'graphTable';
+
+    // Header row
+    let headerRow = document.createElement('tr');
+    headerRow.appendChild(document.createElement('th')); // empty corner cell
+    for(let j=0;j<nodeCount;j++){
+      let th = document.createElement('th');
+      th.textContent = indexToNode(j);
+      headerRow.appendChild(th);
+    }
+    table.appendChild(headerRow);
+
+    for(let i=0;i<nodeCount;i++){
+      let tr = document.createElement('tr');
+      let rowHeader = document.createElement('th');
+      rowHeader.textContent = indexToNode(i);
+      tr.appendChild(rowHeader);
+      for(let j=0;j<nodeCount;j++){
+        let td = document.createElement('td');
+        td.dataset.row = i;
+        td.dataset.col = j;
+        td.textContent = adjacencyMatrix[i][j] === null ? '' : adjacencyMatrix[i][j];
+        td.addEventListener('click', function(){
+          editEdgeWeight(i,j);
+        });
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+
+    graphContainer.appendChild(table);
+  }
+
+  // Popup prompt for editing weight on edge from i to j
+  function editEdgeWeight(i,j){
+    let currentVal = adjacencyMatrix[i][j];
+    let promptText = 'Enter weight for edge ' + indexToNode(i) + ' → ' + indexToNode(j) + ' (empty = no edge, ≥ 0):';
+    let inp = prompt(promptText, currentVal === null ? '' : currentVal);
+    if(inp === null) return; // cancelled
+    inp = inp.trim();
+    if(inp === ''){
+      adjacencyMatrix[i][j] = null;
+    }else{
+      let w = Number(inp);
+      if(Number.isNaN(w) || w < 0 || !Number.isFinite(w)){
+        alert('Invalid weight. Must be a non-negative finite number or empty.');
+        return;
+      }
+      adjacencyMatrix[i][j] = w;
+    }
+    createGraphTable();
+    resetAlgorithmState();
+  }
+
+
+  // Populate startNodeSelect options:
+  function populateStartNodeSelect(){
+    while(startNodeSelect.options.length > 1){
+      startNodeSelect.remove(1);
+    }
+    for(let i=0;i<nodeCount;i++){
+      let opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = indexToNode(i);
+      startNodeSelect.appendChild(opt);
+    }
+    startNodeSelect.disabled = false;
+  }
+
+  // Initialize Dijkstra's Algorithm state variables
+  function initializeAlgorithm(){
+    distances = [];
+    predecessors = [];
+    visitedSet = new Set();
+    unvisitedSet = new Set();
+
+    for(let i=0;i<nodeCount;i++){
+      distances[i] = Infinity;
+      predecessors[i] = null;
+      unvisitedSet.add(i);
+    }
+    distances[startNode] = 0;
+
+    algorithmInitialized = true;
+    finished = false;
+    updateStatusOutput();
+    nextStepBtn.disabled = false;
+    autoRunBtn.disabled = false;
+    pauseAutoBtn.disabled = true;
+    resetAlgorithmBtn.disabled = false;
+    showDistancesBtn.disabled = false;
+    showPredecessorsBtn.disabled = false;
+    destinationInput.disabled = false;
+    findPathBtn.disabled = false;
+    currentNodeSetSpan.textContent = formatVisitedUnvisited();
+    tablesContainer.innerHTML = '';
+    pathOutput.textContent = '';
+  }
+
+  // Format visited and unvisited nodes as strings
+  function formatVisitedUnvisited(){
+    let visitedArr = Array.from(visitedSet).map(i=>indexToNode(i)).sort();
+    let unvisitedArr = Array.from(unvisitedSet).map(i=>indexToNode(i)).sort();
+    return 'Visited: {' + visitedArr.join(', ') + '} | Unvisited: {' + unvisitedArr.join(', ') + '}';
+  }
+
+  // Update the status text area reflecting current algorithm status
+  function updateStatusOutput(){
+    if(!algorithmInitialized){
+      statusOutput.textContent = 'No algorithm initialized.';
+      return;
+    }
+    if(finished){
+      statusOutput.textContent = 'Algorithm finished.\n\n' + distancesSummary();
+      currentNodeSetSpan.textContent = formatVisitedUnvisited();
+      return;
+    }
+
+    let currentNode = getCurrentClosestUnvisitedNode();
+    let stepDetails = '';
+
+    if(currentNode === null){
+      stepDetails += '(No reachable unvisited nodes remain.) Algorithm finished.\n\n';
+      finished = true;
+      nextStepBtn.disabled = true;
+      autoRunBtn.disabled = true;
+      pauseAutoBtn.disabled = true;
+    } else {
+      stepDetails += 'Next node chosen to visit: ' + indexToNode(currentNode) + '\n';
+      stepDetails += 'Current distances:\n';
+      stepDetails += distancesSummary() + '\n';
+      stepDetails += '\nVisited nodes: ' + Array.from(visitedSet).map(i=>indexToNode(i)).join(', ') + '\n';
+      stepDetails += 'Unvisited nodes: ' + Array.from(unvisitedSet).map(i=>indexToNode(i)).join(', ');
+    }
+
+    statusOutput.textContent = stepDetails;
+    currentNodeSetSpan.textContent = formatVisitedUnvisited();
+  }
+
+  // Summary of distances array for output
+  function distancesSummary(){
+    let out = '';
+    for(let i=0;i<nodeCount;i++){
+      out += indexToNode(i) + ': ';
+      if(distances[i] === Infinity){
+        out += '∞';
+      } else {
+        out += distances[i];
+      }
+      if(predecessors[i] !== null){
+        out += ' (via ' + indexToNode(predecessors[i]) + ')';
+      }
+      out += '\n';
+    }
+    return out;
+  }
+
+  // Helper: get unvisited node with smallest current distance
+  function getCurrentClosestUnvisitedNode(){
+    let minDist = Infinity;
+    let minNode = null;
+    for(let node of unvisitedSet){
+      if(distances[node] < minDist){
+        minDist = distances[node];
+        minNode = node;
+      }
+    }
+    return minNode;
+  }
+
+  // Perform a single step of Dijkstra's Algorithm
+  function stepAlgorithm(){
+    if(!algorithmInitialized || finished) return;
+
+    let current = getCurrentClosestUnvisitedNode();
+
+    if(current === null){
+      finished = true;
+      updateStatusOutput();
+      return;
+    }
+
+    // Explore neighbors of current node updating tentative distances
+    for(let neighbor=0;neighbor<nodeCount;neighbor++){
+      let edgeWeight = adjacencyMatrix[current][neighbor];
+      if(edgeWeight !== null && unvisitedSet.has(neighbor)){
+        let newDist = distances[current] + edgeWeight;
+        if(newDist < distances[neighbor]){
+          distances[neighbor] = newDist;
+          predecessors[neighbor] = current;
+        }
+      }
+    }
+
+    visitedSet.add(current);
+    unvisitedSet.delete(current);
+
+    updateStatusOutput();
+  }
+
+
+  // Auto run handlers
+  function startAutoRun(){
+    if(autoRunInterval) return;
+    autoRunBtn.disabled = true;
+    pauseAutoBtn.disabled = false;
+    nextStepBtn.disabled = true;
+    autoRunInterval = setInterval(()=>{
+      if(finished){
+        stopAutoRun();
+        return;
+      }
+      stepAlgorithm();
+    }, AUTO_RUN_SPEED_MS);
+  }
+
+  function stopAutoRun(){
+    if(autoRunInterval){
+      clearInterval(autoRunInterval);
+      autoRunInterval = null;
+    }
+    autoRunBtn.disabled = false;
+    pauseAutoBtn.disabled = true;
+    nextStepBtn.disabled = false;
+  }
+
+
+  // Show tables for distances or predecessors
+  function generateTable(dataArray, title){
+    // dataArray is array length nodeCount
+    // title is string, 'Distances' or 'Predecessors'
+    let container = document.createElement('div');
+    container.tabIndex = 0;
+
+    let heading = document.createElement('h3');
+    heading.textContent = 'Table: ' + title;
+    container.appendChild(heading);
+
+    let table = document.createElement('table');
+    let headerRow = document.createElement('tr');
+    headerRow.appendChild(document.createElement('th'));
+    for(let i=0;i<nodeCount;i++){
+      let th = document.createElement('th');
+      th.textContent = indexToNode(i);
+      headerRow.appendChild(th);
+    }
+    table.appendChild(headerRow);
+
+    let tr = document.createElement('tr');
+    let firstCell = document.createElement('th');
+    firstCell.textContent = title;
+    tr.appendChild(firstCell);
+
+    for(let i=0;i<nodeCount;i++){
+      let td = document.createElement('td');
+      let val = dataArray[i];
+      if(title === 'Distances'){
+        td.textContent = val === Infinity ? '∞' : val;
+      } else if(title === 'Predecessors'){
+        td.textContent = val === null ? '-' : indexToNode(val);
+      }
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+    container.appendChild(table);
+    return container;
+  }
+
+  // Find and display shortest path from startNode to destination node
+  function findPathToTarget(destIndex){
+    if(!algorithmInitialized){
+      pathOutput.textContent = 'Algorithm not initialized.';
+      return;
+    }
+    if(destIndex < 0 || destIndex >= nodeCount){
+      pathOutput.textContent = 'Invalid destination node.';
+      return;
+    }
+    if(distances[destIndex] === Infinity){
+      pathOutput.textContent = 'Destination node ' + indexToNode(destIndex) + ' is unreachable from start node ' + indexToNode(startNode) + '.';
+      return;
+    }
+
+    // Reconstruct path backward from destination
+    let path = [];
+    let current = destIndex;
+    while(current !== null){
+      path.push(indexToNode(current));
+      current = predecessors[current];
+    }
+    path.reverse();
+
+    let outputText = 'Shortest path from ' + indexToNode(startNode) + ' to ' + indexToNode(destIndex) + ':\n';
+    outputText += path.join(' → ') + '\n';
+    outputText += 'Total cost: ' + distances[destIndex];
+    pathOutput.textContent = outputText;
+  }
+
+  // Reset algorithm and UI
+  function resetAlgorithmState(){
+    algorithmInitialized = false;
+    finished = false;
+
+    distances = [];
+    predecessors = [];
+    visitedSet.clear();
+    unvisitedSet.clear();
+    startNode = null;
+
+    startNodeSelect.value = "";
+    startNodeSelect.disabled = nodeCount === 0;
+    initializeBtn.disabled = true;
+
+    statusOutput.textContent = 'No algorithm initialized.';
+    nextStepBtn.disabled = true;
+    autoRunBtn.disabled = true;
+    pauseAutoBtn.disabled = true;
+    resetAlgorithmBtn.disabled = true;
+    showDistancesBtn.disabled = true;
+    showPredecessorsBtn.disabled = true;
+    currentNodeSetSpan.textContent = 'N/A';
+    tablesContainer.innerHTML = '';
+    destinationInput.value = '';
+    destinationInput.disabled = true;
+    findPathBtn.disabled = true;
+    pathOutput.textContent = '';
+    stopAutoRun();
+  }
+
+  // Clear graph and all states from scratch
+  function clearAll(){
+    nodeCount = 0;
+    adjacencyMatrix = [];
+    graphContainer.innerHTML = '';
+    nodeCountInput.value = 5;
+    startNodeSelect.innerHTML = '<option value="">-- Select Start Node --</option>';
+    startNodeSelect.disabled = true;
+    resetAlgorithmState();
+  }
+
+  // --- Event listeners ---
+
+  createGraphBtn.addEventListener('click', ()=>{
+    let val = Number(nodeCountInput.value);
+    if(!Number.isInteger(val) || val < 1 || val > 26){
+      alert('Please enter an integer node count between 1 and 26.');
+      return;
+    }
+    nodeCount = val;
+    adjacencyMatrix = createEmptyMatrix(nodeCount);
+    createGraphTable();
+    populateStartNodeSelect();
+    resetAlgorithmState();
+  });
+
+  startNodeSelect.addEventListener('change', ()=>{
+    let val = startNodeSelect.value;
+    if(val === ''){
+      initializeBtn.disabled = true;
+      startNode = null;
+    } else {
+      initializeBtn.disabled = false;
+      startNode = Number(val);
+    }
+  });
+
+  initializeBtn.addEventListener('click', ()=>{
+    if(startNode === null){
+      alert('Please select a start node to initialize.');
+      return;
+    }
+    initializeAlgorithm();
+  });
+
+  nextStepBtn.addEventListener('click', ()=>{
+    stepAlgorithm();
+  });
+
+  autoRunBtn.addEventListener('click', ()=>{
+    startAutoRun();
+  });
+
+  pauseAutoBtn.addEventListener('click', ()=>{
+    stopAutoRun();
+  });
+
+  resetAlgorithmBtn.addEventListener('click', ()=>{
+    resetAlgorithmState();
+  });
+
+  showDistancesBtn.addEventListener('click', ()=>{
+    if(!algorithmInitialized){
+      alert('Algorithm not initialized.');
+      return;
+    }
+    tablesContainer.innerHTML = '';
+    let distancesTable = generateTable(distances, 'Distances');
+    tablesContainer.appendChild(distancesTable);
+  });
+
+  showPredecessorsBtn.addEventListener('click', ()=>{
+    if(!algorithmInitialized){
+      alert('Algorithm not initialized.');
+      return;
+    }
+    tablesContainer.innerHTML = '';
+    let predecessorsTable = generateTable(predecessors, 'Predecessors');
+    tablesContainer.appendChild(predecessorsTable);
+  });
+
+  findPathBtn.addEventListener('click', ()=>{
+    if(!algorithmInitialized){
+      alert('Algorithm not initialized.');
+      return;
+    }
+    let val = destinationInput.value.trim().toUpperCase();
+    if(val.length !== 1 || val < 'A' || val >= String.fromCharCode(65 + nodeCount)){
+      alert('Please enter a valid destination node letter (A-' + indexToNode(nodeCount - 1) + ').');
+      return;
+    }
+    let destIdx = nodeToIndex(val);
+    findPathToTarget(destIdx);
+  });
+
+  clearAllBtn.addEventListener('click', ()=>{
+    if(confirm('Clear all data and start over?')){
+      clearAll();
+    }
+  });
+
+  // On load init
+  clearAll();
+  nodeCountInput.value = '5';
+
+})();
+</script>
+
+</body>
+</html>

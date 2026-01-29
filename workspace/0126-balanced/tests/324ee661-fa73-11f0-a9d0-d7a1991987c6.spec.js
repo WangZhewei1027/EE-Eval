@@ -122,8 +122,8 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
       // - output "Inserted successfully"
       // - table updated with new row
       // - input cleared after execution
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors1 = [];
+      const pageErrors1 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -131,7 +131,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
         pageErrors.push(err);
       });
 
-      const sql = new SqlPage(page);
+      const sql1 = new SqlPage(page);
       await sql.goto();
 
       // Use INSERT format compatible with the page's parser:
@@ -143,7 +143,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
 
       // Table should now have one row containing the inserted data (note: values are uppercased by the script)
       expect(await sql.getRowCount()).toBe(1);
-      const rows = await sql.getRowsData();
+      const rows1 = await sql.getRowsData();
       expect(rows[0].id).toBe('1');
       // Name is uppercased because executeCommand uppercases the entire command
       expect(rows[0].name.toUpperCase()).toBe(rows[0].name);
@@ -159,8 +159,8 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
 
     test('SELECT displays JSON representation of the database', async ({ page }) => {
       // Validate SELECT returns JSON of database (S1_CommandExecuted)
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors2 = [];
+      const pageErrors2 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -168,7 +168,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
         pageErrors.push(err);
       });
 
-      const sql = new SqlPage(page);
+      const sql2 = new SqlPage(page);
       await sql.goto();
 
       // Insert two rows first to have data to select
@@ -201,8 +201,8 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
       // Validate DELETE transition to S1_CommandExecuted:
       // - output "Deleted successfully"
       // - table row removed
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors3 = [];
+      const pageErrors3 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -210,7 +210,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
         pageErrors.push(err);
       });
 
-      const sql = new SqlPage(page);
+      const sql3 = new SqlPage(page);
       await sql.goto();
 
       // Insert then delete
@@ -225,7 +225,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
 
       // Confirm that id 4 is no longer present in the table rows
       const rowsData = await sql.getRowsData();
-      const ids = rowsData.map((r) => r.id);
+      const ids1 = rowsData.map((r) => r.id);
       expect(ids).not.toContain('4');
 
       // No runtime errors
@@ -237,8 +237,8 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
   test.describe('Error scenarios (S2_Error)', () => {
     test('Invalid INSERT produces Error: Invalid INSERT command', async ({ page }) => {
       // Edge case: malformed or non-numeric id/age should trigger invalid INSERT error
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors4 = [];
+      const pageErrors4 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -246,7 +246,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
         pageErrors.push(err);
       });
 
-      const sql = new SqlPage(page);
+      const sql4 = new SqlPage(page);
       await sql.goto();
 
       // Non-numeric id and invalid age should cause error
@@ -264,8 +264,8 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
 
     test('DELETE for non-existent ID produces Error: ID not found', async ({ page }) => {
       // Attempt to delete an ID that isn't in database
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors5 = [];
+      const pageErrors5 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -273,7 +273,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
         pageErrors.push(err);
       });
 
-      const sql = new SqlPage(page);
+      const sql5 = new SqlPage(page);
       await sql.goto();
 
       // Ensure database is empty
@@ -291,8 +291,8 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
 
     test('Unsupported command produces Error: Unsupported command', async ({ page }) => {
       // Commands other than INSERT/SELECT/DELETE should trigger unsupported command error
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors6 = [];
+      const pageErrors6 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -300,7 +300,7 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
         pageErrors.push(err);
       });
 
-      const sql = new SqlPage(page);
+      const sql6 = new SqlPage(page);
       await sql.goto();
 
       await sql.execute('UPDATE table SET name = \'X\' WHERE id = 1');
@@ -315,12 +315,12 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
 
   test.describe('Additional edge cases and invariants', () => {
     test('Input is cleared after every execution (success and error cases)', async ({ page }) => {
-      const sql = new SqlPage(page);
+      const sql7 = new SqlPage(page);
       await sql.goto();
 
       // Attach listeners to capture runtime errors if any
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors7 = [];
+      const pageErrors7 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });
@@ -346,12 +346,12 @@ test.describe('SQL Simulation FSM - states and transitions', () => {
     });
 
     test('Multiple operations maintain consistent database state', async ({ page }) => {
-      const sql = new SqlPage(page);
+      const sql8 = new SqlPage(page);
       await sql.goto();
 
       // Clear any stray listeners
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors8 = [];
+      const pageErrors8 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg);
       });

@@ -89,13 +89,13 @@ test.describe('DFS Visualization FSM - 63b17551-fa74-11f0-bb9a-db7e6ecdeeaa', ()
       // Wait for the first dfsStep to run (animationSpeed = 600ms). Allow generous timeout to avoid flakiness.
       // After first step, Node A should become 'current' (setNodeState overwrites 'start').
       await page.waitForFunction(() => {
-        const node = Array.from(document.querySelectorAll('#graph g')).find(g => g.dataset.id === 'A');
+        const node1 = Array.from(document.querySelectorAll('#graph g')).find(g => g.dataset.id === 'A');
         return node && node.classList.contains('current');
       }, { timeout: 4000 });
 
       // Assert that Node A is now 'current'
       const nodeAIsCurrent = await page.evaluate(() => {
-        const node = Array.from(document.querySelectorAll('#graph g')).find(g => g.dataset.id === 'A');
+        const node2 = Array.from(document.querySelectorAll('#graph g')).find(g => g.dataset.id === 'A');
         return !!(node && node.classList.contains('current'));
       });
       expect(nodeAIsCurrent, 'Node A should become "current" during animation').toBe(true);

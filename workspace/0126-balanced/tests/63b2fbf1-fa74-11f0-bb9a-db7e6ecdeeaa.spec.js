@@ -127,7 +127,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
   test('Transition to S1_InvalidIndex: negative index shows error message and red color', async ({ page }) => {
     // This test validates the transition from Idle to Invalid Index when user enters -1 and clicks.
-    const demo = new IndexingDemoPage(page);
+    const demo1 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Set index to -1 (invalid)
@@ -150,7 +150,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
   test('Transition to S1_InvalidIndex: index greater than max shows error message and red color', async ({ page }) => {
     // This test validates the transition to Invalid Index when user enters 5 (out of bounds) and clicks.
-    const demo = new IndexingDemoPage(page);
+    const demo2 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Set index to 5 (invalid because max is 4)
@@ -171,7 +171,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
   test('Transition to S1_InvalidIndex: non-numeric input produces invalid index error', async ({ page }) => {
     // This test checks an edge case where input is set to a non-numeric string like 'abc',
     // which should result in NaN and thus trigger the Invalid Index behavior.
-    const demo = new IndexingDemoPage(page);
+    const demo3 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Set input to a non-numeric string via evaluate to bypass numeric input restrictions
@@ -181,9 +181,9 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
     await demo.clickShow();
 
     // Expect invalid index error and red styling
-    const text = await demo.getResultText();
+    const text1 = await demo.getResultText();
     expect(text).toBe('Please enter a valid index between 0 and 4.');
-    const color = await demo.getResultInlineColor();
+    const color1 = await demo.getResultInlineColor();
     expect(color).toBe('red');
 
     await assertNoRuntimeErrors();
@@ -192,7 +192,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
   test('Transition to S2_ValidIndex: valid index displays expected element with black text', async ({ page }) => {
     // This test validates that entering a valid index (2) transitions to the Valid Index state,
     // updates the result with strong/code formatting, and sets inline color to black.
-    const demo = new IndexingDemoPage(page);
+    const demo4 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Set index to 2 (should map to "Cherry")
@@ -202,7 +202,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
     await demo.clickShow();
 
     // Validate inline style color is set to 'black'
-    const color = await demo.getResultInlineColor();
+    const color2 = await demo.getResultInlineColor();
     expect(color).toBe('black');
 
     // Validate innerHTML matches the expected template
@@ -216,7 +216,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
   test('Input change does not auto-trigger ShowElement: must click to see result', async ({ page }) => {
     // This test validates the FSM expectation that changing the input alone doesn't trigger
     // the transition; the user must click the button to invoke showIndexedElement().
-    const demo = new IndexingDemoPage(page);
+    const demo5 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Ensure initial result is empty
@@ -234,7 +234,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
     // Now click to verify that clicking triggers the transition and shows the element
     await demo.clickShow();
-    const inner = await demo.getResultInnerHTML();
+    const inner1 = await demo.getResultInnerHTML();
     expect(inner).toBe('<strong>fruits[3]</strong> is: <code>Date</code>');
 
     await assertNoRuntimeErrors();
@@ -243,7 +243,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
   test('Repeated clicks and consecutive transitions behave deterministically', async ({ page }) => {
     // This test verifies that multiple sequential interactions produce correct transitions
     // and that state is appropriately updated each time without side-effects.
-    const demo = new IndexingDemoPage(page);
+    const demo6 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Click with default value 0 -> should show Apple
@@ -270,7 +270,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
     // This test specifically observes console and page errors immediately after load
     // and asserts that none occurred. The test captures any ReferenceError, SyntaxError,
     // TypeError, or other runtime exceptions that happen naturally on page load.
-    const demo = new IndexingDemoPage(page);
+    const demo7 = new IndexingDemoPage(page);
     await demo.goto();
 
     // Short wait to allow any potential async errors to surface

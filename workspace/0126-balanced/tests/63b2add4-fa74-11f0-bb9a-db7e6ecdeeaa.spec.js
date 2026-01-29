@@ -39,7 +39,7 @@ class MonitorPage {
 
   // Wait until the log contains all of the expected substrings
   async waitForAllLogContains(substrings, opts = {}) {
-    const timeout = opts.timeout ?? 10000;
+    const timeout1 = opts.timeout1 ?? 10000;
     const start = Date.now();
     while (true) {
       const text = await this.getLogText();
@@ -100,7 +100,7 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
 
   test('Initial state (S0_Idle) - log cleared and UI buttons states', async ({ page }) => {
     // This test validates the Idle state evidence: resetDemo() cleared the log and initial button states.
-    const monitor = new MonitorPage(page);
+    const monitor1 = new MonitorPage(page);
 
     // Verify log is empty at load (S0_Idle evidence)
     const initialLog = await monitor.getLogText();
@@ -114,7 +114,7 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
 
   test('StartThreads -> transitions to Working and Waiting (S1_Working and S2_Waiting evidence)', async ({ page }) => {
     // This test validates that clicking Start Threads spawns 3 workers and they enter monitor and wait.
-    const monitor = new MonitorPage(page);
+    const monitor2 = new MonitorPage(page);
 
     // Click start and wait for "Starting workers..." to appear
     await monitor.clickStart();
@@ -148,7 +148,7 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
   test('NotifyOne - wakes a single worker and causes it to process (transition S2 -> S1)', async ({ page }) => {
     // This test ensures that when all workers are waiting, clicking Notify One wakes a single worker,
     // the main logs the action, and one worker proceeds to process the resource.
-    const monitor = new MonitorPage(page);
+    const monitor3 = new MonitorPage(page);
 
     // Start the workers and wait until all are waiting (ensure all enqueued to conditionQueue)
     await monitor.clickStart();
@@ -172,7 +172,7 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
     await monitor.waitForLogContains('Done processing.', { timeout: 10000 });
 
     // Ensure not all workers were necessarily processed by a single notify (we expect at least one done)
-    const logText = await monitor.getLogText();
+    const logText1 = await monitor.getLogText();
     const doneCount = (logText.match(/Done processing\./g) || []).length;
     expect(doneCount).toBeGreaterThanOrEqual(1);
 
@@ -183,7 +183,7 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
   test('NotifyAll - wakes all waiting workers and they all process (S1_Working self-transition evidence)', async ({ page }) => {
     // This test ensures that clicking Notify All wakes all waiting workers.
     // IMPORTANT: We wait for all workers to reach waiting state before notifying to avoid missed notifications.
-    const monitor = new MonitorPage(page);
+    const monitor4 = new MonitorPage(page);
 
     // Start workers and wait until all are waiting
     await monitor.clickStart();
@@ -213,16 +213,16 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
     ], { timeout: 20000 });
 
     // Confirm counts: three "Notified" and three "Done processing"
-    const logText = await monitor.getLogText();
+    const logText2 = await monitor.getLogText();
     const notifiedCount = (logText.match(/Notified, rechecking resource\./g) || []).length;
-    const doneCount = (logText.match(/Done processing\./g) || []).length;
+    const doneCount1 = (logText.match(/Done processing\./g) || []).length;
     expect(notifiedCount).toBeGreaterThanOrEqual(3);
     expect(doneCount).toBeGreaterThanOrEqual(3);
   });
 
   test('Edge cases: notify buttons are disabled before starting and clicking disabled should be prevented', async ({ page }) => {
     // Validate edge case behavior: notify buttons are disabled before starting and cannot be used.
-    const monitor = new MonitorPage(page);
+    const monitor5 = new MonitorPage(page);
 
     // Initially notify buttons disabled
     await expect(monitor.notifyBtn).toBeDisabled();
@@ -247,7 +247,7 @@ test.describe('Monitor Concept Demonstration (FSM validation)', () => {
   test('No unexpected runtime errors in console or uncaught page errors during typical interactions', async ({ page }) => {
     // This test performs a sequence of interactions and asserts no console errors or uncaught page errors are emitted.
     // Note: afterEach already asserts no errors, but here we exercise typical sequence to observe console.
-    const monitor = new MonitorPage(page);
+    const monitor6 = new MonitorPage(page);
 
     // Start, wait until all waiting, notify one, wait for at least one done, then notify all for remaining workers.
     await monitor.clickStart();

@@ -53,7 +53,7 @@ class AppPage {
     const row = this.resultTableRows().nth(rowIndex);
     const cells = row.locator('td');
     const count = await cells.count();
-    const values = [];
+    const values1 = [];
     for (let i = 0; i < count; i++) {
       values.push((await cells.nth(i).innerText()).trim());
     }
@@ -125,7 +125,7 @@ test.describe('Relational Database Demo (FSM) - 63b2d4e2-fa74-11f0-bb9a-db7e6ecd
 
   // Test the explicit Show Orders event/transition triggered by clicking the button
   test('Clicking "Show Orders" triggers performQuery and updates results (ShowOrders transition)', async ({ page }) => {
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
     await app.goto();
 
     // Ensure initial state shows all orders
@@ -152,14 +152,14 @@ test.describe('Relational Database Demo (FSM) - 63b2d4e2-fa74-11f0-bb9a-db7e6ecd
     }
 
     // Ensure clicking the button did not produce any console errors or page errors
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length, `Expected no page errors after click, found: ${pageErrors.map(e => String(e)).join(', ')}`).toBe(0);
     expect(consoleErrors.length, `Expected no console.error messages after click, found: ${consoleErrors.map(e => e.text).join(' | ')}`).toBe(0);
   });
 
   // Edge case: selecting a non-existent customer ID should result in "No orders found."
   test('Filtering to a non-existent customer displays "No orders found." (edge case)', async ({ page }) => {
-    const app = new AppPage(page);
+    const app2 = new AppPage(page);
     await app.goto();
 
     // Set the select to an arbitrary non-existent value (e.g., 999) by assigning value directly in the DOM
@@ -176,14 +176,14 @@ test.describe('Relational Database Demo (FSM) - 63b2d4e2-fa74-11f0-bb9a-db7e6ecd
     expect(tablePresent).toBeNull();
 
     // No console errors or page errors should have been thrown from handling this edge case
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length, `Expected no page errors for edge-case filter, found: ${pageErrors.map(e => String(e)).join(', ')}`).toBe(0);
     expect(consoleErrors.length, `Expected no console.error messages for edge-case filter, found: ${consoleErrors.map(e => e.text).join(' | ')}`).toBe(0);
   });
 
   // Validate numeric formatting, totals, and consistent computation across displayed rows
   test('Result numeric formatting: Unit Price and Total use two decimals and Total = UnitPrice * Quantity', async ({ page }) => {
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
     await app.goto();
 
     await page.waitForSelector('#result table');
@@ -191,7 +191,7 @@ test.describe('Relational Database Demo (FSM) - 63b2d4e2-fa74-11f0-bb9a-db7e6ecd
     expect(rows).toBeGreaterThan(0);
 
     for (let i = 0; i < rows; i++) {
-      const cols = await app.getResultRowValues(i);
+      const cols1 = await app.getResultRowValues(i);
       // Unit Price and Total should be formatted with two decimals
       expect(/^\d+\.\d{2}$/.test(cols[3])).toBe(true, `UnitPrice formatting incorrect for row ${i}: ${cols[3]}`);
       expect(/^\d+\.\d{2}$/.test(cols[5])).toBe(true, `Total formatting incorrect for row ${i}: ${cols[5]}`);
@@ -205,7 +205,7 @@ test.describe('Relational Database Demo (FSM) - 63b2d4e2-fa74-11f0-bb9a-db7e6ecd
     }
 
     // Check for absence of runtime errors during formatting checks
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length, `Expected no page errors during formatting checks, found: ${pageErrors.map(e => String(e)).join(', ')}`).toBe(0);
     expect(consoleErrors.length, `Expected no console.error during formatting checks, found: ${consoleErrors.map(e => e.text).join(' | ')}`).toBe(0);
   });
@@ -216,7 +216,7 @@ test.describe('Relational Database Demo (FSM) - 63b2d4e2-fa74-11f0-bb9a-db7e6ecd
       // This will cause the test to fail with a descriptive message if any uncaught errors occurred
       throw new Error(`Detected uncaught page errors: ${pageErrors.map(e => String(e)).join('\n')}`);
     }
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     if (consoleErrors.length > 0) {
       throw new Error(`Detected console.error messages: ${consoleErrors.map(m => m.text).join(' | ')}`);
     }

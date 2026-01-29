@@ -42,8 +42,8 @@ class RepoPage {
 
   // Click and expect an alert with specific text (will accept it)
   async clickAndExpectAlert(selector) {
-    const p = this.page;
-    const dialogPromise = new Promise(resolve => {
+    const p1 = this.page;
+    const dialogPromise1 = new Promise(resolve => {
       p.once('dialog', async dialog => {
         resolve({ type: dialog.type(), message: dialog.message() });
         await dialog.accept();
@@ -78,26 +78,26 @@ class RepoPage {
 
   async makeCommitWithMessage(message) {
     // supply commit message via prompt
-    const dialogPromise = this.clickAndRespondToPrompt(this.selectors.makeCommit, message);
+    const dialogPromise2 = this.clickAndRespondToPrompt(this.selectors.makeCommit, message);
     const result = await dialogPromise;
     return result;
   }
 
   async createBranchWithName(name) {
-    const dialogPromise = this.clickAndRespondToPrompt(this.selectors.createBranch, name);
-    const result = await dialogPromise;
+    const dialogPromise3 = this.clickAndRespondToPrompt(this.selectors.createBranch, name);
+    const result1 = await dialogPromise;
     return result;
   }
 
   async switchBranchTo(name) {
-    const dialogPromise = this.clickAndRespondToPrompt(this.selectors.switchBranch, name);
-    const result = await dialogPromise;
+    const dialogPromise4 = this.clickAndRespondToPrompt(this.selectors.switchBranch, name);
+    const result2 = await dialogPromise;
     return result;
   }
 
   async mergeBranchNamed(name) {
-    const dialogPromise = this.clickAndRespondToPrompt(this.selectors.mergeBranch, name);
-    const result = await dialogPromise;
+    const dialogPromise5 = this.clickAndRespondToPrompt(this.selectors.mergeBranch, name);
+    const result3 = await dialogPromise;
     return result;
   }
 
@@ -416,7 +416,7 @@ test.describe('Git Concepts Demo - FSM and UI interactions', () => {
 
     // Unstage when nothing staged -> should alert 'No changes staged to unstage!'
     // Ensure staging area is empty
-    const state = await repoPage.getRepoState();
+    const state1 = await repoPage.getRepoState();
     expect(state.stagingCount).toBe(0);
 
     const unstageDialog = await repoPage.clickAndExpectAlert("button[onclick='unstageFile()']");

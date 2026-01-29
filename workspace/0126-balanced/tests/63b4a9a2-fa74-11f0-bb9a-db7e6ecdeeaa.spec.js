@@ -118,7 +118,7 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
 
   test('GenerateKeys event transitions to Keys Generated (S1) and Ready to Encrypt (S2)', async ({ page }) => {
     // This test validates the GenerateKeys event and subsequent state changes.
-    const app = new AsymmetricCryptoPage(page);
+    const app1 = new AsymmetricCryptoPage(page);
 
     // Generate keys and assert resulting UI changes (keys present, encrypt enabled)
     await app.generateKeys({ timeout: 30000 });
@@ -135,13 +135,13 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     await expect(app.keysInfo).toHaveText('RSA 2048-bit key pair generated successfully.');
 
     // Ensure no unexpected page errors (or if present, they are runtime errors per instructions)
-    const pageErrorsOk = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
+    const pageErrorsOk1 = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
     expect(pageErrorsOk).toBeTruthy();
   });
 
   test('EncryptText event transitions to Encrypted (S3) and produces ciphertext', async ({ page }) => {
     // This test covers the full flow: generate -> set plaintext -> encrypt -> ciphertext appears.
-    const app = new AsymmetricCryptoPage(page);
+    const app2 = new AsymmetricCryptoPage(page);
     const message = 'Hello Playwright RSA!';
 
     // Generate keys first
@@ -159,14 +159,14 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     await expect(app.decryptBtn).toBeEnabled();
 
     // Ensure no fatal page errors occurred (or acceptable runtime errors)
-    const pageErrorsOk = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
+    const pageErrorsOk2 = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
     expect(pageErrorsOk).toBeTruthy();
   });
 
   test('DecryptText event transitions to Decrypted (S4) and recovers plaintext', async ({ page }) => {
     // This test validates encryption followed by decryption returns original plaintext.
-    const app = new AsymmetricCryptoPage(page);
-    const message = 'The quick brown fox jumps over the lazy dog. 0123456789';
+    const app3 = new AsymmetricCryptoPage(page);
+    const message1 = 'The quick brown fox jumps over the lazy dog. 0123456789';
 
     // Generate keys
     await app.generateKeys({ timeout: 30000 });
@@ -182,14 +182,14 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     expect(decrypted).toBe(message);
 
     // Ensure no fatal page errors occurred (or acceptable runtime errors)
-    const pageErrorsOk = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
+    const pageErrorsOk3 = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
     expect(pageErrorsOk).toBeTruthy();
   });
 
   test('Edge case: Decryption with invalid ciphertext shows error dialog', async ({ page }) => {
     // This test ensures that when ciphertext is tampered with, decryption fails and an alert is shown.
-    const app = new AsymmetricCryptoPage(page);
-    const message = 'Edge case test message';
+    const app4 = new AsymmetricCryptoPage(page);
+    const message2 = 'Edge case test message2';
 
     // Generate keys and encrypt to enable decrypt button
     await app.generateKeys({ timeout: 30000 });
@@ -215,7 +215,7 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     expect(dialogMessage.toLowerCase()).toContain('decryption failed');
 
     // Ensure page errors are acceptable
-    const pageErrorsOk = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
+    const pageErrorsOk4 = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
     expect(pageErrorsOk).toBeTruthy();
   });
 
@@ -223,7 +223,7 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     // This test explores encrypting an empty string. The implementation should handle this
     // without throwing uncaught exceptions. We accept either a produced ciphertext (non-empty)
     // or no change, but monitor for uncaught errors.
-    const app = new AsymmetricCryptoPage(page);
+    const app5 = new AsymmetricCryptoPage(page);
 
     // Generate keys
     await app.generateKeys({ timeout: 30000 });
@@ -238,7 +238,7 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     await page.waitForTimeout(1000);
 
     // ciphertext might be empty or non-empty depending on the crypto behavior; assert no uncaught errors
-    const pageErrorsOk = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
+    const pageErrorsOk5 = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
     expect(pageErrorsOk).toBeTruthy();
 
     // If ciphertext non-empty then decrypt button should be enabled; otherwise decrypt remains disabled
@@ -254,8 +254,8 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
   test('Observes console messages and page errors during full flow (generate->encrypt->decrypt)', async ({ page }) => {
     // This test runs the full happy path and then asserts that any console errors observed
     // are either absent or are runtime errors captured naturally (per instruction).
-    const app = new AsymmetricCryptoPage(page);
-    const message = 'Console/Errors observation test';
+    const app6 = new AsymmetricCryptoPage(page);
+    const message3 = 'Console/Errors observation test';
 
     // Generate -> Encrypt -> Decrypt
     await app.generateKeys({ timeout: 30000 });
@@ -271,7 +271,7 @@ test.describe('Asymmetric Cryptography Demo - FSM states and transitions', () =>
     }
 
     // Page errors: either none OR contain runtime errors
-    const pageErrorsOk = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
+    const pageErrorsOk6 = pageErrors.length === 0 || pageErrors.some(e => /ReferenceError|TypeError|SyntaxError/.test(String(e)));
     expect(pageErrorsOk).toBeTruthy();
   });
 });

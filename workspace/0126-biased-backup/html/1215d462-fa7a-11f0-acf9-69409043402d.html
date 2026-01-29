@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NoSQL Interactive Demo</title>
+<style>
+  /* Minimal styling: plain black text on white */
+  body {
+    font-family: monospace;
+    margin: 1em;
+    white-space: pre-wrap;
+  }
+  textarea {
+    width: 100%;
+    height: 4em;
+    font-family: monospace;
+  }
+  input, button, select {
+    font-family: monospace;
+    font-size: 1em;
+  }
+  label {
+    display: block;
+    margin-top: 0.5em;
+  }
+  fieldset {
+    margin-top: 1em;
+  }
+  #output {
+    margin-top: 1em;
+    border: 1px solid #000;
+    padding: 0.5em;
+    height: 8em;
+    overflow: auto;
+  }
+  #dbstate {
+    margin-top: 1em;
+    border: 1px solid #000;
+    padding: 0.5em;
+    height: 14em;
+    overflow: auto;
+    font-size: 0.9em;
+  }
+</style>
+</head>
+<body>
+<h1>NoSQL Interactive Demo</h1>
+<p>
+  This demo simulates an in-memory document-oriented NoSQL database with powerful interactive controls.
+  You can create collections, insert, update, delete, and query documents, define indexes, perform complex queries, and explore NoSQL concepts.
+</p>
+
+<fieldset>
+  <legend>Database Setup</legend>
+  <label>
+    Collection Name:
+    <input type="text" id="collectionName" />
+  </label>
+  <button id="createCollectionBtn">Create Collection</button>
+  <button id="deleteCollectionBtn">Delete Collection</button>
+  <div id="collectionsList"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Document Operations</legend>
+  <label>
+    Selected Collection:
+    <select id="collectionSelect"></select>
+  </label>
+  <label>
+    Insert/Update Document (JSON):
+    <textarea id="docInput" placeholder='e.g. {"_id": "abc123", "name": "John", "age": 32}'></textarea>
+  </label>
+  <button id="insertDocBtn">Insert Document</button>
+  <button id="updateDocBtn">Update Document by _id</button>
+  <button id="deleteDocBtn">Delete Document by _id</button>
+  <label>
+    Document _id for Update/Delete:
+    <input type="text" id="docIdInput" />
+  </label>
+</fieldset>
+
+<fieldset>
+  <legend>Query Interface</legend>
+  <p>Enter a JSON query object. Supports simple comparison with operators <code>$eq, $ne, $gt, $lt, $gte, $lte, $in, $nin</code> and logical operators <code>$and, $or, $not</code>.</p>
+  <textarea id="queryInput" placeholder='e.g. {"age": {"$gt": 25}}'></textarea>
+  <label>
+    Limit results:
+    <input type="number" id="queryLimit" min="0" value="0" />
+  </label>
+  <button id="runQueryBtn">Run Query</button>
+</fieldset>
+
+<fieldset>
+  <legend>Indexes</legend>
+  <p>Create indexes on fields to accelerate query simulation. (This demo doesn't execute real index acceleration but showcases management and effect on state.)</p>
+  <label>
+    Index Name:
+    <input type="text" id="indexNameInput" />
+  </label>
+  <label>
+    Collection for Index:
+    <select id="indexCollectionSelect"></select>
+  </label>
+  <label>
+    Field(s) (comma separated):
+    <input type="text" id="indexFieldsInput" placeholder="e.g. name,age" />
+  </label>
+  <button id="createIndexBtn">Create Index</button>
+  <label>
+    Select Index to Delete:
+    <select id="indexDeleteSelect"></select>
+  </label>
+  <button id="deleteIndexBtn">Delete Index</button>
+</fieldset>
+
+<fieldset>
+  <legend>Aggregation Operations</legend>
+  <p>Perform simple aggregation pipeline on selected collection. Supports <code>$match</code>, <code>$group</code>, <code>$sort</code>, <code>$limit</code>.</p>
+  <textarea id="aggPipelineInput" placeholder='Example pipeline JSON:
+[
+  {"$match": {"age": {"$gte": 20}}},
+  {"$group": {"_id": "$name", "total": {"$sum": 1}}},
+  {"$sort": {"total": -1}},
+  {"$limit": 5}
+]
+'></textarea>
+  <button id="runAggBtn">Run Aggregation</button>
+</fieldset>
+
+<fieldset>
+  <legend>Output</legend>
+  <div id="output"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Database State Snapshot</legend>
+  <small>Current collections, documents, and indexes (expanded view)</small>
+  <div id="dbstate"></div>
+</fieldset>
+
+<script>
+(() => {
+  // Internal DB structure
+  // { collections: { [colName]: { docs: Map(_id -> doc), indexes: { [idxName]: { fields: [fieldStrs] } } } } }
+  const db = { collections: {} };
+
+  // Helpers
+  function safeJSONparse(text) {
+    try {
+      return [JSON.parse(text), null];
+    } catch (e) {
+      return [null, e.message];
+    }
+  }
+  function deepCopy(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+  function isObject(o) {
+    return o !== null && typeof o === 'object' && !Array.isArray(o);
+  }
+  function getValueByPath(obj, path) {
+    // path: "field.subfield" or "$field"
+    if (typeof path !== 'string') return undefined;
+    if (path[0] === '$') path = path.slice(1);
+    const parts = path.split('.');
+    let val = obj;
+    for (const p of parts) {
+      if (val == null) return undefined;
+      val = val[p];
+    }
+    return val;
+  }
+
+  // Query operators implementation
+  // Returns true if doc matches query
+  function matchesQuery(doc, query) {
+    if (!isObject(query)) return false;
+    // Logical operators
+    if ('$and' in query) {
+      if (!Array.isArray(query['$and'])) return false;
+      return query['$and'].every(q => matchesQuery(doc, q));
+    }
+    if ('$or' in query) {
+      if (!Array.isArray(query['$or'])) return false;
+      return query['$or'].some(q => matchesQuery(doc, q));
+    }
+    if ('$not' in query) {
+      return !matchesQuery(doc, query['$not']);
+    }
+    // Field conditions
+    for (const [field, cond] of Object.entries(query)) {
+      if (field.startsWith('$')) continue; // skip unrecognized operators
+      const val = getValueByPath(doc, field);
+      if (isObject(cond)) {
+        // operator cases
+        for (const [op, opVal] of Object.entries(cond)) {
+          if (!matchesOperator(val, op, opVal)) return false;
+        }
+      } else {
+        // direct equality
+        if (!isEqual(val, cond)) return false;
+      }
+    }
+    return true;
+  }
+
+  function matchesOperator(value, operator, operand) {
+    switch (operator) {
+      case '$eq':
+        return isEqual(value, operand);
+      case '$ne':
+        return !isEqual(value, operand);
+      case '$gt':
+        return compare(value, operand) > 0;
+      case '$lt':
+        return compare(value, operand) < 0;
+      case '$gte':
+        return compare(value, operand) >= 0;
+      case '$lte':
+        return compare(value, operand) <= 0;
+      case '$in':
+        if (!Array.isArray(operand)) return false;
+        return operand.some(o => isEqual(value, o));
+      case '$nin':
+        if (!Array.isArray(operand)) return false;
+        return !operand.some(o => isEqual(value, o));
+      default:
+        return false;
+    }
+  }
+
+  // Compare two values: numbers or strings, else fallback
+  function compare(a, b) {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
+    if (a === b) return 0;
+    return 0;
+  }
+  // Deep equality for primitives, arrays, objects
+  function isEqual(a, b) {
+    if (a === b) return true;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!isEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    if (isObject(a) && isObject(b)) {
+      const aKeys = Object.keys(a);
+      const bKeys = Object.keys(b);
+      if (aKeys.length !== bKeys.length) return false;
+      for (const k of aKeys) {
+        if (!isEqual(a[k], b[k])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Aggregation pipeline runner (limited implementation)
+  function runAggregationPipeline(collection, pipeline) {
+    // collection: { docs: Map }
+    // pipeline: Array of stages objects
+    let docs = Array.from(collection.docs.values()).map(d => deepCopy(d));
+
+    for (const stage of pipeline) {
+      if (!isObject(stage)) throw 'Pipeline stages must be objects';
+      if ('$match' in stage) {
+        const query = stage['$match'];
+        docs = docs.filter(doc => matchesQuery(doc, query));
+      } else if ('$group' in stage) {
+        const groupSpec = stage['$group']; // {_id: "...", accumulations...}
+        if (!isObject(groupSpec)) throw '$group must be an object';
+        const idExpr = groupSpec._id;
+        if (idExpr === undefined) throw '$group must have _id field';
+
+        const groups = new Map();
+        for (const doc of docs) {
+          let groupId;
+          if (typeof idExpr === 'string' && idExpr[0] === '$') {
+            groupId = JSON.stringify(getValueByPath(doc, idExpr));
+          } else {
+            groupId = JSON.stringify(idExpr);
+          }
+          if (!groups.has(groupId)) {
+            groups.set(groupId, { _id: JSON.parse(groupId) });
+            for (const [k, v] of Object.entries(groupSpec)) {
+              if (k !== '_id') groups.get(groupId)[k] = 0;
+            }
+          }
+          const groupObj = groups.get(groupId);
+          for (const [field, expr] of Object.entries(groupSpec)) {
+            if (field === '_id') continue;
+            // Currently only support $sum with number or $sum: 1 for counting
+            if (isObject(expr) && '$sum' in expr) {
+              const sumVal = expr['$sum'];
+              if (typeof sumVal === 'number') {
+                groupObj[field] += sumVal;
+              } else if (sumVal === 1) {
+                groupObj[field] += 1;
+              } else if (typeof sumVal === 'string' && sumVal[0] === '$') {
+                const val = getValueByPath(doc, sumVal);
+                if (typeof val === 'number') groupObj[field] += val;
+              }
+            }
+            // Extend here for $avg, $max, $min if desired
+          }
+        }
+        docs = Array.from(groups.values());
+      } else if ('$sort' in stage) {
+        const sortSpec = stage['$sort'];
+        if (!isObject(sortSpec)) throw '$sort must be an object';
+        docs.sort((a, b) => {
+          for (const [field, dir] of Object.entries(sortSpec)) {
+            const va = getValueByPath(a, field);
+            const vb = getValueByPath(b, field);
+            const c = compare(va, vb);
+            if (c !== 0) return dir > 0 ? c : -c;
+          }
+          return 0;
+        });
+      } else if ('$limit' in stage) {
+        const limitCount = stage['$limit'];
+        if (typeof limitCount !== 'number' || limitCount < 0) throw '$limit must be a nonnegative integer';
+        docs = docs.slice(0, limitCount);
+      } else {
+        throw 'Unsupported pipeline stage: ' + Object.keys(stage)[0];
+      }
+    }
+    return docs;
+  }
+
+
+  // DOM Elements
+  const collectionNameInput = document.getElementById('collectionName');
+  const createCollectionBtn = document.getElementById('createCollectionBtn');
+  const deleteCollectionBtn = document.getElementById('deleteCollectionBtn');
+  const collectionsListDiv = document.getElementById('collectionsList');
+
+  const collectionSelect = document.getElementById('collectionSelect');
+  const docInput = document.getElementById('docInput');
+  const insertDocBtn = document.getElementById('insertDocBtn');
+  const updateDocBtn = document.getElementById('updateDocBtn');
+  const deleteDocBtn = document.getElementById('deleteDocBtn');
+  const docIdInput = document.getElementById('docIdInput');
+
+  const queryInput = document.getElementById('queryInput');
+  const queryLimitInput = document.getElementById('queryLimit');
+  const runQueryBtn = document.getElementById('runQueryBtn');
+
+  const indexNameInput = document.getElementById('indexNameInput');
+  const indexCollectionSelect = document.getElementById('indexCollectionSelect');
+  const indexFieldsInput = document.getElementById('indexFieldsInput');
+  const createIndexBtn = document.getElementById('createIndexBtn');
+  const indexDeleteSelect = document.getElementById('indexDeleteSelect');
+  const deleteIndexBtn = document.getElementById('deleteIndexBtn');
+
+  const aggPipelineInput = document.getElementById('aggPipelineInput');
+  const runAggBtn = document.getElementById('runAggBtn');
+
+  const outputDiv = document.getElementById('output');
+  const dbstateDiv = document.getElementById('dbstate');
+
+  // Update collections list area & selects
+  function refreshCollectionsUI() {
+    // List collections with doc counts and indexes count
+    const names = Object.keys(db.collections);
+    if (names.length === 0) {
+      collectionsListDiv.textContent = 'No collections created yet.';
+    } else {
+      const lines = names.map(name => {
+        const c = db.collections[name];
+        const docCount = c.docs.size;
+        const idxCount = Object.keys(c.indexes).length;
+        return '- ' + name + ' (' + docCount + ' docs, ' + idxCount + ' indexes)';
+      });
+      collectionsListDiv.textContent = lines.join('\n');
+    }
+    // Populate collectionSelect and indexCollectionSelect dropdowns
+    updateDropdown(collectionSelect, names);
+    updateDropdown(indexCollectionSelect, names);
+    refreshIndexesDeleteUI();
+  }
+
+  function updateDropdown(selectEl, items) {
+    const oldVal = selectEl.value;
+    selectEl.innerHTML = '';
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item;
+      opt.textContent = item;
+      selectEl.appendChild(opt);
+    }
+    if (items.includes(oldVal)) selectEl.value = oldVal;
+  }
+
+  // Document operations
+  function insertDocument() {
+    const colName = collectionSelect.value;
+    if (!colName) {
+      setOutput('Select a collection first to insert document.');
+      return;
+    }
+    const [doc, err] = safeJSONparse(docInput.value);
+    if (err) {
+      setOutput('JSON parse error: ' + err);
+      return;
+    }
+    if (!isObject(doc)) {
+      setOutput('Document must be a JSON object.');
+      return;
+    }
+    // Require _id field
+    if (!('_id' in doc)) {
+      setOutput('Document must contain an "_id" field.');
+      return;
+    }
+    const c = db.collections[colName];
+    if (c.docs.has(doc._id)) {
+      setOutput('Insert failed: Document with _id="' + doc._id + '" already exists.');
+      return;
+    }
+    c.docs.set(doc._id, deepCopy(doc));
+    setOutput('Inserted document with _id = ' + doc._id + ' into "' + colName + '".');
+    refreshDbState();
+  }
+  function updateDocument() {
+    const colName = collectionSelect.value;
+    if (!colName) {
+      setOutput('Select a collection first to update document.');
+      return;
+    }
+    const id = docIdInput.value.trim();
+    if (!id) {
+      setOutput('Provide the _id of the document to update.');
+      return;
+    }
+    const c = db.collections[colName];
+    if (!c.docs.has(id)) {
+      setOutput('No document with _id="' + id + '" found in collection.');
+      return;
+    }
+    const [doc, err] = safeJSONparse(docInput.value);
+    if (err) {
+      setOutput('JSON parse error: ' + err);
+      return;
+    }
+    if (!isObject(doc)) {
+      setOutput('Document must be a JSON object.');
+      return;
+    }
+    if (!('_id' in doc) || doc._id !== id) {
+      setOutput('Document JSON must include the same _id as provided.');
+      return;
+    }
+    c.docs.set(id, deepCopy(doc));
+    setOutput('Updated document with _id = ' + id + ' in "' + colName + '".');
+    refreshDbState();
+  }
+  function deleteDocument() {
+    const colName = collectionSelect.value;
+    if (!colName) {
+      setOutput('Select a collection first to delete document.');
+      return;
+    }
+    const id = docIdInput.value.trim();
+    if (!id) {
+      setOutput('Provide the _id of the document to delete.');
+      return;
+    }
+    const c = db.collections[colName];
+    if (!c.docs.has(id)) {
+      setOutput('No document with _id="' + id + '" found in collection.');
+      return;
+    }
+    c.docs.delete(id);
+    setOutput('Deleted document with _id = ' + id + ' from "' + colName + '".');
+    refreshDbState();
+  }
+
+  // Create Collection
+  function createCollection() {
+    const name = collectionNameInput.value.trim();
+    if (!name) {
+      setOutput('Collection name cannot be empty.');
+      return;
+    }
+    if (db.collections[name]) {
+      setOutput('Collection "' + name + '" already exists.');
+      return;
+    }
+    db.collections[name] = { docs: new Map(), indexes: {} };
+    setOutput('Collection "' + name + '" created.');
+    refreshCollectionsUI();
+    refreshDbState();
+  }
+  // Delete Collection
+  function deleteCollection() {
+    const name = collectionNameInput.value.trim();
+    if (!name) {
+      setOutput('Collection name cannot be empty.');
+      return;
+    }
+    if (!db.collections[name]) {
+      setOutput('Collection "' + name + '" does not exist.');
+      return;
+    }
+    if (!confirm('Are you sure you want to delete collection "' + name + '"? This will remove all documents and indexes.')) return;
+    delete db.collections[name];
+    setOutput('Collection "' + name + '" deleted.');
+    refreshCollectionsUI();
+    refreshDbState();
+  }
+
+  // Run Query
+  function runQuery() {
+    const colName = collectionSelect.value;
+    if (!colName) {
+      setOutput('Select a collection before running queries.');
+      return;
+    }
+    const c = db.collections[colName];
+    const [query, err] = safeJSONparse(queryInput.value.trim() || '{}');
+    if (err) {
+      setOutput('Query JSON parse error: ' + err);
+      return;
+    }
+    if (!isObject(query)) {
+      setOutput('Query must be a JSON object');
+      return;
+    }
+    let res = [];
+    try {
+      for (const doc of c.docs.values()) {
+        if (matchesQuery(doc, query)) res.push(deepCopy(doc));
+      }
+    } catch (e) {
+      setOutput('Error running query: ' + e);
+      return;
+    }
+    let limit = parseInt(queryLimitInput.value, 10);
+    if (isNaN(limit) || limit < 0) limit = 0;
+    if (limit > 0) res = res.slice(0, limit);
+    setOutput('Query results (' + res.length + ' documents):\n' + JSON.stringify(res, null, 2));
+  }
+
+  // Indexes
+  function createIndex() {
+    const idxName = indexNameInput.value.trim();
+    if (!idxName) {
+      setOutput('Index name cannot be empty.');
+      return;
+    }
+    const colName = indexCollectionSelect.value;
+    if (!colName) {
+      setOutput('Select collection to create index on.');
+      return;
+    }
+    const fieldsRaw = indexFieldsInput.value.trim();
+    if (!fieldsRaw) {
+      setOutput('Specify at least one field for the index.');
+      return;
+    }
+    const fields = fieldsRaw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    if (fields.length === 0) {
+      setOutput('Specify valid fields for the index.');
+      return;
+    }
+    const c = db.collections[colName];
+    if (c.indexes[idxName]) {
+      setOutput('Index with name "' + idxName + '" already exists in collection "' + colName + '".');
+      return;
+    }
+    c.indexes[idxName] = { fields: fields };
+    setOutput('Created index "' + idxName + '" on collection "' + colName + '" on fields: ' + fields.join(', '));
+    refreshIndexesDeleteUI();
+    refreshDbState();
+  }
+  function refreshIndexesDeleteUI() {
+    // Show all indexes from all collections as {colName}.{idxName} options
+    const opts = [];
+    for (const [colName, col] of Object.entries(db.collections)) {
+      for (const idxName of Object.keys(col.indexes)) {
+        opts.push(colName + '.' + idxName);
+      }
+    }
+    const oldVal = indexDeleteSelect.value;
+    indexDeleteSelect.innerHTML = '';
+    for (const optStr of opts) {
+      const opt = document.createElement('option');
+      opt.value = optStr;
+      opt.textContent = optStr;
+      indexDeleteSelect.appendChild(opt);
+    }
+    if (opts.includes(oldVal)) {
+      indexDeleteSelect.value = oldVal;
+    }
+  }
+  function deleteIndex() {
+    const val = indexDeleteSelect.value;
+    if (!val) {
+      setOutput('Select an index to delete.');
+      return;
+    }
+    const parts = val.split('.');
+    if (parts.length !== 2) {
+      setOutput('Invalid index selection.');
+      return;
+    }
+    const [colName, idxName] = parts;
+    const c = db.collections[colName];
+    if (!c || !c.indexes[idxName]) {
+      setOutput('Index not found.');
+      return;
+    }
+    delete c.indexes[idxName];
+    setOutput('Deleted index "' + idxName + '" from collection "' + colName + '".');
+    refreshIndexesDeleteUI();
+    refreshDbState();
+  }
+
+  // Aggregation
+  function runAggregation() {
+    const colName = collectionSelect.value;
+    if (!colName) {
+      setOutput('Select a collection for aggregation.');
+      return;
+    }
+    const c = db.collections[colName];
+    const [pipeline, err] = safeJSONparse(aggPipelineInput.value.trim() || '[]');
+    if (err) {
+      setOutput('Pipeline JSON parse error: ' + err);
+      return;
+    }
+    if (!Array.isArray(pipeline)) {
+      setOutput('Aggregation pipeline must be an array.');
+      return;
+    }
+    let result;
+    try {
+      result = runAggregationPipeline(c, pipeline);
+    } catch (e) {
+      setOutput('Aggregation error: ' + e);
+      return;
+    }
+    setOutput('Aggregation result (' + result.length + ' documents):\n' + JSON.stringify(result, null, 2));
+  }
+
+  // Display output
+  function setOutput(text) {
+    outputDiv.textContent = text;
+  }
+
+  // Show full DB JSON for exploration
+  function refreshDbState() {
+    const snapshot = {};
+    for (const [colName, col] of Object.entries(db.collections)) {
+      snapshot[colName] = {
+        indexes: deepCopy(col.indexes),
+        documents: {},
+      };
+      for (const [id, doc] of col.docs.entries()) {
+        snapshot[colName].documents[id] = deepCopy(doc);
+      }
+    }
+    dbstateDiv.textContent = JSON.stringify(snapshot, null, 2);
+  }
+
+  // Event listeners
+  createCollectionBtn.addEventListener('click', createCollection);
+  deleteCollectionBtn.addEventListener('click', deleteCollection);
+  insertDocBtn.addEventListener('click', insertDocument);
+  updateDocBtn.addEventListener('click', updateDocument);
+  deleteDocBtn.addEventListener('click', deleteDocument);
+  runQueryBtn.addEventListener('click', runQuery);
+  createIndexBtn.addEventListener('click', createIndex);
+  deleteIndexBtn.addEventListener('click', deleteIndex);
+  runAggBtn.addEventListener('click', runAggregation);
+
+  // Initial UI setup
+  refreshCollectionsUI();
+  refreshDbState();
+})();
+</script>
+</body>
+</html>

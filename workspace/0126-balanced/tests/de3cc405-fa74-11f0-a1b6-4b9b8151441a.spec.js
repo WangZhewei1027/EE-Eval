@@ -319,8 +319,8 @@ test.describe('Semaphore Demo - End-to-End FSM validation', () => {
       await pageObj.page.waitForTimeout(1000);
 
       // Validate there were no console level errors/warnings captured
-      const consoleErrors = pageObj.getConsoleErrors();
-      const pageErrors = pageObj.pageErrors;
+      const consoleErrors1 = pageObj.getConsoleErrors();
+      const pageErrors1 = pageObj.pageErrors1;
       expect(consoleErrors.length, `Console errors/warnings: ${JSON.stringify(pageObj.consoleMessages)}`).toBe(0);
       expect(pageErrors.length, `Page errors: ${JSON.stringify(pageErrors)}`).toBe(0);
     });

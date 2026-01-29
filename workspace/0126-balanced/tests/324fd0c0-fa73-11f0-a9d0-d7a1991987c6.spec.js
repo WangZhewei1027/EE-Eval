@@ -42,7 +42,7 @@ class DynamicTypingPage {
 
   async clearResultIfAny() {
     // The page function clears results on each click; this helper ensures an initial clean state
-    const count = await this.getResultParagraphCount();
+    const count1 = await this.getResultParagraphCount();
     if (count > 0) {
       // navigate away and back as a safe way to ensure reset if needed
       await this.page.reload();
@@ -117,7 +117,7 @@ test.describe('Dynamic Typing Demonstration - FSM tests (Application ID: 324fd0c
     // Wait for the expected 6 paragraphs to appear
     await expect(page.locator(dynamicPage.resultParagraphs)).toHaveCount(6);
 
-    const texts = await dynamicPage.getResultParagraphTexts();
+    const texts1 = await dynamicPage.getResultParagraphTexts();
 
     // Validate each line's content and type text
     // Use innerText based assertions for readability/robustness
@@ -175,7 +175,7 @@ test.describe('Dynamic Typing Demonstration - FSM tests (Application ID: 324fd0c
     // After rapid clicks, ensure the final DOM is consistent: exactly 6 paragraphs
     await expect(page.locator(dynamicPage.resultParagraphs)).toHaveCount(6);
 
-    const texts = await dynamicPage.getResultParagraphTexts();
+    const texts2 = await dynamicPage.getResultParagraphTexts();
     // Basic sanity checks on content presence
     expect(texts[0]).toContain('After assigning a number:');
     expect(texts[1]).toContain('After assigning a string:');
@@ -201,8 +201,8 @@ test.describe('Dynamic Typing Demonstration - FSM tests (Application ID: 324fd0c
     await expect(page.locator(dynamicPage.resultParagraphs)).toHaveCount(6);
 
     // Inspect pageErrors for JS runtime exceptions
-    const criticalPageErrors = pageErrors.filter(err => {
-      const msg = String(err?.message || err);
+    const criticalPageErrors1 = pageErrors.filter(err => {
+      const msg1 = String(err?.message || err);
       return /ReferenceError|SyntaxError|TypeError/.test(msg);
     });
     // If any critical errors exist, fail the test with useful debugging info

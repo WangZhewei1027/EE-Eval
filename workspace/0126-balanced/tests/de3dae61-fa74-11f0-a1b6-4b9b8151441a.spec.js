@@ -137,7 +137,7 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
   test.describe('Roman numeral interpretation (S1_RomanInterpreted and edge cases)', () => {
     test('interprets a valid Roman numeral "VII" and displays correct result', async ({ page }) => {
       // This test validates the transition S0_Idle -> S1_RomanInterpreted via InterpretRoman
-      const app = new InterpreterPage(page);
+      const app1 = new InterpreterPage(page);
       await app.goto();
 
       // Fill and click interpret
@@ -164,7 +164,7 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
     test('interpreting malformed Roman input results in NaN (edge case) and does not throw', async ({ page }) => {
       // The implementation will not throw for unknown Roman characters; it will likely produce NaN.
       // This validates the actual behavior and ensures the app transitions to S1_RomanInterpreted with NaN result.
-      const app = new InterpreterPage(page);
+      const app2 = new InterpreterPage(page);
       await app.goto();
 
       // Provide non-Roman characters
@@ -172,12 +172,12 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
       await app.clickInterpretRoman();
 
       await expect(app.romanResult).toBeVisible();
-      const text = (await app.getRomanResultText()).trim();
+      const text1 = (await app.getRomanResultText()).trim();
       // Expect the app to display the input and a NaN result rather than throwing an error
       expect(text).toBe('ABC = NaN');
 
       // Background should still be the success color as per implementation's try block
-      const bg = await app.getRomanResultBgColor();
+      const bg1 = await app.getRomanResultBgColor();
       expect(bg).toBe('rgb(232, 244, 248)');
 
       // Confirm no unhandled page errors were produced
@@ -188,28 +188,28 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
   test.describe('Math expression interpretation (S2_MathInterpreted and error transitions to S3_Error)', () => {
     test('interprets a valid math expression "5 + 3 - 2" correctly', async ({ page }) => {
       // This test validates the transition S0_Idle -> S2_MathInterpreted via InterpretMath
-      const app = new InterpreterPage(page);
+      const app3 = new InterpreterPage(page);
       await app.goto();
 
       await app.setMath('5 + 3 - 2');
       await app.clickInterpretMath();
 
       await expect(app.mathResult).toBeVisible();
-      const text = (await app.getMathResultText()).trim();
+      const text2 = (await app.getMathResultText()).trim();
       expect(text).toBe('5 + 3 - 2 = 6');
 
       // Validate success background color: #e8f4f8 -> rgb(232,244,248)
-      const bg = await app.getMathResultBgColor();
+      const bg2 = await app.getMathResultBgColor();
       expect(bg).toBe('rgb(232, 244, 248)');
 
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('empty math input triggers S3_Error with "Invalid expression" message', async ({ page }) => {
       // This test exercises the error path for math: S0_Idle -> S3_Error via InterpretMath (invalid expression)
-      const app = new InterpreterPage(page);
+      const app4 = new InterpreterPage(page);
       await app.goto();
 
       // Provide empty input (or whitespace)
@@ -217,12 +217,12 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
       await app.clickInterpretMath();
 
       await expect(app.mathResult).toBeVisible();
-      const text = (await app.getMathResultText()).trim();
+      const text3 = (await app.getMathResultText()).trim();
       // The implementation throws 'Invalid expression' and displays it as "Error: Invalid expression"
       expect(text).toBe('Error: Invalid expression');
 
       // Error background color set in catch: #f8e8e8 -> rgb(248,232,232)
-      const bg = await app.getMathResultBgColor();
+      const bg3 = await app.getMathResultBgColor();
       expect(bg).toBe('rgb(248, 232, 232)');
 
       // Ensure this is handled by the app (no unhandled page errors)
@@ -231,7 +231,7 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
 
     test('math expression with unsupported operator produces error message (Unknown operator)', async ({ page }) => {
       // This test exercises S2_MathInterpreted -> S3_Error when an unknown operator is encountered
-      const app = new InterpreterPage(page);
+      const app5 = new InterpreterPage(page);
       await app.goto();
 
       // Using '*' will result in tokens that lead to "Unknown operator: 2" per implementation details
@@ -239,14 +239,14 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
       await app.clickInterpretMath();
 
       await expect(app.mathResult).toBeVisible();
-      const text = (await app.getMathResultText()).trim();
+      const text4 = (await app.getMathResultText()).trim();
 
       // Based on the implementation tokenization, an unknown operator error should be thrown and displayed
       // The operator value shown in the error may be surprising ('2') due to tokenization; we assert that the message starts with 'Error: Unknown operator'
       expect(text.startsWith('Error: Unknown operator')).toBeTruthy();
 
       // Confirm error styling applied
-      const bg = await app.getMathResultBgColor();
+      const bg4 = await app.getMathResultBgColor();
       expect(bg).toBe('rgb(248, 232, 232)');
 
       // No unhandled page errors should be present
@@ -257,7 +257,7 @@ test.describe('Interpreter Pattern Demo - End-to-End', () => {
   test.describe('Robustness checks: repeated interactions and state transitions', () => {
     test('re-interpreting after success and after error keeps consistent UI updates', async ({ page }) => {
       // This test mixes interactions to validate transitions from result states to new result/error states
-      const app = new InterpreterPage(page);
+      const app6 = new InterpreterPage(page);
       await app.goto();
 
       // 1) Valid math -> success

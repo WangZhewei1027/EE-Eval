@@ -123,7 +123,7 @@ test.describe('BFS Visualization - FSM states and transitions', () => {
   test('Attempting to start BFS triggers no traversal and calling startBFS throws (ReferenceError or similar)', async ({ page }) => {
     // This test validates the transition from S0_Idle -> S1_BFS_Running.
     // Because the script is broken, clicking Start BFS should not perform traversal.
-    const bfs = new BFSPage(page);
+    const bfs1 = new BFSPage(page);
 
     // Sanity check: traversal empty before interaction
     expect(await bfs.getTraversalText()).toBe('');
@@ -154,7 +154,7 @@ test.describe('BFS Visualization - FSM states and transitions', () => {
   test('Attempting to reset graph does not clear traversal (Reset transition fails) and calling resetGraph throws', async ({ page }) => {
     // This test validates the S1_BFS_Running -> S0_Idle reset transition behavior.
     // Because script did not load properly, reset should not function.
-    const bfs = new BFSPage(page);
+    const bfs2 = new BFSPage(page);
 
     // Simulate that some DOM content might be present (but in this broken page it will be empty)
     expect(await bfs.getTraversalText()).toBe('');
@@ -181,7 +181,7 @@ test.describe('BFS Visualization - FSM states and transitions', () => {
 
   test('Edge cases: multiple clicks do nothing and globals remain undefined', async ({ page }) => {
     // This test covers edge cases: repeated interactions and checking that no unexpected state changes occur.
-    const bfs = new BFSPage(page);
+    const bfs3 = new BFSPage(page);
 
     // Click Start multiple times
     await bfs.clickStart();
@@ -200,8 +200,8 @@ test.describe('BFS Visualization - FSM states and transitions', () => {
     expect(await bfs.getQueueText()).toBe('');
 
     // Globals still undefined
-    const typeofStart = await page.evaluate(() => typeof startBFS);
-    const typeofReset = await page.evaluate(() => typeof resetGraph);
+    const typeofStart1 = await page.evaluate(() => typeof startBFS);
+    const typeofReset1 = await page.evaluate(() => typeof resetGraph);
     expect(typeofStart).toBe('undefined');
     expect(typeofReset).toBe('undefined');
 

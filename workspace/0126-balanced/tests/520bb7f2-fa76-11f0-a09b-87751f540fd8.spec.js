@@ -128,10 +128,10 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
 
   // Validate transition: S0_Idle -> S1_ClustersGenerated via GenerateClustersClick
   test('Transition S0 -> S1: Clicking Generate Clusters triggers generate_clusters and results in a runtime error (observed behavior)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const kmPage = new KMeansPage(page);
+    const kmPage1 = new KMeansPage(page);
     await kmPage.goto(APP_URL);
 
     // Record initial page error count (load-time errors)
@@ -149,7 +149,7 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
     expect(pageErrors.length).toBeGreaterThanOrEqual(initialErrors);
 
     // The result area should NOT have been populated successfully due to the runtime error.
-    const childrenCount = await kmPage.getResultChildrenCount();
+    const childrenCount1 = await kmPage.getResultChildrenCount();
     // The buggy script is expected to prevent proper cluster generation -> children likely remain 0
     expect(childrenCount).toBe(0);
 
@@ -159,12 +159,12 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
 
   // Validate transition: S1_ClustersGenerated -> S2_ClustersVisualized via VisualizeClustersClick
   test('Transition S1 -> S2: Clicking Visualize Clusters invokes visualize_clusters and applies styles (no new runtime error expected)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     const consoleMsgs = [];
     page.on('console', (msg) => consoleMsgs.push(msg));
 
-    const kmPage = new KMeansPage(page);
+    const kmPage2 = new KMeansPage(page);
     await kmPage.goto(APP_URL);
 
     // There may be load-time errors already; note the count
@@ -187,16 +187,16 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
     expect(backgrounds.length).toBe(0);
 
     // Ensure clicking visualize did not create new DOM children unexpectedly
-    const childrenCount = await kmPage.getResultChildrenCount();
+    const childrenCount2 = await kmPage.getResultChildrenCount();
     expect(childrenCount).toBe(0);
   });
 
   // Edge case: attempt to change number of clusters and click generate -> still triggers runtime errors (validate robustness)
   test('Edge case: Changing num_clusters to different values and clicking Generate triggers errors (observed behavior)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const kmPage = new KMeansPage(page);
+    const kmPage3 = new KMeansPage(page);
     await kmPage.goto(APP_URL);
 
     // Test multiple values that may reveal different failures in the implementation
@@ -217,7 +217,7 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
       expect(pageErrors.length).toBeGreaterThanOrEqual(beforeCount);
 
       // The page should still not have valid cluster DOM children injected due to errors
-      const childrenCount = await kmPage.getResultChildrenCount();
+      const childrenCount3 = await kmPage.getResultChildrenCount();
       expect(childrenCount).toBe(0);
     }
   });
@@ -225,15 +225,15 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
   // Validate that the visualize_clusters function does not throw even if result children are present or absent.
   // To avoid modifying the page's JavaScript, we only assert behavior without injecting nodes by user script.
   test('S2_ClustersVisualized: visualize_clusters is present and safe to call (no modification of page JS)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors4 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const kmPage = new KMeansPage(page);
+    const kmPage4 = new KMeansPage(page);
     await kmPage.goto(APP_URL);
 
     // Call visualize_clusters via click - it should run and not throw in most conditions.
-    const beforeCount = pageErrors.length;
-    const waitErr = page.waitForEvent('pageerror', { timeout: 1000 }).catch(() => null);
+    const beforeCount1 = pageErrors.length;
+    const waitErr1 = page.waitForEvent('pageerror', { timeout: 1000 }).catch(() => null);
     await kmPage.clickVisualize();
     await waitErr;
 
@@ -245,10 +245,10 @@ test.describe('K-Means Clustering FSM - End-to-End', () => {
 
   // Sanity: ensure that runtime errors observed are consistent with TypeError-ish failures caused by broken generate_clusters
   test('Runtime errors originate from generate_clusters (sanity check)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors5 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const kmPage = new KMeansPage(page);
+    const kmPage5 = new KMeansPage(page);
     await kmPage.goto(APP_URL);
 
     // There should be at least one captured error

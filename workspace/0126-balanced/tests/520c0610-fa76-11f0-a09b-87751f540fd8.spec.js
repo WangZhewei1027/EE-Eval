@@ -108,10 +108,10 @@ test.describe('Hash Functions interactive application (static)', () => {
 
   test('no interactive elements or transitions are present (matches FSM: no events/transitions)', async ({ page }) => {
     // This test verifies the FSM claim that the page is static and contains no interactive UI controls.
-    const pageObj = new HashFunctionsPage(page);
+    const pageObj1 = new HashFunctionsPage(page);
 
     // Attach listeners to capture runtime errors for completeness (they are expected)
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     await pageObj.goto();
 
@@ -135,10 +135,10 @@ test.describe('Hash Functions interactive application (static)', () => {
   test('console output does not contain successful hash results and errors are observable', async ({ page }) => {
     // This test confirms that the page did not successfully compute and log hash values
     // (because the Node 'crypto' API is not available in the browser), and that we observed errors.
-    const pageObj = new HashFunctionsPage(page);
+    const pageObj2 = new HashFunctionsPage(page);
 
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors2 = [];
+    const consoleMessages1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => consoleMessages.push({ type: msg.type(), text: msg.text() }));
 
@@ -159,16 +159,16 @@ test.describe('Hash Functions interactive application (static)', () => {
   test('edge case: accessing non-existent global functions does not crash the test harness', async ({ page }) => {
     // This test attempts to read some globals that the FSM or page references (e.g., renderPage),
     // verifying that probing these globals does not modify the page or attempt to repair errors.
-    const pageObj = new HashFunctionsPage(page);
+    const pageObj3 = new HashFunctionsPage(page);
 
     // No listeners needed for this simple DOM/global check, but keep them for safety
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
     await pageObj.goto();
 
     // Accessing a non-existent global should return false from our helper
-    const hasRenderPage = await pageObj.globalRenderPageExists();
+    const hasRenderPage1 = await pageObj.globalRenderPageExists();
     expect(hasRenderPage).toBe(false);
 
     // Confirm that probing globals did not clear the naturally occurring page errors.

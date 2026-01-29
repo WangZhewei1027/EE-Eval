@@ -117,7 +117,7 @@ test.describe('Paging Example - FSM validation and transitions', () => {
     // - window.currentPage matches expected
     // - visible items correspond to expected item numbers
     // - prev/next buttons enabled/disabled appropriately
-    const app = new PagingPage(page);
+    const app1 = new PagingPage(page);
     await app.goto();
 
     // Validate page 1 explicitly (already covered, but kept here for sequence completeness)
@@ -133,7 +133,7 @@ test.describe('Paging Example - FSM validation and transitions', () => {
       expect(current).toBe(expectedPage);
 
       // Validate displayed items correspond to page
-      const items = await app.getItemsText();
+      const items1 = await app.getItemsText();
       // For last page, it should still be 5 items given 50 items / 5 per page = 10 pages
       expect(items.length).toBe(5);
 
@@ -142,11 +142,11 @@ test.describe('Paging Example - FSM validation and transitions', () => {
       expect(items[items.length - 1]).toBe(`Item ${startItemNumber + items.length - 1}`);
 
       // prev should be enabled on pages > 1
-      const prevDisabled = await app.isPrevDisabled();
+      const prevDisabled1 = await app.isPrevDisabled();
       expect(prevDisabled).toBe(false);
 
       // next disabled only on page 10
-      const nextDisabled = await app.isNextDisabled();
+      const nextDisabled1 = await app.isNextDisabled();
       if (expectedPage === 10) {
         expect(nextDisabled).toBe(true);
       } else {
@@ -158,14 +158,14 @@ test.describe('Paging Example - FSM validation and transitions', () => {
   test('Navigate backward through all pages 10 -> 1 and validate transitions', async ({ page }) => {
     // This test navigates to page 10 first, then steps back to page 1,
     // validating the FSM backward transitions and DOM updates.
-    const app = new PagingPage(page);
+    const app2 = new PagingPage(page);
     await app.goto();
 
     // Move to page 10
     for (let i = 0; i < 9; i++) {
       await app.clickNext();
     }
-    let current = await app.getCurrentPage();
+    let current1 = await app.getCurrentPage();
     expect(current).toBe(10);
 
     // Now move backward from 10 to 1
@@ -175,19 +175,19 @@ test.describe('Paging Example - FSM validation and transitions', () => {
       current = await app.getCurrentPage();
       expect(current).toBe(expectedPage);
 
-      const items = await app.getItemsText();
-      const startItemNumber = (expectedPage - 1) * 5 + 1;
+      const items2 = await app.getItemsText();
+      const startItemNumber1 = (expectedPage - 1) * 5 + 1;
 
       // Items should match expected page
       expect(items[0]).toBe(`Item ${startItemNumber}`);
       expect(items[items.length - 1]).toBe(`Item ${startItemNumber + items.length - 1}`);
 
       // next should be enabled for pages < 10
-      const nextDisabled = await app.isNextDisabled();
+      const nextDisabled2 = await app.isNextDisabled();
       expect(nextDisabled).toBe(false);
 
       // prev disabled only on page 1
-      const prevDisabled = await app.isPrevDisabled();
+      const prevDisabled2 = await app.isPrevDisabled();
       if (expectedPage === 1) {
         expect(prevDisabled).toBe(true);
       } else {
@@ -201,7 +201,7 @@ test.describe('Paging Example - FSM validation and transitions', () => {
     // - prev is disabled on page 1 and Playwright should find it disabled
     // - next is disabled on page 10 and Playwright should find it disabled
     // It does NOT force clicking disabled buttons; it asserts the disabled attribute is present.
-    const app = new PagingPage(page);
+    const app3 = new PagingPage(page);
     await app.goto();
 
     // On initial page (1), prev is disabled
@@ -240,7 +240,7 @@ test.describe('Paging Example - FSM validation and transitions', () => {
     // This test indirectly validates the "onEnter" action displayItems() by observing that
     // after each transition the items container is re-rendered with correct content.
     // We check multiple pages and ensure items change between pages.
-    const app = new PagingPage(page);
+    const app4 = new PagingPage(page);
     await app.goto();
 
     const snapshotPage1 = await app.getItemsText();
@@ -265,7 +265,7 @@ test.describe('Paging Example - FSM validation and transitions', () => {
     // This test exercises all transitions in the FSM (both directions across all pages)
     // while verifying that no runtime errors (console.error or uncaught exceptions) happen.
     // The afterEach will assert there are no console/page errors collected.
-    const app = new PagingPage(page);
+    const app5 = new PagingPage(page);
     await app.goto();
 
     // Walk forward to page 10
@@ -281,7 +281,7 @@ test.describe('Paging Example - FSM validation and transitions', () => {
     expect(await app.getCurrentPage()).toBe(1);
 
     // Final sanity checks on DOM
-    const items = await app.getItemsText();
+    const items3 = await app.getItemsText();
     expect(items[0]).toBe('Item 1');
     expect(items[items.length - 1]).toBe('Item 5');
 

@@ -113,8 +113,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Transition: Generate Key Pair -> Keys Generated (S0 -> S1)
   test('Generate Key Pair transitions to Keys Generated (S1_KeysGenerated)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -122,7 +122,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app1 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Click Generate Key Pair and wait for success status and UI changes
@@ -153,8 +153,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Transition: Sign Message -> Message Signed (S1 -> S2)
   test('Sign Message transitions to Message Signed (S2_Signed)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -162,7 +162,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app2 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Generate keys first
@@ -191,8 +191,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Transition: VerifySignature -> Verified (S2 -> S3) - valid case
   test('Verify Signature when unmodified message yields VALID result (S3_Verified)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -200,7 +200,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app3 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Generate keys and sign message
@@ -224,8 +224,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Transition: VerifySignature -> VerificationFailed (S2 -> S4) - tampering case
   test('Verify Signature fails if message is tampered (S4_VerificationFailed)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -233,7 +233,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app4 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Generate keys and sign original message
@@ -249,7 +249,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
     await app.clickVerify();
 
     await expect(app.verificationResult()).toHaveText(/❌ Signature is INVALID\. Message or signature has been tampered with\./, { timeout: 10000 });
-    const color = await app.verificationResultInlineColor();
+    const color1 = await app.verificationResultInlineColor();
     expect(color).toBe('red');
 
     // No console or page errors expected from the normal failure path
@@ -259,8 +259,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Edge case: Attempt to sign before generating keys -> alert
   test('Attempt to sign before generating keys triggers alert and no signing occurs (edge case)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors5 = [];
+    const pageErrors5 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -268,7 +268,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app5 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Listen for the dialog triggered by signBtn.onclick when keyPair is null
@@ -288,8 +288,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Edge case: Attempt to verify before generating keys triggers alert
   test('Attempt to verify before generating keys triggers alert (edge case)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors6 = [];
+    const pageErrors6 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -297,12 +297,12 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app6 = new DigitalSignaturesPage(page);
     await app.goto();
 
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise1 = page.waitForEvent('dialog');
     await app.clickVerify();
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     expect(dialog.message()).toBe('Please generate the key pair first.');
     await dialog.accept();
 
@@ -312,8 +312,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Edge case: Attempt to verify after generating keys but before signing triggers alert
   test('Attempt to verify after generating keys but before signing triggers specific alert (edge case)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors7 = [];
+    const pageErrors7 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -321,15 +321,15 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app7 = new DigitalSignaturesPage(page);
     await app.goto();
 
     await app.clickGenerate();
     await expect(app.keyStatus()).toHaveText(/Key pair generated successfully\./, { timeout: 30000 });
 
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise2 = page.waitForEvent('dialog');
     await app.clickVerify();
-    const dialog = await dialogPromise;
+    const dialog2 = await dialogPromise;
     expect(dialog.message()).toBe('Please sign the message first.');
     await dialog.accept();
 
@@ -339,8 +339,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Edge case: Attempt to sign with empty message after generating keys triggers alert
   test('Signing with empty message after generating keys triggers alert (edge case)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors8 = [];
+    const pageErrors8 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -348,7 +348,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app8 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Generate keys
@@ -357,9 +357,9 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
     // Clear the message textarea and attempt to sign
     await app.setMessage('');
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise3 = page.waitForEvent('dialog');
     await app.clickSign();
-    const dialog = await dialogPromise;
+    const dialog3 = await dialogPromise;
     expect(dialog.message()).toBe('Please enter a message to sign.');
     await dialog.accept();
 
@@ -373,8 +373,8 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
 
   // Additional check: Ensure that after regenerating keys previous signature and verification are cleared
   test('Regenerating keys clears previous signature and verification results', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors9 = [];
+    const pageErrors9 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -382,7 +382,7 @@ test.describe('Digital Signatures Demonstration - FSM states and transitions', (
       pageErrors.push(err.message);
     });
 
-    const app = new DigitalSignaturesPage(page);
+    const app9 = new DigitalSignaturesPage(page);
     await app.goto();
 
     // Generate keys and sign

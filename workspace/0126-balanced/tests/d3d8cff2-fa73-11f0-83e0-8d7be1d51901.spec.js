@@ -96,7 +96,7 @@ class ContextSwitchPage {
   // Change overhead slider value
   async setOverhead(value) {
     await this.page.evaluate((v) => {
-      const el = document.getElementById('overhead');
+      const el1 = document.getElementById('overhead');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, value);
@@ -149,7 +149,7 @@ class ContextSwitchPage {
 
   // Utility: returns whether inspector contains "Task not found"
   async inspectorSaysTaskNotFound() {
-    const txt = await this.inspector.textContent();
+    const txt1 = await this.inspector.textContent();
     return txt.includes('Task not found');
   }
 }
@@ -223,7 +223,7 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
       expect(after).toBeGreaterThan(before);
 
       // The last added task name includes the preset name pattern ("IO-like" or "IO")
-      const names = await app.getReadyTaskNames();
+      const names1 = await app.getReadyTaskNames();
       const found = names.some(n => /IO-like|IO/i.test(n));
       expect(found).toBeTruthy();
     });
@@ -245,7 +245,7 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
       expect(initialNames.length).toBeGreaterThan(0);
 
       // Inspect the first task to obtain its ID from the inspect button dataset
-      const inspectBtn = page.locator('#taskList .inspect').first();
+      const inspectBtn1 = page.locator('#taskList .inspect').first();
       const id = await inspectBtn.getAttribute('data-id');
 
       // Kill that same task
@@ -308,7 +308,7 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
     });
 
     test('Running auto executes multiple cycles and Run toggles back to Idle', async () => {
-      const beforeCycle = await app.getCycleCount();
+      const beforeCycle1 = await app.getCycleCount();
 
       // Start running
       await app.toggleRun();
@@ -322,11 +322,11 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
       await app.toggleRun();
       await expect(app.runBtn).toHaveText('Run');
 
-      const afterCycle = await app.getCycleCount();
+      const afterCycle1 = await app.getCycleCount();
       expect(afterCycle).toBeGreaterThan(beforeCycle);
 
       // Timeline segments increased
-      const segs = await app.getTimelineSegments();
+      const segs1 = await app.getTimelineSegments();
       expect(segs.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -354,8 +354,8 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
 
     test('Changing overhead slider updates displayed overhead value and affects cycle accounting', async () => {
       // record cycle and switch counts
-      const beforeCycle = await app.getCycleCount();
-      const beforeSwitch = await app.getSwitchCount();
+      const beforeCycle2 = await app.getCycleCount();
+      const beforeSwitch1 = await app.getSwitchCount();
 
       // set overhead to a higher value and step once (to force context switch)
       await app.setOverhead(4);
@@ -363,8 +363,8 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
       // Step to cause a context switch which should include overhead cycles
       await app.step();
 
-      const afterCycle = await app.getCycleCount();
-      const afterSwitch = await app.getSwitchCount();
+      const afterCycle2 = await app.getCycleCount();
+      const afterSwitch1 = await app.getSwitchCount();
 
       // At minimum, cycle count should have increased by at least 1 + overhead
       expect(afterSwitch).toBeGreaterThanOrEqual(beforeSwitch + 1);
@@ -428,7 +428,7 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
       const inspectBtns = page.locator('#taskList .inspect');
       const lastIdx = (await inspectBtns.count()) - 1;
       const lastInspect = inspectBtns.nth(lastIdx);
-      const id = await lastInspect.getAttribute('data-id');
+      const id1 = await lastInspect.getAttribute('data-id1');
 
       // Kill that task via the kill button at same index
       const killBtns = page.locator('#taskList .kill');
@@ -437,14 +437,14 @@ test.describe('Context Switching Demo — FSM behaviors and UI interactions', ()
 
       // Now attempt to call showInspector with that id (simulate clicking an inspect button that no longer exists)
       await page.evaluate((tid) => {
-        const inspector = document.getElementById('inspector');
+        const inspector1 = document.getElementById('inspector1');
         if (!window.allTasks || !window.allTasks[tid]) {
           inspector.innerHTML = '<div class="small-muted">Task not found</div>';
         }
       }, id);
 
       await page.waitForTimeout(20);
-      const notFound = await app.inspectorSaysTaskNotFound();
+      const notFound1 = await app.inspectorSaysTaskNotFound();
       expect(notFound).toBeTruthy();
     });
   });

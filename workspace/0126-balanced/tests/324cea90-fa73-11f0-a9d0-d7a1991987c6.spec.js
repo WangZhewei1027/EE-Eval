@@ -108,7 +108,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
 
   // Validate the InsertNode transition and S1_NodeInserted state
   test('Insert Node transition: inserting single node updates visualization and clears input', async ({ page }) => {
-    const app = new AVLPage(page);
+    const app1 = new AVLPage(page);
     await app.goto();
 
     // Insert a single value and verify DOM updates
@@ -122,7 +122,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
     // After insertion, renderTree() should have created one node with innerText '10'
     await page.waitForSelector('#tree-container .node'); // wait for at least one node
 
-    const nodeCount = await app.getNodeCount();
+    const nodeCount1 = await app.getNodeCount();
     expect(nodeCount).toBeGreaterThanOrEqual(1); // at least the inserted node
 
     const values = await app.getNodeValues();
@@ -144,7 +144,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
 
   // Test AVL balancing behavior using a sequence that should cause rotation
   test('AVL balancing: insert [30, 20, 10] results in a balanced tree with root 20', async ({ page }) => {
-    const app = new AVLPage(page);
+    const app2 = new AVLPage(page);
     await app.goto();
 
     // Insert 30, 20, 10 in that order to trigger a right rotation (LL case)
@@ -162,15 +162,15 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
     await page.waitForTimeout(200); // small pause to let rendering complete
 
     // Expect three node elements in the container
-    const nodeCount = await app.getNodeCount();
+    const nodeCount2 = await app.getNodeCount();
     expect(nodeCount).toBeGreaterThanOrEqual(3);
 
     // Expect a node with value '20' to be present and, per AVL logic, be the root
-    const values = await app.getNodeValues();
+    const values1 = await app.getNodeValues();
     expect(values).toContain('20');
 
     // Verify the global avlTree.root value is 20 (evidence that internal rotation happened)
-    const rootValue = await app.getGlobalAvlRootValue();
+    const rootValue1 = await app.getGlobalAvlRootValue();
     // rootValue might be null if avlTree not accessible; assert accordingly
     expect(rootValue).toBe(20);
 
@@ -185,7 +185,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
 
   // Edge case: clicking insert with empty input should trigger an alert and not insert a node
   test('Edge case: clicking Insert Node with empty input shows alert and does not modify tree', async ({ page }) => {
-    const app = new AVLPage(page);
+    const app3 = new AVLPage(page);
     await app.goto();
 
     // Ensure input is empty
@@ -204,7 +204,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
     await dialog.accept();
 
     // Verify no nodes were added
-    const nodeCount = await app.getNodeCount();
+    const nodeCount3 = await app.getNodeCount();
     expect(nodeCount).toBe(0);
 
     // Ensure no page errors resulting from this interaction
@@ -213,7 +213,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
 
   // Validate that the button uses the expected onclick attribute (evidence from FSM)
   test('Button has onclick attribute pointing to insertNode()', async ({ page }) => {
-    const app = new AVLPage(page);
+    const app4 = new AVLPage(page);
     await app.goto();
 
     // Query the button and assert it has the onclick attribute text
@@ -230,7 +230,7 @@ test.describe('AVL Tree Visualization (324cea90-fa73-11f0-a9d0-d7a1991987c6)', (
 
   // Observe console output and ensure no hidden runtime errors (smoke test)
   test('Console and runtime error monitoring during common interactions', async ({ page }) => {
-    const app = new AVLPage(page);
+    const app5 = new AVLPage(page);
     await app.goto();
 
     // Monitor console while performing some interactions

@@ -105,7 +105,7 @@ test.describe('5208aab2-fa76-11f0-a09b-87751f540fd8 - Graph (Undirected) FSM tes
     // We will call addVertex twice to guarantee vertex-like entries (even if implementation mixes types).
     await page.evaluate(() => { addVertex(); addVertex(); });
 
-    const before = await page.evaluate(() => window.edges.length);
+    const before1 = await page.evaluate(() => window.edges.length);
     // Add an edge with numeric indices
     const resultLength = await page.evaluate(() => {
       addEdge(0, 1);
@@ -114,7 +114,7 @@ test.describe('5208aab2-fa76-11f0-a09b-87751f540fd8 - Graph (Undirected) FSM tes
     expect(resultLength).toBe(before + 1);
 
     const lastEdge = await page.evaluate(() => {
-      const e = window.edges[window.edges.length - 1];
+      const e1 = window.edges[window.edges.length - 1];
       return { fromType: typeof e.from, toType: typeof e.to, from: e.from, to: e.to };
     });
 

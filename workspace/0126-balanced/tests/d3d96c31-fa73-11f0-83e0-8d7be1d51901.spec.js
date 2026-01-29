@@ -148,7 +148,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Run SQL executes editor SQL and updates output and status (S0 -> S1)', async ({ page }) => {
     // This validates the RunSQL_Click event and runSQL() behavior.
-    const app = new SQLDemoPage(page);
+    const app1 = new SQLDemoPage(page);
     await app.goto();
 
     // Click Run SQL to execute the preloaded JOIN example.
@@ -171,7 +171,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Reset DB button resets database and updates output & status (S0 -> S2)', async ({ page }) => {
     // This validates ResetDB_Click transition and resetDatabase() entry action.
-    const app = new SQLDemoPage(page);
+    const app2 = new SQLDemoPage(page);
     await app.goto();
 
     // Change editor to make sure reset does not depend on editor content.
@@ -185,7 +185,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
     expect(outputText).toContain('Database reset to initial sample state.');
 
     // Status should be updated to 'Database reset.'
-    const status = await app.getStatusText();
+    const status1 = await app.getStatusText();
     expect(status).toBe('Database reset.');
 
     // Tables meta should include the known sample tables.
@@ -201,17 +201,17 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Load Sample Data displays message and retains DB (S0 -> S3)', async ({ page }) => {
     // This validates LoadSamples_Click and that output shows sample data loaded.
-    const app = new SQLDemoPage(page);
+    const app3 = new SQLDemoPage(page);
     await app.goto();
 
     await app.clickLoadSamples();
 
     // Output should contain sample data loaded message.
-    const outputText = await app.getOutputText();
+    const outputText1 = await app.getOutputText();
     expect(outputText).toContain('Sample data loaded.');
 
     // The status should indicate the sample DB was loaded (resetDatabase sets this).
-    const status = await app.getStatusText();
+    const status2 = await app.getStatusText();
     expect(status).toContain('Sample database loaded.');
 
     expect(pageErrors.length).toBe(0);
@@ -220,7 +220,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Insert Example inserts selected example SQL into editor (S0 -> S5)', async ({ page }) => {
     // Validate InsertExample_Click event and insertExample() behavior.
-    const app = new SQLDemoPage(page);
+    const app4 = new SQLDemoPage(page);
     await app.goto();
 
     // Choose the first real example (value '0' was assigned to EXAMPLES[0] in page script).
@@ -230,7 +230,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
     await app.clickInsertExample();
 
     // Editor should now contain the SQL from the first example which is known in the HTML.
-    const sqlVal = await app.getSqlValue();
+    const sqlVal1 = await app.getSqlValue();
     // The first example in the HTML is: "SELECT id, name, city FROM users;"
     expect(sqlVal.trim()).toBe("SELECT id, name, city FROM users;");
 
@@ -240,7 +240,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Clear Editor clears text and updates output/status (S0 -> S4)', async ({ page }) => {
     // Validate Clear_Click and clearEditor() entry action
-    const app = new SQLDemoPage(page);
+    const app5 = new SQLDemoPage(page);
     await app.goto();
 
     // Ensure editor has content
@@ -250,15 +250,15 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
     await app.clickClear();
 
     // Editor should be empty
-    const sqlVal = await app.getSqlValue();
+    const sqlVal2 = await app.getSqlValue();
     expect(sqlVal).toBe('');
 
     // Output should show editor cleared message
-    const outputText = await app.getOutputText();
+    const outputText2 = await app.getOutputText();
     expect(outputText).toContain('Editor cleared.');
 
     // Status should be cleared (empty string)
-    const status = await app.getStatusText();
+    const status3 = await app.getStatusText();
     expect(status).toBe('');
 
     expect(pageErrors.length).toBe(0);
@@ -267,14 +267,14 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Show Tables lists tables and showTable displays table rows (S0 -> S6)', async ({ page }) => {
     // Validate ShowTables_Click and showTable() usage
-    const app = new SQLDemoPage(page);
+    const app6 = new SQLDemoPage(page);
     await app.goto();
 
     // Click Show Tables which should render buttons for each table
     await app.clickShowTables();
 
     // Output should now include buttons for users, products, orders
-    const outputHtml = await app.getOutputHtml();
+    const outputHtml1 = await app.getOutputHtml();
     expect(outputHtml).toContain('Tables');
     expect(outputHtml).toContain('users');
     expect(outputHtml).toContain('products');
@@ -300,14 +300,14 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
   test('Export DB triggers JSON export and updates status (S0 -> S7)', async ({ page }) => {
     // Validate ExportDB_Click action. The implementation creates a blob and programmatically clicks an anchor,
     // and sets status text to 'Exported DB as JSON.' We assert the status update.
-    const app = new SQLDemoPage(page);
+    const app7 = new SQLDemoPage(page);
     await app.goto();
 
     // Click export button. This should not throw but should set status.
     await app.clickExport();
 
     // Status should indicate export succeeded.
-    const status = await app.getStatusText();
+    const status4 = await app.getStatusText();
     expect(status).toBe('Exported DB as JSON.');
 
     // No uncaught page errors as download is simulated via programmatic click.
@@ -317,7 +317,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Running with empty editor shows "No SQL to run." (edge case)', async ({ page }) => {
     // Edge case: run with empty SQL should show friendly message rather than throwing.
-    const app = new SQLDemoPage(page);
+    const app8 = new SQLDemoPage(page);
     await app.goto();
 
     // Ensure editor is empty
@@ -327,7 +327,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
     await app.clickRun();
 
     // Output should show the specific message for no SQL
-    const outputHtml = await app.getOutputHtml();
+    const outputHtml2 = await app.getOutputHtml();
     expect(outputHtml).toContain('No SQL to run.');
 
     // No uncaught page errors
@@ -337,7 +337,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
 
   test('Running invalid SQL surfaces an error message in output (error scenario)', async ({ page }) => {
     // This tests the application's error handling when SQL execution fails (invalid table).
-    const app = new SQLDemoPage(page);
+    const app9 = new SQLDemoPage(page);
     await app.goto();
 
     // Put an invalid SQL that references a nonexistent table
@@ -349,7 +349,7 @@ test.describe('SQL Concepts — Interactive Demo (FSM validation)', () => {
     // The UI should render an error block inside output and set status to 'Execution failed.'
     const outHtml = await app.getOutputHtml();
     expect(outHtml).toContain('<strong>Error:</strong>');
-    const status = await app.getStatusText();
+    const status5 = await app.getStatusText();
     expect(status).toBe('Execution failed.');
 
     // This error is handled by the app; there should be no uncaught page errors.

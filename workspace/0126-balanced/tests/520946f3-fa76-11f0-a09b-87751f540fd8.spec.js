@@ -116,7 +116,7 @@ test.describe('Floyd-Warshall Algorithm - FSM and Implementation Tests', () => {
   test('S1_AlgorithmRunning: Running the algorithm logs "Shortest Distances:" to console (entry: runFloydWarshall)', async ({ page }) => {
     // This test validates that the algorithm's run function logs progress to the console.
     // The page auto-runs on load; we will also explicitly click the button to trigger it again.
-    const fw = new FloydWarshallPage(page);
+    const fw1 = new FloydWarshallPage(page);
     await fw.goto();
 
     // There should be at least one console message from the auto-run.
@@ -151,7 +151,7 @@ test.describe('Floyd-Warshall Algorithm - FSM and Implementation Tests', () => {
     // - The algorithm logs the result to the console before failing
     // - A TypeError occurs (observed as a pageerror)
     // - The graph container was NOT populated with the expected matrix HTML
-    const fw = new FloydWarshallPage(page);
+    const fw2 = new FloydWarshallPage(page);
     await fw.goto();
 
     // Wait for the console log "Shortest Distances:" (should have occurred on load)
@@ -188,7 +188,7 @@ test.describe('Floyd-Warshall Algorithm - FSM and Implementation Tests', () => {
 
     // Finally, assert that the graph container does NOT contain the expected matrix markup,
     // because the code's TypeError prevents the line that sets innerHTML from executing.
-    const graphHtml = await fw.getGraphInnerHTML();
+    const graphHtml1 = await fw.getGraphInnerHTML();
     expect(graphHtml).not.toContain('<tr><td>');
     expect(graphHtml.length).toBeLessThan(200); // should be small / empty
 
@@ -198,7 +198,7 @@ test.describe('Floyd-Warshall Algorithm - FSM and Implementation Tests', () => {
   test('Edge cases: Multiple runs (multiple clicks) reproduce runtime errors and produce multiple console logs', async ({ page }) => {
     // This test validates robustness and error-repeat behavior:
     // - Clicking the run button multiple times should re-trigger the function and produce logs/errors repeatedly.
-    const fw = new FloydWarshallPage(page);
+    const fw3 = new FloydWarshallPage(page);
     await fw.goto();
 
     // Clear any initial console captures we don't want to mix into counts (recreate page object listeners)

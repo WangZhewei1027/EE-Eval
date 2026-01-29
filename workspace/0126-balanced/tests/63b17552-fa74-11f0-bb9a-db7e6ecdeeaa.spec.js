@@ -168,7 +168,7 @@ test.describe('BFS Visualization - FSM states and transitions (63b17552-fa74-11f
 
     // Wait for BFS to finish and produce the final "BFS complete" log entry
     await bfs.waitForLogText('BFS complete. Order of visit:', 60_000);
-    const logText = await bfs.getLogText();
+    const logText1 = await bfs.getLogText();
     expect(logText).toContain('BFS complete. Order of visit:');
 
     // Validate the visited order is as expected for BFS starting at 'A'
@@ -212,7 +212,7 @@ test.describe('BFS Visualization - FSM states and transitions (63b17552-fa74-11f
 
     // Clear selection value by setting it to empty string (simulates no selection)
     await page.evaluate(() => {
-      const sel = document.getElementById('startNode');
+      const sel1 = document.getElementById('startNode');
       if (sel) sel.value = '';
     });
 
@@ -222,7 +222,7 @@ test.describe('BFS Visualization - FSM states and transitions (63b17552-fa74-11f
     // Ensure no log entries were created and UI did not transition to running
     // Slight pause to let any accidental actions occur
     await page.waitForTimeout(500);
-    const logText = await bfs.getLogText();
+    const logText2 = await bfs.getLogText();
     expect(logText.trim()).toBe('');
 
     // Buttons should remain in idle configuration
@@ -275,7 +275,7 @@ test.describe('BFS Visualization - FSM states and transitions (63b17552-fa74-11f
     await bfs.reset();
 
     // Validate we captured no page errors or console.error messages so far
-    const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+    const consoleErrorCount1 = consoleMessages.filter(m => m.type === 'error').length;
     expect(pageErrors.length).toBe(0);
     expect(consoleErrorCount).toBe(0);
   });

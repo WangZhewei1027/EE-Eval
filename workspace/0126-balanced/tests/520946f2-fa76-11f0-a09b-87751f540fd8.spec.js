@@ -127,7 +127,7 @@ test.describe('Bellman-Ford interactive page - FSM S0_Idle validation', () => {
   test('Console output on load includes shortest distances logged by the script', async ({ page }) => {
     // This test listens to console logs emitted during page load and asserts
     // that the sample run of bellmanFord logged the expected lines (A 0, B 4, C 2).
-    const bfPage = new BellmanFordPage(page);
+    const bfPage1 = new BellmanFordPage(page);
     await bfPage.attachListeners();
     await bfPage.goto(APP_URL);
 
@@ -152,7 +152,7 @@ test.describe('Bellman-Ford interactive page - FSM S0_Idle validation', () => {
   test('Entry action "renderPage" is not defined: invoking it throws a ReferenceError', async ({ page }) => {
     // FSM lists renderPage() as an entry_action. The implementation does not define renderPage.
     // This test asserts that the global renderPage is missing and that calling it produces a ReferenceError.
-    const bfPage = new BellmanFordPage(page);
+    const bfPage2 = new BellmanFordPage(page);
     await bfPage.attachListeners();
     await bfPage.goto(APP_URL);
 
@@ -168,7 +168,7 @@ test.describe('Bellman-Ford interactive page - FSM S0_Idle validation', () => {
   test('bellmanFord returns correct distances for the built-in example when invoked directly', async ({ page }) => {
     // Validate that bellmanFord is available globally and calling it directly via evaluate returns
     // the expected distances object for a known graph.
-    const bfPage = new BellmanFordPage(page);
+    const bfPage3 = new BellmanFordPage(page);
     await bfPage.attachListeners();
     await bfPage.goto(APP_URL);
 
@@ -190,7 +190,7 @@ test.describe('Bellman-Ford interactive page - FSM S0_Idle validation', () => {
 
   test('bellmanFord throws "Negative cycle detected" for graphs with a negative cycle', async ({ page }) => {
     // Edge case: ensure the function detects negative cycles and throws the expected Error.
-    const bfPage = new BellmanFordPage(page);
+    const bfPage4 = new BellmanFordPage(page);
     await bfPage.attachListeners();
     await bfPage.goto(APP_URL);
 
@@ -205,24 +205,24 @@ test.describe('Bellman-Ford interactive page - FSM S0_Idle validation', () => {
 
     // Ensure that this thrown error did not appear as an uncaught pageerror (it was caught by evaluate)
     // We still expect no uncaught page errors because the evaluate handled the exception propagation.
-    const pageErrors = bfPage.getPageErrors();
+    const pageErrors1 = bfPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
   });
 
   test('Calling bellmanFord with disconnected nodes yields Infinity distances for unreachable nodes', async ({ page }) => {
     // Edge case: some nodes unreachable from the source should have Infinity distances.
-    const bfPage = new BellmanFordPage(page);
+    const bfPage5 = new BellmanFordPage(page);
     await bfPage.attachListeners();
     await bfPage.goto(APP_URL);
 
-    const graph = {
+    const graph1 = {
       A: { B: 1 },
       B: {}, // B has no outgoing edges
       C: { D: 2 }, // C and D are disconnected from A/B component
       D: {},
     };
 
-    const distances = await bfPage.callBellmanFord(graph, 'A');
+    const distances1 = await bfPage.callBellmanFord(graph, 'A');
     // A reachable from itself
     expect(distances.A).toBe(0);
     // B reachable from A via edge weight 1

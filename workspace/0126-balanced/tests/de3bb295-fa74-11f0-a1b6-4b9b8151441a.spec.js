@@ -127,7 +127,7 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
 
   test('Transition Idle -> Searching -> ResultFound: clicking Search searches and finds existing target (S1_Searching -> S2_ResultFound)', async ({ page }) => {
     // This test validates clicking the Search button triggers searching and yields ResultFound
-    const app = new BinarySearchPage(page);
+    const app1 = new BinarySearchPage(page);
     await app.goto();
 
     // Change target to 7 (exists in array at index 3)
@@ -140,7 +140,7 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
     await app.clickSearch();
 
     // After clicking, result should reflect the new target's found index
-    const resultText = await app.getResultText();
+    const resultText1 = await app.getResultText();
     expect(resultText).toContain('Found 7 at index 3');
 
     // Visualization should be updated (should differ from before) and include a found span
@@ -155,13 +155,13 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
 
     // Validate there were no runtime errors or console errors during the search
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Transition Searching -> ResultNotFound: searching for a non-existent value displays not found (S1_Searching -> S3_ResultNotFound)', async ({ page }) => {
     // This test validates searching an absent target leads to the ResultNotFound final state
-    const app = new BinarySearchPage(page);
+    const app2 = new BinarySearchPage(page);
     await app.goto();
 
     // Choose a target not present in the default array
@@ -171,22 +171,22 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
     await app.clickSearch();
 
     // Result should indicate not found
-    const resultText = await app.getResultText();
+    const resultText2 = await app.getResultText();
     expect(resultText).toContain('14 not found in the array');
 
     // Visualization should include a message indicating not found (there will be a step.message)
-    const vizHTML = await app.getVisualizationHTML();
+    const vizHTML1 = await app.getVisualizationHTML();
     expect(vizHTML.toLowerCase()).toContain('not found');
 
     // Confirm no page errors or console errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Transition Searching -> InvalidInput: empty array input triggers invalid input alert (S1_Searching -> S4_InvalidInput)', async ({ page }) => {
     // This test validates that entering an empty array triggers the "Please enter a valid array of numbers" alert
-    const app = new BinarySearchPage(page);
+    const app3 = new BinarySearchPage(page);
     await app.goto();
 
     // Set up one-time dialog handler to capture and accept the alert
@@ -207,23 +207,23 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
 
     // Because the search returns early, result should remain empty or unchanged from before.
     // We check that result does not contain a "Found" message
-    const resultText = await app.getResultText();
+    const resultText3 = await app.getResultText();
     // It might be empty string or previous content; assert it does not claim a successful find for empty input
     expect(resultText.toLowerCase()).not.toContain('found');
 
     // No page errors or console errors from this flow
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Transition Searching -> InvalidInput: unsorted array input triggers unsorted array alert (S1_Searching -> S4_InvalidInput)', async ({ page }) => {
     // This test validates that entering an unsorted array triggers the "Array must be sorted..." alert
-    const app = new BinarySearchPage(page);
+    const app4 = new BinarySearchPage(page);
     await app.goto();
 
     // Prepare to capture the alert dialog
-    let dialogMessage = null;
+    let dialogMessage1 = null;
     page.once('dialog', async dialog => {
       dialogMessage = dialog.message();
       await dialog.accept();
@@ -239,12 +239,12 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
     expect(dialogMessage).toBe('Array must be sorted in ascending order for binary search');
 
     // Assert result does not show a successful find
-    const resultText = await app.getResultText();
+    const resultText4 = await app.getResultText();
     expect(resultText.toLowerCase()).not.toContain('found');
 
     // No page errors or console errors produced by this flow
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -252,11 +252,11 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
     // This test checks the parsing/filtering of non-numeric entries in the input array.
     // If all entries are non-numeric the array becomes empty and should produce the empty-array alert.
 
-    const app = new BinarySearchPage(page);
+    const app5 = new BinarySearchPage(page);
     await app.goto();
 
     // Capture dialog
-    let dialogMessage = null;
+    let dialogMessage2 = null;
     page.once('dialog', async dialog => {
       dialogMessage = dialog.message();
       await dialog.accept();
@@ -272,7 +272,7 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
 
     // Ensure no unhandled JS errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -280,14 +280,14 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
     // This test inspects visualization step HTML to ensure the algorithm marks low/high/mid indices,
     // validating the visualization logic executed during searching.
 
-    const app = new BinarySearchPage(page);
+    const app6 = new BinarySearchPage(page);
     await app.goto();
 
     // Set a target that will require multiple steps so we can see mid/low/high markers
     await app.setTargetValue(19); // last element -> many steps to narrow
     await app.clickSearch();
 
-    const vizHTML = await app.getVisualizationHTML();
+    const vizHTML2 = await app.getVisualizationHTML();
 
     // Expect at least one of the class markers to be present
     const hasLow = vizHTML.includes('class="low"');
@@ -297,12 +297,12 @@ test.describe('Binary Search Demonstration - FSM and UI tests', () => {
     expect(hasLow || hasHigh || hasMid).toBeTruthy();
 
     // Also confirm final found element for target 19 exists in visualization
-    const foundElem = await page.$('#visualization .found');
+    const foundElem1 = await page.$('#visualization .found');
     expect(foundElem).not.toBeNull();
 
     // No runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

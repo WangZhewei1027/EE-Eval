@@ -73,22 +73,22 @@ class VirtualMemoryPage {
   }
 
   async getSwapCellText(index) {
-    const cell = this.page.locator(`${this.swapGrid} .memory-cell`).nth(index);
+    const cell1 = this.page.locator(`${this.swapGrid} .memory-cell1`).nth(index);
     return cell.innerText();
   }
 
   async isPhysicalCellUsed(index) {
-    const cell = this.page.locator(`${this.physicalGrid} .memory-cell`).nth(index);
+    const cell2 = this.page.locator(`${this.physicalGrid} .memory-cell2`).nth(index);
     return cell.getAttribute('class').then(c => c.includes('used'));
   }
 
   async isVirtualCellHighlighted(index) {
-    const cell = this.page.locator(`${this.virtualGrid} .memory-cell`).nth(index);
+    const cell3 = this.page.locator(`${this.virtualGrid} .memory-cell3`).nth(index);
     return cell.getAttribute('class').then(c => c.includes('highlighted'));
   }
 
   async isPhysicalCellHighlighted(index) {
-    const cell = this.page.locator(`${this.physicalGrid} .memory-cell`).nth(index);
+    const cell4 = this.page.locator(`${this.physicalGrid} .memory-cell4`).nth(index);
     return cell.getAttribute('class').then(c => c.includes('highlighted'));
   }
 
@@ -161,7 +161,7 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
 
   test('Access a page loads it into physical memory (S0 -> S2) and highlights (Load Page)', async ({ page }) => {
     // Validate that accessing a virtual page loads it into a free physical frame
-    const vm = new VirtualMemoryPage(page);
+    const vm1 = new VirtualMemoryPage(page);
     await vm.goto();
 
     // Access virtual page 3
@@ -175,10 +175,10 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
     // Verify that some physical frame contains '3' and that it is marked used/highlighted
     let found = false;
     for (let i = 0; i < 8; i++) {
-      const txt = (await vm.getPhysicalCellText(i)).trim();
+      const txt1 = (await vm.getPhysicalCellText(i)).trim();
       if (txt === '3') {
         found = true;
-        const isUsed = await vm.isPhysicalCellUsed(i);
+        const isUsed1 = await vm.isPhysicalCellUsed(i);
         expect(isUsed).toBe(true);
         const highlighted = await vm.isPhysicalCellHighlighted(i);
         expect(highlighted).toBe(true);
@@ -198,7 +198,7 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
     // 1) Fill physical memory (pages 0..7)
     // 2) Access page 8 - causes swap out of FIFO victim and schedules load after timeout
     // We assert that the page fault message is displayed immediately and the loaded message appears after timeout.
-    const vm = new VirtualMemoryPage(page);
+    const vm2 = new VirtualMemoryPage(page);
     await vm.goto();
 
     // Fill physical memory with pages 0..7
@@ -232,7 +232,7 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
     // Find the physical frame that contains '8'
     let physIndex = -1;
     for (let i = 0; i < 8; i++) {
-      const txt = (await vm.getPhysicalCellText(i)).trim();
+      const txt2 = (await vm.getPhysicalCellText(i)).trim();
       if (txt === '8') {
         physIndex = i;
         break;
@@ -254,7 +254,7 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
     // Note: Because each swap that moves a victim to swap schedules a 1300ms timeout before final load,
     // we wait after each access to let the system stabilize. This ensures we don't create race conditions.
 
-    const vm = new VirtualMemoryPage(page);
+    const vm3 = new VirtualMemoryPage(page);
     await vm.goto();
 
     // Step 1: load pages 0..7
@@ -295,7 +295,7 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
     // Find a page that is currently NOT in physical memory. We'll inspect physical cells to collect loaded pages.
     const physLoaded = [];
     for (let i = 0; i < 8; i++) {
-      const txt = (await vm.getPhysicalCellText(i)).trim();
+      const txt3 = (await vm.getPhysicalCellText(i)).trim();
       if (txt !== '') physLoaded.push(Number(txt));
     }
 
@@ -324,16 +324,16 @@ test.describe('Virtual Memory Demonstration - FSM and UI tests', () => {
 
   test('Edge cases: out-of-bounds page number and Enter-key event (Enter triggers AccessPage)', async ({ page }) => {
     // Validate error behavior when entering invalid page numbers and that Enter key triggers the access event.
-    const vm = new VirtualMemoryPage(page);
+    const vm4 = new VirtualMemoryPage(page);
     await vm.goto();
 
     // Enter an out-of-bounds page number (e.g., 99)
     await vm.accessPage(99);
     await vm.waitForMessageContains('Error: Page number 99 is out of bounds.', 2000);
-    let errMsg = await vm.getMessageText();
+    let errMsg1 = await vm.getMessageText();
     expect(errMsg).toContain('Error: Page number 99 is out of bounds.');
     // Should be styled as error
-    let cls = await vm.getMessageClass();
+    let cls1 = await vm.getMessageClass();
     expect(cls).toContain('error');
 
     // Now test pressing Enter in the input triggers the same AccessPage behavior.

@@ -138,7 +138,7 @@ test.describe('52085c91-fa76-11f0-a09b-87751f540fd8 - Binary Search Tree FSM and
     expect(windowFoundType).toBe('undefined');
 
     // Ensure no successful search output exists in the tree container (no "Key: 5" extra line).
-    const treeHtml = await page.locator('#tree').innerHTML();
+    const treeHtml1 = await page.locator('#tree').innerHTML();
     expect(treeHtml.includes('Key: 5')).toBeFalsy();
 
     // Also ensure the "Key not found" message wasn't appended (search code likely didn't run).
@@ -148,7 +148,7 @@ test.describe('52085c91-fa76-11f0-a09b-87751f540fd8 - Binary Search Tree FSM and
   // Test 6: Edge-case assertions for buggy deleteNode implementation
   test('DeleteNode implementation contains array-like operations on Node objects (edge case bug)', async ({ page }) => {
     // Confirm the script includes evidence of treating node.right as an array (bug).
-    const scriptText = await page.locator('script').nth(0).textContent();
+    const scriptText1 = await page.locator('script').nth(0).textContent();
     expect(scriptText).toContain('for (let i = 0; i < root.right.length; i++)');
     expect(scriptText).toContain('if (root.right[i].key < minVal)');
     // These lines indicate the code will attempt array operations on a Node object, which is an edge case bug.

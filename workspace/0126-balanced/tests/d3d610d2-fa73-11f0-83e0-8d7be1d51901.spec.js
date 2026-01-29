@@ -75,7 +75,7 @@ class SelectionSortPage {
     }, n);
     await this.sizeNum.fill(String(n));
     await this.page.evaluate((v) => {
-      const el = document.getElementById('sizeNum');
+      const el1 = document.getElementById('sizeNum');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, n);
@@ -85,7 +85,7 @@ class SelectionSortPage {
     // set value then trigger change (which calls init)
     await this.setSize(n);
     await this.page.evaluate((v) => {
-      const el = document.getElementById('size');
+      const el2 = document.getElementById('size');
       el.value = String(v);
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }, n);
@@ -93,7 +93,7 @@ class SelectionSortPage {
 
   async setSpeed(ms) {
     await this.page.evaluate((v) => {
-      const el = document.getElementById('speed');
+      const el3 = document.getElementById('speed');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, ms);
@@ -105,7 +105,7 @@ class SelectionSortPage {
   }
 
   async getSwapCount() {
-    const txt = await this.swapCount.textContent();
+    const txt1 = await this.swapCount.textContent();
     return parseInt((txt || '0').trim(), 10);
   }
 
@@ -175,7 +175,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
     });
 
     test('Size change (input and change) updates controls and triggers init on change', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app1 = new SelectionSortPage(page);
 
       // Change the size slider's input to 10 (should update sizeNum value)
       await app.setSize(10);
@@ -190,12 +190,12 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
       await app.sizeNum.fill('1000'); // user types large number
       // trigger input event already done by fill combined with dispatch above would not run here; simulate input
       await page.evaluate(() => {
-        const el = document.getElementById('sizeNum');
+        const el4 = document.getElementById('sizeNum');
         el.dispatchEvent(new Event('input', { bubbles: true }));
       });
       // now trigger change to cause clamp and init
       await page.evaluate(() => {
-        const el = document.getElementById('sizeNum');
+        const el5 = document.getElementById('sizeNum');
         el.dispatchEvent(new Event('change', { bubbles: true }));
       });
       // After change, value should be clamped to max 60
@@ -208,7 +208,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
 
   test.describe('Run, Pause, Step, Resume transitions (S0 -> S1 -> S2 -> S1)', () => {
     test('Start click begins running; Pause click pauses; Start click resumes', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app2 = new SelectionSortPage(page);
 
       // Speed up and reduce size for faster tests
       await app.changeSizeTriggerInit(8);
@@ -250,7 +250,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
     });
 
     test('Step button advances one step while paused and when not running creates generator', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app3 = new SelectionSortPage(page);
 
       // Ensure small size and fast speed
       await app.changeSizeTriggerInit(6);
@@ -291,7 +291,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
 
   test.describe('Reset, Shuffle and Visual feedback tests', () => {
     test('Reset resets counters and indices and re-enables controls', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app4 = new SelectionSortPage(page);
 
       // Run a few steps then reset
       await app.changeSizeTriggerInit(8);
@@ -319,7 +319,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
     });
 
     test('Shuffle changes the array values and resets counters', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app5 = new SelectionSortPage(page);
 
       await app.changeSizeTriggerInit(10);
       const before = await app.getBarValues();
@@ -342,7 +342,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
     });
 
     test('Clicking a bar highlights it briefly (visual feedback)', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app6 = new SelectionSortPage(page);
 
       await app.changeSizeTriggerInit(8);
       // Click the first bar
@@ -360,7 +360,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
 
   test.describe('Speed control and finishing (S1_Running -> S3_Finished)', () => {
     test('Adjusting speed updates label and transition durations', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app7 = new SelectionSortPage(page);
 
       // Set a very fast speed and confirm label updates
       await app.setSpeed(60);
@@ -368,7 +368,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
 
       // Check that bars have updated style transition-duration property
       await app.changeSizeTriggerInit(8);
-      const firstBar = page.locator('#bars .bar').first();
+      const firstBar1 = page.locator('#bars .bar').first();
       const td = await firstBar.evaluate((el) => getComputedStyle(el).transitionDuration);
       // transitionDuration should be a valid CSS time string (e.g., '80ms' or '0.1s')
       expect(typeof td).toBe('string');
@@ -376,7 +376,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
     });
 
     test('Run to completion on small array results in finished state', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app8 = new SelectionSortPage(page);
 
       // Use minimal size and fast speed to allow finishing within test timeout
       await app.changeSizeTriggerInit(6);
@@ -407,7 +407,7 @@ test.describe('Selection Sort Visualizer - FSM and UI integration tests', () => 
 
   test.describe('Error observation and robustness checks (observe console/page errors)', () => {
     test('No unexpected uncaught exceptions or console.error messages occurred during interactions', async ({ page }) => {
-      const app = new SelectionSortPage(page);
+      const app9 = new SelectionSortPage(page);
 
       // Perform a sequence of interactions to surface latent errors
       await app.changeSizeTriggerInit(12);

@@ -122,8 +122,8 @@ test.describe('Paging Demonstration - FSM validation', () => {
   });
 
   test('Next page transitions through all states S1 -> S13 using Next button', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -131,7 +131,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
       pageErrors.push(err);
     });
 
-    const app = new PagingPage(page);
+    const app1 = new PagingPage(page);
     await app.goto();
 
     // Starting at page 1; click Next repeatedly and validate each state's rendering (S2..S13)
@@ -144,7 +144,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
     }
 
     // After reaching the last page, verify Next is disabled and clicking it fails
-    const nextDisabled = await app.isDisabled(app.nextBtn);
+    const nextDisabled1 = await app.isDisabled(app.nextBtn);
     expect(nextDisabled).toBe(true);
 
     // Attempting to click the disabled Next button should cause Playwright to reject the click promise
@@ -153,13 +153,13 @@ test.describe('Paging Demonstration - FSM validation', () => {
 
     // Ensure we encountered no uncaught runtime errors during the navigation
     expect(pageErrors.length, 'No uncaught page errors during Next navigation').toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'No console.error calls during Next navigation').toBe(0);
   });
 
   test('Prev transitions back from S13 -> S1 and validates Prev behavior for each state', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors2 = [];
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -167,7 +167,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
       pageErrors.push(err);
     });
 
-    const app = new PagingPage(page);
+    const app2 = new PagingPage(page);
     await app.goto();
 
     // Jump to last page using Last button and verify
@@ -183,19 +183,19 @@ test.describe('Paging Demonstration - FSM validation', () => {
     }
 
     // On page 1, Prev should be disabled and clicking it should fail
-    const prevDisabled = await app.isDisabled(app.prevBtn);
+    const prevDisabled1 = await app.isDisabled(app.prevBtn);
     expect(prevDisabled).toBe(true);
     await expect(app.prevBtn.click()).rejects.toThrow();
 
     // Verify no runtime errors during Prev navigation
     expect(pageErrors.length, 'No uncaught page errors during Prev navigation').toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'No console.error calls during Prev navigation').toBe(0);
   });
 
   test('First and Last buttons cause correct onEnter actions (renderPage) and update UI accordingly', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages3 = [];
+    const pageErrors3 = [];
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -203,7 +203,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
       pageErrors.push(err);
     });
 
-    const app = new PagingPage(page);
+    const app3 = new PagingPage(page);
     await app.goto();
 
     // From initial state (page 1), clicking First should be a no-op and the button should be disabled.
@@ -223,13 +223,13 @@ test.describe('Paging Demonstration - FSM validation', () => {
 
     // Verify no runtime errors during First/Last operations
     expect(pageErrors.length, 'No uncaught page errors during First/Last operations').toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'No console.error calls during First/Last operations').toBe(0);
   });
 
   test('Edge cases: ensure clicking disabled controls is blocked and does not change state', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages4 = [];
+    const pageErrors4 = [];
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -237,7 +237,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
       pageErrors.push(err);
     });
 
-    const app = new PagingPage(page);
+    const app4 = new PagingPage(page);
     await app.goto();
 
     // On page 1, prev and first are disabled
@@ -264,13 +264,13 @@ test.describe('Paging Demonstration - FSM validation', () => {
 
     // Final check: no uncaught runtime errors were produced while exercising disabled behavior
     expect(pageErrors.length, 'No uncaught page errors during disabled-control tests').toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'No console.error calls during disabled-control tests').toBe(0);
   });
 
   test('Comprehensive traversal: random access via sequences of Next/Prev/First/Last and validate states', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages5 = [];
+    const pageErrors5 = [];
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -278,7 +278,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
       pageErrors.push(err);
     });
 
-    const app = new PagingPage(page);
+    const app5 = new PagingPage(page);
     await app.goto();
 
     // Sequence of actions designed to traverse multiple transitions in the FSM
@@ -308,14 +308,14 @@ test.describe('Paging Demonstration - FSM validation', () => {
 
     // Verify no runtime errors during the random traversal
     expect(pageErrors.length, 'No uncaught page errors during random traversal').toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors5 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'No console.error calls during random traversal').toBe(0);
   });
 
   test('Monitor for JS errors: assert that no ReferenceError/SyntaxError/TypeError occurred during full test sequence', async ({ page }) => {
     // This test intentionally navigates through the entire flow and then asserts no JS runtime errors were captured.
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages6 = [];
+    const pageErrors6 = [];
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -323,7 +323,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
       pageErrors.push(err);
     });
 
-    const app = new PagingPage(page);
+    const app6 = new PagingPage(page);
     await app.goto();
 
     // Do a full traversal: Next to last, Prev to first, Last, First
@@ -348,7 +348,7 @@ test.describe('Paging Demonstration - FSM validation', () => {
     expect(pageErrors.length, 'There should be no uncaught page errors across full traversal').toBe(0);
 
     // Also ensure console did not emit any messages of type 'error'
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors6 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'Console should not contain error messages across full traversal').toBe(0);
 
     // Additionally ensure none of the console messages indicate TypeError/ReferenceError/SyntaxError strings

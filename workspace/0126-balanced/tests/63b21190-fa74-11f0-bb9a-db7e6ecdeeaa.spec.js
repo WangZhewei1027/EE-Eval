@@ -55,7 +55,7 @@ class GreedyPage {
   }
 
   async getExplanationText(trim = true) {
-    const txt = await this.explanationEl.textContent();
+    const txt1 = await this.explanationEl.textContent();
     if (txt === null) return '';
     return trim ? txt.trim() : txt;
   }
@@ -125,7 +125,7 @@ test.describe('Greedy Algorithm Demo - FSM and UI tests', () => {
   test.describe('RunGreedyAlgorithm event and transition to ResultDisplayed (S1_ResultDisplayed)', () => {
     test('clicking Run Greedy Algorithm with default inputs displays expected result and explanation', async ({ page }) => {
       // This test triggers the RunGreedyAlgorithm event and validates the transition outputs.
-      const gp = new GreedyPage(page);
+      const gp1 = new GreedyPage(page);
       await gp.goto();
 
       // Sanity check inputs are defaults
@@ -157,7 +157,7 @@ Total coins used: 6`;
 
     test('transition evidence: result and explanation updated after running algorithm', async ({ page }) => {
       // This test double-checks that the page sets both #result and #explanation as part of the transition
-      const gp = new GreedyPage(page);
+      const gp2 = new GreedyPage(page);
       await gp.goto();
 
       // Ensure earlier they are empty
@@ -184,7 +184,7 @@ Total coins used: 6`;
   test.describe('Edge cases and error scenarios', () => {
     test('invalid inputs show validation message and clear explanation', async ({ page }) => {
       // This test verifies behavior when inputs are invalid (empty or non-positive)
-      const gp = new GreedyPage(page);
+      const gp3 = new GreedyPage(page);
       await gp.goto();
 
       // Set invalid coins and amount
@@ -194,8 +194,8 @@ Total coins used: 6`;
       await gp.clickRun();
 
       // Should display a validation message in result and clear explanation
-      const res = await gp.getResultText();
-      const expl = await gp.getExplanationText();
+      const res1 = await gp.getResultText();
+      const expl1 = await gp.getExplanationText();
       expect(res).toBe('Please enter valid positive coin denominations and amount.');
       expect(expl).toBe('');
 
@@ -205,7 +205,7 @@ Total coins used: 6`;
     test('greedy algorithm fails to find solution for certain coin sets (returns null) and displays message', async ({ page }) => {
       // This test uses a coin system where greedy fails but another combination would work:
       // coins = [4,3], amount = 6 -> greedy picks 4 then fails, although 3+3 is possible.
-      const gp = new GreedyPage(page);
+      const gp4 = new GreedyPage(page);
       await gp.goto();
 
       await gp.setCoinsValue('4,3');
@@ -213,8 +213,8 @@ Total coins used: 6`;
 
       await gp.clickRun();
 
-      const res = await gp.getResultText();
-      const expl = await gp.getExplanationText();
+      const res2 = await gp.getResultText();
+      const expl2 = await gp.getExplanationText();
 
       // The application is expected to indicate greedy failure with a specific message
       expect(res).toBe('No solution possible using this greedy approach.');
@@ -228,7 +228,7 @@ Total coins used: 6`;
   test.describe('Observability: console and page error capture', () => {
     test('no console.error or uncaught page errors emitted during load and interactions', async ({ page }) => {
       // Attach page object and listeners already in beforeEach
-      const gp = new GreedyPage(page);
+      const gp5 = new GreedyPage(page);
       await gp.goto();
 
       // Interact with page to exercise code paths
@@ -244,8 +244,8 @@ Total coins used: 6`;
       await page.waitForTimeout(50);
 
       // Validate that we captured no console errors (type 'error' or 'warning') and no page errors
-      const consoleErrors = page._observedConsoleErrors ?? [];
-      const pageErrors = page._observedPageErrors ?? [];
+      const consoleErrors1 = page._observedConsoleErrors ?? [];
+      const pageErrors1 = page._observedPageErrors ?? [];
       expect(consoleErrors.length, `Console errors/warnings were emitted: ${JSON.stringify(page._observedConsoleMessages)}`).toBe(0);
       expect(pageErrors.length, `Uncaught page errors were emitted: ${JSON.stringify(pageErrors)}`).toBe(0);
     });

@@ -103,7 +103,7 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
     // Check page title and that the content contains the Home heading and paragraph
     await expect(page).toHaveTitle(/Simple Routing Example/);
 
-    const heading = await router.getHeadingText();
+    const heading1 = await router.getHeadingText();
     expect(heading).toBeTruthy();
     expect(heading).toContain('Welcome to the Home Page');
 
@@ -122,36 +122,36 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
 
   test('Transition: Home -> About (S0_Home to S1_About) via NavigateAbout', async ({ page }) => {
     // Validate clicking the About button moves to About state and updates DOM accordingly
-    const router = new RouterPage(page);
+    const router1 = new RouterPage(page);
     await router.goto();
 
     // Click About and verify content updates to About Us
     await router.clickAbout();
 
-    const heading = await router.getHeadingText();
+    const heading2 = await router.getHeadingText();
     expect(heading).toContain('About Us');
 
-    const paragraph = await router.getParagraphText();
+    const paragraph1 = await router.getParagraphText();
     expect(paragraph).toContain('This page contains information about our application');
   });
 
   test('Transition: Home -> Contact (S0_Home to S2_Contact) via NavigateContact', async ({ page }) => {
     // Validate clicking the Contact button from Home updates to Contact state
-    const router = new RouterPage(page);
+    const router2 = new RouterPage(page);
     await router.goto();
 
     await router.clickContact();
 
-    const heading = await router.getHeadingText();
+    const heading3 = await router.getHeadingText();
     expect(heading).toContain('Contact Us');
 
-    const paragraph = await router.getParagraphText();
+    const paragraph2 = await router.getParagraphText();
     expect(paragraph).toContain('contact@example.com');
   });
 
   test('Full transition cycle: Home -> About -> Home -> Contact -> Home', async ({ page }) => {
     // Validate multiple sequential transitions as specified in the FSM transitions
-    const router = new RouterPage(page);
+    const router3 = new RouterPage(page);
     await router.goto();
 
     // Home -> About
@@ -173,7 +173,7 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
 
   test('Transitions between all pairs: About <-> Contact and About <-> Home and Contact <-> Home', async ({ page }) => {
     // This test exercises all pairs of transitions enumerated in the FSM transitions list.
-    const router = new RouterPage(page);
+    const router4 = new RouterPage(page);
     await router.goto();
 
     // S0(Home) -> S1(About)
@@ -203,7 +203,7 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
 
   test('Edge case: clicking the same navigation button repeatedly does not break the app', async ({ page }) => {
     // Repeated clicks on the same state should be idempotent and result in the same DOM state
-    const router = new RouterPage(page);
+    const router5 = new RouterPage(page);
     await router.goto();
 
     // Start at Home -> click Home multiple times
@@ -226,7 +226,7 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
 
   test('Edge case / Error scenario: calling navigate with an unknown page parameter leaves content unchanged', async ({ page }) => {
     // Validate that passing an unexpected parameter to navigate() does not throw and content remains stable
-    const router = new RouterPage(page);
+    const router6 = new RouterPage(page);
     await router.goto();
 
     // Capture current content HTML
@@ -243,21 +243,21 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
 
   test('Edge case / Error scenario: calling navigate without parameters should not throw and content remains unchanged', async ({ page }) => {
     // Some consumers may call navigate() with no argument; this should be handled gracefully by the page.
-    const router = new RouterPage(page);
+    const router7 = new RouterPage(page);
     await router.goto();
 
-    const beforeHTML = await router.getContentHTML();
+    const beforeHTML1 = await router.getContentHTML();
 
     // Call navigate without parameter
-    const result = await router.callNavigate();
-    const afterHTML = await router.getContentHTML();
+    const result1 = await router.callNavigate();
+    const afterHTML1 = await router.getContentHTML();
 
     expect(beforeHTML.trim()).toBe(afterHTML.trim());
   });
 
   test('DOM integrity: verify content structure for each state (headings & paragraphs exist)', async ({ page }) => {
     // Ensure that for each logical state the expected DOM elements (h1 and p) are present
-    const router = new RouterPage(page);
+    const router8 = new RouterPage(page);
     await router.goto();
 
     // Home
@@ -277,7 +277,7 @@ test.describe('Simple Routing Example - FSM State & Transition Tests', () => {
 
   test('Accessibility and interaction: navigation via keyboard (Enter) works for focused buttons', async ({ page }) => {
     // Verify keyboard activation: focus a nav button and press Enter
-    const router = new RouterPage(page);
+    const router9 = new RouterPage(page);
     await router.goto();
 
     // Focus About button and press Enter

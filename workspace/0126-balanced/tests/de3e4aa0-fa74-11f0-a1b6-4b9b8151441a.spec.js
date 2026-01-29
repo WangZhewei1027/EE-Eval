@@ -139,7 +139,7 @@ test.describe('Hash Function Demonstration - FSM and UI tests', () => {
 
   test('CalculateHashes event: clicking without input triggers alert and remains in Idle', async ({ page }) => {
     // This test validates the transition guard for empty input (edge case / error scenario)
-    const hashPage = new HashPage(page);
+    const hashPage1 = new HashPage(page);
     await hashPage.goto();
 
     // Ensure input is empty
@@ -160,7 +160,7 @@ test.describe('Hash Function Demonstration - FSM and UI tests', () => {
 
   test('Transition S0_Idle -> S1_HashesCalculated: Valid input produces hashes of expected lengths and content', async ({ page }) => {
     // This test triggers the CalculateHashes transition and validates the expected observables.
-    const hashPage = new HashPage(page);
+    const hashPage2 = new HashPage(page);
     await hashPage.goto();
 
     // Enter known text and click the calculate button
@@ -193,7 +193,7 @@ test.describe('Hash Function Demonstration - FSM and UI tests', () => {
 
   test('Avalanche-like behavior: small input changes produce different hashes', async ({ page }) => {
     // This test exercises the non-deterministic expectation that small changes change outputs substantially.
-    const hashPage = new HashPage(page);
+    const hashPage3 = new HashPage(page);
     await hashPage.goto();
 
     // First input
@@ -219,7 +219,7 @@ test.describe('Hash Function Demonstration - FSM and UI tests', () => {
 
   test('Robustness: repeated calculations do not produce unhandled exceptions in console/pageerror', async ({ page }) => {
     // Run several calculations to try to surface any intermittent runtime errors
-    const hashPage = new HashPage(page);
+    const hashPage4 = new HashPage(page);
     await hashPage.goto();
 
     const inputs = ['', 'a', 'abc', 'the quick brown fox', '1234567890'];
@@ -247,7 +247,7 @@ test.describe('Hash Function Demonstration - FSM and UI tests', () => {
 
     // Console error strings, if any, should reference typical JS error types or be harmless warnings
     for (const msg of consoleErrors) {
-      const lower = msg.toLowerCase();
+      const lower1 = msg.toLowerCase();
       // Allow messages that look like JS errors; fail if a console error appears to be unrelated or inscrutable
       expect(lower.includes('error') || lower.includes('referenceerror') || lower.includes('typeerror') || lower.includes('syntaxerror') || lower.includes('warning') || lower.length > 0).toBeTruthy();
     }

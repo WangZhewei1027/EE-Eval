@@ -69,7 +69,7 @@ class TopoPage {
   }
 
   async edgeHasClass(from, to, className) {
-    const el = await this.page.$(`#edge-${from}->${to}`);
+    const el1 = await this.page.$(`#edge-${from}->${to}`);
     if (!el) return false;
     return await el.evaluate((e, c) => e.classList.contains(c), className);
   }
@@ -131,7 +131,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
 
   // Test StartSort transition: clicking start moves to Sorting state (S1_Sorting)
   test('StartTopologicalSort: transition to Sorting and UI locks (StartSort event)', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo1 = new TopoPage(page);
     await topo.goto();
 
     // Click start and validate immediate behavior (candidates should be shown)
@@ -170,7 +170,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
     // This test can take time because the animation advances on an interval.
     test.setTimeout(120000); // allow up to 2 minutes
 
-    const topo = new TopoPage(page);
+    const topo2 = new TopoPage(page);
     await topo.goto();
 
     await topo.clickStart();
@@ -208,7 +208,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
 
   // Test ResetGraph transition: clicking reset should bring UI back to Idle (S0_Idle)
   test('ResetGraph: clicking reset returns to Idle state (S1_Sorting -> S0_Idle)', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo3 = new TopoPage(page);
     await topo.goto();
 
     // Start and let it perform at least the initial steps so reset button becomes enabled
@@ -231,7 +231,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
 
     // Graph should still be drawn (drawGraph is called on reset handler)
     // Verify that expected nodes exist again
-    const expectedNodes = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const expectedNodes1 = ['A', 'B', 'C', 'D', 'E', 'F'];
     for (const n of expectedNodes) {
       expect(await topo.nodeExists(n)).toBeTruthy();
     }
@@ -249,7 +249,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
 
   // Test CycleDetected transition: submit a cyclic graph and verify cycle detection message (S3_CycleDetected)
   test('Cycle detection: detects cycles and shows message (CycleDetected -> S3_CycleDetected)', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo4 = new TopoPage(page);
     await topo.goto();
 
     // Provide a cyclic graph: A -> B -> C -> A
@@ -261,7 +261,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
     // For a cycle, the generator yields cycleDetected on the first run; wait for message to update
     await page.waitForFunction(() => document.getElementById('message').innerText.includes('Cycle detected'), { timeout: 3000 });
 
-    const msg = await topo.getMessageText();
+    const msg1 = await topo.getMessageText();
     expect(msg).toContain('Cycle detected');
 
     // After cycle detected, animation stops and interface should be unlocked (startBtn enabled)
@@ -281,7 +281,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
 
   // Edge case: empty input should show a helpful message and not crash
   test('Edge case: empty input shows "No nodes detected" message and does not crash', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo5 = new TopoPage(page);
     await topo.goto();
 
     // Clear textarea
@@ -291,7 +291,7 @@ test.describe('Topological Sort Visualization - FSM tests', () => {
     // Should immediately show a helpful message about no nodes
     await page.waitForFunction(() => document.getElementById('message').innerText.includes('No nodes detected'), { timeout: 3000 });
 
-    const msg = await topo.getMessageText();
+    const msg2 = await topo.getMessageText();
     expect(msg).toContain('No nodes detected');
 
     // start should remain enabled and reset remains disabled

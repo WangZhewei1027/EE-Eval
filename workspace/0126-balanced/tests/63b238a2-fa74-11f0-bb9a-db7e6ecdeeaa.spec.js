@@ -135,7 +135,7 @@ test.describe('Big-Theta Notation Demonstration (FSM states & transitions)', () 
 
   test('S1_FunctionInput -> S2_VisualizationResult: submitting valid defaults shows success result', async ({ page }) => {
     // This test validates the transition S1 -> S2 (successful visualization)
-    const tp = new ThetaPage(page);
+    const tp1 = new ThetaPage(page);
 
     // Verify initial input values as asserted in FSM/components
     const inputs = await tp.getInputValues();
@@ -158,19 +158,19 @@ test.describe('Big-Theta Notation Demonstration (FSM states & transitions)', () 
     expect(color).toBe('rgb(39, 174, 96)');
 
     // The userChart should have been updated (non-empty data URL)
-    const userData = await tp.getCanvasDataURL('#userChart');
+    const userData1 = await tp.getCanvasDataURL('#userChart');
     expect(userData).toBeTruthy();
     expect(userData.startsWith('data:image')).toBe(true);
 
     // No uncaught page errors or console errors during this operation
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('S1_FunctionInput -> S3_VisualizationFailure: submitting values outside bounds shows failure result', async ({ page }) => {
     // This test validates the transition S1 -> S3 (visualization failure)
-    const tp = new ThetaPage(page);
+    const tp2 = new ThetaPage(page);
 
     // Use parameters that should fail: a=5, b=0, c1=2, c2=4 -> 5n is > 4n for n>0
     await tp.fillAndSubmit({ a: 5, b: 0, c1: 2, c2: 4 });
@@ -182,19 +182,19 @@ test.describe('Big-Theta Notation Demonstration (FSM states & transitions)', () 
     expect(color).toBe('rgb(192, 57, 43)');
 
     // Ensure user chart exists and was attempted to be drawn (data URL exists)
-    const userData = await tp.getCanvasDataURL('#userChart');
+    const userData2 = await tp.getCanvasDataURL('#userChart');
     expect(userData).toBeTruthy();
     expect(userData.startsWith('data:image')).toBe(true);
 
     // No uncaught runtime page errors and no console errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('S1_FunctionInput InvalidInput: c1 or c2 non-positive triggers alert and stays in input state', async ({ page }) => {
     // This test validates the InvalidInput event handling and ensures the FSM stays in input state (no transition to result)
-    const tp = new ThetaPage(page);
+    const tp3 = new ThetaPage(page);
 
     // Case 1: c1 <= 0 should trigger alert "Constants c1 and c2 must be positive."
     await tp.fillAndSubmit({ a: 3, b: 0, c1: 0, c2: 4 });
@@ -224,14 +224,14 @@ test.describe('Big-Theta Notation Demonstration (FSM states & transitions)', () 
 
     // No uncaught page errors and no console errors during validation
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('FSM transitions and onEnter/onExit evidence: sequence of events and state checks', async ({ page }) => {
     // This test runs through a sequence to demonstrate transitions S0 -> S1 -> S2 and S1 -> S3,
     // and checks that the functions invoked on entry (drawThetaExample) and exit (no explicit exit actions) behave as expected.
-    const tp = new ThetaPage(page);
+    const tp4 = new ThetaPage(page);
 
     // S0 (Idle) verified by initial canvas content; ensure theta canvas has been drawn
     const thetaDataInitial = await tp.getCanvasDataURL('#thetaChart');
@@ -258,13 +258,13 @@ test.describe('Big-Theta Notation Demonstration (FSM states & transitions)', () 
 
     // Ensure no page errors or JS exceptions occurred in this sequence
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('Edge case: non-integer / fractional coefficients handled and result text updated accordingly', async ({ page }) => {
     // This test ensures fractional numbers are accepted (type="number" step="any") and that the logic still runs
-    const tp = new ThetaPage(page);
+    const tp5 = new ThetaPage(page);
 
     // Use fractional a that should still be within bounds: a=3.5, b=1.2, c1=3, c2=4
     await tp.fillAndSubmit({ a: 3.5, b: 1.2, c1: 3, c2: 4 });
@@ -278,7 +278,7 @@ test.describe('Big-Theta Notation Demonstration (FSM states & transitions)', () 
 
     // No page errors or console errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole5 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 });

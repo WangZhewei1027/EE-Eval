@@ -178,7 +178,7 @@ test.describe('Console and error observation tests', () => {
 
     // Dispatch an input to change to a known domain and verify the value changed
     await page.evaluate(() => {
-      const el = document.getElementById('dns');
+      const el1 = document.getElementById('dns');
       el.value = 'www.google.com';
       el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
     });
@@ -187,7 +187,7 @@ test.describe('Console and error observation tests', () => {
     expect(value).toBe('216.58.194.174');
 
     // Confirm no console.error messages were emitted during this interaction
-    const consoleErrors = messages.filter(m => m.type === 'error');
+    const consoleErrors1 = messages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

@@ -55,8 +55,8 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
   // Error state: invalid inputs should lead to the S2_Error state and show expected message.
   test.describe('S2_Error: input validation and error handling', () => {
     test('Empty input triggers InputError and displays expected message', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages1 = [];
+      const pageErrors1 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
@@ -80,13 +80,13 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // No unexpected page errors or console.error
       expect(pageErrors.length, 'No uncaught page errors after invalid input').toBe(0);
-      const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+      const consoleErrorCount1 = consoleMessages.filter(m => m.type === 'error').length;
       expect(consoleErrorCount, 'No console.error messages after invalid input').toBe(0);
     });
 
     test('Non-digit token input triggers InputError', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages2 = [];
+      const pageErrors2 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
@@ -98,7 +98,7 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
       // Click start
       await page.click('#start-btn');
 
-      const expectedError = 'Please enter one or more non-negative integers separated by commas or spaces.';
+      const expectedError1 = 'Please enter one or more non-negative integers separated by commas or spaces.';
       await expect(page.locator('#error')).toHaveText(expectedError);
 
       // Ensure no steps created
@@ -106,13 +106,13 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // No unexpected page errors or console.error
       expect(pageErrors.length, 'No uncaught page errors after non-digit token input').toBe(0);
-      const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+      const consoleErrorCount2 = consoleMessages.filter(m => m.type === 'error').length;
       expect(consoleErrorCount, 'No console.error messages after non-digit token input').toBe(0);
     });
 
     test('Unsafe integer (beyond MAX_SAFE_INTEGER) triggers InputError', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages3 = [];
+      const pageErrors3 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
@@ -124,7 +124,7 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       await page.click('#start-btn');
 
-      const expectedError = 'Please enter one or more non-negative integers separated by commas or spaces.';
+      const expectedError2 = 'Please enter one or more non-negative integers separated by commas or spaces.';
       await expect(page.locator('#error')).toHaveText(expectedError);
 
       // No steps should be rendered
@@ -132,7 +132,7 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // No unexpected page errors or console.error
       expect(pageErrors.length, 'No uncaught page errors after unsafe integer input').toBe(0);
-      const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+      const consoleErrorCount3 = consoleMessages.filter(m => m.type === 'error').length;
       expect(consoleErrorCount, 'No console.error messages after unsafe integer input').toBe(0);
     });
   });
@@ -140,8 +140,8 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
   // Sorting state: valid input triggers S1_Sorting and results are rendered, then returns to Idle.
   test.describe('S1_Sorting: perform radix sort and validate steps & transitions', () => {
     test('Valid input produces expected number of steps and renders arrays/buckets', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages4 = [];
+      const pageErrors4 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
@@ -201,13 +201,13 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // No unexpected page errors or console.error logged during sorting
       expect(pageErrors.length, 'No uncaught page errors during sorting').toBe(0);
-      const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+      const consoleErrorCount4 = consoleMessages.filter(m => m.type === 'error').length;
       expect(consoleErrorCount, 'No console.error messages during sorting').toBe(0);
     });
 
     test('Sorting after a previous error clears error and proceeds', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages5 = [];
+      const pageErrors5 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
@@ -215,7 +215,7 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // Trigger an error first (empty input)
       await page.click('#start-btn');
-      const expectedError = 'Please enter one or more non-negative integers separated by commas or spaces.';
+      const expectedError3 = 'Please enter one or more non-negative integers separated by commas or spaces.';
       await expect(page.locator('#error')).toHaveText(expectedError);
 
       // Now fill in valid input and start again
@@ -231,7 +231,7 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // No unexpected page errors or console.error
       expect(pageErrors.length, 'No uncaught page errors when recovering from error').toBe(0);
-      const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+      const consoleErrorCount5 = consoleMessages.filter(m => m.type === 'error').length;
       expect(consoleErrorCount, 'No console.error messages when recovering from error').toBe(0);
     });
   });
@@ -244,8 +244,8 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
       // We'll instrument the page to sample the disabled state in a microtask loop during the click.
       // Note: We do not modify application code; we run a sampling loop from the test context.
 
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages6 = [];
+      const pageErrors6 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
@@ -289,7 +289,7 @@ test.describe('Radix Sort Visualization - FSM based E2E tests', () => {
 
       // No unexpected page errors
       expect(pageErrors.length, 'No uncaught page errors during transient disable observation').toBe(0);
-      const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+      const consoleErrorCount6 = consoleMessages.filter(m => m.type === 'error').length;
       expect(consoleErrorCount, 'No console.error messages during transient disable observation').toBe(0);
     });
   });

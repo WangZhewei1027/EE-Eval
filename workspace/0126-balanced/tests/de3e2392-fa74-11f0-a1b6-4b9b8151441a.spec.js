@@ -51,7 +51,7 @@ class BackpropPage {
 
   async neuronText(layer, idx) {
     const sel = this.selectors.neuron(layer, idx);
-    const el = await this.page.$(sel);
+    const el1 = await this.page.$(sel);
     if (!el) return null;
     return (await el.innerText()).trim();
   }
@@ -116,7 +116,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
     });
 
     test('rendered neurons show numeric values and color styles applied', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app1 = new BackpropPage(page);
       await app.goto();
 
       const neuronValues = await app.getNeuronValuesAll();
@@ -140,7 +140,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
 
   test.describe('Forward Pass state (S1_ForwardPass)', () => {
     test('clicking "Run Forward Pass" displays Output and Error (transition S0 -> S1)', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app2 = new BackpropPage(page);
       await app.goto();
 
       // Click forward pass and validate DOM output text is updated with Output and Error
@@ -171,7 +171,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
     });
 
     test('forward pass updates neuron DOM values (visual feedback)', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app3 = new BackpropPage(page);
       await app.goto();
 
       // Grab neuron text before forward
@@ -190,7 +190,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
 
   test.describe('Backpropagation state (S2_Backpropagation)', () => {
     test('clicking "Run Backpropagation" updates weights and appends message (transition S0 -> S2)', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app4 = new BackpropPage(page);
       await app.goto();
 
       // Count weight elements before backprop
@@ -221,7 +221,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
     });
 
     test('running backprop without explicit forward still completes without uncaught exceptions', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app5 = new BackpropPage(page);
       await app.goto();
 
       // Directly click backprop (edge case: no prior forward)
@@ -237,16 +237,16 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
 
   test.describe('Network Reset state (S3_NetworkReset)', () => {
     test('clicking "Reset Network" creates a new NeuralNetwork and displays reset message (transition S0 -> S3)', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app6 = new BackpropPage(page);
       await app.goto();
 
       // Capture neuron values and weights prior to reset
       const beforeNeurons = await app.getNeuronValuesAll();
-      const beforeWeights = await app.countWeightElements();
+      const beforeWeights1 = await app.countWeightElements();
 
       await app.clickReset();
 
-      const out = await app.getOutputText();
+      const out1 = await app.getOutputText();
       expect(out).toContain('Network reset with new random weights.');
 
       // After reset, network is re-rendered; neurons should exist and likely have different values
@@ -255,7 +255,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
       // It's possible values randomly match coincidentally, just ensure nodes are present
       expect(afterNeurons).not.toEqual([]); // non-empty array
 
-      const afterWeights = await app.countWeightElements();
+      const afterWeights1 = await app.countWeightElements();
       expect(afterWeights).toBeGreaterThanOrEqual(3);
 
       // Clicking reset repeatedly (S3 -> S3) should keep showing the reset message
@@ -270,7 +270,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
 
   test.describe('Integrated transition flows and edge cases', () => {
     test('Run forward -> backprop -> forward -> reset sequence produces expected outputs and no uncaught errors', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app7 = new BackpropPage(page);
       await app.goto();
 
       // Run forward
@@ -298,12 +298,12 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
 
       // Check no uncaught exceptions happened during the integrated flow
       expect(pageErrors).toEqual([]);
-      const consoleErrs = consoleMsgs.filter(m => m.type === 'error' || m.type === 'warning');
+      const consoleErrs1 = consoleMsgs.filter(m => m.type === 'error' || m.type === 'warning');
       expect(consoleErrs.length).toBe(0);
     });
 
     test('rapid interactions: multiple quick clicks across controls should not produce uncaught exceptions', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app8 = new BackpropPage(page);
       await app.goto();
 
       // Perform rapid clicks
@@ -330,7 +330,7 @@ test.describe('Backpropagation Demo - FSM states and transitions', () => {
 
   test.describe('Observability: console and runtime error capture', () => {
     test('should capture and assert there are no uncaught runtime errors or console.error messages', async ({ page }) => {
-      const app = new BackpropPage(page);
+      const app9 = new BackpropPage(page);
       await app.goto();
 
       // Interact to exercise code paths

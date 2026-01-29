@@ -49,15 +49,15 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
   test('Submitting empty form is blocked by HTML required validation (no submit handler invoked)', async ({ page }) => {
     // We want to ensure the browser's native validation prevents submit when input is empty.
     // Attach listeners to detect any page error that might occur if submit handler ran.
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors1 = [];
+    const consoleMessages1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => consoleMessages.push(msg.text()));
 
     await page.goto(APP_URL, { waitUntil: 'load' });
 
     // Ensure input is empty
-    const messageInput = page.locator('input#messageInput');
+    const messageInput1 = page.locator('input#messageInput1');
     await expect(messageInput).toHaveValue('');
 
     // Click the submit button without entering text
@@ -76,7 +76,7 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
     expect(sendErrorDetected).toBeFalsy();
 
     // Additionally, messages area should remain unchanged
-    const messagesDiv = page.locator('#messages');
+    const messagesDiv1 = page.locator('#messages');
     const content = await messagesDiv.innerHTML();
     expect(content.trim().length).toBeLessThanOrEqual(0);
   });
@@ -86,8 +86,8 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
     // We will fill the required input and submit the form. Since the page attempts to send via WebSocket to
     // ws://localhost:8080 and we have not provided a server, the operation may throw an error which we must assert.
 
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors2 = [];
+    const consoleMessages2 = [];
     page.on('pageerror', (err) => {
       pageErrors.push(err);
     });
@@ -99,7 +99,7 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
     await page.goto(APP_URL, { waitUntil: 'load' });
 
     // Fill the input with a test message
-    const messageInput = page.locator('input#messageInput');
+    const messageInput2 = page.locator('input#messageInput2');
     await messageInput.fill('Hello Playwright');
 
     // Submit the form
@@ -131,8 +131,8 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
     // Validate that the script logs WebSocket related errors to the console (via console.error in the page script)
     // and that page-level errors due to Node code are present.
 
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages3 = [];
+    const pageErrors3 = [];
     page.on('console', (msg) => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', (err) => pageErrors.push(err));
 
@@ -159,8 +159,8 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
     // Since the environment likely has no ws server, we assert that the 'Connected to server' message does NOT appear.
     // We also check for 'Disconnected from server' which should only appear on a close event; absence is acceptable.
 
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages4 = [];
+    const pageErrors4 = [];
     page.on('console', (msg) => consoleMessages.push(msg.text()));
     page.on('pageerror', (err) => pageErrors.push(err));
 
@@ -169,8 +169,8 @@ test.describe('Socket Programming Demo - FSM and UI validation', () => {
     // Wait to allow any open/close handlers to run if they will
     await page.waitForTimeout(800);
 
-    const messagesDiv = page.locator('#messages');
-    const content = await messagesDiv.innerText();
+    const messagesDiv2 = page.locator('#messages');
+    const content1 = await messagesDiv.innerText();
 
     // The FSM expects that when ConnectionOpened the page would contain 'Connected to server'.
     // In this test environment, we typically do not have a server so that string should NOT exist.

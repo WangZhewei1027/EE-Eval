@@ -197,7 +197,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       expect(state.numFrames).toBeGreaterThanOrEqual(1);
 
       // ptable should render rows equal to numPages
-      const rows = await app.getPTableRowCount();
+      const rows1 = await app.getPTableRowCount();
       expect(rows).toBe(state.numPages);
 
       // frames rendered count should equal configured frames
@@ -211,7 +211,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('clicking Build with modified inputs updates configuration', async ({ page }) => {
       // Validate Build button transition S0 -> S1 and re-rendering
-      const app = new PagingPage(page);
+      const app1 = new PagingPage(page);
       await app.goto();
 
       // Modify configuration
@@ -223,7 +223,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       await app.build();
 
       // Check state updated
-      const state = await app.evaluateState();
+      const state1 = await app.evaluateState();
       expect(state.numPages).toBe(8);
       expect(state.pageSize).toBe(32);
       expect(state.numFrames).toBe(2);
@@ -241,7 +241,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
   test.describe('Accessing Addresses (S2_Accessing)', () => {
     test('accessing a valid address causes page fault then load, counters update and TLB/ptable reflect mapping', async ({ page }) => {
       // This test validates Access transition and its effects on page table, frames and counters.
-      const app = new PagingPage(page);
+      const app2 = new PagingPage(page);
       await app.goto();
 
       // Ensure a known small configuration for deterministic checks
@@ -279,7 +279,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('clicking Access with empty input triggers alert dialog (edge-case)', async ({ page }) => {
       // This test ensures the Access button shows an alert when input is empty
-      const app = new PagingPage(page);
+      const app3 = new PagingPage(page);
       await app.goto();
 
       // Ensure input empty
@@ -305,7 +305,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('accessing out-of-range address logs an out-of-range message', async ({ page }) => {
       // This test validates edge-case where address is beyond virtual space
-      const app = new PagingPage(page);
+      const app4 = new PagingPage(page);
       await app.goto();
 
       // Ensure known config
@@ -315,14 +315,14 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       await app.build();
 
       // compute out of range
-      const state = await app.evaluateState();
+      const state2 = await app.evaluateState();
       expect(state).toBeTruthy();
       const maxAddr = state.numPages * state.pageSize - 1;
       const out = maxAddr + 5;
 
       await app.accessAddress(out);
 
-      const logText = await app.getLogText();
+      const logText1 = await app.getLogText();
       expect(logText).toContain(`Address ${out} out of range`);
 
       expect(consoleErrors.length, 'No console.error during out-of-range access').toBe(0);
@@ -331,7 +331,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('pressing Enter in access input triggers Access (EnterAccess event)', async ({ page }) => {
       // This test validates Enter key triggers the access button behavior
-      const app = new PagingPage(page);
+      const app5 = new PagingPage(page);
       await app.goto();
 
       await app.setNumPages(8);
@@ -344,7 +344,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       await app.accessAddr.press('Enter');
 
       // Expect the access to have been processed (access counter incremented)
-      const counters = await app.getCounters();
+      const counters1 = await app.getCounters();
       expect(counters.access).toBeGreaterThanOrEqual(1);
 
       expect(consoleErrors.length, 'No console.error on Enter access').toBe(0);
@@ -355,7 +355,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
   test.describe('Sequence Generation and Running (S3_SequenceGenerated -> S4_SequenceRunning)', () => {
     test('generating a sequence populates seq and logs event (S3_SequenceGenerated)', async ({ page }) => {
       // Validate Seq (20) button behavior and that sequence is stored/visible in log
-      const app = new PagingPage(page);
+      const app6 = new PagingPage(page);
       await app.goto();
 
       await app.setNumPages(16);
@@ -372,7 +372,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       expect(seqInfo.seq.length).toBe(20);
 
       // Log contains sequence message
-      const logText = await app.getLogText();
+      const logText2 = await app.getLogText();
       expect(logText).toContain('Generated sequence (20)');
 
       expect(consoleErrors.length, 'No console.error during sequence generation').toBe(0);
@@ -381,7 +381,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('stepping through sequence processes one address and increments seqIndex (StepSequence)', async ({ page }) => {
       // Validate Step button consumes one sequence item and triggers access
-      const app = new PagingPage(page);
+      const app7 = new PagingPage(page);
       await app.goto();
 
       await app.setNumPages(16);
@@ -410,7 +410,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('running sequence toggles auto-run (RunSequence) and can be stopped', async ({ page }) => {
       // Validate Run toggles to "Stop" and starts advancing seqIndex; then toggling stops it.
-      const app = new PagingPage(page);
+      const app8 = new PagingPage(page);
       await app.goto();
 
       await app.setNumPages(16);
@@ -420,7 +420,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
       await app.generateSequence();
 
-      const before = await app.getSeqAndIndex();
+      const before1 = await app.getSeqAndIndex();
 
       // Start auto-run
       await app.runSequenceToggle();
@@ -435,7 +435,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       // Button text returns to original
       await expect(app.runSeqBtn).toHaveText('Run sequence (auto)', { timeout: 1000 });
 
-      const after = await app.getSeqAndIndex();
+      const after1 = await app.getSeqAndIndex();
       // seqIndex should have advanced (at least 1)
       expect(after.seqIndex).toBeGreaterThanOrEqual((before.seqIndex || 0) + 1);
 
@@ -445,7 +445,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
     test('clear log while running clears the UI log but does not crash (ClearLog during S4)', async ({ page }) => {
       // Validate Clear Log works while sequence running
-      const app = new PagingPage(page);
+      const app9 = new PagingPage(page);
       await app.goto();
 
       await app.setNumPages(16);
@@ -464,7 +464,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       await app.clearLog();
 
       // The log should be empty (no content)
-      const logText = await app.getLogText();
+      const logText3 = await app.getLogText();
       // innerText may be empty string; ensure it's empty or only whitespace
       expect(logText.trim().length).toBeLessThanOrEqual(0);
 
@@ -480,7 +480,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
   test.describe('Reset and UI cleanup', () => {
     test('Reset button clears state, UI and logs (Reset transition)', async ({ page }) => {
       // Validate Reset behavior and S1->S1 Reset transition
-      const app = new PagingPage(page);
+      const app10 = new PagingPage(page);
       await app.goto();
 
       // Make some accesses to create non-empty state and logs
@@ -491,7 +491,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       await app.reset();
 
       // After reset, internal state should be null (window.pagingState returns null)
-      const state = await app.evaluateState();
+      const state3 = await app.evaluateState();
       expect(state).toBeNull();
 
       // UI elements should be cleared
@@ -499,7 +499,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       expect(ptableHtml.trim()).toBe('');
 
       // Log should be empty
-      const logText = await app.getLogText();
+      const logText4 = await app.getLogText();
       expect(logText.trim()).toBe('');
 
       expect(consoleErrors.length, 'No console.error after Reset').toBe(0);
@@ -509,7 +509,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
 
   test.describe('Additional edge cases and invariants', () => {
     test('Random address button generates and accesses an address (Random event)', async ({ page }) => {
-      const app = new PagingPage(page);
+      const app11 = new PagingPage(page);
       await app.goto();
 
       await app.setNumPages(8);
@@ -517,13 +517,13 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
       await app.setNumFrames(2);
       await app.build();
 
-      const before = await app.getCounters();
+      const before2 = await app.getCounters();
       await app.clickRandom();
 
       // small wait for processing
       await page.waitForTimeout(200);
 
-      const after = await app.getCounters();
+      const after2 = await app.getCounters();
       // accessCounter should have increased
       expect(after.access).toBeGreaterThanOrEqual(before.access + 1);
 
@@ -532,7 +532,7 @@ test.describe('Paging Demo — Virtual Memory (d3d94521...)', () => {
     });
 
     test('TLB enabled/disabled toggles display and behavior does not crash', async ({ page }) => {
-      const app = new PagingPage(page);
+      const app12 = new PagingPage(page);
       await app.goto();
 
       // Ensure TLB enabled (default)

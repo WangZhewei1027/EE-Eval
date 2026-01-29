@@ -111,7 +111,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
   test.describe('Singleton Demo (S1_SingletonDemo) and transition from Idle', () => {
     test('DemoSingleton: clicking button shows two instances with identical timestamps and equality true', async ({ page }) => {
       // This test validates the transition S0_Idle -> S1_SingletonDemo and entry action demoSingleton()
-      const p = new PatternsPage(page);
+      const p1 = new PatternsPage(page);
 
       // Click to trigger singleton demo
       await p.triggerSingleton();
@@ -139,13 +139,13 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
   test.describe('Factory Demo (S2_FactoryDemo)', () => {
     test('DemoFactory: clicking creates Dog and Cat and they speak', async ({ page }) => {
       // Validates S0_Idle -> S2_FactoryDemo and demoFactory() output
-      const p = new PatternsPage(page);
+      const p2 = new PatternsPage(page);
 
       await p.triggerFactory();
 
       await expect(p.factoryOutput).toBeVisible();
 
-      const text = (await p.getFactoryText()).replace(/\s+/g, ' ');
+      const text1 = (await p.getFactoryText()).replace(/\s+/g, ' ');
       // Expect Dog and Cat outputs with the correct sounds
       expect(text).toContain('Dog says:');
       expect(text).toContain('Woof!');
@@ -154,7 +154,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
       // Edge case: repeatedly clicking should overwrite the output and remain stable
       await p.triggerFactory();
-      const text2 = (await p.getFactoryText()).replace(/\s+/g, ' ');
+      const text21 = (await p.getFactoryText()).replace(/\s+/g, ' ');
       expect(text2).toContain('Dog says:');
       expect(text2).toContain('Woof!');
       expect(text2).toContain('Cat says:');
@@ -165,13 +165,13 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
   test.describe('Strategy Demo (S3_StrategyDemo)', () => {
     test('DemoStrategy: clicking sorts array using bubble and quick sort producing same sorted results', async ({ page }) => {
       // Validates S0_Idle -> S3_StrategyDemo and demoStrategy() entry action
-      const p = new PatternsPage(page);
+      const p3 = new PatternsPage(page);
 
       await p.triggerStrategy();
 
       await expect(p.strategyOutput).toBeVisible();
 
-      const text = await p.getStrategyText();
+      const text2 = await p.getStrategyText();
 
       // Validate that original array is present and both strategies produce a sorted array
       expect(text).toMatch(/Original array: \[5, 3, 8, 4, 2, 7, 1, 6\]/);
@@ -189,13 +189,13 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
     test('Strategy edge case: ensure original data is not mutated by sort implementations', async ({ page }) => {
       // This verifies that sorts operate on copies (bubbleSort clones array in implementation)
-      const p = new PatternsPage(page);
+      const p4 = new PatternsPage(page);
 
       await p.triggerStrategy();
 
       await expect(p.strategyOutput).toBeVisible();
 
-      const text = await p.getStrategyText();
+      const text3 = await p.getStrategyText();
 
       // The original array should still be the original order
       expect(text).toMatch(/Original array: \[5, 3, 8, 4, 2, 7, 1, 6\]/);
@@ -205,7 +205,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
   test.describe('Observer Demo (S4_ObserverDemo)', () => {
     test('DemoObserver: subscribe, notify, unsubscribe flow emits appropriate messages over time', async ({ page }) => {
       // This test validates S0_Idle -> S4_ObserverDemo and the timed notifications/unsubscribe behavior
-      const p = new PatternsPage(page);
+      const p5 = new PatternsPage(page);
 
       // Trigger the observer demo which uses setTimeouts for notifications
       await p.triggerObserver();
@@ -228,13 +228,13 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
       // Wait for unsubscribe message around 2200ms (allow buffer)
       await page.waitForFunction(() => {
-        const el = document.getElementById('observer-output');
+        const el1 = document.getElementById('observer-output');
         return el && el.innerText.includes('Unsubscribing Observer 2');
       }, {}, { timeout: 4000 });
 
       // Finally wait for second notify (3000ms) and assert that only Observer 1 receives Event #2
       await page.waitForFunction(() => {
-        const el = document.getElementById('observer-output');
+        const el2 = document.getElementById('observer-output');
         return el && el.innerText.includes('Notifying observers with "Event #2"') &&
                el.innerText.includes('Observer 1 received: Event #2');
       }, {}, { timeout: 6000 });
@@ -252,7 +252,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
     test('Observer edge case: triggering observer demo multiple times appends additional sequences', async ({ page }) => {
       // Clicking the observer demo twice should append new sequences into the same output element (no isolation)
-      const p = new PatternsPage(page);
+      const p6 = new PatternsPage(page);
 
       // Trigger twice in quick succession
       await p.triggerObserver();
@@ -260,11 +260,11 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
       // We expect at least the subscribing message twice or appended content visible
       await page.waitForFunction(() => {
-        const el = document.getElementById('observer-output');
+        const el3 = document.getElementById('observer-output');
         return el && el.innerText.includes('Subscribing Observer 1 and Observer 2');
       }, {}, { timeout: 2000 });
 
-      const text = await p.getObserverText();
+      const text4 = await p.getObserverText();
 
       // The text should contain multiple "Subscribing" occurrences if append happened
       const subscribingCount = (text.match(/Subscribing Observer 1 and Observer 2/g) || []).length;
@@ -272,7 +272,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
       // Wait for at least one Event #1 notification to appear to ensure sequences progressed
       await page.waitForFunction(() => {
-        const el = document.getElementById('observer-output');
+        const el4 = document.getElementById('observer-output');
         return el && el.innerText.includes('Notifying observers with "Event #1"');
       }, {}, { timeout: 5000 });
 
@@ -285,7 +285,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
       // This test runs a series of interactions and then asserts there were no page errors / console.error entries.
       // It complements the afterEach guard and collects interactions across patterns.
 
-      const p = new PatternsPage(page);
+      const p7 = new PatternsPage(page);
 
       // Perform all interactions to exercise the code paths
       await p.triggerSingleton();
@@ -295,7 +295,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
 
       // Wait for observer finalization to occur (Event #2) to ensure timeouts had a chance to run
       await page.waitForFunction(() => {
-        const el = document.getElementById('observer-output');
+        const el5 = document.getElementById('observer-output');
         return el && el.innerText.includes('Notifying observers with "Event #2"');
       }, {}, { timeout: 7000 });
 
@@ -313,7 +313,7 @@ test.describe('Design Patterns Demo - FSM states and transitions', () => {
       expect(pageErrors).toHaveLength(0);
 
       // Confirm there are no console.error typed messages
-      const errorConsole = consoleMessages.filter(m => m.type === 'error');
+      const errorConsole1 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsole).toHaveLength(0);
     });
   });

@@ -42,7 +42,7 @@ class SDLCPage {
 
   // Get the onclick attribute value for a phase button.
   async getButtonOnclick(phaseId) {
-    const selector = `.phase#${phaseId} .button`;
+    const selector1 = `.phase#${phaseId} .button`;
     return this.page.locator(selector).getAttribute('onclick');
   }
 
@@ -113,7 +113,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
     // Test each FSM transition: clicking the More Details button should display appropriate details.
     for (const phase of PHASES) {
       test(`Clicking ${phase.name} button shows ${phase.name} details`, async ({ page }) => {
-        const sdlc = new SDLCPage(page);
+        const sdlc1 = new SDLCPage(page);
         await sdlc.goto();
 
         // Validate the button has the expected onclick evidence attribute as described in the FSM.
@@ -130,12 +130,12 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
         expect(detailsHTML).toContain(phase.snippet);
 
         // Check innerText as well for completeness (text extraction/visual feedback).
-        const detailsText = await sdlc.getDetailsText();
+        const detailsText1 = await sdlc.getDetailsText();
         expect(detailsText).toContain(`${phase.name} Phase`);
         expect(detailsText).toContain(phase.snippet);
 
         // No runtime errors should have occurred during this interaction.
-        const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+        const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
         expect(pageErrors.length).toBe(0);
         expect(consoleErrors.length).toBe(0);
       });
@@ -143,7 +143,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
 
     test('Clicking multiple phase buttons updates details accordingly', async ({ page }) => {
       // Validate switching between states updates the details content as expected (visual feedback).
-      const sdlc = new SDLCPage(page);
+      const sdlc2 = new SDLCPage(page);
       await sdlc.goto();
 
       // Click Planning, then Testing, then Deployment
@@ -163,7 +163,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
       expect(text).toContain('Deployment entails releasing the software');
 
       // Verify no console or page errors happened during multiple transitions.
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -171,18 +171,18 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
 
   test.describe('Attributes, edge cases, and failure modes', () => {
     test('All phase buttons exist and have correct onclick attributes', async ({ page }) => {
-      const sdlc = new SDLCPage(page);
+      const sdlc3 = new SDLCPage(page);
       await sdlc.goto();
 
       for (const phase of PHASES) {
-        const onclick = await sdlc.getButtonOnclick(phase.id);
+        const onclick1 = await sdlc.getButtonOnclick(phase.id);
         // Ensure the onclick attribute is present and references showDetails.
         expect(onclick).toBeTruthy();
         expect(onclick).toContain(`showDetails('${phase.name}')`);
       }
 
       // No console/page errors detected on attribute checks.
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -190,7 +190,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
     test('Edge case: calling showDetails with an unknown phase shows undefined content (no crash)', async ({ page }) => {
       // This validates application behavior when provided with an unexpected phase name.
       // We do NOT inject or redefine functions; we rely on the existing showDetails function.
-      const sdlc = new SDLCPage(page);
+      const sdlc4 = new SDLCPage(page);
       await sdlc.goto();
 
       // Call the existing showDetails function with an unknown phase.
@@ -202,20 +202,20 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
       });
 
       // The details area should now contain the heading for the unknown phase and show 'undefined' text.
-      const detailsText = await sdlc.getDetailsText();
+      const detailsText2 = await sdlc.getDetailsText();
       expect(detailsText).toContain('UnknownPhaseXYZ Phase');
       // The content is expected to be the string "undefined" (because detailsContent[phase] is undefined).
       expect(detailsText).toContain('undefined');
 
       // Confirm application didn't produce runtime errors (ReferenceError/SyntaxError/TypeError).
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('No uncaught ReferenceError, SyntaxError, or TypeError occurred during test run', async ({ page }) => {
       // This test explicitly checks captured page errors for specific error types.
-      const sdlc = new SDLCPage(page);
+      const sdlc5 = new SDLCPage(page);
       await sdlc.goto();
 
       // Perform some typical interactions to ensure runtime stability.
@@ -232,9 +232,9 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
       expect(relevantErrors.length).toBe(0);
 
       // Also validate console error messages for those error keywords (if any).
-      const consoleErrors = consoleMessages.filter(m => {
+      const consoleErrors5 = consoleMessages.filter(m => {
         const t = (m.type || '').toLowerCase();
-        const text = (m.text || '').toLowerCase();
+        const text1 = (m.text1 || '').toLowerCase();
         // Filter for error messages (console type 'error') or messages containing error type names.
         return t === 'error' || text.includes('referenceerror') || text.includes('syntaxerror') || text.includes('typeerror');
       });
@@ -245,7 +245,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
   test.afterEach(async ({ page }) => {
     // Final safety assertions: ensure there were no uncaught errors recorded during the test.
     // This provides an early signal if the page had runtime issues during any individual test.
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
     // If any errors exist, fail the test with a helpful message. The expect below will surface the errors.
     expect(pageErrors.length, `Unexpected page errors: ${pageErrors.map(e => e.message).join('; ')}`).toBe(0);
     expect(consoleErrors.length, `Unexpected console error messages: ${consoleErrors.map(e => e.text).join('; ')}`).toBe(0);

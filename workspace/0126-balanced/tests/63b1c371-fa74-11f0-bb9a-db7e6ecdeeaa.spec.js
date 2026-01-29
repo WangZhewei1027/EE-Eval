@@ -71,7 +71,7 @@ class KruskalPage {
   async waitForExactStateText(text, timeout = 5000) {
     await this.page.waitForFunction(
       (sel, expected) => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         return el && el.textContent && el.textContent.trim() === expected;
       },
       '#stateText',
@@ -243,7 +243,7 @@ test.describe('Kruskal Algorithm Visualization - FSM state & transitions', () =>
     expect(await app.getBtnAutoText()).toBe('Auto Play');
 
     // Also ensure canvas was re-rendered (it should have a defined dataURL)
-    const dataURL = await app.getCanvasDataURL();
+    const dataURL1 = await app.getCanvasDataURL();
     expect(typeof dataURL).toBe('string');
     expect(dataURL.length).toBeGreaterThan(100);
   });
@@ -255,7 +255,7 @@ test.describe('Kruskal Algorithm Visualization - FSM state & transitions', () =>
 
     // run steps until complete (safe loop)
     for (let i = 0; i < 40; i++) {
-      const st = await app.getStateText();
+      const st1 = await app.getStateText();
       if (st === 'Algorithm complete! MST formed.') break;
       await app.clickStep();
       await app.page.waitForTimeout(20);
@@ -267,7 +267,7 @@ test.describe('Kruskal Algorithm Visualization - FSM state & transitions', () =>
     // Now click Auto: the app should respond with "Algorithm already complete. Reset to run again."
     await app.clickAuto();
     await app.waitForStateTextContains('Algorithm already complete. Reset to run again.', 1000);
-    const text = await app.getStateText();
+    const text1 = await app.getStateText();
     expect(text).toBe('Algorithm already complete. Reset to run again.');
   });
 });

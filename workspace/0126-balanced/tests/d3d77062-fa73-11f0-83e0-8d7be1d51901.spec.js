@@ -142,12 +142,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Running state tests: synchronous run (speed 0) and asynchronous run->pause
   test('Running state: RunClick triggers algorithm to execute (synchronous when speed=0)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p1 = new AStarPage(page);
     await p.goto();
 
     // Set speed to 0 for synchronous run (fast and deterministic)
@@ -180,12 +180,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
   });
 
   test('Running -> Paused transition via PauseClick stops progress (asynchronous run)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p2 = new AStarPage(page);
     await p.goto();
 
     // Use a small positive speed to run asynchronously
@@ -217,12 +217,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Stepping tests
   test('Stepping state: StepClick from Idle performs a single expansion', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p3 = new AStarPage(page);
     await p.goto();
 
     // Ensure baseline
@@ -232,7 +232,7 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
     await p.clickStep();
     await page.waitForTimeout(20);
 
-    const expanded = await p.getExpanded();
+    const expanded1 = await p.getExpanded();
     expect(expanded).toBeGreaterThanOrEqual(1);
 
     // Step again should increment further
@@ -248,12 +248,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
   });
 
   test('Transition Running -> Stepping: clicking Step while running stops and performs a step', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p4 = new AStarPage(page);
     await p.goto();
 
     // Start a fast asynchronous run
@@ -276,12 +276,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Reset state and related events
   test('Reset transitions: ResetClick, ClearWallsClick, RandomizeClick, ResizeClick cause resetSearchState and no errors', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors5 = [];
+    const pageErrors5 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p5 = new AStarPage(page);
     await p.goto();
 
     // Make sure some state changes: toggle a wall by clicking canvas center
@@ -324,12 +324,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Heuristic / Diagonal / NoCut changes -> should reset search state
   test('Changing heuristic, diagonal, and no-cut toggles trigger reset and draw', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors6 = [];
+    const pageErrors6 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p6 = new AStarPage(page);
     await p.goto();
 
     // cause some progress
@@ -360,12 +360,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Weight and Speed input interactions and labels
   test('WeightInput and SpeedInput update UI labels and do not throw errors', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors7 = [];
+    const pageErrors7 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p7 = new AStarPage(page);
     await p.goto();
 
     // Change weight slider and verify label updates
@@ -393,12 +393,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Keyboard shortcuts as an edge-case test
   test('Keyboard shortcuts: r -> randomize, c -> clear, Space -> run/pause, s -> step', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors8 = [];
+    const pageErrors8 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p8 = new AStarPage(page);
     await p.goto();
 
     // Press 'r' to randomize
@@ -433,12 +433,12 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   // Error observation test: ensure no uncaught page errors, type errors, etc.
   test('No unexpected runtime errors (console or page errors) occur during typical interactions', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors9 = [];
+    const pageErrors9 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', e => pageErrors.push(String(e)));
 
-    const p = new AStarPage(page);
+    const p9 = new AStarPage(page);
     await p.goto();
 
     // Perform a series of actions that exercise many handlers

@@ -1,0 +1,144 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3d77060-fa73-11f0-83e0-8d7be1d51901.html';
+
+// Page Object for interacting with the Prim's Visualization page
+class PrimPage {
+  constructor(page) {
+    this.page = page;
+  }
+
+  // Basic element handles
+  async regenBtn() { return this.page.locator('#regen'); }
+  async randomizePosBtn() { return this.page.locator('#randomizePos'); }
+  async initBtn() { return this.page.locator('#initBtn'); }
+  async stepBtn() { return this.page.locator('#stepBtn'); }
+  async autoBtn() { return this.page.locator('#autoBtn'); }
+  async resetBtn() { return this.page.locator('#resetBtn'); }
+  async clearSelectionBtn() { return this.page.locator('#clearSelection'); }
+  async nodeCountSlider() { return this.page.locator('#nodeCount'); }
+  async densitySlider() { return this.page.locator('#density'); }
+
+  // Labels / displays
+  async startNodeLabel() { return this.page.locator('#startNode'); }
+  async mstWeightLabel() { return this.page.locator('#mstWeight'); }
+  async mstEdgesLabel() { return this.page.locator('#mstEdges'); }
+  async lastActionLabel() { return this.page.locator('#lastAction'); }
+  async pqListDiv() { return this.page.locator('#pqList'); }
+  async svg() { return this.page.locator('#svg'); }
+  async pseudocodeLine(n) { return this.page.locator(`#pc${n}`); }
+
+  // Counts number of node groups (g.node)
+  async countNodes() {
+    return this.page.evaluate(() => document.querySelectorAll('g.node').length);
+  }
+
+  // Counts number of edge lines (svg line elements)
+  async countEdges() {
+    return this.page.evaluate(() => Array.from(document.querySelectorAll('#svg > line')).length);
+  }
+
+  // Click a node by index (0-based) using the g.node element
+  async clickNode(index = 0) {
+    // Ensure node exists
+    await this.page.waitForSelector('g.node');
+    const nodes = await this.page.$$('g.node');
+    if (nodes.length === 0) throw new Error('No nodes found to click');
+    const idx = Math.min(index, nodes.length - 1);
+    await nodes[idx].click();
+  }
+
+  // Get circle attributes (fill, stroke, cx, cy) for a given node index
+  async getNodeCircleAttrs(index = 0) {
+    return this.page.evaluate((i) => {
+      const g = document.querySelectorAll('g.node')[i];
+      if (!g) return null;
+      const circle = g.querySelector('circle');
+      return {
+        fill: circle.getAttribute('fill'),
+        stroke: circle.getAttribute('stroke'),
+        strokeWidth: circle.getAttribute('stroke-width'),
+        cx: circle.getAttribute('cx'),
+        cy: circle.getAttribute('cy'),
+      };
+    }, index);
+  }
+
+  // Get stroke color of first edge line (for checking style changes)
+  async getEdgeStroke(index = 0) {
+    return this.page.evaluate((i) => {
+      const lines = document.querySelectorAll('#svg > line');
+      if (lines.length === 0) return null;
+      const ln = lines[i] || lines[0];
+      return ln.getAttribute('stroke');
+    }, index);
+  }
+
+  // Returns text content of PQ list (can be '(empty)' or list)
+  async getPQText() {
+    return this.page.evaluate(() => document.getElementById('pqList').textContent.trim());
+  }
+
+  // Returns MST stats
+  async getMSTStats() {
+    const start = await this.startNodeLabel().textContent();
+    const weight = await this.mstWeightLabel().textContent();
+    const edges = await this.mstEdgesLabel().textContent();
+    const lastAction = await this.lastActionLabel().textContent();
+    return {
+      start: start?.trim(),
+      weight: weight?.trim(),
+      edges: edges?.trim(),
+      lastAction: lastAction?.trim()
+    };
+  }
+
+  // Returns whether a pseudocode line has highlight class
+  async isPseudocodeHighlighted(n) {
+    return this.page.evaluate((lineNo) => {
+      const el = document.getElementById(`pc${lineNo}`);
+      return el.classList.contains('pc-highlight');
+    }, n);
+  }
+}
+
+test.describe('Prim Algorithm Interactive - d3d77060-fa73-11f0-83e0-8d7be1d51901', () => {
+  // Capture console errors and page errors to assert none occur unexpectedly
+  let consoleErrors;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    consoleErrors = [];
+    pageErrors = [];
+
+    // Listen for console messages of type error
+    page.on('console', msg => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+
+    // Listen for uncaught exceptions
+    page.on('pageerror', err => {
+      pageErrors.push(err.message);
+    });
+
+    await page.goto(APP_URL);
+    // wait for svg to be populated (initial generateGraph runs on load)
+    await page.waitForSelector('#svg');
+    // Wait until at least one node is present
+    await page.waitForSelector('g.node');
+  });
+
+  test.afterEach(async () => {
+    // Assert no uncaught page errors exist (ensures runtime didn't throw unexpected errors)
+    expect(pageErrors, 'no uncaught page errors').toEqual([]);
+    // Also assert no console.error messages were emitted
+    expect(consoleErrors, 'no console.error messages').toEqual([]);
+  });
+
+  test.describe('S0 Idle & Graph Generation', () => {
+    test('renders controls and initial graph (Idle state)', async ({ page }) => {
+      const prim = new PrimPage(page);
+
+      // Validate presence of major controls
+      await expect(prim.regenBtn()).toBeVisible();
+      await expect(

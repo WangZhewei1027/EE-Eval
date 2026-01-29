@@ -149,10 +149,10 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
   test('STEP transition from Idle to Step initializes centroids and increments iteration', async ({ page }) => {
     // Clicking "Step" from Idle should initialize centroids and update iteration and clusters.
-    const app = new KMeansPage(page);
+    const app1 = new KMeansPage(page);
 
     // Ensure starting state
-    let info = await app.getInfoNumbers();
+    let info1 = await app.getInfoNumbers();
     expect(info.iteration).toBe(0);
     expect(info.clusters).toBe(0);
 
@@ -171,7 +171,7 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
   test('Run Clustering transition Idle -> Running: animation begins and iterations increase over time', async ({ page }) => {
     // Clicking "Run Clustering" should start an animation loop where iteration increases repeatedly.
-    const app = new KMeansPage(page);
+    const app2 = new KMeansPage(page);
 
     // Start clustering
     await app.clickRun();
@@ -179,7 +179,7 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
     // Wait for a few animation frames to occur
     await page.waitForTimeout(500);
 
-    let info = await app.getInfoNumbers();
+    let info2 = await app.getInfoNumbers();
     expect(info.clusters).toBe(3);
     expect(info.iteration).toBeGreaterThanOrEqual(1);
 
@@ -194,14 +194,14 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
   test('STEP while Running: clicking Step does not stop animation and iterations continue', async ({ page }) => {
     // Start running, then click Step while running and confirm animation continues.
-    const app = new KMeansPage(page);
+    const app3 = new KMeansPage(page);
 
     // Start clustering animation
     await app.clickRun();
     await page.waitForTimeout(300);
 
     // Record iteration count
-    let info = await app.getInfoNumbers();
+    let info3 = await app.getInfoNumbers();
     const beforeClick = info.iteration;
 
     // Click Step while running (should execute an additional step but not stop animation)
@@ -215,14 +215,14 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
   test('RESET_POINTS while Running: stops clustering and resets to Idle (centroids cleared, iteration 0)', async ({ page }) => {
     // Start running, then reset; verify the clustering stops and the app returns to Idle state.
-    const app = new KMeansPage(page);
+    const app4 = new KMeansPage(page);
 
     // Start clustering
     await app.clickRun();
     await page.waitForTimeout(400);
 
     // Confirm it's running by checking iteration > 0
-    let info = await app.getInfoNumbers();
+    let info4 = await app.getInfoNumbers();
     expect(info.iteration).toBeGreaterThanOrEqual(1);
 
     // Click Reset - should stop animation and reinitialize points, clear centroids and clusters, reset iteration
@@ -245,7 +245,7 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
   test('ADD_POINT event: clicking the canvas adds a visual change on canvas', async ({ page }) => {
     // Clicking on the canvas should add a new point and redraw the canvas.
-    const app = new KMeansPage(page);
+    const app5 = new KMeansPage(page);
 
     // Capture canvas appearance before clicking
     const beforeData = await app.getCanvasDataURL();
@@ -265,7 +265,7 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
   test('Edge case: Setting K to 1 results in single cluster after a step', async ({ page }) => {
     // Set K to 1 and step; expect Number of clusters: 1
-    const app = new KMeansPage(page);
+    const app6 = new KMeansPage(page);
 
     await app.setK(1);
 
@@ -275,7 +275,7 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
     // Wait for UI
     await page.waitForTimeout(200);
 
-    const info = await app.getInfoNumbers();
+    const info5 = await app.getInfoNumbers();
     expect(info.clusters).toBe(1);
     expect(info.iteration).toBeGreaterThanOrEqual(1);
   });
@@ -283,7 +283,7 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
   test('Edge case: Setting K to 0 (invalid/min edge) and stepping should handle gracefully (0 clusters)', async ({ page }) => {
     // Directly set the input value to 0 via evaluate (bypassing native constraints) to test robustness
     // This simulates an edge-case input value and ensures the app does not throw and behaves consistently.
-    const app = new KMeansPage(page);
+    const app7 = new KMeansPage(page);
 
     // Force input value to 0
     await page.evaluate(() => {
@@ -299,14 +299,14 @@ test.describe('K-Means Clustering Visualization - FSM states and transitions', (
 
     await page.waitForTimeout(200);
 
-    const info = await app.getInfoNumbers();
+    const info6 = await app.getInfoNumbers();
     expect(info.iteration).toBeGreaterThanOrEqual(1);
     expect(info.clusters).toBe(0);
   });
 
   test('Observes console and page errors during typical usage (should have none)', async ({ page }) => {
     // Perform a series of interactions and then assert there are no console errors or page errors.
-    const app = new KMeansPage(page);
+    const app8 = new KMeansPage(page);
 
     // Interact: step, run, click canvas, reset
     await app.clickStep();

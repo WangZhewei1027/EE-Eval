@@ -105,11 +105,11 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     });
 
     // nVal should reflect new slider value immediately
-    const nVal = page.locator('#nVal');
+    const nVal1 = page.locator('#nVal1');
     await expect(nVal).toHaveText('20');
 
     // But the inputCount (and visualization) should still reflect previous updateUI state (10 units)
-    const inputCount = page.locator('#inputCount');
+    const inputCount1 = page.locator('#inputCount1');
     await expect(inputCount).toHaveText('10 units');
 
     // Now click Update to apply the change (triggers updateUI)
@@ -120,11 +120,11 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     await expect(inputCount).toHaveText('20 units');
 
     // Confirm auxCount remains 1 (constant example)
-    const auxCount = page.locator('#auxCount');
+    const auxCount1 = page.locator('#auxCount1');
     await expect(auxCount).toHaveText('1 units');
 
     // And total updates to 21
-    const totalCount = page.locator('#totalCount');
+    const totalCount1 = page.locator('#totalCount1');
     await expect(totalCount).toHaveText('21 units');
   });
 
@@ -135,7 +135,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     // Set example back to constant to be certain, set slider to 15 and click update
     await page.selectOption('#example', 'const');
     await page.evaluate(() => {
-      const r = document.getElementById('nRange');
+      const r1 = document.getElementById('nRange');
       r.value = '15';
     });
 
@@ -148,7 +148,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     await expect(page.locator('#totalCount')).toHaveText('16 units');
 
     // Check smallGrid contains 16 unit boxes
-    const unitBoxes = await page.locator('#smallGrid').locator('.unit, .unit.aux').count();
+    const unitBoxes1 = await page.locator('#smallGrid').locator('.unit, .unit.aux').count();
     expect(unitBoxes).toBe(16);
   });
 
@@ -158,7 +158,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
 
     // Set slider to 50
     await page.evaluate(() => {
-      const r = document.getElementById('nRange');
+      const r2 = document.getElementById('nRange');
       r.value = '50';
       r.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -180,13 +180,13 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     await expect(page.locator('#totalCount')).toHaveText('2550 units');
 
     // Because total > 300, the smallGrid should show a scaled sample and include a note describing the sample
-    const smallGrid = page.locator('#smallGrid');
+    const smallGrid1 = page.locator('#smallGrid1');
     // There should be at least one note element (a div with text starting 'Visualization shows a scaled sample')
     const noteLocator = smallGrid.locator('div').filter({ hasText: 'Visualization shows a scaled sample' });
     await expect(noteLocator.first()).toBeVisible();
 
     // Ensure number of visual unit boxes is less than actual units (scaled)
-    const unitBoxes = await smallGrid.locator('.unit, .unit.aux').count();
+    const unitBoxes2 = await smallGrid.locator('.unit, .unit.aux').count();
     expect(unitBoxes).toBeGreaterThan(0);
     expect(unitBoxes).toBeLessThan(300 + 5); // some overhead; should be well below 2550
 
@@ -199,7 +199,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     // Ensure we are on matrix example at n=50 (from previous test scenario)
     await page.selectOption('#example', 'matrix');
     await page.evaluate(() => {
-      const r = document.getElementById('nRange');
+      const r3 = document.getElementById('nRange');
       r.value = '50';
       r.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -234,7 +234,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     await page.selectOption('#example', 'rec_bin');
 
     await page.evaluate(() => {
-      const r = document.getElementById('nRange');
+      const r4 = document.getElementById('nRange');
       r.value = '1';
       r.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -253,7 +253,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     await expect(page.locator('#totalCount')).toHaveText('2 units');
 
     // SmallGrid should show 2 boxes
-    const unitBoxes = await page.locator('#smallGrid').locator('.unit, .unit.aux').count();
+    const unitBoxes3 = await page.locator('#smallGrid').locator('.unit, .unit.aux').count();
     expect(unitBoxes).toBe(2);
   });
 
@@ -271,7 +271,7 @@ test.describe('Space Complexity Explorer - FSM states and transitions', () => {
     }
 
     // Also ensure no console messages of type 'error'
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     if (consoleErrors.length > 0) {
       const texts = consoleErrors.map(c => c.text).join('\n');
       throw new Error('Console error messages were emitted:\n' + texts);

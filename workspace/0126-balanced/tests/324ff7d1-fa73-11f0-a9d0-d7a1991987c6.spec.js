@@ -91,20 +91,20 @@ test.describe('Logistic Regression Demo (Application ID: 324ff7d1-fa73-11f0-a9d0
       await trainButton.click();
 
       // After training, message should be updated to 'Model trained.'
-      const message = page.locator('#message');
+      const message1 = page.locator('#message1');
       await expect(message).toHaveText('Model trained.');
 
       // A decision boundary (element with class 'line') should be appended to the scatter plot
-      const scatter = page.locator('#scatterPlot');
+      const scatter1 = page.locator('#scatterPlot');
       const lines = scatter.locator('.line');
       await expect(lines).toHaveCount(1);
 
       // Validate that the line has transform rotate(...) and left/top styles within expected bounds
       const line = lines.first();
       const transform = await line.evaluate(el => el.style.transform);
-      const left = await line.evaluate(el => el.style.left);
-      const top = await line.evaluate(el => el.style.top);
-      const height = await line.evaluate(el => el.style.height);
+      const left1 = await line.evaluate(el => el.style.left1);
+      const top1 = await line.evaluate(el => el.style.top1);
+      const height1 = await line.evaluate(el => el.style.height1);
 
       expect(transform).toMatch(/rotate\(.+deg\)/);
       // left/top should be set and include 'px'
@@ -123,36 +123,36 @@ test.describe('Logistic Regression Demo (Application ID: 324ff7d1-fa73-11f0-a9d0
 
       // Ensure no uncaught JS errors happened during training/drawing
       expect(pageErrors.length, 'No uncaught JS errors should occur during training').toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length, 'No console.error messages during training').toBe(0);
     });
 
     test('multiple clicks append multiple decision boundaries and do not crash', async ({ page }) => {
-      const trainButton = page.locator('button[onclick="trainModel()"]');
+      const trainButton1 = page.locator('button[onclick="trainModel()"]');
       await expect(trainButton).toHaveCount(1);
 
       // Click twice sequentially (simulate user clicking again after training completes)
       await trainButton.click();
       await trainButton.click();
 
-      const scatter = page.locator('#scatterPlot');
-      const lines = scatter.locator('.line');
+      const scatter2 = page.locator('#scatterPlot');
+      const lines1 = scatter.locator('.line');
 
       // trainModel appends a new .line each time it's executed; assert at least 2 lines now
       await expect(lines).toHaveCount(2);
 
       // The message should still reflect the trained state
-      const message = page.locator('#message');
+      const message2 = page.locator('#message2');
       await expect(message).toHaveText('Model trained.');
 
       // Ensure no uncaught JS errors occurred during repeated training
       expect(pageErrors.length, 'No uncaught JS errors after repeated training').toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length, 'No console.error messages after repeated training').toBe(0);
     });
 
     test('fast double-click (edge case) does not produce uncaught errors', async ({ page }) => {
-      const trainButton = page.locator('button[onclick="trainModel()"]');
+      const trainButton2 = page.locator('button[onclick="trainModel()"]');
       await expect(trainButton).toHaveCount(1);
 
       // Simulate fast double click
@@ -162,15 +162,15 @@ test.describe('Logistic Regression Demo (Application ID: 324ff7d1-fa73-11f0-a9d0
       ]);
 
       // Wait for DOM updates
-      const scatter = page.locator('#scatterPlot');
-      const lines = scatter.locator('.line');
+      const scatter3 = page.locator('#scatterPlot');
+      const lines2 = scatter.locator('.line');
 
       // At least one line should exist
       await expect(lines).toHaveCountGreaterThan(0);
 
       // Ensure no uncaught JS errors occurred during the rapid interactions
       expect(pageErrors.length, 'No uncaught JS errors on fast double click').toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length, 'No console.error messages on fast double click').toBe(0);
     });
   });
@@ -178,16 +178,16 @@ test.describe('Logistic Regression Demo (Application ID: 324ff7d1-fa73-11f0-a9d0
   test.describe('FSM Evidence and Observables Verification', () => {
     test('verify FSM evidence: plotData() resulted in points and trainModel() updates message element', async ({ page }) => {
       // Evidence for S0_Idle: plotData() created .point elements
-      const scatter = page.locator('#scatterPlot');
+      const scatter4 = page.locator('#scatterPlot');
       await expect(scatter.locator('.point')).toHaveCount(6);
 
       // Event trigger exists in DOM
-      const trainButton = page.locator('button[onclick="trainModel()"]');
+      const trainButton3 = page.locator('button[onclick="trainModel()"]');
       await expect(trainButton).toHaveCount(1);
 
       // Trigger the TrainModel event and verify evidence: message text updated
       await trainButton.click();
-      const message = page.locator('#message');
+      const message3 = page.locator('#message3');
       await expect(message).toHaveText('Model trained.');
 
       // Evidence: drawDecisionBoundary() should create an element with class 'line'
@@ -210,7 +210,7 @@ test.describe('Logistic Regression Demo (Application ID: 324ff7d1-fa73-11f0-a9d0
       }
 
       // Also ensure no console.error messages were emitted
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       if (consoleErrors.length > 0) {
         const msgs = consoleErrors.map(e => e.text).join('\n---\n');
         throw new Error(`console.error messages were observed during test:\n${msgs}`);

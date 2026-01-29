@@ -96,7 +96,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
   test.describe('FSM transitions — clicking each example button', () => {
     test('Run O(1) Example: clicking button triggers error (function not defined) and does not update DOM', async ({ page }) => {
       // Collect page errors and console messages
-      const collectors = await attachCollectors(page);
+      const collectors1 = await attachCollectors(page);
 
       await page.goto(APP_URL);
       // Ensure page parsed and listeners are active
@@ -131,7 +131,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
     });
 
     test('Run O(n) Example: clicking button triggers error (function not defined) and does not update DOM', async ({ page }) => {
-      const collectors = await attachCollectors(page);
+      const collectors2 = await attachCollectors(page);
 
       await page.goto(APP_URL);
       await page.waitForTimeout(100);
@@ -141,7 +141,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
       });
       expect(typeofLinear).not.toBe('function');
 
-      const button = page.locator('button[onclick="runLinearExample()"]');
+      const button1 = page.locator('button1[onclick="runLinearExample()"]');
       await expect(button).toBeVisible();
 
       const [error] = await Promise.all([
@@ -149,7 +149,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
         button.click({ timeout: 1000 }).catch(() => {})
       ]);
 
-      const foundRef = collectors.pageErrors.some(msg => /runLinearExample/i.test(msg) && /not defined|ReferenceError/i.test(msg));
+      const foundRef1 = collectors.pageErrors.some(msg => /runLinearExample/i.test(msg) && /not defined|ReferenceError/i.test(msg));
       expect(foundRef).toBeTruthy();
 
       const linearOutputHtml = (await page.locator('#linear-output').innerHTML()).trim();
@@ -159,7 +159,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
     });
 
     test('Run O(n²) Example: clicking button results in parse/runtime errors and no DOM update', async ({ page }) => {
-      const collectors = await attachCollectors(page);
+      const collectors3 = await attachCollectors(page);
 
       await page.goto(APP_URL);
       await page.waitForTimeout(100);
@@ -171,7 +171,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
       expect(typeofQuadratic => {}).not.toThrow; // simple guard to ensure evaluation succeeded
       expect(typeofQuadratic).not.toBe('function');
 
-      const button = page.locator('button[onclick="runQuadraticExample()"]');
+      const button2 = page.locator('button2[onclick="runQuadraticExample()"]');
       await expect(button).toBeVisible();
 
       const [error] = await Promise.all([
@@ -179,7 +179,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
         button.click({ timeout: 1000 }).catch(() => {})
       ]);
 
-      const foundRef = collectors.pageErrors.some(msg => /runQuadraticExample/i.test(msg) && (/not defined|ReferenceError/i.test(msg) || /SyntaxError/i.test(msg)));
+      const foundRef2 = collectors.pageErrors.some(msg => /runQuadraticExample/i.test(msg) && (/not defined|ReferenceError/i.test(msg) || /SyntaxError/i.test(msg)));
       expect(foundRef).toBeTruthy();
 
       const quadraticOutputHtml = (await page.locator('#quadratic-output').innerHTML()).trim();
@@ -189,7 +189,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
     });
 
     test('Run O(log n) Example: clicking button triggers error (function not defined) and does not update DOM', async ({ page }) => {
-      const collectors = await attachCollectors(page);
+      const collectors4 = await attachCollectors(page);
 
       await page.goto(APP_URL);
       await page.waitForTimeout(100);
@@ -199,7 +199,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
       });
       expect(typeofLog).not.toBe('function');
 
-      const button = page.locator('button[onclick="runLogarithmicExample()"]');
+      const button3 = page.locator('button3[onclick="runLogarithmicExample()"]');
       await expect(button).toBeVisible();
 
       const [error] = await Promise.all([
@@ -207,7 +207,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
         button.click({ timeout: 1000 }).catch(() => {})
       ]);
 
-      const foundRef = collectors.pageErrors.some(msg => /runLogarithmicExample/i.test(msg) && /not defined|ReferenceError/i.test(msg));
+      const foundRef3 = collectors.pageErrors.some(msg => /runLogarithmicExample/i.test(msg) && /not defined|ReferenceError/i.test(msg));
       expect(foundRef).toBeTruthy();
 
       const logOutputHtml = (await page.locator('#logarithmic-output').innerHTML()).trim();
@@ -234,12 +234,12 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
     });
 
     test('Multiple clicks produce repeated page errors (robustness / error scenario)', async ({ page }) => {
-      const collectors = await attachCollectors(page);
+      const collectors5 = await attachCollectors(page);
 
       await page.goto(APP_URL);
       await page.waitForTimeout(100);
 
-      const button = page.locator('button[onclick="runConstantExample()"]');
+      const button4 = page.locator('button4[onclick="runConstantExample()"]');
       await expect(button).toBeVisible();
 
       // Click the button multiple times and ensure errors accumulate
@@ -256,7 +256,7 @@ test.describe('Big-O Notation Interactive — FSM validation and error observati
       expect(matches.length).toBeGreaterThanOrEqual(1);
 
       // Confirm the output remains empty after repeated attempts
-      const constantOutputHtml = (await page.locator('#constant-output').innerHTML()).trim();
+      const constantOutputHtml1 = (await page.locator('#constant-output').innerHTML()).trim();
       expect(constantOutputHtml).toBe('');
 
       collectors.dispose();

@@ -138,7 +138,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
 
     test('initial page load produces no console errors or uncaught exceptions', async ({ page }) => {
       // Ensure no runtime errors on page load
-      const app = new AppPage(page);
+      const app1 = new AppPage(page);
       await app.goto();
 
       // Small delay to allow any synchronous or microtask errors to surface
@@ -154,7 +154,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
       // This validates the transition S0 -> S1 by clicking Compare Methods
       // - For n <= 20 the recursive method runs (not "Too slow")
       // - Memoization, Tabulation, Optimized Tabulation values match expected Fibonacci
-      const app = new AppPage(page);
+      const app2 = new AppPage(page);
       await app.goto();
 
       // Choose n = 7 to keep recursive feasible
@@ -167,7 +167,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
       const resultsLocator = app.getResultsLocator();
       await expect(resultsLocator).toContainText(`Results for fib(${n})`);
       // The table should be present
-      const resultsHTML = await app.getResultsHTML();
+      const resultsHTML1 = await app.getResultsHTML();
       expect(resultsHTML).toContain('<table>');
 
       // Extract the cells for each method by parsing innerText
@@ -193,26 +193,26 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
 
     test('clicking Compare Methods for n > 20 shows "Too slow for n > 20" for Recursive and still computes other methods', async ({ page }) => {
       // This validates the documented behavior for large n where recursive is skipped
-      const app = new AppPage(page);
+      const app3 = new AppPage(page);
       await app.goto();
 
-      const n = 25;
+      const n1 = 25;
       await app.setInputValue(n);
       await app.clickCompare();
 
-      const resultsText = await app.getResultsText();
+      const resultsText1 = await app.getResultsText();
 
       // Recursive cell should indicate it's too slow
       expect(resultsText).toContain('Too slow for n > 20');
 
       // Other methods should still compute fib(25)
-      const expected = fibIter(n);
+      const expected1 = fibIter(n);
       expect(resultsText).toContain(String(expected));
     });
 
     test('invalid input (negative or non-number) triggers alert and does not update results', async ({ page }) => {
       // This validates edge-case handling: runComparisons should show an alert for invalid inputs
-      const app = new AppPage(page);
+      const app4 = new AppPage(page);
       await app.goto();
 
       // Set invalid value -1 and click compare
@@ -223,7 +223,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
       expect(lastDialogMessage).toBe("Please enter a valid positive number");
 
       // Ensure results remain empty (no table rendered)
-      const resultsHTML = await app.getResultsHTML();
+      const resultsHTML2 = await app.getResultsHTML();
       expect(resultsHTML.trim()).toBe('');
     });
   });
@@ -233,7 +233,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
       // This validates transition S0 -> S2 by clicking Show Time Complexity
       // - Content should include "Time Complexity Comparison" and list method complexities
       // - The container should have the .result styling class applied
-      const app = new AppPage(page);
+      const app5 = new AppPage(page);
       await app.goto();
 
       await app.clickShowTimeComplexity();
@@ -252,7 +252,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
       expect(text).toContain('O(1)');
 
       // Ensure results element has the result class applied via the inner content
-      const resultsHTML = await app.getResultsHTML();
+      const resultsHTML3 = await app.getResultsHTML();
       expect(resultsHTML).toContain('class="result"');
     });
   });
@@ -260,7 +260,7 @@ test.describe('Dynamic Programming Demo - FSM and UI tests', () => {
   test.describe('Runtime stability and logging', () => {
     test('no uncaught exceptions or console.error messages after interactions', async ({ page }) => {
       // Perform a sequence of interactions and assert there are no runtime errors emitted
-      const app = new AppPage(page);
+      const app6 = new AppPage(page);
       await app.goto();
 
       // Interactions: show complexity, compare a small n, compare a large n, attempt invalid input

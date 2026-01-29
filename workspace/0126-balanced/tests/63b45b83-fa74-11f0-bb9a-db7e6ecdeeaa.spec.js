@@ -132,7 +132,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
   });
 
   test('Generate Points (S0 -> S1) - enables controls, populates legend and draws points', async ({ page }) => {
-    const km = new KMeansPage(page);
+    const km1 = new KMeansPage(page);
     await km.goto();
 
     // Capture canvas before generating to compare changes
@@ -151,7 +151,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
     expect(await km.isDisabled(km.resetBtn)).toBe(false);
 
     // Legend should show 4 clusters
-    const legendCount = await km.getLegendCount();
+    const legendCount1 = await km.getLegendCount();
     expect(legendCount).toBe(4);
 
     // Canvas should have redrawn and differ from initial dataURL
@@ -161,7 +161,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
   });
 
   test('Next Step (S1 -> S2) - performing a single step updates the visualization (and may converge)', async ({ page }) => {
-    const km = new KMeansPage(page);
+    const km2 = new KMeansPage(page);
     await km.goto();
 
     // Use a small and deterministic config to make the test fast
@@ -178,7 +178,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
     // Perform one step
     await km.clickStep();
 
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     if (dialog) {
       // If an alert happened, ensure it is the convergence alert and that buttons were disabled
       expect(dialog.message()).toContain('Clustering converged!');
@@ -199,7 +199,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
   });
 
   test('Run to End (S1 -> S2 -> S3) - run finishes clustering and alerts convergence', async ({ page }) => {
-    const km = new KMeansPage(page);
+    const km3 = new KMeansPage(page);
     await km.goto();
 
     // Use smaller number of points to make convergence faster for the test
@@ -208,12 +208,12 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
     await km.clickGenerate();
 
     // Listen for the convergence dialog, which should appear as runBtn runs to completion
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 5000 });
+    const dialogPromise1 = page.waitForEvent('dialog', { timeout: 5000 });
 
     await km.clickRun();
 
     // Verify convergence dialog occurred and has expected text
-    const dialog = await dialogPromise;
+    const dialog2 = await dialogPromise;
     expect(dialog).not.toBeNull();
     expect(dialog.message()).toContain('Clustering converged!');
     await dialog.accept();
@@ -224,7 +224,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
   });
 
   test('Reset (S1 -> S4) - Reset clears visualization and disables interaction', async ({ page }) => {
-    const km = new KMeansPage(page);
+    const km4 = new KMeansPage(page);
     await km.goto();
 
     // Generate points first
@@ -243,7 +243,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
     await km.clickReset();
 
     // After reset, legend should be empty
-    const legendCount = await km.getLegendCount();
+    const legendCount2 = await km.getLegendCount();
     expect(legendCount).toBe(0);
 
     // Controls should be disabled (except generate)
@@ -259,7 +259,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
   });
 
   test('Input validation errors produce alerts - clusters and points out of range and non-number', async ({ page }) => {
-    const km = new KMeansPage(page);
+    const km5 = new KMeansPage(page);
     await km.goto();
 
     // 1) clusters=0 -> alert about clusters
@@ -289,7 +289,7 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
   });
 
   test('Edge case: Generate then immediately Run - handles rapid workflow without exceptions', async ({ page }) => {
-    const km = new KMeansPage(page);
+    const km6 = new KMeansPage(page);
     await km.goto();
 
     // Rapidly generate and run to check for race conditions
@@ -300,11 +300,11 @@ test.describe('K-Means Clustering Demo - FSM tests (63b45b83-fa74-11f0-bb9a-db7e
     await km.clickGenerate();
 
     // Immediately click run
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 5000 });
+    const dialogPromise2 = page.waitForEvent('dialog', { timeout: 5000 });
     await km.clickRun();
 
     // Expect convergence dialog and that no runtime errors occurred
-    const dialog = await dialogPromise;
+    const dialog3 = await dialogPromise;
     expect(dialog).not.toBeNull();
     expect(dialog.message()).toContain('Clustering converged!');
     await dialog.accept();

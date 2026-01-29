@@ -116,10 +116,10 @@ test.describe('Array Example (Idle state) - 52079940-fa76-11f0-a09b-87751f540fd8
   // FSM specified an entry action "Array Example Loaded" for the Idle state.
   // The implementation does not log this; assert that the expected FSM entry log is missing.
   test('should not emit FSM-declared entry action "Array Example Loaded" (verify onEnter mismatch)', async ({ page }) => {
-    const app = new ArrayPage(page);
+    const app1 = new ArrayPage(page);
     await app.load();
 
-    const logs = app.getConsoleMessages();
+    const logs1 = app.getConsoleMessages();
 
     // The FSM declared "console.log('Array Example Loaded')" as an entry action.
     // Verify that such a log is NOT present in the actual console output (indicating mismatch).
@@ -129,7 +129,7 @@ test.describe('Array Example (Idle state) - 52079940-fa76-11f0-a09b-87751f540fd8
 
   // Verify DOM elements and that the UI does not display any dynamic output (script does not set #output)
   test('should render static header and empty output placeholder', async ({ page }) => {
-    const app = new ArrayPage(page);
+    const app2 = new ArrayPage(page);
     await app.load();
 
     // Validate header text
@@ -143,7 +143,7 @@ test.describe('Array Example (Idle state) - 52079940-fa76-11f0-a09b-87751f540fd8
 
   // Confirm there are no interactive elements on the page as noted in FSM extraction summary
   test('should have no interactive elements (buttons, inputs, anchors)', async ({ page }) => {
-    const app = new ArrayPage(page);
+    const app3 = new ArrayPage(page);
     await app.load();
 
     const buttons = await app.countElements('button');
@@ -159,7 +159,7 @@ test.describe('Array Example (Idle state) - 52079940-fa76-11f0-a09b-87751f540fd8
   // Edge case tests: variables declared with let inside the page script are NOT attached to window.
   // Accessing them as bare identifiers in page context should cause ReferenceError; accessing via window should return undefined.
   test('should throw ReferenceError when referencing script-scoped identifier directly, and window property should be undefined', async ({ page }) => {
-    const app = new ArrayPage(page);
+    const app4 = new ArrayPage(page);
     await app.load();
 
     // Accessing bare identifier 'fruitsArray' (declared with let in the page script) from page.evaluate should reject with ReferenceError.
@@ -177,10 +177,10 @@ test.describe('Array Example (Idle state) - 52079940-fa76-11f0-a09b-87751f540fd8
 
   // Validate that console logs include array contents for "Array of fruits:" and that elements mutate as logged.
   test('should log array contents and show mutated elements according to the script logs', async ({ page }) => {
-    const app = new ArrayPage(page);
+    const app5 = new ArrayPage(page);
     await app.load();
 
-    const logs = app.getConsoleMessages();
+    const logs2 = app.getConsoleMessages();
 
     // Ensure the initial array log exists and contains initial fruit names (apple or mango depending on when logged)
     const initialFruitsLog = logs.find(msg => msg.includes('Array of fruits:')) || '';
@@ -198,7 +198,7 @@ test.describe('Array Example (Idle state) - 52079940-fa76-11f0-a09b-87751f540fd8
   // Sanity check: ensure no unexpected runtime errors were emitted to the page error stream during normal load.
   // This is slightly redundant with earlier checks but explicitly asserts that pageerror remains empty after load.
   test('should not emit page errors during normal load (sanity check)', async ({ page }) => {
-    const app = new ArrayPage(page);
+    const app6 = new ArrayPage(page);
     await app.load();
 
     const errors = app.getPageErrors();

@@ -253,7 +253,7 @@ test.describe('SVM Interactive Demo - FSM and UI behavior', () => {
     for (const pt of predefined) {
       const [px, py] = svmPage.dataToPixel(pt.x, pt.y);
       // Round to nearest integers for sampling
-      const rgba = await svmPage.getCanvasPixel(Math.round(px), Math.round(py));
+      const rgba1 = await svmPage.getCanvasPixel(Math.round(px), Math.round(py));
       if (pt.class === +1) {
         // red-ish
         expect(rgba[0]).toBeGreaterThan(150);
@@ -276,7 +276,7 @@ test.describe('SVM Interactive Demo - FSM and UI behavior', () => {
     expect(await svmPage.isTrainDisabled()).toBe(true);
 
     // Canvas center should return to white background (indicating cleared drawing)
-    const centerPixel = await svmPage.getCanvasPixel(300, 300);
+    const centerPixel1 = await svmPage.getCanvasPixel(300, 300);
     expect(centerPixel[0]).toBeGreaterThanOrEqual(250);
     expect(centerPixel[1]).toBeGreaterThanOrEqual(250);
     expect(centerPixel[2]).toBeGreaterThanOrEqual(250);

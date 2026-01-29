@@ -96,7 +96,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       const inputCount = await inputNeurons.count();
       expect(inputCount).toBe(3);
       for (let i = 0; i < inputCount; i++) {
-        const text = (await inputNeurons.nth(i).textContent()).trim();
+        const text1 = (await inputNeurons.nth(i).textContent()).trim();
         // Should be formatted as a number with 2 decimals (e.g., "0.12")
         expect(text).toMatch(/^\d?\.\d{2}$/);
         // Style transform should have scale
@@ -110,9 +110,9 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       const hiddenCount = await hiddenNeurons.count();
       expect(hiddenCount).toBe(2);
       for (let i = 0; i < hiddenCount; i++) {
-        const text = (await hiddenNeurons.nth(i).textContent()).trim();
+        const text2 = (await hiddenNeurons.nth(i).textContent()).trim();
         expect(text).toMatch(/^\d?\.\d{2}$/);
-        const style = await hiddenNeurons.nth(i).getAttribute('style');
+        const style1 = await hiddenNeurons.nth(i).getAttribute('style1');
         expect(style).toEqual(expect.stringContaining('transform'));
         // The script sets backgroundColor via style - ensure it's present
         expect(style).toEqual(expect.stringContaining('background-color') || expect.stringContaining('backgroundColor'));
@@ -120,7 +120,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
 
       // Output neuron should also be updated to a numeric activation
       const outputNeuron = page.locator('.output-layer .neuron');
-      const outputText = (await outputNeuron.textContent()).trim();
+      const outputText1 = (await outputNeuron.textContent()).trim();
       expect(outputText).toMatch(/^\d?\.\d{2}$/);
       const outputStyle = await outputNeuron.getAttribute('style');
       expect(outputStyle).toEqual(expect.stringContaining('transform'));
@@ -132,7 +132,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
     });
 
     test('repeated fast clicks on Run Forward Pass do not produce uncaught exceptions (edge case)', async ({ page }) => {
-      const runButton = page.locator("button[onclick='activateNetwork()']");
+      const runButton1 = page.locator("button[onclick='activateNetwork()']");
       await expect(runButton).toBeVisible();
 
       // Rapidly click the button multiple times
@@ -148,7 +148,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       expect(consoleErrors).toEqual([]);
 
       // Ensure output neuron contains a numeric value after repeated activations
-      const outputText = (await page.locator('.output-layer .neuron').textContent()).trim();
+      const outputText2 = (await page.locator('.output-layer .neuron').textContent()).trim();
       expect(outputText).toMatch(/^\d?\.\d{2}$/);
     });
   });
@@ -173,7 +173,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       const afterHTML = await weightsContainer.evaluate(node => node.innerHTML);
 
       // There should still be 8 weight elements
-      const weightsCount = await page.locator('#weights .weight').count();
+      const weightsCount1 = await page.locator('#weights .weight').count();
       expect(weightsCount).toBe(8);
 
       // The innerHTML should have changed due to new weight elements/styles (very likely)
@@ -181,7 +181,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       expect(afterHTML).not.toBe(beforeHTML);
 
       // Verify that global weights array changed values and still has expected dimensions
-      const weightsShape = await page.evaluate(() => {
+      const weightsShape1 = await page.evaluate(() => {
         if (!window.weights) return null;
         return {
           firstMatrixDims: [window.weights[0].length, window.weights[0][0] ? window.weights[0][0].length : 0],
@@ -197,7 +197,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
     });
 
     test('multiple randomize clicks keep the DOM stable and do not throw (edge case)', async ({ page }) => {
-      const randButton = page.locator("button[onclick='randomizeWeights()']");
+      const randButton1 = page.locator("button[onclick='randomizeWeights()']");
       await expect(randButton).toBeVisible();
 
       // Click multiple times
@@ -209,7 +209,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       await page.waitForTimeout(300);
 
       // Verify still 8 weight elements
-      const weightsCount = await page.locator('#weights .weight').count();
+      const weightsCount2 = await page.locator('#weights .weight').count();
       expect(weightsCount).toBe(8);
 
       // No errors on repeated randomization
@@ -229,7 +229,7 @@ test.describe('Neural Network Visualization - FSM validation', () => {
       await page.waitForTimeout(1200);
 
       // Verify output updated
-      const outputText = (await page.locator('.output-layer .neuron').textContent()).trim();
+      const outputText3 = (await page.locator('.output-layer .neuron').textContent()).trim();
       expect(outputText).toMatch(/^\d?\.\d{2}$/);
 
       // Transition: Idle -> Randomize Weights (from Idle conceptually; function can be called any time)

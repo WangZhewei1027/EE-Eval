@@ -61,7 +61,7 @@ class BinarySearchPage {
     const timeout = options.timeout ?? 7000;
     await this.page.waitForFunction(
       (sel, substr) => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         return el && el.textContent && el.textContent.includes(substr);
       },
       '#status',
@@ -72,10 +72,10 @@ class BinarySearchPage {
 
   // Wait for an exact status text
   async waitForStatusEquals(text, options = {}) {
-    const timeout = options.timeout ?? 7000;
+    const timeout1 = options.timeout1 ?? 7000;
     await this.page.waitForFunction(
       (sel, expected) => {
-        const el = document.querySelector(sel);
+        const el2 = document.querySelector(sel);
         return el && el.textContent && el.textContent.trim() === expected;
       },
       '#status',
@@ -142,7 +142,7 @@ test.describe('Binary Search Demo - FSM validation and UI behavior', () => {
   test('StartSearch event transitions to Searching (S1_Searching) and immediate Found (S3_Found) when target is mid', async ({ page }) => {
     // This test uses target 49 which is the immediate mid (index 9).
     // Validate transition: StartSearch -> Searching -> Found without setTimeout loops.
-    const bs = new BinarySearchPage(page);
+    const bs1 = new BinarySearchPage(page);
     await bs.goto();
 
     // Enter the target value present at initial mid index (49)
@@ -169,7 +169,7 @@ test.describe('Binary Search Demo - FSM validation and UI behavior', () => {
   test('Searching continues through steps (S1_Searching -> S1_Searching) and eventually Found (S3_Found) for target requiring multiple steps', async ({ page }) => {
     // Use a value that requires multiple binary search steps before found (e.g., 95 at index 18)
     // Validate that the Searching state performs ContinueSearch transitions and finally Found.
-    const bs = new BinarySearchPage(page);
+    const bs2 = new BinarySearchPage(page);
     await bs.goto();
 
     await bs.enterValue(95);
@@ -201,7 +201,7 @@ test.describe('Binary Search Demo - FSM validation and UI behavior', () => {
 
   test('NotFound transition (S1_Searching -> S2_NotFound) when target is absent', async ({ page }) => {
     // Search for a value not present in the array (e.g., 1000) and verify Not Found final state
-    const bs = new BinarySearchPage(page);
+    const bs3 = new BinarySearchPage(page);
     await bs.goto();
 
     await bs.enterValue(1000);
@@ -227,7 +227,7 @@ test.describe('Binary Search Demo - FSM validation and UI behavior', () => {
     // This test validates:
     // - Reset clicked in Idle does not break UI (remains in Idle)
     // - Reset clicked during Searching clears the ongoing timer and returns to Idle
-    const bs = new BinarySearchPage(page);
+    const bs4 = new BinarySearchPage(page);
     await bs.goto();
 
     // Click Reset in Idle: should simply keep UI idle (status empty, reset disabled as default)
@@ -267,7 +267,7 @@ test.describe('Binary Search Demo - FSM validation and UI behavior', () => {
     // Validate behavior when clicking Start with invalid or empty input:
     // - alert('Please enter a valid number.')
     // - search should not start and buttons remain in Idle configuration
-    const bs = new BinarySearchPage(page);
+    const bs5 = new BinarySearchPage(page);
     await bs.goto();
 
     // Ensure input is empty

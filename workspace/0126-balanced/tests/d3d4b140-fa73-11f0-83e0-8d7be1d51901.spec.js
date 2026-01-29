@@ -94,8 +94,8 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
         selectors.size
       );
 
-      const size = await page.$eval(selectors.size, el => el.textContent.trim());
-      const top = await page.$eval(selectors.topValue, el => el.textContent.trim());
+      const size1 = await page.$eval(selectors.size1, el => el.textContent.trim());
+      const top1 = await page.$eval(selectors.topValue, el => el.textContent.trim());
       expect(size).toBe('4');
       expect(top).toBe('42');
 
@@ -135,24 +135,24 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       const inputValue = await page.$eval(selectors.valueInput, el => el.value);
       expect(inputValue).toBe('');
 
-      const activeId = await page.evaluate(() => document.activeElement && document.activeElement.id);
+      const activeId1 = await page.evaluate(() => document.activeElement && document.activeElement.id);
       expect(activeId).toBe('valueInput');
 
       // Top should equal the pushed string (string, not coerced to number)
-      const top = await page.$eval(selectors.topValue, el => el.textContent.trim());
+      const top2 = await page.$eval(selectors.topValue, el => el.textContent.trim());
       expect(top).toBe('hello-enter');
     });
 
     test('attempting to push empty input shows notice and does not change size (edge case)', async ({ page }) => {
       // Ensure input is empty
       await page.fill(selectors.valueInput, '');
-      const startSize = await page.$eval(selectors.size, el => el.textContent.trim());
+      const startSize1 = await page.$eval(selectors.size, el => el.textContent.trim());
 
       // Click push with empty input
       await page.click(selectors.pushBtn);
 
       // Notice should indicate to enter a value
-      const notice = await page.$eval(selectors.notice, el => el.textContent.trim());
+      const notice1 = await page.$eval(selectors.notice1, el => el.textContent.trim());
       expect(notice).toContain('Enter a value to push');
 
       // Size should remain the same
@@ -184,7 +184,7 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       expect(sizeAfter).toBe(initialSize - 1);
 
       // Notice should report the popped value
-      const notice = await page.$eval(selectors.notice, el => el.textContent.trim());
+      const notice2 = await page.$eval(selectors.notice2, el => el.textContent.trim());
       expect(notice).toMatch(/Popped/);
 
       // The log should include a pop() => ... message
@@ -195,7 +195,7 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
 
     test('popping until empty then popping again should produce the expected error notice/log', async ({ page }) => {
       // Repeatedly pop until isEmpty becomes true
-      let isEmpty = await page.$eval(selectors.isEmpty, el => el.textContent.trim() === 'true');
+      let isEmpty1 = await page.$eval(selectors.isEmpty1, el => el.textContent.trim() === 'true');
       // Keep safety guard to avoid infinite loop
       let iterations = 0;
       while (!isEmpty && iterations < 10) {
@@ -216,7 +216,7 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       expect(noticeText).toContain('Stack is empty');
 
       // The in-DOM log should contain the 'pop() called on empty stack' error message
-      const logTexts = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
+      const logTexts1 = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
       const hasEmptyPopLog = logTexts.some(t => t.includes('pop() called on empty stack'));
       expect(hasEmptyPopLog).toBeTruthy();
     });
@@ -234,11 +234,11 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       await page.click(selectors.peekBtn);
       await page.waitForTimeout(80); // allow logging/notice update
 
-      const notice = await page.$eval(selectors.notice, el => el.textContent.trim());
+      const notice3 = await page.$eval(selectors.notice3, el => el.textContent.trim());
       expect(notice).toContain('Top is');
 
       // Size should remain unchanged
-      const sizeAfter = Number(await page.$eval(selectors.size, el => el.textContent.trim()));
+      const sizeAfter1 = Number(await page.$eval(selectors.size, el => el.textContent.trim()));
       expect(sizeAfter).toBe(sizeBefore);
 
       // Top should be unchanged
@@ -246,7 +246,7 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       expect(topAfter).toBe(topBefore);
 
       // Log should include peek() => ... entry
-      const logTexts = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
+      const logTexts2 = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
       const peekLogExists = logTexts.some(t => t.includes('peek() =>'));
       expect(peekLogExists).toBeTruthy();
     });
@@ -261,11 +261,11 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       await page.click(selectors.peekBtn);
       await page.waitForTimeout(80);
 
-      const notice = await page.$eval(selectors.notice, el => el.textContent.trim());
+      const notice4 = await page.$eval(selectors.notice4, el => el.textContent.trim());
       expect(notice).toContain('Stack is empty');
 
       // Log should include 'peek() => undefined'
-      const logTexts = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
+      const logTexts3 = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
       const peekUndefined = logTexts.some(t => t.includes('peek() => undefined'));
       expect(peekUndefined).toBeTruthy();
     });
@@ -274,7 +274,7 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
   test.describe('Clear interactions', () => {
     test('clear button empties non-empty stack and updates DOM & stats', async ({ page }) => {
       // Ensure stack is non-empty
-      const startSize = Number(await page.$eval(selectors.size, el => el.textContent.trim()));
+      const startSize2 = Number(await page.$eval(selectors.size, el => el.textContent.trim()));
       expect(startSize).toBeGreaterThanOrEqual(1);
 
       // Click clear
@@ -283,7 +283,7 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       // Wait for size 0
       await page.waitForFunction(sel => document.querySelector(sel).textContent.trim() === '0', selectors.size, { timeout: 2000 });
 
-      const size = await page.$eval(selectors.size, el => el.textContent.trim());
+      const size2 = await page.$eval(selectors.size2, el => el.textContent.trim());
       expect(size).toBe('0');
 
       // Array view should show a single "empty" array-item
@@ -291,11 +291,11 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       expect(arrayItems.length).toBe(1);
       expect(arrayItems[0]).toBe('empty');
 
-      const notice = await page.$eval(selectors.notice, el => el.textContent.trim());
+      const notice5 = await page.$eval(selectors.notice5, el => el.textContent.trim());
       expect(notice).toContain('Stack cleared');
 
       // Log should include clear() — stack emptied
-      const logTexts = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
+      const logTexts4 = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
       const hasClearLog = logTexts.some(t => t.includes('clear() — stack emptied'));
       expect(hasClearLog).toBeTruthy();
     });
@@ -309,11 +309,11 @@ test.describe('Stack (LIFO) Interactive Demo — FSM validation', () => {
       await page.click(selectors.clearBtn);
       await page.waitForTimeout(80);
 
-      const notice = await page.$eval(selectors.notice, el => el.textContent.trim());
+      const notice6 = await page.$eval(selectors.notice6, el => el.textContent.trim());
       expect(notice).toContain('already empty');
 
       // Log should include 'clear() — already empty'
-      const logTexts = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
+      const logTexts5 = await page.$$eval(selectors.logMsgs, nodes => nodes.map(n => n.textContent.trim()));
       const hasAlreadyEmptyLog = logTexts.some(t => t.includes('clear() — already empty'));
       expect(hasAlreadyEmptyLog).toBeTruthy();
     });

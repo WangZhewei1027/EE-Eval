@@ -156,7 +156,7 @@ test.describe('Agile Methodology Demo - FSM verification', () => {
 
   // Test 2: Edge case - starting sprint with no tasks should be blocked (alert shown)
   test('Start Sprint should be blocked when there are no tasks in the sprint (edge case)', async ({ page }) => {
-    const app = new AgilePage(page);
+    const app1 = new AgilePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -181,7 +181,7 @@ test.describe('Agile Methodology Demo - FSM verification', () => {
 
   // Test 3: Full sprint lifecycle, covering StartSprint -> MoveTask -> DailyScrum -> CompleteTask -> EndSprint
   test('Full Sprint lifecycle: move tasks, start sprint, progress tasks, complete task, and end sprint', async ({ page }) => {
-    const app = new AgilePage(page);
+    const app2 = new AgilePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -269,7 +269,7 @@ test.describe('Agile Methodology Demo - FSM verification', () => {
 
   // Test 4: Edge case validations for event handlers when preconditions aren't met
   test('Edge cases: DailyScrum and CompleteTask should be no-ops when sprint inactive or no review tasks', async ({ page }) => {
-    const app = new AgilePage(page);
+    const app3 = new AgilePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -294,7 +294,7 @@ test.describe('Agile Methodology Demo - FSM verification', () => {
 
   // Test 5: Validate there are no uncaught runtime errors during normal interactions
   test('No uncaught console errors or page errors observed during interactions', async ({ page }) => {
-    const app = new AgilePage(page);
+    const app4 = new AgilePage(page);
     await app.attachListeners();
     await app.goto();
 

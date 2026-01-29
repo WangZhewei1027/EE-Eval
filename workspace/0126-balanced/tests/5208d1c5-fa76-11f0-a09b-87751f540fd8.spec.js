@@ -125,7 +125,7 @@ test.describe('Radix Sort FSM - Interactive Application (5208d1c5-fa76-11f0-a09b
     });
 
     test('Function source includes expected evidence (return arr;)', async ({ page }) => {
-      const rp = new RadixPage(page);
+      const rp1 = new RadixPage(page);
       const src = await rp.getSortArraySource();
       // The FSM evidence indicates the implementation should contain "return arr;"
       expect(src).toBeTruthy();
@@ -147,7 +147,7 @@ test.describe('Radix Sort FSM - Interactive Application (5208d1c5-fa76-11f0-a09b
     }
 
     test('Click SortArray(12345) triggers runtime error(s) and leaves DOM result unchanged', async ({ page }) => {
-      const rp = new RadixPage(page);
+      const rp2 = new RadixPage(page);
 
       // Ensure starting conditions
       expect(await rp.getResultText()).toBe('');
@@ -173,7 +173,7 @@ test.describe('Radix Sort FSM - Interactive Application (5208d1c5-fa76-11f0-a09b
       }
 
       if (hasConsoleError) {
-        const matches = consoleErrorsSnapshot.some(m => /typeerror|not iterable|cannot spread|cannot read property|undefined/i.test(m));
+        const matches1 = consoleErrorsSnapshot.some(m => /typeerror|not iterable|cannot spread|cannot read property|undefined/i.test(m));
         expect(matches).toBeTruthy();
       }
 
@@ -183,7 +183,7 @@ test.describe('Radix Sort FSM - Interactive Application (5208d1c5-fa76-11f0-a09b
     });
 
     test('Click SortArray(67890) triggers runtime error(s) and multiple clicks accumulate errors', async ({ page }) => {
-      const rp = new RadixPage(page);
+      const rp3 = new RadixPage(page);
 
       // Click first time
       await rp.clickSort67890();
@@ -229,7 +229,7 @@ test.describe('Radix Sort FSM - Interactive Application (5208d1c5-fa76-11f0-a09b
 
     test('Verify function source code contains expected evidence and problematic constructs', async ({ page }) => {
       // Check that the implementation contains fragments that correspond to FSM evidence and also some problematic constructs
-      const src = await page.evaluate(() => (typeof sortArray === 'function' ? sortArray.toString() : null));
+      const src1 = await page.evaluate(() => (typeof sortArray === 'function' ? sortArray.toString() : null));
       expect(src).toBeTruthy();
       // FSM evidence: contains "let n = arr.length;" and "let max = Math.max(...arr);"
       expect(src).toContain('let n = arr.length;');

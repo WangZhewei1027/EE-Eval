@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Interactive Big-Theta Explorer</title>
+  <style>
+    /* Keep visuals extremely minimal and basic. */
+    body { font-family: monospace; margin: 10px; }
+    input, button, select, textarea { font-family: monospace; font-size: 13px; }
+    canvas { border: 1px solid #000; display: block; }
+    .row { margin: 6px 0; }
+    .col { display: inline-block; vertical-align: top; margin-right: 12px; }
+    label { display: inline-block; width: 70px; }
+    textarea { width: 98%; height: 160px; }
+    .small { width: 70px; }
+  </style>
+</head>
+<body>
+  <h2>Big-Theta Notation — Interactive Explorer</h2>
+
+  <div class="row">
+    <div class="col">
+      <div><label>f(n) =</label><input id="fexpr" size="40" value="n^2 + 5*n + 3"></div>
+      <div class="row">
+        Templates for f: 
+        <button id="f_poly">n^2</button>
+        <button id="f_nlogn">n log(n)</button>
+        <button id="f_log">log(n)</button>
+        <button id="f_exp">2^n</button>
+        <button id="f_fact">n!</button>
+        <button id="f_rand">Random</button>
+      </div>
+      <div class="row"><label>g(n) =</label><input id="gexpr" size="40" value="n^2"></div>
+      <div class="row">
+        Templates for g:
+        <button id="g_poly">n^2</button>
+        <button id="g_nlogn">n log(n)</button>
+        <button id="g_log">log(n)</button>
+        <button id="g_exp">2^n</button>
+        <button id="g_fact">n!</button>
+        <button id="g_rand">Random</button>
+      </div>
+      <div class="row">
+        <label>max n</label><input id="maxn" class="small" type="number" value="200">
+        <label>samples</label><input id="samples" class="small" type="number" value="200">
+        <label>scale</label>
+        <select id="scale">
+          <option value="linear">linear</option>
+          <option value="log">log-log</option>
+        </select>
+      </div>
+      <div class="row">
+        <button id="plot">Plot</button>
+        <button id="showTable">Show Value Table</button>
+        <button id="clearLog">Clear Log</button>
+      </div>
+      <div class="row">
+        Bounding guess: c1<input id="c1" class="small" type="number" step="any" value="0.5">
+        c2<input id="c2" class="small" type="number" step="any" value="2">
+        n0<input id="n0" class="small" type="number" value="10">
+        <button id="checkTheta">Check Θ</button>
+      </div>
+      <div class="row">
+        <button id="searchConstants">Search c1,c2,n0 (brute)</button>
+        <button id="stepSearch">Stepwise Search</button>
+        <button id="autoFindLimit">Estimate lim f/g</button>
+      </div>
+      <div class="row">
+        Modes:
+        <button id="modeTheta">Θ</button>
+        <button id="modeO">O</button>
+        <button id="modeOmega">Ω</button>
+        <span id="modeLabel">Mode: Θ</span>
+      </div>
+      <div class="row">
+        Extra analysis:
+        <button id="classify">Classify Growth</button>
+        <button id="genCounter">Find Counterexample</button>
+        <button id="simplify">Asymptotic Simplify</button>
+      </div>
+    </div>
+
+    <div class="col">
+      <canvas id="plotCanvas" width="600" height="360"></canvas>
+      <div class="row">
+        Plot options:
+        <button id="togglePoints">Toggle Points/Lines</button>
+        <button id="showBounds">Toggle Show Bounds</button>
+        <button id="exportCSV">Export CSV</button>
+      </div>
+      <div class="row">
+        Proof steps controls:
+        <button id="startProof">Start Proof Workflow</button>
+        <button id="nextStep">Next Step</button>
+        <button id="prevStep">Prev Step</button>
+        <button id="accept">Accept Current</button>
+        <button id="reject">Reject</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    Logs and analysis:
+    <textarea id="log" readonly></textarea>
+  </div>
+
+<script>
+/*
+  Big-Theta Interactive Explorer
+  - Extremely functional, minimal visuals.
+  - Many controls and interactive workflows.
+*/
+
+/* ---------- Utilities and Expression Handling ---------- */
+
+function logAppend(s) {
+  const t = document.getElementById('log');
+  const time = new Date().toLocaleTimeString();
+  t.value = "[" + time + "] " + s + "\\n" + t.value;
+}
+
+function cleanExpr(str) {
+  if (!str) return "";
+  let s = str.trim();
+  // Replace common tokens with Math.* equivalents and exponent operator
+  s = s.replace(/\\^/g, "**");
+  // Replace word log with Math.log, but keep log10 or similar if provided explicitly
+  s = s.replace(/\\bexp\\b/g, "Math.exp");
+  s = s.replace(/\\bln\\b/g, "Math.log");
+  s = s.replace(/\\blog\\b/g, "Math.log");
+  s = s.replace(/\\bsqrt\\b/g, "Math.sqrt");
+  s = s.replace(/\\babs\\b/g, "Math.abs");
+  s = s.replace(/\\bceil\\b/g, "Math.ceil");
+  s = s.replace(/\\bfloor\\b/g, "Math.floor");
+  s = s.replace(/\\bmax\\b/g, "Math.max");
+  s = s.replace(/\\bmin\\b/g, "Math.min");
+  s = s.replace(/\\be\\b/g, "Math.E");
+  // allow function n! via factorial(n)
+  s = s.replace(/(\\d+)!/g, function(_, m){ return "factorial(" + m + ")"; });
+  // allow n! as factorial(n)
+  s = s.replace(/\\b(n)\\!/g, "factorial($1)");
+  // allow implicit multiplication like 'n log(n)' -> 'n*Math.log(n)'
+  s = s.replace(/(\\d|n)\\s+(Math\\.)?([a-zA-Z_][a-zA-Z0-9_]*(\\([^)]*\\))?)/g, function(_, a, b, c){ 
+    if (b) return a + " " + c;
+    return a + "*"+(c.indexOf("(")===-1?("Math."+c):("Math."+c));
+  });
+  // Ensure bare 'log(' becomes Math.log(
+  s = s.replace(/\\blog\\s*\\(/g, "Math.log(");
+  // Ensure bare function names like sin, cos get Math.
+  s = s.replace(/\\b(sin|cos|tan|asin|acos|atan|pow)\\s*\\(/g, function(_, f){ return "Math."+f+"("; });
+  // Final safety: replace any remaining 'n' with 'n' (kept as variable)
+  return s;
+}
+
+function makeEval(expr) {
+  // returns function(n) -> number or NaN
+  const s = cleanExpr(expr);
+  // Build function that also has factorial helper
+  const body = "function factorial(k){ if(!isFinite(k) || k<0) return NaN; k = Math.floor(k); var r=1; for(var i=2;i<=k;i++) r*=i; return r;} return (" + s + ");";
+  try {
+    // Using new Function with Math in scope via referenced names inside
+    const f = new Function('n', body);
+    // Test compile by calling with n=1 (catch errors)
+    try { f(1); } catch(e) {}
+    return f;
+  } catch(e) {
+    return function(){ return NaN; };
+  }
+}
+
+function safeNum(x) {
+  if (!isFinite(x)) return NaN;
+  if (Math.abs(x) > 1e300) return (x>0?Infinity:-Infinity);
+  return x;
+}
+
+/* ---------- Global State ---------- */
+
+const state = {
+  fexpr: document.getElementById('fexpr').value,
+  gexpr: document.getElementById('gexpr').value,
+  ffun: null,
+  gfun: null,
+  maxn: parseInt(document.getElementById('maxn').value,10),
+  samples: parseInt(document.getElementById('samples').value,10),
+  scale: document.getElementById('scale').value,
+  pointsMode: true,
+  showBounds: true,
+  mode: 'theta', // 'theta', 'o', 'omega'
+  proofSteps: [],
+  currentStep: -1,
+  lastSearchResult: null
+};
+
+/* ---------- UI Wiring ---------- */
+
+function updateStateFromInputs() {
+  state.fexpr = document.getElementById('fexpr').value;
+  state.gexpr = document.getElementById('gexpr').value;
+  state.maxn = Math.max(1, parseInt(document.getElementById('maxn').value,10) || 200);
+  state.samples = Math.max(10, parseInt(document.getElementById('samples').value,10) || 200);
+  state.scale = document.getElementById('scale').value;
+  state.ffun = makeEval(state.fexpr);
+  state.gfun = makeEval(state.gexpr);
+}
+
+document.getElementById('plot').addEventListener('click', function(){ updateStateFromInputs(); drawPlot(); logAppend("Plot requested: f="+state.fexpr+" g="+state.gexpr); });
+document.getElementById('showTable').addEventListener('click', function(){ updateStateFromInputs(); showTable(); });
+document.getElementById('clearLog').addEventListener('click', function(){ document.getElementById('log').value = ""; });
+
+function setF(expr) { document.getElementById('fexpr').value = expr; updateStateFromInputs(); }
+function setG(expr) { document.getElementById('gexpr').value = expr; updateStateFromInputs(); }
+
+document.getElementById('f_poly').addEventListener('click', function(){ setF("n^2"); });
+document.getElementById('f_nlogn').addEventListener('click', function(){ setF("n*log(n)"); });
+document.getElementById('f_log').addEventListener('click', function(){ setF("log(n)"); });
+document.getElementById('f_exp').addEventListener('click', function(){ setF("2^n"); });
+document.getElementById('f_fact').addEventListener('click', function(){ setF("factorial(n)"); });
+document.getElementById('f_rand').addEventListener('click', function(){ setF(randomExpression()); });
+
+document.getElementById('g_poly').addEventListener('click', function(){ setG("n^2"); });
+document.getElementById('g_nlogn').addEventListener('click', function(){ setG("n*log(n)"); });
+document.getElementById('g_log').addEventListener('click', function(){ setG("log(n)"); });
+document.getElementById('g_exp').addEventListener('click', function(){ setG("2^n"); });
+document.getElementById('g_fact').addEventListener('click', function(){ setG("factorial(n)"); });
+document.getElementById('g_rand').addEventListener('click', function(){ setG(randomExpression()); });
+
+document.getElementById('togglePoints').addEventListener('click', function(){ state.pointsMode = !state.pointsMode; drawPlot(); logAppend("Toggled points/lines. Points mode = "+state.pointsMode); });
+document.getElementById('showBounds').addEventListener('click', function(){ state.showBounds = !state.showBounds; drawPlot(); logAppend("Toggled show bounds. showBounds = "+state.showBounds); });
+
+document.getElementById('modeTheta').addEventListener('click', function(){ state.mode='theta'; document.getElementById('modeLabel').innerText = "Mode: Θ"; logAppend("Mode set to Θ"); });
+document.getElementById('modeO').addEventListener('click', function(){ state.mode='o'; document.getElementById('modeLabel').innerText = "Mode: O"; logAppend("Mode set to O"); });
+document.getElementById('modeOmega').addEventListener('click', function(){ state.mode='omega'; document.getElementById('modeLabel').innerText = "Mode: Ω"; logAppend("Mode set to Ω"); });
+
+document.getElementById('checkTheta').addEventListener('click', function(){
+  updateStateFromInputs();
+  const c1 = parseFloat(document.getElementById('c1').value);
+  const c2 = parseFloat(document.getElementById('c2').value);
+  const n0 = parseInt(document.getElementById('n0').value,10);
+  const result = checkInequality(c1,c2,n0);
+  if (result.ok) {
+    logAppend("Inequality holds for all sampled n >= "+n0+" with c1="+c1+", c2="+c2+". Result: PASS.");
+  } else {
+    logAppend("Inequality FAILED at n="+result.counterexample+" (value f="+result.fval+" g="+result.gval+" )");
+  }
+  drawPlot(c1,c2,n0);
+});
+
+document.getElementById('searchConstants').addEventListener('click', function(){
+  updateStateFromInputs();
+  bruteForceSearch();
+});
+
+document.getElementById('stepSearch').addEventListener('click', function(){
+  updateStateFromInputs();
+  stepwiseSearchInit();
+});
+
+document.getElementById('autoFindLimit').addEventListener('click', function(){
+  updateStateFromInputs();
+  const r = estimateLimit();
+  logAppend("Estimated limit of f(n)/g(n) as n→∞ ≈ " + r.summary + " (numerical samples: " + r.values.slice(0,6).join(", ") + (r.values.length>6?" ...":"") + ")");
+});
+
+document.getElementById('classify').addEventListener('click', function(){
+  updateStateFromInputs();
+  const cls = classifyGrowth();
+  logAppend("Classification: " + cls);
+});
+
+document.getElementById('genCounter').addEventListener('click', function(){
+  updateStateFromInputs();
+  const cnt = findCounterexample();
+  if (cnt) {
+    logAppend("Counterexample found at n="+cnt.n+"; f="+cnt.f+" g="+cnt.g);
+  } else logAppend("No counterexample found in sampled range.");
+});
+
+document.getElementById('simplify').addEventListener('click', function(){
+  updateStateFromInputs();
+  const simp = asymptoticSimplify();
+  logAppend("Asymptotic simplification guesses: f ~ "+simp.f +"; g ~ "+simp.g);
+});
+
+document.getElementById('exportCSV').addEventListener('click', function(){
+  updateStateFromInputs();
+  exportCSV();
+});
+
+/* ---------- Canvas Plotting ---------- */
+
+const canvas = document.getElementById('plotCanvas');
+const ctx = canvas.getContext('2d');
+
+function drawPlot(c1=null,c2=null,n0=null) {
+  updateStateFromInputs();
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.font = "10px monospace";
+  // compute sample points
+  const maxn = state.maxn;
+  const samples = state.samples;
+  const xs = [];
+  for (let i=0;i<samples;i++){
+    const t = i/(samples-1);
+    let n = 1 + Math.floor(t*(maxn-1));
+    xs.push(n);
+  }
+  const fvals = xs.map(n=>safeNum(state.ffun(n)));
+  const gvals = xs.map(n=>safeNum(state.gfun(n)));
+  // Determine plotting bounds
+  let allvals = fvals.concat(gvals).filter(v => isFinite(v) && !isNaN(v) && v>0);
+  if (allvals.length===0) {
+    // try allow negatives by absolute
+    allvals = fvals.concat(gvals).filter(v => isFinite(v) && !isNaN(v));
+  }
+  if (allvals.length===0) {
+    ctx.fillText("No finite sample values to plot",10,20);
+    return;
+  }
+  let minv = Math.min.apply(null, allvals);
+  let maxv = Math.max.apply(null, allvals);
+  if (minv<=0 && state.scale==='log') minv = 1e-9;
+  if (minv===maxv) { maxv = minv * 10 + 1; }
+  // scale functions
+  function yMap(v){
+    if (!isFinite(v) || isNaN(v)) return NaN;
+    if (state.scale === 'log') {
+      const lv = Math.log(Math.max(1e-12, Math.abs(v)));
+      const ymin = Math.log(Math.max(1e-12,minv));
+      const ymax = Math.log(Math.max(1e-12,maxv));
+      return H - 20 - (lv - ymin)/(ymax-ymin) * (H-40);
+    } else {
+      return H - 20 - ( (v - minv) / (maxv - minv) ) * (H-40);
+    }
+  }
+  function xMap(n){ return 40 + (n-1)/(state.maxn-1) * (W-60); }
+
+  // axes
+  ctx.strokeStyle = "#000";
+  ctx.beginPath();
+  ctx.moveTo(35,10);
+  ctx.lineTo(35,H-20);
+  ctx.lineTo(W-10,H-20);
+  ctx.stroke();
+  ctx.fillText("n", W-30, H-22);
+  ctx.fillText("value", 0, 12);
+
+  // draw bounds region if provided
+  if (state.showBounds && c1!==null && c2!==null && n0!==null) {
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.globalAlpha = 0.08;
+    for (let i=0;i<xs.length;i++){
+      const n = xs[i];
+      if (n < n0) continue;
+      const gv = gvals[i];
+      if (!isFinite(gv)) continue;
+      const up = c2*gv;
+      const lo = c1*gv;
+      const y1 = yMap(up), y2 = yMap(lo);
+      if (!isNaN(y1) && !isNaN(y2)){
+        const x = xMap(n);
+        ctx.fillRect(x-1, Math.min(y1,y2), 2, Math.abs(y1-y2) || 2);
+      }
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  // draw g as dashed
+  ctx.beginPath();
+  ctx.strokeStyle = "#000";
+  for (let i=0;i<xs.length;i++){
+    const x = xMap(xs[i]), y = yMap(gvals[i]);
+    if (i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+  if (state.pointsMode) {
+    for (let i=0;i<xs.length;i++){
+      const x = xMap(xs[i]), y = yMap(gvals[i]);
+      if (isFinite(y)) ctx.fillRect(x-1,y-1,2,2);
+    }
+  } else ctx.stroke();
+  ctx.fillText("g(n)", 45, 30);
+
+  // draw f as solid line
+  ctx.beginPath();
+  ctx.strokeStyle = "#000";
+  for (let i=0;i<xs.length;i++){
+    const x = xMap(xs[i]), y = yMap(fvals[i]);
+    if (i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+  if (state.pointsMode) {
+    for (let i=0;i<xs.length;i++){
+      const x = xMap(xs[i]), y = yMap(fvals[i]);
+      if (isFinite(y)) ctx.fillRect(x-1,y-1,2,2);
+    }
+  } else ctx.stroke();
+  ctx.fillText("f(n)", 45, 42);
+
+  // optionally draw bounding lines
+  if (state.showBounds && c1!==null && c2!==null) {
+    ctx.beginPath();
+    ctx.strokeStyle = "#000";
+    for (let i=0;i<xs.length;i++){
+      const x = xMap(xs[i]);
+      const gv = gvals[i];
+      let ylo = yMap(c1*gv);
+      let yup = yMap(c2*gv);
+      if (i===0) { ctx.moveTo(x,ylo); } else ctx.lineTo(x,ylo);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    for (let i=0;i<xs.length;i++){
+      const x = xMap(xs[i]);
+      const gv = gvals[i];
+      let yup = yMap(c2*gv);
+      if (i===0) { ctx.moveTo(x,yup); } else ctx.lineTo(x,yup);
+    }
+    ctx.stroke();
+    ctx.fillText("c1*g, c2*g (bounds)", 45, 54);
+  }
+
+  // annotate some sample points values
+  for (let i=0;i<Math.min(6,xs.length);i++){
+    const n = xs[Math.floor(i*(xs.length-1)/5)];
+    const x = xMap(n);
+    const yf = yMap(state.ffun(n));
+    const yg = yMap(state.gfun(n));
+    if (isFinite(yf)) ctx.fillText("n="+n+" f="+formatNum(state.ffun(n)), x+4, yf-4);
+    if (isFinite(yg)) ctx.fillText("g="+formatNum(state.gfun(n)), x+4, yg+12);
+  }
+}
+
+function formatNum(x) {
+  if (!isFinite(x)) return String(x);
+  if (Math.abs(x) >= 1e6 || Math.abs(x) < 1e-3 && x!==0) return x.toExponential(3);
+  return Number(x.toFixed(6)).toString();
+}
+
+/* ---------- Table and CSV ---------- */
+
+function showTable() {
+  updateStateFromInputs();
+  const maxn = state.maxn;
+  const samples = state.samples;
+  const rows = [];
+  for (let i=0;i<samples;i++){
+    const t = i/(samples-1);
+    let n = 1 + Math.floor(t*(maxn-1));
+    const f = state.ffun(n);
+    const g = state.gfun(n);
+    rows.push({n, f, g});
+  }
+  let text = "n,f(n),g(n)\\n";
+  for (const r of rows) text += r.n + "," + formatNum(r.f) + "," + formatNum(r.g) + "\\n";
+  logAppend("Value table (first 20 rows):\\n" + rows.slice(0,20).map(r => r.n + " f="+formatNum(r.f)+" g="+formatNum(r.g)).join("\\n"));
+}
+
+function exportCSV() {
+  updateStateFromInputs();
+  const maxn = state.maxn;
+  const samples = state.samples;
+  const rows = [];
+  for (let i=0;i<samples;i++){
+    const t = i/(samples-1);
+    let n = 1 + Math.floor(t*(maxn-1));
+    const f = state.ffun(n);
+    const g = state.gfun(n);
+    rows.push(n + "," + formatNum(f) + "," + formatNum(g));
+  }
+  const csv = "n,f(n),g(n)\\n" + rows.join("\\n");
+  // create a downloadable blob
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = "theta_export.csv";
+  a.textContent = "download";
+  a.click();
+  URL.revokeObjectURL(url);
+  logAppend("CSV exported for sampled values.");
+}
+
+/* ---------- Theta Checking and Searches ---------- */
+
+function checkInequality(c1, c2, n0) {
+  // checks in sample range for all n >= n0 whether inequality holds depending on mode
+  const maxn = state.maxn;
+  for (let n = n0; n <= maxn; n++) {
+    const f = state.ffun(n), g = state.gfun(n);
+    if (!isFinite(f) || !isFinite(g)) {
+      return { ok: false, counterexample: n, fval: f, gval: g };
+    }
+    if (state.mode === 'theta') {
+      if (!(c1 * g <= f + 1e-12 && f <= c2 * g + 1e-12)) return { ok:false, counterexample:n, fval:f, gval:g };
+    } else if (state.mode === 'o') {
+      if (!(f <= c2 * g + 1e-12)) return { ok:false, counterexample:n, fval:f, gval:g };
+    } else if (state.mode === 'omega') {
+      if (!(c1 * g <= f + 1e-12)) return { ok:false, counterexample:n, fval:f, gval:g };
+    }
+  }
+  return { ok:true };
+}
+
+async function bruteForceSearch() {
+  // Search for small integer/floating c1, c2 and n0 that satisfy Theta (in sampled range)
+  const maxn = state.maxn;
+  const mode = state.mode;
+  logAppend("Brute-force search starting (this may take a moment)...");
+  // We'll search c1 in geometric grid (0.01 to 10) and c2 in 1..100, n0 from 1..maxn
+  const c1Candidates = [];
+  for (let p=-4;p<=2;p++) for (let k=1;k<=9;k++){
+    c1Candidates.push(k*Math.pow(10,p));
+  }
+  const c2Candidates = [];
+  for (let p=-1;p<=4;p++) for (let k=1;k<=9;k++){
+    c2Candidates.push(k*Math.pow(10,p));
+  }
+  // Guarantee c1 < c2
+  for (const c1 of c1Candidates) {
+    for (const c2 of c2Candidates) {
+      if (c2 <= c1) continue;
+      for (let n0 = 1; n0 <= Math.min(maxn, 200); n0++) {
+        const res = checkInequality(c1,c2,n0);
+        if (res.ok) {
+          logAppend("Found candidate: c1="+c1+" c2="+c2+" n0="+n0+" (mode="+mode+")");
+          state.lastSearchResult = {c1,c2,n0};
+          document.getElementById('c1').value = c1;
+          document.getElementById('c2').value = c2;
+          document.getElementById('n0').value = n0;
+          drawPlot(c1,c2,n0);
+          return;
+        }
+      }
+    }
+  }
+  logAppend("Brute-force search: No candidate found in grid.");
+}
+
+/* Stepwise search: explore gradually with manual steps recorded */
+function stepwiseSearchInit() {
+  logAppend("Stepwise search initiated. Use Next Step to try candidate triplets.");
+  const c1start = 0.1;
+  state.proofSteps = [];
+  // Setup initial grid of plausible picks
+  const cs = [0.1, 0.25, 0.5, 1, 2, 5];
+  const n0s = [1,2,5,10,20,50];
+  for (const c1 of cs) for (const c2 of cs) for (const n0 of n0s) {
+    if (c2 <= c1) continue;
+    state.proofSteps.push({c1,c2,n0, tried:false});
+  }
+  state.currentStep = -1;
+  logAppend("Prepared "+state.proofSteps.length+" candidate steps.");
+}
+
+document.getElementById('startProof').addEventListener('click', function(){
+  updateStateFromInputs();
+  state.proofSteps = [];
+  state.currentStep = -1;
+  logAppend("Proof workflow reset. Press Stepwise Search to prepare steps.");
+});
+document.getElementById('nextStep').addEventListener('click', function(){
+  if (!state.proofSteps || state.proofSteps.length===0) { logAppend("No proof steps prepared. Click Stepwise Search first."); return; }
+  state.currentStep = Math.min(state.currentStep+1, state.proofSteps.length-1);
+  const step = state.proofSteps[state.currentStep];
+  step.tried = true;
+  document.getElementById('c1').value = step.c1;
+  document.getElementById('c2').value = step.c2;
+  document.getElementById('n0').value = step.n0;
+  const result = checkInequality(step.c1, step.c2, step.n0);
+  if (result.ok) {
+    logAppend("Step "+(state.currentStep+1)+": Candidate PASSED c1="+step.c1+" c2="+step.c2+" n0="+step.n0);
+    drawPlot(step.c1, step.c2, step.n0);
+  } else {
+    logAppend("Step "+(state.currentStep+1)+": Candidate FAILED at n="+result.counterexample+" c1="+step.c1+" c2="+step.c2+" n0="+step.n0);
+    drawPlot(step.c1, step.c2, step.n0);
+  }
+});
+document.getElementById('prevStep').addEventListener('click', function(){
+  if (!state.proofSteps || state.proofSteps.length===0) return;
+  state.currentStep = Math.max(0, state.currentStep-1);
+  const step = state.proofSteps[state.currentStep];
+  document.getElementById('c1').value = step.c1;
+  document.getElementById('c2').value = step.c2;
+  document.getElementById('n0').value = step.n0;
+  logAppend("Moved to previous step "+(state.currentStep+1));
+  drawPlot(step.c1, step.c2, step.n0);
+});
+document.getElementById('accept').addEventListener('click', function(){
+  const c1 = parseFloat(document.getElementById('c1').value);
+  const c2 = parseFloat(document.getElementById('c2').value);
+  const n0 = parseInt(document.getElementById('n0').value,10);
+  logAppend("User accepted candidate c1="+c1+" c2="+c2+" n0="+n0+". Marking proof complete.");
+});
+document.getElementById('reject').addEventListener('click', function(){
+  logAppend("User rejected current candidate. Continue searching.");
+});
+
+/* ---------- Limit estimation and simplification ---------- */
+
+function estimateLimit() {
+  // Sample f/g for increasing n and see trend
+  const maxn = state.maxn;
+  const points = [];
+  const steps = [10,20,50,100,200,500,1000];
+  let nprev = Math.max(10, Math.floor(maxn/10));
+  for (let k=0;k<Math.min(8, steps.length);k++){
+    const n = Math.min(maxn, steps[k]);
+    const val = state.gfun(n);
+    const fv = state.ffun(n);
+    const ratio = (isFinite(fv) && isFinite(val) && val!==0)? fv/val : NaN;
+    points.push(Number.isFinite(ratio)?ratio:NaN);
+  }
+  // Also sample geometric progression
+  const extra = [];
+  for (let i=1;i<=6;i++){
+    const n = Math.min(maxn, Math.floor(Math.pow(10, Math.log10(Math.max(2,maxn))/6 * i)));
+    const fv = state.ffun(n);
+    const gv = state.gfun(n);
+    const ratio = (isFinite(fv) && isFinite(gv) && gv!==0)? fv/gv : NaN;
+    extra.push(ratio);
+  }
+  const vals = points.concat(extra).filter(x=>isFinite(x));
+  let summary = "insufficient data";
+  if (vals.length>0) {
+    const last = vals[vals.length-1];
+    const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+    if (Math.abs(last) < 1e-6) summary = "0 (f is smaller than g)";
+    else if (!isFinite(last) || Math.abs(last) > 1e9) summary = "∞ (f grows much faster than g)";
+    else summary = "≈ " + last.toExponential(3) + " (avg " + avg.toExponential(3) + ")";
+  }
+  return {values: vals, summary};
+}
+
+function classifyGrowth() {
+  // crude classification based on sample slopes in log-log if possible
+  const samples = [];
+  const maxn = state.maxn;
+  for (let i=1;i<=20;i++){
+    const n = Math.max(1, Math.floor(i/20 * (maxn-1)) + 1);
+    const fv = state.ffun(n);
+    if (!isFinite(fv) || fv<=0) continue;
+    samples.push({n, fv});
+  }
+  if (samples.length<3) return "Not enough positive samples to classify.";
+  // compute slope of log(f) vs log(n)
+  const logn = samples.map(s=>Math.log(s.n));
+  const logf = samples.map(s=>Math.log(Math.abs(s.fv)));
+  const avgx = logn.reduce((a,b)=>a+b,0)/logn.length;
+  const avgy = logf.reduce((a,b)=>a+b,0)/logf.length;
+  let num=0, den=0;
+  for (let i=0;i<logn.length;i++){
+    num += (logn[i]-avgx)*(logf[i]-avgy);
+    den += (logn[i]-avgx)*(logn[i]-avgx);
+  }
+  const slope = num/den;
+  if (slope>4) return "Superpolynomial growth (slope ~ "+slope.toFixed(2)+")";
+  if (slope>1.5) return "Polynomial of degree ~"+slope.toFixed(2);
+  if (slope>0.4) return "Between linear and quadratic (slope ~"+slope.toFixed(2)+")";
+  if (slope>0.1) return "Near-linear (slope ~"+slope.toFixed(2)+")";
+  if (slope>-0.5 && slope<=0.1) return "Polylogarithmic or logarithmic growth (slope ~"+slope.toFixed(2)+")";
+  if (slope<=-0.5) return "Decaying or sub-log growth (slope ~"+slope.toFixed(2)+")";
+  return "Unclear classification (slope ~"+slope.toFixed(2)+")";
+}
+
+/* Asymptotic simplify: try to guess leading term among polynomial/log/exp */
+function asymptoticSimplify() {
+  // Try to detect polynomial degree by evaluating ratio n^k
+  function guess(exprfun) {
+    // try polynomial degree up to 6
+    for (let deg=6; deg>=0; deg--) {
+      // test ratio f / n^deg converging to constant
+      const vals = [];
+      for (const n of [10,50,200,500,1000]) {
+        if (n>state.maxn) continue;
+        const f = exprfun(n);
+        const denom = Math.pow(n,deg);
+        if (!isFinite(f) || denom===0) { vals.push(NaN); continue; }
+        vals.push(f/denom);
+      }
+      const finite = vals.filter(v=>isFinite(v));
+      if (finite.length>=3) {
+        const ratioChange = Math.max.apply(null, finite)/Math.min.apply(null, finite);
+        if (ratioChange < 100) {
+          return (deg===0?"constant or log-like":"n^"+deg+" * Theta(1)");
+        }
+      }
+    }
+    // test exponential: f( n ) ~ a^n ?
+    const r1 = exprfun(20), r2 = exprfun(21);
+    if (isFinite(r1)&&isFinite(r2)&&r1>0&&r2>0) {
+      const approx = r2/r1;
+      if (approx>1.2) return "Exponential growth ~"+approx.toFixed(3)+"^n";
+    }
+    // fallback: sample slopes
+    return "Unknown (use numeric limit estimate)";
+  }
+  const fguess = guess(state.ffun);
+  const gguess = guess(state.gfun);
+  return {f:fguess, g:gguess};
+}
+
+/* Counterexample search: tries to find n where inequality fails for provided c's */
+function findCounterexample() {
+  const c1 = parseFloat(document.getElementById('c1').value);
+  const c2 = parseFloat(document.getElementById('c2').value);
+  const n0 = parseInt(document.getElementById('n0').value,10);
+  const maxn = state.maxn;
+  for (let n=1;n<=maxn;n++){
+    const f = state.ffun(n), g = state.gfun(n);
+    if (!isFinite(f) || !isFinite(g)) continue;
+    if (n>=n0) {
+      if (!(c1 * g <= f + 1e-12 && f <= c2 * g + 1e-12)) return {n,f,g};
+    }
+  }
+  return null;
+}
+
+/* ---------- Random expression generator ---------- */
+
+function randomExpression() {
+  const choices = [
+    "n^3 + 4*n^2 + 7",
+    "n^2 + 5*n + 3",
+    "n*log(n) + n",
+    "log(n) + 2",
+    "2^n + n^3",
+    "n^2 * log(n)",
+    "factorial(n)",
+    "n^1.5 + 100*n",
+    "n*sqrt(n) + 20",
+    "n*log(n)^2",
+    "10*n + 100",
+    "n^4 + 2^n",
+    "n"
+  ];
+  return choices[Math.floor(Math.random()*choices.length)];
+}
+
+/* ---------- Proof workflow placeholders (complex state transitions) ---------- */
+
+// We'll create a multi-step "proof assistant" that records attempts, counters, refinement actions.
+function createProofWorkflow() {
+  // Not used directly but the UI allows stepwise interaction
+}
+
+/* ---------- Initialization ---------- */
+
+updateStateFromInputs();
+drawPlot();
+logAppend("Interactive Big-Theta Explorer loaded. Edit f(n) and g(n), then Plot, Search, or Check Θ.");
+
+/* ---------- Extra: allow keyboard shortcuts for convenience (minimal) ---------- */
+document.addEventListener('keydown', function(e){
+  if (e.key === "p" && e.ctrlKey) { e.preventDefault(); updateStateFromInputs(); drawPlot(); logAppend("Plot (shortcut)."); }
+});
+
+/* ---------- End of script ---------- */
+</script>
+
+</body>
+</html>

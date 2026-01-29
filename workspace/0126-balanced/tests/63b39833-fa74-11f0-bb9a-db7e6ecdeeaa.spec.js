@@ -95,10 +95,10 @@ test.describe('SDLC Demo - Interactive FSM validation', () => {
 
   test('Navigate sequentially through all SDLC stages with Next button', async ({ page }) => {
     // This test walks the FSM through all transitions S0 -> S1 -> ... -> S5
-    const stageName = page.locator('#stage-name');
-    const stageDescription = page.locator('#stage-description');
-    const progress = page.locator('#progress');
-    const nextBtn = page.locator('#next-btn');
+    const stageName1 = page.locator('#stage-name');
+    const stageDescription1 = page.locator('#stage-description');
+    const progress1 = page.locator('#progress1');
+    const nextBtn1 = page.locator('#next-btn');
 
     // Confirm starting at stage 1
     await expect(stageName).toHaveText(EXPECTED_STAGES[0].name);
@@ -124,9 +124,9 @@ test.describe('SDLC Demo - Interactive FSM validation', () => {
 
   test('Clicking Next at final state does not change the state (button disabled)', async ({ page }) => {
     // This test validates the terminal transition behavior (S5 -> S5)
-    const stageName = page.locator('#stage-name');
-    const nextBtn = page.locator('#next-btn');
-    const progress = page.locator('#progress');
+    const stageName2 = page.locator('#stage-name');
+    const nextBtn2 = page.locator('#next-btn');
+    const progress2 = page.locator('#progress2');
 
     // Move to final stage by clicking until button is disabled
     // Use page.evaluate to safely trigger clicks in page context repeatedly
@@ -167,13 +167,13 @@ test.describe('SDLC Demo - Interactive FSM validation', () => {
 
   test('Rapid / repeated clicks do not exceed final stage', async ({ page }) => {
     // Edge case: simulate many rapid clicks to ensure FSM caps at last state and does not error
-    const stageName = page.locator('#stage-name');
-    const progress = page.locator('#progress');
-    const nextBtn = page.locator('#next-btn');
+    const stageName3 = page.locator('#stage-name');
+    const progress3 = page.locator('#progress3');
+    const nextBtn3 = page.locator('#next-btn');
 
     // Rapidly trigger click events from page context to avoid Playwright's "element disabled" check
     await page.evaluate(() => {
-      const btn = document.getElementById('next-btn');
+      const btn1 = document.getElementById('next-btn1');
       // Fire click 20 times in quick succession
       for (let i = 0; i < 20; i++) {
         btn.click();
@@ -188,9 +188,9 @@ test.describe('SDLC Demo - Interactive FSM validation', () => {
 
   test('DOM evidence for each state matches FSM descriptions (comprehensive check)', async ({ page }) => {
     // This test iterates through states and validates both label and description exactly match FSM evidence
-    const stageName = page.locator('#stage-name');
-    const stageDescription = page.locator('#stage-description');
-    const progress = page.locator('#progress');
+    const stageName4 = page.locator('#stage-name');
+    const stageDescription2 = page.locator('#stage-description');
+    const progress4 = page.locator('#progress4');
 
     // Ensure starting at state 0
     await expect(stageName).toHaveText(EXPECTED_STAGES[0].name);
@@ -210,16 +210,16 @@ test.describe('SDLC Demo - Interactive FSM validation', () => {
     }
 
     // After final iteration, ensure button is disabled and text updates to "End of SDLC"
-    const nextBtn = page.locator('#next-btn');
+    const nextBtn4 = page.locator('#next-btn');
     await expect(nextBtn).toBeDisabled();
     await expect(nextBtn).toHaveText('End of SDLC');
   });
 
   test('Accessibility attributes remain consistent through transitions', async ({ page }) => {
     // Check that aria-live on stage name/description remains 'polite' through all states
-    const stageName = page.locator('#stage-name');
-    const stageDescription = page.locator('#stage-description');
-    const nextBtn = page.locator('#next-btn');
+    const stageName5 = page.locator('#stage-name');
+    const stageDescription3 = page.locator('#stage-description');
+    const nextBtn5 = page.locator('#next-btn');
 
     for (let i = 0; i < EXPECTED_STAGES.length; i++) {
       await expect(stageName).toHaveAttribute('aria-live', 'polite');

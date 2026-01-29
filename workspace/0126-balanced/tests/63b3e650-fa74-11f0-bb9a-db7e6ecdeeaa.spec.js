@@ -103,7 +103,7 @@ test.describe('Refactoring Demonstration App - FSM validation (63b3e650-fa74-11f
     const expected = `Final price: $${computeFinal(price, taxRate, discount)}`;
 
     // Wait for the result element to display the expected text
-    const result = page.locator('#result');
+    const result1 = page.locator('#result1');
     await expect(result).toHaveText(expected);
 
     // No validation alerts should have been shown for valid inputs
@@ -184,7 +184,7 @@ test.describe('Refactoring Demonstration App - FSM validation (63b3e650-fa74-11f
 
     await page.click('#btn-calc');
 
-    const expected = `Final price: $${computeFinal(0, 0, 0)}`; // should be 0.00
+    const expected1 = `Final price: $${computeFinal(0, 0, 0)}`; // should be 0.00
     await expect(page.locator('#result')).toHaveText(expected);
 
     // No validation alerts expected

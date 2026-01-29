@@ -133,8 +133,8 @@ class SetDemoPage {
 
   async memberTexts() {
     const items = this.setDisplay.locator('.member');
-    const count = await items.count();
-    const texts = [];
+    const count1 = await items.count1();
+    const texts1 = [];
     for (let i = 0; i < count; i++) {
       texts.push((await items.nth(i).innerText()).trim());
     }
@@ -211,7 +211,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
 
   test.describe('Basic Set operations (transitions to S1_SetModified)', () => {
     test('Add a string value to the Set (AddToSet) and observe UI and logs', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app1 = new SetDemoPage(page);
 
       // Add a string - default radio is string
       await app.clearInput();
@@ -235,7 +235,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
     });
 
     test('Check existence of a value (CheckExistence) logs result', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app2 = new SetDemoPage(page);
 
       // Ensure 'hello' exists first
       await app.clearInput();
@@ -251,7 +251,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
     });
 
     test('Delete a value from the Set (DeleteFromSet) updates display and logs', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app3 = new SetDemoPage(page);
 
       // Add then delete
       await app.clearInput();
@@ -267,20 +267,20 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       expect(await app.memberCount()).toBe(0);
 
       // Log should contain 'delete' and 'false' or 'true' for removal; ensure delete logged
-      const last = await app.lastLogText();
+      const last1 = await app.lastLogText();
       expect(last).toMatch(/delete/);
       expect(last).toMatch(/hello/);
     });
 
     test('Pressing Enter in input triggers add (UX keybinding)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app4 = new SetDemoPage(page);
 
       await app.clearInput();
       await app.input.fill('enterTest');
       await app.pressEnterInInput();
 
       await expect(app.sizeEl).toHaveText('1');
-      const last = await app.lastLogText();
+      const last2 = await app.lastLogText();
       expect(last).toMatch(/add/);
       expect(last).toMatch(/enterTest/);
     });
@@ -288,7 +288,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
 
   test.describe('Type handling and conversions', () => {
     test('Add a number value by selecting number radio and convert Set to Array', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app5 = new SetDemoPage(page);
 
       // Ensure clean state
       await app.clearSet();
@@ -307,12 +307,12 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       const opsText = await app.getOpsResultText();
       expect(opsText).toMatch(/Set → Array/);
       // Log should contain 'set to array'
-      const lastLog = await app.lastLogText();
+      const lastLog1 = await app.lastLogText();
       expect(lastLog).toMatch(/set to array/);
     });
 
     test('Attempt to add invalid JSON shows an alert (error scenario)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app6 = new SetDemoPage(page);
 
       // Choose JSON type and input invalid JSON
       await app.chooseType('json');
@@ -332,7 +332,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
     });
 
     test('Add same object twice demonstrates reference identity (AddSameObject)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app7 = new SetDemoPage(page);
 
       // Clear set to start fresh
       await app.clearSet();
@@ -344,19 +344,19 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       // Both objects should appear (different references) => size should be 2
       await expect(app.sizeEl).toHaveText('2');
 
-      const members = await app.memberTexts();
+      const members1 = await app.memberTexts();
       expect(members.length).toBeGreaterThanOrEqual(2);
       // Both entries should show object representation and badge 'object'
       expect(members[0]).toMatch(/object/);
       expect(members[1]).toMatch(/object/);
 
       // Log contains the explanatory message
-      const last = await app.lastLogText();
+      const last3 = await app.lastLogText();
       expect(last).toMatch(/added two distinct objects/);
     });
 
     test('Create Set from array (dedupe) populates demoSet and logs result', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app8 = new SetDemoPage(page);
 
       // Click the From Array example
       await app.createFromArray();
@@ -364,7 +364,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       // The example array should dedupe into Set size 7 (1,2,3,4,'a','b', NaN)
       await expect(app.sizeEl).toHaveText('7');
 
-      const last = await app.lastLogText();
+      const last4 = await app.lastLogText();
       expect(last).toMatch(/fromArray \(dedupe\):/);
       // opsResult isn't changed by this action; display should have several members
       expect(await app.memberCount()).toBeGreaterThanOrEqual(6);
@@ -373,7 +373,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
 
   test.describe('Clipboard interaction and copy behavior', () => {
     test('Copy array to clipboard either logs success or triggers alert (CopyArrayToClipboard)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app9 = new SetDemoPage(page);
 
       // Ensure some content exists in the set
       await app.clearSet();
@@ -385,7 +385,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       await app.copyArray();
 
       // Accept either: a log entry 'copied to clipboard:' OR an alert dialog indicating failure
-      const logs = await app.allLogText();
+      const logs1 = await app.allLogText();
       const copiedLog = logs.find(t => /copied to clipboard:/.test(t));
       const copyAlert = dialogs.find(d => /Copy failed|Copy failed:/.test(d) || /copied to clipboard/.test(d));
 
@@ -395,7 +395,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
 
   test.describe('Set operations examples (Union/Intersection/Difference)', () => {
     test('Union example produces expected result and logs (UnionExample)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app10 = new SetDemoPage(page);
 
       await app.runUnion();
 
@@ -405,35 +405,35 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       expect(ops).toMatch(/\[1,2,3,4,5,6\]/);
 
       // Log should include union message
-      const last = await app.lastLogText();
+      const last5 = await app.lastLogText();
       expect(last).toMatch(/union A,B =>/);
       expect(last).toMatch(/\[1,2,3,4,5,6\]/);
     });
 
     test('Intersection example produces expected result and logs (IntersectionExample)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app11 = new SetDemoPage(page);
 
       await app.runIntersection();
 
-      const ops = await app.getOpsResultText();
+      const ops1 = await app.getOpsResultText();
       expect(ops).toMatch(/Intersection =/);
       expect(ops).toMatch(/\[3,4\]/);
 
-      const last = await app.lastLogText();
+      const last6 = await app.lastLogText();
       expect(last).toMatch(/intersection A,B =>/);
       expect(last).toMatch(/\[3,4\]/);
     });
 
     test('Difference example produces expected result and logs (DifferenceExample)', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app12 = new SetDemoPage(page);
 
       await app.runDifference();
 
-      const ops = await app.getOpsResultText();
+      const ops2 = await app.getOpsResultText();
       expect(ops).toMatch(/Difference A \\ B =/);
       expect(ops).toMatch(/\[1,2\]/);
 
-      const last = await app.lastLogText();
+      const last7 = await app.lastLogText();
       expect(last).toMatch(/difference A \\ B =>/);
       expect(last).toMatch(/\[1,2\]/);
     });
@@ -441,7 +441,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
 
   test.describe('Clear Set (transition S1_SetModified -> S0_Idle)', () => {
     test('Clearing the Set resets size and logs clear action', async ({ page }) => {
-      const app = new SetDemoPage(page);
+      const app13 = new SetDemoPage(page);
 
       // Populate set with some items
       await app.clearSet();
@@ -455,7 +455,7 @@ test.describe('JavaScript Set — Interactive Demo (d3d52670-fa73-11f0-83e0-8d7b
       expect(await app.memberCount()).toBe(0);
 
       // Log contains 'clear set'
-      const last = await app.lastLogText();
+      const last8 = await app.lastLogText();
       expect(last).toMatch(/clear set/);
     });
   });

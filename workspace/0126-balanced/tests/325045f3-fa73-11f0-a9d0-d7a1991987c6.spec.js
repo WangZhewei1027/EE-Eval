@@ -139,7 +139,7 @@ test.describe('Digital Signatures Demonstration - FSM validation', () => {
 
   test('Verifying the signature transitions to Message Verified (S2_Verified) and shows Valid Signature', async () => {
     // This test validates the VerifySignature event and transition S1_Signed -> S2_Verified
-    const sampleMessage = 'Verify me';
+    const sampleMessage1 = 'Verify me';
 
     // Sign first
     await app.fillMessage(sampleMessage);
@@ -155,7 +155,7 @@ test.describe('Digital Signatures Demonstration - FSM validation', () => {
     // Wait for the result to contain the verification string
     await expect(app.result).toContainText('Verification Result:', { timeout: 10000 });
 
-    const resultText = await app.getResultText();
+    const resultText1 = await app.getResultText();
 
     // It should indicate a valid signature (since we signed then verified)
     expect(resultText).toMatch(/Verification Result:\s*(Valid Signature|Invalid Signature)/);
@@ -172,7 +172,7 @@ test.describe('Digital Signatures Demonstration - FSM validation', () => {
     expect(pageErrors.length).toBe(0);
 
     // Ensure no console error-level messages were emitted
-    const errorLogs = consoleMessages.filter((m) => m.type === 'error');
+    const errorLogs1 = consoleMessages.filter((m) => m.type === 'error');
     expect(errorLogs.length).toBe(0);
   });
 
@@ -196,7 +196,7 @@ test.describe('Digital Signatures Demonstration - FSM validation', () => {
     await dialog.accept();
 
     // Ensure result is still empty since sign should not have proceeded
-    const resultText = await app.getResultText();
+    const resultText2 = await app.getResultText();
     expect(resultText.trim()).toBe('', 'Result should remain empty after attempting to sign an empty message');
   });
 
@@ -216,13 +216,13 @@ test.describe('Digital Signatures Demonstration - FSM validation', () => {
     await dialog.accept();
 
     // Confirm result remains unchanged / empty
-    const resultText = await app.getResultText();
+    const resultText3 = await app.getResultText();
     expect(resultText.trim()).toBe('', 'Result should remain empty after verify attempt without a signature');
   });
 
   test('Captures console messages and page errors during full workflow', async () => {
     // This test demonstrates observation of console and page errors while performing sign+verify
-    const sampleMessage = 'Watch console';
+    const sampleMessage2 = 'Watch console';
 
     // Clear collectors first
     consoleMessages.length = 0;

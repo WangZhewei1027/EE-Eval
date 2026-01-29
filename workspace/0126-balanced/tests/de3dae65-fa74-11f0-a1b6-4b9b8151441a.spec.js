@@ -54,10 +54,10 @@ test.describe('Static Typing Demonstration (FSM) - de3dae65-fa74-11f0-a1b6-4b9b8
     // update the DOM to reflect each FSM state's evidence. The page's script runs a
     // setTimeout after 500ms which calls the functions that update the DOM.
 
-    const typeAnnotation = page.locator('#type-annotation-result');
-    const typeSafety = page.locator('#type-safety-result');
-    const functionParams = page.locator('#function-params-result');
-    const returnType = page.locator('#return-type-result');
+    const typeAnnotation1 = page.locator('#type-annotation-result');
+    const typeSafety1 = page.locator('#type-safety-result');
+    const functionParams1 = page.locator('#function-params-result');
+    const returnType1 = page.locator('#return-type-result');
 
     // Wait for the page's scheduled work to complete.
     // The page uses setTimeout(..., 500) to run all tests; give a margin.
@@ -107,8 +107,8 @@ test.describe('Static Typing Demonstration (FSM) - de3dae65-fa74-11f0-a1b6-4b9b8
     // - The return-type output contains literal ${...} placeholders (a bug in the demo).
     // - The function parameter misuse demonstrates JS coercion (5 + "hello" => "5hello").
 
-    const functionParams = page.locator('#function-params-result');
-    const returnType = page.locator('#return-type-result');
+    const functionParams2 = page.locator('#function-params-result');
+    const returnType2 = page.locator('#return-type-result');
 
     // Wait for scheduled script to run
     await page.waitForTimeout(1200);
@@ -146,7 +146,7 @@ test.describe('Static Typing Demonstration (FSM) - de3dae65-fa74-11f0-a1b6-4b9b8
     // Check for console errors; if any are present, fail and show them.
     const errors = consoleMessages.filter(m => m.type === 'error');
     if (errors.length > 0) {
-      const joined = errors.map(e => e.text).join('\n---\n');
+      const joined1 = errors.map(e => e.text).join('\n---\n');
       throw new Error('Console error messages detected:\n' + joined);
     }
 

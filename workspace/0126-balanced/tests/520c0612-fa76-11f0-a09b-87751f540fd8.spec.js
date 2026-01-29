@@ -151,7 +151,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // This test simulates the FSM transition to S1_Authenticated by invoking the existing authenticate function.
     // We do not modify or redefine the function; we only call it in page context and assert logs.
 
-    const auth = new AuthPage(page);
+    const auth1 = new AuthPage(page);
     await auth.navigate();
 
     // Clear any existing messages and errors recorded during initial load
@@ -162,7 +162,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // Call authenticate('admin', 'password') in page context and let it log follow-up message
     await auth.evaluateAuthWithLogging('admin', 'password');
 
-    const texts = auth.consoleMessages.map(m => m.text);
+    const texts1 = auth.consoleMessages.map(m => m.text);
     // authenticate should log "Authentication successful!" and our follow-up logs "You are logged in!"
     expect(texts.some(t => t.includes('Authentication successful!'))).toBeTruthy();
     expect(texts.some(t => t.includes('You are logged in!'))).toBeTruthy();
@@ -177,7 +177,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
   test('Unauthenticated transition via calling authenticate with wrong credentials produces expected logs (S2_Unauthenticated evidence)', async ({ page }) => {
     // This test simulates the FSM transition to S2_Unauthenticated by calling authenticate with invalid creds.
 
-    const auth = new AuthPage(page);
+    const auth2 = new AuthPage(page);
     await auth.navigate();
 
     // Clear prior logs
@@ -188,7 +188,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // Call authenticate with invalid credentials
     await auth.evaluateAuthWithLogging('baduser', 'badpass');
 
-    const texts = auth.consoleMessages.map(m => m.text);
+    const texts2 = auth.consoleMessages.map(m => m.text);
     expect(texts.some(t => t.includes('Authentication failed!'))).toBeTruthy();
     expect(texts.some(t => t.includes('You are not logged in!'))).toBeTruthy();
 
@@ -204,7 +204,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // The implementation does not attach a submit handler; submitting the form will reload the page,
     // causing the inline script to run again (which uses hardcoded credentials). We assert that behavior.
 
-    const auth = new AuthPage(page);
+    const auth3 = new AuthPage(page);
     await auth.navigate();
 
     // Clear initial logs
@@ -220,7 +220,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     await auth.submitForm(true);
 
     // After navigation/reload the inline script should run and produce logs again
-    const texts = auth.consoleMessages.map(m => m.text);
+    const texts3 = auth.consoleMessages.map(m => m.text);
     // On reload, the inline script still uses hardcoded admin/password; we expect success logs
     expect(texts.some(t => t.includes('Authentication successful!'))).toBeTruthy();
     expect(texts.some(t => t.includes('You are logged in!'))).toBeTruthy();
@@ -240,7 +240,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // This test verifies behavior for empty username/password.
     // It is an edge case: authenticate should return false and appropriate logs should be emitted.
 
-    const auth = new AuthPage(page);
+    const auth4 = new AuthPage(page);
     await auth.navigate();
 
     // Clear previous logs
@@ -251,7 +251,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // Evaluate authenticate with empty strings
     await auth.evaluateAuthWithLogging('', '');
 
-    const texts = auth.consoleMessages.map(m => m.text);
+    const texts4 = auth.consoleMessages.map(m => m.text);
     expect(texts.some(t => t.includes('Authentication failed!'))).toBeTruthy();
     expect(texts.some(t => t.includes('You are not logged in!'))).toBeTruthy();
 
@@ -264,7 +264,7 @@ test.describe('Authentication FSM - Interactive Application (520c0612-fa76-11f0-
     // to validate that runtime ReferenceErrors surface as pageerrors. We do this WITHOUT
     // modifying global state or redefining anything — we simply run code that references a missing symbol.
 
-    const auth = new AuthPage(page);
+    const auth5 = new AuthPage(page);
     await auth.navigate();
 
     // Clear prior logs and errors

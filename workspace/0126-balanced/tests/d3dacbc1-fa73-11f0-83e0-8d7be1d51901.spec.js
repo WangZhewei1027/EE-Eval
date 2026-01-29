@@ -87,7 +87,7 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
       // This test validates the ApplySelectedRefactors event/transition from S0_Idle -> S1_Refactoring
       // Modify the originalArea slightly to ensure transform has something to operate on
       const originalLocator = page.locator('#originalArea');
-      const originalBefore = await originalLocator.inputValue();
+      const originalBefore1 = await originalLocator.inputValue();
       // Append a harmless comment line to cause a difference
       const appended = originalBefore + '\n// appended comment for test';
       await originalLocator.fill(appended);
@@ -106,7 +106,7 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
       expect(await steps.count()).toBeGreaterThan(0);
 
       // Diff box should reflect differences (contain + or - lines)
-      const diffText = await page.locator('#diffBox').innerText();
+      const diffText1 = await page.locator('#diffBox').innerText();
       expect(diffText.length).toBeGreaterThan(0);
       // Expect at least one diff marker or the appended comment present
       expect(diffText.includes('+ ') || diffText.includes('- ') || diffText.includes('appended comment')).toBeTruthy();
@@ -130,17 +130,17 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
       expect(await page.locator('#t_format').isChecked()).toBeTruthy();
 
       // Steps should include items for multiple transforms (at least 3)
-      const stepsCount = await page.locator('#steps .step').count();
+      const stepsCount1 = await page.locator('#steps .step').count();
       expect(stepsCount).toBeGreaterThanOrEqual(3);
 
       // diffBox should be updated
-      const diffText = await page.locator('#diffBox').innerText();
+      const diffText2 = await page.locator('#diffBox').innerText();
       expect(diffText.length).toBeGreaterThan(0);
     });
 
     test('Undo after refactoring restores previous original and clears diffs/output', async ({ page }) => {
       // Ensure there's a change in history: modify and apply
-      const originalLocator = page.locator('#originalArea');
+      const originalLocator1 = page.locator('#originalArea');
       const originalInitial = await originalLocator.inputValue();
       const modified = originalInitial + '\n// undo-test line';
       await originalLocator.fill(modified);
@@ -191,7 +191,7 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
     test('Run Tests (RunTests2 button) produces same test output', async ({ page }) => {
       // Click alternate Run Tests button
       await page.click('#runTests2');
-      const output = await page.locator('#testOutput').innerText();
+      const output1 = await page.locator('#testOutput').innerText();
       expect(output).toContain('Original function');
       expect(output).toContain('Refactored function');
       expect(output).toContain('PASS');
@@ -229,18 +229,18 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
       await page.click('#showSteps');
 
       // Each .step created by Show Steps contains a <strong> title and a "Why:" rationale
-      const steps = page.locator('#steps .step');
+      const steps1 = page.locator('#steps1 .step');
       await expect(steps.first()).toBeVisible();
       const firstStepHtml = await steps.first().innerHTML();
       expect(firstStepHtml).toMatch(/<strong>.*<\/strong>/i);
       expect(firstStepHtml).toContain('Why:');
 
       // diffBox should be updated to show differences
-      const diffText = await page.locator('#diffBox').innerText();
+      const diffText3 = await page.locator('#diffBox').innerText();
       expect(diffText.length).toBeGreaterThan(0);
 
       // refactoredArea should be populated with the transformed code
-      const refactoredValue = await page.locator('#refactoredArea').inputValue();
+      const refactoredValue1 = await page.locator('#refactoredArea').inputValue();
       expect(refactoredValue.length).toBeGreaterThan(0);
       expect(refactoredValue).not.toBe('');
     });
@@ -256,7 +256,7 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
       await page.click('#applySelected');
 
       // refactoredArea should be produced; because format is off, we expect that certain formatting changes (like consistent indentation) are not applied.
-      const refactored = await page.locator('#refactoredArea').inputValue();
+      const refactored1 = await page.locator('#refactoredArea').inputValue();
       // Basic assertion: refactored exists and differs from original (some transforms still likely applied)
       expect(refactored.length).toBeGreaterThan(0);
       // Since format was disabled, there should be fewer newline/indent normalization effects: ensure there is at least one line containing 'function computeItemTotal' or TAX_RATE or var->let replacements may exist depending on other transforms.
@@ -265,7 +265,7 @@ test.describe('Refactoring Demo — FSM and UI integration tests', () => {
     });
 
     test('Multiple sequential transforms and undos maintain history and do not crash', async ({ page }) => {
-      const originalLocator = page.locator('#originalArea');
+      const originalLocator2 = page.locator('#originalArea');
       const base = await originalLocator.inputValue();
 
       // Make 3 small edits and apply each time

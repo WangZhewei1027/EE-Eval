@@ -119,7 +119,7 @@ test.describe('Static Typing Demo (TypeScript in the Browser) — FSM and UI tes
   });
 
   test('S0 -> S1: clicking Check Types updates diagnostics and emits transpiled JS', async ({ page }) => {
-    const editor = new EditorPage(page);
+    const editor1 = new EditorPage(page);
     await editor.goto();
 
     // Preserve initial diagnostics and outJs
@@ -153,7 +153,7 @@ test.describe('Static Typing Demo (TypeScript in the Browser) — FSM and UI tes
   });
 
   test('S1 -> S2 -> S3: Transpile & Run executes code in sandbox; runtime errors surface as page errors when they occur', async ({ page }) => {
-    const editor = new EditorPage(page);
+    const editor2 = new EditorPage(page);
     await editor.goto();
 
     // First, ensure we can detect the sandbox initial console message if present
@@ -192,7 +192,7 @@ test.describe('Static Typing Demo (TypeScript in the Browser) — FSM and UI tes
   });
 
   test('Show emitted JavaScript and Reset buttons: either update UI or produce natural ReferenceErrors if functions are missing', async ({ page }) => {
-    const editor = new EditorPage(page);
+    const editor3 = new EditorPage(page);
     await editor.goto();
 
     // Record prior state

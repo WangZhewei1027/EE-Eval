@@ -106,7 +106,7 @@ test.describe('Mutex Demonstration - FSM validation and behavior', () => {
     // - Clicking Start schedules multiple criticalSection calls
     // - Each "Thread {id} has entered the critical section." appears before "Thread {id} is leaving the critical section."
     // - The critical section is mutually exclusive: the next thread should not enter before the previous leaves
-    const mutex = new MutexPage(page);
+    const mutex1 = new MutexPage(page);
     await mutex.goto();
 
     // Start collecting timeline and ensure no errors before starting
@@ -170,7 +170,7 @@ test.describe('Mutex Demonstration - FSM validation and behavior', () => {
   test('Repeated runs append logs and remain free of uncaught exceptions (edge case: start invoked after completion)', async ({ page }) => {
     // This test validates that invoking Start again (after a full run) starts a new sequence of operations
     // and that the app remains stable (no page errors). It also ensures logs are appended rather than replaced.
-    const mutex = new MutexPage(page);
+    const mutex2 = new MutexPage(page);
     await mutex.goto();
 
     // Start first run
@@ -213,7 +213,7 @@ test.describe('Mutex Demonstration - FSM validation and behavior', () => {
   test('No unexpected runtime ReferenceError/SyntaxError/TypeError occur when interacting with the page', async ({ page }) => {
     // This test explicitly asserts that no uncaught JS errors occurred during typical interactions:
     // initial load and one start sequence.
-    const mutex = new MutexPage(page);
+    const mutex3 = new MutexPage(page);
     await mutex.goto();
 
     // Trigger operations

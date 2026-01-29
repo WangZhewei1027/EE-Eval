@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Abstract Syntax Tree Interactive Explorer</title>
+<style>
+/* Extremely minimal styling - plain black text on white background */
+body { margin: 10px; font-family: monospace; color: black; background: white; }
+button, input, select, textarea { font-family: monospace; }
+.container { display: flex; gap: 10px; }
+.column { flex: 1 1 0; min-width: 200px; max-width: 50%; }
+.section { margin-bottom: 10px; }
+.small { font-size: 12px; }
+.tree { white-space: pre; overflow: auto; max-height: 480px; border: 1px solid #000; padding: 6px; }
+.jsonarea { width: 100%; height: 220px; }
+textarea { width: 100%; }
+.controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.node-row { margin: 2px 0; }
+.list { max-height: 140px; overflow: auto; border: 1px solid #000; padding: 4px; }
+.rightpanel { display: flex; flex-direction: column; gap: 8px; }
+label { margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<h2>Abstract Syntax Tree - Interactive Explorer</h2>
+
+<div class="container">
+  <div class="column" id="leftColumn">
+    <div class="section">
+      <div><strong>Code / Input</strong></div>
+      <textarea id="codeInput" rows="10" cols="60">a = 2 + 3 * (4 - 1);
+b = a * 5;
+a + b</textarea>
+      <div class="controls">
+        <label for="parserSelect">Parser:</label>
+        <select id="parserSelect">
+          <option value="expr">Expression/Statements Parser</option>
+          <option value="json">AST JSON (paste AST)</option>
+        </select>
+        <button id="parseBtn">Parse → AST</button>
+        <button id="resetBtn">Reset</button>
+        <button id="loadSampleBtn">Load Samples</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div><strong>Samples</strong></div>
+      <select id="sampleSelect" size="4" class="list">
+        <option value="simple">Simple arithmetic (a = 2 + 3 * (4 - 1);)</option>
+        <option value="calls">Function calls (f(x, y + 1))</option>
+        <option value="assigns">Sequence & assigns (x=1; y=x+2; z=y*3)</option>
+        <option value="manual">Manual AST example (JSON)</option>
+      </select>
+      <div class="controls">
+        <button id="applySampleBtn">Load into Input</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div><strong>Traversal Controls</strong></div>
+      <div class="controls">
+        <label for="traversalSelect">Order:</label>
+        <select id="traversalSelect">
+          <option value="pre">Pre-order</option>
+          <option value="post">Post-order</option>
+          <option value="breadth">Breadth-first</option>
+        </select>
+        <button id="startTraversalBtn">Start</button>
+        <button id="stepBackBtn">Step ←</button>
+        <button id="stepForwardBtn">Step →</button>
+        <button id="stopTraversalBtn">Stop</button>
+        <label for="speedRange">Speed</label>
+        <input id="speedRange" type="range" min="100" max="2000" step="100" value="600">
+      </div>
+      <div id="traversalStatus" class="small">Traversal status: stopped</div>
+    </div>
+
+    <div class="section">
+      <div><strong>Search</strong></div>
+      <input id="searchInput" placeholder="Regex on type or value" />
+      <button id="searchBtn">Search</button>
+      <button id="clearSearchBtn">Clear</button>
+      <div id="searchResults" class="small"></div>
+    </div>
+
+    <div class="section">
+      <div><strong>Snapshots & History</strong></div>
+      <div class="controls">
+        <input id="snapshotName" placeholder="snapshot name" />
+        <button id="saveSnapBtn">Save Snapshot</button>
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+      </div>
+      <div id="snapList" class="list small"></div>
+    </div>
+
+  </div>
+
+  <div class="column" id="centerColumn">
+    <div class="section">
+      <div><strong>AST View</strong></div>
+      <div class="controls">
+        <button id="expandAllBtn">Expand All</button>
+        <button id="collapseAllBtn">Collapse All</button>
+        <label for="collapseDepth">Collapse to depth</label>
+        <input id="collapseDepth" type="number" min="0" value="2" style="width:60px">
+        <button id="applyCollapseBtn">Apply</button>
+        <button id="showJsonBtn">Show AST JSON</button>
+        <button id="exportJsonBtn">Export JSON</button>
+      </div>
+      <div id="astTree" class="tree" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div><strong>Code Generation / Evaluation</strong></div>
+      <div class="controls">
+        <button id="genCodeBtn">Generate Code</button>
+        <button id="evalBtn">Evaluate (if possible)</button>
+        <button id="prettyPrintBtn">Pretty Print AST</button>
+        <button id="manualEditBtn">Edit AST JSON Manually</button>
+      </div>
+      <textarea id="codeOutput" rows="6" cols="60" readonly></textarea>
+      <div id="evalOutput" class="small"></div>
+    </div>
+
+  </div>
+
+  <div class="column rightpanel" id="rightColumn">
+    <div class="section">
+      <div><strong>Node Inspector</strong></div>
+      <div id="selectedPath" class="small">No node selected</div>
+      <div id="nodeDetails" class="node-row">
+        <label>Type:</label><input id="nodeType" />
+        <label>Value:</label><input id="nodeValue" />
+      </div>
+      <div class="controls">
+        <button id="updateNodeBtn">Update Node</button>
+        <button id="deleteNodeBtn">Delete Node</button>
+        <button id="addChildBtn">Add Child</button>
+        <button id="wrapNodeBtn">Wrap Node</button>
+      </div>
+      <div class="small">Add child: type and optional value</div>
+      <input id="newChildType" placeholder="type" style="width:60px" />
+      <input id="newChildValue" placeholder="value" style="width:90px" />
+    </div>
+
+    <div class="section">
+      <div><strong>Transforms</strong></div>
+      <div class="controls">
+        <button id="constFoldBtn">Constant Fold</button>
+        <button id="renameBtn">Rename Identifier</button>
+        <input id="renameFrom" placeholder="from" style="width:70px" />
+        <input id="renameTo" placeholder="to" style="width:70px" />
+        <button id="removeDeadBtn">Remove Dead Assignments</button>
+      </div>
+      <div class="small">Custom transform (JS): function transform(node, utils) { ...; return node; }</div>
+      <textarea id="customTransform" rows="6" class="jsonarea">// Example: inline constant folding for binops
+function transform(node, utils) {
+  if (node.type === 'BinaryExpression') {
+    node.children = node.children.map(c => transform(c, utils));
+    if (node.children.length === 2 &&
+        node.children[0].type === 'Literal' &&
+        node.children[1].type === 'Literal') {
+      return utils.evalBinary(node.value, node.children[0].value, node.children[1].value);
+    }
+  }
+  return node;
+}</textarea>
+      <div class="controls">
+        <button id="runCustomBtn">Run Custom Transform</button>
+        <button id="previewBtn">Preview Only</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div><strong>AST JSON / Manual Editor</strong></div>
+      <textarea id="astJsonArea" class="jsonarea"></textarea>
+      <div class="controls">
+        <button id="applyJsonBtn">Apply JSON to AST</button>
+        <button id="loadAstToEditorBtn">Load AST into Editor</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// AST Interactive Explorer - Single-file implementation
+
+// Basic AST node helper
+let idCounter = 1;
+function createNode(type, value, children) {
+  return {
+    id: String(idCounter++),
+    type: type || 'Node',
+    value: value === undefined ? null : value,
+    children: Array.isArray(children) ? children : []
+  };
+}
+function cloneAst(ast) {
+  return JSON.parse(JSON.stringify(ast));
+}
+
+// State
+let AST = null;
+let selectedNodeId = null;
+let collapsed = new Set();
+let traversal = { order: [], index: -1, timer: null };
+let history = { past: [], future: [] };
+let snapshots = []; // list of {name, ast}
+let searchMatches = [];
+
+// Utility: find node by id and parent info
+function findNodeAndParent(node, id, parent=null) {
+  if (!node) return null;
+  if (node.id === id) return { node, parent };
+  for (let child of node.children || []) {
+    let res = findNodeAndParent(child, id, node);
+    if (res) return res;
+  }
+  return null;
+}
+
+// Parser: a simple expression & statement parser
+function tokenize(input) {
+  const re = /\s*([A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)?|==|!=|<=|>=|&&|\|\||[:;,\+\-\*\/\=\(\)\{\}]|.)/g;
+  let m, tokens = [];
+  while ((m = re.exec(input)) !== null) {
+    let t = m[1];
+    if (t.trim() === '') continue;
+    tokens.push(t);
+  }
+  return tokens;
+}
+
+function parseProgram(tokens) {
+  let pos = 0;
+  function peek() { return tokens[pos]; }
+  function consume(tok) {
+    if (tok && tokens[pos] === tok) { pos++; return tok; }
+    return null;
+  }
+  function isIdent(t) { return /^[A-Za-z_][A-Za-z0-9_]*$/.test(t); }
+  function isNumber(t) { return /^[0-9]+(?:\.[0-9]+)?$/.test(t); }
+
+  function parsePrimary() {
+    let t = peek();
+    if (t === '(') {
+      consume('(');
+      let expr = parseAssign();
+      consume(')');
+      return expr;
+    }
+    if (isNumber(t)) {
+      consume(t);
+      return createNode('Literal', Number(t), []);
+    }
+    if (isIdent(t)) {
+      consume(t);
+      if (peek() === '(') {
+        consume('(');
+        let args = [];
+        if (peek() !== ')') {
+          while (true) {
+            args.push(parseAssign());
+            if (consume(',') == null) break;
+          }
+        }
+        consume(')');
+        return createNode('CallExpression', t, args);
+      } else {
+        return createNode('Identifier', t, []);
+      }
+    }
+    // fallback - consume token as literal
+    consume(t);
+    return createNode('Literal', t, []);
+  }
+
+  function parseFactor() {
+    return parsePrimary();
+  }
+
+  function parseTerm() {
+    let node = parseFactor();
+    while (peek() === '*' || peek() === '/') {
+      let op = consume(peek());
+      let right = parseFactor();
+      node = createNode('BinaryExpression', op, [node, right]);
+    }
+    return node;
+  }
+
+  function parseExpr() {
+    let node = parseTerm();
+    while (peek() === '+' || peek() === '-') {
+      let op = consume(peek());
+      let right = parseTerm();
+      node = createNode('BinaryExpression', op, [node, right]);
+    }
+    return node;
+  }
+
+  function parseAssign() {
+    // a = b = c  (right associative)
+    let left = parseExpr();
+    if (peek() === '=') {
+      if (left.type === 'Identifier') {
+        consume('=');
+        let right = parseAssign();
+        return createNode('AssignmentExpression', '=', [left, right]);
+      }
+    }
+    return left;
+  }
+
+  function parseStatement() {
+    let stmt = parseAssign();
+    // optional semicolon
+    if (peek() === ';') consume(';');
+    return createNode('ExpressionStatement', null, [stmt]);
+  }
+
+  let body = [];
+  while (pos < tokens.length) {
+    body.push(parseStatement());
+  }
+  return createNode('Program', null, body);
+}
+
+// Code generator from AST
+function generateCode(node) {
+  if (!node) return '';
+  switch (node.type) {
+    case 'Program':
+      return node.children.map(generateCode).join('\n');
+    case 'ExpressionStatement':
+      return generateCode(node.children[0]) + ';';
+    case 'AssignmentExpression':
+      return generateCode(node.children[0]) + ' ' + node.value + ' ' + generateCode(node.children[1]);
+    case 'BinaryExpression':
+      return '(' + generateCode(node.children[0]) + ' ' + node.value + ' ' + generateCode(node.children[1]) + ')';
+    case 'Identifier':
+      return node.value;
+    case 'Literal':
+      return typeof node.value === 'string' ? JSON.stringify(node.value) : String(node.value);
+    case 'CallExpression':
+      return node.value + '(' + node.children.map(generateCode).join(', ') + ')';
+    default:
+      // Generic fallback print
+      if (node.children && node.children.length) {
+        return node.type + '(' + (node.value || '') + ' ' + node.children.map(generateCode).join(', ') + ')';
+      }
+      return node.type + (node.value !== null ? ':' + node.value : '');
+  }
+}
+
+// Evaluation (very small interpreter for our AST - handles assignments, binary, literals, calls to Math.* safe)
+function evaluateAst(node, env) {
+  env = env || {};
+  function evalNode(n) {
+    if (!n) return undefined;
+    switch (n.type) {
+      case 'Program':
+        let res;
+        for (let s of n.children) res = evalNode(s);
+        return res;
+      case 'ExpressionStatement':
+        return evalNode(n.children[0]);
+      case 'AssignmentExpression': {
+        let name = n.children[0].value;
+        let val = evalNode(n.children[1]);
+        env[name] = val;
+        return val;
+      }
+      case 'BinaryExpression': {
+        let a = evalNode(n.children[0]);
+        let b = evalNode(n.children[1]);
+        switch (n.value) {
+          case '+': return a + b;
+          case '-': return a - b;
+          case '*': return a * b;
+          case '/': return a / b;
+          default: return null;
+        }
+      }
+      case 'Literal':
+        return n.value;
+      case 'Identifier':
+        return env[n.value];
+      case 'CallExpression': {
+        // Support Math functions and simple builtins
+        if (n.value in Math) {
+          let args = n.children.map(evalNode);
+          return Math[n.value].apply(null, args);
+        } else {
+          // dummy: return string
+          return '[' + n.value + '(' + n.children.map(evalNode).join(',') + ')]';
+        }
+      }
+      default:
+        return null;
+    }
+  }
+  return evalNode(node);
+}
+
+// Rendering AST as nested list text (clickable)
+function renderAST() {
+  let container = document.getElementById('astTree');
+  container.innerHTML = '';
+  if (!AST) { container.textContent = '(no AST)'; return; }
+
+  function renderNode(n, depth, path) {
+    const div = document.createElement('div');
+    div.className = 'node';
+    const indent = '  '.repeat(depth);
+    let line = indent + n.type + (n.value !== null && n.value !== undefined ? ' [' + n.value + ']' : '');
+    line += ' (id=' + n.id + ')';
+    // mark search match
+    if (searchMatches.indexOf(n.id) >= 0) line += '  <<MATCH>>';
+    const collapsedIndicator = (n.children && n.children.length) ? (collapsed.has(n.id) ? ' [+] ' : ' [-] ') : '     ';
+    const btn = document.createElement('button');
+    btn.textContent = collapsedIndicator.trim();
+    btn.style.fontSize = '10px';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (collapsed.has(n.id)) collapsed.delete(n.id); else collapsed.add(n.id);
+      renderAST();
+    });
+    const txt = document.createElement('span');
+    txt.textContent = ' ' + line;
+    txt.style.cursor = 'pointer';
+    txt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectNodeById(n.id);
+    });
+    if (traversal.order[traversal.index] === n.id) {
+      // mark current traversal node by adding annotation
+      const curMark = document.createElement('strong');
+      curMark.textContent = '  <<CURRENT>>';
+      txt.appendChild(curMark);
+    }
+    // Append elements
+    div.appendChild(btn);
+    div.appendChild(txt);
+    container.appendChild(div);
+
+    if (!collapsed.has(n.id)) {
+      for (let child of n.children || []) {
+        renderNode(child, depth + 1, path.concat(n.type));
+      }
+    }
+  }
+
+  renderNode(AST, 0, []);
+}
+
+// Selection
+function selectNodeById(id) {
+  selectedNodeId = id;
+  updateInspector();
+  renderAST();
+}
+
+function updateInspector() {
+  const selPath = document.getElementById('selectedPath');
+  const typeInput = document.getElementById('nodeType');
+  const valueInput = document.getElementById('nodeValue');
+  if (!selectedNodeId) {
+    selPath.textContent = 'No node selected';
+    typeInput.value = '';
+    valueInput.value = '';
+    return;
+  }
+  const res = findNodeAndParent(AST, selectedNodeId);
+  if (!res) { selPath.textContent = 'Selected node not found'; return; }
+  const n = res.node;
+  selPath.textContent = 'Selected: ' + n.type + (n.value !== null ? ' [' + n.value + ']' : '') + ' (id=' + n.id + ')';
+  typeInput.value = n.type;
+  valueInput.value = n.value === null ? '' : String(n.value);
+}
+
+// Node operations
+function updateNodeFromInspector() {
+  if (!selectedNodeId) return alert('No node selected');
+  const res = findNodeAndParent(AST, selectedNodeId);
+  if (!res) return alert('Node missing');
+  const n = res.node;
+  const type = document.getElementById('nodeType').value.trim();
+  const valueRaw = document.getElementById('nodeValue').value.trim();
+  let val = valueRaw === '' ? null : interpretValue(valueRaw);
+  n.type = type || n.type;
+  n.value = val;
+  pushHistory();
+  renderAST();
+  updateInspector();
+}
+
+function interpretValue(v) {
+  if (/^[0-9]+(\.[0-9]+)?$/.test(v)) return Number(v);
+  if (v === 'null') return null;
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return v;
+}
+
+function deleteSelectedNode() {
+  if (!selectedNodeId) return alert('No node selected');
+  if (AST.id === selectedNodeId) {
+    if (!confirm('Deleting root will clear AST. Proceed?')) return;
+    AST = null;
+    selectedNodeId = null;
+    pushHistory();
+    renderAST();
+    updateInspector();
+    return;
+  }
+  const res = findNodeAndParent(AST, selectedNodeId);
+  if (!res || !res.parent) return alert('Parent not found');
+  res.parent.children = res.parent.children.filter(c => c.id !== selectedNodeId);
+  selectedNodeId = null;
+  pushHistory();
+  renderAST();
+  updateInspector();
+}
+
+function addChildToSelected() {
+  if (!selectedNodeId) return alert('No node selected');
+  const type = document.getElementById('newChildType').value.trim();
+  if (!type) return alert('Child type required');
+  const valueRaw = document.getElementById('newChildValue').value.trim();
+  const child = createNode(type, valueRaw === '' ? null : interpretValue(valueRaw), []);
+  const res = findNodeAndParent(AST, selectedNodeId);
+  if (!res) return alert('Node not found');
+  res.node.children.push(child);
+  pushHistory();
+  renderAST();
+}
+
+// Wrap node: replace selected node with new node and put selected as child
+function wrapNode() {
+  if (!selectedNodeId) return alert('No node selected');
+  const type = prompt('Enter wrapper node type', 'Wrapper');
+  if (!type) return;
+  const res = findNodeAndParent(AST, selectedNodeId);
+  if (!res || !res.parent) {
+    // wrapping root
+    const oldRoot = AST;
+    const newRoot = createNode(type, null, [oldRoot]);
+    AST = newRoot;
+    pushHistory();
+    renderAST();
+    return;
+  }
+  const parent = res.parent;
+  const idx = parent.children.findIndex(c => c.id === selectedNodeId);
+  if (idx < 0) return alert('Child index not found');
+  const oldNode = res.node;
+  const wrapper = createNode(type, null, [oldNode]);
+  parent.children[idx] = wrapper;
+  pushHistory();
+  renderAST();
+}
+
+// Traversal generation
+function buildTraversal(order) {
+  traversal.order = [];
+  traversal.index = -1;
+  function pre(n) {
+    traversal.order.push(n.id);
+    for (let c of n.children || []) pre(c);
+  }
+  function post(n) {
+    for (let c of n.children || []) post(c);
+    traversal.order.push(n.id);
+  }
+  function breadth(root) {
+    let q = [root];
+    while (q.length) {
+      let n = q.shift();
+      traversal.order.push(n.id);
+      for (let c of n.children || []) q.push(c);
+    }
+  }
+  if (!AST) return;
+  if (order === 'pre') pre(AST);
+  else if (order === 'post') post(AST);
+  else breadth(AST);
+}
+
+function startTraversal() {
+  if (!AST) return alert('No AST');
+  const order = document.getElementById('traversalSelect').value;
+  buildTraversal(order);
+  traversal.index = -1;
+  const speed = parseInt(document.getElementById('speedRange').value, 10) || 600;
+  function step() {
+    traversal.index++;
+    if (traversal.index >= traversal.order.length) {
+      stopTraversal();
+      return;
+    }
+    renderAST();
+    document.getElementById('traversalStatus').textContent = 'Traversal: running, node ' + (traversal.index+1) + '/' + traversal.order.length;
+    traversal.timer = setTimeout(step, speed);
+  }
+  if (traversal.timer) clearTimeout(traversal.timer);
+  step();
+}
+
+function stopTraversal() {
+  if (traversal.timer) clearTimeout(traversal.timer);
+  traversal.timer = null;
+  document.getElementById('traversalStatus').textContent = 'Traversal status: stopped';
+  renderAST();
+}
+
+function stepForward() {
+  if (!AST) return;
+  if (!traversal.order.length) buildTraversal(document.getElementById('traversalSelect').value);
+  traversal.index = Math.min(traversal.order.length - 1, traversal.index + 1);
+  document.getElementById('traversalStatus').textContent = 'Traversal status: manual step ' + (traversal.index+1);
+  renderAST();
+}
+
+function stepBack() {
+  if (!AST) return;
+  if (!traversal.order.length) buildTraversal(document.getElementById('traversalSelect').value);
+  traversal.index = Math.max(0, traversal.index - 1);
+  document.getElementById('traversalStatus').textContent = 'Traversal status: manual step ' + (traversal.index+1);
+  renderAST();
+}
+
+// Search
+function searchNodes() {
+  const q = document.getElementById('searchInput').value.trim();
+  searchMatches = [];
+  if (!q) { renderAST(); document.getElementById('searchResults').textContent = ''; return; }
+  let re;
+  try { re = new RegExp(q); } catch (e) { alert('Invalid regex: ' + e.message); return; }
+  function walk(n) {
+    if (re.test(n.type + ' ' + (n.value === null ? '' : String(n.value)))) searchMatches.push(n.id);
+    for (let c of n.children || []) walk(c);
+  }
+  if (AST) walk(AST);
+  document.getElementById('searchResults').textContent = 'Matches: ' + searchMatches.length;
+  renderAST();
+}
+
+// Snapshots and history
+function pushHistory() {
+  if (!AST) return;
+  history.past.push(cloneAst(AST));
+  history.future = [];
+  updateSnapList();
+}
+
+function undo() {
+  if (!history.past.length) return alert('Nothing to undo');
+  history.future.push(cloneAst(AST));
+  AST = history.past.pop();
+  selectedNodeId = null;
+  renderAST();
+  updateInspector();
+  updateSnapList();
+}
+
+function redo() {
+  if (!history.future.length) return alert('Nothing to redo');
+  history.past.push(cloneAst(AST));
+  AST = history.future.pop();
+  selectedNodeId = null;
+  renderAST();
+  updateInspector();
+  updateSnapList();
+}
+
+function saveSnapshot() {
+  const name = document.getElementById('snapshotName').value.trim() || ('snap' + (snapshots.length+1));
+  snapshots.push({ name, ast: cloneAst(AST) });
+  updateSnapList();
+}
+
+function updateSnapList() {
+  const el = document.getElementById('snapList');
+  el.innerHTML = '';
+  let html = '';
+  history.past.forEach((h, i) => {
+    const d = document.createElement('div');
+    d.textContent = 'H[' + i + ']';
+    el.appendChild(d);
+  });
+  snapshots.forEach((s, i) => {
+    const row = document.createElement('div');
+    const btn = document.createElement('button');
+    btn.textContent = 'Load';
+    btn.addEventListener('click', () => {
+      AST = cloneAst(s.ast);
+      selectedNodeId = null;
+      pushHistory();
+      renderAST();
+      updateInspector();
+    });
+    const del = document.createElement('button');
+    del.textContent = 'Delete';
+    del.addEventListener('click', () => {
+      snapshots.splice(i,1);
+      updateSnapList();
+    });
+    row.textContent = s.name + ' ';
+    row.appendChild(btn);
+    row.appendChild(del);
+    el.appendChild(row);
+  });
+}
+
+// JSON editor interactions
+function loadAstToEditor() {
+  document.getElementById('astJsonArea').value = JSON.stringify(AST, null, 2);
+}
+
+function applyJsonToAst() {
+  try {
+    const parsed = JSON.parse(document.getElementById('astJsonArea').value);
+    // ensure IDs exist; reassign if missing
+    function fix(node) {
+      if (!node.id) node.id = String(idCounter++);
+      if (!node.children) node.children = [];
+      for (let c of node.children) fix(c);
+    }
+    fix(parsed);
+    AST = parsed;
+    pushHistory();
+    renderAST();
+    updateInspector();
+  } catch (e) {
+    alert('Invalid JSON: ' + e.message);
+  }
+}
+
+// Transformations
+function constantFold(root) {
+  function fold(node) {
+    if (!node) return node;
+    node.children = node.children.map(fold);
+    if (node.type === 'BinaryExpression') {
+      const a = node.children[0], b = node.children[1];
+      if (a && b && a.type === 'Literal' && b.type === 'Literal') {
+        const res = evalBinary(node.value, a.value, b.value);
+        return createNode('Literal', res, []);
+      }
+    }
+    return node;
+  }
+  AST = fold(AST);
+  pushHistory();
+  renderAST();
+}
+
+function evalBinary(op, a, b) {
+  switch (op) {
+    case '+': return a + b;
+    case '-': return a - b;
+    case '*': return a * b;
+    case '/': return a / b;
+    default: return null;
+  }
+}
+
+// Rename identifiers
+function renameIdentifiers(from, to) {
+  function walk(n) {
+    if (n.type === 'Identifier' && n.value === from) n.value = to;
+    if (n.children) n.children.forEach(walk);
+  }
+  walk(AST);
+  pushHistory();
+  renderAST();
+}
+
+// Remove dead assignments: simplistic remove assignments to variables never used
+function removeDeadAssignments() {
+  // gather used identifiers (excluding left-hand of assignments)
+  const used = new Set();
+  function collectUses(n, inLHS=false) {
+    if (!n) return;
+    if (n.type === 'Identifier') {
+      if (!inLHS) used.add(n.value);
+      return;
+    }
+    if (n.type === 'AssignmentExpression') {
+      // left is LHS
+      collectUses(n.children[1], false);
+      collectUses(n.children[0], true);
+      return;
+    }
+    for (let c of n.children || []) collectUses(c, false);
+  }
+  collectUses(AST, false);
+  // remove ExpressionStatements with AssignmentExpression to var not in used
+  function prune(n) {
+    if (!n.children) return n;
+    n.children = n.children.filter(child => {
+      if (child.type === 'ExpressionStatement' &&
+          child.children[0] &&
+          child.children[0].type === 'AssignmentExpression') {
+        const lhs = child.children[0].children[0];
+        if (lhs && lhs.type === 'Identifier' && !used.has(lhs.value)) {
+          return false;
+        }
+      }
+      return true;
+    });
+    for (let c of n.children) prune(c);
+  }
+  prune(AST);
+  pushHistory();
+  renderAST();
+}
+
+// Custom transform execution
+function runCustomTransform(previewOnly=false) {
+  const src = document.getElementById('customTransform').value;
+  let fn;
+  try {
+    fn = new Function('node', 'utils', src + '\n return transform(node, utils);');
+  } catch (e) { alert('Error compiling transform: ' + e.message); return; }
+  const utils = {
+    evalBinary: evalBinary,
+    createNode: createNode,
+    clone: cloneAst
+  };
+  function applyRec(n) {
+    let result;
+    try {
+      result = fn(n, utils);
+    } catch (e) {
+      // if user function expects to call transform recursively, allow fallback:
+      try {
+        // attempt to call transform declared inside with node param
+        result = (typeof window.transform === 'function') ? window.transform(n, utils) : n;
+      } catch (ex) {
+        result = n;
+      }
+    }
+    if (!result) return null;
+    // ensure children are processed if not handled by transform
+    if (result.children && result.children.length) {
+      result.children = result.children.map(ch => applyRec(ch)).filter(Boolean);
+    }
+    return result;
+  }
+  let newAst;
+  try {
+    newAst = applyRec(cloneAst(AST));
+  } catch (e) { alert('Error during transform: ' + e.message); return; }
+  if (previewOnly) {
+    document.getElementById('astJsonArea').value = JSON.stringify(newAst, null, 2);
+    alert('Preview written to AST Editor. Use "Apply JSON to AST" to persist.');
+  } else {
+    AST = newAst;
+    pushHistory();
+    renderAST();
+    updateInspector();
+  }
+}
+
+// Misc utilities
+function exportJson() {
+  if (!AST) return alert('No AST');
+  const data = JSON.stringify(AST, null, 2);
+  const win = window.open('', '_blank');
+  win.document.write('<pre>' + escapeHtml(data) + '</pre>');
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Initialize with parse and UI wiring
+function init() {
+  document.getElementById('parseBtn').addEventListener('click', () => {
+    const parser = document.getElementById('parserSelect').value;
+    const input = document.getElementById('codeInput').value;
+    if (parser === 'expr') {
+      try {
+        const tokens = tokenize(input);
+        AST = parseProgram(tokens);
+        pushHistory();
+        renderAST();
+        updateInspector();
+        document.getElementById('codeOutput').value = generateCode(AST);
+      } catch (e) {
+        alert('Parse error: ' + e.message);
+      }
+    } else {
+      // JSON
+      try {
+        const parsed = JSON.parse(input);
+        AST = parsed;
+        pushHistory();
+        renderAST();
+        updateInspector();
+      } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+      }
+    }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm('Reset the workspace?')) return;
+    AST = null;
+    selectedNodeId = null;
+    history = { past: [], future: [] };
+    snapshots = [];
+    collapsed = new Set();
+    traversal = { order: [], index: -1, timer: null };
+    document.getElementById('astTree').textContent = '(no AST)';
+    document.getElementById('codeOutput').value = '';
+    updateInspector();
+    updateSnapList();
+  });
+
+  document.getElementById('loadSampleBtn').addEventListener('click', () => {
+    document.getElementById('sampleSelect').focus();
+  });
+
+  document.getElementById('applySampleBtn').addEventListener('click', () => {
+    const sel = document.getElementById('sampleSelect').value;
+    if (sel === 'simple') {
+      document.getElementById('codeInput').value = 'a = 2 + 3 * (4 - 1);\nb = a * 5;\na + b';
+    } else if (sel === 'calls') {
+      document.getElementById('codeInput').value = 'x = max(3, 4+1);\ny = sin(3.14/2);\nx + y';
+    } else if (sel === 'assigns') {
+      document.getElementById('codeInput').value = 'x = 1; y = x + 2; z = y * 3; z';
+    } else if (sel === 'manual') {
+      document.getElementById('codeInput').value = JSON.stringify({
+        id: "1", type: "Program", value: null, children: [
+          { id: "2", type: "ExpressionStatement", value: null, children: [
+             { id: "3", type: "AssignmentExpression", value: "=", children: [
+               { id: "4", type: "Identifier", value: "x", children: [] },
+               { id: "5", type: "BinaryExpression", value: "+", children: [
+                 { id: "6", type: "Literal", value: 2, children: []},
+                 { id: "7", type: "Literal", value: 3, children: []}
+               ]}
+             ]}
+          ]}
+        ]
+      }, null, 2);
+    }
+  });
+
+  document.getElementById('startTraversalBtn').addEventListener('click', startTraversal);
+  document.getElementById('stopTraversalBtn').addEventListener('click', stopTraversal);
+  document.getElementById('stepForwardBtn').addEventListener('click', stepForward);
+  document.getElementById('stepBackBtn').addEventListener('click', stepBack);
+
+  document.getElementById('searchBtn').addEventListener('click', searchNodes);
+  document.getElementById('clearSearchBtn').addEventListener('click', () => { document.getElementById('searchInput').value=''; searchMatches=[]; renderAST(); });
+
+  document.getElementById('saveSnapBtn').addEventListener('click', saveSnapshot);
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('redoBtn').addEventListener('click', redo);
+
+  document.getElementById('expandAllBtn').addEventListener('click', () => { collapsed = new Set(); renderAST(); });
+  document.getElementById('collapseAllBtn').addEventListener('click', () => { /* collapse all children of root */ collapsed = new Set(); function walk(n){ if(n.children && n.children.length){ for(let c of n.children){ collapsed.add(c.id); walk(c); } } } if(AST) walk(AST); renderAST(); });
+  document.getElementById('applyCollapseBtn').addEventListener('click', () => {
+    const d = parseInt(document.getElementById('collapseDepth').value || '0', 10);
+    collapsed = new Set();
+    function walk(n, depth) {
+      if (depth > d) { collapsed.add(n.id); return; }
+      for (let c of n.children || []) walk(c, depth+1);
+    }
+    if (AST) walk(AST, 0);
+    renderAST();
+  });
+
+  document.getElementById('showJsonBtn').addEventListener('click', () => { if (!AST) return alert('No AST'); document.getElementById('astJsonArea').value = JSON.stringify(AST, null, 2); window.scrollTo(0,document.body.scrollHeight); });
+  document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
+
+  document.getElementById('genCodeBtn').addEventListener('click', () => {
+    if (!AST) return alert('No AST');
+    document.getElementById('codeOutput').value = generateCode(AST);
+  });
+
+  document.getElementById('evalBtn').addEventListener('click', () => {
+    if (!AST) return alert('No AST');
+    try {
+      const res = evaluateAst(AST, {});
+      document.getElementById('evalOutput').textContent = 'Result: ' + JSON.stringify(res);
+    } catch (e) { document.getElementById('evalOutput').textContent = 'Eval error: ' + e.message; }
+  });
+
+  document.getElementById('prettyPrintBtn').addEventListener('click', () => { if (!AST) return; document.getElementById('astJsonArea').value = JSON.stringify(AST, null, 2); });
+
+  document.getElementById('manualEditBtn').addEventListener('click', () => { document.getElementById('astJsonArea').value = AST ? JSON.stringify(AST, null, 2) : ''; });
+
+  document.getElementById('nodeType').addEventListener('keydown', (e) => { if (e.key === 'Enter') updateNodeFromInspector(); });
+  document.getElementById('updateNodeBtn').addEventListener('click', updateNodeFromInspector);
+  document.getElementById('deleteNodeBtn').addEventListener('click', deleteSelectedNode);
+  document.getElementById('addChildBtn').addEventListener('click', addChildToSelected);
+  document.getElementById('wrapNodeBtn').addEventListener('click', wrapNode);
+
+  document.getElementById('constFoldBtn').addEventListener('click', () => { if (!AST) return alert('No AST'); constantFold(AST); });
+  document.getElementById('renameBtn').addEventListener('click', () => {
+    const f = document.getElementById('renameFrom').value.trim();
+    const t = document.getElementById('renameTo').value.trim();
+    if (!f || !t) return alert('Provide both from and to');
+    renameIdentifiers(f, t);
+  });
+  document.getElementById('removeDeadBtn').addEventListener('click', removeDeadAssignments);
+
+  document.getElementById('runCustomBtn').addEventListener('click', () => runCustomTransform(false));
+  document.getElementById('previewBtn').addEventListener('click', () => runCustomTransform(true));
+
+  document.getElementById('applyJsonBtn').addEventListener('click', applyJsonToAst);
+  document.getElementById('loadAstToEditorBtn').addEventListener('click', loadAstToEditor);
+
+  // keyboard navigation: arrow up/down moves traversal
+  document.getElementById('astTree').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') stepForward();
+    if (e.key === 'ArrowLeft') stepBack();
+  });
+
+  document.getElementById('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchNodes(); });
+
+  // initial parse from textarea
+  document.getElementById('parseBtn').click();
+}
+
+init();
+
+</script>
+
+</body>
+</html>

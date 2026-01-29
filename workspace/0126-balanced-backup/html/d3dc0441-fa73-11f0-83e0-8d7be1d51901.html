@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Backpropagation Demonstration</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 12px; color: #111; }
+    h1 { font-size: 20px; margin: 6px 0 12px; }
+    #app { display: flex; gap: 16px; }
+    #left { width: 520px; }
+    #canvasWrap { background:#fff; border:1px solid #ddd; padding:8px; border-radius:8px; }
+    svg { width: 500px; height: 300px; display:block; }
+    .controls { margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap; }
+    button { padding:6px 10px; border-radius:6px; border:1px solid #bbb; background:white; cursor:pointer; }
+    button:active { transform: translateY(1px); }
+    label { font-size:13px; margin-right:6px; display:inline-flex; align-items:center; gap:6px; }
+    input[type="range"] { vertical-align: middle; }
+    .info { margin-top: 10px; font-size: 13px; background:#fafafa; border:1px solid #eee; padding:8px; border-radius:8px; }
+    table { border-collapse: collapse; font-size:13px; margin-top:8px;}
+    td, th { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
+    .small { font-size:12px; color: #555; }
+    #chart { width: 320px; height: 120px; background: #fff; border:1px solid #eee; margin-top:8px; border-radius:6px; }
+    select { padding:6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <h1>Backpropagation interactive demo (2-2-1 network)</h1>
+  <div id="app">
+    <div id="left">
+      <div id="canvasWrap">
+        <svg id="netSvg" viewBox="0 0 500 300"></svg>
+      </div>
+
+      <div class="controls">
+        <label>Dataset
+          <select id="datasetSelect">
+            <option value="AND">AND</option>
+            <option value="OR">OR</option>
+            <option value="XOR">XOR</option>
+            <option value="CUSTOM">CUSTOM: [0,1]->1 etc</option>
+          </select>
+        </label>
+
+        <label>Learning rate
+          <input id="lr" type="range" min="0.01" max="1.0" step="0.01" value="0.3">
+          <span id="lrVal" class="small">0.30</span>
+        </label>
+
+        <button id="resetBtn">Reset weights</button>
+        <button id="forwardBtn">Forward</button>
+        <button id="backpropBtn">Backprop (compute deltas)</button>
+        <button id="updateBtn">Apply Update</button>
+        <button id="stepBtn">Step (F+B+U)</button>
+        <button id="trainBtn">Train 1000</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+
+      <div class="info">
+        <div><strong>Current sample:</strong> <span id="sampleIdx">0</span> / <span id="nSamples">4</span></div>
+        <div class="small">Inputs: <span id="inputsText"></span> → Target: <span id="targetText"></span></div>
+        <div style="margin-top:6px;">
+          <strong>Activations</strong> — hidden: <span id="hActs"></span> • output: <span id="oAct"></span>
+        </div>
+        <div style="margin-top:6px;">
+          <strong>Deltas (local gradients)</strong> — hidden: <span id="hDeltas"></span> • output: <span id="oDelta"></span>
+        </div>
+        <div style="margin-top:6px;">
+          <strong>Loss (MSE over dataset)</strong> — <span id="mseVal">–</span>
+        </div>
+
+        <div id="chart"></div>
+      </div>
+    </div>
+
+    <div id="right">
+      <div class="info">
+        <div><strong>Weights (input → hidden)</strong></div>
+        <table id="wIHtable"><tbody></tbody></table>
+
+        <div style="margin-top:8px;"><strong>Weights (hidden → output)</strong></div>
+        <table id="wHOtable"><tbody></tbody></table>
+
+        <div style="margin-top:8px;"><strong>Biases</strong></div>
+        <table id="biasTable"><tbody></tbody></table>
+
+        <div style="margin-top:8px;" class="small">
+          Use "Step" to execute: Forward → Backprop → Update. Select dataset then train to see weights adjust.
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+Backpropagation interactive demo
+Network: 2 inputs, 2 hidden units, 1 output (sigmoid activations).
+Per-sample online training (stochastic).
+Controls allow stepping through forward, computing deltas, applying weight updates,
+and running multiple training iterations while showing activations, deltas, and MSE.
+*/
+
+(function(){
+  // Utility
+  function randn(a,b){ return a + (b-a)*Math.random(); }
+  function sigmoid(x){ return 1 / (1 + Math.exp(-x)); }
+  function dsig(y){ return y * (1 - y); } // derivative with respect to activation
+  function mse(dataset, net){ let s=0; for(let p of dataset){ let out = net.forward(p.x); s += (p.y - out[2][0])**2; } return s/dataset.length; }
+
+  // Model state
+  let net = {
+    // weight matrices: wIH: hidden x input (2x2), wHO: output x hidden (1x2), biases: bh (2), bo (1)
+    wIH: [[0,0],[0,0]],
+    wHO: [[0,0]],
+    bh: [0,0],
+    bo: [0],
+    // forward cache: store nets and activations for use in backprop
+    cache: {x:[0,0], netH:[0,0], aH:[0,0], netO:0, aO:0}
+  };
+
+  // Dataset options
+  const datasets = {
+    "AND": [ {x:[0,0], y:0}, {x:[0,1], y:0}, {x:[1,0], y:0}, {x:[1,1], y:1} ],
+    "OR":  [ {x:[0,0], y:0}, {x:[0,1], y:1}, {x:[1,0], y:1}, {x:[1,1], y:1} ],
+    "XOR": [ {x:[0,0], y:0}, {x:[0,1], y:1}, {x:[1,0], y:1}, {x:[1,1], y:0} ],
+    "CUSTOM": [ {x:[0,0], y:0}, {x:[0,1], y:1}, {x:[1,0], y:0}, {x:[1,1], y:1} ]
+  };
+
+  let datasetName = 'AND';
+  let dataset = datasets[datasetName].slice();
+
+  // Training control
+  let sampleIndex = 0;
+  let learningRate = parseFloat(document.getElementById('lr').value);
+  let running = false;
+  let trainLoopId = null;
+  let history = [];
+
+  // Initialize weights randomly
+  function initWeights() {
+    for(let i=0;i<2;i++){
+      for(let j=0;j<2;j++) net.wIH[i][j] = randn(-1,1);
+    }
+    for(let j=0;j<2;j++) net.wHO[0][j] = randn(-1,1);
+    net.bh = [randn(-1,1), randn(-1,1)];
+    net.bo = [randn(-1,1)];
+    net.cache = {x:[0,0], netH:[0,0], aH:[0,0], netO:0, aO:0};
+    history = [];
+    updateUI();
+    drawNetwork();
+  }
+
+  // Forward pass for one input: returns arrays: [inputs, hiddenActs, outputAct]
+  net.forward = function(x){
+    this.cache.x = x.slice();
+    // hidden nets and activations
+    let netH = [0,0], aH = [0,0];
+    for(let i=0;i<2;i++){
+      netH[i] = this.bh[i];
+      for(let j=0;j<2;j++) netH[i] += this.wIH[i][j] * x[j];
+      aH[i] = sigmoid(netH[i]);
+    }
+    this.cache.netH = netH;
+    this.cache.aH = aH;
+    // output
+    let netO = this.bo[0];
+    for(let j=0;j<2;j++) netO += this.wHO[0][j] * aH[j];
+    let aO = sigmoid(netO);
+    this.cache.netO = netO;
+    this.cache.aO = aO;
+    return [x, aH, aO];
+  };
+
+  // Backpropagation: compute deltas and gradients for current sample in cache
+  function computeBackprop() {
+    const x = net.cache.x;
+    const aH = net.cache.aH;
+    const aO = net.cache.aO;
+    const target = dataset[sampleIndex].y;
+    // output delta
+    const deltaO = (target - aO) * dsig(aO); // gradient of error wrt netO
+    // hidden deltas
+    const deltaH = [0,0];
+    for(let i=0;i<2;i++){
+      deltaH[i] = dsig(aH[i]) * (net.wHO[0][i] * deltaO);
+    }
+    // gradients (for a single sample)
+    const grad_wHO = [ deltaO * aH[0], deltaO * aH[1] ];
+    const grad_bo = [ deltaO ];
+    const grad_wIH = [
+      [ deltaH[0]*x[0], deltaH[0]*x[1] ],
+      [ deltaH[1]*x[0], deltaH[1]*x[1] ]
+    ];
+    const grad_bh = [ deltaH[0], deltaH[1] ];
+
+    // Attach to cache for UI
+    net.cache.deltaO = deltaO;
+    net.cache.deltaH = deltaH;
+    net.cache.grad_wHO = grad_wHO;
+    net.cache.grad_wIH = grad_wIH;
+    net.cache.grad_bo = grad_bo;
+    net.cache.grad_bh = grad_bh;
+
+    updateUI();
+    drawNetwork();
+  }
+
+  // Apply weight updates using computed grads and current learning rate
+  function applyUpdate() {
+    const lr = learningRate;
+    if(!net.cache.grad_wHO) computeBackprop(); // ensure grads available
+    // update wHO, bo
+    for(let j=0;j<2;j++){
+      net.wHO[0][j] += lr * net.cache.grad_wHO[j];
+    }
+    net.bo[0] += lr * net.cache.grad_bo[0];
+    // update wIH, bh
+    for(let i=0;i<2;i++){
+      for(let j=0;j<2;j++){
+        net.wIH[i][j] += lr * net.cache.grad_wIH[i][j];
+      }
+      net.bh[i] += lr * net.cache.grad_bh[i];
+    }
+    updateUI();
+    drawNetwork();
+  }
+
+  // Compute MSE across dataset and append to history
+  function computeMSEandLog() {
+    const v = mse(dataset, net);
+    history.push(v);
+    if(history.length > 200) history.shift();
+    document.getElementById('mseVal').textContent = v.toFixed(5);
+    drawChart();
+  }
+
+  // Single training iteration (one sample): forward->backprop->update. Advance sample index.
+  function trainStep() {
+    // random sample or sequential? Use sequential to illustrate cycling.
+    const p = dataset[sampleIndex];
+    net.forward(p.x);
+    computeBackprop();
+    applyUpdate();
+    computeMSEandLog();
+    sampleIndex = (sampleIndex + 1) % dataset.length;
+    updateUI();
+  }
+
+  // UI bindings
+  const svg = document.getElementById('netSvg');
+  const lrInput = document.getElementById('lr');
+  const lrVal = document.getElementById('lrVal');
+  const sampleIdxEl = document.getElementById('sampleIdx');
+  const nSamplesEl = document.getElementById('nSamples');
+  const inputsText = document.getElementById('inputsText');
+  const targetText = document.getElementById('targetText');
+  const hActs = document.getElementById('hActs');
+  const oAct = document.getElementById('oAct');
+  const hDeltas = document.getElementById('hDeltas');
+  const oDelta = document.getElementById('oDelta');
+  const wIHtable = document.querySelector('#wIHtable tbody');
+  const wHOtable = document.querySelector('#wHOtable tbody');
+  const biasTable = document.querySelector('#biasTable tbody');
+  const forwardBtn = document.getElementById('forwardBtn');
+  const backpropBtn = document.getElementById('backpropBtn');
+  const updateBtn = document.getElementById('updateBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const trainBtn = document.getElementById('trainBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const datasetSelect = document.getElementById('datasetSelect');
+
+  // Draw network as SVG
+  function drawNetwork() {
+    // layout coordinates
+    const coords = {
+      inputs: [ [60,80], [60,220] ],
+      hidden: [ [250,110], [250,190] ],
+      output: [ [420,150] ],
+      biasH: [ [250,40], [250,40] ],
+      biasO: [ [420,40] ]
+    };
+    // clear svg
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // draw weights: input->hidden
+    for(let i=0;i<2;i++){
+      for(let j=0;j<2;j++){
+        const x1 = coords.inputs[j][0], y1 = coords.inputs[j][1];
+        const x2 = coords.hidden[i][0], y2 = coords.hidden[i][1];
+        const w = net.wIH[i][j];
+        const color = w>=0 ? '#1b7f1b' : '#bf3b3b';
+        const thickness = Math.min(8, 1 + Math.abs(w)*4);
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+        line.setAttribute('stroke', color); line.setAttribute('stroke-width', thickness);
+        line.setAttribute('opacity', 0.8);
+        svg.appendChild(line);
+        // weight text
+        const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+        tx.setAttribute('x', (x1+x2)/2 + 6);
+        tx.setAttribute('y', (y1+y2)/2 - 6);
+        tx.setAttribute('font-size', '12');
+        tx.setAttribute('fill', '#333');
+        tx.textContent = w.toFixed(3);
+        svg.appendChild(tx);
+      }
+    }
+    // hidden->output
+    for(let j=0;j<2;j++){
+      const x1 = coords.hidden[j][0], y1 = coords.hidden[j][1];
+      const x2 = coords.output[0][0], y2 = coords.output[0][1];
+      const w = net.wHO[0][j];
+      const color = w>=0 ? '#1b7f1b' : '#bf3b3b';
+      const thickness = Math.min(10, 1 + Math.abs(w)*5);
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      line.setAttribute('stroke', color); line.setAttribute('stroke-width', thickness);
+      svg.appendChild(line);
+      const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+      tx.setAttribute('x', (x1+x2)/2 + 6);
+      tx.setAttribute('y', (y1+y2)/2 - 6);
+      tx.setAttribute('font-size', '12');
+      tx.setAttribute('fill', '#333');
+      tx.textContent = w.toFixed(3);
+      svg.appendChild(tx);
+    }
+
+    // draw nodes
+    function drawNode(x,y,label,fill='#fff') {
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 22);
+      c.setAttribute('fill', fill); c.setAttribute('stroke', '#777'); c.setAttribute('stroke-width', '1');
+      g.appendChild(c);
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', x); t.setAttribute('y', y+5);
+      t.setAttribute('font-size', '13'); t.setAttribute('text-anchor','middle'); t.setAttribute('fill','#111');
+      t.textContent = label;
+      g.appendChild(t);
+      svg.appendChild(g);
+    }
+
+    // inputs
+    drawNode(coords.inputs[0][0], coords.inputs[0][1], 'x0');
+    drawNode(coords.inputs[1][0], coords.inputs[1][1], 'x1');
+    // hidden with activations in small label
+    for(let i=0;i<2;i++){
+      let fill = '#fff';
+      if(net.cache.aH && net.cache.aH[i] !== undefined) {
+        // shade by activation
+        const v = net.cache.aH[i];
+        const val = Math.round(240 - v*120);
+        fill = `rgb(${val},${val},255)`;
+      }
+      drawNode(coords.hidden[i][0], coords.hidden[i][1], 'h'+i, fill);
+      // small activation number
+      if(net.cache.aH && net.cache.aH[i] !== undefined){
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x', coords.hidden[i][0]); t.setAttribute('y', coords.hidden[i][1]+36);
+        t.setAttribute('font-size', '11'); t.setAttribute('text-anchor','middle'); t.setAttribute('fill','#333');
+        t.textContent = net.cache.aH[i].toFixed(3);
+        svg.appendChild(t);
+      }
+    }
+    // output
+    let outFill = '#fff';
+    if(net.cache.aO !== undefined) {
+      const v = net.cache.aO;
+      const val = Math.round(240 - v*150);
+      outFill = `rgb(${val},255,${val})`;
+    }
+    drawNode(coords.output[0][0], coords.output[0][1], 'o', outFill);
+    if(net.cache.aO !== undefined){
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', coords.output[0][0]); t.setAttribute('y', coords.output[0][1]+36);
+      t.setAttribute('font-size', '11'); t.setAttribute('text-anchor','middle'); t.setAttribute('fill','#333');
+      t.textContent = net.cache.aO.toFixed(3);
+      svg.appendChild(t);
+    }
+    // biases text (only numbers)
+    for(let i=0;i<2;i++){
+      const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+      tx.setAttribute('x', coords.hidden[i][0]-28);
+      tx.setAttribute('y', coords.hidden[i][1]-36);
+      tx.setAttribute('font-size','11'); tx.setAttribute('fill','#555');
+      tx.textContent = 'b=' + net.bh[i].toFixed(3);
+      svg.appendChild(tx);
+    }
+    const txo = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txo.setAttribute('x', coords.output[0][0]-28);
+    txo.setAttribute('y', coords.output[0][1]-36);
+    txo.setAttribute('font-size','11'); txo.setAttribute('fill','#555');
+    txo.textContent = 'b=' + net.bo[0].toFixed(3);
+    svg.appendChild(txo);
+
+    // deltas arrow if present
+    if(net.cache.deltaH){
+      for(let i=0;i<2;i++){
+        const dx = net.cache.deltaH[i];
+        const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+        tx.setAttribute('x', coords.hidden[i][0]+36);
+        tx.setAttribute('y', coords.hidden[i][1]+6);
+        tx.setAttribute('font-size','12'); tx.setAttribute('fill','#aa00aa');
+        tx.textContent = 'δ=' + dx.toFixed(4);
+        svg.appendChild(tx);
+      }
+    }
+    if(net.cache.deltaO !== undefined){
+      const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+      tx.setAttribute('x', coords.output[0][0]+36);
+      tx.setAttribute('y', coords.output[0][1]+6);
+      tx.setAttribute('font-size','12'); tx.setAttribute('fill','#aa00aa');
+      tx.textContent = 'δ=' + net.cache.deltaO.toFixed(4);
+      svg.appendChild(tx);
+    }
+  }
+
+  // Update numeric UI tables and texts
+  function updateUI() {
+    document.getElementById('lrVal').textContent = learningRate.toFixed(2);
+    sampleIdxEl.textContent = sampleIndex;
+    nSamplesEl.textContent = dataset.length;
+    const cur = dataset[sampleIndex];
+    inputsText.textContent = '[' + cur.x.join(', ') + ']';
+    targetText.textContent = cur.y;
+    // activations
+    if(net.cache.aH){
+      hActs.textContent = net.cache.aH.map(v=>v.toFixed(3)).join(' , ');
+    } else hActs.textContent = '–';
+    oAct.textContent = net.cache.aO !== undefined ? net.cache.aO.toFixed(4) : '–';
+    // deltas
+    if(net.cache.deltaH) hDeltas.textContent = net.cache.deltaH.map(v=>v.toFixed(4)).join(' , '); else hDeltas.textContent='–';
+    oDelta.textContent = net.cache.deltaO !== undefined ? net.cache.deltaO.toFixed(5) : '–';
+
+    // tables for weights
+    wIHtable.innerHTML = '';
+    for(let i=0;i<2;i++){
+      const tr = document.createElement('tr');
+      const th = document.createElement('th'); th.textContent = 'h'+i+' ←';
+      const td0 = document.createElement('td'); td0.textContent = 'w['+i+'][0] = ' + net.wIH[i][0].toFixed(5);
+      const td1 = document.createElement('td'); td1.textContent = 'w['+i+'][1] = ' + net.wIH[i][1].toFixed(5);
+      tr.appendChild(th); tr.appendChild(td0); tr.appendChild(td1);
+      wIHtable.appendChild(tr);
+    }
+    wHOtable.innerHTML = '';
+    const tr = document.createElement('tr');
+    const th = document.createElement('th'); th.textContent = 'o ←';
+    const td0 = document.createElement('td'); td0.textContent = 'wHO[0] = ' + net.wHO[0][0].toFixed(5);
+    const td1 = document.createElement('td'); td1.textContent = 'wHO[1] = ' + net.wHO[0][1].toFixed(5);
+    tr.appendChild(th); tr.appendChild(td0); tr.appendChild(td1);
+    wHOtable.appendChild(tr);
+
+    biasTable.innerHTML = '';
+    const tr2 = document.createElement('tr'); tr2.innerHTML = '<th>bh</th><td>' + net.bh[0].toFixed(5) + '</td><td>' + net.bh[1].toFixed(5) + '</td>';
+    const tr3 = document.createElement('tr'); tr3.innerHTML = '<th>bo</th><td colspan="2">' + net.bo[0].toFixed(5) + '</td>';
+    biasTable.appendChild(tr2); biasTable.appendChild(tr3);
+  }
+
+  // Chart of MSE history
+  const chart = document.getElementById('chart');
+  const chartCanvas = document.createElement('canvas');
+  chartCanvas.width = 320; chartCanvas.height = 120;
+  chart.appendChild(chartCanvas);
+  const cx = chartCanvas.getContext('2d');
+  function drawChart() {
+    cx.clearRect(0,0,chartCanvas.width,chartCanvas.height);
+    cx.fillStyle = '#fff'; cx.fillRect(0,0,chartCanvas.width,chartCanvas.height);
+    cx.strokeStyle = '#ddd'; for(let i=0;i<chartCanvas.width;i+=40){ cx.beginPath(); cx.moveTo(i,0); cx.lineTo(i,chartCanvas.height); cx.stroke(); }
+    // draw line
+    if(history.length === 0) return;
+    const max = Math.max(...history);
+    const min = Math.min(...history);
+    const range = Math.max(1e-6, max - min);
+    cx.strokeStyle = '#1177cc'; cx.lineWidth = 2;
+    cx.beginPath();
+    for(let i=0;i<history.length;i++){
+      const x = Math.round(i/(history.length-1 || 1) * (chartCanvas.width-8)) + 4;
+      const y = chartCanvas.height - 4 - Math.round((history[i]-min)/range * (chartCanvas.height-8));
+      if(i===0) cx.moveTo(x,y); else cx.lineTo(x,y);
+    }
+    cx.stroke();
+    // last value text
+    cx.fillStyle = '#333'; cx.font = '12px system-ui';
+    cx.fillText('MSE: ' + history[history.length-1].toFixed(5), 6, 14);
+  }
+
+  // Event listeners
+  lrInput.addEventListener('input', function(e){ learningRate = parseFloat(this.value); lrVal.textContent = learningRate.toFixed(2); });
+  forwardBtn.addEventListener('click', function(){ net.forward(dataset[sampleIndex].x); updateUI(); drawNetwork(); });
+  backpropBtn.addEventListener('click', function(){ net.forward(dataset[sampleIndex].x); computeBackprop(); });
+  updateBtn.addEventListener('click', function(){ applyUpdate(); computeMSEandLog(); });
+  stepBtn.addEventListener('click', function(){ trainStep(); });
+  resetBtn.addEventListener('click', function(){ initWeights(); computeMSEandLog(); });
+  datasetSelect.addEventListener('change', function(){
+    datasetName = this.value;
+    dataset = datasets[datasetName].slice();
+    sampleIndex = 0;
+    history = [];
+    updateUI();
+    computeMSEandLog();
+  });
+
+  trainBtn.addEventListener('click', function(){
+    if(running) return;
+    running = true;
+    trainBtn.disabled = true;
+    stopBtn.disabled = false;
+    // run 1000 steps or until stopped
+    let steps = 1000;
+    (function loop(){
+      if(!running || steps<=0){ running=false; trainBtn.disabled=false; stopBtn.disabled=true; return; }
+      // do a chunk to keep UI responsive
+      for(let k=0;k<8 && steps>0;k++){
+        trainStep();
+        steps--;
+      }
+      trainLoopId = requestAnimationFrame(loop);
+    })();
+  });
+  stopBtn.addEventListener('click', function(){ running=false; trainBtn.disabled=false; stopBtn.disabled=true; if(trainLoopId) cancelAnimationFrame(trainLoopId); });
+
+  // Initial setup
+  initWeights();
+  computeMSEandLog();
+
+  // keyboard shortcuts
+  window.addEventListener('keydown', function(e){
+    if(e.key === ' ') { e.preventDefault(); trainStep(); }
+    else if(e.key === 'f') { net.forward(dataset[sampleIndex].x); updateUI(); drawNetwork(); }
+    else if(e.key === 'b') { net.forward(dataset[sampleIndex].x); computeBackprop(); }
+    else if(e.key === 'u') { applyUpdate(); computeMSEandLog(); }
+  });
+
+  // Expose a brief explanation within the page (small)
+  const expl = document.createElement('div');
+  expl.className = 'small';
+  expl.style.marginTop = '10px';
+  expl.innerHTML = 'This demo uses a small network: 2 inputs → 2 hidden → 1 output. Sigmoid activations. Backprop computes local gradients (δ) at output and hidden layers, multiplies by inputs/activations to get weight gradients, and updates weights using the learning rate. Use Step to run a single training iteration (forward → backprop → update).';
+  document.getElementById('right').appendChild(expl);
+
+})();
+</script>
+</body>
+</html>

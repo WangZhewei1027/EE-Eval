@@ -67,8 +67,8 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
     // - The search runs (searching state) and then results are displayed (result displayed state)
     // - Steps are rendered in the steps container
     const runButton = page.locator("button[onclick='runTernarySearch()']");
-    const resultDiv = page.locator('#result');
-    const stepsDiv = page.locator('#steps');
+    const resultDiv1 = page.locator('#result');
+    const stepsDiv1 = page.locator('#steps');
 
     // Ensure pre-click state does not show "Found at index"
     await expect(resultDiv).not.toContainText('Found at index');
@@ -90,7 +90,7 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
 
     // No runtime exceptions should have occurred during this normal run
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -99,10 +99,10 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
   // -------------------------
   test('Searching for a non-existent target displays Not found and includes final "Target not found" step', async ({ page }) => {
     // This test validates the algorithm path where the target is not in the array.
-    const targetInput = page.locator('#targetInput');
-    const runButton = page.locator("button[onclick='runTernarySearch()']");
-    const resultDiv = page.locator('#result');
-    const stepsDiv = page.locator('#steps');
+    const targetInput1 = page.locator('#targetInput1');
+    const runButton1 = page.locator("button[onclick='runTernarySearch()']");
+    const resultDiv2 = page.locator('#result');
+    const stepsDiv2 = page.locator('#steps');
 
     // Set target to a value not in the default array (e.g., 4)
     await targetInput.fill('4');
@@ -114,7 +114,7 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
     await expect(resultDiv).toContainText('Not found');
 
     // Steps should include the final message 'Target not found in the array.'
-    const stepElements = stepsDiv.locator('.step');
+    const stepElements1 = stepsDiv.locator('.step');
     await expect(stepElements).toHaveCountGreaterThan(0);
     // Look for the final step text among steps
     const stepsText = await stepsDiv.innerText();
@@ -122,7 +122,7 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
 
     // Ensure no runtime page errors occurred during this path
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -133,11 +133,11 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
     // This test validates the InputValidationFailed event path:
     // - When array or target input contains invalid numbers, the app should display a validation message
     // - Steps area should remain empty (no search executed)
-    const arrayInput = page.locator('#arrayInput');
-    const targetInput = page.locator('#targetInput');
-    const runButton = page.locator("button[onclick='runTernarySearch()']");
-    const resultDiv = page.locator('#result');
-    const stepsDiv = page.locator('#steps');
+    const arrayInput1 = page.locator('#arrayInput1');
+    const targetInput2 = page.locator('#targetInput2');
+    const runButton2 = page.locator("button[onclick='runTernarySearch()']");
+    const resultDiv3 = page.locator('#result');
+    const stepsDiv3 = page.locator('#steps');
 
     // Introduce an invalid token in the array input
     await arrayInput.fill('1, 2, three, 4');
@@ -155,7 +155,7 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
 
     // Ensure no runtime page errors occurred just from validation path
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -165,11 +165,11 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
   test('After validation failure, correcting input and re-running proceeds to display results and steps', async ({ page }) => {
     // This test validates a sequence of transitions:
     // S0 (idle) -> invalid input -> validation failure -> user corrects input -> run -> S1/S2 and results shown
-    const arrayInput = page.locator('#arrayInput');
-    const targetInput = page.locator('#targetInput');
-    const runButton = page.locator("button[onclick='runTernarySearch()']");
-    const resultDiv = page.locator('#result');
-    const stepsDiv = page.locator('#steps');
+    const arrayInput2 = page.locator('#arrayInput2');
+    const targetInput3 = page.locator('#targetInput3');
+    const runButton3 = page.locator("button[onclick='runTernarySearch()']");
+    const resultDiv4 = page.locator('#result');
+    const stepsDiv4 = page.locator('#steps');
 
     // Start with invalid input
     await arrayInput.fill('bad, data, here');
@@ -195,7 +195,7 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
 
     // Confirm no runtime exceptions occurred throughout the sequence
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -204,9 +204,9 @@ test.describe('Ternary Search Demonstration (Application ID: de3bd9a3-fa74-11f0-
   // -------------------------
   test('Observability: page emits no console.error or uncaught exceptions during a typical run', async ({ page }) => {
     // This test simply runs a normal search and asserts that the page produced no console errors or uncaught exceptions.
-    const runButton = page.locator("button[onclick='runTernarySearch()']");
-    const resultDiv = page.locator('#result');
-    const stepsDiv = page.locator('#steps');
+    const runButton4 = page.locator("button[onclick='runTernarySearch()']");
+    const resultDiv5 = page.locator('#result');
+    const stepsDiv5 = page.locator('#steps');
 
     // Run the search using defaults
     await runButton.click();

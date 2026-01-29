@@ -174,7 +174,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Test S0 -> S2 transition via InsertValue button
   test('InsertValue: clicking Insert transitions to Tree With Values and renders node', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo1 = new RBDemoPage(page);
     await demo.goto();
 
     // Insert a specific value
@@ -185,16 +185,16 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     expect(snapCount).toBeGreaterThanOrEqual(2);
 
     // The svg should now contain drawn nodes (some children: lines, circles, text)
-    const svgCount = await demo.svgChildrenCount();
+    const svgCount1 = await demo.svgChildrenCount();
     expect(svgCount).toBeGreaterThan(0);
 
     // Step counter should show last step selected (n / n)
-    const stepText = await demo.getStepCounterText();
+    const stepText1 = await demo.getStepCounterText();
     // Extract current step and total from text
     expect(stepText).toMatch(/Step:\s*\d+\s*\/\s*\d+/);
 
     // Description should end with 'Insertion complete: root is black.' in final snapshot text
-    const desc = await demo.getDescText();
+    const desc1 = await demo.getDescText();
     // It may show the last snapshot description; ensure it contains either "Inserted" or "Insertion complete"
     expect(/Inserted|Insertion complete/.test(desc)).toBeTruthy();
 
@@ -205,16 +205,16 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Test Enter key insertion event (EnterKeyInsert)
   test('EnterKeyInsert: pressing Enter in input inserts the value', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo2 = new RBDemoPage(page);
     await demo.goto();
 
     // Use Enter to insert
     await demo.insertValueByEnter(21);
 
     // Assert a new snapshot was created and rendering occurred
-    const snapCount = await demo.getSnapshotsLength();
+    const snapCount1 = await demo.getSnapshotsLength();
     expect(snapCount).toBeGreaterThanOrEqual(2);
-    const svgCount = await demo.svgChildrenCount();
+    const svgCount2 = await demo.svgChildrenCount();
     expect(svgCount).toBeGreaterThan(0);
 
     // No runtime errors on Enter
@@ -224,18 +224,18 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Test InsertRandomValue event
   test('InsertRandomValue: clicking Insert Random inserts a value and updates UI', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo3 = new RBDemoPage(page);
     await demo.goto();
 
     // Insert random value
     await demo.insertRandom();
 
     // After random insert, snapshots should increase
-    const snapCount = await demo.getSnapshotsLength();
+    const snapCount2 = await demo.getSnapshotsLength();
     expect(snapCount).toBeGreaterThanOrEqual(2);
 
     // SVG should have node renderings
-    const svgCount = await demo.svgChildrenCount();
+    const svgCount3 = await demo.svgChildrenCount();
     expect(svgCount).toBeGreaterThan(0);
 
     // No console or page errors
@@ -245,7 +245,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Test InsertSampleSequence (bulk button) - S2 -> S2 for multiple inserts
   test('InsertSampleSequence: clicking Insert Sample Sequence schedules multiple inserts and updates snapshots', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo4 = new RBDemoPage(page);
     await demo.goto();
 
     // Ensure tree is empty first
@@ -255,11 +255,11 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     await demo.insertSampleSequence();
 
     // Expect snapshots to have grown significantly (sequence length at least 6)
-    const snapCount = await demo.getSnapshotsLength();
+    const snapCount3 = await demo.getSnapshotsLength();
     expect(snapCount).toBeGreaterThanOrEqual(6);
 
     // SVG should render nodes
-    const svgCount = await demo.svgChildrenCount();
+    const svgCount4 = await demo.svgChildrenCount();
     expect(svgCount).toBeGreaterThan(0);
 
     // No console or page errors during bulk insertion
@@ -269,12 +269,12 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Test ClearTree transition to S1_Tree_Cleared
   test('ClearTree: clicking Clear resets snapshots, counter and description', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo5 = new RBDemoPage(page);
     await demo.goto();
 
     // Insert a value to create snapshots
     await demo.insertValue(33);
-    let snapCount = await demo.getSnapshotsLength();
+    let snapCount4 = await demo.getSnapshotsLength();
     expect(snapCount).toBeGreaterThanOrEqual(2);
 
     // Now clear
@@ -285,15 +285,15 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     expect(snapCount).toBe(0);
 
     // Step counter should show 'Step: 0 / 0'
-    const stepText = await demo.getStepCounterText();
+    const stepText2 = await demo.getStepCounterText();
     expect(stepText.trim()).toBe('Step: 0 / 0');
 
     // Description should be the cleared message
-    const desc = await demo.getDescText();
+    const desc2 = await demo.getDescText();
     expect(desc).toContain('Cleared. Insert values to see the insertion algorithm.');
 
     // No svg children
-    const svgCount = await demo.svgChildrenCount();
+    const svgCount5 = await demo.svgChildrenCount();
     expect(svgCount).toBe(0);
 
     // No console/page errors
@@ -303,7 +303,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Test PlayAuto (S2 -> S3) and playback controls (PreviousStep, NextStep)
   test('PlayAuto & Navigation: Play starts autoplay, Next/Previous navigate steps correctly', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo6 = new RBDemoPage(page);
     await demo.goto();
 
     // Prepare multiple snapshots by inserting several values
@@ -312,7 +312,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     await demo.insertValue(35);
     await demo.insertValue(50);
 
-    let snapCount = await demo.getSnapshotsLength();
+    let snapCount5 = await demo.getSnapshotsLength();
     expect(snapCount).toBeGreaterThanOrEqual(3);
 
     // Set speed lower to make playback faster
@@ -329,7 +329,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     await page.waitForTimeout(500);
 
     // Ensure current step is > 0 (autoplay progressed)
-    const stepText = await demo.getStepCounterText();
+    const stepText3 = await demo.getStepCounterText();
     const matches = /Step:\s*(\d+)\s*\/\s*(\d+)/.exec(stepText);
     expect(matches).not.toBeNull();
     const current = Number(matches[1]);
@@ -362,7 +362,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Edge case: invalid input triggers alert dialog (Enter invalid or empty)
   test('Edge case: invalid input triggers alert and does not create snapshot', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo7 = new RBDemoPage(page);
     await demo.goto();
 
     // Ensure no value in input
@@ -383,7 +383,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     expect(dialogs[0].message).toContain('Enter a valid integer');
 
     // Snapshots shouldn't have grown due to invalid input (should remain at initial 1)
-    const snapCount = await demo.getSnapshotsLength();
+    const snapCount6 = await demo.getSnapshotsLength();
     // Implementation created an initial snapshot on load, so expect 1
     expect(snapCount).toBeGreaterThanOrEqual(0);
 
@@ -394,7 +394,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
 
   // Edge case: duplicate insertion triggers alert and is ignored
   test('Edge case: duplicate values are ignored and show alert "Duplicate value ignored."', async ({ page }) => {
-    const demo = new RBDemoPage(page);
+    const demo8 = new RBDemoPage(page);
     await demo.goto();
 
     // Insert a value first
@@ -403,7 +403,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
     expect(beforeCount).toBeGreaterThanOrEqual(2);
 
     // Try to insert the same value again - expect alert and no growth in snapshots
-    const dialogs = [];
+    const dialogs1 = [];
     page.once('dialog', async (dialog) => {
       dialogs.push({ message: dialog.message(), type: dialog.type() });
       await dialog.dismiss();
@@ -429,7 +429,7 @@ test.describe('Red-Black Tree — Interactive Demo (FSM validation)', () => {
   // Final sanity: ensure no runtime ReferenceError, SyntaxError, TypeError occurred during any of the tests' page interactions
   test('No unexpected runtime ReferenceError/SyntaxError/TypeError in console or page errors', async ({ page }) => {
     // This test intentionally loads the page and checks for these errors
-    const demo = new RBDemoPage(page);
+    const demo9 = new RBDemoPage(page);
 
     // Reset collectors for this test
     const consoleMsgs = [];

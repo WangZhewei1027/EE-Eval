@@ -120,7 +120,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
 
   test.describe('Enqueue interactions and transitions (S0 -> S1 and S1 -> S1)', () => {
     test('Enqueue from empty transitions to non-empty and updates display and result', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq1 = new PriorityQueuePage(page);
       await pq.goto();
 
       // From S0_Empty, enqueue an item -> should transition to S1_NonEmpty
@@ -131,12 +131,12 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       expect(result).toContain('Enqueued: Task A with priority 3');
 
       // Queue display should contain the item and priority badge
-      const displayText = await pq.getQueueDisplayText();
+      const displayText1 = await pq.getQueueDisplayText();
       expect(displayText).toContain('Task A');
       expect(displayText).toContain('3');
 
       // Items count should be 1
-      const count = await pq.getItemsCount();
+      const count1 = await pq.getItemsCount();
       expect(count).toBe(1);
 
       // No runtime errors
@@ -145,7 +145,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
     });
 
     test('Multiple enqueues maintain priority ordering (lower number = higher priority)', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq2 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Enqueue items with different priorities
@@ -159,11 +159,11 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       expect(firstItemText).toContain('1');
 
       // The sequence of priority badges should be [1,3,5]
-      const badges = await pq.getPriorityBadgeTexts();
+      const badges1 = await pq.getPriorityBadgeTexts();
       expect(badges).toEqual(['1', '3', '5']);
 
       // Ensure operation result reflects the last enqueue action
-      const opText = await pq.getOperationResultText();
+      const opText1 = await pq.getOperationResultText();
       expect(opText).toContain('Enqueued: MediumPriority with priority 3');
 
       // No runtime errors
@@ -174,7 +174,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
 
   test.describe('Dequeue interactions and transitions (S1 -> S1 and S1 -> S0)', () => {
     test('Dequeue removes highest priority item and updates display (S1 -> S1)', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq3 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Prepare queue with two items
@@ -189,7 +189,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       expect(op).toContain('Dequeued: Alpha (priority 2)');
 
       // Queue should still be non-empty (Beta remains)
-      const displayText = await pq.getQueueDisplayText();
+      const displayText2 = await pq.getQueueDisplayText();
       expect(displayText).toContain('Beta');
       expect(displayText).toContain('4');
 
@@ -199,7 +199,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
     });
 
     test('Dequeue until empty transitions back to S0_Empty and shows empty message', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq4 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Enqueue a single item then dequeue to make it empty
@@ -211,11 +211,11 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       await pq.dequeue();
 
       // Operation result should reflect dequeued item
-      const op = await pq.getOperationResultText();
+      const op1 = await pq.getOperationResultText();
       expect(op).toContain('Dequeued: Solo (priority 1)');
 
       // Queue display should now indicate empty
-      const displayText = await pq.getQueueDisplayText();
+      const displayText3 = await pq.getQueueDisplayText();
       expect(displayText).toContain('Queue is empty');
 
       // No runtime errors
@@ -224,7 +224,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
     });
 
     test('Dequeue on empty queue yields user-facing message and does not throw', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq5 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Ensure queue is empty initially
@@ -234,7 +234,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       await pq.dequeue();
 
       // Should show a friendly message in operationResult
-      const op = await pq.getOperationResultText();
+      const op2 = await pq.getOperationResultText();
       expect(op).toContain('Queue is empty, nothing to dequeue');
 
       // No runtime errors (we let any actual JS errors surface; we assert none occurred)
@@ -245,7 +245,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
 
   test.describe('Peek and Clear operations (S1 -> S1 and S1 -> S0)', () => {
     test('Peek shows highest priority without removing it', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq6 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Prepare queue
@@ -255,19 +255,19 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       // Peek should report First (priority 2) and not remove it
       await pq.peek();
 
-      const op = await pq.getOperationResultText();
+      const op3 = await pq.getOperationResultText();
       expect(op).toContain('Highest priority item: First (priority 2)');
 
       // Ensure the queue still contains both items in the same order
       expect(await pq.getItemsCount()).toBe(2);
-      const firstItemText = await pq.getFirstItemText();
+      const firstItemText1 = await pq.getFirstItemText();
       expect(firstItemText).toContain('First');
       expect(pageErrors).toHaveLength(0);
       expect(consoleErrors).toHaveLength(0);
     });
 
     test('Clear removes all items and transitions to S0_Empty', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq7 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Populate queue
@@ -278,7 +278,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
       await pq.clear();
 
       // Operation result should indicate cleared
-      const op = await pq.getOperationResultText();
+      const op4 = await pq.getOperationResultText();
       expect(op).toContain('Queue has been cleared');
 
       // Queue display should indicate empty
@@ -296,14 +296,14 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
 
   test.describe('Form validation and edge cases', () => {
     test('Enqueue with missing inputs shows validation message and does not crash', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq8 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Intentionally click Enqueue with empty inputs
       await pq.enqueueButton.click();
 
       // Should show a red validation message in operationResult
-      const op = await pq.getOperationResultText();
+      const op5 = await pq.getOperationResultText();
       expect(op).toContain('Please enter both value and priority');
 
       // Queue should remain empty
@@ -316,7 +316,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
     });
 
     test('Event handler elements are present for all expected actions', async ({ page }) => {
-      const pq = new PriorityQueuePage(page);
+      const pq9 = new PriorityQueuePage(page);
       await pq.goto();
 
       // Validate presence of trigger elements as described in FSM
@@ -333,7 +333,7 @@ test.describe('Priority Queue Demonstration - FSM and UI tests', () => {
 
   // Final test: summarize console and page error observation
   test('No unexpected runtime console errors or page errors occurred during interaction flows', async ({ page }) => {
-    const pq = new PriorityQueuePage(page);
+    const pq10 = new PriorityQueuePage(page);
     await pq.goto();
 
     // Perform a variety of interactions to exercise the code paths

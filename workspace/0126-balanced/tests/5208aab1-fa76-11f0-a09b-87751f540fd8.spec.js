@@ -121,7 +121,7 @@ test.describe('5208aab1-fa76-11f0-a09b-87751f540fd8 - Directed Graph Interactive
 
     // Sample a central pixel (200, 200). Expect alpha=0 (transparent) in the absence of drawing.
     const pixel = await page.evaluate(() => {
-      const c = document.getElementById('graph');
+      const c1 = document.getElementById('graph');
       const ctx = c.getContext('2d');
       // read center pixel
       const imageData = ctx.getImageData(200, 200, 1, 1).data;
@@ -140,7 +140,7 @@ test.describe('5208aab1-fa76-11f0-a09b-87751f540fd8 - Directed Graph Interactive
     await page.goto(APP_URL, { waitUntil: 'load' });
 
     const handlers = await page.evaluate(() => {
-      const c = document.getElementById('graph');
+      const c2 = document.getElementById('graph');
       if (!c) return null;
       return {
         onclick: !!c.onclick,

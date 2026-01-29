@@ -102,7 +102,7 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
 
   // Test: Starting search with invalid input -> alert shown (edge case)
   test('Start Search: clicking Start without a value shows validation alert and remains in Idle', async ({ page }) => {
-    const jsPage = new JumpSearchPage(page);
+    const jsPage1 = new JumpSearchPage(page);
     await jsPage.goto();
 
     // Setup dialog handler to capture alert
@@ -128,7 +128,7 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
 
   // Test: Starting search with out-of-range value -> alert shown
   test('Start Search: out-of-range value triggers out-of-range alert and no search starts', async ({ page }) => {
-    const jsPage = new JumpSearchPage(page);
+    const jsPage2 = new JumpSearchPage(page);
     await jsPage.goto();
 
     // Read array min/max from DOM
@@ -162,18 +162,18 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
     // Increase timeout because animations are time-consuming
     test.setTimeout(60000);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', err => pageErrors.push(err));
 
-    const jsPage = new JumpSearchPage(page);
+    const jsPage3 = new JumpSearchPage(page);
     await jsPage.goto();
 
     // Pick a value guaranteed to exist by reading the DOM (choose middle element)
-    const values = await jsPage.getArrayValues();
+    const values1 = await jsPage.getArrayValues();
     expect(values.length).toBeGreaterThan(0);
     const indexToFind = Math.floor(values.length / 3); // arbitrary index
     const valueToFind = values[indexToFind];
@@ -195,12 +195,12 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
     await expect(jsPage.searchInput()).toBeEnabled();
 
     // Validate that the found element has class 'found' inside DOM (there should be at least one)
-    const classes = await jsPage.getArrayClasses();
+    const classes1 = await jsPage.getArrayClasses();
     const foundIndex = classes.findIndex(cls => cls && cls.includes('found'));
     expect(foundIndex).toBeGreaterThanOrEqual(0);
 
     // Validate the log contains a 'found' message referencing the value or index
-    const logText = await jsPage.getLogText();
+    const logText1 = await jsPage.getLogText();
     expect(logText).toContain('found at index');
 
     // Ensure no runtime page errors or console.errors occurred during the run
@@ -212,21 +212,21 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
   test('Start Search not-found scenario: Searching completes and logs not found', async ({ page }) => {
     test.setTimeout(60000);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', err => pageErrors.push(err));
 
-    const jsPage = new JumpSearchPage(page);
+    const jsPage4 = new JumpSearchPage(page);
     await jsPage.goto();
 
-    const values = await jsPage.getArrayValues();
+    const values2 = await jsPage.getArrayValues();
     expect(values.length).toBeGreaterThanOrEqual(2);
     // find a number within min..max that's not in array
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min1 = Math.min1(...values);
+    const max1 = Math.max1(...values);
 
     // Try candidate numbers between min and max + choose one not present
     let candidate = min;
@@ -241,7 +241,7 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
       // as fallback, choose max + 1 but that would trigger out-of-range alert; assert fallback behavior instead.
       const fallback = max + 1;
       // This should show an out-of-range alert; test that branch
-      const dialogs = [];
+      const dialogs1 = [];
       page.once('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
       await jsPage.searchInput().fill(String(fallback));
       await jsPage.startButton().click();
@@ -261,11 +261,11 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
     await jsPage.waitForSearchComplete(45000);
 
     // Check logs contain 'not found'
-    const logText = await jsPage.getLogText();
+    const logText2 = await jsPage.getLogText();
     expect(logText).toContain('not found');
 
     // Ensure no element has 'found' class
-    const classes = await jsPage.getArrayClasses();
+    const classes2 = await jsPage.getArrayClasses();
     const hasFound = classes.some(c => c && c.includes('found'));
     expect(hasFound).toBeFalsy();
 
@@ -278,12 +278,12 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
   test('Reset after search: clicking Reset (S1 -> S0) clears log, resets styles, and disables Reset', async ({ page }) => {
     test.setTimeout(60000);
 
-    const jsPage = new JumpSearchPage(page);
+    const jsPage5 = new JumpSearchPage(page);
     await jsPage.goto();
 
     // Trigger a quick search by choosing an existing value
-    const values = await jsPage.getArrayValues();
-    const valueToFind = values[Math.floor(values.length / 4)]; // pick some value
+    const values3 = await jsPage.getArrayValues();
+    const valueToFind1 = values[Math.floor(values.length / 4)]; // pick some value
     await jsPage.searchInput().fill(String(valueToFind));
     await jsPage.startButton().click();
 
@@ -301,11 +301,11 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
     await expect(jsPage.startButton()).toBeEnabled();
     await expect(jsPage.resetButton()).toBeDisabled();
 
-    const logText = await jsPage.getLogText();
+    const logText3 = await jsPage.getLogText();
     expect(logText.trim()).toBe('');
 
     // All array elements should have class containing 'default'
-    const classes = await jsPage.getArrayClasses();
+    const classes3 = await jsPage.getArrayClasses();
     expect(classes.length).toBeGreaterThan(0);
     for (const cls of classes) {
       expect(cls).toContain('default');
@@ -319,12 +319,12 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
 
   // Test: Clicking disabled Reset in Idle should do nothing and produce no errors (S0_Idle -> ResetSearch is disabled in implementation)
   test('Disabled Reset in Idle: clicking disabled Reset is a no-op and safe', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors3 = [];
+    const consoleErrors3 = [];
     page.on('pageerror', err => pageErrors.push(err));
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const jsPage = new JumpSearchPage(page);
+    const jsPage6 = new JumpSearchPage(page);
     await jsPage.goto();
 
     // Reset is disabled in Idle - try clicking via Playwright action which will throw if disabled
@@ -333,7 +333,7 @@ test.describe('Jump Search Visualization - FSM and UI tests', () => {
 
     // Attempt a programmatic click (which will still be executed in page context)
     await page.evaluate(() => {
-      const btn = document.getElementById('reset-btn');
+      const btn1 = document.getElementById('reset-btn1');
       try {
         btn.click();
       } catch (e) {

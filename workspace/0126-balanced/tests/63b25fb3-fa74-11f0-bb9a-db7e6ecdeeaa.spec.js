@@ -113,7 +113,7 @@ test.describe('NP-Completeness Demo (FSM) - 63b25fb3-fa74-11f0-bb9a-db7e6ecdeeaa
       // Now ensure the brute force button remains disabled and cannot be clicked.
       expect(await page.locator('#runBruteForce').isDisabled()).toBe(true);
 
-      let clickThrew = false;
+      let clickThrew1 = false;
       try {
         await page.click('#runBruteForce', { timeout: 500 });
       } catch (e) {
@@ -160,7 +160,7 @@ test.describe('NP-Completeness Demo (FSM) - 63b25fb3-fa74-11f0-bb9a-db7e6ecdeeaa
     test('Attempt to run DP without running brute force first (edge case): should be disabled', async ({ page }) => {
       // On fresh load DP is disabled; attempt clicking it should throw and not produce runtime errors.
       expect(await page.locator('#runDP').isDisabled()).toBe(true);
-      let clickThrew = false;
+      let clickThrew2 = false;
       try {
         await page.click('#runDP', { timeout: 500 });
       } catch (e) {

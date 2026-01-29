@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Max Heap Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    white-space: pre;
+  }
+  button, input, select {
+    font-family: monospace, monospace;
+    font-size: 14px;
+    margin: 2px 4px 2px 0;
+  }
+  #heap-display {
+    font-family: monospace, monospace;
+  }
+  #log {
+    max-height: 15em;
+    overflow-y: scroll;
+    border: 1px solid;
+    padding: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Max Heap Interactive Explorer</h1>
+
+<p>
+This tool lets you build and explore a max heap step-by-step with full interactive control and detailed feedback.
+</p>
+
+<section>
+  <h2>1. Build Heap: Insert Elements</h2>
+  <label for="insert-value">Insert value:</label>
+  <input type="number" id="insert-value" style="width:5em" />
+  <button id="btn-insert">Insert</button>
+  <button id="btn-insert-random">Insert Random (1-99)</button>
+  <button id="btn-clear">Clear Heap</button>
+  <p>Heap size: <span id="heap-size">0</span></p>
+</section>
+
+<section>
+  <h2>2. Operations</h2>
+  <button id="btn-extract-max">Extract Max (Pop Root)</button>
+  <button id="btn-peek-max">Peek Max (View Root)</button>
+  <button id="btn-heapify-scratch">Build Heap from Array</button>
+</section>
+
+<section>
+  <h2>3. Heapify Modes and Controls</h2>
+  <label for="heapify-array-input">Array (space-separated integers):</label><br />
+  <input type="text" id="heapify-array-input" style="width: 90%" placeholder="e.g. 15 10 20 30 5" />
+  <br />
+  <label for="heapify-strategy">Heapify strategy:</label>
+  <select id="heapify-strategy">
+    <option value="bottom-up">Bottom-Up (Floyd's algorithm)</option>
+    <option value="insert">Insert each element</option>
+  </select>
+  <br />
+  <button id="btn-heapify-step">Do One Step of Heapify</button>
+  <button id="btn-heapify-reset">Reset Heapify Process</button>
+  <p>
+    Heapify State: <span id="heapify-state">Idle</span>
+  </p>
+</section>
+
+<section>
+  <h2>4. Stepwise Visualization & Manual Swaps</h2>
+  <p>Use the index-based manual swap tool to explore sifting and heap property.</p>
+  <label for="swap-index1">Index 1:</label>
+  <input type="number" id="swap-index1" style="width:4em" min="0" />
+  <label for="swap-index2">Index 2:</label>
+  <input type="number" id="swap-index2" style="width:4em" min="0" />
+  <button id="btn-swap">Swap Indices</button>
+</section>
+
+<section>
+  <h2>5. Heap Display (Array representation)</h2>
+  <div id="heap-display"></div>
+</section>
+
+<section>
+  <h2>6. Log / Explanation / Step Info</h2>
+  <div id="log" aria-live="polite"></div>
+</section>
+
+<script>
+(function(){
+  'use strict';
+
+  // Heap array container
+  let heap = [];
+
+  // Heapify stepwise process variables
+  let heapifyProcess = null;
+  // HeapifyProcess will be an object with strategy, array, index pointers, etc.
+
+  // Log helper
+  function log(msg){
+    const logDiv = document.getElementById('log');
+    logDiv.textContent += msg + '\\n';
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+  function clearLog(){
+    document.getElementById('log').textContent = '';
+  }
+
+  // Utility: swap in heap array
+  function swap(i,j){
+    if(i < 0 || j < 0 || i >= heap.length || j >= heap.length){
+      log('Swap indices out of range; no swap performed.');
+      return false;
+    }
+    const v1 = heap[i], v2 = heap[j];
+    heap[i] = v2;
+    heap[j] = v1;
+    log('Swapped indices '+i+' ('+v1+') and '+j+' ('+v2+').');
+    return true;
+  }
+
+  // Utility: Parent and children indices
+  function parent(i){ return Math.floor((i-1)/2); }
+  function leftChild(i){ return 2*i+1; }
+  function rightChild(i){ return 2*i+2; }
+
+  // Check if heap property holds fully
+  function isMaxHeap(arr){
+    for(let i=0;i<arr.length;i++){
+      const l = leftChild(i), r = rightChild(i);
+      if(l < arr.length && arr[l] > arr[i]) return false;
+      if(r < arr.length && arr[r] > arr[i]) return false;
+    }
+    return true;
+  }
+
+  // Render the heap array visually - as array and a tree printed in text
+  function renderHeap(){
+    const display = document.getElementById('heap-display');
+    if(heap.length === 0){
+      display.textContent = '(Heap is empty)';
+      updateHeapSize();
+      return;
+    }
+    // Show array
+    let out = 'Heap array (index: value):\\n';
+    for(let i=0;i<heap.length;i++){
+      out += '  ['+i+']: '+heap[i] + '\\n';
+    }
+    // Show tree layer by layer (level order)
+    out += '\\nHeap tree level order:\\n';
+    let level = 0;
+    let levelStart = 0;
+    while(levelStart < heap.length){
+      const levelCount = Math.pow(2, level);
+      const levelEnd = Math.min(heap.length, levelStart+levelCount);
+      let line = 'Level '+ level + ': ';
+      for(let i=levelStart;i<levelEnd;i++){
+        line += heap[i];
+        if(i < levelEnd-1) line += ' ';
+      }
+      out += line + '\\n';
+      levelStart = levelEnd;
+      level++;
+    }
+    display.textContent = out;
+    updateHeapSize();
+  }
+
+  function updateHeapSize(){
+    document.getElementById('heap-size').textContent = heap.length.toString();
+  }
+
+  // Heap insertion with sift-up
+  function heapInsert(value){
+    heap.push(value);
+    log('Inserted '+value+' at index '+(heap.length-1)+'. Starting sift-up.');
+    siftUp(heap.length-1);
+    renderHeap();
+  }
+
+  // sift-up operation
+  function siftUp(i){
+    while(i > 0){
+      const p = parent(i);
+      if(heap[i] > heap[p]){
+        log('siftUp: heap['+i+']('+heap[i]+') > heap['+p+']('+heap[p]+'), swapping.');
+        swap(i,p);
+        i=p;
+      } else {
+        log('siftUp: heap['+i+']('+heap[i]+') <= heap['+p+']('+heap[p]+'), stop.');
+        break;
+      }
+    }
+  }
+
+  // sift-down operation for heapify and extract max
+  function siftDown(i, endIndex=heap.length){
+    while(true){
+      let largest = i;
+      const l = leftChild(i);
+      const r = rightChild(i);
+      if(l < endIndex && heap[l] > heap[largest]) largest = l;
+      if(r < endIndex && heap[r] > heap[largest]) largest = r;
+      if(largest !== i){
+        log('siftDown: heap['+largest+']('+heap[largest]+') > heap['+i+']('+heap[i]+'), swapping.');
+        swap(i,largest);
+        i = largest;
+      } else {
+        log('siftDown: position '+i+' ('+heap[i]+') is correct, stop.');
+        break;
+      }
+    }
+  }
+
+  // Extract max (pop root)
+  function extractMax(){
+    if(heap.length === 0){
+      log('Heap is empty. Cannot extract max.');
+      return null;
+    }
+    const max = heap[0];
+    const end = heap.pop();
+    if(heap.length > 0){
+      heap[0] = end;
+      log('Extracted max '+max+'. Moved '+end+' to root. Starting sift-down.');
+      siftDown(0);
+    } else {
+      log('Extracted last element '+max+'. Heap is now empty.');
+    }
+    renderHeap();
+    return max;
+  }
+
+  // Peek max (root value)
+  function peekMax(){
+    if(heap.length === 0){
+      log('Heap is empty.');
+      return null;
+    }
+    log('Max (root) value is: '+heap[0]);
+    return heap[0];
+  }
+
+  // Build heap from array using bottom-up Floyd's method
+  // This is stepwise version with external state
+  function initBottomUpHeapify(array){
+    heapifyProcess = {
+      strategy: 'bottom-up',
+      array: array.slice(),
+      stepStage: 'init', // steps: init -> siftDown(currIndex) -> done
+      currentIndex: Math.floor(array.length/2)-1,
+      done: false
+    };
+    log('Initialized bottom-up Floyd heapify with array: [' + heapifyProcess.array.join(', ') + ']');
+    renderHeapifyProcess();
+  }
+
+  // Build heap from array inserting elements one by one stepwise
+  function initInsertHeapify(array){
+    heapifyProcess = {
+      strategy: 'insert',
+      array: array.slice(),
+      stepStage: 'init-0', // phases: init-0, init-1, ..., inserting each index,
+      currentIndex: 0,
+      done: false
+    };
+    log('Initialized insert-style heapify with array: [' + heapifyProcess.array.join(', ') + ']');
+    renderHeapifyProcess();
+  }
+
+  // Perform one step of heapify according to strategy
+  function stepHeapify(){
+    if(!heapifyProcess){
+      log('Heapify process not started.');
+      return;
+    }
+    if(heapifyProcess.done){
+      log('Heapify process is already complete.');
+      return;
+    }
+
+    if(heapifyProcess.strategy === 'bottom-up'){
+      bottomUpHeapifyStep();
+    } else if(heapifyProcess.strategy === 'insert'){
+      insertHeapifyStep();
+    } else {
+      log('Unknown heapify strategy.');
+    }
+    renderHeapifyProcess();
+  }
+
+  // Reset Heapify process
+  function resetHeapify(){
+    heapifyProcess = null;
+    log('Heapify process reset.');
+    document.getElementById('heapify-state').textContent = 'Idle';
+  }
+
+  // Bottom-up step implementation (Floyd)
+  function bottomUpHeapifyStep(){
+    if(heapifyProcess.stepStage === 'init'){
+      heap = heapifyProcess.array.slice();
+      if(heap.length === 0){
+        heapifyProcess.done = true;
+        log('Empty array: heapify done.');
+        return;
+      }
+      heapifyProcess.stepStage = 'siftDown';
+      log('Heap array copied. Start heapify from index '+heapifyProcess.currentIndex);
+    }
+    if(heapifyProcess.stepStage === 'siftDown'){
+      if(heapifyProcess.currentIndex < 0){
+        heapifyProcess.done = true;
+        log('Heapify complete. Final heap is: ['+heap.join(', ')+']');
+        return;
+      }
+      log('Heapify step: siftDown at index '+heapifyProcess.currentIndex+' (value: '+heap[heapifyProcess.currentIndex]+')');
+      siftDown(heapifyProcess.currentIndex);
+      heapifyProcess.currentIndex--;
+    }
+  }
+
+  // Insert heapify step implementation
+  function insertHeapifyStep(){
+    if(heapifyProcess.stepStage.startsWith('init')){
+      // Clear heap first on first step (init-0)
+      if(heapifyProcess.currentIndex === 0){
+        heap = [];
+        log('Starting insert heapify: empty heap.');
+      }
+      if(heapifyProcess.currentIndex >= heapifyProcess.array.length){
+        heapifyProcess.done = true;
+        log('Insert heapify complete. Final heap is: [' + heap.join(', ') + ']');
+        return;
+      }
+      // Insert next element with siftUp
+      const val = heapifyProcess.array[heapifyProcess.currentIndex];
+      heap.push(val);
+      log('Inserted '+val+' at index '+(heap.length-1)+'. Starting sift-up.');
+      siftUp(heap.length-1);
+      heapifyProcess.currentIndex++;
+    }
+  }
+
+  // Render heapify process state
+  function renderHeapifyProcess(){
+    const stateEl = document.getElementById('heapify-state');
+    if(!heapifyProcess){
+      stateEl.textContent = 'Idle';
+      renderHeap();
+      return;
+    }
+    let s = '';
+    if(heapifyProcess.done){
+      s = 'DONE';
+    } else {
+      s = 'Running -> Strategy: '+heapifyProcess.strategy + '; ';
+      if(heapifyProcess.strategy === 'bottom-up'){
+        s += 'Current siftDown index: '+heapifyProcess.currentIndex;
+      } else if(heapifyProcess.strategy === 'insert'){
+        s += 'Inserted elements: '+heapifyProcess.currentIndex + '/' + heapifyProcess.array.length;
+      }
+    }
+    stateEl.textContent = s;
+    renderHeap();
+  }
+
+  // Parse array from input string
+  function parseArrayInput(str){
+    let parts = str.trim().split(/\s+/);
+    let nums = [];
+    for(let p of parts){
+      let v = parseInt(p,10);
+      if(isNaN(v)){
+        log('Invalid integer in array input: "'+p+'"');
+        return null;
+      }
+      nums.push(v);
+    }
+    return nums;
+  }
+
+  // --- Event handlers below ---
+
+  document.getElementById('btn-insert').onclick = function(){
+    clearLog();
+    let valStr = document.getElementById('insert-value').value;
+    let val = parseInt(valStr,10);
+    if(isNaN(val)){
+      log('Please enter a valid integer to insert.');
+      return;
+    }
+    heapifyProcess = null; // interrupt any heapify
+    heapInsert(val);
+  };
+
+  document.getElementById('btn-insert-random').onclick = function(){
+    clearLog();
+    heapifyProcess = null;
+    let val = Math.floor(Math.random()*99)+1;
+    log('Randomly generated value: '+val);
+    heapInsert(val);
+  };
+
+  document.getElementById('btn-clear').onclick = function(){
+    clearLog();
+    heapifyProcess = null;
+    heap = [];
+    renderHeap();
+    log('Heap cleared.');
+  };
+
+  document.getElementById('btn-extract-max').onclick = function(){
+    clearLog();
+    heapifyProcess = null;
+    let max = extractMax();
+    if(max !== null){
+      log('Extracted max value: '+max);
+    }
+  };
+
+  document.getElementById('btn-peek-max').onclick = function(){
+    clearLog();
+    peekMax();
+  };
+
+  document.getElementById('btn-heapify-scratch').onclick = function(){
+    clearLog();
+    let arrStr = document.getElementById('heapify-array-input').value;
+    if(!arrStr.trim()){
+      log('Enter an array of integers for heapify.');
+      return;
+    }
+    let arr = parseArrayInput(arrStr);
+    if(arr === null){
+      return;
+    }
+    let strategy = document.getElementById('heapify-strategy').value;
+    if(strategy === 'bottom-up'){
+      initBottomUpHeapify(arr);
+    } else if(strategy === 'insert'){
+      initInsertHeapify(arr);
+    } else {
+      log('Unknown heapify strategy selected.');
+      return;
+    }
+    renderHeapifyProcess();
+  };
+
+  document.getElementById('btn-heapify-step').onclick = function(){
+    clearLog();
+    if(!heapifyProcess){
+      log('No heapify process started. Use "Build Heap from Array" first.');
+      return;
+    }
+    stepHeapify();
+  };
+
+  document.getElementById('btn-heapify-reset').onclick = function(){
+    resetHeapify();
+    renderHeapifyProcess();
+  };
+
+  document.getElementById('btn-swap').onclick = function(){
+    clearLog();
+    heapifyProcess = null;
+    let i1 = parseInt(document.getElementById('swap-index1').value,10);
+    let i2 = parseInt(document.getElementById('swap-index2').value,10);
+    if(isNaN(i1) || isNaN(i2)){
+      log('Please enter valid integer indices to swap.');
+      return;
+    }
+    if(i1 === i2){
+      log('Indices are the same; no swap needed.');
+      return;
+    }
+    if(swap(i1,i2)){
+      log('After manual swap. Check and fix heap property as needed.');
+    }
+    renderHeap();
+  };
+
+  // Initial render
+  renderHeap();
+
+})();
+</script>
+
+</body>
+</html>

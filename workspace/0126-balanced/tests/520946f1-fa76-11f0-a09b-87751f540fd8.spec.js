@@ -95,7 +95,7 @@ test.describe('Dijkstra Algorithm Interactive Page - FSM State Tests', () => {
 
   test('Console output: script logs expected distance and shortest path messages on load', async ({ page }) => {
     // This test captures console logs emitted during page load and validates expected output strings.
-    const gp = new GraphPage(page);
+    const gp1 = new GraphPage(page);
     await gp.goto();
 
     // Allow some time for console messages to be collected (already attached listeners before navigation).
@@ -117,7 +117,7 @@ test.describe('Dijkstra Algorithm Interactive Page - FSM State Tests', () => {
   test('FSM entry action renderPage() is not defined on the page and calling it throws ReferenceError', async ({ page }) => {
     // FSM metadata mentions an entry action "renderPage()". The implementation does NOT define it.
     // This test attempts to call renderPage() and asserts that a ReferenceError (or "not defined") is thrown naturally.
-    const gp = new GraphPage(page);
+    const gp2 = new GraphPage(page);
     await gp.goto();
 
     // Directly invoking an undefined global function should produce a rejected promise from page.evaluate
@@ -132,7 +132,7 @@ test.describe('Dijkstra Algorithm Interactive Page - FSM State Tests', () => {
   test('Calling dijkstra(graph, "A") returns distances object (verify returned structure and values)', async ({ page }) => {
     // This verifies behavior of the dijkstra function present in the global scope.
     // It asserts that running with start 'A' returns an object that includes A: 0.
-    const gp = new GraphPage(page);
+    const gp3 = new GraphPage(page);
     await gp.goto();
 
     const result = await page.evaluate(() => {
@@ -157,7 +157,7 @@ test.describe('Dijkstra Algorithm Interactive Page - FSM State Tests', () => {
   test('Calling dijkstra with undefined graph throws a TypeError (edge case)', async ({ page }) => {
     // This test exercises an edge case: calling dijkstra with undefined graph should naturally throw a TypeError
     // (Object.keys(undefined) will cause a TypeError). We do NOT patch or modify global functions.
-    const gp = new GraphPage(page);
+    const gp4 = new GraphPage(page);
     await gp.goto();
 
     // Expect the evaluation to be rejected with a TypeError
@@ -170,7 +170,7 @@ test.describe('Dijkstra Algorithm Interactive Page - FSM State Tests', () => {
   test('FSM transitions: there are no interactive transitions or controls present', async ({ page }) => {
     // FSM extraction reported zero transitions and no event handlers.
     // This test ensures the DOM has no obvious interactive controls (buttons or explicit event-linked elements).
-    const gp = new GraphPage(page);
+    const gp5 = new GraphPage(page);
     await gp.goto();
 
     // No buttons expected
@@ -190,7 +190,7 @@ test.describe('Dijkstra Algorithm Interactive Page - FSM State Tests', () => {
   test('Inspect console and page error stream: capture any runtime exceptions and validate content', async ({ page }) => {
     // This test double-checks the console and pageerror streams are accessible and that
     // console includes the algorithm logs while page errors remain empty prior to provoking errors.
-    const gp = new GraphPage(page);
+    const gp6 = new GraphPage(page);
     await gp.goto();
 
     // Basic sanity: ensure we captured at least the two expected logs

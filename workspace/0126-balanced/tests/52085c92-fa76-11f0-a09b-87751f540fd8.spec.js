@@ -80,7 +80,7 @@ test.describe('AVL Tree FSM and interactive application (Application ID: 52085c9
    * - Expects a ReferenceError / evaluation rejection and captures the pageerror event
    */
   test('Calling missing renderPage() should produce a ReferenceError (verify missing onEnter action)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
     await page.goto(URL, { waitUntil: 'load' });
@@ -113,7 +113,7 @@ test.describe('AVL Tree FSM and interactive application (Application ID: 52085c9
    * - Attempts to call InitializeTree() to validate missing event handler produces an error
    */
   test('Invoking missing InitializeTree() event handler should produce a ReferenceError (FSM transition missing implementation)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
     await page.goto(URL, { waitUntil: 'load' });
@@ -127,7 +127,7 @@ test.describe('AVL Tree FSM and interactive application (Application ID: 52085c9
     await page.waitForTimeout(50);
 
     expect(pageErrors.length).toBeGreaterThanOrEqual(1);
-    const matches = pageErrors.some(err => /InitializeTree is not defined|ReferenceError/.test(String(err.message || err)));
+    const matches1 = pageErrors.some(err => /InitializeTree is not defined|ReferenceError/.test(String(err.message || err)));
     expect(matches).toBeTruthy();
   });
 
@@ -206,7 +206,7 @@ test.describe('AVL Tree FSM and interactive application (Application ID: 52085c9
         return { error: 'tree-missing' };
       }
 
-      const before = [];
+      const before1 = [];
       inorder(tree.root, before);
 
       // Count how many times 15 appears before insertion
@@ -219,7 +219,7 @@ test.describe('AVL Tree FSM and interactive application (Application ID: 52085c9
         return { error: 'insert-failed', msg: String(e) };
       }
 
-      const after = [];
+      const after1 = [];
       inorder(tree.root, after);
       const countAfter = after.filter(k => k === 15).length;
 

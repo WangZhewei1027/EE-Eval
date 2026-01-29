@@ -138,8 +138,8 @@ test.describe('Prim Algorithm Visualization - FSM and error observation', () => 
     });
 
     test('Clicking Start Algorithm should not start algorithm steps when script failed (S0 -> S2)', async () => {
-      const beforeConsoleCount = consoleErrors.length;
-      const beforePageCount = pageErrors.length;
+      const beforeConsoleCount1 = consoleErrors.length;
+      const beforePageCount1 = pageErrors.length;
 
       // Attempt to start algorithm
       await primPage.clickStart();
@@ -162,8 +162,8 @@ test.describe('Prim Algorithm Visualization - FSM and error observation', () => 
     });
 
     test('Clicking Reset should not reset anything when script failed (S0 -> S3)', async () => {
-      const beforeConsoleCount = consoleErrors.length;
-      const beforePageCount = pageErrors.length;
+      const beforeConsoleCount2 = consoleErrors.length;
+      const beforePageCount2 = pageErrors.length;
 
       // Attempt to reset
       await primPage.clickReset();
@@ -172,8 +172,8 @@ test.describe('Prim Algorithm Visualization - FSM and error observation', () => 
       await new Promise(resolve => setTimeout(resolve, 150));
 
       // Steps and graph should remain unchanged (still empty)
-      const graphHtmlAfter = await primPage.graphInnerHTML();
-      const stepsHtmlAfter = await primPage.stepsInnerHTML();
+      const graphHtmlAfter1 = await primPage.graphInnerHTML();
+      const stepsHtmlAfter1 = await primPage.stepsInnerHTML();
       expect(graphHtmlAfter.trim()).toBe('');
       expect(stepsHtmlAfter.trim()).toBe('');
 
@@ -216,7 +216,7 @@ test.describe('Prim Algorithm Visualization - FSM and error observation', () => 
 
   test('Diagnostic: surface captured console and page errors for debugging', async () => {
     // This test aggregates and asserts that we captured errors and logs their content for diagnostics.
-    const combined = consoleErrors.concat(pageErrors);
+    const combined1 = consoleErrors.concat(pageErrors);
     // We must have captured at least one error as the inline script contains an invalid expression.
     expect(combined.length).toBeGreaterThan(0);
 

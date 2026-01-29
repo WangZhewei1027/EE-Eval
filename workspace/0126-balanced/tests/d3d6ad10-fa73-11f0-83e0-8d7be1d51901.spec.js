@@ -68,9 +68,9 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
   test.describe('Randomize, DetectRuns, FullSort transitions', () => {
     test('Randomize Array (RandomizeArray -> S1_ArrayRandomized): updates bars and logs', async ({ page }) => {
       const randomizeBtn = page.locator('#randomize');
-      const nVal = page.locator('#nVal');
-      const bars = page.locator('#bars > .bar');
-      const logEl = page.locator('#log');
+      const nVal1 = page.locator('#nVal1');
+      const bars1 = page.locator('#bars1 > .bar');
+      const logEl1 = page.locator('#log');
       const actionCountEl = page.locator('#actionCount');
 
       // Click Randomize to trigger Array Randomized state
@@ -80,8 +80,8 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
       await expect(logEl).toContainText('Array randomized.');
 
       // Bars should be re-rendered; ensure bars count equals reported n
-      const nText = await nVal.textContent();
-      const barsCount = await bars.count();
+      const nText1 = await nVal.textContent();
+      const barsCount1 = await bars.count();
       expect(barsCount).toEqual(Number(nText));
 
       // After randomize, no frames should be generated yet (actionCount 0)
@@ -89,14 +89,14 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
     });
 
     test('Detect Runs (DetectRuns -> S2_RunsDetected): generates frames and shows run coloring', async ({ page }) => {
-      const randomizeBtn = page.locator('#randomize');
+      const randomizeBtn1 = page.locator('#randomize');
       const detectRunsBtn = page.locator('#detectRunsBtn');
-      const logEl = page.locator('#log');
-      const actionCountEl = page.locator('#actionCount');
+      const logEl2 = page.locator('#log');
+      const actionCountEl1 = page.locator('#actionCount');
       const stackView = page.locator('#stackView');
-      const phaseEl = page.locator('#phase');
+      const phaseEl1 = page.locator('#phase');
       const runBars = page.locator('#bars .bar.run');
-      const bars = page.locator('#bars > .bar');
+      const bars2 = page.locator('#bars2 > .bar');
 
       // Ensure there is an array to detect runs on
       await randomizeBtn.click();
@@ -124,16 +124,16 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
       const runCount = await runBars.count();
       expect(runCount).toBeGreaterThanOrEqual(0);
       // Ensure bars are present
-      const barsCount = await bars.count();
+      const barsCount2 = await bars.count();
       expect(barsCount).toBeGreaterThan(0);
     });
 
     test('Full Sort (FullSort -> S3_FullSortGenerated): generates full frames and shows start frame', async ({ page }) => {
-      const randomizeBtn = page.locator('#randomize');
+      const randomizeBtn2 = page.locator('#randomize');
       const fullSortBtn = page.locator('#fullSortBtn');
-      const logEl = page.locator('#log');
-      const phaseEl = page.locator('#phase');
-      const actionCountEl = page.locator('#actionCount');
+      const logEl3 = page.locator('#log');
+      const phaseEl2 = page.locator('#phase');
+      const actionCountEl2 = page.locator('#actionCount');
 
       // Ensure array exists
       await randomizeBtn.click();
@@ -145,7 +145,7 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
       await expect(logEl).toContainText('Full TimSort frames generated:');
 
       // actionCount should be > 0 (frames were generated)
-      const actionCountText = await actionCountEl.textContent();
+      const actionCountText1 = await actionCountEl.textContent();
       expect(Number(actionCountText)).toBeGreaterThanOrEqual(1);
 
       // The displayed phase of the currently shown frame should not be empty
@@ -156,7 +156,7 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
   test.describe('Stepping and Playing behaviors', () => {
     test('Step when no frames (S5_Stepping edge case): logs helpful message', async ({ page }) => {
       const stepBtn = page.locator('#stepBtn');
-      const logEl = page.locator('#log');
+      const logEl4 = page.locator('#log');
 
       // Reload page to guarantee no frames present
       await page.reload({ waitUntil: 'load' });
@@ -169,11 +169,11 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
     });
 
     test('Step through frames after Detect Runs (S2 -> S5_Stepping): advances frames', async ({ page }) => {
-      const randomizeBtn = page.locator('#randomize');
-      const detectRunsBtn = page.locator('#detectRunsBtn');
-      const stepBtn = page.locator('#stepBtn');
-      const logEl = page.locator('#log');
-      const actionCountEl = page.locator('#actionCount');
+      const randomizeBtn3 = page.locator('#randomize');
+      const detectRunsBtn1 = page.locator('#detectRunsBtn1');
+      const stepBtn1 = page.locator('#stepBtn1');
+      const logEl5 = page.locator('#log');
+      const actionCountEl3 = page.locator('#actionCount');
 
       // Prepare frames via Detect Runs
       await randomizeBtn.click();
@@ -190,19 +190,19 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
       expect(after).toBeLessThanOrEqual(before);
 
       // Log should contain a frame message
-      const logText = await logEl.textContent();
+      const logText1 = await logEl.textContent();
       expect(logText).toContain('[frame');
     });
 
     test('Play through frames and finish playback (S4_Playing): play toggles and finishes', async ({ page }) => {
       const sizeEl = page.locator('#size');
       const seedEl = page.locator('#seed');
-      const randomizeBtn = page.locator('#randomize');
+      const randomizeBtn4 = page.locator('#randomize');
       const speedEl = page.locator('#speed');
-      const fullSortBtn = page.locator('#fullSortBtn');
+      const fullSortBtn1 = page.locator('#fullSortBtn1');
       const playBtn = page.locator('#playBtn');
-      const logEl = page.locator('#log');
-      const phaseEl = page.locator('#phase');
+      const logEl6 = page.locator('#log');
+      const phaseEl3 = page.locator('#phase');
       const sortedBars = page.locator('#bars .bar.sorted');
 
       // Reduce size to produce fewer frames so play completes quickly
@@ -239,11 +239,11 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
   });
 
   test('Reset behavior (S6_Reset): triggers randomize and reset logs and re-renders', async ({ page }) => {
-    const randomizeBtn = page.locator('#randomize');
+    const randomizeBtn5 = page.locator('#randomize');
     const resetBtn = page.locator('#resetBtn');
-    const logEl = page.locator('#log');
-    const actionCountEl = page.locator('#actionCount');
-    const bars = page.locator('#bars > .bar');
+    const logEl7 = page.locator('#log');
+    const actionCountEl4 = page.locator('#actionCount');
+    const bars3 = page.locator('#bars3 > .bar');
 
     // Ensure a known starting point
     await randomizeBtn.click();
@@ -259,15 +259,15 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
     await expect(actionCountEl).toHaveText('0');
 
     // Bars should be rendered (new randomized array)
-    const barsCount = await bars.count();
+    const barsCount3 = await bars.count();
     expect(barsCount).toBeGreaterThanOrEqual(1);
   });
 
   test('Play when no frames: play triggers full sort generation then plays', async ({ page }) => {
-    const playBtn = page.locator('#playBtn');
-    const logEl = page.locator('#log');
-    const randomizeBtn = page.locator('#randomize');
-    const speedEl = page.locator('#speed');
+    const playBtn1 = page.locator('#playBtn1');
+    const logEl8 = page.locator('#log');
+    const randomizeBtn6 = page.locator('#randomize');
+    const speedEl1 = page.locator('#speed');
 
     // Ensure small size and speed for quick run
     await page.locator('#size').evaluate((el) => { el.value = '20'; el.dispatchEvent(new Event('input')); });
@@ -284,7 +284,7 @@ test.describe('TimSort Visual Demonstration - FSM state & transition tests', () 
 
     // Wait for playback finished message
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el1 = document.getElementById('log');
       return el && el.textContent && el.textContent.includes('Playback finished.');
     }, { timeout: 20000 });
 

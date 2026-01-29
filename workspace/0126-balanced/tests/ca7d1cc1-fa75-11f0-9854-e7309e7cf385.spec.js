@@ -136,7 +136,7 @@ test.describe('Interpreter FSM - ca7d1cc1-fa75-11f0-9854-e7309e7cf385', () => {
     // This test validates transition S0_Idle -> S1_Calculated via SubmitForm:
     // - Fill a value, submit the form, and observe the result text changed/updated by page script
     // Note: Implementation does not attach a submit handler; it computes result on load.
-    const app = new InterpreterPage(page);
+    const app1 = new InterpreterPage(page);
     await app.goto();
 
     // Fill with a known numeric input
@@ -183,7 +183,7 @@ test.describe('Interpreter FSM - ca7d1cc1-fa75-11f0-9854-e7309e7cf385', () => {
 
   test('Edge case: negative number input results in NaN (Math.sqrt of negative)', async ({ page }) => {
     // This test validates how the implementation handles negative numbers: Math.sqrt(-4) -> NaN
-    const app = new InterpreterPage(page);
+    const app2 = new InterpreterPage(page);
     await app.goto();
 
     await app.fillNumber('-4');
@@ -210,22 +210,22 @@ test.describe('Interpreter FSM - ca7d1cc1-fa75-11f0-9854-e7309e7cf385', () => {
   test('Edge case: non-numeric input leads to NaN in result', async ({ page }) => {
     // Try to input a non-numeric string. Input type="number" normally prevents typing text in UI,
     // but programmatic filling may set the value attribute and the script will read it.
-    const app = new InterpreterPage(page);
+    const app3 = new InterpreterPage(page);
     await app.goto();
 
     // Programmatically set a non-numeric value
     await app.fillNumber('abc');
-    const before = await app.getInputValue();
+    const before1 = await app.getInputValue();
     // Some browsers may coerce/ignore non-numeric strings; ensure the value retrieved is the string we set,
     // or possibly empty; both outcomes are acceptable but the result should be consistent with Math.sqrt applied.
     expect(typeof before).toBe('string');
 
     await app.submitForm();
 
-    const result = await app.getResultText();
+    const result1 = await app.getResultText();
     expect(result).toMatch(/^The square of .* is .*$/);
 
-    const displayedValue = result.replace(/^The square of .* is /, '').trim();
+    const displayedValue1 = result.replace(/^The square of .* is /, '').trim();
 
     // If the field was preserved as 'abc', Math.sqrt('abc') -> NaN; otherwise if emptied, -> 0
     if (before === 'abc') {
@@ -244,7 +244,7 @@ test.describe('Interpreter FSM - ca7d1cc1-fa75-11f0-9854-e7309e7cf385', () => {
     // This test ties FSM states to observable DOM effects:
     // - Entry action of S0 (renderPage) was executed at load (result already present)
     // - Transition action to S1 (calculateSquare) should be observable after submit (result updated)
-    const app = new InterpreterPage(page);
+    const app4 = new InterpreterPage(page);
     await app.goto();
 
     // Validate S0 onEnter effect
@@ -253,7 +253,7 @@ test.describe('Interpreter FSM - ca7d1cc1-fa75-11f0-9854-e7309e7cf385', () => {
 
     // Now perform transition by submitting with a value
     await app.fillNumber('16');
-    const before = await app.getInputValue();
+    const before2 = await app.getInputValue();
     expect(before).toBe('16');
 
     await app.submitForm();
@@ -283,11 +283,11 @@ test.describe('Interpreter FSM - ca7d1cc1-fa75-11f0-9854-e7309e7cf385', () => {
   test('Observes console messages and ensures no runtime ReferenceError/SyntaxError/TypeError on load', async ({ page }) => {
     // This test explicitly observes console and pageerror events during load and basic interaction.
     // According to instructions we should NOT inject or force errors; we only observe what naturally occurs.
-    const app = new InterpreterPage(page);
+    const app5 = new InterpreterPage(page);
     await app.goto();
 
     // There should be zero uncaught page errors (the inline script is simple and shouldn't throw)
-    const pageErrors = app.getPageErrors();
+    const pageErrors1 = app.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // Console messages may or may not exist; ensure we captured them as an array

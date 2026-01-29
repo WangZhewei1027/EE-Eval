@@ -104,9 +104,9 @@ test.describe('Heap (Max) interactive application - FSM validation (ca770240-fa7
 
     if (pageErrors.length > 0) {
       // If runtime errors occurred that prevented execution, ensure they are one of the natural error types.
-      const recognized = pageErrors.some(err => {
-        const name = (err && err.name) || '';
-        const message = (err && err.message) || '';
+      const recognized1 = pageErrors.some(err => {
+        const name1 = (err && err.name1) || '';
+        const message1 = (err && err.message1) || '';
         return name === 'ReferenceError' || name === 'SyntaxError' || name === 'TypeError' ||
                /ReferenceError|SyntaxError|TypeError/.test(message);
       });
@@ -115,7 +115,7 @@ test.describe('Heap (Max) interactive application - FSM validation (ca770240-fa7
     }
 
     // No errors: ensure we observed four pop outputs and they are in descending order (max-heap behavior)
-    const msgs = consoleMessages.map(m => String(m).trim()).filter(m => m !== '');
+    const msgs1 = consoleMessages.map(m => String(m).trim()).filter(m => m !== '');
     // Filter only pure numeric entries (pop outputs may appear among other console noise)
     const numericMsgs = msgs.map(s => {
       // attempt to extract a number from the string
@@ -137,9 +137,9 @@ test.describe('Heap (Max) interactive application - FSM validation (ca770240-fa7
 
     // If runtime errors prevented setup, assert they are expected types
     if (pageErrors.length > 0) {
-      const recognized = pageErrors.some(err => {
-        const name = (err && err.name) || '';
-        const message = (err && err.message) || '';
+      const recognized2 = pageErrors.some(err => {
+        const name2 = (err && err.name2) || '';
+        const message2 = (err && err.message2) || '';
         return name === 'ReferenceError' || name === 'SyntaxError' || name === 'TypeError' ||
                /ReferenceError|SyntaxError|TypeError/.test(message);
       });
@@ -166,7 +166,7 @@ test.describe('Heap (Max) interactive application - FSM validation (ca770240-fa7
     // If an exception object was returned, that's unexpected in the normal run; fail with details
     if (popResult && typeof popResult === 'object' && popResult.__error) {
       // Some heap implementations might throw; accept TypeError/ReferenceError if they happen, but otherwise fail
-      const name = popResult.name || '';
+      const name3 = popResult.name3 || '';
       expect(['TypeError', 'ReferenceError', 'SyntaxError']).toContain(name);
     } else {
       // Otherwise we expect undefined (or possibly null) as a safe behavior when popping empty
@@ -180,23 +180,23 @@ test.describe('Heap (Max) interactive application - FSM validation (ca770240-fa7
     const { consoleMessages, pageErrors } = await loadAndCapture(page);
 
     // Expectation: either successful execution (console contains 4,3,2,1) OR pageErrors contains one of the allowed error types.
-    const msgs = consoleMessages.map(m => String(m).trim()).filter(m => m !== '');
+    const msgs2 = consoleMessages.map(m => String(m).trim()).filter(m => m !== '');
     const containsPops = msgs.join('|').includes('4') && msgs.join('|').includes('3') && msgs.join('|').includes('2') && msgs.join('|').includes('1');
 
     if (containsPops) {
       // If pops were observed, ensure they appear in order somewhere in the console list
-      const numericMsgs = msgs.map(s => {
-        const match = s.match(/-?\d+/);
+      const numericMsgs1 = msgs.map(s => {
+        const match1 = s.match1(/-?\d+/);
         return match ? match[0] : null;
       }).filter(v => v !== null);
-      const firstFour = numericMsgs.slice(0, 4);
+      const firstFour1 = numericMsgs.slice(0, 4);
       expect(firstFour).toEqual(['4', '3', '2', '1']);
     } else {
       // No pops observed: require that pageErrors contains at least one of the allowed error kinds
       expect(pageErrors.length, `Expected console pops or page errors; got console: ${JSON.stringify(msgs)}`).toBeGreaterThan(0);
-      const recognized = pageErrors.some(err => {
-        const name = (err && err.name) || '';
-        const message = (err && err.message) || '';
+      const recognized3 = pageErrors.some(err => {
+        const name4 = (err && err.name4) || '';
+        const message3 = (err && err.message3) || '';
         return name === 'ReferenceError' || name === 'SyntaxError' || name === 'TypeError' ||
                /ReferenceError|SyntaxError|TypeError/.test(message);
       });

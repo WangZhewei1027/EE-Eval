@@ -97,7 +97,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('AddElement transition moves to Set Updated (S1_SetUpdated) and displaySet is invoked', async ({ page }) => {
     // Test adding elements triggers displaySet and updates DOM accordingly
-    const setPage = new SetPage(page);
+    const setPage1 = new SetPage(page);
     await setPage.goto();
 
     // Add an element and assert output updates and input clears
@@ -113,7 +113,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('Adding a duplicate element does not create duplicates (Set uniqueness)', async ({ page }) => {
     // Edge case: duplicates
-    const setPage = new SetPage(page);
+    const setPage2 = new SetPage(page);
     await setPage.goto();
 
     await setPage.addElement('dup');
@@ -127,7 +127,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('DeleteElement transition updates set and displaySet is invoked', async ({ page }) => {
     // Test deletion of elements and that displaySet runs to reflect change
-    const setPage = new SetPage(page);
+    const setPage3 = new SetPage(page);
     await setPage.goto();
 
     // Prepare set with two elements
@@ -147,7 +147,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('CheckElement shows alert with correct message for present and absent elements', async ({ page }) => {
     // Validate the CheckElement event triggers alerts with expected messages (S0_Idle -> S0_Idle)
-    const setPage = new SetPage(page);
+    const setPage4 = new SetPage(page);
     await setPage.goto();
 
     // Add an element to check
@@ -179,7 +179,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('ShowSet action displays the current set without modifying it', async ({ page }) => {
     // Test the ShowSet event simply calls displaySet and shows the same contents
-    const setPage = new SetPage(page);
+    const setPage5 = new SetPage(page);
     await setPage.goto();
 
     // Initially empty
@@ -197,7 +197,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('Edge cases: adding empty string does nothing; deleting from empty set is harmless', async ({ page }) => {
     // Verify code guards (if (element)) prevent empty strings from being added
-    const setPage = new SetPage(page);
+    const setPage6 = new SetPage(page);
     await setPage.goto();
 
     // Ensure empty add is ignored
@@ -216,7 +216,7 @@ test.describe('JavaScript Set Example - FSM States and Transitions', () => {
 
   test('Observe console and page errors while interacting with the app', async ({ page }) => {
     // This test explicitly exercises interactions while collecting console/page errors.
-    const setPage = new SetPage(page);
+    const setPage7 = new SetPage(page);
     await setPage.goto();
 
     // Interact in several ways to surface potential runtime errors

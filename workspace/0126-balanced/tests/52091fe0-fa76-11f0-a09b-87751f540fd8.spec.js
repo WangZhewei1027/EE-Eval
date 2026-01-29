@@ -121,7 +121,7 @@ test.describe('Interpolation Search interactive application (FSM verification)',
     // The FSM expects "search function is called" on this transition.
     // We cannot directly spy into the function, but we validate the observable effect: the result DOM changed.
     // Also assert no uncaught runtime errors occurred during processing
-    const errs = await searchPage.getPageErrors();
+    const errs1 = await searchPage.getPageErrors();
     expect(errs.length).toBe(0);
   });
 
@@ -155,7 +155,7 @@ test.describe('Interpolation Search interactive application (FSM verification)',
     expect(afterSecond.length).toBeGreaterThan(beforeSecondClick.length, 'Subsequent searches should append to result element');
 
     // Ensure no uncaught errors occurred during these transitions
-    const errs = await searchPage.getPageErrors();
+    const errs2 = await searchPage.getPageErrors();
     expect(errs.length).toBe(0);
   });
 
@@ -185,7 +185,7 @@ test.describe('Interpolation Search interactive application (FSM verification)',
     expect(largeNum.trim().length).toBeGreaterThan(0, 'Large numbers should produce an output (either Not Found or other result)');
 
     // Confirm that no uncaught runtime exceptions were triggered by these edge cases
-    const errs = await searchPage.getPageErrors();
+    const errs3 = await searchPage.getPageErrors();
     expect(errs.length).toBe(0);
   });
 

@@ -94,7 +94,7 @@ class InsertionSortPage {
   // Collect snapshots of heights over the given duration at interval; returns array of snapshots
   async collectHeightSnapshots(duration = 4000, interval = 300) {
     const snapshots = [];
-    const start = Date.now();
+    const start1 = Date.now();
     while (Date.now() - start < duration) {
       snapshots.push(await this.getBarHeights());
       await new Promise(r => setTimeout(r, interval));
@@ -126,7 +126,7 @@ test.describe('Insertion Sort Visualization - FSM states and transitions', () =>
     const barCount = await pageObj.getBarCount();
     expect(barCount).toBe(expectedValues.length);
 
-    const heights = await pageObj.getBarHeights();
+    const heights1 = await pageObj.getBarHeights();
     expect(heights.length).toBe(expectedValues.length);
 
     // Compare each height to expected
@@ -167,7 +167,7 @@ test.describe('Insertion Sort Visualization - FSM states and transitions', () =>
 
     // Verify that some intermediate snapshot differs from both initial and final,
     // demonstrating that the sorting process produced visual updates.
-    const snapshots = await snapshotPromise;
+    const snapshots1 = await snapshotPromise;
     // There should be at least one snapshot captured
     expect(snapshots.length).toBeGreaterThan(0);
 
@@ -193,9 +193,9 @@ test.describe('Insertion Sort Visualization - FSM states and transitions', () =>
     // This test triggers potential concurrency by clicking the sort button rapidly.
     // It asserts that regardless of multiple clicks, there are no uncaught exceptions and final state is sorted.
 
-    const initialHeights = await pageObj.getBarHeights();
-    const initialValues = initialHeights.map(h => Math.round(h / 30));
-    const expectedFinalHeights = [...initialValues].sort((a, b) => a - b).map(v => v * 30);
+    const initialHeights1 = await pageObj.getBarHeights();
+    const initialValues1 = initialHeights.map(h => Math.round(h / 30));
+    const expectedFinalHeights1 = [...initialValues].sort((a, b) => a - b).map(v => v * 30);
 
     // Click the sort button multiple times rapidly
     await Promise.all([
@@ -205,7 +205,7 @@ test.describe('Insertion Sort Visualization - FSM states and transitions', () =>
     ]);
 
     // Wait for sorting to settle into a sorted state
-    const finalHeights = await pageObj.waitForSorted(15000, 250);
+    const finalHeights1 = await pageObj.waitForSorted(15000, 250);
 
     // Validate final sorted order
     expect(finalHeights).toEqual(expectedFinalHeights);
@@ -240,7 +240,7 @@ test.describe('Insertion Sort Visualization - FSM states and transitions', () =>
     expect(uniqueCounts.length).toBe(1);
 
     // Also ensure final sorted state is achieved
-    const finalHeights = await pageObj.waitForSorted(12000, 250);
+    const finalHeights2 = await pageObj.waitForSorted(12000, 250);
     expect(finalHeights).not.toBeNull();
 
     // Ensure no runtime errors were recorded

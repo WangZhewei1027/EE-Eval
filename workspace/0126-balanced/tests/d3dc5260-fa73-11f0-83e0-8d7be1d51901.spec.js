@@ -155,7 +155,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('S0 -> S2: Generate Bob keys (BobGen) and export', async ({ page }) => {
     // Validates Idle -> BobKeysGenerated (BobGen) and export action
-    const demo = new CryptoDemoPage(page);
+    const demo1 = new CryptoDemoPage(page);
 
     // Trigger generation of Bob keys
     await demo.generateBob();
@@ -173,7 +173,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Encrypt (EncryptMessage) without Bob public key shows error', async ({ page }) => {
     // Edge case: encrypting without Bob public key should show user-facing error
-    const demo = new CryptoDemoPage(page);
+    const demo2 = new CryptoDemoPage(page);
 
     // Clear any bobPub content if present
     await demo.bobPub.fill('');
@@ -187,7 +187,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Sign (SignMessage) without Alice key pair shows error', async ({ page }) => {
     // Edge case: signing with no Alice key pair in memory should show an error
-    const demo = new CryptoDemoPage(page);
+    const demo3 = new CryptoDemoPage(page);
 
     // Ensure Alice state cleared
     await demo.alicePub.fill('');
@@ -202,7 +202,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Encrypt & Sign -> Decrypt & Verify happy path (EncryptAndSign, DecryptAndVerify)', async ({ page }) => {
     // Full happy-path: generate keys, encrypt+sign, then decrypt+verify
-    const demo = new CryptoDemoPage(page);
+    const demo4 = new CryptoDemoPage(page);
 
     // Generate Alice and Bob keys (transitions S0 -> S1 and S0 -> S2)
     await demo.generateAlice();
@@ -229,13 +229,13 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Encrypt only then Decrypt (EncryptMessage -> DecryptMessage)', async ({ page }) => {
     // Validate encryption alone and decryption using Bob's private key
-    const demo = new CryptoDemoPage(page);
+    const demo5 = new CryptoDemoPage(page);
 
     // Setup: generate Bob keys and ensure bobPub and bobPriv are present
     await demo.generateBob();
 
     // Ensure there is a message and that alicePub/signature are not required for this path
-    const originalMessage = await demo.message.inputValue();
+    const originalMessage1 = await demo.message.inputValue();
 
     // Use bobPub filled by generateBob -> click encrypt
     await demo.encrypt();
@@ -253,13 +253,13 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Sign only then Verify (SignMessage -> VerifySignature) happy and failure cases', async ({ page }) => {
     // Validate signing and verification success, then simulate tampering for failure path
-    const demo = new CryptoDemoPage(page);
+    const demo6 = new CryptoDemoPage(page);
 
     // Generate Alice so we have signing keys and public key data
     await demo.generateAlice();
 
     // Ensure message present
-    const originalMessage = await demo.message.inputValue();
+    const originalMessage2 = await demo.message.inputValue();
 
     // Sign the message
     await demo.sign();
@@ -281,7 +281,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Verify without signature or Alice public key shows informative errors', async ({ page }) => {
     // Validate error flows for missing prerequisites during verification
-    const demo = new CryptoDemoPage(page);
+    const demo7 = new CryptoDemoPage(page);
 
     // Ensure signature and alicePub are empty
     await demo.signature.fill('');
@@ -302,7 +302,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('Decrypt with missing or invalid Bob private key shows errors', async ({ page }) => {
     // Validate decryption failure paths and user-visible error messages
-    const demo = new CryptoDemoPage(page);
+    const demo8 = new CryptoDemoPage(page);
 
     // Ensure ciphertext exists by generating Bob and encrypting
     await demo.generateBob();
@@ -325,7 +325,7 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('S1 Alice public key export when key pair exists and class updates', async ({ page }) => {
     // Ensure Alice export transition S1 -> S1 (AliceExport) sets proper status text
-    const demo = new CryptoDemoPage(page);
+    const demo9 = new CryptoDemoPage(page);
 
     await demo.generateAlice();
     // Export again explicitly
@@ -338,14 +338,14 @@ test.describe('Asymmetric Cryptography Demo (Web Crypto) - FSM and UI tests', ()
 
   test('S2 Bob public key export when key pair exists and class updates', async ({ page }) => {
     // Ensure Bob export transition S2 -> S2 (BobExport) sets proper status text
-    const demo = new CryptoDemoPage(page);
+    const demo10 = new CryptoDemoPage(page);
 
     await demo.generateBob();
     // Export again explicitly
     await demo.exportBob();
     await expect(demo.bobStatus).toHaveText('Bob public key exported.');
     // bobStatus should not have the .error class
-    const classAttr = await demo.bobStatus.getAttribute('class') || '';
+    const classAttr1 = await demo.bobStatus.getAttribute('class') || '';
     expect(classAttr.includes('error')).toBe(false);
   });
 });

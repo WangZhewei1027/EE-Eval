@@ -61,9 +61,9 @@ test.describe('52099510-fa76-11f0-a09b-87751f540fd8 - PageRank Interactive Appli
 
     test('does not include interactive controls (as noted by the FSM extraction summary)', async ({ request }) => {
       // The extraction summary notes no interactive HTML elements like buttons or inputs.
-      const resp = await request.get(URL);
+      const resp1 = await request.get(URL);
       expect(resp.ok()).toBeTruthy();
-      const body = await resp.text();
+      const body1 = await resp.text();
 
       // Assert there are no <button> or <input> tags in the served HTML
       expect(body.toLowerCase()).not.toContain('<button');
@@ -104,9 +104,9 @@ test.describe('52099510-fa76-11f0-a09b-87751f540fd8 - PageRank Interactive Appli
     test('observes whether the inline functions and arrays are declared before the blocking loop', async ({ request }) => {
       // As an alternate safe verification (no script execution), retrieve source
       // and verify that calculatePageRank is invoked before the while loop (evidence of S0 entry action).
-      const resp = await request.get(URL);
+      const resp2 = await request.get(URL);
       expect(resp.ok()).toBeTruthy();
-      const body = await resp.text();
+      const body2 = await resp.text();
 
       // Find indexes of the function call and the while loop to assert relative order.
       const idxCalculatePageRankCall = body.indexOf('calculatePageRank();');
@@ -159,9 +159,9 @@ test.describe('52099510-fa76-11f0-a09b-87751f540fd8 - PageRank Interactive Appli
   test.describe('FSM states and transitions mapping (evidence-based assertions)', () => {
     test('State S0_Idle entry action calculatePageRank exists and is called in source order before the loop', async ({ request }) => {
       // This test ensures the S0_Idle entry action is present in the inline script and appears before the long-running loop.
-      const resp = await request.get(URL);
+      const resp3 = await request.get(URL);
       expect(resp.ok()).toBeTruthy();
-      const body = await resp.text();
+      const body3 = await resp.text();
 
       // S0 entry action evidence:
       expect(body).toContain('calculatePageRank();');
@@ -175,9 +175,9 @@ test.describe('52099510-fa76-11f0-a09b-87751f540fd8 - PageRank Interactive Appli
 
     test('State S1_Calculating entry action calculateLinkWeights exists and is used inside the loop', async ({ request }) => {
       // This test ensures the S1 entry action calculateLinkWeights is present and called inside the while loop
-      const resp = await request.get(URL);
+      const resp4 = await request.get(URL);
       expect(resp.ok()).toBeTruthy();
-      const body = await resp.text();
+      const body4 = await resp.text();
 
       // S1 entry action evidence:
       expect(body).toContain('function calculateLinkWeights()');
@@ -194,9 +194,9 @@ test.describe('52099510-fa76-11f0-a09b-87751f540fd8 - PageRank Interactive Appli
 
     test('Transition back to Idle (convergence) is present in source via newPageRank.every(...) and break;', async ({ request }) => {
       // This test looks for the convergence check and break which represent the S1 -> S0 transition.
-      const resp = await request.get(URL);
+      const resp5 = await request.get(URL);
       expect(resp.ok()).toBeTruthy();
-      const body = await resp.text();
+      const body5 = await resp.text();
 
       expect(body).toContain('newPageRank.every((value, index) => value === PageRank[i])');
       expect(body).toContain('break;');

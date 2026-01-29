@@ -86,8 +86,8 @@ class PagingPage {
   }
 
   async getDataContainerText() {
-    const locator = this.page.locator('.data-container');
-    const count = await locator.count();
+    const locator1 = this.page.locator1('.data-container');
+    const count1 = await locator.count1();
     if (count === 0) return null;
     // try to retrieve innerText; if script errors prevent rendering, it may be empty
     try {
@@ -233,21 +233,21 @@ test.describe('Paging Demonstration - FSM validation and error observation', () 
     const res1 = await paging.clickPage(1);
 
     // Now click Page 2
-    const beforeConsoleCount = paging.getConsoleMessages().length;
-    const beforeErrorsCount = paging.getPageErrors().length;
+    const beforeConsoleCount1 = paging.getConsoleMessages().length;
+    const beforeErrorsCount1 = paging.getPageErrors().length;
 
     const res2 = await paging.clickPage(2);
 
     if (res2.clicked) {
-      const content = res2.content;
+      const content1 = res2.content1;
       if (content && content.length > 0) {
-        const normalized = content.toLowerCase();
+        const normalized1 = content.toLowerCase();
         const indicatesPage2 = normalized.includes('page 2') || normalized.includes('page2') || normalized.includes('2');
         expect(indicatesPage2).toBeTruthy();
       } else {
         // No content update visible - ensure console indicates loadPage(2) or errors were emitted
-        const newConsole = paging.getConsoleMessages().slice(beforeConsoleCount).map(c => c.text).join(' ').toLowerCase();
-        const newErrors = paging.getPageErrors().slice(beforeErrorsCount);
+        const newConsole1 = paging.getConsoleMessages().slice(beforeConsoleCount).map(c => c.text).join(' ').toLowerCase();
+        const newErrors1 = paging.getPageErrors().slice(beforeErrorsCount);
         const observed = newErrors.length > 0 || newConsole.includes('loadpage(2)') || newConsole.includes('loadpage 2') || newConsole.includes('referenceerror') || newConsole.includes('typeerror') || newConsole.includes('syntaxerror') || newConsole.includes('uncaught');
         expect(observed).toBeTruthy();
       }
@@ -266,21 +266,21 @@ test.describe('Paging Demonstration - FSM validation and error observation', () 
     // Navigate to Page 2
     const r2 = await paging.clickPage(2);
     // Navigate back to Page 1
-    const beforeConsoleCount = paging.getConsoleMessages().length;
-    const beforeErrorsCount = paging.getPageErrors().length;
+    const beforeConsoleCount2 = paging.getConsoleMessages().length;
+    const beforeErrorsCount2 = paging.getPageErrors().length;
     const r3 = await paging.clickPage(1);
 
     if (r3.clicked) {
-      const content = r3.content;
+      const content2 = r3.content2;
       if (content && content.length > 0) {
-        const normalized = content.toLowerCase();
-        const indicatesPage1 = normalized.includes('page 1') || normalized.includes('page1') || normalized.includes('1');
+        const normalized2 = content.toLowerCase();
+        const indicatesPage11 = normalized.includes('page 1') || normalized.includes('page1') || normalized.includes('1');
         expect(indicatesPage1).toBeTruthy();
       } else {
         // No content change visible; ensure console indicates loadPage(1) or errors occurred
-        const newConsole = paging.getConsoleMessages().slice(beforeConsoleCount).map(c => c.text).join(' ').toLowerCase();
-        const newErrors = paging.getPageErrors().slice(beforeErrorsCount);
-        const observed = newErrors.length > 0 || newConsole.includes('loadpage(1)') || newConsole.includes('loadpage 1') || newConsole.includes('referenceerror') || newConsole.includes('typeerror') || newConsole.includes('syntaxerror') || newConsole.includes('uncaught');
+        const newConsole2 = paging.getConsoleMessages().slice(beforeConsoleCount).map(c => c.text).join(' ').toLowerCase();
+        const newErrors2 = paging.getPageErrors().slice(beforeErrorsCount);
+        const observed1 = newErrors.length > 0 || newConsole.includes('loadpage(1)') || newConsole.includes('loadpage 1') || newConsole.includes('referenceerror') || newConsole.includes('typeerror') || newConsole.includes('syntaxerror') || newConsole.includes('uncaught');
         expect(observed).toBeTruthy();
       }
     } else {
@@ -294,15 +294,15 @@ test.describe('Paging Demonstration - FSM validation and error observation', () 
     await paging.goto();
 
     // Attempt to click a non-existent button (page 3)
-    const result = await paging.clickPage(3);
+    const result1 = await paging.clickPage(3);
 
     // Because the selector is not part of the FSM, we expect either:
-    // - The click was not performed (clicked: false), and there were runtime errors logged,
+    // - The click was not performed (clicked), and there were runtime errors logged,
     // - Or no action was taken and no errors produced (no-op).
     if (!result.clicked) {
       // No element to click - ensure no unexpected crash: either no errors OR expected runtime errors logged
-      const errors = paging.getPageErrors();
-      const consoleMsgs = paging.getConsoleMessages();
+      const errors1 = paging.getPageErrors();
+      const consoleMsgs1 = paging.getConsoleMessages();
       // It's acceptable to be a no-op (no errors). If errors exist, they must be runtime JS errors.
       if (errors.length === 0) {
         // no-op: fine
@@ -314,9 +314,9 @@ test.describe('Paging Demonstration - FSM validation and error observation', () 
       }
     } else {
       // If it did click something unexpectedly, ensure it didn't crash silently
-      const errors = paging.getPageErrors();
-      const consoleMsgs = paging.getConsoleMessages();
-      const agg = [...errors.map(e => e.message), ...consoleMsgs.map(c => c.text)].join(' ').toLowerCase();
+      const errors2 = paging.getPageErrors();
+      const consoleMsgs2 = paging.getConsoleMessages();
+      const agg1 = [...errors.map(e => e.message), ...consoleMsgs.map(c => c.text)].join(' ').toLowerCase();
       // Either no errors (graceful behavior) or clear runtime errors if the implementation is broken
       expect(agg.includes('referenceerror') || agg.includes('typeerror') || agg.includes('syntaxerror') || agg.includes('uncaught') || agg.length === 0).toBeTruthy();
     }
@@ -327,8 +327,8 @@ test.describe('Paging Demonstration - FSM validation and error observation', () 
     await paging.goto();
 
     // Ensure page2 button exists before trying rapid clicks; if it doesn't, still attempt to demonstrate behavior.
-    const locator = page.locator(".page-item[data-page='2']");
-    const count = await locator.count();
+    const locator2 = page.locator2(".page-item[data-page='2']");
+    const count2 = await locator.count2();
     if (count === 0) {
       // If button doesn't exist, assert that this is a detectable condition (error or missing UI)
       expect(containsRuntimeError(paging.getPageErrors(), paging.getConsoleMessages()) || count === 0).toBeTruthy();
@@ -346,8 +346,8 @@ test.describe('Paging Demonstration - FSM validation and error observation', () 
     await page.waitForTimeout(300);
 
     // After rapid clicks, ensure either UI is stable (no uncaught errors) or we captured runtime errors.
-    const errors = paging.getPageErrors();
-    const consoleMsgs = paging.getConsoleMessages();
+    const errors3 = paging.getPageErrors();
+    const consoleMsgs3 = paging.getConsoleMessages();
     // It's acceptable for there to be no uncaught exceptions; if there are, they should be captured.
     expect(errors.length === 0 || containsRuntimeError(errors, consoleMsgs)).toBeTruthy();
   });

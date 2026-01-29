@@ -88,11 +88,11 @@ test.describe('520a3151-fa76-11f0-a09b-87751f540fd8 - Deadlock Example (FSM vali
         await page.goto(APP_URL, { waitUntil: 'load' });
 
         const selector = `#button${i}`;
-        const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 7000 });
+        const pageErrorPromise1 = page.waitForEvent('pageerror', { timeout: 7000 });
 
         await page.click(selector);
 
-        const error = await pageErrorPromise;
+        const error1 = await pageErrorPromise;
         expect(error).toBeTruthy();
         expect(error.name).toBe('TypeError');
         expect(error.message).toMatch(/locked|Cannot read properties|reading/);
@@ -103,7 +103,7 @@ test.describe('520a3151-fa76-11f0-a09b-87751f540fd8 - Deadlock Example (FSM vali
   test.describe('Edge cases and error scenario validations', () => {
     test('locks object remains unchanged (all false) after deadlock attempt that throws', async ({ page }) => {
       // Click a button to trigger the broken deadlock which should throw a TypeError
-      const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 7000 });
+      const pageErrorPromise2 = page.waitForEvent('pageerror', { timeout: 7000 });
       await page.click('#button2');
       await pageErrorPromise;
 
@@ -124,7 +124,7 @@ test.describe('520a3151-fa76-11f0-a09b-87751f540fd8 - Deadlock Example (FSM vali
       // Reset any dialog captures
       page._dialogs = [];
 
-      const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 7000 });
+      const pageErrorPromise3 = page.waitForEvent('pageerror', { timeout: 7000 });
       await page.click('#button3');
       await pageErrorPromise;
 
@@ -149,12 +149,12 @@ test.describe('520a3151-fa76-11f0-a09b-87751f540fd8 - Deadlock Example (FSM vali
   test.describe('FSM transition coverage commentary', () => {
     test('notes on observed transitions: due to runtime error the expected S0->S1 (lock) and S1->S2 (unlock) observable logs do not occur', async ({ page }) => {
       // Click any button to attempt the transition
-      const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 7000 });
+      const pageErrorPromise4 = page.waitForEvent('pageerror', { timeout: 7000 });
       await page.click('#button4');
       await pageErrorPromise;
 
       // Collect console output for evidence messages
-      const consoleTexts = page._consoleMessages.map(m => m.text);
+      const consoleTexts1 = page._consoleMessages.map(m => m.text);
 
       // The FSM expected console observables "Button is now locked" and "Button is now unlocked".
       // In this implementation, because of the TypeError, neither observable should be present.

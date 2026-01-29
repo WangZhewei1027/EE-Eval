@@ -60,7 +60,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
       }
       if (provideValue === null) {
         await prompt.dismiss();
-        const alertDialog = await this.page.waitForEvent('dialog');
+        const alertDialog1 = await this.page.waitForEvent('dialog');
         return { prompt, alertDialog };
       } else {
         await prompt.accept(provideValue);
@@ -78,7 +78,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
   // Test the Idle state: verifies initial render and presence of components
   test('S0_Idle state: initial render shows Encrypt/Decrypt buttons and empty output', async ({ page }) => {
     // This test validates the Idle state's evidence: the two buttons and the output div exist and output is empty.
-    const ep = new EncryptionPage(page);
+    const ep1 = new EncryptionPage(page);
 
     // Buttons should be visible and have expected text
     await expect(ep.encryptBtn).toBeVisible();
@@ -96,7 +96,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
     // This test exercises the EncryptClick event and the expected observable behavior from the FSM.
     // The implementation contains a bug that causes a runtime TypeError when trying to append to a const string.
     // We must let that error happen and assert it occurred, and also assert that output was not updated.
-    const ep = new EncryptionPage(page);
+    const ep2 = new EncryptionPage(page);
 
     // Click encrypt and handle the prompt by providing a key 'A'
     // Use Promise.all to ensure we capture the dialog and then click.
@@ -121,7 +121,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
   // Edge case: user cancels the prompt when clicking Encrypt -> should trigger an alert asking for valid key, no runtime error
   test('Encrypt cancel path: clicking Encrypt and cancelling prompt shows alert and leaves output unchanged', async ({ page }) => {
     // This test validates the branch where user cancels the prompt: the code should show an alert 'Please enter a valid key'
-    const ep = new EncryptionPage(page);
+    const ep3 = new EncryptionPage(page);
 
     // Click encrypt and dismiss the prompt (simulate Cancel)
     const [prompt] = await Promise.all([
@@ -132,7 +132,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
     await prompt.dismiss();
 
     // The application code then calls alert('Please enter a valid key'); capture that alert
-    const alertDialog = await page.waitForEvent('dialog');
+    const alertDialog2 = await page.waitForEvent('dialog');
     expect(alertDialog.type()).toBe('alert');
     expect(alertDialog.message()).toContain('Please enter a valid key');
     await alertDialog.accept();
@@ -156,7 +156,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
   // Test Decrypt transition where user enters a key (success path) -> similar to encrypt; expect runtime error and no output change
   test('Transition: S0_Idle -> S2_Decrypting when clicking Decrypt and providing key (expect runtime error in implementation)', async ({ page }) => {
     // This test exercises the DecryptClick event; the implementation bug in decrypt() will similarly throw.
-    const ep = new EncryptionPage(page);
+    const ep4 = new EncryptionPage(page);
 
     // Click decrypt and accept the prompt with a key
     const [dialog] = await Promise.all([
@@ -167,7 +167,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
     await dialog.accept('B');
 
     // Expect the runtime error to be emitted from the page due to the const reassignment bug
-    const pageError = await page.waitForEvent('pageerror');
+    const pageError1 = await page.waitForEvent('pageerror');
     expect(pageError.message.toLowerCase()).toMatch(/assignment to constant|assignment/i);
 
     // Output should remain empty because the decrypt routine threw before updating outputDiv
@@ -177,7 +177,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
   // Edge case: user cancels the prompt when clicking Decrypt -> should trigger alert and no runtime error
   test('Decrypt cancel path: clicking Decrypt and cancelling prompt shows alert and leaves output unchanged', async ({ page }) => {
     // Validate cancel behavior for decrypt: an alert appears asking for valid key and no runtime error occurs.
-    const ep = new EncryptionPage(page);
+    const ep5 = new EncryptionPage(page);
 
     const [prompt] = await Promise.all([
       page.waitForEvent('dialog'),
@@ -186,7 +186,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
     expect(prompt.type()).toBe('prompt');
     await prompt.dismiss();
 
-    const alertDialog = await page.waitForEvent('dialog');
+    const alertDialog3 = await page.waitForEvent('dialog');
     expect(alertDialog.type()).toBe('alert');
     expect(alertDialog.message()).toContain('Please enter a valid key');
     await alertDialog.accept();
@@ -195,7 +195,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
     await expect(ep.output).toHaveText('');
 
     // Ensure no pageerror occurs in this flow
-    let pageErrorOccurred = false;
+    let pageErrorOccurred1 = false;
     try {
       await page.waitForEvent('pageerror', { timeout: 200 });
       pageErrorOccurred = true;
@@ -207,7 +207,7 @@ test.describe('Encryption app FSM (Application ID: 520bdf02-fa76-11f0-a09b-87751
 
   // Additional test: repeated clicks produce repeated runtime errors (verifies the processing states are reached repeatedly)
   test('Repeated Encrypt clicks with key produce runtime errors each time (verifies repeated transition behavior)', async ({ page }) => {
-    const ep = new EncryptionPage(page);
+    const ep6 = new EncryptionPage(page);
 
     // Helper to invoke encrypt with a provided key and capture the pageerror
     async function invokeEncryptWithKey(key) {

@@ -126,7 +126,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
   test('Auto-run on load triggers test execution and completes (S1 -> S2 transitions)', async ({ page }) => {
     // This test validates that autoRun triggers the run on load and that the UI transitions
     // from Running Tests to Tests Completed with rendered results.
-    const runner = new RunnerPage(page);
+    const runner1 = new RunnerPage(page);
 
     await runner.goto();
 
@@ -162,7 +162,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
   test('Manual Run: clicking Run All transitions to RunningTests and then TestsCompleted (S0 -> S1 -> S2)', async ({ page }) => {
     // Validate the explicit click event (#runBtn) triggers Running state and then completes
-    const runner = new RunnerPage(page);
+    const runner2 = new RunnerPage(page);
 
     await runner.goto();
 
@@ -186,14 +186,14 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
   test('Clicking a failed test shows details including error message; toggling showStack reveals stack (ClickTestResult + ToggleShowStack)', async ({ page }) => {
     // Verify clicking a test item opens detailed view and the showStack checkbox toggles stack display
-    const runner = new RunnerPage(page);
+    const runner3 = new RunnerPage(page);
     await runner.goto();
 
     // Ensure tests have run (auto-run)
     await runner.waitForRunComplete(20000);
 
     // Click the first failing test to see details. If none, click first test.
-    const failCount = await page.locator('.test-item.fail').count();
+    const failCount1 = await page.locator('.test-item.fail').count();
     if (failCount > 0) {
       await runner.clickFirstFailed();
     } else {
@@ -230,7 +230,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
   test('Toggle auto-run checkbox changes state (ToggleAutoRun)', async ({ page }) => {
     // Validate that toggling the autoRun checkbox updates its checked property and the app does not crash.
-    const runner = new RunnerPage(page);
+    const runner4 = new RunnerPage(page);
     await runner.goto();
 
     const before = await page.locator('#autoRun').isChecked();
@@ -248,7 +248,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
   test('Details summary reflects overall results when a test is selected (S2 -> S0 click leads to details update)', async ({ page }) => {
     // This test asserts that after tests complete, clicking a test shows a summary in details (lastResults usage).
-    const runner = new RunnerPage(page);
+    const runner5 = new RunnerPage(page);
     await runner.goto();
 
     // Wait for tests to complete
@@ -262,7 +262,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
     await expect(runner.details).toContainText('Total:');
 
     // Validate the numbers shown in details summary correspond to the badges
-    const counts = await runner.getCounts();
+    const counts1 = await runner.getCounts();
     const detailsText = await runner.getDetailsText();
     // Basic sanity checks that the textual summary mentions the totals (we don't parse exact numbers to avoid brittle assumptions)
     expect(detailsText).toContain('Total:');
@@ -271,7 +271,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
   test('Rendered result items correspond to the internal test collection (consistency / edge cases)', async ({ page }) => {
     // This test ensures that the UI lists each collected test and that the rootSuites/collectTests helpers are exposed.
-    const runner = new RunnerPage(page);
+    const runner6 = new RunnerPage(page);
     await runner.goto();
 
     // Expose and call collectTests via window.__tinyTestRunner if available
@@ -284,7 +284,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
     // Ensure the internal collectTests exists and returns at least as many tests as are rendered.
     await runner.waitForRunComplete(20000);
-    const counts = await runner.getCounts();
+    const counts2 = await runner.getCounts();
     expect(exposed.hasRunner).toBeTruthy();
     expect(exposed.collectLength).toBeGreaterThanOrEqual(counts.total);
 
@@ -294,7 +294,7 @@ test.describe('Tiny Unit Test Runner - FSM and UI validation', () => {
 
   test('Observe console for informational logs and ensure no unexpected JS exceptions occurred', async ({ page }) => {
     // This test primarily inspects captured console messages and page errors.
-    const runner = new RunnerPage(page);
+    const runner7 = new RunnerPage(page);
     await runner.goto();
 
     // Wait for run to finish

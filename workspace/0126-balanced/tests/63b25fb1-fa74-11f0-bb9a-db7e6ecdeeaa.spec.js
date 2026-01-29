@@ -123,7 +123,7 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
   });
 
   test('Transition S0 -> S1 (LinearTestStart) and back to S0 (LinearTestComplete)', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app1 = new TimeComplexityPage(page);
     await app.goto();
 
     // Verify onEnter actions after clicking linear: button disabled and 'Generating array...' shown
@@ -154,12 +154,12 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
     expect(pageErrors.length).toBe(0);
 
     // Also ensure there are no console errors
-    const errorConsoleMessages = consoleMessages.filter((m) => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter((m) => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 
   test('Transition S0 -> S2 (QuadraticTestStart) and back to S0 (QuadraticTestComplete)', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app2 = new TimeComplexityPage(page);
     await app.goto();
 
     // Click quadratic button and validate onEnter actions
@@ -185,12 +185,12 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
     // Ensure no page errors or console errors occurred
     expect(pageErrors.length).toBe(0);
-    const errorConsoleMessages = consoleMessages.filter((m) => m.type === 'error');
+    const errorConsoleMessages2 = consoleMessages.filter((m) => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 
   test('Transition S0 -> S3 (LogarithmicTestStart) and back to S0 (LogarithmicTestComplete)', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app3 = new TimeComplexityPage(page);
     await app.goto();
 
     // Click logarithmic button and validate onEnter actions
@@ -216,12 +216,12 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
     // Ensure no page errors or console errors occurred
     expect(pageErrors.length).toBe(0);
-    const errorConsoleMessages = consoleMessages.filter((m) => m.type === 'error');
+    const errorConsoleMessages3 = consoleMessages.filter((m) => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 
   test('Edge case: clicking a button while test is running should not start duplicate run', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app4 = new TimeComplexityPage(page);
     await app.goto();
 
     // Start linear test
@@ -253,7 +253,7 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
     // We accept either outcome; the important part is that no duplicate run completes producing multiple "Sum:" results,
     // so final text should still start with a single 'Sum:' once complete.
     await app.waitForResultPrefix(app.resultLinear, 'Sum:', 90000);
-    const finalLinear = await app.getLinearResultText();
+    const finalLinear1 = await app.getLinearResultText();
     expect(finalLinear.trim().startsWith('Sum:')).toBeTruthy();
 
     // Assert button is enabled again
@@ -271,7 +271,7 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
   });
 
   test('Sequential runs: run all three tests one after another and ensure system returns to Idle each time', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app5 = new TimeComplexityPage(page);
     await app.goto();
 
     // Run linear
@@ -301,12 +301,12 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
     // No page errors or console errors observed
     expect(pageErrors.length).toBe(0);
-    const errorConsoleMessages = consoleMessages.filter((m) => m.type === 'error');
+    const errorConsoleMessages4 = consoleMessages.filter((m) => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 
   test('Observability: capture console messages and page errors during page lifecycle', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app6 = new TimeComplexityPage(page);
     await app.goto();
 
     // At this point we have been collecting console messages and page errors in beforeEach.

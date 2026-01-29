@@ -99,7 +99,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Test performing a topological sort for a simple linear graph
   test('Transition S0_Idle -> S1_Sorting -> S2_Sorted: Performs topological sort for A-B, B-C', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo1 = new TopologicalPage(page);
     await topo.goto();
 
     // Fill edges: A-B and B-C
@@ -111,7 +111,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
     // For the given edges, expected order is "A -> B -> C"
     await expect(topo.result).toHaveText(/^Topological Sort Order:/);
 
-    const resultText = await topo.getResultText();
+    const resultText1 = await topo.getResultText();
     expect(resultText).toBe('Topological Sort Order: A -> B -> C');
 
     // Verify again that no page errors occurred during sort processing
@@ -121,7 +121,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Edge case: input contains blank lines and the word "done" which should be ignored
   test('Edge cases: Blank lines and "done" are ignored in parsing', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo2 = new TopologicalPage(page);
     await topo.goto();
 
     // Include blank lines and the literal "done" which should be filtered out
@@ -136,7 +136,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
     await topo.fillEdges(input);
     await topo.clickSort();
 
-    const resultText = await topo.getResultText();
+    const resultText2 = await topo.getResultText();
     // "done" and blank lines should be ignored and result should match A->B->C
     expect(resultText).toBe('Topological Sort Order: A -> B -> C');
 
@@ -147,7 +147,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Edge case: empty input should produce an empty order string (but still a valid DOM update)
   test('Edge case: Empty input yields empty Topological Sort Order text', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo3 = new TopologicalPage(page);
     await topo.goto();
 
     // Ensure textarea is empty
@@ -155,7 +155,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
     await topo.clickSort();
 
     // Expect the result text to be the prefix with empty content
-    const resultText = await topo.getResultText();
+    const resultText3 = await topo.getResultText();
     expect(resultText).toBe('Topological Sort Order: ');
 
     // Ensure there were no runtime exceptions
@@ -165,7 +165,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Test a more complex graph with two disconnected components to ensure algorithm handles multiple roots
   test('Sorting a graph with disconnected components produces a valid topological order', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo4 = new TopologicalPage(page);
     await topo.goto();
 
     // Graph: A->B, C->D
@@ -173,7 +173,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
     await topo.fillEdges('A-B\nC-D');
     await topo.clickSort();
 
-    const resultText = await topo.getResultText();
+    const resultText4 = await topo.getResultText();
     expect(resultText.startsWith('Topological Sort Order:')).toBeTruthy();
 
     // The expected order given the implementation and insertion order is "A -> B -> C -> D"
@@ -191,7 +191,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Test "idempotent" behavior: clicking the sort button multiple times does not throw errors and updates result deterministically
   test('Clicking the sort button multiple times is safe and deterministic', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo5 = new TopologicalPage(page);
     await topo.goto();
 
     await topo.fillEdges('A-B\nB-C');
@@ -213,7 +213,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Validate that the application wires the click handler (transition evidence)
   test('Event wiring: sortButton has a click handler and triggers sorting', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo6 = new TopologicalPage(page);
     await topo.goto();
 
     // We can't directly inspect event listeners without modifying the page; instead,
@@ -234,7 +234,7 @@ test.describe('Topological Sort Demonstration - FSM Tests', () => {
 
   // Final test: collect and assert console/page error observations (observability test)
   test('Observability: collect console and page errors during a typical session', async ({ page }) => {
-    const topo = new TopologicalPage(page);
+    const topo7 = new TopologicalPage(page);
 
     // Start fresh listeners (ensured in beforeEach)
     await topo.goto();

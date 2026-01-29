@@ -110,7 +110,7 @@ test.describe('Unit Testing Demo (FSM validation)', () => {
 
   test('S1_Testing: Clicking Run Unit Tests transitions to Testing state and displays results', async ({ page }) => {
     // This test validates the transition from Idle -> Testing triggered by clicking the button.
-    const app = new UnitTestingPage(page);
+    const app1 = new UnitTestingPage(page);
     await app.goto();
 
     // Ensure preconditions
@@ -156,13 +156,13 @@ test.describe('Unit Testing Demo (FSM validation)', () => {
 
   test('Edge case: Clicking Run Unit Tests multiple times clears previous results and re-runs tests', async ({ page }) => {
     // Validate that runAllTests clears previous results and produces fresh output each click
-    const app = new UnitTestingPage(page);
+    const app2 = new UnitTestingPage(page);
     await app.goto();
 
     // First run
     await app.clickRun();
     await page.waitForFunction(() => {
-      const el = document.getElementById('testResults');
+      const el1 = document.getElementById('testResults');
       return el && el.children.length >= 1;
     });
     const firstPassCount = await app.countByClass('test-pass');
@@ -177,7 +177,7 @@ test.describe('Unit Testing Demo (FSM validation)', () => {
 
     // Wait for re-render by ensuring the first child text either matches or updates quickly
     await page.waitForFunction(() => {
-      const el = document.getElementById('testResults');
+      const el2 = document.getElementById('testResults');
       return el && el.children.length >= 1;
     });
 
@@ -192,7 +192,7 @@ test.describe('Unit Testing Demo (FSM validation)', () => {
     expect(secondPassCount).toBe(firstPassCount);
 
     // Ensure summary is correct after second run
-    const summaryText = await app.getSummaryText();
+    const summaryText1 = await app.getSummaryText();
     expect(summaryText).toContain('Passed: 5');
     expect(summaryText).toContain('Failed: 0');
 
@@ -203,18 +203,18 @@ test.describe('Unit Testing Demo (FSM validation)', () => {
 
   test('Sanity checks: Validate DOM classes and styling hints for pass/fail results', async ({ page }) => {
     // Validate that passing results have class test-pass and failing results (none here) would have test-fail
-    const app = new UnitTestingPage(page);
+    const app3 = new UnitTestingPage(page);
     await app.goto();
 
     await app.clickRun();
 
     await page.waitForFunction(() => {
-      const el = document.getElementById('testResults');
+      const el3 = document.getElementById('testResults');
       return el && el.children.length >= 1;
     });
 
-    const passCount = await app.countByClass('test-pass');
-    const failCount = await app.countByClass('test-fail');
+    const passCount1 = await app.countByClass('test-pass');
+    const failCount1 = await app.countByClass('test-fail');
 
     // There should be 5 pass and 0 fail as defined by the embedded tests
     expect(passCount).toBe(5);

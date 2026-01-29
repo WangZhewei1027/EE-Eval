@@ -114,7 +114,7 @@ test.describe('Garbage Collection Demo - FSM and UI validations', () => {
     await gcPage.waitForLogContaining('Creating 1000 DemoObject instances and registering them for finalization...');
     await gcPage.waitForLogContaining('1000 objects created and referenced in an array.');
 
-    const logs = await gcPage.getAllLogTexts();
+    const logs1 = await gcPage.getAllLogTexts();
 
     // Check for the observable messages described in the FSM transition
     expect(logs.some(t => t.includes('Creating 1000 DemoObject instances'))).toBeTruthy();
@@ -140,7 +140,7 @@ test.describe('Garbage Collection Demo - FSM and UI validations', () => {
     // Verify the expected log message for dropping references
     await gcPage.waitForLogContaining('Dropped references to all objects. Now they are eligible for garbage collection.');
 
-    const logs = await gcPage.getAllLogTexts();
+    const logs2 = await gcPage.getAllLogTexts();
     expect(logs.some(t => t.includes('Dropped references to all objects. Now they are eligible for garbage collection.'))).toBeTruthy();
 
     // After dropping references, the drop button should be disabled
@@ -171,7 +171,7 @@ test.describe('Garbage Collection Demo - FSM and UI validations', () => {
     // We'll poll the log for up to 2s to make sure messages have time to be appended.
     await gcPage.page.waitForTimeout(500);
 
-    const logs = await gcPage.getAllLogTexts();
+    const logs3 = await gcPage.getAllLogTexts();
 
     const requested = logs.some(t => t.includes('Requesting garbage collection...'));
     const requestedDone = logs.some(t => t.includes('Garbage collection requested.'));
@@ -203,7 +203,7 @@ test.describe('Garbage Collection Demo - FSM and UI validations', () => {
     await expect(gcPage.page.locator('#forceGCBtn').click()).rejects.toThrow();
 
     // Additionally assert that 'No objects to drop references from.' is not present because the drop button is disabled and click didn't proceed
-    const logs = await gcPage.getAllLogTexts();
+    const logs4 = await gcPage.getAllLogTexts();
     expect(logs.some(t => t.includes('No objects to drop references from.'))).toBeFalsy();
 
     // No uncaught page errors expected as result of attempted clicks
@@ -221,7 +221,7 @@ test.describe('Garbage Collection Demo - FSM and UI validations', () => {
     await expect(gcPage.createBtn).toBeDisabled();
 
     // Count occurrences of the "Objects created" message
-    const logs = await gcPage.getAllLogTexts();
+    const logs5 = await gcPage.getAllLogTexts();
     const createdMessages = logs.filter(t => t.includes('1000 objects created and referenced in an array.'));
     expect(createdMessages.length).toBeGreaterThanOrEqual(1);
     expect(createdMessages.length).toBeLessThanOrEqual(1); // should only appear once per normal flow

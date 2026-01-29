@@ -119,7 +119,7 @@ test.describe('Suffix Tree Visualization - FSM-driven end-to-end tests', () => {
       // - reads input value
       // - constructs SuffixTree(input)
       // - calls visualize() and updates DOM with nodes
-      const app = new SuffixTreePage(page);
+      const app1 = new SuffixTreePage(page);
       await app.goto();
 
       // Ensure initial state
@@ -139,7 +139,7 @@ test.describe('Suffix Tree Visualization - FSM-driven end-to-end tests', () => {
 
     test('Subsequent clicks re-render (container cleared then populated) and no duplicate accumulation', async ({ page }) => {
       // Validate that calling buildSuffixTree multiple times replaces visualization (it calls container.innerHTML = '')
-      const app = new SuffixTreePage(page);
+      const app2 = new SuffixTreePage(page);
       await app.goto();
 
       // First build
@@ -161,7 +161,7 @@ test.describe('Suffix Tree Visualization - FSM-driven end-to-end tests', () => {
   test.describe('Edge cases and error scenarios', () => {
     test('Empty input results in empty visualization and no runtime errors', async ({ page }) => {
       // This test ensures edge case handling: empty string should produce no nodes
-      const app = new SuffixTreePage(page);
+      const app3 = new SuffixTreePage(page);
       await app.goto();
 
       // Set input to empty string and build
@@ -176,7 +176,7 @@ test.describe('Suffix Tree Visualization - FSM-driven end-to-end tests', () => {
 
     test('Different input "aa" visualization correctness', async ({ page }) => {
       // Validate visualization correctness for input with repeating characters
-      const app = new SuffixTreePage(page);
+      const app4 = new SuffixTreePage(page);
       await app.goto();
 
       await app.setInputValue('aa');
@@ -185,7 +185,7 @@ test.describe('Suffix Tree Visualization - FSM-driven end-to-end tests', () => {
       // For 'aa' expected nodes:
       // first suffix (i=0) adds 'a', 'aa'
       // second suffix (i=1) references existing root child 'a' and won't create duplicates
-      const nodes = await app.getTreeNodeTexts();
+      const nodes1 = await app.getTreeNodeTexts();
       expect(nodes).toEqual(['a', 'aa']);
       expect(await app.getTreeNodeCount()).toBe(2);
     });
@@ -195,7 +195,7 @@ test.describe('Suffix Tree Visualization - FSM-driven end-to-end tests', () => {
     test('No console errors or uncaught exceptions during normal operations', async ({ page }) => {
       // This test purposefully performs sequences of operations while capturing console/page errors.
       // The beforeEach/afterEach handlers collect console messages and page errors; afterEach asserts none exist.
-      const app = new SuffixTreePage(page);
+      const app5 = new SuffixTreePage(page);
       await app.goto();
 
       // Perform several interactions

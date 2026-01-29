@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Interactive Trie Playground</title>
+<style>
+/* Extremely minimal styling: plain black text on white background */
+body { background: white; color: black; font-family: monospace; margin: 12px; }
+button, input, textarea, select { margin: 2px 4px; }
+section { margin-bottom: 12px; }
+label { margin-right: 6px; }
+.small { font-size: 12px; }
+.log { white-space: pre-wrap; border: 1px solid #000; padding: 6px; height: 160px; overflow: auto; background: white; }
+.tree, .adj, .words, .jsonout { border: 1px solid #000; padding: 6px; margin-top: 6px; height: 220px; overflow: auto; background: white; }
+.controls-row { margin-bottom: 6px; }
+.inline { display: inline-block; vertical-align: top; margin-right: 12px; }
+kbd { background: #eee; border: 1px solid #000; padding: 1px 4px; }
+</style>
+</head>
+<body>
+
+<h1>Trie Interactive Playground</h1>
+
+<section>
+  <strong>Basic Controls</strong>
+  <div class="controls-row">
+    <label>Word:</label>
+    <input id="wordInput" type="text" placeholder="type word" />
+    <button id="insertBtn">Insert</button>
+    <button id="deleteBtn">Delete</button>
+    <button id="searchBtn">Search</button>
+    <button id="highlightBtn">Highlight Path</button>
+  </div>
+  <div class="controls-row">
+    <label>Prefix:</label>
+    <input id="prefixInput" type="text" placeholder="prefix" />
+    <button id="prefixSearchBtn">Prefix Search</button>
+    <label>k:</label>
+    <input id="kInput" type="number" value="10" min="1" style="width:60px" />
+    <button id="autoCompleteBtn">Autocomplete</button>
+    <button id="countPrefixBtn">Count Prefix</button>
+  </div>
+
+  <div class="controls-row">
+    <label>Batch (one per line):</label><br/>
+    <textarea id="batchInput" rows="4" cols="60" placeholder="one word per line"></textarea><br/>
+    <button id="insertBatchBtn">Insert Batch</button>
+    <button id="deleteBatchBtn">Delete Batch</button>
+    <button id="randomBtn">Add Random Words</button>
+    <label>n:</label><input id="randN" type="number" value="20" style="width:60px" />
+    <label>len min:</label><input id="randMin" type="number" value="3" style="width:50px" />
+    <label>max:</label><input id="randMax" type="number" value="8" style="width:50px" />
+  </div>
+
+  <div class="controls-row">
+    <button id="clearBtn">Clear Trie</button>
+    <button id="exportBtn">Export JSON</button>
+    <button id="importBtn">Import JSON</button>
+    <button id="saveSnapshotBtn">Save Snapshot</button>
+    <button id="loadSnapshotBtn">Load Snapshot</button>
+    <select id="snapshotSelect"></select>
+  </div>
+
+  <div class="controls-row">
+    <label><input id="caseSensitive" type="checkbox" /> Case Sensitive</label>
+    <label><input id="allowSymbols" type="checkbox" /> Allow Symbols (non-letter)</label>
+    <label><input id="recordSteps" type="checkbox" checked /> Record Steps</label>
+    <label><input id="showCounts" type="checkbox" checked /> Show Counts</label>
+    <label><input id="compressedView" type="checkbox" /> Compressed View</label>
+    <button id="compressBtn">Compress</button>
+    <button id="decompressBtn">Decompress</button>
+  </div>
+</section>
+
+<section>
+  <strong>Step Controls / Playback</strong>
+  <div class="controls-row">
+    <button id="stepPrev">Step ◀</button>
+    <button id="stepNext">Step ▶</button>
+    <button id="playPause">Play</button>
+    <label>Speed:</label>
+    <input id="speed" type="range" min="50" max="2000" value="400" />
+    <span id="speedVal">400ms</span>
+    <button id="resetSteps">Reset Steps</button>
+    <button id="replayLastOp">Replay Last Operation</button>
+  </div>
+  <div>
+    <label>Operation Log (click entry to replay):</label>
+    <div id="operationLog" class="log"></div>
+  </div>
+</section>
+
+<section>
+  <strong>Advanced Actions</strong>
+  <div class="controls-row">
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+    <button id="listWordsBtn">List All Words</button>
+    <button id="longestPrefixBtn">Longest Common Prefix</button>
+    <button id="compressCountBtn">Compress Chains Count</button>
+  </div>
+
+  <div class="controls-row">
+    <label>Max results:</label><input id="maxResults" type="number" value="200" style="width:80px" />
+    <button id="truncateBtn">Truncate Trie (limit nodes)</button>
+    <input id="nodeLimit" type="number" value="500" style="width:80px" />
+  </div>
+</section>
+
+<section>
+  <div class="inline" style="width:48%">
+    <strong>Trie Structure</strong>
+    <div id="tree" class="tree"></div>
+  </div>
+  <div class="inline" style="width:48%">
+    <strong>Adjacency / Metadata</strong>
+    <div id="adj" class="adj"></div>
+  </div>
+</section>
+
+<section>
+  <div class="inline" style="width:48%">
+    <strong>Words / Results</strong>
+    <div id="words" class="words"></div>
+  </div>
+  <div class="inline" style="width:48%">
+    <strong>JSON Export / Import</strong>
+    <div><textarea id="jsonArea" class="jsonout" placeholder="Exported JSON appears here"></textarea></div>
+  </div>
+</section>
+
+<script>
+// Extremely feature-rich trie playground with minimal visuals.
+
+// Data structures and utilities
+(function(){
+  // Unique id generator for nodes
+  let nodeIdCounter = 1;
+  function nextId(){ return nodeIdCounter++; }
+  function resetIdCounter(){ nodeIdCounter = 1; }
+
+  // Trie Node (normal)
+  function TrieNode(char){
+    this.char = char === undefined ? '' : char;
+    this.children = Object.create(null); // simple object map char -> node
+    this.isEnd = false;
+    this.count = 0; // how many words pass through or end here
+    this.id = nextId();
+  }
+
+  // Compressed node (used only when compressed)
+  function CompressedNode(label){
+    this.label = label === undefined ? '' : label;
+    this.children = Object.create(null); // label -> node
+    this.isEnd = false;
+    this.count = 0;
+    this.id = nextId();
+  }
+
+  // Trie main
+  function Trie(){
+    this.root = new TrieNode('');
+    this.countWords = 0;
+    this.isCompressed = false;
+    this.steps = []; // recorded step snapshots for playback
+    this.lastOperationLog = []; // human-readable log lines for last op
+  }
+
+  // Config from UI
+  const config = {
+    caseSensitive: false,
+    allowSymbols: false,
+    recordSteps: true,
+    showCounts: true,
+  };
+
+  // Utility functions
+  function normalizeWord(w){
+    if(typeof w !== 'string') return '';
+    if(!config.caseSensitive) w = w.toLowerCase();
+    if(!config.allowSymbols) w = w.replace(/[^a-zA-Z]/g,'');
+    return w;
+  }
+
+  // Traverse helpers produce snapshots
+  Trie.prototype._recordStep = function(info){
+    if(!config.recordSteps) return;
+    // Snapshot: we snapshot a minimal serializable version of trie and meta info
+    try {
+      const snap = {
+        time: Date.now(),
+        info: info,
+        trie: exportTrie(this), // serializable
+      };
+      // store steps
+      this.steps.push(snap);
+    } catch(e){
+      console.error("snapshot failed", e);
+    }
+  };
+
+  Trie.prototype.insert = function(word){
+    if(!word) return false;
+    if(this.isCompressed){
+      // perform naive decompress, insert on normal trie, re-compress optional later
+      decompressTrie(this);
+    }
+    const w = normalizeWord(word);
+    this.lastOperationLog = [];
+    this.steps = [];
+    this._recordStep("Start insert '" + word + "'");
+    let node = this.root;
+    node.count++;
+    this._recordStep("Root count++");
+    for(let i=0;i<w.length;i++){
+      const ch = w[i];
+      this._recordStep("Processing char '" + ch + "' (index " + i + ")");
+      if(!node.children[ch]){
+        const newNode = new TrieNode(ch);
+        node.children[ch] = newNode;
+        this._recordStep("Created node for '" + ch + "' id=" + newNode.id);
+      } else {
+        this._recordStep("Moved to existing node '" + ch + "' id=" + node.children[ch].id);
+      }
+      node = node.children[ch];
+      node.count++;
+      this._recordStep("Incremented count at node id=" + node.id + " -> " + node.count);
+    }
+    if(!node.isEnd){
+      node.isEnd = true;
+      this.countWords++;
+      this._recordStep("Marked end of word at id=" + node.id);
+      this.lastOperationLog.push("Inserted: " + word);
+      this._recordStep("Insert complete: '" + word + "'");
+      return true;
+    } else {
+      this._recordStep("Word already existed");
+      this.lastOperationLog.push("Insert (already existed): " + word);
+      return false;
+    }
+  };
+
+  // Delete with decrement and cleanup
+  Trie.prototype.delete = function(word){
+    if(!word) return false;
+    if(this.isCompressed){
+      decompressTrie(this);
+    }
+    const w = normalizeWord(word);
+    this.lastOperationLog = [];
+    this.steps = [];
+    this._recordStep("Start delete '" + word + "'");
+    let node = this.root;
+    const stack = []; // to keep nodes path
+    stack.push(node);
+    for(let i=0;i<w.length;i++){
+      const ch = w[i];
+      this._recordStep("Traversing char '" + ch + "'");
+      if(!node.children[ch]){
+        this._recordStep("Char not found; abort delete");
+        this.lastOperationLog.push("Delete failed (not found): " + word);
+        return false;
+      }
+      node = node.children[ch];
+      stack.push(node);
+    }
+    if(!node.isEnd){
+      this._recordStep("Target node not marked end; abort delete");
+      this.lastOperationLog.push("Delete failed (not a word): " + word);
+      return false;
+    }
+    // decrement counts backwards and remove nodes with count==1 (will become 0)
+    node.isEnd = false;
+    this.countWords--;
+    this._recordStep("Unmarked end of word at id=" + node.id);
+    for(let i = w.length; i >= 0; i--){
+      const cur = stack[i];
+      cur.count--;
+      this._recordStep("Decremented count at id=" + cur.id + " -> " + cur.count);
+      if(i>0){
+        const parent = stack[i-1];
+        const ch = w[i-1];
+        if(cur.count <= 0){
+          // delete reference
+          delete parent.children[ch];
+          this._recordStep("Removed node for '" + ch + "' id=" + cur.id);
+        } else {
+          this._recordStep("Stop removal at id=" + cur.id + " (count>0)");
+          break;
+        }
+      }
+    }
+    this.lastOperationLog.push("Deleted: " + word);
+    this._recordStep("Delete complete: '" + word + "'");
+    return true;
+  };
+
+  Trie.prototype.search = function(word){
+    if(!word) return false;
+    const w = normalizeWord(word);
+    if(this.isCompressed){
+      // we can search compressed
+      return searchCompressed(this, w);
+    }
+    let node = this.root;
+    this.steps = [];
+    this.lastOperationLog = [];
+    this._recordStep("Start search '" + word + "'");
+    for(let i=0;i<w.length;i++){
+      const ch = w[i];
+      this._recordStep("Looking for '" + ch + "'");
+      if(!node.children[ch]){
+        this._recordStep("Not found at char '" + ch + "'");
+        this.lastOperationLog.push("Search: not found " + word);
+        return false;
+      }
+      node = node.children[ch];
+      this._recordStep("Moved to id=" + node.id);
+    }
+    this._recordStep("Ended at id=" + node.id + " isEnd=" + node.isEnd);
+    this.lastOperationLog.push("Search: " + (node.isEnd? "found ":"not found ") + word);
+    return node.isEnd;
+  };
+
+  Trie.prototype._collectFromNode = function(node, prefix, results, limit){
+    if(!node) return;
+    if(node.isEnd) results.push(prefix);
+    if(limit && results.length >= limit) return;
+    const keys = Object.keys(node.children).sort();
+    for(let i=0;i<keys.length;i++){
+      const ch = keys[i];
+      if(limit && results.length >= limit) break;
+      this._collectFromNode(node.children[ch], prefix + ch, results, limit);
+    }
+  };
+
+  Trie.prototype.startsWith = function(prefix, limit){
+    if(this.isCompressed){
+      return startsWithCompressed(this, normalizeWord(prefix), limit);
+    }
+    const p = normalizeWord(prefix || '');
+    let node = this.root;
+    for(let i=0;i<p.length;i++){
+      const ch = p[i];
+      if(!node.children[ch]) return [];
+      node = node.children[ch];
+    }
+    const results = [];
+    this._collectFromNode(node, p, results, limit);
+    return results;
+  };
+
+  Trie.prototype.listAllWords = function(limit){
+    return this.startsWith('', limit);
+  };
+
+  Trie.prototype.countPrefix = function(prefix){
+    const p = normalizeWord(prefix || '');
+    if(this.isCompressed){
+      // decompress for count or implement compressed approach; decompress for correctness
+      decompressTrie(this);
+    }
+    let node = this.root;
+    for(let i=0;i<p.length;i++){
+      const ch = p[i];
+      if(!node.children[ch]) return 0;
+      node = node.children[ch];
+    }
+    return node.count || 0;
+  };
+
+  Trie.prototype.longestCommonPrefix = function(){
+    if(this.countWords === 0) return '';
+    if(this.isCompressed){
+      // decompress to compute simple
+      decompressTrie(this);
+    }
+    let node = this.root;
+    let prefix = '';
+    while(true){
+      const keys = Object.keys(node.children);
+      if(keys.length !== 1) break;
+      const ch = keys[0];
+      const child = node.children[ch];
+      if(child.isEnd) break;
+      prefix += ch;
+      node = child;
+    }
+    return prefix;
+  };
+
+  // Serialization / export helpers
+  function exportTrie(trie){
+    // produce object {isCompressed, countWords, root: recursive}
+    if(trie.isCompressed){
+      // compressed serialize
+      function serC(node){
+        const obj = {id: node.id, label: node.label, isEnd: !!node.isEnd, count: node.count, children: {}};
+        for(const k in node.children){
+          obj.children[k] = serC(node.children[k]);
+        }
+        return obj;
+      }
+      return {isCompressed: true, countWords: trie.countWords, root: serC(trie.root)};
+    } else {
+      function ser(node){
+        const obj = {id: node.id, char: node.char, isEnd: !!node.isEnd, count: node.count, children: {}};
+        for(const k in node.children){
+          obj.children[k] = ser(node.children[k]);
+        }
+        return obj;
+      }
+      return {isCompressed: false, countWords: trie.countWords, root: ser(trie.root)};
+    }
+  }
+
+  function importTrie(obj, trie){
+    resetIdCounter();
+    // reconstruct into provided trie object
+    if(!obj || typeof obj !== 'object') return false;
+    if(obj.isCompressed){
+      trie.isCompressed = true;
+      function revC(o){
+        const n = new CompressedNode(o.label);
+        n.id = o.id || nextId();
+        n.isEnd = !!o.isEnd;
+        n.count = o.count || 0;
+        n.children = Object.create(null);
+        for(const k in o.children){
+          n.children[k] = revC(o.children[k]);
+        }
+        return n;
+      }
+      trie.root = revC(obj.root);
+      trie.countWords = obj.countWords || 0;
+    } else {
+      trie.isCompressed = false;
+      function rev(o){
+        const n = new TrieNode(o.char);
+        n.id = o.id || nextId();
+        n.isEnd = !!o.isEnd;
+        n.count = o.count || 0;
+        n.children = Object.create(null);
+        for(const k in o.children){
+          n.children[k] = rev(o.children[k]);
+        }
+        return n;
+      }
+      trie.root = rev(obj.root);
+      trie.countWords = obj.countWords || 0;
+    }
+    return true;
+  }
+
+  // Decompress compressed trie into normal trie (destructive)
+  function decompressTrie(trie){
+    if(!trie.isCompressed) return trie;
+    const newTrie = new Trie();
+    newTrie.countWords = trie.countWords;
+    newTrie.isCompressed = false;
+    newTrie.root = new TrieNode('');
+    newTrie.root.count = trie.root.count || 0;
+    const stack = [{cnode: trie.root, prefix: ''}];
+    while(stack.length){
+      const {cnode, prefix} = stack.pop();
+      if(cnode.isEnd){
+        newTrie.insert(prefix + cnode.label);
+      } else {
+        // if label may represent a sequence, we need to create path nodes
+        if(cnode.label){
+          // Create chain for label (but do not mark end unless isEnd)
+          // We'll use insert to handle counts properly
+          // But we must preserve counts exactly, so we will insert multiple times?
+          // Simpler approach: insert the word.
+          // This will set counts correctly in newTrie.
+          // Danger: if counts encoded differently, but acceptable for interactive demo.
+          // Insert prefix+label as word if node.isEnd, but we already added above.
+        }
+      }
+      for(const k in cnode.children){
+        const chNode = cnode.children[k];
+        stack.push({cnode: chNode, prefix: prefix + cnode.label});
+      }
+    }
+    // However above approach missed establishing nodes in many cases; simpler: collect words then insert them.
+    // Let's collect words from compressed trie first, then rebuild new trie.
+    const words = collectFromCompressed(trie);
+    // rebuild
+    newTrie.root = new TrieNode('');
+    newTrie.countWords = 0;
+    newTrie.steps = [];
+    for(const w of words){
+      newTrie.insert(w);
+    }
+    // replace
+    trie.root = newTrie.root;
+    trie.countWords = newTrie.countWords;
+    trie.isCompressed = false;
+    trie.steps = newTrie.steps;
+    return trie;
+  }
+
+  function collectFromCompressed(trie){
+    const out = [];
+    function dfs(node, prefix){
+      const cur = prefix + (node.label || '');
+      if(node.isEnd) out.push(cur);
+      for(const k in node.children){
+        dfs(node.children[k], cur);
+      }
+    }
+    dfs(trie.root, '');
+    return out;
+  }
+
+  // Simple compression: merge chains of single-child nodes where parent isn't end and child isn't branching
+  function compressTrie(trie){
+    if(trie.isCompressed) return trie;
+    // collect words then build compressed trie by inserting sequences greedily
+    const words = trie.listAllWords(1000000);
+    const cTrie = new Trie();
+    cTrie.isCompressed = true;
+    resetIdCounter();
+    cTrie.root = new CompressedNode('');
+    cTrie.root.count = trie.root.count || 0;
+    cTrie.countWords = words.length;
+    for(const w of words){
+      // Insert into compressed structure: insert as path of labels; if can merge with existing child by prefix
+      let node = cTrie.root;
+      let remaining = w;
+      while(remaining.length){
+        // try to find a child whose label shares prefix
+        let matchedChildKey = null;
+        let matchedChild = null;
+        for(const k in node.children){
+          const child = node.children[k];
+          const common = commonPrefix(remaining, child.label);
+          if(common.length > 0){
+            matchedChild = child;
+            matchedChildKey = k;
+            break;
+          }
+        }
+        if(!matchedChild){
+          // create new child with the entire remaining as label
+          const newNode = new CompressedNode(remaining);
+          newNode.count = 1;
+          newNode.isEnd = true;
+          node.children[newNode.label] = newNode;
+          break;
+        } else {
+          const child = matchedChild;
+          const common = commonPrefix(remaining, child.label);
+          if(common === child.label){
+            // remaining has child.label as prefix -> descend
+            child.count++;
+            remaining = remaining.slice(child.label.length);
+            node = child;
+            if(remaining === ''){
+              child.isEnd = true;
+            }
+            continue;
+          } else if(common === remaining){
+            // need to split child: remaining is prefix of child.label
+            const oldLabel = child.label;
+            const suffix = oldLabel.slice(common.length);
+            const splitNode = new CompressedNode(suffix);
+            splitNode.children = child.children;
+            splitNode.isEnd = child.isEnd;
+            splitNode.count = child.count;
+            splitNode.id = child.id;
+            // adjust child to be common prefix node
+            child.label = common;
+            child.children = {};
+            child.children[splitNode.label] = splitNode;
+            child.isEnd = true;
+            child.count++;
+            break;
+          } else {
+            // partial match but neither is prefix: split both
+            const oldLabel = child.label;
+            const suffixChild = oldLabel.slice(common.length);
+            const suffixRemaining = remaining.slice(common.length);
+            const newSplit = new CompressedNode(suffixChild);
+            newSplit.children = child.children;
+            newSplit.isEnd = child.isEnd;
+            newSplit.count = child.count;
+            newSplit.id = child.id;
+            // update existing child to be common
+            child.label = common;
+            child.children = {};
+            child.children[newSplit.label] = newSplit;
+            child.isEnd = false;
+            // now attach new node for remaining suffix
+            const remNode = new CompressedNode(suffixRemaining);
+            remNode.isEnd = true;
+            remNode.count = 1;
+            child.children[remNode.label] = remNode;
+            child.count += 1;
+            break;
+          }
+        }
+      }
+    }
+    // update counts for all nodes roughly by traversing
+    function setCounts(node){
+      let c = node.isEnd ? 1 : 0;
+      for(const k in node.children){
+        c += setCounts(node.children[k]);
+      }
+      node.count = c;
+      return c;
+    }
+    setCounts(cTrie.root);
+    // assign ids properly
+    function assignIds(node){
+      node.id = nextId();
+      for(const k in node.children) assignIds(node.children[k]);
+    }
+    assignIds(cTrie.root);
+    // replace original trie content
+    trie.root = cTrie.root;
+    trie.isCompressed = true;
+    trie.countWords = cTrie.countWords;
+    return trie;
+  }
+
+  function commonPrefix(a,b){
+    let i=0;
+    while(i<a.length && i<b.length && a[i]===b[i]) i++;
+    return a.slice(0,i);
+  }
+
+  // Search compressed by walking labels
+  function searchCompressed(trie, w){
+    let node = trie.root;
+    let pos = 0;
+    while(pos < w.length){
+      const foundKey = Object.keys(node.children).find(k => w.startsWith(node.children[k].label, pos));
+      if(!foundKey) return false;
+      const child = node.children[foundKey];
+      pos += child.label.length;
+      node = child;
+    }
+    return !!node.isEnd;
+  }
+
+  // startsWith compressed
+  function startsWithCompressed(trie, prefix, limit){
+    // collect all words starting with prefix by DFS with matching labels
+    const results = [];
+    function dfs(node, current){
+      if(results.length >= (limit || Infinity)) return;
+      const cur = current + (node.label || '');
+      if(cur.startsWith(prefix) || prefix.startsWith(cur)){
+        if(node.isEnd && cur.startsWith(prefix)) results.push(cur);
+        // traverse deeper
+        for(const k in node.children){
+          dfs(node.children[k], cur);
+          if(results.length >= (limit || Infinity)) return;
+        }
+      } else {
+        // no match
+        // if prefix starts with cur, it's okay to explore children
+        if(prefix.startsWith(cur)){
+          for(const k in node.children){
+            dfs(node.children[k], cur);
+            if(results.length >= (limit || Infinity)) return;
+          }
+        }
+      }
+    }
+    dfs(trie.root, '');
+    return results.slice(0, limit || results.length);
+  }
+
+  // Collect all words from normal trie
+  Trie.prototype._collectAll = function(){
+    const results = [];
+    this._collectFromNode(this.root, '', results);
+    return results;
+  };
+
+  // Utilities for app UI rendering
+  function renderNormalTree(node, depth, activeIds){
+    depth = depth || 0;
+    activeIds = activeIds || {};
+    let out = '';
+    const indent = ' '.repeat(depth*2);
+    const marker = node === null ? '' : (node.isEnd ? '[*]' : '');
+    const displayChar = node.char === '' ? '<root>' : node.char;
+    const countPart = config.showCounts ? (' count=' + (node.count||0)) : '';
+    const highlight = activeIds[node.id] ? '>> ' : '';
+    out += indent + highlight + displayChar + marker + countPart + ' (id=' + node.id + ')\n';
+    const keys = Object.keys(node.children).sort();
+    for(const k of keys){
+      out += renderNormalTree(node.children[k], depth+1, activeIds);
+    }
+    return out;
+  }
+
+  function renderCompressedTree(node, depth, activeIds){
+    depth = depth || 0;
+    activeIds = activeIds || {};
+    let out = '';
+    const indent = ' '.repeat(depth*2);
+    const marker = node === null ? '' : (node.isEnd ? '[*]' : '');
+    const displayLabel = node.label === '' ? '<root>' : node.label;
+    const countPart = config.showCounts ? (' count=' + (node.count||0)) : '';
+    const highlight = activeIds[node.id] ? '>> ' : '';
+    out += indent + highlight + displayLabel + marker + countPart + ' (id=' + node.id + ')\n';
+    const keys = Object.keys(node.children).sort();
+    for(const k of keys){
+      out += renderCompressedTree(node.children[k], depth+1, activeIds);
+    }
+    return out;
+  }
+
+  function renderAdjacency(trie){
+    let out = '';
+    if(trie.isCompressed){
+      function dfs(node){
+        out += 'id=' + node.id + ' label="' + node.label + '" isEnd=' + !!node.isEnd + ' count=' + node.count + '\n';
+        for(const k in node.children){
+          out += '  -> ' + node.children[k].id + ' ("' + node.children[k].label + '")\n';
+        }
+        for(const k in node.children) dfs(node.children[k]);
+      }
+      dfs(trie.root);
+    } else {
+      function dfs(node){
+        out += 'id=' + node.id + ' char="' + node.char + '" isEnd=' + !!node.isEnd + ' count=' + node.count + '\n';
+        for(const k in node.children){
+          out += '  -> ' + node.children[k].id + ' ("' + node.children[k].char + '")\n';
+        }
+        for(const k in node.children) dfs(node.children[k]);
+      }
+      dfs(trie.root);
+    }
+    return out;
+  }
+
+  // Expose to global
+  window.Trie = Trie;
+  window.TrieNode = TrieNode;
+  window.CompressedNode = CompressedNode;
+  window.exportTrie = exportTrie;
+  window.importTrie = importTrie;
+  window.compressTrie = compressTrie;
+  window.decompressTrie = decompressTrie;
+  window.collectFromCompressed = collectFromCompressed;
+  window.searchCompressed = searchCompressed;
+})();
+
+// UI wiring and complex interactions
+
+(function(){
+  const trie = new Trie();
+
+  // history stack for undo/redo
+  const history = [];
+  let historyPos = -1;
+  function pushHistory(desc){
+    const obj = exportTrie(trie);
+    history.splice(historyPos+1); // drop redo entries
+    history.push({state: obj, desc: desc || ('op@' + Date.now())});
+    historyPos = history.length - 1;
+    refreshSnapshotSelect();
+  }
+  function canUndo(){ return historyPos > 0; }
+  function canRedo(){ return historyPos < history.length-1; }
+  function doUndo(){
+    if(!canUndo()) return;
+    historyPos--;
+    importTrie(history[historyPos].state, trie);
+    renderAll();
+  }
+  function doRedo(){
+    if(!canRedo()) return;
+    historyPos++;
+    importTrie(history[historyPos].state, trie);
+    renderAll();
+  }
+
+  // initial state
+  pushHistory('initial empty');
+
+  // UI elements
+  const wordInput = document.getElementById('wordInput');
+  const insertBtn = document.getElementById('insertBtn');
+  const deleteBtn = document.getElementById('deleteBtn');
+  const searchBtn = document.getElementById('searchBtn');
+  const highlightBtn = document.getElementById('highlightBtn');
+  const prefixInput = document.getElementById('prefixInput');
+  const prefixSearchBtn = document.getElementById('prefixSearchBtn');
+  const autoCompleteBtn = document.getElementById('autoCompleteBtn');
+  const kInput = document.getElementById('kInput');
+  const countPrefixBtn = document.getElementById('countPrefixBtn');
+  const batchInput = document.getElementById('batchInput');
+  const insertBatchBtn = document.getElementById('insertBatchBtn');
+  const deleteBatchBtn = document.getElementById('deleteBatchBtn');
+  const randomBtn = document.getElementById('randomBtn');
+  const randN = document.getElementById('randN');
+  const randMin = document.getElementById('randMin');
+  const randMax = document.getElementById('randMax');
+  const clearBtn = document.getElementById('clearBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const jsonArea = document.getElementById('jsonArea');
+  const saveSnapshotBtn = document.getElementById('saveSnapshotBtn');
+  const loadSnapshotBtn = document.getElementById('loadSnapshotBtn');
+  const snapshotSelect = document.getElementById('snapshotSelect');
+  const caseSensitive = document.getElementById('caseSensitive');
+  const allowSymbols = document.getElementById('allowSymbols');
+  const recordSteps = document.getElementById('recordSteps');
+  const showCounts = document.getElementById('showCounts');
+  const compressedView = document.getElementById('compressedView');
+  const compressBtn = document.getElementById('compressBtn');
+  const decompressBtn = document.getElementById('decompressBtn');
+
+  const stepPrev = document.getElementById('stepPrev');
+  const stepNext = document.getElementById('stepNext');
+  const playPause = document.getElementById('playPause');
+  const speed = document.getElementById('speed');
+  const speedVal = document.getElementById('speedVal');
+  const resetSteps = document.getElementById('resetSteps');
+  const replayLastOp = document.getElementById('replayLastOp');
+  const operationLog = document.getElementById('operationLog');
+
+  const undoBtn = document.getElementById('undoBtn');
+  const redoBtn = document.getElementById('redoBtn');
+  const listWordsBtn = document.getElementById('listWordsBtn');
+  const longestPrefixBtn = document.getElementById('longestPrefixBtn');
+  const compressCountBtn = document.getElementById('compressCountBtn');
+  const maxResults = document.getElementById('maxResults');
+  const truncateBtn = document.getElementById('truncateBtn');
+  const nodeLimit = document.getElementById('nodeLimit');
+
+  const treeDiv = document.getElementById('tree');
+  const adjDiv = document.getElementById('adj');
+  const wordsDiv = document.getElementById('words');
+
+  // Step playback state
+  let playTimer = null;
+  let playIndex = 0;
+
+  function refreshSnapshotSelect(){
+    snapshotSelect.innerHTML = '';
+    for(let i=0;i<history.length;i++){
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.text = i + ': ' + (history[i].desc || 'snapshot');
+      snapshotSelect.appendChild(opt);
+    }
+  }
+
+  refreshSnapshotSelect();
+
+  // Render entire UI views
+  function renderAll(activeIds){
+    activeIds = activeIds || {};
+    // tree
+    if(trie.isCompressed || compressedView.checked){
+      compressedView.checked = true;
+      const text = renderCompressedTree(trie.root, 0, activeIds);
+      treeDiv.textContent = text;
+    } else {
+      compressedView.checked = false;
+      const text = renderNormalTree(trie.root, 0, activeIds);
+      treeDiv.textContent = text;
+    }
+    // adj
+    adjDiv.textContent = renderAdjacency(trie);
+
+    // words
+    const words = trie.listAllWords(Number(maxResults.value) || 200);
+    wordsDiv.textContent = words.join('\n');
+
+    // json area is left for explicit export
+    operationLog.textContent = (trie.lastOperationLog || []).join('\n') + '\n\nSteps recorded: ' + (trie.steps ? trie.steps.length : 0);
+    undoBtn.disabled = !canUndo();
+    redoBtn.disabled = !canRedo();
+  }
+
+  // Helpers to render tree strings via global functions
+  function renderNormalTree(node, depth, activeIds){
+    return window.renderNormalTree ? window.renderNormalTree(node, depth, activeIds) : '';
+  }
+  function renderCompressedTree(node, depth, activeIds){
+    return window.renderCompressedTree ? window.renderCompressedTree(node, depth, activeIds) : '';
+  }
+  function renderAdjacency(tr){
+    return window.renderAdjacency ? window.renderAdjacency(tr) : '';
+  }
+
+  // But these functions are not globally exposed; write local simple versions using existing ones:
+  function localRenderNormal(node, depth, activeIds){
+    depth = depth || 0;
+    activeIds = activeIds || {};
+    let out = '';
+    const indent = ' '.repeat(depth*2);
+    const marker = node === null ? '' : (node.isEnd ? '[*]' : '');
+    const displayChar = node.char === '' ? '<root>' : node.char;
+    const countPart = config.showCounts ? (' count=' + (node.count||0)) : '';
+    const highlight = activeIds[node.id] ? '>> ' : '';
+    out += indent + highlight + displayChar + marker + countPart + ' (id=' + node.id + ')\n';
+    const keys = Object.keys(node.children).sort();
+    for(const k of keys){
+      out += localRenderNormal(node.children[k], depth+1, activeIds);
+    }
+    return out;
+  }
+  function localRenderCompressed(node, depth, activeIds){
+    depth = depth || 0;
+    activeIds = activeIds || {};
+    let out = '';
+    const indent = ' '.repeat(depth*2);
+    const marker = node === null ? '' : (node.isEnd ? '[*]' : '');
+    const displayLabel = node.label === '' ? '<root>' : node.label;
+    const countPart = config.showCounts ? (' count=' + (node.count||0)) : '';
+    const highlight = activeIds[node.id] ? '>> ' : '';
+    out += indent + highlight + displayLabel + marker + countPart + ' (id=' + node.id + ')\n';
+    const keys = Object.keys(node.children).sort();
+    for(const k of keys){
+      out += localRenderCompressed(node.children[k], depth+1, activeIds);
+    }
+    return out;
+  }
+  function localRenderAdj(tr){
+    let out = '';
+    if(tr.isCompressed){
+      function dfs(node){
+        out += 'id=' + node.id + ' label="' + node.label + '" isEnd=' + !!node.isEnd + ' count=' + node.count + '\n';
+        for(const k in node.children){
+          out += '  -> ' + node.children[k].id + ' ("' + node.children[k].label + '")\n';
+        }
+        for(const k in node.children) dfs(node.children[k]);
+      }
+      dfs(tr.root);
+    } else {
+      function dfs(node){
+        out += 'id=' + node.id + ' char="' + node.char + '" isEnd=' + !!node.isEnd + ' count=' + node.count + '\n';
+        for(const k in node.children){
+          out += '  -> ' + node.children[k].id + ' ("' + node.children[k].char + '")\n';
+        }
+        for(const k in node.children) dfs(node.children[k]);
+      }
+      dfs(tr.root);
+    }
+    return out;
+  }
+
+  // override render functions used above
+  window.renderNormalTree = localRenderNormal;
+  window.renderCompressedTree = localRenderCompressed;
+  window.renderAdjacency = localRenderAdj;
+
+  // Wire config toggles
+  caseSensitive.addEventListener('change', () => config.caseSensitive = caseSensitive.checked);
+  allowSymbols.addEventListener('change', () => config.allowSymbols = allowSymbols.checked);
+  recordSteps.addEventListener('change', () => config.recordSteps = recordSteps.checked);
+  showCounts.addEventListener('change', () => { config.showCounts = showCounts.checked; renderAll(); });
+  compressedView.addEventListener('change', () => { renderAll(); });
+
+  // Speed display
+  speed.addEventListener('input', () => speedVal.textContent = speed.value + 'ms');
+
+  // Insert
+  insertBtn.addEventListener('click', () => {
+    const w = wordInput.value.trim();
+    if(!w) { alert('Enter a word'); return; }
+    const ok = trie.insert(w);
+    pushHistory('insert ' + w);
+    renderAll();
+  });
+
+  // Delete
+  deleteBtn.addEventListener('click', () => {
+    const w = wordInput.value.trim();
+    if(!w){ alert('Enter word'); return; }
+    const ok = trie.delete(w);
+    pushHistory('delete ' + w);
+    renderAll();
+  });
+
+  // Search
+  searchBtn.addEventListener('click', () => {
+    const w = wordInput.value.trim();
+    if(!w){ alert('Enter word'); return; }
+    const found = trie.search(w);
+    alert('Search: ' + w + ' -> ' + (found ? 'found' : 'not found'));
+    renderAll();
+  });
+
+  // Highlight path (uses last recorded steps to highlight nodes)
+  highlightBtn.addEventListener('click', () => {
+    const w = wordInput.value.trim();
+    if(!w){ alert('Enter word'); return; }
+    // find path and collect node ids
+    const activeIds = {};
+    if(trie.isCompressed){
+      // follow labels
+      let node = trie.root;
+      let pos = 0;
+      activeIds[node.id] = true;
+      while(pos < normalizeWord(w).length){
+        let matched = false;
+        for(const k in node.children){
+          const child = node.children[k];
+          const lab = child.label || '';
+          const rem = normalizeWord(w).slice(pos);
+          if(rem.startsWith(lab)){
+            activeIds[child.id] = true;
+            pos += lab.length;
+            node = child;
+            matched = true;
+            break;
+          }
+        }
+        if(!matched) break;
+      }
+    } else {
+      let node = trie.root;
+      activeIds[node.id] = true;
+      const s = normalizeWord(w);
+      for(let i=0;i<s.length;i++){
+        const ch = s[i];
+        if(!node.children[ch]) break;
+        node = node.children[ch];
+        activeIds[node.id] = true;
+      }
+    }
+    renderAll(activeIds);
+  });
+
+  // Prefix search
+  prefixSearchBtn.addEventListener('click', () => {
+    const p = prefixInput.value.trim();
+    const limit = Number(kInput.value) || 50;
+    const results = trie.startsWith(p, limit);
+    alert('Prefix results (' + results.length + '):\n' + results.slice(0,200).join('\n'));
+    renderAll();
+  });
+
+  // Autocomplete
+  autoCompleteBtn.addEventListener('click', () => {
+    const p = prefixInput.value.trim();
+    const k = Number(kInput.value) || 10;
+    const results = trie.startsWith(p, k);
+    alert('Autocomplete top ' + k + ':\n' + results.join('\n'));
+    renderAll();
+  });
+
+  // Count prefix
+  countPrefixBtn.addEventListener('click', () => {
+    const p = prefixInput.value.trim();
+    const c = trie.countPrefix(p);
+    alert('Prefix count for "' + p + '": ' + c);
+    renderAll();
+  });
+
+  // Batch insert
+  insertBatchBtn.addEventListener('click', () => {
+    const lines = batchInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+    if(lines.length === 0){ alert('No words to insert'); return; }
+    trie.lastOperationLog = [];
+    trie.steps = [];
+    for(const w of lines){
+      trie.insert(w);
+    }
+    pushHistory('insert batch ' + lines.length + ' words');
+    renderAll();
+  });
+
+  // Batch delete
+  deleteBatchBtn.addEventListener('click', () => {
+    const lines = batchInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+    if(lines.length === 0){ alert('No words to delete'); return; }
+    trie.lastOperationLog = [];
+    trie.steps = [];
+    for(const w of lines){
+      trie.delete(w);
+    }
+    pushHistory('delete batch ' + lines.length + ' words');
+    renderAll();
+  });
+
+  // Random generator
+  randomBtn.addEventListener('click', () => {
+    const n = Number(randN.value) || 10;
+    const mn = Number(randMin.value) || 3;
+    const mx = Number(randMax.value) || 8;
+    const chars = 'abcdefghijklmnopqrstuvwxyz';
+    const words = [];
+    for(let i=0;i<n;i++){
+      const L = Math.floor(Math.random()*(mx-mn+1)) + mn;
+      let s = '';
+      for(let j=0;j<L;j++) s += chars[Math.floor(Math.random()*chars.length)];
+      words.push(s);
+      trie.insert(s);
+    }
+    pushHistory('random add ' + n);
+    alert('Added random words:\n' + words.join('\n'));
+    renderAll();
+  });
+
+  // Clear trie
+  clearBtn.addEventListener('click', () => {
+    if(!confirm('Clear the entire trie?')) return;
+    // Reset by importing fresh
+    importTrie({isCompressed:false, countWords:0, root:{id:1,char:'',isEnd:false,count:0,children:{}}}, trie);
+    pushHistory('clear');
+    renderAll();
+  });
+
+  // Export JSON
+  exportBtn.addEventListener('click', () => {
+    const obj = exportTrie(trie);
+    jsonArea.value = JSON.stringify(obj, null, 2);
+  });
+
+  // Import JSON
+  importBtn.addEventListener('click', () => {
+    try{
+      const obj = JSON.parse(jsonArea.value);
+      importTrie(obj, trie);
+      pushHistory('import json');
+      renderAll();
+    } catch(e){
+      alert('Invalid JSON: ' + e.message);
+    }
+  });
+
+  // Save snapshot
+  saveSnapshotBtn.addEventListener('click', () => {
+    const name = prompt('Enter snapshot description (optional):','snapshot');
+    pushHistory(name || 'snapshot');
+    alert('Snapshot saved.');
+  });
+
+  // Load snapshot
+  loadSnapshotBtn.addEventListener('click', () => {
+    const idx = Number(snapshotSelect.value);
+    if(isNaN(idx)) { alert('Select snapshot'); return; }
+    if(!history[idx]) { alert('Invalid snapshot'); return; }
+    importTrie(history[idx].state, trie);
+    historyPos = idx;
+    renderAll();
+  });
+
+  // Steps playback handlers
+  stepPrev.addEventListener('click', () => {
+    if(trie.steps.length === 0){ alert('No recorded steps'); return; }
+    playIndex = Math.max(0, playIndex-1);
+    renderStep(playIndex);
+  });
+  stepNext.addEventListener('click', () => {
+    if(trie.steps.length === 0){ alert('No recorded steps'); return; }
+    playIndex = Math.min(trie.steps.length-1, playIndex+1);
+    renderStep(playIndex);
+  });
+
+  playPause.addEventListener('click', () => {
+    if(playTimer){
+      clearInterval(playTimer);
+      playTimer = null;
+      playPause.textContent = 'Play';
+    } else {
+      if(trie.steps.length === 0){ alert('No recorded steps'); return; }
+      playPause.textContent = 'Pause';
+      playTimer = setInterval(() => {
+        renderStep(playIndex);
+        playIndex++;
+        if(playIndex >= trie.steps.length){
+          clearInterval(playTimer);
+          playTimer = null;
+          playPause.textContent = 'Play';
+          playIndex = trie.steps.length-1;
+        }
+      }, Number(speed.value) || 400);
+    }
+  });
+
+  resetSteps.addEventListener('click', () => {
+    trie.steps = [];
+    playIndex = 0;
+    renderAll();
+  });
+
+  // render a recorded step snapshot
+  function renderStep(i){
+    if(!trie.steps || trie.steps.length === 0) return;
+    i = Math.max(0, Math.min(trie.steps.length-1, i));
+    const snap = trie.steps[i];
+    if(!snap) return;
+    // import trie snapshot temporarily for rendering
+    const tmp = new Trie();
+    importTrie(snap.trie, tmp);
+    // use activeIds to highlight nodes mentioned in snapshot.info text if possible (match ids)
+    const info = snap.info || '';
+    const activeIds = {};
+    // find numbers in info that look like id=123
+    const re = /id=(\d+)/g;
+    let m;
+    while((m = re.exec(info)) !== null){
+      activeIds[Number(m[1])] = true;
+    }
+    // show info in operationLog area as highlight
+    operationLog.textContent = "Step " + i + "/" + (trie.steps.length-1) + ": " + info + "\n\n" + JSON.stringify(snap.trie, null, 2);
+    // render tmp tri
+    if(tmp.isCompressed){
+      treeDiv.textContent = localRenderCompressed(tmp.root, 0, activeIds);
+      adjDiv.textContent = localRenderAdj(tmp);
+    } else {
+      treeDiv.textContent = localRenderNormal(tmp.root, 0, activeIds);
+      adjDiv.textContent = localRenderAdj(tmp);
+    }
+    wordsDiv.textContent = tmp.listAllWords(200).join('\n');
+  }
+
+  // Replay last operation
+  replayLastOp.addEventListener('click', () => {
+    // if last operation left recorded steps, we can replay
+    if(trie.steps && trie.steps.length > 0){
+      playIndex = 0;
+      if(playTimer) { clearInterval(playTimer); playTimer = null; playPause.textContent = 'Play'; }
+      playPause.click(); // start playing
+    } else {
+      alert('No steps recorded to replay. Try performing operations with "Record Steps" enabled.');
+    }
+  });
+
+  // Undo/Redo
+  undoBtn.addEventListener('click', () => { doUndo(); });
+  redoBtn.addEventListener('click', () => { doRedo(); });
+
+  // List words
+  listWordsBtn.addEventListener('click', () => {
+    const words = trie.listAllWords(Number(maxResults.value) || 200);
+    alert('Words (' + words.length + '):\n' + words.join('\n'));
+  });
+
+  // Longest common prefix
+  longestPrefixBtn.addEventListener('click', () => {
+    const lcp = trie.longestCommonPrefix();
+    alert('Longest common prefix: "' + lcp + '"');
+  });
+
+  // Compress chains count
+  compressCountBtn.addEventListener('click', () => {
+    const beforeNodes = countNodes(trie);
+    compressTrie(trie);
+    const afterNodes = countNodes(trie);
+    pushHistory('compress');
+    alert('Compressed. Nodes before: ' + beforeNodes + ', after: ' + afterNodes);
+    renderAll();
+  });
+
+  // Compress / Decompress buttons
+  compressBtn.addEventListener('click', () => {
+    compressTrie(trie);
+    pushHistory('compress');
+    renderAll();
+  });
+  decompressBtn.addEventListener('click', () => {
+    decompressTrie(trie);
+    pushHistory('decompress');
+    renderAll();
+  });
+
+  // Truncate trie by limiting nodes (naive BFS prune)
+  truncateBtn.addEventListener('click', () => {
+    const limit = Number(nodeLimit.value) || 500;
+    const nodes = [];
+    // BFS collect nodes
+    const q = [trie.root];
+    while(q.length && nodes.length < limit){
+      const n = q.shift();
+      nodes.push(n);
+      for(const k in n.children) q.push(n.children[k]);
+    }
+    // rebuild a pruned trie by exporting words only that are fully within nodes
+    const words = trie.listAllWords(1000000).slice(0, Number(maxResults.value) || 10000);
+    // naive approach: keep the first N words up to node limit
+    const t2 = new Trie();
+    for(const w of words){
+      t2.insert(w);
+      if(countNodes(t2) >= limit) break;
+    }
+    importTrie(exportTrie(t2), trie);
+    pushHistory('truncate to ' + limit + ' nodes');
+    renderAll();
+  });
+
+  function countNodes(tr){
+    let cnt = 0;
+    function dfs(n){
+      cnt++;
+      if(tr.isCompressed){
+        for(const k in n.children) dfs(n.children[k]);
+      } else {
+        for(const k in n.children) dfs(n.children[k]);
+      }
+    }
+    dfs(tr.root);
+    return cnt;
+  }
+
+  // Clickable operation log: clicking lines will attempt to replay that operation (if in history)
+  operationLog.addEventListener('click', (e) => {
+    const text = operationLog.textContent;
+    const lines = text.split('\n').filter(Boolean);
+    if(lines.length === 0) return;
+    // attempt to parse an index like "Step i/j: info"
+    const sel = window.getSelection().toString().trim();
+    if(sel){
+      // if selection is a word present in trie, highlight it
+      if(sel.length < 200){
+        wordInput.value = sel;
+        highlightBtn.click();
+      }
+    }
+  });
+
+  // On any manual modifications, push history
+  function attachPushAfterOperation(fn){
+    return function(){
+      const res = fn.apply(this, arguments);
+      pushHistory(fn.name || 'op');
+      renderAll();
+      return res;
+    };
+  }
+
+  // Preload some words for exploration
+  const starters = ['apple','app','apricot','banana','band','bandana','bandit','can','candy','cape','car','card','care','dog','dove','doom','cute','cut','cutter'];
+  for(const w of starters) trie.insert(w);
+  pushHistory('seed words');
+  renderAll();
+
+  // Bulk import example for user - show initial JSON
+  jsonArea.value = JSON.stringify(exportTrie(trie), null, 2);
+
+  // Expose some quick debug functions in console
+  window._trie = trie;
+  window._pushHistory = pushHistory;
+  window._export = () => JSON.stringify(exportTrie(trie), null, 2);
+  window._import = (str) => { importTrie(JSON.parse(str), trie); renderAll(); };
+})();
+
+</script>
+</body>
+</html>

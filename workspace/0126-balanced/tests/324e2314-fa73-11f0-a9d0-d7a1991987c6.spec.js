@@ -101,7 +101,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     // Then either S1_Calculating -> S3_Result (valid n) or S1_Calculating -> S2_Error (invalid n)
 
     test('Valid input leads to result (transition S0 -> S1 -> S3_Result)', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage1 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -119,7 +119,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     });
 
     test('Edge case n = 0 and n = 1 produce correct results', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage2 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -137,7 +137,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     });
 
     test('Large n produces correct Fibonacci number (performance + correctness)', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage3 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -151,7 +151,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     });
 
     test('Invalid input: negative number transitions to Error state (S1 -> S2_Error)', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage4 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -166,7 +166,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     });
 
     test('Invalid input: empty input transitions to Error state (S1 -> S2_Error)', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage5 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -181,7 +181,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     });
 
     test('Non-integer decimal input is parsed by parseInt and handled accordingly', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage6 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -198,7 +198,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
 
   test.describe('Robustness checks and FSM evidence validation', () => {
     test('Button click triggers calculation function (observable through DOM update)', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage7 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 
@@ -213,7 +213,7 @@ test.describe('Dynamic Programming Demo - Fibonacci (FSM Validation)', () => {
     });
 
     test('Validate that initial page contains the components listed in the FSM components list', async ({ page }) => {
-      const fibPage = new FibonacciPage(page);
+      const fibPage8 = new FibonacciPage(page);
       await fibPage.attachListeners();
       await fibPage.goto();
 

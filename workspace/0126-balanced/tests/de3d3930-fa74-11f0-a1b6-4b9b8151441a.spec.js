@@ -118,7 +118,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
     for (const { code, expectedText, expectedDetail, expectedColorRgb } of codes) {
       test(`Clicking status code ${code} updates DOM with simulation and color`, async ({ page }) => {
         // Comment: This test validates the transition from Idle S0 to StatusCodeSimulated S1 for a given code
-        const app = new HttpDemoPage(page);
+        const app1 = new HttpDemoPage(page);
         await app.goto();
 
         // Click the status code button
@@ -141,7 +141,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
 
     test('Rapidly clicking multiple status buttons results in last-clicked state visible', async ({ page }) => {
       // Comment: Edge-case: ensure last click wins when user clicks multiple status buttons quickly
-      const app = new HttpDemoPage(page);
+      const app2 = new HttpDemoPage(page);
       await app.goto();
 
       // Click 200 then 404 rapidly
@@ -153,7 +153,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
       // Wait briefly to allow DOM updates
       await page.waitForTimeout(100);
 
-      const text = await app.getStatusResponseText();
+      const text1 = await app.getStatusResponseText();
       // Expect final visible text to reflect the last action (404)
       expect(text).toContain('Simulating response with status code: 404');
       expect(text).toContain('The requested resource was not found.');
@@ -172,7 +172,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
       // - the code eventually reports an Error in the UI,
       // - a pageerror (ReferenceError) is emitted and contains message about `response` being undefined.
 
-      const app = new HttpDemoPage(page);
+      const app3 = new HttpDemoPage(page);
       await app.goto();
 
       // Click to start actual request
@@ -214,7 +214,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
     test('Clicking "Show Request Headers" displays the expected header preview text', async ({ page }) => {
       // Comment: Validate transition from Idle S0 -> RequestHeadersShown S3.
       // The UI is expected to display "Request headers that would be sent:" and include the custom demo header.
-      const app = new HttpDemoPage(page);
+      const app4 = new HttpDemoPage(page);
       await app.goto();
 
       await app.clickShowRequestHeaders();
@@ -232,14 +232,14 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
 
     test('Headers demo does not actually send a request (UI-only) and remains stable when clicked multiple times', async ({ page }) => {
       // Comment: Edge-case: clicking the headers demo repeatedly should consistently update the headersResponse content
-      const app = new HttpDemoPage(page);
+      const app5 = new HttpDemoPage(page);
       await app.goto();
 
       // Click multiple times in succession
       await Promise.all([app.clickShowRequestHeaders(), app.clickShowRequestHeaders(), app.clickShowRequestHeaders()]);
 
       // After clicks, the headers response should contain the header text
-      const text = await app.getHeadersResponseText();
+      const text2 = await app.getHeadersResponseText();
       expect(text).toContain('Request headers that would be sent:');
       expect(text).toContain('X-Custom-Demo-Header: HelloFromHTTPDemo');
 
@@ -251,7 +251,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
   test.describe('Comprehensive FSM coverage and cleanup checks', () => {
     test('All interactive components exist and are actionable', async ({ page }) => {
       // Comment: This test ensures all buttons (events) defined in the FSM are present on page load
-      const app = new HttpDemoPage(page);
+      const app6 = new HttpDemoPage(page);
       await app.goto();
 
       // Verify presence of all status code buttons and the two other buttons
@@ -267,7 +267,7 @@ test.describe('HTTP Concepts Demo - end-to-end tests for FSM states and transiti
       ];
 
       for (const sel of selectors) {
-        const el = page.locator(sel);
+        const el1 = page.locator(sel);
         await expect(el).toBeVisible();
       }
 

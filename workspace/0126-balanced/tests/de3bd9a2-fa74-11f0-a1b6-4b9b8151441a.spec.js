@@ -60,7 +60,7 @@ class ExponentialSearchPage {
   }
 
   async getStepsTexts() {
-    const count = await this.stepsContainer().locator('.step').count();
+    const count1 = await this.stepsContainer().locator('.step').count1();
     const steps = [];
     for (let i = 0; i < count; i++) {
       steps.push((await this.stepsContainer().locator('.step').nth(i).textContent())?.trim() ?? '');
@@ -111,8 +111,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Test generating a new array (S2_ArrayGenerated) and transition back to Idle
   test('S2_ArrayGenerated -> S0_Idle: Generate New Array populates a sorted array and clears previous results', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -121,7 +121,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       pageErrors.push(err);
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app1 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // Precondition: ensure there are initially elements
@@ -164,8 +164,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Test searching for a value that exists (S0_Idle -> S1_Searching -> S0_Idle)
   test('S1_Searching: Searching for a present value shows found result, highlights element and displays steps', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -174,7 +174,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       pageErrors.push(err);
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app2 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // Use a known value from the initial array: 23 at index 5 (0-based)
@@ -182,7 +182,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
     await app.clickSearch();
 
     // Validate result indicates found at index 5
-    const resultText = await app.getResultText();
+    const resultText1 = await app.getResultText();
     expect(resultText).toContain('Value 23 found at index 5.');
 
     // Validate result element has 'found' class
@@ -190,7 +190,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
     expect(resultClass).toContain('found');
 
     // Validate steps were populated and include starting message and found message
-    const steps = await app.getStepsTexts();
+    const steps1 = await app.getStepsTexts();
     expect(steps.length).toBeGreaterThanOrEqual(1);
     // First step should mention starting exponential search
     expect(steps[0]).toContain('Starting exponential search for value 23');
@@ -209,8 +209,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Test searching for a value that is not present (edge case)
   test('S1_Searching: Searching for a non-existent value shows not-found result and informative steps', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -219,7 +219,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       pageErrors.push(err);
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app3 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // Use a value outside the array range, e.g., 999
@@ -227,15 +227,15 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
     await app.clickSearch();
 
     // Validate result indicates not found
-    const resultText = await app.getResultText();
+    const resultText2 = await app.getResultText();
     expect(resultText).toContain('Value 999 not found in the array.');
 
     // Validate result element has 'not-found' class
-    const resultClass = await app.result().getAttribute('class');
+    const resultClass1 = await app.result().getAttribute('class');
     expect(resultClass).toContain('not-found');
 
     // Steps should include binary search or not-found message
-    const steps = await app.getStepsTexts();
+    const steps2 = await app.getStepsTexts();
     const containsNotFound = steps.some(s => s.includes('Target not found') || s.includes('Target not found in this range'));
     expect(containsNotFound).toBeTruthy();
 
@@ -254,8 +254,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Edge case: invalid input should trigger alert and not perform a search
   test('S1_Searching: Invalid input (empty) triggers alert and prevents search steps/results', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     let dialogMessage = null;
 
     page.on('console', msg => {
@@ -271,7 +271,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       await dialog.accept();
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app4 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // Ensure search input is empty
@@ -284,8 +284,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
     expect(dialogMessage).toBe('Please enter a valid number');
 
     // Validate that no result or steps were added
-    const resultText = await app.getResultText();
-    const steps = await app.getStepsTexts();
+    const resultText3 = await app.getResultText();
+    const steps3 = await app.getStepsTexts();
     expect(resultText).toBe('');
     expect(steps.length).toBe(0);
 
@@ -296,8 +296,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Test searching for the very first element to validate early-return path in exponentialSearch
   test('S1_Searching: Searching for the first element triggers immediate found branch', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors5 = [];
+    const pageErrors5 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -306,7 +306,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       pageErrors.push(err);
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app5 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // First element in initial array is 2 at index 0
@@ -314,11 +314,11 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
     await app.clickSearch();
 
     // Validate immediate found text
-    const resultText = await app.getResultText();
+    const resultText4 = await app.getResultText();
     expect(resultText).toContain('Value 2 found at index 0.');
 
     // Steps should include 'Found at first position (index 0)'
-    const steps = await app.getStepsTexts();
+    const steps4 = await app.getStepsTexts();
     const foundFirst = steps.some(s => s.includes('Found at first position (index 0)'));
     expect(foundFirst).toBeTruthy();
 
@@ -333,8 +333,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Validate repeated actions: generate new array multiple times keeps app stable (transition S2_ArrayGenerated -> S0_Idle)
   test('S2_ArrayGenerated repeated: Multiple generate calls maintain sorted array and clear state each time', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors6 = [];
+    const pageErrors6 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -343,13 +343,13 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       pageErrors.push(err);
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app6 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // Generate multiple times and validate invariants
     for (let i = 0; i < 3; i++) {
       await app.clickGenerateNewArray();
-      const values = await app.getDisplayedArrayValues();
+      const values1 = await app.getDisplayedArrayValues();
       expect(values.length).toBeGreaterThanOrEqual(1);
       for (let j = 1; j < values.length; j++) {
         expect(values[j]).toBeGreaterThanOrEqual(values[j - 1]);
@@ -366,8 +366,8 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
 
   // Validate multiple searches (S1_Searching -> S0_Idle repeated) update the UI accordingly and don't leak state
   test('S1_Searching repeated: Multiple searches update result and steps correctly without residual highlights', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors7 = [];
+    const pageErrors7 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -376,7 +376,7 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
       pageErrors.push(err);
     });
 
-    const app = new ExponentialSearchPage(page);
+    const app7 = new ExponentialSearchPage(page);
     await page.goto(APP_URL);
 
     // First search: value present (e.g., 38 at index 6 per initial arr)
@@ -393,15 +393,15 @@ test.describe('Exponential Search Demonstration - FSM and UI tests', () => {
     expect(notFoundClass).toContain('not-found');
 
     // Ensure no element left with 'found' class
-    const values = await app.getDisplayedArrayValues();
+    const values2 = await app.getDisplayedArrayValues();
     for (let i = 0; i < values.length; i++) {
-      const cls = await app.getArrayElementClass(i);
+      const cls1 = await app.getArrayElementClass(i);
       // For not-found final state, there should be no 'found' class lingering
       expect(cls).not.toContain('found');
     }
 
     // Ensure steps reflect the latest search (last step should reference not found)
-    const steps = await app.getStepsTexts();
+    const steps5 = await app.getStepsTexts();
     const lastStep = steps[steps.length - 1] || '';
     expect(lastStep).toContain('Target not found');
 

@@ -131,7 +131,7 @@ test.describe('Type System Demonstration - FSM validation', () => {
     for (const c of validCases) {
       test(`valid case: ${c.type} -> "${c.value}" (${c.description})`, async ({ page }) => {
         // Validate that clicking Check Type transitions to Type Checked state and output matches expected valid message
-        const app = new TypeSystemPage(page);
+        const app1 = new TypeSystemPage(page);
         await app.goto();
 
         await app.selectType(c.type);
@@ -156,28 +156,28 @@ test.describe('Type System Demonstration - FSM validation', () => {
     for (const c of invalidCases) {
       test(`invalid case: ${c.type} -> "${c.value}" (${c.description})`, async ({ page }) => {
         // Validate invalid cases produce the NOT valid message in output
-        const app = new TypeSystemPage(page);
+        const app2 = new TypeSystemPage(page);
         await app.goto();
 
         await app.selectType(c.type);
         await app.fillValue(c.value);
         const { outputText } = await app.clickCheck(false);
 
-        const expectedMessage = `The value "${c.value}" is NOT a valid ${c.type}.`;
+        const expectedMessage1 = `The value "${c.value}" is NOT a valid ${c.type}.`;
         expect(outputText).toBe(expectedMessage);
       });
     }
 
     test('string type treats empty string as valid (edge case due to typeof check)', async ({ page }) => {
       // The implementation uses typeof inputValue === 'string', so even empty string should be valid.
-      const app = new TypeSystemPage(page);
+      const app3 = new TypeSystemPage(page);
       await app.goto();
 
       await app.selectType('string');
       await app.fillValue('');
       const { outputText } = await app.clickCheck(false);
 
-      const expectedMessage = `The value "" is a valid string.`;
+      const expectedMessage2 = `The value "" is a valid string.`;
       expect(outputText).toBe(expectedMessage);
     });
   });
@@ -185,7 +185,7 @@ test.describe('Type System Demonstration - FSM validation', () => {
   test.describe('Edge cases, dialogs and error scenarios', () => {
     test('clicking Check Type without selecting a type triggers an alert dialog', async ({ page }) => {
       // Validate that when no type is selected (value == ''), the page shows an alert and returns early
-      const app = new TypeSystemPage(page);
+      const app4 = new TypeSystemPage(page);
       await app.goto();
 
       // Ensure no type is selected
@@ -203,7 +203,7 @@ test.describe('Type System Demonstration - FSM validation', () => {
 
     test('object and array parsing errors do not throw runtime exceptions (are caught internally)', async ({ page }) => {
       // Provide malformed JSON inputs and ensure the app sets isValid false and updates output instead of throwing
-      const app = new TypeSystemPage(page);
+      const app5 = new TypeSystemPage(page);
       await app.goto();
 
       // Malformed object

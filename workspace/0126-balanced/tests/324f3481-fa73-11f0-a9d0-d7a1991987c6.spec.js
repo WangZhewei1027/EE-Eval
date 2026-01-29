@@ -113,7 +113,7 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
     // This test verifies the click event and both possible transitions.
     // It does not forcibly patch the environment; it asserts the outcome that naturally occurs
     // based on window.location.protocol when the page is served.
-    const httpsPage = new HttpsPage(page);
+    const httpsPage1 = new HttpsPage(page);
     await httpsPage.goto();
 
     // Determine protocol before clicking to set the expected outcome
@@ -137,7 +137,7 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
       await expect(secureSpan).toHaveText('✔️');
     } else {
       // Expect insecure message evidence (S2_Insecure)
-      const expectedHTML = 'This connection is NOT secure! <span class="insecure">❌</span>';
+      const expectedHTML1 = 'This connection is NOT secure! <span class="insecure">❌</span>';
       expect(resultHTML).toBe(expectedHTML);
       expect(resultText).toContain('This connection is NOT secure!');
       // The span with class 'insecure' should be present
@@ -156,7 +156,7 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
   // Test idempotency: clicking multiple times should not duplicate content
   test('Edge case: multiple clicks are idempotent and do not append duplicate messages', async ({ page }) => {
     // This test ensures that repeated triggers of the CheckHttpsStatus event lead to stable state transitions
-    const httpsPage = new HttpsPage(page);
+    const httpsPage2 = new HttpsPage(page);
     await httpsPage.goto();
 
     // Click once and capture result
@@ -189,15 +189,15 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
   // Test rapid-fire clicking for potential race conditions / exceptions
   test('Edge case: rapid clicks do not produce runtime errors', async ({ page }) => {
     // This test rapidly triggers the click handler to check for thrown exceptions or console errors
-    const httpsPage = new HttpsPage(page);
+    const httpsPage3 = new HttpsPage(page);
     await httpsPage.goto();
 
     // Rapidly click using Promise.all to trigger clicks back-to-back
     await Promise.all(new Array(10).fill(0).map(() => httpsPage.clickCheck()));
 
     // After rapid clicks, ensure status message is consistent with protocol
-    const protocol = await httpsPage.getProtocol();
-    const finalHTML = await httpsPage.getStatusInnerHTML();
+    const protocol1 = await httpsPage.getProtocol();
+    const finalHTML1 = await httpsPage.getStatusInnerHTML();
 
     if (protocol === 'https:') {
       expect(finalHTML).toContain('This connection is secure!');
@@ -213,7 +213,7 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
   // Verify presence of FSM entry_action evidence (renderPage) by checking the expected DOM elements exist
   test('OnEnter (renderPage) evidence: static content and structure are present on load', async ({ page }) => {
     // This test validates that the page's initial render includes the educational content expected by the FSM
-    const httpsPage = new HttpsPage(page);
+    const httpsPage4 = new HttpsPage(page);
     await httpsPage.goto();
 
     // Verify primary content sections exist
@@ -234,7 +234,7 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
   // expected event-side effects occur, and if the environment somehow lacks the handler, fail the test.
   test('Event binding evidence: clicking triggers the registered click handler (document.getElementById(...).addEventListener)', async ({ page }) => {
     // This test ensures the page attached a click handler to #checkHttpsBtn per the FSM's evidence.
-    const httpsPage = new HttpsPage(page);
+    const httpsPage5 = new HttpsPage(page);
     await httpsPage.goto();
 
     // Before clicking, patching or inspection of internals is forbidden. We rely on behavioral evidence:
@@ -264,10 +264,10 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
   // Final test: ensure that the state transitions match FSM expected_observables exactly when possible
   test('FSM expected_observables: innerHTML matches the FSM statements exactly for the observed protocol', async ({ page }) => {
     // This test checks the innerHTML content exactly matches the expected observable strings defined in the FSM
-    const httpsPage = new HttpsPage(page);
+    const httpsPage6 = new HttpsPage(page);
     await httpsPage.goto();
 
-    const protocol = await httpsPage.getProtocol();
+    const protocol2 = await httpsPage.getProtocol();
 
     // Trigger the transition by clicking
     await httpsPage.clickCheck();
@@ -280,7 +280,7 @@ test.describe('Understanding HTTPS interactive application (FSM: Idle, Secure, I
       expect(observed).toBe(expected);
     } else {
       // Exact match for S2_Insecure expected_observables
-      const expected = 'This connection is NOT secure! <span class="insecure">❌</span>';
+      const expected1 = 'This connection is NOT secure! <span class="insecure">❌</span>';
       expect(observed).toBe(expected);
     }
 

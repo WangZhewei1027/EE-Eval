@@ -104,11 +104,11 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
   test.describe('Transitions and Searching (S0 -> S1 -> S2)', () => {
     test('Transition: Clicking Search triggers search and displays found result (S1 -> S2)', async ({ page }) => {
       // Test successful search flow: array contains target
-      const p = new ExponentialSearchPage(page);
+      const p1 = new ExponentialSearchPage(page);
       await p.goto();
 
       // Capture page errors and console errors during this interaction
-      const pageErrors = [];
+      const pageErrors1 = [];
       const consoleErrors = [];
       page.on('pageerror', e => pageErrors.push(e));
       page.on('console', msg => {
@@ -134,10 +134,10 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
 
     test('Transition: Clicking Search with missing target shows validation message', async ({ page }) => {
       // Edge case: valid array but missing target -> should show validation message
-      const p = new ExponentialSearchPage(page);
+      const p2 = new ExponentialSearchPage(page);
       await p.goto();
 
-      const pageErrors = [];
+      const pageErrors2 = [];
       page.on('pageerror', e => pageErrors.push(e));
 
       await p.setArray('10,20,30');
@@ -146,7 +146,7 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
 
       await p.clickSearch();
 
-      const resultText = await p.getResultText();
+      const resultText1 = await p.getResultText();
       expect(resultText).toBe('Please enter a valid sorted array and target value.');
 
       // No uncaught page errors expected
@@ -155,7 +155,7 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
 
     test('Transition: Clicking Search with empty array or invalid array shows validation when target missing', async ({ page }) => {
       // If array input is empty and/or target is NaN, function should show validation string
-      const p = new ExponentialSearchPage(page);
+      const p3 = new ExponentialSearchPage(page);
       await p.goto();
 
       await p.setArray(''); // this becomes [''] -> parseInt('') => NaN, but array length > 0; validation only checks arrayInput.length === 0
@@ -165,13 +165,13 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
 
       // According to implementation, it checks arrayInput.length === 0 || isNaN(targetInput)
       // arrayInput.length will be 1 (['']), but targetInput is NaN -> validation triggers
-      const resultText = await p.getResultText();
+      const resultText2 = await p.getResultText();
       expect(resultText).toBe('Please enter a valid sorted array and target value.');
     });
 
     test('Transition: Target not present in array results in correct "not found" message', async ({ page }) => {
       // Test path where target is not in the array -> S1 -> S2 with not found message
-      const p = new ExponentialSearchPage(page);
+      const p4 = new ExponentialSearchPage(page);
       await p.goto();
 
       await p.setArray('10,20,30,40');
@@ -179,13 +179,13 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
 
       await p.clickSearch();
 
-      const resultText = await p.getResultText();
+      const resultText3 = await p.getResultText();
       expect(resultText).toBe('Target value 25 not found in the array.');
     });
 
     test('Transition: Works with negative numbers and different sizes', async ({ page }) => {
       // Validate algorithm works with negative numbers and multiple sizes
-      const p = new ExponentialSearchPage(page);
+      const p5 = new ExponentialSearchPage(page);
       await p.goto();
 
       await p.setArray('-10,-5,0,5,10,20');
@@ -193,7 +193,7 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
 
       await p.clickSearch();
 
-      const resultText = await p.getResultText();
+      const resultText4 = await p.getResultText();
       expect(resultText).toBe('Target value -5 found at index: 1');
     });
   });
@@ -201,11 +201,11 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
   test.describe('Observability: Console logs and page errors during interactions', () => {
     test('No unexpected console.error or pageerror during normal usage', async ({ page }) => {
       // This test performs several valid interactions and asserts no page-level errors occur
-      const p = new ExponentialSearchPage(page);
+      const p6 = new ExponentialSearchPage(page);
       await p.goto();
 
-      const pageErrors = [];
-      const consoleErrors = [];
+      const pageErrors3 = [];
+      const consoleErrors1 = [];
       const consoleMessages = [];
 
       page.on('pageerror', e => pageErrors.push(e));
@@ -246,7 +246,7 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
   test.describe('FSM explicit checks: verify transitions and expected DOM updates', () => {
     test('Clicking Search transitions from S0 to S1 and then S2 by updating #result innerHTML', async ({ page }) => {
       // This test validates the observable expected in transitions: resultElement.innerHTML updated
-      const p = new ExponentialSearchPage(page);
+      const p7 = new ExponentialSearchPage(page);
       await p.goto();
 
       // Ensure starting in S0 (Idle) — result empty
@@ -260,7 +260,7 @@ test.describe('Exponential Search Interactive Application - FSM Validation', () 
       await p.clickSearch();
 
       // After actions, resultElement should be updated to show found index
-      const text = await p.getResultText();
+      const text1 = await p.getResultText();
       expect(text).toBe('Target value 300 found at index: 2');
     });
 

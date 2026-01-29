@@ -114,7 +114,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Start 3-way Handshake transitions from CLOSED -> SYN_SENT and establishes connection', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app1 = new TcpDemoPage(page);
 
     // Click handshake button to start
     await app.btnHand().click();
@@ -140,7 +140,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Sending data requires established connection; verify behavior before/after handshake', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app2 = new TcpDemoPage(page);
 
     // Edge case: Click Send Data while still CLOSED
     await app.btnSend().click();
@@ -173,7 +173,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Run Auto Transfer toggles auto mode and initiates auto send', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app3 = new TcpDemoPage(page);
 
     // Ensure handshake completes first so auto can send
     await app.btnHand().click();
@@ -198,7 +198,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Toggle Packet Loss updates UI and can result in dropped packets (style and log assertions)', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app4 = new TcpDemoPage(page);
 
     // Establish connection
     await app.btnHand().click();
@@ -239,7 +239,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Reset returns simulation to CLOSED and clears state/logs', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app5 = new TcpDemoPage(page);
 
     // Start handshake and then reset mid-flight to exercise reset behavior
     await app.btnHand().click();
@@ -267,7 +267,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Changing RTT input updates displayed RTT value and influences timing indirectly', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app6 = new TcpDemoPage(page);
 
     // Read initial RTT display
     const initialRttText = await app.rttVal().innerText();
@@ -287,7 +287,7 @@ test.describe('TCP/IP Interactive Demo (FSM validation)', () => {
   });
 
   test('Edge cases: clicking handshake twice and ensuring proper user feedback', async ({ page }) => {
-    const app = new TcpDemoPage(page);
+    const app7 = new TcpDemoPage(page);
 
     // Start handshake once
     await app.btnHand().click();

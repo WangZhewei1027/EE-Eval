@@ -118,7 +118,7 @@ test.describe('Bubble Sort interactive application - FSM validation', () => {
     // According to the FSM, clicking should trigger bubbleSort(arr). The HTML's onclick passes multiple numbers
     // as separate args (bubbleSort(8,3,4,...)), which is an incorrect signature for the function expecting an array.
     // We assert behavior: click happens, no page crash, and DOM Sorted List remains the static content.
-    const app = new BubbleSortPage(page);
+    const app1 = new BubbleSortPage(page);
     await app.goto();
 
     // Capture console message count before clicking.
@@ -163,7 +163,7 @@ test.describe('Bubble Sort interactive application - FSM validation', () => {
   test('Edge case & error scenario: calling bubbleSort() with no arguments triggers a runtime TypeError', async ({ page }) => {
     // This test intentionally invokes bubbleSort with no arguments to allow a natural TypeError to occur
     // in the page runtime (arr will be undefined and accessing arr.length should throw in subsequent code).
-    const app = new BubbleSortPage(page);
+    const app2 = new BubbleSortPage(page);
     await app.goto();
 
     // Ensure no recorded page errors prior to this invocation.
@@ -200,7 +200,7 @@ test.describe('Bubble Sort interactive application - FSM validation', () => {
     // This test double-checks that the page's initial script executed bubbleSort on a real array during load.
     // The inline script assigns let arr = [8,...]; and then calls bubbleSort(arr);
     // We validate that console messages from initial load include swap messages and a final sorted list print.
-    const app = new BubbleSortPage(page);
+    const app3 = new BubbleSortPage(page);
     await app.goto();
 
     // Confirm presence of "Swapped" console logs from the initial execution (bubble sort performed swaps).
@@ -212,7 +212,7 @@ test.describe('Bubble Sort interactive application - FSM validation', () => {
     expect(hasSortedLog).toBeTruthy();
 
     // Confirm the Sorted List displayed in the DOM matches the expected final array
-    const sortedText = await app.getSortedListText();
+    const sortedText1 = await app.getSortedListText();
     expect(sortedText).toContain('[1, 2, 3, 4, 5, 6, 7, 8, 9]');
   });
 });

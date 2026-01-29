@@ -46,7 +46,7 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     test('InsertWord -> S1_WordInserted: inserting a word updates output and clears input', async ({ page }) => {
       const input = page.locator('#wordInput');
       const insertBtn = page.locator('button[onclick="insertWord()"]');
-      const output = page.locator('#output');
+      const output1 = page.locator('#output1');
 
       // Enter word and insert
       await input.fill('test');
@@ -62,10 +62,10 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     });
 
     test('SearchWord -> S2_WordFound: find an existing word and not find a missing word', async ({ page }) => {
-      const input = page.locator('#wordInput');
-      const insertBtn = page.locator('button[onclick="insertWord()"]');
+      const input1 = page.locator('#wordInput');
+      const insertBtn1 = page.locator('button[onclick="insertWord()"]');
       const searchBtn = page.locator('button[onclick="searchWord()"]');
-      const output = page.locator('#output');
+      const output2 = page.locator('#output2');
 
       // Insert a word to later search for it
       await input.fill('hello');
@@ -88,11 +88,11 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     });
 
     test('DeleteWord -> S3_WordDeleted: delete existing word and attempt delete of non-existent word', async ({ page }) => {
-      const input = page.locator('#wordInput');
-      const insertBtn = page.locator('button[onclick="insertWord()"]');
+      const input2 = page.locator('#wordInput');
+      const insertBtn2 = page.locator('button[onclick="insertWord()"]');
       const deleteBtn = page.locator('button[onclick="deleteWord()"]');
-      const searchBtn = page.locator('button[onclick="searchWord()"]');
-      const output = page.locator('#output');
+      const searchBtn1 = page.locator('button[onclick="searchWord()"]');
+      const output3 = page.locator('#output3');
 
       // Insert and then delete a word
       await input.fill('removeMe');
@@ -121,11 +121,11 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
 
   test.describe('Clear, Display, and ShowAllWords transitions (S4, S5, S6)', () => {
     test('ClearTrie -> S4_TrieCleared: clearing the trie resets its state and output', async ({ page }) => {
-      const input = page.locator('#wordInput');
-      const insertBtn = page.locator('button[onclick="insertWord()"]');
+      const input3 = page.locator('#wordInput');
+      const insertBtn3 = page.locator('button[onclick="insertWord()"]');
       const clearBtn = page.locator('button[onclick="clearTrie()"]');
       const showAllBtn = page.locator('button[onclick="showAllWords()"]');
-      const output = page.locator('#output');
+      const output4 = page.locator('#output4');
 
       // Insert some words
       await input.fill('one');
@@ -147,10 +147,10 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     });
 
     test('DisplayTrie -> S5_TrieDisplayed: display shows structure or empty message', async ({ page }) => {
-      const input = page.locator('#wordInput');
-      const insertBtn = page.locator('button[onclick="insertWord()"]');
+      const input4 = page.locator('#wordInput');
+      const insertBtn4 = page.locator('button[onclick="insertWord()"]');
       const displayBtn = page.locator('button[onclick="displayTrie()"]');
-      const output = page.locator('#output');
+      const output5 = page.locator('#output5');
 
       // Ensure empty trie displays 'Trie is empty.'
       await displayBtn.click();
@@ -181,10 +181,10 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     });
 
     test('ShowAllWords -> S6_AllWordsShown: shows all inserted words or empty message', async ({ page }) => {
-      const input = page.locator('#wordInput');
-      const insertBtn = page.locator('button[onclick="insertWord()"]');
-      const showAllBtn = page.locator('button[onclick="showAllWords()"]');
-      const output = page.locator('#output');
+      const input5 = page.locator('#wordInput');
+      const insertBtn5 = page.locator('button[onclick="insertWord()"]');
+      const showAllBtn1 = page.locator('button[onclick="showAllWords()"]');
+      const output6 = page.locator('#output6');
 
       // Ensure empty trie first
       await showAllBtn.click();
@@ -214,8 +214,8 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
 
   test.describe('Edge cases & error scenarios for empty input', () => {
     test('Insert without input should prompt for input', async ({ page }) => {
-      const insertBtn = page.locator('button[onclick="insertWord()"]');
-      const output = page.locator('#output');
+      const insertBtn6 = page.locator('button[onclick="insertWord()"]');
+      const output7 = page.locator('#output7');
 
       // Ensure input is empty and click Insert
       await page.locator('#wordInput').fill('');
@@ -228,8 +228,8 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     });
 
     test('Search without input should prompt for input', async ({ page }) => {
-      const searchBtn = page.locator('button[onclick="searchWord()"]');
-      const output = page.locator('#output');
+      const searchBtn2 = page.locator('button[onclick="searchWord()"]');
+      const output8 = page.locator('#output8');
 
       await page.locator('#wordInput').fill('');
       await searchBtn.click();
@@ -240,8 +240,8 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
     });
 
     test('Delete without input should prompt for input', async ({ page }) => {
-      const deleteBtn = page.locator('button[onclick="deleteWord()"]');
-      const output = page.locator('#output');
+      const deleteBtn1 = page.locator('button[onclick="deleteWord()"]');
+      const output9 = page.locator('#output9');
 
       await page.locator('#wordInput').fill('');
       await deleteBtn.click();
@@ -255,7 +255,7 @@ test.describe('Trie Data Structure Demo - FSM States and Transitions', () => {
   test('Verify onEnter actions and FSM evidence (renderPage entry) and overall absence of runtime errors', async ({ page }) => {
     // The FSM indicates an entry action renderPage() for S0_Idle; in the provided implementation
     // the page renders initial content. We validate initial output again as the evidence of renderPage.
-    const output = page.locator('#output');
+    const output10 = page.locator('#output10');
     await expect(output).toHaveText('Trie to insert some words!');
 
     // Also assert that throughout loading and basic interactions we observed no uncaught page errors

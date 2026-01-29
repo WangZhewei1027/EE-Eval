@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Abstract Syntax Tree Explorer</title>
+    <style>
+        body {
+            font-family: monospace;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #000;
+            padding: 10px;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button, select, input {
+            padding: 5px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            font-family: monospace;
+        }
+        .ast-visualization {
+            min-height: 300px;
+            border: 1px solid #000;
+            padding: 10px;
+            white-space: pre;
+            overflow: auto;
+        }
+        .node {
+            cursor: pointer;
+            margin-left: 20px;
+        }
+        .node:hover {
+            text-decoration: underline;
+        }
+        .selected {
+            font-weight: bold;
+        }
+        .properties {
+            margin-top: 10px;
+            padding: 5px;
+            border: 1px dashed #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Abstract Syntax Tree Explorer</h1>
+        
+        <div class="panel">
+            <h2>Code Input</h2>
+            <div class="controls">
+                <select id="language-select">
+                    <option value="javascript">JavaScript</option>
+                    <option value="python">Python</option>
+                    <option value="arithmetic">Arithmetic Expressions</option>
+                </select>
+                <button id="parse-btn">Parse Code</button>
+                <button id="random-example-btn">Random Example</button>
+                <button id="clear-btn">Clear</button>
+            </div>
+            <textarea id="code-input">function add(a, b) {
+    return a + b;
+}</textarea>
+        </div>
+        
+        <div class="panel">
+            <h2>AST Visualization</h2>
+            <div class="controls">
+                <button id="expand-all-btn">Expand All</button>
+                <button id="collapse-all-btn">Collapse All</button>
+                <select id="view-mode">
+                    <option value="tree">Tree View</option>
+                    <option value="json">Raw JSON</option>
+                </select>
+                <label>
+                    Depth Limit: <input type="range" id="depth-slider" min="1" max="10" value="5">
+                    <span id="depth-value">5</span>
+                </label>
+            </div>
+            <div id="ast-visualization" class="ast-visualization"></div>
+        </div>
+        
+        <div class="panel">
+            <h2>Node Properties</h2>
+            <div id="node-properties" class="properties">Select a node to view its properties</div>
+        </div>
+        
+        <div class="panel">
+            <h2>AST Transformations</h2>
+            <div class="controls">
+                <select id="transformation-select">
+                    <option value="">Select Transformation...</option>
+                    <option value="rename">Rename Variable</option>
+                    <option value="remove">Remove Node</option>
+                    <option value="insert">Insert Node</option>
+                    <option value="optimize">Optimize Arithmetic</option>
+                </select>
+                <input type="text" id="transformation-param" placeholder="Parameter" disabled>
+                <button id="apply-transformation-btn" disabled>Apply</button>
+                <button id="undo-btn">Undo</button>
+                <button id="redo-btn">Redo</button>
+            </div>
+            <div id="transformation-status"></div>
+        </div>
+    </div>
+
+    <script>
+        // AST data and state management
+        let ast = null;
+        let astHistory = [];
+        let historyPointer = -1;
+        let selectedNodePath = [];
+        let collapsedNodes = new Set();
+        
+        // Example ASTs for different languages
+        const examples = {
+            javascript: [
+                `function add(a, b) { return a + b; }`,
+                `const x = 5 * (3 + 2); console.log(x);`,
+                `if (x > 10) { alert('Large'); } else { alert('Small'); }`
+            ],
+            python: [
+                `def greet(name):\n    print("Hello", name)`,
+                `x = [i*2 for i in range(10) if i % 2 == 0]`,
+                `class Point:\n    def __init__(self, x, y):\n        self.x = x\n        self.y = y`
+            ],
+            arithmetic: [
+                `2 + 3 * 4`,
+                `(5 + 3) * (10 - 2)`,
+                `sqrt(9) + pow(2, 3)`
+            ]
+        };
+        
+        // Simple parser for demonstration purposes
+        function parseCode(code, language) {
+            if (language === 'arithmetic') {
+                return parseArithmeticExpression(code);
+            } else {
+                // In a real app, you would use a proper parser like Acorn for JavaScript
+                return mockParse(code, language);
+            }
+        }
+        
+        function mockParse(code, language) {
+            // This is a simplified mock parser for demonstration
+            const ast = {
+                type: 'Program',
+                language: language,
+                body: [],
+                range: [0, code.length],
+                loc: {
+                    start: { line: 1, column: 0 },
+                    end: { line: code.split('\n').length, column: 0 }
+                }
+            };
+            
+            if (language === 'javascript') {
+                if (code.includes('function')) {
+                    ast.body.push({
+                        type: 'FunctionDeclaration',
+                        id: { type: 'Identifier', name: code.match(/function\s+(\w+)/)[1] },
+                        params: code.match(/\(([^)]*)\)/)[1].split(',').map(p => ({
+                            type: 'Identifier',
+                            name: p.trim()
+                        })),
+                        body: {
+                            type: 'BlockStatement',
+                            body: [{
+                                type: 'ReturnStatement',
+                                argument: {
+                                    type: 'BinaryExpression',
+                                    operator: '+',
+                                    left: { type: 'Identifier', name: 'a' },
+                                    right: { type: 'Identifier', name: 'b' }
+                                }
+                            }]
+                        }
+                    });
+                } else if (code.includes('if')) {
+                    ast.body.push({
+                        type: 'IfStatement',
+                        test: {
+                            type: 'BinaryExpression',
+                            operator: '>',
+                            left: { type: 'Identifier', name: 'x' },
+                            right: { type: 'Literal', value: 10 }
+                        },
+                        consequent: {
+                            type: 'BlockStatement',
+                            body: [{
+                                type: 'ExpressionStatement',
+                                expression: {
+                                    type: 'CallExpression',
+                                    callee: { type: 'Identifier', name: 'alert' },
+                                    arguments: [{ type: 'Literal', value: 'Large' }]
+                                }
+                            }]
+                        },
+                        alternate: {
+                            type: 'BlockStatement',
+                            body: [{
+                                type: 'ExpressionStatement',
+                                expression: {
+                                    type: 'CallExpression',
+                                    callee: { type: 'Identifier', name: 'alert' },
+                                    arguments: [{ type: 'Literal', value: 'Small' }]
+                                }
+                            }]
+                        }
+                    });
+                }
+            } else if (language === 'python') {
+                if (code.includes('def')) {
+                    ast.body.push({
+                        type: 'FunctionDef',
+                        name: code.match(/def\s+(\w+)/)[1],
+                        args: {
+                            type: 'arguments',
+                            args: code.match(/\(([^)]*)\)/)[1].split(',').map(p => ({
+                                type: 'arg',
+                                arg: p.trim()
+                            }))
+                        },
+                        body: [{
+                            type: 'Expr',
+                            value: {
+                                type: 'Call',
+                                func: { type: 'Name', id: 'print' },
+                                args: [
+                                    { type: 'Str', s: 'Hello' },
+                                    { type: 'Name', id: 'name' }
+                                ]
+                            }
+                        }]
+                    });
+                }
+            }
+            
+            return ast;
+        }
+        
+        function parseArithmeticExpression(expr) {
+            // Very simple arithmetic expression parser
+            const tokens = tokenize(expr);
+            let index = 0;
+            
+            function parseExpression() {
+                return parseAdditive();
+            }
+            
+            function parseAdditive() {
+                let left = parseMultiplicative();
+                
+                while (index < tokens.length && (tokens[index].type === 'PLUS' || tokens[index].type === 'MINUS')) {
+                    const operator = tokens[index].value;
+                    index++;
+                    const right = parseMultiplicative();
+                    left = {
+                        type: 'BinaryExpression',
+                        operator,
+                        left,
+                        right
+                    };
+                }
+                
+                return left;
+            }
+            
+            function parseMultiplicative() {
+                let left = parsePrimary();
+                
+                while (index < tokens.length && (tokens[index].type === 'MULTIPLY' || tokens[index].type === 'DIVIDE')) {
+                    const operator = tokens[index].value;
+                    index++;
+                    const right = parsePrimary();
+                    left = {
+                        type: 'BinaryExpression',
+                        operator,
+                        left,
+                        right
+                    };
+                }
+                
+                return left;
+            }
+            
+            function parsePrimary() {
+                if (tokens[index].type === 'NUMBER') {
+                    return { type: 'Literal', value: parseFloat(tokens[index++].value) };
+                } else if (tokens[index].type === 'LPAREN') {
+                    index++;
+                    const expr = parseExpression();
+                    if (tokens[index].type !== 'RPAREN') {
+                        throw new Error('Expected )');
+                    }
+                    index++;
+                    return expr;
+                } else if (tokens[index].type === 'IDENTIFIER') {
+                    const name = tokens[index++].value;
+                    if (tokens[index]?.type === 'LPAREN') {
+                        index++;
+                        const args = [];
+                        if (tokens[index].type !== 'RPAREN') {
+                            args.push(parseExpression());
+                            while (tokens[index].type === 'COMMA') {
+                                index++;
+                                args.push(parseExpression());
+                            }
+                        }
+                        if (tokens[index].type !== 'RPAREN') {
+                            throw new Error('Expected )');
+                        }
+                        index++;
+                        return {
+                            type: 'CallExpression',
+                            callee: { type: 'Identifier', name },
+                            arguments: args
+                        };
+                    } else {
+                        return { type: 'Identifier', name };
+                    }
+                } else {
+                    throw new Error('Unexpected token');
+                }
+            }
+            
+            const ast = {
+                type: 'Program',
+                language: 'arithmetic',
+                body: [{
+                    type: 'ExpressionStatement',
+                    expression: parseExpression()
+                }]
+            };
+            
+            return ast;
+        }
+        
+        function tokenize(expr) {
+            const tokens = [];
+            let i = 0;
+            
+            while (i < expr.length) {
+                const c = expr[i];
+                
+                if (c === ' ') {
+                    i++;
+                    continue;
+                }
+                
+                if (c === '+') {
+                    tokens.push({ type: 'PLUS', value: '+' });
+                    i++;
+                } else if (c === '-') {
+                    tokens.push({ type: 'MINUS', value: '-' });
+                    i++;
+                } else if (c === '*') {
+                    tokens.push({ type: 'MULTIPLY', value: '*' });
+                    i++;
+                } else if (c === '/') {
+                    tokens.push({ type: 'DIVIDE', value: '/' });
+                    i++;
+                } else if (c === '(') {
+                    tokens.push({ type: 'LPAREN', value: '(' });
+                    i++;
+                } else if (c === ')') {
+                    tokens.push({ type: 'RPAREN', value: ')' });
+                    i++;
+                } else if (c === ',') {
+                    tokens.push({ type: 'COMMA', value: ',' });
+                    i++;
+                } else if (/c/.test(c)) {
+                    let num = '';
+                    while (/[0-9.]/.test(expr[i])) {
+                        num += expr[i];
+                        i++;
+                    }
+                    tokens.push({ type: 'NUMBER', value: num });
+                } else if (/[a-zA-Z]/.test(c)) {
+                    let ident = '';
+                    while (/[a-zA-Z0-9]/.test(expr[i])) {
+                        ident += expr[i];
+                        i++;
+                    }
+                    tokens.push({ type: 'IDENTIFIER', value: ident });
+                } else {
+                    i++;
+                }
+            }
+            
+            return tokens;
+        }
+        
+        // AST visualization
+        function renderAST() {
+            const visualization = document.getElementById('ast-visualization');
+            const viewMode = document.getElementById('view-mode').value;
+            const depthLimit = parseInt(document.getElementById('depth-slider').value);
+            
+            if (viewMode === 'json') {
+                visualization.textContent = JSON.stringify(ast, null, 2);
+                return;
+            }
+            
+            if (!ast) {
+                visualization.textContent = 'No AST available. Parse some code first.';
+                return;
+            }
+            
+            visualization.innerHTML = '';
+            renderNode(visualization, ast, 0, depthLimit, []);
+        }
+        
+        function renderNode(container, node, depth, depthLimit, path) {
+            if (depth > depthLimit) return;
+            
+            const isCollapsed = collapsedNodes.has(path.join('.'));
+            const nodeElement = document.createElement('div');
+            nodeElement.className = 'node';
+            if (selectedNodePath.join('.') === path.join('.')) {
+                nodeElement.classList.add('selected');
+            }
+            
+            nodeElement.textContent = `${'  '.repeat(depth)}${node.type}`;
+            nodeElement.onclick = (e) => {
+                e.stopPropagation();
+                selectNode(path);
+            };
+            
+            container.appendChild(nodeElement);
+            
+            if (isCollapsed) {
+                const ellipsis = document.createElement('div');
+                ellipsis.textContent = `${'  '.repeat(depth + 1)}...`;
+                ellipsis.style.marginLeft = '20px';
+                container.appendChild(ellipsis);
+                return;
+            }
+            
+            if (typeof node === 'object' && node !== null) {
+                for (const key in node) {
+                    if (key === 'type' || key === 'loc' || key === 'range') continue;
+                    
+                    const value = node[key];
+                    if (Array.isArray(value)) {
+                        value.forEach((item, index) => {
+                            if (typeof item === 'object' && item !== null) {
+                                renderNode(container, item, depth + 1, depthLimit, [...path, key, index]);
+                            }
+                        });
+                    } else if (typeof value === 'object' && value !== null) {
+                        renderNode(container, value, depth + 1, depthLimit, [...path, key]);
+                    }
+                }
+            }
+        }
+        
+        function selectNode(path) {
+            selectedNodePath = path;
+            renderAST();
+            showNodeProperties(getNodeByPath(ast, path));
+        }
+        
+        function getNodeByPath(root, path) {
+            let node = root;
+            for (const key of path) {
+                if (Array.isArray(node)) {
+                    node = node[key];
+                } else {
+                    node = node[key];
+                }
+            }
+            return node;
+        }
+        
+        function showNodeProperties(node) {
+            const propsContainer = document.getElementById('node-properties');
+            
+            if (!node) {
+                propsContainer.textContent = 'No node selected';
+                return;
+            }
+            
+            let html = `<strong>${node.type}</strong><br><br>`;
+            
+            for (const key in node) {
+                if (key === 'type') continue;
+                const value = node[key];
+                html += `<strong>${key}:</strong> ${typeof value === 'object' ? JSON.stringify(value) : value}<br>`;
+            }
+            
+            propsContainer.innerHTML = html;
+        }
+        
+        // AST transformations
+        function applyTransformation() {
+            const transformation = document.getElementById('transformation-select').value;
+            const param = document.getElementById('transformation-param').value;
+            
+            if (!ast || !selectedNodePath.length) {
+                document.getElementById('transformation-status').textContent = 'No node selected for transformation';
+                return;
+            }
+            
+            // Save current state to history
+            saveToHistory();
+            
+            const node = selectedNodePath.reduce((obj, key) => obj[key], ast);
+            
+            try {
+                switch (transformation) {
+                    case 'rename':
+                        if (node.type === 'Identifier' || node.type === 'arg') {
+                            const oldName = node.name || node.arg;
+                            node.name = param;
+                            if (node.arg) node.arg = param;
+                            document.getElementById('transformation-status').textContent = 
+                                `Renamed ${oldName} to ${param}`;
+                        } else {
+                            document.getElementById('transformation-status').textContent = 
+                                'Can only rename identifier nodes';
+                        }
+                        break;
+                    case 'remove':
+                        const parentPath = selectedNodePath.slice(0, -1);
+                        const parent = parentPath.reduce((obj, key) => obj[key], ast);
+                        const lastKey = selectedNodePath[selectedNodePath.length - 1];
+                        
+                        if (Array.isArray(parent)) {
+                            parent.splice(lastKey, 1);
+                        } else {
+                            delete parent[lastKey];
+                        }
+                        
+                        document.getElementById('transformation-status').textContent = 'Node removed';
+                        selectedNodePath = [];
+                        break;
+                    case 'optimize':
+                        if (node.type === 'BinaryExpression') {
+                            if (node.left.type === 'Literal' && node.right.type === 'Literal') {
+                                const left = node.left.value;
+                                const right = node.right.value;
+                                let result;
+                                
+                                switch (node.operator) {
+                                    case '+': result = left + right; break;
+                                    case '-': result = left - right; break;
+                                    case '*': result = left * right; break;
+                                    case '/': result = left / right; break;
+                                }
+                                
+                                const parentPath = selectedNodePath.slice(0, -1);
+                                const parent = parentPath.reduce((obj, key) => obj[key], ast);
+                                const lastKey = selectedNodePath[selectedNodePath.length - 1];
+                                
+                                parent[lastKey] = { type: 'Literal', value: result };
+                                document.getElementById('transformation-status').textContent = 
+                                    `Optimized to ${result}`;
+                            } else {
+                                document.getElementById('transformation-status').textContent = 
+                                    'Can only optimize literal expressions';
+                            }
+                        } else {
+                            document.getElementById('transformation-status').textContent = 
+                                'Can only optimize binary expressions';
+                        }
+                        break;
+                }
+                
+                renderAST();
+            } catch (e) {
+                document.getElementById('transformation-status').textContent = `Error: ${e.message}`;
+                undo(); // Revert if transformation failed
+            }
+        }
+        
+        // History management
+        function saveToHistory() {
+            // Remove any redo history
+            astHistory = astHistory.slice(0, historyPointer + 1);
+            
+            // Save current state
+            astHistory.push(JSON.parse(JSON.stringify(ast)));
+            historyPointer++;
+            
+            updateUndoRedoButtons();
+        }
+        
+        function undo() {
+            if (historyPointer <= 0) return;
+            
+            historyPointer--;
+            ast = JSON.parse(JSON.stringify(astHistory[historyPointer]));
+            
+            renderAST();
+            updateUndoRedoButtons();
+        }
+        
+        function redo() {
+            if (historyPointer >= astHistory.length - 1) return;
+            
+            historyPointer++;
+            ast = JSON.parse(JSON.stringify(astHistory[historyPointer]));
+            
+            renderAST();
+            updateUndoRedoButtons();
+        }
+        
+        function updateUndoRedoButtons() {
+            document.getElementById('undo-btn').disabled = historyPointer <= 0;
+            document.getElementById('redo-btn').disabled = historyPointer >= astHistory.length - 1;
+        }
+        
+        // Event listeners
+        document.getElementById('parse-btn').addEventListener('click', () => {
+            const code = document.getElementById('code-input').value;
+            const language = document.getElementById('language-select').value;
+            
+            try {
+                ast = parseCode(code, language);
+                saveToHistory();
+                renderAST();
+                document.getElementById('transformation-status').textContent = 'Code parsed successfully';
+            } catch (e) {
+                document.getElementById('transformation-status').textContent = `Parse error: ${e.message}`;
+            }
+        });
+        
+        document.getElementById('random-example-btn').addEventListener('click', () => {
+            const language = document.getElementById('language-select').value;
+            const examplesForLang = examples[language];
+            const randomExample = examplesForLang[Math.floor(Math.random() * examplesForLang.length)];
+            document.getElementById('code-input').value = randomExample;
+        });
+        
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            document.getElementById('code-input').value = '';
+            ast = null;
+            astHistory = [];
+            historyPointer = -1;
+            selectedNodePath = [];
+            collapsedNodes = new Set();
+            renderAST();
+            document.getElementById('node-properties').textContent = 'Select a node to view its properties';
+            document.getElementById('transformation-status').textContent = '';
+        });
+        
+        document.getElementById('expand-all-btn').addEventListener('click', () => {
+            collapsedNodes = new Set();
+            renderAST();
+        });
+        
+        document.getElementById('collapse-all-btn').addEventListener('click', () => {
+            // Collapse all nodes except the root
+            collapsedNodes = new Set();
+            if (ast) {
+                function collectPaths(node, path) {
+                    if (typeof node === 'object' && node !== null) {
+                        for (const key in node) {
+                            if (key === 'type' || key === 'loc' || key === 'range') continue;
+                            
+                            const value = node[key];
+                            if (Array.isArray(value)) {
+                                value.forEach((item, index) => {
+                                    if (typeof item === 'object' && item !== null) {
+                                        collapsedNodes.add([...path, key, index].join('.'));
+                                        collectPaths(item, [...path, key, index]);
+                                    }
+                                });
+                            } else if (typeof value === 'object' && value !== null) {
+                                collapsedNodes.add([...path, key].join('.'));
+                                collectPaths(value, [...path, key]);
+                            }
+                        }
+                    }
+                }
+                
+                collectPaths(ast, []);
+            }
+            renderAST();
+        });
+        
+        document.getElementById('view-mode').addEventListener('change', renderAST);
+        
+        document.getElementById('depth-slider').addEventListener('input', (e) => {
+            document.getElementById('depth-value').textContent = e.target.value;
+            renderAST();
+        });
+        
+        document.getElementById('transformation-select').addEventListener('change', (e) => {
+            const paramInput = document.getElementById('transformation-param');
+            const applyBtn = document.getElementById('apply-transformation-btn');
+            
+            if (e.target.value) {
+                paramInput.disabled = e.target.value !== 'rename';
+                applyBtn.disabled = false;
+            } else {
+                paramInput.disabled = true;
+                applyBtn.disabled = true;
+            }
+        });
+        
+        document.getElementById('apply-transformation-btn').addEventListener('click', applyTransformation);
+        
+        document.getElementById('undo-btn').addEventListener('click', undo);
+        document.getElementById('redo-btn').addEventListener('click', redo);
+        
+        // Initialize
+        renderAST();
+    </script>
+</body>
+</html>

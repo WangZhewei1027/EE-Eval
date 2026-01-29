@@ -117,7 +117,7 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
 
   test('S1 PlotUpdated: Selecting algorithm and bound then clicking Visualize updates the plot and legend', async ({ page }) => {
     // Validate transition from Idle -> PlotUpdated via SelectAlgorithm/SelectBound + ClickVisualize
-    const app = new BigOmegaPage(page);
+    const app1 = new BigOmegaPage(page);
     await app.goto();
 
     // Choose a different algorithm and bound, then visualize
@@ -126,7 +126,7 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
     await app.clickVisualize();         // ClickVisualize event
 
     // After updatePlot runs, legend should reflect the choices
-    const plotText = await app.getPlotText();
+    const plotText1 = await app.getPlotText();
     expect(plotText).toContain('Algorithm: n^3'); // legend contains algorithm
     expect(plotText).toContain('Ω Bound: n^2');   // legend contains bound
 
@@ -143,13 +143,13 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
 
     // Ensure no uncaught errors during plot updates
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('S2 Omega Verified: Verify Ω returns TRUE for f(n)=3*n^2+2*n+5 and g(n)=n^2', async ({ page }) => {
     // This validates the transition PlotUpdated -> OmegaVerified on ClickVerify (true path)
-    const app = new BigOmegaPage(page);
+    const app2 = new BigOmegaPage(page);
     await app.goto();
 
     // Ensure we start with safe, JS-friendly expressions to avoid eval pitfalls:
@@ -174,13 +174,13 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
 
     // Assert no uncaught page errors or console errors occurred
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('S3 Omega Not Verified: Verify Ω returns FALSE for f(n)=n and g(n)=n^2', async ({ page }) => {
     // This validates the transition PlotUpdated -> OmegaNotVerified on ClickVerify (false path)
-    const app = new BigOmegaPage(page);
+    const app3 = new BigOmegaPage(page);
     await app.goto();
 
     // Enter a function pair where f grows slower than g
@@ -189,25 +189,25 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
     await app.clickVerify();
     await page.waitForTimeout(100); // wait for DOM update
 
-    const resultText = await app.getVerificationText();
+    const resultText1 = await app.getVerificationText();
 
     // Expect the false message per evidence
     expect(resultText).toContain('is FALSE');
     expect(resultText).toContain('no suitable c and n₀ found');
 
     // The UI sets the result color to red on failure
-    const color = await app.getVerificationColor();
+    const color1 = await app.getVerificationColor();
     expect(color).toBe('red');
 
     // Ensure no uncaught runtime errors during verification
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Edge case: malformed function triggers evaluation error message (syntax/runtime in eval handled)', async ({ page }) => {
     // Validate behavior when the user provides an expression that cannot be evaluated (e.g., undefined function call)
-    const app = new BigOmegaPage(page);
+    const app4 = new BigOmegaPage(page);
     await app.goto();
 
     // Provide an expression that will cause eval to throw (but evaluateFunction catches it and returns NaN)
@@ -217,7 +217,7 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
     // The app returns early with an error message when isNaN encountered inside verifyOmega
     await page.waitForTimeout(100);
 
-    const resultText = await app.getVerificationText();
+    const resultText2 = await app.getVerificationText();
     expect(resultText).toMatch(/Error evaluating functions at n=\d+/); // e.g., Error evaluating functions at n=1. Check substring
 
     // This flow should not produce uncaught page errors because evaluateFunction handles exceptions
@@ -228,7 +228,7 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
 
   test('Multiple interactions: sequence of selects, visualize, and verify do not cause uncaught exceptions', async ({ page }) => {
     // This test runs through many interactions to validate FSM transitions stability
-    const app = new BigOmegaPage(page);
+    const app5 = new BigOmegaPage(page);
     await app.goto();
 
     // Sequence: change algorithm, bound, visualize, change functions, verify true, change functions, verify false
@@ -259,7 +259,7 @@ test.describe('Big-Omega (Ω) Notation Interactive App - FSM tests', () => {
 
     // Still no uncaught errors should have occurred during these interactions
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

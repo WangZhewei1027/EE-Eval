@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Exponential Search Interactive Demo</title>
+<style>
+  body { margin: 1em; font-family: monospace, monospace; background: white; color: black; }
+  input, button, select { font-family: monospace, monospace; margin: 0.2em 0; }
+  textarea { font-family: monospace, monospace; width: 100%; height: 7em; }
+  #log { width: 100%; height: 12em; overflow-y: scroll; border: 1px solid #000; white-space: pre-wrap; }
+  label { display: block; margin-top: 0.9em; }
+  fieldset { margin-bottom: 1em; }
+  .inline { display: inline-block; margin-right: 1em; }
+</style>
+</head>
+<body>
+
+<h1>Exponential Search Interactive Demo</h1>
+
+<p>
+This tool lets you <b>explore, build, and run</b> the Exponential Search algorithm step-by-step on a sorted array.
+You can input your own array, adjust the value to search, control the search speed, step through each phase, and experiment with different binary search variants used in the algorithm.
+</p>
+
+<form id="configForm" onsubmit="return false;">
+  <fieldset>
+    <legend>1. Input Array (Sorted, ascending)</legend>
+    <label for="arrayInput">Enter numbers separated by commas, spaces, or new lines:</label>
+    <textarea id="arrayInput" aria-label="Input array" placeholder="e.g. 1, 3, 5, 7, 9, 11"></textarea>
+    <button id="loadArray">Load Array</button>
+    <div id="arrayValidationMsg" aria-live="polite" style="color: red; font-weight: bold;"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Search Value and Settings</legend>
+    <label for="searchValue">Value to Find:</label>
+    <input id="searchValue" type="number" aria-label="Value to search" />
+    <label for="delaySlider" class="inline">Auto-play Step Delay (ms):</label>
+    <input id="delaySlider" type="range" min="100" max="2000" step="100" value="500" aria-label="Step delay slider" class="inline" />
+    <span id="delayValue" class="inline">500</span> ms
+    <br/>
+    <label for="binaryVariant">Binary Search Variant used in Exponential Search:</label>
+    <select id="binaryVariant" aria-label="Binary search variant">
+      <option value="standard">Standard Binary Search</option>
+      <option value="first-occurrence">Find First Occurrence</option>
+      <option value="last-occurrence">Find Last Occurrence</option>
+    </select>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Controls</legend>
+    <button id="resetAll" type="button">Reset All</button>
+    <button id="startSearch" type="button" disabled>Start Search</button>
+    <button id="autoPlay" type="button" disabled>Auto-Play: Off</button>
+    <button id="stepForward" type="button" disabled>Step Forward ▶</button>
+    <button id="stepBackward" type="button" disabled>Step Back ◀</button>
+  </fieldset>
+</form>
+
+<fieldset>
+  <legend>4. Current Array State</legend>
+  <pre id="arrayDisplay" aria-live="polite" style="white-space: pre-wrap;">(No array loaded)</pre>
+</fieldset>
+
+<fieldset>
+  <legend>5. Search Visualization and Logs</legend>
+  <pre id="searchState" aria-live="polite" style="min-height: 8em;">(No search started)</pre>
+  <div id="log" aria-live="polite">(Logs will appear here)</div>
+</fieldset>
+
+<fieldset>
+  <legend>6. Explore & Experiment</legend>
+  <p>
+    <b>Interactive Workflow:</b> 
+    <ul>
+      <li>Load a valid sorted array.</li>
+      <li>Set the target value and select binary search variant.</li>
+      <li>Click <i>Start Search</i> to begin the Exponential Search step-through.</li>
+      <li>Use <i>Step Forward</i> and <i>Step Backward</i> to explore each detailed step or <i>Auto-Play</i> to run automatically.</li>
+      <li>Modify parameters mid-search and <i>Reset All</i> to restart fresh.</li>
+    </ul>
+  </p>
+</fieldset>
+
+<script>
+(function(){
+  // Elements references
+  const arrayInput = document.getElementById('arrayInput');
+  const loadArrayBtn = document.getElementById('loadArray');
+  const arrayValidationMsg = document.getElementById('arrayValidationMsg');
+  const arrayDisplay = document.getElementById('arrayDisplay');
+
+  const searchValueInput = document.getElementById('searchValue');
+  const delaySlider = document.getElementById('delaySlider');
+  const delayValue = document.getElementById('delayValue');
+  const binaryVariantSelect = document.getElementById('binaryVariant');
+
+  const resetAllBtn = document.getElementById('resetAll');
+  const startSearchBtn = document.getElementById('startSearch');
+  const autoPlayBtn = document.getElementById('autoPlay');
+  const stepForwardBtn = document.getElementById('stepForward');
+  const stepBackwardBtn = document.getElementById('stepBackward');
+
+  const searchStatePre = document.getElementById('searchState');
+  const logDiv = document.getElementById('log');
+
+  // Core data state
+  let dataArray = [];
+  let searchValue = null;
+  let binaryVariant = 'standard';
+  let stepDelay = 500;
+
+  // Search internal states and history for stepping
+  let steps = [];
+  let currentStepIndex = -1;
+  let autoPlayTimer = null;
+
+  // Search stages enumeration
+  const Stage = {
+    INIT: 'Init',
+    EXP_STEP_CHECK: 'Exponential Step Check',
+    EXP_STEP_FOUND_RANGE: 'Exponential Found Range',
+    BINARY_SEARCH: 'Binary Search',
+    FINISHED: 'Finished',
+  };
+
+  // Step record schema: 
+  // {
+  //   stage: string,
+  //   description: string,
+  //   indices: {low?, high?, i?, range?},
+  //   log: string,
+  //   highlight: function or null (to generate contextual text),
+  //   resultIndex: number|null (final found index),
+  // }
+
+  // Helper for logging with history capture
+  function logStep(step) {
+    steps.push(step);
+  }
+
+  // Utility to parse input array and validate sorted ascending integers
+  function parseAndValidateArray(text) {
+    let raw = text.trim();
+    if(raw === '') return {valid:false, reason:'Array cannot be empty.'};
+    // Split by comma, spaces, new lines
+    let parts = raw.split(/[\s,]+/);
+    let nums = [];
+    for(let p of parts){
+      if(p === '') continue;
+      let n = Number(p);
+      if(isNaN(n) || !Number.isFinite(n)){
+        return {valid:false, reason: 'All inputs must be valid finite numbers.'};
+      }
+      nums.push(n);
+    }
+    if(nums.length === 0) return {valid:false, reason:'Array cannot be empty.'};
+    // Check sorted ascending
+    for(let i=1; i<nums.length; ++i){
+      if(nums[i] < nums[i-1]){
+        return {valid:false, reason:'Array must be sorted in ascending order (non-decreasing).'};
+      }
+    }
+    return {valid:true, array: nums};
+  }
+
+  // Display array with highlighting on indices, highlight options:
+  // {highlightIndices: Set} or null
+  function displayArray(arr, highlightIndices){
+    if(!arr || arr.length === 0) return '(Empty array)';
+    let out = '';
+    for(let i=0; i<arr.length; i++){
+      let s = arr[i].toString();
+      if(highlightIndices && highlightIndices.has(i)){
+        s = '[' + s + ']';
+      }
+      out += s + (i === arr.length - 1 ? '' : ', ');
+    }
+    return out;
+  }
+
+  // Clear all steps and visualizations
+  function resetSearch(){
+    steps = [];
+    currentStepIndex = -1;
+    clearTimeout(autoPlayTimer);
+    autoPlayTimer = null;
+    startSearchBtn.disabled = (dataArray.length === 0);
+    autoPlayBtn.disabled = true;
+    stepForwardBtn.disabled = true;
+    stepBackwardBtn.disabled = true;
+    searchStatePre.textContent = '(No search started)';
+    logDiv.textContent = '(Logs will appear here)';
+  }
+
+  // Update delay value display
+  delaySlider.addEventListener('input', ()=>{
+    stepDelay = Number(delaySlider.value);
+    delayValue.textContent = stepDelay;
+  });
+
+  // Load array button handler
+  loadArrayBtn.addEventListener('click', e=>{
+    e.preventDefault();
+    const input = arrayInput.value;
+    let validation = parseAndValidateArray(input);
+    if(!validation.valid){
+      arrayValidationMsg.textContent = validation.reason;
+      dataArray = [];
+      arrayDisplay.textContent = '(No array loaded)';
+      resetSearch();
+      startSearchBtn.disabled = true;
+      return;
+    }
+    arrayValidationMsg.textContent = '';
+    dataArray = validation.array;
+    arrayDisplay.textContent = displayArray(dataArray, null);
+    resetSearch();
+    startSearchBtn.disabled = false;
+  });
+
+  // Reset all button clears everything
+  resetAllBtn.addEventListener('click', e=>{
+    e.preventDefault();
+    arrayInput.value = '';
+    searchValueInput.value = '';
+    binaryVariantSelect.value = 'standard';
+    delaySlider.value = 500;
+    delayValue.textContent = '500';
+    dataArray = [];
+    searchValue = null;
+    arrayValidationMsg.textContent = '';
+    arrayDisplay.textContent = '(No array loaded)';
+    resetSearch();
+  });
+
+  // Search value change handler (just store number if valid)
+  searchValueInput.addEventListener('input', ()=>{
+    let val = searchValueInput.value;
+    if(val === '') {
+      searchValue = null;
+    } else {
+      let n = Number(val);
+      searchValue = Number.isFinite(n) ? n : null;
+    }
+  });
+
+  // Update binary variant immediately
+  binaryVariantSelect.addEventListener('change', ()=>{
+    binaryVariant = binaryVariantSelect.value;
+  });
+
+  // Disable or enable controls during searching
+  function setControlsDuringSearch(isRunning){
+    loadArrayBtn.disabled = isRunning;
+    arrayInput.disabled = isRunning;
+    searchValueInput.disabled = isRunning;
+    binaryVariantSelect.disabled = isRunning;
+    startSearchBtn.disabled = isRunning;
+    resetAllBtn.disabled = isRunning;
+  }
+
+  // Display current step state in searchStatePre and logDiv, highlight array elements
+   
+  function renderCurrentStep(){
+    if(currentStepIndex < 0 || currentStepIndex >= steps.length){
+      searchStatePre.textContent = '(No step to display)';
+      logDiv.textContent = '(Logs will appear here)';
+      arrayDisplay.textContent = displayArray(dataArray, null);
+      stepForwardBtn.disabled = true;
+      stepBackwardBtn.disabled = currentStepIndex <= 0;
+      return;
+    }
+    let step = steps[currentStepIndex];
+    searchStatePre.textContent = step.description;
+    logDiv.textContent = step.log || '';
+
+    // Highlight indices on array display
+    if(step.highlightIndices){
+      arrayDisplay.textContent = displayArray(dataArray, step.highlightIndices);
+    } else {
+      arrayDisplay.textContent = displayArray(dataArray, null);
+    }
+
+    stepForwardBtn.disabled = (currentStepIndex >= steps.length - 1);
+    stepBackwardBtn.disabled = (currentStepIndex <= 0);
+
+  }
+
+  // Advance one step forward (if any)
+  function stepForward(){
+    if(currentStepIndex < steps.length -1 ) {
+      currentStepIndex++;
+      renderCurrentStep();
+    }
+  }
+
+  // Step one backward
+  function stepBackward(){
+    if(currentStepIndex > 0) {
+      currentStepIndex--;
+      renderCurrentStep();
+    }
+  }
+
+  stepForwardBtn.addEventListener('click', e=>{ e.preventDefault(); stepForward(); });
+  stepBackwardBtn.addEventListener('click', e=>{ e.preventDefault(); stepBackward(); });
+
+  // Auto play toggle
+  autoPlayBtn.addEventListener('click', e=>{
+    e.preventDefault();
+    if(autoPlayTimer) {
+      // Stop auto play
+      clearTimeout(autoPlayTimer);
+      autoPlayTimer = null;
+      autoPlayBtn.textContent = 'Auto-Play: Off';
+      setControlsDuringSearch(false);
+      stepForwardBtn.disabled = (currentStepIndex >= steps.length - 1);
+      stepBackwardBtn.disabled = (currentStepIndex <= 0);
+      startSearchBtn.disabled = false;
+    } else {
+      // Start auto play from current or next step
+      setControlsDuringSearch(true);
+      autoPlayBtn.textContent = 'Auto-Play: On';
+      startSearchBtn.disabled = true;
+      stepForwardBtn.disabled = true;
+      stepBackwardBtn.disabled = true;
+      autoPlayStep();
+    }
+  });
+
+  function autoPlayStep(){
+    if(currentStepIndex < steps.length -1) {
+      currentStepIndex++;
+      renderCurrentStep();
+      autoPlayTimer = setTimeout(autoPlayStep, stepDelay);
+    } else {
+      // End autoplay
+      autoPlayTimer = null;
+      autoPlayBtn.textContent = 'Auto-Play: Off';
+      setControlsDuringSearch(false);
+      stepForwardBtn.disabled = (currentStepIndex >= steps.length - 1);
+      stepBackwardBtn.disabled = (currentStepIndex <= 0);
+      startSearchBtn.disabled = false;
+    }
+  }
+
+  // Exponential Search implementation with step-by-step logging and all possible detailed steps
+  // Will push each step into steps array with data for visualization and stepping
+
+  // Internal binary search variants for the binary search phase
+  // Standard: first found index of the value (any occurrence)
+  // First-occurrence: leftmost occurrence
+  // Last-occurrence: rightmost occurrence
+  function binarySearch(arr, val, low, high, variant, addStep){
+    let left = low;
+    let right = high;
+    addStep({
+      stage: Stage.BINARY_SEARCH,
+      description: `Binary Search started on range [${left} .. ${right}]`,
+      highlightIndices: new Set(),
+      log: `Beginning binary search for value ${val} in range [${low} .. ${high}].`,
+    });
+
+    let found = -1;
+    while(left <= right){
+      let mid = Math.floor((left + right) / 2);
+      addStep({
+        stage: Stage.BINARY_SEARCH,
+        description: `Checking middle element arr[${mid}] = ${arr[mid]}`,
+        highlightIndices: new Set([mid]),
+        log: `Compare search value ${val} with arr[${mid}] = ${arr[mid]}.`,
+      });
+      if(arr[mid] === val){
+        found = mid;
+        addStep({
+          stage: Stage.BINARY_SEARCH,
+          description: `Found value at index ${mid}.`,
+          highlightIndices: new Set([mid]),
+          log: `Value matched at index ${mid}.`,
+        });
+        // If standard binary, stop immediately
+        if(variant === 'standard'){
+          return found;
+        } else if (variant === 'first-occurrence'){
+          // Continue searching left to find the first occurrence
+          right = mid - 1;
+        } else if (variant === 'last-occurrence'){
+          // Continue searching right to find the last occurrence
+          left = mid + 1;
+        }
+      } else if(val < arr[mid]){
+        addStep({
+          stage: Stage.BINARY_SEARCH,
+          description: `Value less than arr[${mid}], narrowing to left half.`,
+          highlightIndices: new Set(),
+          log: `Value ${val} < ${arr[mid]}. Narrow search to left subarray.`,
+        });
+        right = mid -1;
+      } else {
+        addStep({
+          stage: Stage.BINARY_SEARCH,
+          description: `Value greater than arr[${mid}], narrowing to right half.`,
+          highlightIndices: new Set(),
+          log: `Value ${val} > ${arr[mid]}. Narrow search to right subarray.`,
+        });
+        left = mid + 1;
+      }
+      // Show current search bounds at every iteration end
+      addStep({
+        stage: Stage.BINARY_SEARCH,
+        description: `Binary Search bounds now [${left} .. ${right}]`,
+        highlightIndices: new Set(),
+        log: `Continue search in index range [${left} .. ${right}].`,
+      });
+    }
+    if(found !== -1){
+      addStep({
+        stage: Stage.BINARY_SEARCH,
+        description: `Search complete. Final found index is ${found}.`,
+        highlightIndices: new Set([found]),
+        log: `Binary search complete with final index ${found}.`,
+      });
+    } else {
+      addStep({
+        stage: Stage.BINARY_SEARCH,
+        description: `Search complete. Value NOT found in range.`,
+        highlightIndices: new Set(),
+        log: `Binary search complete without finding value ${val}.`,
+      });
+    }
+    return found;
+  }
+
+  // Exponential search main function, sets up steps
+  function exponentialSearch(arr, val, variant){
+    steps = [];
+    currentStepIndex = -1;
+    if(arr.length === 0){
+      steps.push({
+        stage: Stage.INIT,
+        description: 'Array is empty, nothing to search.',
+        highlightIndices: null,
+        log: '',
+      });
+      return;
+    }
+    // Step 1 - check first element
+    if(arr[0] === val){
+      steps.push({
+        stage: Stage.INIT,
+        description: `First element arr[0] = ${arr[0]} matches the search value.`,
+        highlightIndices: new Set([0]),
+        log: `Search value found at first element.`,
+      });
+      steps.push({
+        stage: Stage.FINISHED,
+        description: `Search finished. Found at index 0.`,
+        highlightIndices: new Set([0]),
+        log: 'Exponential search finished successfully.',
+      });
+      return;
+    } else {
+      steps.push({
+        stage: Stage.INIT,
+        description: `First element arr[0] = ${arr[0]} does NOT match the search value ${val}.`,
+        highlightIndices: new Set([0]),
+        log: `First element not a match, moving to exponential bound search.`,
+      });
+    }
+
+    // Step 2 - find range with exponential stepping
+    let i = 1;
+    steps.push({
+      stage: Stage.EXP_STEP_CHECK,
+      description: `Start exponential index bound search with index i = ${i}.`,
+      highlightIndices: new Set([i]),
+      log: `Initialize exponential bounds: i = 1.`,
+    });
+    while(i < arr.length && arr[i] < val){
+      steps.push({
+        stage: Stage.EXP_STEP_CHECK,
+        description: `Value at arr[${i}] = ${arr[i]} is less than ${val}, doubling i.`,
+        highlightIndices: new Set([i]),
+        log: `arr[${i}] = ${arr[i]} < ${val}, increase i exponentially.`,
+      });
+      i = i * 2;
+      if(i >= arr.length) {
+        i = arr.length - 1;
+        steps.push({
+          stage: Stage.EXP_STEP_CHECK,
+          description: `Index i adjusted to array end: i = ${i}.`,
+          highlightIndices: new Set([i]),
+          log: 'Index i exceeded array length, adjusted to last index.',
+        });
+      } else {
+        steps.push({
+          stage: Stage.EXP_STEP_CHECK,
+          description: `Doubled i, now i = ${i}.`,
+          highlightIndices: new Set([i]),
+          log: '',
+        });
+      }
+    }
+
+    // Now i is >= val or at end
+    let low = Math.floor(i / 2) + 1;
+    let high = i;
+    steps.push({
+      stage: Stage.EXP_STEP_FOUND_RANGE,
+      description: `Found range for binary search between indices [${low} .. ${high}].`,
+      highlightIndices: new Set([low, high]),
+      log: `Exponential search found range from ${low} to ${high} for binary search.`,
+    });
+
+    // Step 3 - binary search in range found
+    let foundIndex = binarySearch(arr, val, low, high, variant, function(step){
+      steps.push(step);
+    });
+
+    // Step 4 - finish
+    if(foundIndex !== -1){
+      steps.push({
+        stage: Stage.FINISHED,
+        description: `Search completed. Value found at index ${foundIndex}.`,
+        highlightIndices: new Set([foundIndex]),
+        log: 'Exponential search finished successfully.',
+        resultIndex: foundIndex,
+      });
+    } else {
+      steps.push({
+        stage: Stage.FINISHED,
+        description: `Search completed. Value NOT found in array.`,
+        highlightIndices: null,
+        log: 'Exponential search finished without finding the value.',
+        resultIndex: -1,
+      });
+    }
+  }
+
+  // Start search button handler
+  startSearchBtn.addEventListener('click', e=>{
+    e.preventDefault();
+    if(dataArray.length === 0){
+      alert('Please load a valid sorted array first.');
+      return;
+    }
+    let val = Number(searchValueInput.value);
+    if(!Number.isFinite(val)){
+      alert('Please enter a valid numerical search value.');
+      return;
+    }
+    searchValue = val;
+    binaryVariant = binaryVariantSelect.value;
+    steps = [];
+    currentStepIndex = -1;
+
+    // Build all steps for the search
+    exponentialSearch(dataArray, searchValue, binaryVariant);
+
+    if(steps.length === 0){
+      searchStatePre.textContent = '(No steps generated)';
+      logDiv.textContent = '';
+      return;
+    }
+
+    currentStepIndex = 0;
+    renderCurrentStep();
+
+    autoPlayBtn.disabled = false;
+    stepForwardBtn.disabled = (steps.length <= 1);
+    stepBackwardBtn.disabled = true;
+
+    setControlsDuringSearch(false);
+  });
+
+  // Initial disable start search
+  startSearchBtn.disabled = true;
+  autoPlayBtn.disabled = true;
+  stepForwardBtn.disabled = true;
+  stepBackwardBtn.disabled = true;
+
+  // Accessibility text for screen readers on load
+  arrayInput.setAttribute('aria-describedby', 'arrayValidationMsg');
+  arrayDisplay.setAttribute('tabindex', '0');
+  searchStatePre.setAttribute('tabindex', '0');
+  logDiv.setAttribute('tabindex', '0');
+
+})();
+</script>
+
+</body>
+</html>

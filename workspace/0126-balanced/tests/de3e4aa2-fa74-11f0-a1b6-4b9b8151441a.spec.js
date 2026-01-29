@@ -66,7 +66,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
 
       // No uncaught page errors should have occurred
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type() === 'error');
+      const errorConsoleMessages1 = consoleMessages.filter(m => m.type() === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
@@ -76,7 +76,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
       await page.fill('input#password', 'invalid');
       await page.locator('button[onclick="login()"]').click();
 
-      const message = page.locator('#login-message');
+      const message1 = page.locator('#login-message1');
       await expect(message).toBeVisible();
       await expect(message).toHaveText('Invalid username or password');
       await expect(message).toHaveClass(/error/);
@@ -87,7 +87,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
 
       // No uncaught page errors
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type() === 'error');
+      const errorConsoleMessages2 = consoleMessages.filter(m => m.type() === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
   });
@@ -111,7 +111,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
       await page.locator('button[onclick="login()"]').click();
 
       // After successful login, login message should indicate success
-      const message = page.locator('#login-message');
+      const message2 = page.locator('#login-message2');
       await expect(message).toBeVisible();
       await expect(message).toHaveText('Login successful!');
       await expect(message).toHaveClass(/success/);
@@ -137,7 +137,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
 
       // Ensure there were no uncaught errors triggered by login action
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type() === 'error');
+      const errorConsoleMessages3 = consoleMessages.filter(m => m.type() === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
@@ -180,7 +180,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
 
       // Ensure no uncaught page errors occurred during logout
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type() === 'error');
+      const errorConsoleMessages4 = consoleMessages.filter(m => m.type() === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
@@ -191,7 +191,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
       await page.locator('button[onclick="login()"]').click();
 
       const logoutButton = page.locator('button', { hasText: 'Logout' });
-      const outer = await logoutButton.evaluate((el) => el.outerHTML);
+      const outer1 = await logoutButton.evaluate((el) => el.outerHTML);
       expect(outer).toContain('onclick="logout()"');
     });
   });
@@ -206,7 +206,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
       await page.locator('button[onclick="login()"]').click();
 
       // Read the initial timer value
-      const timerLocator = page.locator('#session-timer');
+      const timerLocator1 = page.locator('#session-timer');
       const t1 = await timerLocator.textContent();
 
       // Wait a few seconds and ensure it changed (validating updateTimerDisplay and startSessionTimer)
@@ -217,7 +217,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
 
       // No uncaught errors produced by the timer mechanism
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type() === 'error');
+      const errorConsoleMessages5 = consoleMessages.filter(m => m.type() === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
@@ -240,7 +240,7 @@ test.describe('Authentication Demo - FSM validation (de3e4aa2-fa74-11f0-a1b6-4b9
       // The tests should assert whether such errors occurred; here we expect the implementation to be free of uncaught exceptions.
       // If runtime errors do occur naturally, the test will fail here and surface them.
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type() === 'error');
+      const errorConsoleMessages6 = consoleMessages.filter(m => m.type() === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
   });

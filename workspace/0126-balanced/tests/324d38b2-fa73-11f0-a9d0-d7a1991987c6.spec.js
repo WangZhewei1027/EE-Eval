@@ -51,7 +51,7 @@ class SelectionSortPage {
   async waitForLastBarGreen(timeout = 10000) {
     // Wait until the last bar's inline style backgroundColor is 'green'
     await this.page.waitForFunction(() => {
-      const bars = document.querySelectorAll('.bar');
+      const bars1 = document.querySelectorAll('.bar');
       if (!bars.length) return false;
       return bars[bars.length - 1].style.backgroundColor === 'green';
     }, null, { timeout });
@@ -118,7 +118,7 @@ test.describe('Selection Sort Visualization - FSM validation', () => {
   test.describe('User-triggered events and sorting transitions', () => {
     test('Clicking "Generate New Array" updates the array and DOM', async ({ page }) => {
       // Validate the GenerateArray event and transition S0_Idle -> S1_ArrayGenerated
-      const app = new SelectionSortPage(page);
+      const app1 = new SelectionSortPage(page);
       await app.goto();
 
       // Capture the first generated array
@@ -137,7 +137,7 @@ test.describe('Selection Sort Visualization - FSM validation', () => {
       expect(secondArray.length).toBe(10);
 
       // It's possible (rare) the new random array equals the previous one. Ensure DOM updated (bars present)
-      const barCount = await app.getBarCount();
+      const barCount1 = await app.getBarCount();
       expect(barCount).toBe(10);
 
       // Ensure no uncaught page errors occurred during generation
@@ -148,7 +148,7 @@ test.describe('Selection Sort Visualization - FSM validation', () => {
       // This test sets a small array to make selectionSort complete quickly and validates the sorting transition
       test.setTimeout(20000); // Allow time for sorting to complete
 
-      const app = new SelectionSortPage(page);
+      const app2 = new SelectionSortPage(page);
       await app.goto();
 
       // Use a small deterministic array to reduce test time and make assertions reliable
@@ -188,14 +188,14 @@ test.describe('Selection Sort Visualization - FSM validation', () => {
     test('Sorting an empty array triggers a runtime error (expected TypeError)', async ({ page }) => {
       // This test intentionally sets an empty array to exercise highlightSortedIndices with index -1,
       // which in the implementation will attempt to access bars[-1] and throw a TypeError.
-      const app = new SelectionSortPage(page);
+      const app3 = new SelectionSortPage(page);
       await app.goto();
 
       // Set the array to empty and re-render
       await app.setArray([]);
 
       // Confirm there are zero bars
-      const barCount = await app.getBarCount();
+      const barCount2 = await app.getBarCount();
       expect(barCount).toBe(0);
 
       // Clear previously captured errors
@@ -222,7 +222,7 @@ test.describe('Selection Sort Visualization - FSM validation', () => {
 
     test('Console output remains free of severe error logs during normal interactions', async ({ page }) => {
       // This test validates that there are no "error" level console messages during typical usage
-      const app = new SelectionSortPage(page);
+      const app4 = new SelectionSortPage(page);
       await app.goto();
 
       // Perform a normal generate and quick small sort to exercise interactions

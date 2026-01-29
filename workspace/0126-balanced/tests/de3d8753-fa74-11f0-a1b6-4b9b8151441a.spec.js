@@ -78,7 +78,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
       // No uncaught page errors
       expect(pageErrors.length).toBe(0);
       // No console errors for the successful path
-      const hasConsoleErrors = consoleMessages.some(m => m.type === 'error');
+      const hasConsoleErrors1 = consoleMessages.some(m => m.type === 'error');
       expect(hasConsoleErrors).toBeFalsy();
     });
 
@@ -94,9 +94,9 @@ test.describe('Integration Testing Demo - FSM validation', () => {
         }
       });
 
-      const authButton = page.locator('#runAuthTest');
-      const authResult = page.locator('#authResult');
-      const results = page.locator('#results');
+      const authButton1 = page.locator('#runAuthTest');
+      const authResult1 = page.locator('#authResult1');
+      const results1 = page.locator('#results1');
 
       // Start the test
       await authButton.click();
@@ -112,7 +112,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
 
       // Ensure no uncaught page errors bubbled up (runTest catches exceptions)
       expect(pageErrors.length).toBe(0);
-      const hasConsoleErrors = consoleMessages.some(m => m.type === 'error');
+      const hasConsoleErrors2 = consoleMessages.some(m => m.type === 'error');
       expect(hasConsoleErrors).toBeFalsy();
 
       // Restore users back to initial state so other tests are not affected
@@ -130,8 +130,8 @@ test.describe('Integration Testing Demo - FSM validation', () => {
       // Edge case: multiple rapid clicks produce multiple result entries
       const { pageErrors } = await attachLogging(page);
 
-      const authButton = page.locator('#runAuthTest');
-      const results = page.locator('#results');
+      const authButton2 = page.locator('#runAuthTest');
+      const results2 = page.locator('#results2');
 
       // Click twice in quick succession
       await authButton.click();
@@ -156,7 +156,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
 
       const checkoutButton = page.locator('#runCheckoutTest');
       const checkoutResult = page.locator('#checkoutResult');
-      const results = page.locator('#results');
+      const results3 = page.locator('#results3');
 
       // Click to start checkout test
       await checkoutButton.click();
@@ -179,7 +179,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
 
       // No uncaught page errors or console errors
       expect(pageErrors.length).toBe(0);
-      const hasConsoleErrors = consoleMessages.some(m => m.type === 'error');
+      const hasConsoleErrors3 = consoleMessages.some(m => m.type === 'error');
       expect(hasConsoleErrors).toBeFalsy();
     });
 
@@ -199,9 +199,9 @@ test.describe('Integration Testing Demo - FSM validation', () => {
         }
       });
 
-      const checkoutButton = page.locator('#runCheckoutTest');
-      const checkoutResult = page.locator('#checkoutResult');
-      const results = page.locator('#results');
+      const checkoutButton1 = page.locator('#runCheckoutTest');
+      const checkoutResult1 = page.locator('#checkoutResult1');
+      const results4 = page.locator('#results4');
 
       // Start the test
       await checkoutButton.click();
@@ -217,7 +217,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
 
       // No uncaught page errors (runTest catches thrown assertions)
       expect(pageErrors.length).toBe(0);
-      const hasConsoleErrors = consoleMessages.some(m => m.type === 'error');
+      const hasConsoleErrors4 = consoleMessages.some(m => m.type === 'error');
       expect(hasConsoleErrors).toBeFalsy();
 
       // Restore original paymentProcessor.processPayment implementation to avoid affecting other tests.
@@ -229,8 +229,8 @@ test.describe('Integration Testing Demo - FSM validation', () => {
     test('Edge case: clicking Run Checkout Test multiple times accumulates results', async ({ page }) => {
       const { pageErrors } = await attachLogging(page);
 
-      const checkoutButton = page.locator('#runCheckoutTest');
-      const results = page.locator('#results');
+      const checkoutButton2 = page.locator('#runCheckoutTest');
+      const results5 = page.locator('#results5');
 
       await checkoutButton.click();
       await checkoutButton.click();
@@ -238,8 +238,8 @@ test.describe('Integration Testing Demo - FSM validation', () => {
       // Wait for both to have completed
       await page.waitForTimeout(1200);
 
-      const resultsText = await results.innerText();
-      const occurrences = (resultsText.match(/Checkout Process Integration/g) || []).length;
+      const resultsText1 = await results.innerText();
+      const occurrences1 = (resultsText.match(/Checkout Process Integration/g) || []).length;
       expect(occurrences).toBeGreaterThanOrEqual(2);
 
       // No uncaught page errors

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive NoSQL Explorer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { display: flex; flex-direction: column; gap: 20px; }
+        .panel { border: 1px solid #ccc; padding: 15px; }
+        .row { display: flex; gap: 20px; }
+        .col { flex: 1; }
+        button, select, input { margin: 5px 0; padding: 5px; }
+        textarea { width: 100%; height: 200px; font-family: monospace; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .hidden { display: none; }
+        #queryResults { max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NoSQL Interactive Explorer</h1>
+        
+        <div class="row">
+            <div class="col">
+                <div class="panel">
+                    <h2>Database Selection</h2>
+                    <select id="dbType">
+                        <option value="document">Document Store (MongoDB-like)</option>
+                        <option value="keyvalue">Key-Value (Redis-like)</option>
+                        <option value="column">Column Family (Cassandra-like)</option>
+                        <option value="graph">Graph (Neo4j-like)</option>
+                    </select>
+                    <button id="initDb">Initialize Database</button>
+                    <div id="dbStatus">No database initialized</div>
+                </div>
+                
+                <div class="panel" id="documentControls">
+                    <h2>Document Operations</h2>
+                    <div>
+                        <h3>Create Document</h3>
+                        <textarea id="newDocument">{"name": "Example", "value": 42, "tags": ["demo", "test"]}</textarea>
+                        <button id="createDocument">Insert Document</button>
+                    </div>
+                    <div>
+                        <h3>Query Documents</h3>
+                        <input type="text" id="queryField" placeholder="Field name">
+                        <input type="text" id="queryValue" placeholder="Value">
+                        <button id="queryDocuments">Find Documents</button>
+                        <button id="getAllDocuments">Get All Documents</button>
+                    </div>
+                </div>
+                
+                <div class="panel hidden" id="graphControls">
+                    <h2>Graph Operations</h2>
+                    <div>
+                        <h3>Create Node</h3>
+                        <input type="text" id="nodeLabel" placeholder="Label">
+                        <textarea id="nodeProperties">{"name": "Node1"}</textarea>
+                        <button id="createNode">Add Node</button>
+                    </div>
+                    <div>
+                        <h3>Create Relationship</h3>
+                        <input type="text" id="relType" placeholder="Relationship type">
+                        <input type="text" id="fromNode" placeholder="From node ID">
+                        <input type="text" id="toNode" placeholder="To node ID">
+                        <button id="createRelationship">Add Relationship</button>
+                    </div>
+                    <div>
+                        <h3>Traverse Graph</h3>
+                        <input type="text" id="startNode" placeholder="Start node ID">
+                        <input type="number" id="depth" placeholder="Depth" value="1" min="1" max="5">
+                        <button id="traverseGraph">Traverse</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col">
+                <div class="panel">
+                    <h2>Query Results</h2>
+                    <div id="queryResults"></div>
+                </div>
+                
+                <div class="panel">
+                    <h2>Database Statistics</h2>
+                    <div id="stats">
+                        <div>Documents/Nodes: <span id="docCount">0</span></div>
+                        <div>Relationships: <span id="relCount">0</span></div>
+                        <div>Storage Size: <span id="storageSize">0</span> KB</div>
+                    </div>
+                    <button id="refreshStats">Refresh Statistics</button>
+                </div>
+                
+                <div class="panel">
+                    <h2>Advanced Operations</h2>
+                    <div>
+                        <button id="createIndex">Create Index</button>
+                        <input type="text" id="indexField" placeholder="Field to index">
+                    </div>
+                    <div>
+                        <button id="runAggregation">Run Aggregation</button>
+                        <select id="aggOperation">
+                            <option value="count">Count</option>
+                            <option value="sum">Sum</option>
+                            <option value="avg">Average</option>
+                            <option value="max">Maximum</option>
+                            <option value="min">Minimum</option>
+                        </select>
+                        <input type="text" id="aggField" placeholder="Field to aggregate">
+                    </div>
+                    <div>
+                        <button id="runTransaction">Run Transaction</button>
+                        <textarea id="transactionOps">[{"op": "insert", "data": {"test": "value"}}]</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Database state
+        let db = {
+            type: null,
+            documents: [],
+            nodes: [],
+            relationships: [],
+            indexes: {}
+        };
+        
+        // UI Elements
+        const dbTypeSelect = document.getElementById('dbType');
+        const initDbBtn = document.getElementById('initDb');
+        const dbStatus = document.getElementById('dbStatus');
+        const docControls = document.getElementById('documentControls');
+        const graphControls = document.getElementById('graphControls');
+        const queryResults = document.getElementById('queryResults');
+        const docCount = document.getElementById('docCount');
+        const relCount = document.getElementById('relCount');
+        const storageSize = document.getElementById('storageSize');
+        
+        // Initialize database
+        initDbBtn.addEventListener('click', () => {
+            db.type = dbTypeSelect.value;
+            db.documents = [];
+            db.nodes = [];
+            db.relationships = [];
+            db.indexes = {};
+            
+            dbStatus.textContent = `${dbTypeSelect.options[dbTypeSelect.selectedIndex].text} initialized`;
+            
+            // Show appropriate controls
+            docControls.classList.toggle('hidden', db.type !== 'document');
+            graphControls.classList.toggle('hidden', db.type !== 'graph');
+            
+            updateStats();
+        });
+        
+        // Document operations
+        document.getElementById('createDocument').addEventListener('click', () => {
+            try {
+                const doc = JSON.parse(document.getElementById('newDocument').value);
+                doc._id = generateId();
+                db.documents.push(doc);
+                updateStats();
+                queryResults.textContent = `Document inserted with ID: ${doc._id}`;
+            } catch (e) {
+                queryResults.textContent = `Error: ${e.message}`;
+            }
+        });
+        
+        document.getElementById('queryDocuments').addEventListener('click', () => {
+            const field = document.getElementById('queryField').value;
+            const value = document.getElementById('queryValue').value;
+            
+            let results;
+            if (field && value) {
+                results = db.documents.filter(doc => {
+                    if (doc[field] === undefined) return false;
+                    if (Array.isArray(doc[field])) {
+                        return doc[field].includes(value);
+                    }
+                    return doc[field].toString() === value;
+                });
+            } else {
+                results = db.documents;
+            }
+            
+            displayResults(results);
+        });
+        
+        document.getElementById('getAllDocuments').addEventListener('click', () => {
+            displayResults(db.documents);
+        });
+        
+        // Graph operations
+        document.getElementById('createNode').addEventListener('click', () => {
+            try {
+                const label = document.getElementById('nodeLabel').value;
+                const properties = JSON.parse(document.getElementById('nodeProperties').value);
+                const node = {
+                    id: generateId(),
+                    label,
+                    properties
+                };
+                db.nodes.push(node);
+                updateStats();
+                queryResults.textContent = `Node created with ID: ${node.id}`;
+            } catch (e) {
+                queryResults.textContent = `Error: ${e.message}`;
+            }
+        });
+        
+        document.getElementById('createRelationship').addEventListener('click', () => {
+            const type = document.getElementById('relType').value;
+            const fromId = document.getElementById('fromNode').value;
+            const toId = document.getElementById('toNode').value;
+            
+            const fromNode = db.nodes.find(n => n.id === fromId);
+            const toNode = db.nodes.find(n => n.id === toId);
+            
+            if (!fromNode || !toNode) {
+                queryResults.textContent = 'Error: One or both nodes not found';
+                return;
+            }
+            
+            const rel = {
+                id: generateId(),
+                type,
+                from: fromId,
+                to: toId,
+                properties: {}
+            };
+            
+            db.relationships.push(rel);
+            updateStats();
+            queryResults.textContent = `Relationship created with ID: ${rel.id}`;
+        });
+        
+        document.getElementById('traverseGraph').addEventListener('click', () => {
+            const startId = document.getElementById('startNode').value;
+            const depth = parseInt(document.getElementById('depth').value);
+            
+            const startNode = db.nodes.find(n => n.id === startId);
+            if (!startNode) {
+                queryResults.textContent = 'Error: Start node not found';
+                return;
+            }
+            
+            const result = traverseGraph(startId, depth);
+            displayResults(result);
+        });
+        
+        // Advanced operations
+        document.getElementById('createIndex').addEventListener('click', () => {
+            const field = document.getElementById('indexField').value;
+            if (!field) {
+                queryResults.textContent = 'Error: Please specify a field to index';
+                return;
+            }
+            
+            if (!db.indexes[field]) {
+                db.indexes[field] = {};
+                db.documents.forEach((doc, idx) => {
+                    if (doc[field] !== undefined) {
+                        const value = doc[field].toString();
+                        if (!db.indexes[field][value]) {
+                            db.indexes[field][value] = [];
+                        }
+                        db.indexes[field][value].push(idx);
+                    }
+                });
+                queryResults.textContent = `Index created on field: ${field}`;
+            } else {
+                queryResults.textContent = `Index already exists on field: ${field}`;
+            }
+        });
+        
+        document.getElementById('runAggregation').addEventListener('click', () => {
+            const op = document.getElementById('aggOperation').value;
+            const field = document.getElementById('aggField').value;
+            
+            if (!field) {
+                queryResults.textContent = 'Error: Please specify a field to aggregate';
+                return;
+            }
+            
+            const values = db.documents
+                .map(doc => doc[field])
+                .filter(val => val !== undefined);
+            
+            if (values.length === 0) {
+                queryResults.textContent = `No documents have field: ${field}`;
+                return;
+            }
+            
+            let result;
+            switch (op) {
+                case 'count':
+                    result = values.length;
+                    break;
+                case 'sum':
+                    result = values.reduce((a, b) => a + b, 0);
+                    break;
+                case 'avg':
+                    result = values.reduce((a, b) => a + b, 0) / values.length;
+                    break;
+                case 'max':
+                    result = Math.max(...values);
+                    break;
+                case 'min':
+                    result = Math.min(...values);
+                    break;
+                default:
+                    result = 'Unknown operation';
+            }
+            
+            queryResults.textContent = `Aggregation result (${op} of ${field}): ${result}`;
+        });
+        
+        document.getElementById('runTransaction').addEventListener('click', () => {
+            try {
+                const ops = JSON.parse(document.getElementById('transactionOps').value);
+                const results = [];
+                
+                ops.forEach(op => {
+                    if (op.op === 'insert') {
+                        const doc = op.data;
+                        doc._id = generateId();
+                        db.documents.push(doc);
+                        results.push(`Inserted document with ID: ${doc._id}`);
+                    } else if (op.op === 'update') {
+                        const updated = db.documents.filter(d => {
+                            return Object.entries(op.query).every(([k, v]) => d[k] === v);
+                        }).map(d => {
+                            Object.assign(d, op.update);
+                            return d._id;
+                        });
+                        results.push(`Updated ${updated.length} documents: ${updated.join(', ')}`);
+                    } else if (op.op === 'delete') {
+                        const toDelete = db.documents.filter(d => {
+                            return Object.entries(op.query).every(([k, v]) => d[k] === v);
+                        });
+                        db.documents = db.documents.filter(d => {
+                            return !Object.entries(op.query).every(([k, v]) => d[k] === v);
+                        });
+                        results.push(`Deleted ${toDelete.length} documents`);
+                    }
+                });
+                
+                updateStats();
+                queryResults.textContent = results.join('\n');
+            } catch (e) {
+                queryResults.textContent = `Transaction error: ${e.message}`;
+            }
+        });
+        
+        // Utility functions
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+        
+        function updateStats() {
+            docCount.textContent = db.type === 'graph' ? db.nodes.length : db.documents.length;
+            relCount.textContent = db.relationships.length;
+            storageSize.textContent = Math.floor(JSON.stringify(db).length / 1024);
+        }
+        
+        function displayResults(results) {
+            if (results.length === 0) {
+                queryResults.textContent = 'No results found';
+                return;
+            }
+            
+            if (typeof results[0] === 'string') {
+                queryResults.textContent = results.join('\n');
+                return;
+            }
+            
+            if (db.type === 'graph' && results[0].hasOwnProperty('path')) {
+                // Special handling for graph traversal results
+                let html = '<table><tr><th>Path</th><th>Nodes</th><th>Relationships</th></tr>';
+                results.forEach(path => {
+                    html += `<tr>
+                        <td>${path.path.join(' → ')}</td>
+                        <td>${path.nodes.map(n => n.id).join(', ')}</td>
+                        <td>${path.relationships.map(r => r.id).join(', ')}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+                queryResults.innerHTML = html;
+                return;
+            }
+            
+            // Default table display for documents/nodes
+            const sample = Object.keys(results[0]);
+            let html = '<table><tr>';
+            sample.forEach(key => {
+                html += `<th>${key}</th>`;
+            });
+            html += '</tr>';
+            
+            results.forEach(item => {
+                html += '<tr>';
+                sample.forEach(key => {
+                    let value = item[key];
+                    if (typeof value === 'object') {
+                        value = JSON.stringify(value);
+                    }
+                    html += `<td>${value}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</table>';
+            queryResults.innerHTML = html;
+        }
+        
+        function traverseGraph(startId, depth, visited = new Set(), currentDepth = 0, path = []) {
+            if (currentDepth > depth) return [];
+            if (visited.has(startId)) return [];
+            
+            visited.add(startId);
+            const startNode = db.nodes.find(n => n.id === startId);
+            if (!path.length) path = [startId];
+            
+            const results = [{
+                path: [...path],
+                nodes: [startNode],
+                relationships: []
+            }];
+            
+            if (currentDepth === depth) return results;
+            
+            const rels = db.relationships.filter(r => r.from === startId || r.to === startId);
+            
+            for (const rel of rels) {
+                const nextId = rel.from === startId ? rel.to : rel.from;
+                const newPath = [...path, nextId];
+                
+                const subResults = traverseGraph(
+                    nextId,
+                    depth,
+                    new Set([...visited]),
+                    currentDepth + 1,
+                    newPath
+                );
+                
+                subResults.forEach(res => {
+                    res.nodes.unshift(startNode);
+                    res.relationships.unshift(rel);
+                });
+                
+                results.push(...subResults);
+            }
+            
+            return results;
+        }
+        
+        // Initialize with document database
+        dbTypeSelect.value = 'document';
+        initDbBtn.click();
+    </script>
+</body>
+</html>

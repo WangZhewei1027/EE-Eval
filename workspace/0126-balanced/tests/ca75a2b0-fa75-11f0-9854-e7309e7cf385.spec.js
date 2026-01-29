@@ -157,7 +157,7 @@ test.describe('Queue Example App - FSM tests (ca75a2b0-fa75-11f0-9854-e7309e7cf3
 
   test('Documentation text integrity: ensure explanation about pop() behavior is present', async ({ page }) => {
     // The HTML contains explanation text about pop() behavior; verify those sentences exist.
-    const bodyText = await page.locator('body').innerText();
+    const bodyText1 = await page.locator('body').innerText();
     await expect(bodyText).toContain('When we call the `pop()` method on the queue, it will return the last element in the queue');
     await expect(bodyText).toContain('which is also \'item\' in this case');
   });

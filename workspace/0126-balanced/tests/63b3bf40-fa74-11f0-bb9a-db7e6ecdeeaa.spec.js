@@ -77,7 +77,7 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
     const task1 = page.locator('#task1');
     const inProgressList = page.locator('.column[data-status="in-progress"] .task-list');
     const backlogList = page.locator('.column[data-status="backlog"] .task-list');
-    const log = page.locator('#log');
+    const log1 = page.locator('#log1');
 
     // Ensure initial location is backlog
     await expect(backlogList.locator('#task1')).toBeVisible();
@@ -90,7 +90,7 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
     await expect(backlogList.locator('#task1')).toHaveCount(0);
 
     // The application logs a "Moved" message. Verify the latest log contains "Moved" and "In Progress"
-    const text = await log.textContent();
+    const text1 = await log.textContent();
     expect(text).toContain('Moved "User login feature" to "In Progress"');
 
     // After the drag sequence, aria-grabbed should have been reset to false
@@ -99,10 +99,10 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
 
   test('Drag task from In Progress (S1) to Done (S2) via drag-and-drop triggers Drop and DragEnd events', async ({ page }) => {
     // Move task1 to In Progress first (setup)
-    const task1 = page.locator('#task1');
-    const inProgressList = page.locator('.column[data-status="in-progress"] .task-list');
+    const task11 = page.locator('#task11');
+    const inProgressList1 = page.locator('.column[data-status="in-progress"] .task-list');
     const doneList = page.locator('.column[data-status="done"] .task-list');
-    const log = page.locator('#log');
+    const log2 = page.locator('#log2');
 
     // If task1 not yet in in-progress, move it
     if ((await inProgressList.locator('#task1').count()) === 0) {
@@ -118,7 +118,7 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
     await expect(inProgressList.locator('#task1')).toHaveCount(0);
 
     // Application should log the movement to Done
-    const logText = await log.textContent();
+    const logText1 = await log.textContent();
     expect(logText).toContain('Moved "User login feature" to "Done"');
 
     // aria-grabbed should be reset to false after dragend
@@ -131,9 +131,9 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
     // - ArrowLeft moves it back and logs again
 
     const task2 = page.locator('#task2');
-    const backlogList = page.locator('.column[data-status="backlog"] .task-list');
-    const inProgressList = page.locator('.column[data-status="in-progress"] .task-list');
-    const log = page.locator('#log');
+    const backlogList1 = page.locator('.column[data-status="backlog"] .task-list');
+    const inProgressList2 = page.locator('.column[data-status="in-progress"] .task-list');
+    const log3 = page.locator('#log3');
 
     // Ensure task2 starts in backlog
     await expect(backlogList.locator('#task2')).toBeVisible();
@@ -186,7 +186,7 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
     // Dispatch dragenter on In Progress list (should add highlight)
     await page.evaluate((selector, id) => {
       const target = document.querySelector(selector);
-      const dt = new DataTransfer();
+      const dt1 = new DataTransfer();
       dt.setData('text/plain', id);
       const dragEnterEvent = new DragEvent('dragenter', { bubbles: true, cancelable: true, composed: true, dataTransfer: dt });
       target.dispatchEvent(dragEnterEvent);
@@ -197,7 +197,7 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
 
     // Dispatch dragleave to remove highlight
     await page.evaluate((selector) => {
-      const target = document.querySelector(selector);
+      const target1 = document.querySelector(selector);
       const dragLeaveEvent = new DragEvent('dragleave', { bubbles: true, cancelable: true, composed: true });
       target.dispatchEvent(dragLeaveEvent);
     }, inProgressColumnTaskListSelector);
@@ -208,7 +208,7 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
 
     // Finally dispatch dragend on the task to ensure aria-grabbed resets
     await page.evaluate((id) => {
-      const el = document.getElementById(id);
+      const el1 = document.getElementById(id);
       const dragEndEvent = new DragEvent('dragend', { bubbles: true, cancelable: true, composed: true });
       el.dispatchEvent(dragEndEvent);
     }, task3Id);
@@ -220,15 +220,15 @@ test.describe('Agile Methodology Demo - States, Events, and Transitions', () => 
     // Simulate a drop with invalid dataTransfer content and assert no task movement nor misleading log entry is created.
 
     const inProgressListSelector = '.column[data-status="in-progress"] .task-list';
-    const log = page.locator('#log');
+    const log4 = page.locator('#log4');
 
     // Record log before invalid drop
     const beforeLog = await log.textContent();
 
     // Dispatch a drop event with unexpected data
     await page.evaluate((selector) => {
-      const target = document.querySelector(selector);
-      const dt = new DataTransfer();
+      const target2 = document.querySelector(selector);
+      const dt2 = new DataTransfer();
       dt.setData('text/plain', 'non-existent-task-id'); // invalid id
       const dropEvent = new DragEvent('drop', { bubbles: true, cancelable: true, composed: true, dataTransfer: dt });
       target.dispatchEvent(dropEvent);

@@ -109,10 +109,10 @@ test.describe('Process FSM - 520a0a42-fa76-11f0-a09b-87751f540fd8', () => {
 
     await page.waitForTimeout(50);
 
-    const texts = consoleMessages.map((c) => c.text);
+    const texts1 = consoleMessages.map((c) => c.text);
     const processingLog = texts.find((t) => new RegExp(`Processing:\\s*${longString}`).test(t));
     const tooLongLog = texts.find((t) => /Processing too long\./i.test(t));
-    const completedLog = texts.find((t) => /Processing completed\./i.test(t));
+    const completedLog1 = texts.find((t) => /Processing completed\./i.test(t));
 
     // Verify that the process ran and logged "Processing: <data>"
     expect(processingLog).toBeTruthy();
@@ -131,10 +131,10 @@ test.describe('Process FSM - 520a0a42-fa76-11f0-a09b-87751f540fd8', () => {
 
     await page.waitForTimeout(50);
 
-    const texts = consoleMessages.map((c) => c.text);
-    const procLog = texts.find((t) => /Processing:\s*1234567890/.test(t));
-    const completedLog = texts.find((t) => /Processing completed\./i.test(t));
-    const tooLongLog = texts.find((t) => /Processing too long\./i.test(t));
+    const texts2 = consoleMessages.map((c) => c.text);
+    const procLog1 = texts.find((t) => /Processing:\s*1234567890/.test(t));
+    const completedLog2 = texts.find((t) => /Processing completed\./i.test(t));
+    const tooLongLog1 = texts.find((t) => /Processing too long\./i.test(t));
 
     expect(procLog).toBeTruthy();
     expect(completedLog).toBeTruthy();
@@ -145,7 +145,7 @@ test.describe('Process FSM - 520a0a42-fa76-11f0-a09b-87751f540fd8', () => {
   test('Process does not modify the #output element (visual feedback remains empty)', async ({ page }) => {
     // The implementation logs to console but does not update the DOM output element.
     // Verify that after calling process, the output element still has no text content.
-    const output = page.locator('#output');
+    const output1 = page.locator('#output1');
     await expect(output).toHaveCount(1);
 
     // Call process with a short string

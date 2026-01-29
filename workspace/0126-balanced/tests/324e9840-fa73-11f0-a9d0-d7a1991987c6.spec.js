@@ -103,7 +103,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
 
   test('Transition: Solve a P problem -> P Problem Solved state', async ({ page }) => {
     // This test validates that clicking the Solve P button updates #pResult with the sorted array and timing info
-    const app = new PvsNPPage(page);
+    const app1 = new PvsNPPage(page);
     await app.goto();
 
     // Click Solve P and wait for pResult to be populated
@@ -137,7 +137,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
 
   test('Transition: Solve an NP problem -> NP Problem Solved state', async ({ page }) => {
     // This test validates that clicking the Solve NP button updates #npResult with verification result and timing
-    const app = new PvsNPPage(page);
+    const app2 = new PvsNPPage(page);
     await app.goto();
 
     // Click Solve NP and wait for npResult to be populated
@@ -168,7 +168,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
 
   test('Edge case: multiple rapid clicks update results consistently', async ({ page }) => {
     // This test clicks both buttons multiple times in quick succession to ensure results update deterministically
-    const app = new PvsNPPage(page);
+    const app3 = new PvsNPPage(page);
     await app.goto();
 
     // Rapidly click Solve P three times, then Solve NP three times
@@ -191,8 +191,8 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
       app.npResult
     );
 
-    const pText = await app.getPResultText();
-    const npText = await app.getNPResultText();
+    const pText1 = await app.getPResultText();
+    const npText1 = await app.getNPResultText();
 
     // Validate that both contain expected markers and are well-formed
     expect(pText).toContain('Sorted Array:');
@@ -208,7 +208,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
 
   test('State transitions reflect expected FSM evidence strings and formatting', async ({ page }) => {
     // This test uses the FSM evidence formats to assert the exact presence of expected substrings
-    const app = new PvsNPPage(page);
+    const app4 = new PvsNPPage(page);
     await app.goto();
 
     // Click Solve P and assert the exact evidence-like substring appears
@@ -218,7 +218,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
       {},
       app.pResult
     );
-    const pText = await app.getPResultText();
+    const pText2 = await app.getPResultText();
     // Evidence expects: document.getElementById('pResult').innerText = `Sorted Array: ${sortedArray}\nTime taken to sort: ${timeTaken} ms`;
     expect(pText).toMatch(/^Sorted Array: .*[\r\n]+Time taken to sort: \d+(\.\d+)? ms$/m);
 
@@ -229,7 +229,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
       {},
       app.npResult
     );
-    const npText = await app.getNPResultText();
+    const npText2 = await app.getNPResultText();
     // Evidence expects: document.getElementById('npResult').innerText = `Solution found: ${isSolution}\nTime taken for verification: ${timeTaken} ms`;
     expect(npText).toMatch(/^Solution found: (true|false)[\r\n]+Time taken for verification: \d+(\.\d+)? ms$/m);
 
@@ -240,7 +240,7 @@ test.describe('P vs NP Demonstration - FSM states and transitions', () => {
   test('Observability: capture console messages and page errors (should be none)', async ({ page }) => {
     // This test explicitly demonstrates how console and page errors are observed.
     // It asserts there are no SyntaxError/ReferenceError/TypeError occurrences during normal operation.
-    const app = new PvsNPPage(page);
+    const app5 = new PvsNPPage(page);
     await app.goto();
 
     // Perform actions that exercise the app

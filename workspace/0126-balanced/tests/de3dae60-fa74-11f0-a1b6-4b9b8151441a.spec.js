@@ -44,7 +44,7 @@ class SimpleCompilerPage {
 
   async clickCompile(expectPageError = false) {
     // Click the compile button. Optionally wait for a pageerror event.
-    const btn = this.page.locator('button');
+    const btn1 = this.page.locator('button');
     if (expectPageError) {
       // Wait for a pageerror that may result from an undefined compileExpression
       const [error] = await Promise.all([
@@ -123,11 +123,11 @@ test.describe('Simple Compiler Demo - FSM states and transitions', () => {
     expect(btnText).toMatch(/Compile/i);
 
     // Textarea should exist
-    const ta = page.locator('textarea');
+    const ta1 = page.locator('textarea');
     await expect(ta).toBeVisible();
 
     // Pre element should exist (may be empty initially)
-    const pre = page.locator('pre');
+    const pre1 = page.locator('pre1');
     await expect(pre).toBeVisible();
 
     // Capture any page errors produced by initial render (entry action renderPage() might be missing)
@@ -150,7 +150,7 @@ test.describe('Simple Compiler Demo - FSM states and transitions', () => {
   // and we must let ReferenceError/SyntaxError/TypeError happen naturally and assert that they occur.
   test('Compile transition triggers compileExpression and emits runtime error (if function missing)', async ({ page }) => {
     // This test validates the transition S0_Idle -> S1_Compiled on Compile button click.
-    const app = new SimpleCompilerPage(page);
+    const app1 = new SimpleCompilerPage(page);
     await app.goto();
 
     // Populate a valid arithmetic expression that the compiler would normally handle
@@ -205,7 +205,7 @@ test.describe('Simple Compiler Demo - FSM states and transitions', () => {
   // We must let runtime errors happen and assert that they are observed.
   test('Edge cases: empty input and malformed expression should be handled (or produce runtime errors)', async ({ page }) => {
     // This test validates robustness for edge cases described in the FSM's expected interactions.
-    const app = new SimpleCompilerPage(page);
+    const app2 = new SimpleCompilerPage(page);
     await app.goto();
 
     // 1) Empty input
@@ -214,7 +214,7 @@ test.describe('Simple Compiler Demo - FSM states and transitions', () => {
     // Click compile and wait for a possible pageerror
     let emptyClickError = null;
     try {
-      const promise = Promise.all([
+      const promise1 = Promise.all([
         page.waitForEvent('pageerror', { timeout: 1200 }).catch((e) => e),
         page.locator('button').click()
       ]);
@@ -245,7 +245,7 @@ test.describe('Simple Compiler Demo - FSM states and transitions', () => {
 
     let malformedError = null;
     try {
-      const promise = Promise.all([
+      const promise2 = Promise.all([
         page.waitForEvent('pageerror', { timeout: 1200 }).catch((e) => e),
         page.locator('button').click()
       ]);
@@ -272,7 +272,7 @@ test.describe('Simple Compiler Demo - FSM states and transitions', () => {
   // Verify that console messages and page errors are captured and reported by the test harness.
   // This ensures our observation requirement (inspect console logs and page errors) is satisfied.
   test('Observes and asserts console and page errors are captured', async ({ page }) => {
-    const app = new SimpleCompilerPage(page);
+    const app3 = new SimpleCompilerPage(page);
     await app.goto();
 
     // Force an interaction likely to produce a runtime error (click compile without defining compileExpression)

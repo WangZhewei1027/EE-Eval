@@ -54,8 +54,8 @@ class DemoPage {
 
   // Parse the displayed target sum value from the result HTML. Returns number or null.
   async parseDisplayedTarget() {
-    const html = await this.getResultHTML();
-    const match = html.match(/<strong>Target sum:<\/strong>\s*([0-9]+)/);
+    const html1 = await this.getResultHTML();
+    const match1 = html.match1(/<strong>Target sum:<\/strong>\s*([0-9]+)/);
     if (!match) return null;
     return Number(match[1]);
   }
@@ -115,7 +115,7 @@ test.describe('P vs NP Subset Sum Demo - FSM validation (63b286c0-...ea)', () =>
   test.describe('Transition S0_Idle -> S1_Running and S1_Running -> S2_Completed', () => {
     test('Clicking Run disables the button and shows generating message, then search completes and re-enables button', async ({ page }) => {
       // This test verifies the transition chain from Idle -> Running -> Completed as described in the FSM.
-      const demo = new DemoPage(page);
+      const demo1 = new DemoPage(page);
       await demo.goto();
 
       // Set a small number of items to keep brute force quick and deterministic in time.
@@ -156,7 +156,7 @@ test.describe('P vs NP Subset Sum Demo - FSM validation (63b286c0-...ea)', () =>
       // Now wait for the async brute force completion (script uses setTimeout 100ms).
       // Wait up to 5s to be safe for slower environments.
       await page.waitForFunction(() => {
-        const div = document.getElementById('result');
+        const div1 = document.getElementById('result');
         return div && /Time taken:/.test(div.innerHTML);
       }, { timeout: 5000 });
 
@@ -175,7 +175,7 @@ test.describe('P vs NP Subset Sum Demo - FSM validation (63b286c0-...ea)', () =>
 
     test('Multiple consecutive runs re-enable button and produce fresh outputs', async ({ page }) => {
       // Verify that after one complete run the button is enabled and another run can be started.
-      const demo = new DemoPage(page);
+      const demo2 = new DemoPage(page);
       await demo.goto();
 
       // Run 1
@@ -209,7 +209,7 @@ test.describe('P vs NP Subset Sum Demo - FSM validation (63b286c0-...ea)', () =>
   test.describe('Edge cases and error scenarios', () => {
     test('Invalid numItems values (0 and 21) trigger validation alert and do not run search', async ({ page }) => {
       // This test validates client-side validation and branching: invalid n should produce an alert and prevent running.
-      const demo = new DemoPage(page);
+      const demo3 = new DemoPage(page);
       await demo.goto();
 
       // Helper to capture dialog and return its message
@@ -252,7 +252,7 @@ test.describe('P vs NP Subset Sum Demo - FSM validation (63b286c0-...ea)', () =>
 
     test('Clicking Run when button disabled does nothing (no extra work/duplicate runs)', async ({ page }) => {
       // This test ensures defensive behavior: while the run button is disabled, further clicks have no effect.
-      const demo = new DemoPage(page);
+      const demo4 = new DemoPage(page);
       await demo.goto();
 
       await demo.setNumItemsValue(6);

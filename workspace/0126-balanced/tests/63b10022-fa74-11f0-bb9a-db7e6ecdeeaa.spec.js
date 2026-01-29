@@ -129,7 +129,7 @@ test.describe('Merge Sort Visualization - FSM states and transitions', () => {
   });
 
   test('S0_Idle -> S1_ArrayGenerated - Clicking "Generate New Array" regenerates array with requested size', async ({ page }) => {
-    const p = new MergeSortPage(page);
+    const p1 = new MergeSortPage(page);
     await p.goto();
 
     // Change the array size to a smaller number and generate
@@ -138,7 +138,7 @@ test.describe('Merge Sort Visualization - FSM states and transitions', () => {
 
     // Wait for new bars to render and assert the count matches requested size
     await page.waitForSelector('#arrayContainer .bar', { timeout: 5000 });
-    const barsCount = await p.getBarCount();
+    const barsCount1 = await p.getBarCount();
     expect(barsCount).toBe(10);
 
     // Newly generated bars should be in default (unsorted) visual state: class 'bar' present, no 'finished' initially
@@ -155,12 +155,12 @@ test.describe('Merge Sort Visualization - FSM states and transitions', () => {
     expect(pageErrorDuringGenerate, 'There should be no page errors when generating array').toBe(0);
 
     // No console errors either
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'There should be no console errors when generating array').toBe(0);
   });
 
   test('S1_ArrayGenerated -> S2_Sorting -> S3_Sorted - Starting merge sort disables controls, shows merging/highlight states, and finishes sorted', async ({ page }) => {
-    const p = new MergeSortPage(page);
+    const p2 = new MergeSortPage(page);
     await p.goto();
 
     // Use a small array to keep the sort time reasonable in test
@@ -212,12 +212,12 @@ test.describe('Merge Sort Visualization - FSM states and transitions', () => {
     expect(pageErrors.length, 'There should be no page errors during sorting').toBe(0);
 
     // Ensure no console errors during the full sort lifecycle
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'There should be no console errors during sorting').toBe(0);
   }, 45000); // increased timeout for sorting test
 
   test('Edge Case: Invalid array size should show alert and NOT regenerate array', async ({ page }) => {
-    const p = new MergeSortPage(page);
+    const p3 = new MergeSortPage(page);
     await p.goto();
 
     // Capture current bars count to compare after invalid input
@@ -251,12 +251,12 @@ test.describe('Merge Sort Visualization - FSM states and transitions', () => {
     expect(pageErrors.length).toBe(0);
 
     // No console errors either
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Observability: Collect and assert there are no unexpected console errors or uncaught exceptions during typical flows', async ({ page }) => {
-    const p = new MergeSortPage(page);
+    const p4 = new MergeSortPage(page);
     await p.goto();
 
     // Perform a generate and a quick sort on a small array to capture any runtime errors
@@ -270,7 +270,7 @@ test.describe('Merge Sort Visualization - FSM states and transitions', () => {
 
     // After interactions, assert that no page errors or console errors were recorded
     expect(pageErrors.length, 'No uncaught exceptions should have been thrown during interactions').toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length, 'No console errors should be present after interactions').toBe(0);
   }, 40000);
 });

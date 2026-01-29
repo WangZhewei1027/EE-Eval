@@ -22,7 +22,7 @@ class BFSPage {
   async clickClearWalls() { await this.page.click('#clearWalls'); }
   async clickResize() { await this.page.click('#resize'); }
 
-  // Set speed slider (value as number)
+  // Set speed slider (value)
   async setSpeed(value) {
     await this.page.fill('#speed', String(value));
     // dispatch input event to update internal speed variable
@@ -50,7 +50,7 @@ class BFSPage {
     return this.page.$$eval('.queue-item', nodes => nodes.map(n => n.textContent?.trim()));
   }
   async isModeActive(mode) {
-    const selector = mode === 'wall' ? '#modeWall' : mode === 'start' ? '#modeStart' : '#modeTarget';
+    const selector1 = mode === 'wall' ? '#modeWall' : mode === 'start' ? '#modeStart' : '#modeTarget';
     return this.page.$eval(selector, el => el.classList.contains('mode-active'));
   }
 
@@ -186,7 +186,7 @@ test.describe('BFS Visualization - FSM and interaction tests', () => {
     await bfs.clickRandomWalls();
     // Random walls action logs a message
     await page.waitForTimeout(100);
-    let log = await bfs.getLogText();
+    let log1 = await bfs.getLogText();
     expect(log.toLowerCase()).toContain('random walls generated');
 
     // Ensure visit count cleared and queue empty after generating walls
@@ -208,7 +208,7 @@ test.describe('BFS Visualization - FSM and interaction tests', () => {
     await bfs.resizeGrid(30, 10);
     // Wait a bit for resize to complete and the log to include the message
     await page.waitForTimeout(150);
-    const log = await bfs.getLogText();
+    const log2 = await bfs.getLogText();
     expect(log).toMatch(/Grid resized to 30 x 10/);
 
     const size = await bfs.getCanvasSize();
@@ -231,7 +231,7 @@ test.describe('BFS Visualization - FSM and interaction tests', () => {
     expect(visitText).toMatch(/^Visited:\s*\d+$/);
 
     // The log should include an operation like ENQUEUE or DEQUEUE (logged in uppercase)
-    const log = await bfs.getLogText();
+    const log3 = await bfs.getLogText();
     expect(/ENQUEUE|DEQUEUE|FOUND|BFS finished/i.test(log)).toBeTruthy();
   });
 
@@ -293,7 +293,7 @@ test.describe('BFS Visualization - FSM and interaction tests', () => {
     expect(await bfs.getLastActionText()).toBe('Ready');
 
     // Ensure reset produced the expected log entry
-    const log = await bfs.getLogText();
+    const log4 = await bfs.getLogText();
     expect(log.toLowerCase()).toContain('reset bfs state');
   });
 
@@ -332,7 +332,7 @@ test.describe('BFS Visualization - FSM and interaction tests', () => {
     // r -> random walls (should create walls and log)
     await bfs.pressKey('r');
     await page.waitForTimeout(100);
-    let log = await bfs.getLogText();
+    let log5 = await bfs.getLogText();
     expect(log.toLowerCase()).toContain('random walls generated');
 
     // c -> clear walls
@@ -346,7 +346,7 @@ test.describe('BFS Visualization - FSM and interaction tests', () => {
     await bfs.pressKey('Space'); // maps to ' ' in some environments; Playwright accepts 'Space'
     // Wait for something to enqueue
     await page.waitForFunction(() => {
-      const q = document.getElementById('queueList');
+      const q1 = document.getElementById('queueList');
       return q && q.children.length > 0;
     }, { timeout: 2000 });
 

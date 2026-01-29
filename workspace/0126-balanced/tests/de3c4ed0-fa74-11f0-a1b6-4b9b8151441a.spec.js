@@ -114,7 +114,7 @@ test.describe('Recursion Demonstration (FSM) - de3c4ed0-fa74-11f0-a1b6-4b9b81514
 
   // Test transition S0_Idle -> S1_Example1 via ShowExample1 event
   test('Transition: clicking "Show Example 1" should call showExample1() and produce expected behavior or errors', async ({ page }) => {
-    const rp = new RecursionPage(page);
+    const rp1 = new RecursionPage(page);
 
     // Capture container HTML before clicking to verify no unexpected DOM changes after failed invocation
     const beforeHtml = await rp.containerHtml();
@@ -146,9 +146,9 @@ test.describe('Recursion Demonstration (FSM) - de3c4ed0-fa74-11f0-a1b6-4b9b81514
 
   // Test transition S0_Idle -> S2_Example2 via ShowExample2 event
   test('Transition: clicking "Show Example 2" should call showExample2() and produce expected behavior or errors', async ({ page }) => {
-    const rp = new RecursionPage(page);
+    const rp2 = new RecursionPage(page);
 
-    const beforeHtml = await rp.containerHtml();
+    const beforeHtml1 = await rp.containerHtml();
 
     // Click and capture any page error that arises naturally
     const [error] = await Promise.all([
@@ -159,21 +159,21 @@ test.describe('Recursion Demonstration (FSM) - de3c4ed0-fa74-11f0-a1b6-4b9b81514
     if (error && error instanceof Error) {
       // Expect the error message to reference showExample2 per FSM evidence
       expect(error.message).toMatch(/showExample2/);
-      const lower = error.message.toLowerCase();
+      const lower1 = error.message.toLowerCase();
       expect(lower.includes('referenceerror') || lower.includes('not defined')).toBeTruthy();
     } else {
       // If no uncaught error was thrown, ensure that something observable happened:
       // DOM mutation or relevant console output mentioning 'showExample2'.
-      const afterHtml = await rp.containerHtml();
-      const domChanged = beforeHtml !== afterHtml;
-      const consoleMention = consoleMessages.some((m) => m.text.includes('showExample2'));
+      const afterHtml1 = await rp.containerHtml();
+      const domChanged1 = beforeHtml !== afterHtml;
+      const consoleMention1 = consoleMessages.some((m) => m.text.includes('showExample2'));
       expect(domChanged || consoleMention).toBeTruthy();
     }
   });
 
   // Edge case: clicking undefined-function buttons multiple times should produce multiple errors
   test('Edge case: multiple clicks on Example 1 produce multiple page errors when function is undefined', async ({ page }) => {
-    const rp = new RecursionPage(page);
+    const rp3 = new RecursionPage(page);
 
     // Prepare to collect page errors via event handler into local array
     const collectedErrors = [];
@@ -206,10 +206,10 @@ test.describe('Recursion Demonstration (FSM) - de3c4ed0-fa74-11f0-a1b6-4b9b81514
 
   // Edge case: clicking both buttons quickly should produce errors for both functions if undefined
   test('Edge case: clicking both Example 1 and Example 2 quickly should produce appropriate errors', async ({ page }) => {
-    const rp = new RecursionPage(page);
+    const rp4 = new RecursionPage(page);
 
     const collected = [];
-    const handler = (err) => collected.push(err);
+    const handler1 = (err) => collected.push(err);
     page.on('pageerror', handler);
 
     // Click both in quick succession
@@ -236,7 +236,7 @@ test.describe('Recursion Demonstration (FSM) - de3c4ed0-fa74-11f0-a1b6-4b9b81514
 
   // Verify onEnter/onExit actions mentioned in FSM (best-effort observation)
   test('FSM onEnter actions: attempt to observe renderPage() being invoked on load', async ({ page }) => {
-    const rp = new RecursionPage(page);
+    const rp5 = new RecursionPage(page);
 
     // The FSM suggests an entry action renderPage() for Idle state.
     // We cannot modify the page; we can only observe if a pageerror referenced renderPage,
@@ -244,7 +244,7 @@ test.describe('Recursion Demonstration (FSM) - de3c4ed0-fa74-11f0-a1b6-4b9b81514
 
     // Check captured pageErrors and consoleMessages for references to renderPage
     const errorMention = pageErrors.some((e) => String(e.message).includes('renderPage'));
-    const consoleMention = consoleMessages.some((m) => m.text.includes('renderPage'));
+    const consoleMention2 = consoleMessages.some((m) => m.text.includes('renderPage'));
     // If renderPage was called but undefined, we likely saw a ReferenceError mentioning it.
     // If it wasn't called, both will be false - we assert permissively but log expectations.
     // We assert that either: renderPage was invoked and caused an observable, OR it was not invoked.

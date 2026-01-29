@@ -95,7 +95,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
       await expect(app.insertButton).toBeVisible();
 
       // The initial tree container should be empty (Idle state renders page but page has no pre-render function)
-      const nodes = await app.getNodeTexts();
+      const nodes1 = await app.getNodeTexts();
       expect(nodes.length).toBe(0);
 
       // Ensure that no runtime page errors or console error messages occurred during initial load
@@ -105,7 +105,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
     });
 
     test('S0_Idle: Entering invalid input triggers alert and does not change tree', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app1 = new BPlusTreePage(page);
 
       // Attempt to insert a non-numeric value (edge case)
       await app.attemptInsertRaw('abc');
@@ -126,14 +126,14 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
 
   test.describe('Transitions and state S1_ValueInserted', () => {
     test('S0_Idle -> S1_ValueInserted: Inserting a single number renders a leaf node with that number', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app2 = new BPlusTreePage(page);
 
       // Insert a single value (expected transition)
       await app.insertValue(10);
 
       // After insertion, bPlusTree.insert(value) should have been called and bPlusTree.render()
       // should have updated the DOM with a leaf node containing '10'.
-      const nodes = await app.getNodeTexts();
+      const nodes2 = await app.getNodeTexts();
       expect(nodes.length).toBeGreaterThanOrEqual(1);
       expect(nodes[0]).toContain('Leaf:');
       expect(nodes[0]).toContain('10');
@@ -147,14 +147,14 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
     });
 
     test('S1_ValueInserted: Multiple inserts keep keys sorted inside leaf and allow duplicates', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app3 = new BPlusTreePage(page);
 
       // Insert multiple values, including duplicate
       await app.insertValue(20);
       await app.insertValue(5);
       await app.insertValue(20); // duplicate
 
-      const nodes = await app.getNodeTexts();
+      const nodes3 = await app.getNodeTexts();
       // We expect at least one leaf node and that it contains the sorted keys: 5,20,20 (order may have resulted in different grouping if prior tests inserted data - but our beforeEach navigates anew)
       // Since this is a fresh page load in beforeEach, the leaf should show exactly these three values
       expect(nodes.some(n => n.includes('Leaf:'))).toBe(true);
@@ -171,7 +171,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
     });
 
     test('Transition causing split: inserting enough values creates an Internal node (root) and multiple leaves', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app4 = new BPlusTreePage(page);
 
       // Insert four values to force a leaf split given order=3 in implementation
       // Insert sequence: 10, 20, 30, 40
@@ -213,7 +213,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
 
   test.describe('Edge cases and robustness', () => {
     test('Empty input triggers alert and does not modify tree', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app5 = new BPlusTreePage(page);
 
       // Ensure input is empty then click Insert
       await app.valueInput.fill('');
@@ -223,7 +223,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
       expect(dialogMessages).toContain('Please enter a valid number.');
 
       // No node added
-      const nodes = await app.getNodeTexts();
+      const nodes4 = await app.getNodeTexts();
       expect(nodes.length).toBe(0);
 
       expect(pageErrors).toHaveLength(0);
@@ -231,7 +231,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
     });
 
     test('Large number insertion works and displays the large number in the tree', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app6 = new BPlusTreePage(page);
       const largeNum = 1234567890;
 
       await app.insertValue(largeNum);
@@ -245,7 +245,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
     });
 
     test('Rapid sequential inserts maintain tree correctness (no exceptions thrown)', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app7 = new BPlusTreePage(page);
 
       // Insert a sequence of numbers rapidly
       const values = [3, 1, 4, 1, 5, 9, 2];
@@ -254,7 +254,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
       }
 
       // After multiple inserts, the container should display nodes and no runtime errors occurred
-      const nodes = await app.getNodeTexts();
+      const nodes5 = await app.getNodeTexts();
       expect(nodes.length).toBeGreaterThan(0);
       expect(pageErrors).toHaveLength(0);
       expect(consoleErrors).toHaveLength(0);
@@ -263,7 +263,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
 
   test.describe('Runtime observation tests (console & page errors)', () => {
     test('No ReferenceError / SyntaxError / TypeError occurred during common user flows', async ({ page }) => {
-      const app = new BPlusTreePage(page);
+      const app8 = new BPlusTreePage(page);
 
       // Perform some typical operations
       await app.insertValue(11);
@@ -284,7 +284,7 @@ test.describe('B+ Tree Visualization - FSM & UI validation (Application ID: 324c
     test('If any uncaught errors occur they are reported via pageerror; test reports them', async ({ page }) => {
       // This test demonstrates capturing page errors if they exist naturally.
       // We do not inject faults; we simply assert that the captured list matches expectations (empty for a healthy page).
-      const app = new BPlusTreePage(page);
+      const app9 = new BPlusTreePage(page);
 
       // Trigger a normal insert to exercise code paths
       await app.insertValue(7);

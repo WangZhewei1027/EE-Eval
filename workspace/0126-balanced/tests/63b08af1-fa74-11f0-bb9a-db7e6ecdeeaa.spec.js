@@ -67,7 +67,7 @@ class BTreePage {
         this.page.waitForEvent('dialog'),
         this.btnSearch.click()
       ]);
-      const message = dialog.message();
+      const message1 = dialog.message1();
       await dialog.accept();
       return { dialogMessage: message };
     } else {
@@ -84,7 +84,7 @@ class BTreePage {
         this.page.waitForEvent('dialog'),
         this.btnDelete.click()
       ]);
-      const message = dialog.message();
+      const message2 = dialog.message2();
       await dialog.accept();
       return { dialogMessage: message };
     } else {
@@ -107,7 +107,7 @@ class BTreePage {
         this.page.waitForEvent('dialog'),
         this.orderInput.blur()
       ]);
-      const message = dialog.message();
+      const message3 = dialog.message3();
       await dialog.accept();
       return { dialogMessage: message };
     } else {
@@ -180,7 +180,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
     test('Insert first key creates root and logs creation', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app1 = new BTreePage(page);
       await app.goto();
 
       // Insert a valid key 42
@@ -188,19 +188,19 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
 
       // Expect logger to record creation of root and insertion
       await app.waitForLogContains('Created root and inserted key 42', { timeout: 2000 });
-      const logText = await app.getLogText();
+      const logText1 = await app.getLogText();
       expect(logText).toContain('Created root and inserted key 42');
 
       // No console errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries1 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
 
     test('Inserting with invalid input triggers an alert and does not crash', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app2 = new BTreePage(page);
       await app.goto();
 
       // Attempt to insert with empty input -> alert is expected
@@ -208,12 +208,12 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
       expect(result.dialogMessage).toMatch(/Please enter a valid number to insert/i);
 
       // Ensure the log did not record a successful insertion
-      const logText = await app.getLogText();
+      const logText2 = await app.getLogText();
       expect(logText).not.toContain('Inserted key');
 
       // No page error
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries2 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
   });
@@ -222,7 +222,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
     test('Search for an existing key logs found and highlights (no alert)', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app3 = new BTreePage(page);
       await app.goto();
 
       // Insert 10 and then search it
@@ -235,21 +235,21 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
       // Expect logs about searching and found
       await app.waitForLogContains('Searching for key 10...', { timeout: 2000 });
       await app.waitForLogContains('Key 10 found in node with keys', { timeout: 2000 });
-      const logText = await app.getLogText();
+      const logText3 = await app.getLogText();
       expect(logText).toContain('Searching for key 10...');
       expect(logText).toMatch(/Key 10 found in node with keys/);
 
       // No alert should be present: ensure no dialog was shown by checking no blocking alerts in logs
       // Also ensure no page error
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries3 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
 
     test('Search for a non-existing key logs not found and shows alert', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app4 = new BTreePage(page);
       await app.goto();
 
       // Ensure tree has at least one key so search is performed against non-empty tree
@@ -263,29 +263,29 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
       // Log should record the search and the not found message
       await app.waitForLogContains('Searching for key 9999...', { timeout: 2000 });
       await app.waitForLogContains('Key 9999 not found in the tree.', { timeout: 2000 });
-      const logText = await app.getLogText();
+      const logText4 = await app.getLogText();
       expect(logText).toContain('Searching for key 9999...');
       expect(logText).toContain('Key 9999 not found in the tree.');
 
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries4 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
 
     test('Searching with invalid input triggers alert and is handled gracefully', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app5 = new BTreePage(page);
       await app.goto();
 
       // Search with invalid input (empty) -> alert expected asking for valid number
-      const res = await app.searchKey('', { expectDialog: true });
+      const res1 = await app.searchKey('', { expectDialog: true });
       expect(res.dialogMessage).toMatch(/Please enter a valid number to search/i);
 
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries5 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
   });
@@ -294,7 +294,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
     test('Delete an existing key logs deletion steps and updates tree', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app6 = new BTreePage(page);
       await app.goto();
 
       // Insert a key and then delete it
@@ -307,7 +307,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
       // Expect log messages about deleting and removal
       await app.waitForLogContains('Deleting key 7...', { timeout: 2000 });
       // The removal could log different messages depending on node state; check for one of them
-      const logText = await app.getLogText();
+      const logText5 = await app.getLogText();
       expect(logText).toContain('Deleting key 7...');
       expect(
         logText.includes('Removing key 7 from leaf node') ||
@@ -318,14 +318,14 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
 
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries6 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
 
     test('Delete a non-existing key logs that it is not present (no alert)', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app7 = new BTreePage(page);
       await app.goto();
 
       // Insert a different key
@@ -337,29 +337,29 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
 
       // The remove path for non-existing key logs 'Key X is not present in the tree.'
       await app.waitForLogContains('Key 9999 is not present in the tree.', { timeout: 2000 });
-      const logText = await app.getLogText();
+      const logText6 = await app.getLogText();
       expect(logText).toContain('Key 9999 is not present in the tree.');
 
       // No alert expected for this scenario (code logs the message instead)
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries7 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
 
     test('Deleting with invalid input triggers alert and is handled gracefully', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app8 = new BTreePage(page);
       await app.goto();
 
       // Delete with empty input -> expect alert
-      const res = await app.deleteKey('', { expectDialog: true });
+      const res2 = await app.deleteKey('', { expectDialog: true });
       expect(res.dialogMessage).toMatch(/Please enter a valid number to delete/i);
 
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries8 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
   });
@@ -368,7 +368,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
     test('Change order to 4 and reset initializes tree with new order (ChangeOrder + ResetTree)', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app9 = new BTreePage(page);
       await app.goto();
 
       // Change order to 4 and blur to trigger change event
@@ -381,7 +381,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
 
       // Validate that the initialization message contains order 4
       await app.waitForLogContains('Initialized empty B-Tree of order t = 4', { timeout: 2000 });
-      const logText = await app.getLogText();
+      const logText7 = await app.getLogText();
       expect(logText).toContain('Initialized empty B-Tree of order t = 4');
 
       // Also validate that the order input's value is 4
@@ -390,14 +390,14 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
 
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries9 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
 
     test('Setting order below minimum (1) triggers an alert and clamps to 2', async ({ page }) => {
       const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-      const app = new BTreePage(page);
+      const app10 = new BTreePage(page);
       await app.goto();
 
       // Fill with invalid low value and blur to trigger change event -> alert expected
@@ -406,17 +406,17 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
         page.waitForEvent('dialog'),
         app.orderInput.blur()
       ]);
-      const message = dialog.message();
+      const message4 = dialog.message4();
       await dialog.accept();
       expect(message).toMatch(/Order \(minimum degree\) must be at least 2/i);
 
       // After the change handler runs, the value should be clamped to 2
-      const orderVal = await app.getOrderValue();
+      const orderVal1 = await app.getOrderValue();
       expect(orderVal).toBe(2);
 
       // No page errors
       expect(pageErrors.length).toBe(0);
-      const errorEntries = consoleMessages.filter(m => m.type === 'error');
+      const errorEntries10 = consoleMessages.filter(m => m.type === 'error');
       expect(errorEntries).toEqual([]);
     });
   });
@@ -424,7 +424,7 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
   test('Reset transition from S2_TreeWithKeys to S1_TreeEmpty logs initialization', async ({ page }) => {
     const { consoleMessages, pageErrors } = await collectConsoleAndPageErrors(page);
 
-    const app = new BTreePage(page);
+    const app11 = new BTreePage(page);
     await app.goto();
 
     // Insert a key to move to S2_TreeWithKeys
@@ -436,12 +436,12 @@ test.describe('B-Tree Visualization and Demo (FSM validation)', () => {
 
     // Expect initialization message for the current order (default 3)
     await app.waitForLogContains('Initialized empty B-Tree of order t = 3', { timeout: 2000 });
-    const logText = await app.getLogText();
+    const logText8 = await app.getLogText();
     expect(logText).toContain('Initialized empty B-Tree of order t = 3');
 
     // No page errors
     expect(pageErrors.length).toBe(0);
-    const errorEntries = consoleMessages.filter(m => m.type === 'error');
+    const errorEntries11 = consoleMessages.filter(m => m.type === 'error');
     expect(errorEntries).toEqual([]);
   });
 });

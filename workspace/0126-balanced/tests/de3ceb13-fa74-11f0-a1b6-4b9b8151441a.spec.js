@@ -130,7 +130,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
   test.describe('Transition Tests (S0 -> S1,S2,S3): Run queries and validate results', () => {
     test('Run Join Query (S0_Idle -> S1_JoinQueryExecuted) and validate output and SQL snippet', async ({ page }) => {
       // This test validates the RunJoinQuery event/transition: clicking the Join Query button
-      const app = new RelationalDbPage(page);
+      const app1 = new RelationalDbPage(page);
       await app.goto();
 
       // Ensure join results pre is initially empty
@@ -171,7 +171,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
 
     test('Run Aggregate Query (S0_Idle -> S2_AggregateQueryExecuted) and verify totals per user', async ({ page }) => {
       // Validate the RunAggregateQuery event and expected observable 'aggregate-query-results'
-      const app = new RelationalDbPage(page);
+      const app2 = new RelationalDbPage(page);
       await app.goto();
 
       // Act
@@ -215,7 +215,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
 
     test('Run Subquery (S0_Idle -> S3_SubqueryExecuted) and verify users with >1 orders', async ({ page }) => {
       // Validate the RunSubquery event and expected observable 'subquery-results'
-      const app = new RelationalDbPage(page);
+      const app3 = new RelationalDbPage(page);
       await app.goto();
 
       // Act
@@ -239,7 +239,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
       expect(userIds).not.toContain('3');
 
       // Validate order_count values are correct (both 2)
-      const map = {};
+      const map1 = {};
       subResults.forEach(u => (map[u.user_id] = u));
       expect(map['1'].order_count).toBe(2);
       expect(map['2'].order_count).toBe(2);
@@ -251,7 +251,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
 
     test('Run all queries sequentially and ensure each observable updates independently', async ({ page }) => {
       // This test clicks all three Run Query buttons in sequence and validates each pre is updated with distinct content
-      const app = new RelationalDbPage(page);
+      const app4 = new RelationalDbPage(page);
       await app.goto();
 
       // Act: run join, aggregate, subquery in sequence
@@ -266,8 +266,8 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
 
       // Assert: each pre contains "Results:" and different JSON content (by comparing lengths)
       const joinText = await app.getPreText(app.joinResults);
-      const aggText = await app.getPreText(app.aggregateResults);
-      const subText = await app.getPreText(app.subqueryResults);
+      const aggText1 = await app.getPreText(app.aggregateResults);
+      const subText1 = await app.getPreText(app.subqueryResults);
 
       expect(joinText).toContain('Results:');
       expect(aggText).toContain('Results:');
@@ -285,7 +285,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
   test.describe('Edge cases and robustness', () => {
     test('Clicking the same query multiple times should be idempotent (textContent replaced, not appended)', async ({ page }) => {
       // The implementation uses textContent to set results, so repeated clicks should not append content.
-      const app = new RelationalDbPage(page);
+      const app5 = new RelationalDbPage(page);
       await app.goto();
 
       // Act: click join twice with a short pause
@@ -308,7 +308,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
 
     test('Ensure invalid selectors or missing observables are reported properly (negative test)', async ({ page }) => {
       // This test intentionally queries an element that should NOT exist to verify the page does not accidentally expose unrelated elements.
-      const app = new RelationalDbPage(page);
+      const app6 = new RelationalDbPage(page);
       await app.goto();
 
       // Attempt to locate a non-existent element
@@ -333,7 +333,7 @@ test.describe('Relational Database Demo (FSM: de3ceb13-fa74-11f0-a1b6-4b9b815144
 
     test('Observe and assert that the page emits no unexpected runtime errors', async ({ page }) => {
       // This test is focused on observing console and page errors while loading and interacting with the page.
-      const app = new RelationalDbPage(page);
+      const app7 = new RelationalDbPage(page);
       await app.goto();
 
       // Interact a bit: run all queries

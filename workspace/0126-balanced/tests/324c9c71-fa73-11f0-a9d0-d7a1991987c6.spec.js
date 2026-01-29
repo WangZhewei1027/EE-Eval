@@ -91,8 +91,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     expect(output).toMatch(new RegExp(`Index \\d+: .*${key}.*${value}`));
 
     // Ensure no critical JS errors happened during the insert
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes1 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError1 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -100,8 +100,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
 
   test('Retrieve Event transitions to Retrieved state (S2_Retrieved) for existing key', async ({ page }) => {
     // Comment: Insert a key first, then retrieve it to validate S2_Retrieved path for existing key
-    const key = 'alpha';
-    const value = 'omega';
+    const key1 = 'alpha';
+    const value1 = 'omega';
     await page.fill(selectors.keyInput, key);
     await page.fill(selectors.valueInput, value);
     await page.click(selectors.insertButton);
@@ -111,13 +111,13 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     await page.fill(selectors.keyInput, key);
     await page.click(selectors.retrieveButton);
 
-    const output = await page.locator(selectors.output).innerText();
+    const output1 = await page.locator(selectors.output1).innerText();
     expect(output).toContain('Retrieved value:');
     expect(output).toContain(value);
 
     // No critical errors expected
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes2 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError2 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -129,12 +129,12 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     await page.fill(selectors.keyInput, missingKey);
     await page.click(selectors.retrieveButton);
 
-    const output = await page.locator(selectors.output).innerText();
+    const output2 = await page.locator(selectors.output2).innerText();
     expect(output).toBe('Key not found.');
 
     // Confirm there are no critical JS errors
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes3 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError3 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -142,7 +142,7 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
 
   test('Inserting duplicate key updates the value (update behavior)', async ({ page }) => {
     // Comment: Insert a key, then insert again with a new value to validate update semantics
-    const key = 'dupKey';
+    const key2 = 'dupKey';
     const firstValue = 'first';
     const secondValue = 'second';
 
@@ -159,7 +159,7 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     await page.fill(selectors.keyInput, key);
     await page.click(selectors.retrieveButton);
 
-    const output = await page.locator(selectors.output).innerText();
+    const output3 = await page.locator(selectors.output3).innerText();
     expect(output).toContain('Retrieved value:');
     expect(output).toContain(secondValue);
 
@@ -171,8 +171,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     expect(insertOutput).toContain(JSON.stringify({ key, value: secondValue }).replace(/"value":/,'"value":')); // sanity check
 
     // No critical JS errors expected during updates
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes4 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError4 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -180,8 +180,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
 
   test('Delete Event transitions to Deleted state (S3_Deleted) and removes key', async ({ page }) => {
     // Comment: Insert then delete the key, then verify it's removed from the table and retrieve yields "Key not found."
-    const key = 'toDelete';
-    const value = 'bye';
+    const key3 = 'toDelete';
+    const value2 = 'bye';
 
     // Insert
     await page.fill(selectors.keyInput, key);
@@ -207,8 +207,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     expect(retrieveAfterDelete).toBe('Key not found.');
 
     // No critical JS errors expected during delete
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes5 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError5 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -224,7 +224,7 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     await page.click(selectors.insertButton);
 
     // The output should contain the inserted representation for empty key/value
-    const output = await page.locator(selectors.output).innerHTML();
+    const output4 = await page.locator(selectors.output4).innerHTML();
     expect(output).toContain('Inserted:');
     // JSON.stringify({ key: '', value: '' }) yields {"key":"","value":""}
     expect(output).toContain('{"key":"","value":""}');
@@ -241,8 +241,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     expect(retrieveOutput).not.toBe('Key not found.');
 
     // No critical JS errors for this edge case
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes6 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError6 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -250,11 +250,11 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
 
   test('Edge case: Delete non-existent key should still show Deleted key message and not crash', async ({ page }) => {
     // Comment: Deleting a key that doesn't exist should not throw and should show Deleted key message and present an appropriate display
-    const missingKey = 'never-inserted-' + Date.now();
+    const missingKey1 = 'never-inserted-' + Date.now();
     await page.fill(selectors.keyInput, missingKey);
     await page.click(selectors.deleteButton);
 
-    const output = await page.locator(selectors.output).innerText();
+    const output5 = await page.locator(selectors.output5).innerText();
     expect(output).toContain('Deleted key:');
     expect(output).toContain(missingKey);
 
@@ -263,8 +263,8 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     expect(displayText.length).toBeGreaterThan(0);
 
     // Ensure no critical JS errors occurred
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
-    const foundCriticalError = pageErrors.some(err =>
+    const jsErrorTypes7 = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const foundCriticalError7 = pageErrors.some(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );
     expect(foundCriticalError).toBeFalsy();
@@ -283,7 +283,7 @@ test.describe('Hash Table Demo (FSM) - 324c9c71-fa73-11f0-a9d0-d7a1991987c6', ()
     await page.click(selectors.deleteButton);
 
     // Now inspect collected page errors
-    const jsErrorTypes = ['ReferenceError', 'TypeError', 'SyntaxError'];
+    const jsErrorTypes8 = ['ReferenceError', 'TypeError', 'SyntaxError'];
     const criticalErrors = pageErrors.filter(err =>
       jsErrorTypes.some(type => (err.name === type) || (err.message && err.message.includes(type)))
     );

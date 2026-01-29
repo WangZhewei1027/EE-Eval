@@ -86,7 +86,7 @@ test.describe('520af4a2-fa76-11f0-a09b-87751f540fd8 - Version Control FSM', () =
   test('Add File: canceling the first prompt should NOT append a file', async ({ page }) => {
     // Count current appended file-like nodes
     const preLocator = page.locator('#versionControl').locator('div');
-    const preCount = await preLocator.count();
+    const preCount1 = await preLocator.count();
 
     // When the first prompt is shown, dismiss it (cancel the file name prompt)
     page.once('dialog', async dialog => {
@@ -98,13 +98,13 @@ test.describe('520af4a2-fa76-11f0-a09b-87751f540fd8 - Version Control FSM', () =
     await page.waitForTimeout(100);
 
     // Confirm no new file-like node containing content was appended
-    const postCount = await page.locator('#versionControl').locator('div').count();
+    const postCount1 = await page.locator('#versionControl').locator('div').count();
     expect(postCount).toBe(preCount);
   });
 
   test('Commit Changes: clicking commit should throw runtime error because #fileContent is missing', async ({ page }) => {
     // Capture current appended files count to ensure no new file gets appended due to the runtime error
-    const preCount = await page.locator('#versionControl').locator('div').count();
+    const preCount2 = await page.locator('#versionControl').locator('div').count();
 
     // Trigger the click and wait for the next pageerror caused by the handler attempting to read .value of null
     const [error] = await Promise.all([
@@ -114,17 +114,17 @@ test.describe('520af4a2-fa76-11f0-a09b-87751f540fd8 - Version Control FSM', () =
 
     // Validate that the error is consistent with missing fileContent element
     expect(error).toBeTruthy();
-    const msg = typeof error.message === 'string' ? error.message : String(error);
+    const msg1 = typeof error.message === 'string' ? error.message : String(error);
     expect(/fileContent|Cannot read properties of null|Cannot read property 'value'|reading 'value'|reading "value"/i.test(msg)).toBe(true);
 
     // Confirm that no new file node was appended as the handler failed before creating new elements
     await page.waitForTimeout(50);
-    const postCount = await page.locator('#versionControl').locator('div').count();
+    const postCount2 = await page.locator('#versionControl').locator('div').count();
     expect(postCount).toBe(preCount);
   });
 
   test('Pull Changes: clicking pull should throw runtime error because #fileContent is missing', async ({ page }) => {
-    const preCount = await page.locator('#versionControl').locator('div').count();
+    const preCount3 = await page.locator('#versionControl').locator('div').count();
 
     const [error] = await Promise.all([
       page.waitForEvent('pageerror'),
@@ -132,16 +132,16 @@ test.describe('520af4a2-fa76-11f0-a09b-87751f540fd8 - Version Control FSM', () =
     ]);
 
     expect(error).toBeTruthy();
-    const msg = typeof error.message === 'string' ? error.message : String(error);
+    const msg2 = typeof error.message === 'string' ? error.message : String(error);
     expect(/fileContent|Cannot read properties of null|Cannot read property 'value'|reading 'value'|reading "value"/i.test(msg)).toBe(true);
 
     await page.waitForTimeout(50);
-    const postCount = await page.locator('#versionControl').locator('div').count();
+    const postCount3 = await page.locator('#versionControl').locator('div').count();
     expect(postCount).toBe(preCount);
   });
 
   test('List Changes: clicking list should throw runtime error because #fileContent is missing', async ({ page }) => {
-    const preCount = await page.locator('#versionControl').locator('div').count();
+    const preCount4 = await page.locator('#versionControl').locator('div').count();
 
     const [error] = await Promise.all([
       page.waitForEvent('pageerror'),
@@ -149,17 +149,17 @@ test.describe('520af4a2-fa76-11f0-a09b-87751f540fd8 - Version Control FSM', () =
     ]);
 
     expect(error).toBeTruthy();
-    const msg = typeof error.message === 'string' ? error.message : String(error);
+    const msg3 = typeof error.message === 'string' ? error.message : String(error);
     expect(/fileContent|Cannot read properties of null|Cannot read property 'value'|reading 'value'|reading "value"/i.test(msg)).toBe(true);
 
     await page.waitForTimeout(50);
-    const postCount = await page.locator('#versionControl').locator('div').count();
+    const postCount4 = await page.locator('#versionControl').locator('div').count();
     expect(postCount).toBe(preCount);
   });
 
   test('Edge case: clicking Add File then dismissing second prompt should not append a file', async ({ page }) => {
     // Ensure the starting count
-    const preCount = await page.locator('#versionControl').locator('div').count();
+    const preCount5 = await page.locator('#versionControl').locator('div').count();
 
     // Accept first prompt (filename) but dismiss second (file content)
     let dialogCount = 0;
@@ -177,7 +177,7 @@ test.describe('520af4a2-fa76-11f0-a09b-87751f540fd8 - Version Control FSM', () =
     await page.click('#addFile');
     await page.waitForTimeout(100);
 
-    const postCount = await page.locator('#versionControl').locator('div').count();
+    const postCount5 = await page.locator('#versionControl').locator('div').count();
     expect(postCount).toBe(preCount);
   });
 

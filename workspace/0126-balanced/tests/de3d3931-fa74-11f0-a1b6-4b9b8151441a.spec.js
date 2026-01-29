@@ -110,8 +110,8 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
     // Install a route to abort the insecure image request
     await page.route(routeUrlPattern, (route) => route.abort());
 
-    const loadButton = page.locator('#load-insecure');
-    const imageResult = page.locator('#image-result');
+    const loadButton1 = page.locator('#load-insecure');
+    const imageResult1 = page.locator('#image-result');
 
     // Click to attempt to load insecure image (the request will be aborted)
     await loadButton.click();
@@ -120,7 +120,7 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
     await expect(imageResult).toContainText('Trying to load insecure image...', { timeout: 2000 });
 
     // Now expect the blocked message (secure paragraph)
-    const secureParagraph = imageResult.locator('p.secure');
+    const secureParagraph1 = imageResult.locator('p.secure');
     await expect(secureParagraph).toBeVisible({ timeout: 5000 });
     await expect(secureParagraph).toHaveText('Browser blocked insecure image (expected behavior with HTTPS)');
 
@@ -150,7 +150,7 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
     ]);
 
     // After submission on HTTP (the environment in this test), expect the insecure form submission message (S4)
-    const insecureParagraph = formResult.locator('p.insecure');
+    const insecureParagraph1 = formResult.locator('p.insecure');
     await expect(insecureParagraph).toBeVisible({ timeout: 2000 });
     await expect(insecureParagraph).toHaveText('Form submitted over insecure HTTP (data not encrypted)');
 
@@ -187,8 +187,8 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
   test('Edge case: submitting empty form still triggers form result and logs empty values', async ({ page }) => {
     // This test ensures that even when no username/password are provided, the form submit handler
     // still sets the result and logs something to the console (edge case handling).
-    const formResult = page.locator('#form-result');
-    const submitButton = page.locator('button[type="submit"]');
+    const formResult1 = page.locator('#form-result');
+    const submitButton1 = page.locator('button[type="submit"]');
 
     // Clear fields to ensure they are empty
     await page.locator('#username').fill('');
@@ -205,7 +205,7 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
     await expect(formResult.locator('p.insecure')).toHaveText('Form submitted over insecure HTTP (data not encrypted)');
 
     // Ensure the console contains the 'Form data:' log and that empty values appear in the logged output
-    const formLog = consoleMessages.find((m) => m.text.includes('Form data:'));
+    const formLog1 = consoleMessages.find((m) => m.text.includes('Form data:'));
     expect(formLog).toBeTruthy();
     expect(formLog.text).toContain('username');
     expect(formLog.text).toContain('password');
@@ -216,8 +216,8 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
 
   test('Robustness: clicking "Try to Load Insecure Image" multiple times behaves consistently', async ({ page }) => {
     // Click the button multiple times and ensure the page continues to produce a valid outcome each time.
-    const loadButton = page.locator('#load-insecure');
-    const imageResult = page.locator('#image-result');
+    const loadButton2 = page.locator('#load-insecure');
+    const imageResult2 = page.locator('#image-result');
 
     // Perform multiple attempts (3) and assert each attempt yields an expected FSM outcome
     for (let i = 0; i < 3; i++) {
@@ -225,11 +225,11 @@ test.describe('HTTPS Demonstration - FSM Validation (de3d3931-fa74-11f0-a1b6-4b9
       // Wait for the initial "Trying to load insecure image..." then for final outcome
       await expect(imageResult).toContainText('Trying to load insecure image...', { timeout: 2000 });
 
-      const insecureParagraph = imageResult.locator('p.insecure');
-      const secureParagraph = imageResult.locator('p.secure');
+      const insecureParagraph2 = imageResult.locator('p.insecure');
+      const secureParagraph2 = imageResult.locator('p.secure');
 
       // Wait for one of the outcome paragraphs
-      const outcome = await Promise.race([
+      const outcome1 = await Promise.race([
         insecureParagraph.waitFor({ state: 'visible', timeout: 5000 }).then(() => 'insecure').catch(() => null),
         secureParagraph.waitFor({ state: 'visible', timeout: 5000 }).then(() => 'secure').catch(() => null),
         new Promise((resolve) => setTimeout(() => resolve(null), 5000))

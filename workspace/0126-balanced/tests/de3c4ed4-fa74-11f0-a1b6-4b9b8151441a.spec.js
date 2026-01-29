@@ -110,7 +110,7 @@ test.describe('Backtracking - Sudoku Solver (Application ID: de3c4ed4-fa74-11f0-
     expect(pageErrors.length).toBeGreaterThan(0);
 
     // Since solve didn't run, the board remains unpopulated.
-    const cellCount = await page.locator('.cell').count();
+    const cellCount1 = await page.locator('.cell').count();
     expect(cellCount).toBe(0);
   });
 
@@ -123,8 +123,8 @@ test.describe('Backtracking - Sudoku Solver (Application ID: de3c4ed4-fa74-11f0-
     await page.waitForTimeout(200);
 
     // There are no inputs to clear; confirm cell/input counts remain zero.
-    const cellCount = await page.locator('.cell').count();
-    const inputCount = await page.locator('.cell input').count();
+    const cellCount2 = await page.locator('.cell').count();
+    const inputCount1 = await page.locator('.cell input').count();
     expect(cellCount).toBe(0);
     expect(inputCount).toBe(0);
 
@@ -141,7 +141,7 @@ test.describe('Backtracking - Sudoku Solver (Application ID: de3c4ed4-fa74-11f0-
     await page.waitForTimeout(300);
 
     // Because the example loader lives inside the truncated script, no cells should be added.
-    const cellCount = await page.locator('.cell').count();
+    const cellCount3 = await page.locator('.cell').count();
     expect(cellCount).toBe(0);
 
     // Additionally, no input elements should exist and therefore no example values are present.

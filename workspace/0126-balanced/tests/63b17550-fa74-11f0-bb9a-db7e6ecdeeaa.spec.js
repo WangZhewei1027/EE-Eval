@@ -53,7 +53,7 @@ class TernaryPage {
 
   // returns whether any element has a given class
   async anyElementHasClass(className) {
-    const els = this.arrayContainer.locator(`.element.${className}`);
+    const els1 = this.arrayContainer.locator(`.element.${className}`);
     return (await els.count()) > 0;
   }
 
@@ -112,11 +112,11 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
     expect(tp.pageErrors.length).toBe(0);
 
     // Array should be rendered with 30 elements
-    const count = await tp.arrayElementCount();
+    const count1 = await tp.arrayElementCount();
     expect(count).toBe(30);
 
     // Each element text should be multiples of 3 starting from 3
-    const texts = await tp.arrayElementsText();
+    const texts1 = await tp.arrayElementsText();
     expect(texts[0].trim()).toBe('3');
     expect(texts[1].trim()).toBe('6');
     expect(texts[texts.length - 1].trim()).toBe(String(30 * 3));
@@ -131,7 +131,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
   test('S0_Idle -> S1_Searching: Start Search transitions to Searching and finds a target', async ({ page }) => {
     // Allow longer time for search animations and delays
     test.setTimeout(60000);
-    const tp = new TernaryPage(page);
+    const tp1 = new TernaryPage(page);
     await tp.goto();
 
     // Enter a target that exists (e.g., 9)
@@ -169,7 +169,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
   // Test Reset transition: S1_Searching -> S0_Idle via Reset button
   test('S1_Searching -> S2_Reset -> S0_Idle: Reset returns UI to Idle state', async ({ page }) => {
     test.setTimeout(60000);
-    const tp = new TernaryPage(page);
+    const tp2 = new TernaryPage(page);
     await tp.goto();
 
     // Perform a search that will complete (e.g., target 12)
@@ -203,7 +203,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
   // Edge case: Searching for a non-existent target should log 'not found'
   test('S1_Searching: Search for non-existent target logs not found and completes', async ({ page }) => {
     test.setTimeout(60000);
-    const tp = new TernaryPage(page);
+    const tp3 = new TernaryPage(page);
     await tp.goto();
 
     // Choose a value not in multiples of 3 (e.g., 5)
@@ -218,7 +218,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
     await tp.waitForSearchCompletion(40000);
 
     // Expect log to contain not found message
-    const logText = await tp.getLogText();
+    const logText1 = await tp.getLogText();
     expect(logText).toContain('Target 5 not found in the array.');
 
     // Reset to return to Idle
@@ -229,7 +229,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
   // Edge case: clicking Start without entering a target shows alert and does not start search
   test('StartSearch event with empty input triggers alert and prevents search', async ({ page }) => {
     test.setTimeout(20000);
-    const tp = new TernaryPage(page);
+    const tp4 = new TernaryPage(page);
     await tp.goto();
 
     // Ensure input is empty
@@ -253,7 +253,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
   // Test attempt to trigger StartSearch while already searching (self-loop transition check)
   test('S1_Searching self-loop: clicking Start while Searching does not start another search', async ({ page }) => {
     test.setTimeout(60000);
-    const tp = new TernaryPage(page);
+    const tp5 = new TernaryPage(page);
     await tp.goto();
 
     // Start a search for a value that will take some time (non-trivial path)
@@ -291,7 +291,7 @@ test.describe('Ternary Search Demo - FSM states and transitions', () => {
   // Observe console and page errors across a typical user flow
   test('Observe console messages and no unexpected page errors during searches', async ({ page }) => {
     test.setTimeout(60000);
-    const tp = new TernaryPage(page);
+    const tp6 = new TernaryPage(page);
     await tp.goto();
 
     // Do a found search and a not-found search sequentially

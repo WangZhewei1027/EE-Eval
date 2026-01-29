@@ -126,7 +126,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
 
   test('Insert Key transitions from S0_Idle to S1_KeyInserted and updates DOM', async ({ page }) => {
     // Insert a new key not in initial set and verify it's rendered afterwards
-    const app = new BTreePage(page);
+    const app1 = new BTreePage(page);
     await app.navigate();
 
     const newKey = 25;
@@ -141,7 +141,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
 
   test('Repeated InsertKey events keep tree in S1_KeyInserted (multiple inserts)', async ({ page }) => {
     // Insert multiple keys in succession and ensure they all appear
-    const app = new BTreePage(page);
+    const app2 = new BTreePage(page);
     await app.navigate();
 
     const keysToInsert = [22, 24, 27];
@@ -161,7 +161,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
 
   test('Insert invalid key (out of range / empty) triggers validation alert (edge case)', async ({ page }) => {
     // When inserting invalid values, app shows an alert. Capture and assert message.
-    const app = new BTreePage(page);
+    const app3 = new BTreePage(page);
     await app.navigate();
 
     // Empty input
@@ -180,17 +180,17 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
 
   test('Insert duplicate key triggers alert and does not add duplicate', async ({ page }) => {
     // Attempt to insert a key that exists in the seeded initialKeys (e.g., 10)
-    const app = new BTreePage(page);
+    const app4 = new BTreePage(page);
     await app.navigate();
 
     const duplicateKey = 10;
     const beforeKeys = await app.getAllKeyTexts();
-    const dialogMsg = await app.insertKey(duplicateKey, { expectAlert: true });
+    const dialogMsg1 = await app.insertKey(duplicateKey, { expectAlert: true });
 
     expect(dialogMsg).toBeTruthy();
     expect(dialogMsg).toContain(`Key ${duplicateKey} already exists in the tree.`);
 
-    const afterKeys = await app.getAllKeyTexts();
+    const afterKeys1 = await app.getAllKeyTexts();
     // No new duplication - number of occurrences of duplicateKey should remain same (1)
     const occurrencesBefore = beforeKeys.filter(k => k === String(duplicateKey)).length;
     const occurrencesAfter = afterKeys.filter(k => k === String(duplicateKey)).length;
@@ -199,27 +199,27 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
 
   test('Reset Tree from Idle (S0 -> S2_TreeReset) clears the B-Tree visualization', async ({ page }) => {
     // Reset when in Idle should clear all keys and re-render an empty root
-    const app = new BTreePage(page);
+    const app5 = new BTreePage(page);
     await app.navigate();
 
     // Ensure there are keys initially
-    const beforeCount = await app.getKeyCount();
+    const beforeCount1 = await app.getKeyCount();
     expect(beforeCount).toBeGreaterThan(0);
 
     await app.resetTree();
 
     // After reset, tree should be empty (no .key elements)
-    const afterCount = await app.getKeyCount();
+    const afterCount1 = await app.getKeyCount();
     expect(afterCount).toBe(0);
 
     // The container still should have a node representing empty root
-    const nodeCount = await app.getNodeCount();
+    const nodeCount1 = await app.getNodeCount();
     expect(nodeCount).toBeGreaterThanOrEqual(1);
   });
 
   test('Reset Tree after insert (S1 -> S2) clears the structure and allows reinsertion', async ({ page }) => {
     // Insert a key, then reset, then insert the same key and verify it's allowed (no duplicate)
-    const app = new BTreePage(page);
+    const app6 = new BTreePage(page);
     await app.navigate();
 
     const testKey = 44;
@@ -233,7 +233,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
     expect(afterResetCount).toBe(0);
 
     // Insert the same key again - should be allowed now (no duplicate alert)
-    const dialogMsg = await app.insertKey(testKey, { expectAlert: false });
+    const dialogMsg2 = await app.insertKey(testKey, { expectAlert: false });
     // If a dialog unexpectedly appears, previous setup dismisses it automatically; we assert it didn't produce duplicate message
     const keysAfter = await app.getAllKeyTexts();
     expect(keysAfter).toContain(String(testKey));
@@ -241,7 +241,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
 
   test('Visualization draws connections and retains structure after several inserts (structural checks)', async ({ page }) => {
     // Insert several keys to provoke splitting and structural changes; verify nodes and svg lines update
-    const app = new BTreePage(page);
+    const app7 = new BTreePage(page);
     await app.navigate();
 
     const manyKeys = [33, 34, 35, 36, 37];
@@ -250,7 +250,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
     }
 
     // Ensure keys are present
-    const allKeys = await app.getAllKeyTexts();
+    const allKeys1 = await app.getAllKeyTexts();
     for (const k of manyKeys) {
       expect(allKeys).toContain(String(k));
     }
@@ -260,7 +260,7 @@ test.describe('B-Tree Index Visualization (FSM) - 63b2fbf2-fa74-11f0-bb9a-db7e6e
     expect(nodes).toBeGreaterThan(1);
 
     // SVG should contain connecting lines after structural changes
-    const hasLines = await app.svgHasLines();
+    const hasLines1 = await app.svgHasLines();
     expect(hasLines).toBeTruthy();
   });
 });

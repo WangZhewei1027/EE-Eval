@@ -210,7 +210,7 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(50);
       // There should be logs from stepping
-      const logText = await visualizer.getLogText();
+      const logText1 = await visualizer.getLogText();
       expect(logText.length).toBeGreaterThan(0);
     });
   });
@@ -245,7 +245,7 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       expect(label).toBe('Play');
 
       // Logs should contain step activity
-      const log = await visualizer.getLogText();
+      const log1 = await visualizer.getLogText();
       expect(log).toMatch(/Trying to place|Placed queen|Conflict detected|Removing queen/);
     });
   });
@@ -263,11 +263,11 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       // Wait a bit for rendering to complete
       await page.waitForTimeout(200);
 
-      const solCount = parseInt(await visualizer.getSolCount(), 10);
+      const solCount1 = parseInt(await visualizer.getSolCount(), 10);
       expect(solCount).toBeGreaterThanOrEqual(1);
 
       // Log should include "Solution #"
-      const log = await visualizer.getLogText();
+      const log2 = await visualizer.getLogText();
       expect(log).toMatch(/Solution #\d+ found/);
 
       // Board should display queens for that solution (at least N queens visible)
@@ -284,7 +284,7 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       await page.waitForTimeout(100);
 
       // Sanity check: N label and board size updated
-      const nLabel = await visualizer.getNLabel();
+      const nLabel1 = await visualizer.getNLabel();
       expect(nLabel).toBe('4');
 
       // Trigger Find All Solutions
@@ -300,11 +300,11 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       const finalLog = await visualizer.getLogText();
       expect(finalLog).toContain('Search completed.');
 
-      const solCount = parseInt(await visualizer.getSolCount(), 10);
+      const solCount2 = parseInt(await visualizer.getSolCount(), 10);
       expect(solCount).toBeGreaterThanOrEqual(1);
 
       // The last log line should be 'Search completed.' (or contain it)
-      const last = await visualizer.getLastLogLine();
+      const last1 = await visualizer.getLastLogLine();
       expect(last).toMatch(/Search completed\./i);
     });
   });
@@ -316,11 +316,11 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       // Wait for reset to complete
       await page.waitForTimeout(100);
 
-      const nLabel = await visualizer.getNLabel();
+      const nLabel2 = await visualizer.getNLabel();
       expect(nLabel).toBe('6');
 
       // Board should be 6x6
-      const cellCount = await visualizer.getBoardCellCount();
+      const cellCount1 = await visualizer.getBoardCellCount();
       expect(cellCount).toBe(6 * 6);
 
       // Sol count reset to 0
@@ -342,7 +342,7 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
       // Limit iterations to avoid infinite loop in case of unexpected behavior
       for (let i = 0; i < 200; i++) {
         await visualizer.clickStep();
-        const last = await visualizer.getLastLogLine();
+        const last2 = await visualizer.getLastLogLine();
         if ((await last).includes('Mode is "first": pausing after first solution.')) {
           foundModePauseLog = true;
           break;
@@ -364,7 +364,7 @@ test.describe('N-Queens Visualizer - FSM and UI integration tests', () => {
 
       // Verify solCount reset and log contains reset text
       expect(await visualizer.getSolCount()).toBe('0');
-      const log = await visualizer.getLogText();
+      const log3 = await visualizer.getLogText();
       expect(log).toContain('State reset');
     });
   });

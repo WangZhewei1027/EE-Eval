@@ -1,0 +1,314 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3da5692-fa73-11f0-83e0-8d7be1d51901.html';
+
+test.describe('Version Control Demo - FSM states and transitions', () => {
+  let consoleErrors;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    // Capture console.error messages and page errors for every test
+    consoleErrors = [];
+    pageErrors = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => {
+      pageErrors.push(err.message);
+    });
+
+    // Start with a clean localStorage for deterministic tests:
+    // Navigate first, then clear the repo key and reload to ensure a fresh repo is created by the app.
+    await page.goto('about:blank');
+    await page.goto(APP_URL);
+    // Remove potential persisted repo and reload to ensure deterministic initial state
+    await page.evaluate(() => {
+      try { localStorage.removeItem('vc_demo::repo-demo'); } catch (e) { /* ignore */ }
+    });
+    await page.reload();
+    // Wait until the page has set up UI (statusTag present and rendered)
+    await expect(page.locator('#statusTag')).toBeVisible();
+  });
+
+  test.afterEach(async () => {
+    // Assert no unexpected console or page errors occurred during the test run
+    expect(consoleErrors, `Console errors: ${consoleErrors.join('\n')}`).toEqual([]);
+    expect(pageErrors, `Page errors: ${pageErrors.join('\n')}`).toEqual([]);
+  });
+
+  test('Initial load: page renders and shows Ready state with 0 commits', async ({ page }) => {
+    // Validate main UI elements and initial state after a fresh load
+    const status = page.locator('#statusTag');
+    const commitCount = page.locator('#commitCount');
+    const lastCommit = page.locator('#lastCommit');
+
+    // statusTag ultimately set to "Ready" by renderAll()
+    await expect(status).toHaveText('Ready');
+
+    // There should be zero commits initially
+    await expect(commitCount).toHaveText('0 commits');
+
+    // lastCommit placeholder should be '—'
+    await expect(lastCommit).toHaveText('—');
+  });
+
+  test('Init / Load button: creates repo and initial commit when accepted', async ({ page }) => {
+    // Click Init / Load; the app will show a confirm to create initial commit if repo empty.
+    // Accept the confirm so an initial commit is created.
+    const initBtn = page.locator('#initBtn');
+    const commitCount1 = page.locator('#commitCount1');
+    const lastCommit1 = page.locator('#lastCommit1');
+
+    // Prepare to accept the confirmation dialog that offers to create initial commit
+    const [dialog] = await Promise.all([
+      page.waitForEvent('dialog'),
+      initBtn.click()
+    ]);
+    // this is a confirm -> accept to create initial commit
+    await dialog.accept();
+
+    // After the initial commit creation flow, there should be 1 commit visible
+    await expect(commitCount).toHaveText(/1 commits/);
+    // lastCommit should no longer be the placeholder
+    await expect(lastCommit).not.toHaveText('—');
+  });
+
+  test('Commit changes: edit file, add commit message, commit increments commit count', async ({ page }) => {
+    // Make an initial commit first (accept confirm)
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+
+    // Edit the editor and commit
+    const editor = page.locator('#editor');
+    const commitMsg = page.locator('#commitMsg');
+    const commitBtn = page.locator('#commitBtn');
+    const commitCount2 = page.locator('#commitCount2');
+
+    const beforeCountText = await commitCount.textContent();
+    const beforeCount = parseInt(beforeCountText || '0', 10);
+
+    await editor.fill('Hello world\nLine 2');
+    await commitMsg.fill('Add hello world');
+    await commitBtn.click();
+
+    // After committing expect commit count to increase
+    await expect(commitCount).toHaveText(new RegExp(`${beforeCount + 1} commits`));
+  });
+
+  test('Create branch and switch: new branch appears and becomes current', async ({ page }) => {
+    // Initialize repo with an initial commit
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+
+    // Make a change and commit to create a commit to branch from
+    await page.locator('#editor').fill('Base content');
+    await page.locator('#commitMsg').fill('base commit');
+    await page.locator('#commitBtn').click();
+    await expect(page.locator('#commitCount')).toHaveText(/\d+ commits/);
+
+    // Create a new branch by filling newBranchInput and clicking Create & Switch
+    const branchName = 'feature-x';
+    await page.locator('#newBranchInput').fill(branchName);
+    await page.locator('#createBranchBtn').click();
+
+    // After creation, branchSelect should include the new branch and currentBranch should show it
+    const branchSelect = page.locator('#branchSelect');
+    await expect(branchSelect).toHaveValue(branchName);
+    await expect(page.locator('#currentBranch')).toHaveText(branchName);
+  });
+
+  test('Switch branch edge cases: switching with no selection does nothing; switching to existing branch updates head', async ({ page }) => {
+    // Initialize and create two branches to test switching
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+
+    // Create first branch 'dev'
+    await page.locator('#newBranchInput').fill('dev');
+    await page.locator('#createBranchBtn').click();
+    await expect(page.locator('#currentBranch')).toHaveText('dev');
+
+    // Create a second branch 'staging' by setting input, but do not select it in the select element yet
+    await page.locator('#newBranchInput').fill('staging');
+    await page.locator('#createBranchBtn').click();
+    // The select automatically selects the newly created branch, so switch back to 'dev' via select
+    await page.locator('#branchSelect').selectOption('dev');
+    await page.locator('#switchBtn').click();
+    await expect(page.locator('#currentBranch')).toHaveText('dev');
+
+    // Try clicking switch with nothing selected by clearing the selection programmatically and clicking
+    // We simulate this edge case by selecting an invalid option via evaluate (will result in empty selection)
+    await page.evaluate(() => {
+      const sel = document.getElementById('branchSelect');
+      sel.value = '';
+    });
+    // Clicking switch when no branch selected should simply return and not throw; verify current branch remains 'dev'
+    await page.locator('#switchBtn').click();
+    await expect(page.locator('#currentBranch')).toHaveText('dev');
+  });
+
+  test('Merge branches: create divergent commits and merge, resolving no-conflict auto-merge', async ({ page }) => {
+    // Initialize
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+
+    // Commit on main
+    await page.locator('#editor').fill('Line A');
+    await page.locator('#commitMsg').fill('main commit 1');
+    await page.locator('#commitBtn').click();
+
+    // Create branch 'topic' from current HEAD and switch to it
+    await page.locator('#newBranchInput').fill('topic');
+    await page.locator('#createBranchBtn').click();
+
+    // Make a commit on 'topic'
+    await page.locator('#editor').fill('Line A\nTopic change');
+    await page.locator('#commitMsg').fill('topic commit');
+    await page.locator('#commitBtn').click();
+
+    // Switch back to 'main' branch
+    await page.locator('#branchSelect').selectOption('main');
+    await page.locator('#switchBtn').click();
+    await expect(page.locator('#currentBranch')).toHaveText('main');
+
+    // Prepare to accept the confirm that asks to merge branches
+    const mergePromise = page.waitForEvent('dialog');
+    const clickPromise = page.locator('#mergeBtn').click();
+    // The click triggers a prompt/confirm sequence: first an alert if no selection or if trying to merge into itself,
+    // but we have a selection (topic) and it will trigger confirm. Wait for dialog and accept.
+    const dialog = await mergePromise;
+    // Confirm merging
+    await dialog.accept();
+
+    // After mergeIntoCurrent runs the diffOutput should reflect the merge result.
+    // Wait for diffOutput to contain either "Merge successful" or "Merge created with conflicts" or merge output
+    const diffOutput = page.locator('#diffOutput');
+    await expect(diffOutput).toBeVisible();
+    const diffText = await diffOutput.textContent();
+    expect(
+      diffText && (diffText.includes('Merge') || diffText.includes('Merge successful') || diffText.includes('Merge created'))
+    ).toBeTruthy();
+    // Also commit count should have increased for the merge commit
+    await expect(page.locator('#commitCount')).toHaveText(/\d+ commits/);
+  });
+
+  test('Revert changes: prompt for commit id and revert editor content when confirmed', async ({ page }) => {
+    // Initialize and create two commits to revert to
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+
+    // First commit
+    await page.locator('#editor').fill('Original');
+    await page.locator('#commitMsg').fill('first');
+    await page.locator('#commitBtn').click();
+
+    // Second commit with different content
+    await page.locator('#editor').fill('Changed');
+    await page.locator('#commitMsg').fill('second');
+    await page.locator('#commitBtn').click();
+
+    // Grab the short id of the first commit from the commits list (lastCommit is the last/latest; we need the older one)
+    // We can read the commits list DOM to find commit ids
+    const commits = await page.$$eval('#commitsList .commit .id', els => els.map(e => e.textContent));
+    // commits array is ordered newest-first, so the second element (index 1) is the older commit id short
+    const targetShort = commits[1] ? commits[1].trim() : null;
+    expect(targetShort).not.toBeNull();
+
+    // Click Revert to commit -> will prompt for commit id (prompt) then a confirm to apply revert
+    // We need to respond to prompt with the short id, then accept the confirm
+    const dialogPromise = page.waitForEvent('dialog');
+    await page.locator('#revertBtn').click();
+    const promptDialog = await dialogPromise;
+    // Respond with short id
+    await promptDialog.accept(targetShort);
+
+    // After prompt, the code does a confirm before applying the revert. Wait for that confirm and accept.
+    const confirmDialog = await page.waitForEvent('dialog');
+    await confirmDialog.accept();
+
+    // Editor content should now reflect the reverted commit (the content of the older commit)
+    const editorValue = await page.locator('#editor').inputValue();
+    expect(editorValue).toBe('Original');
+    // Status should have been set to 'Editor reverted' at some point (might be later overwritten by renderAll)
+    // We at least check the status element exists and page is responsive
+    await expect(page.locator('#statusTag')).toBeVisible();
+  });
+
+  test('Show Diff: prompt flows and handles invalid commit id gracefully', async ({ page }) => {
+    // Initialize and commit a change
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+    await page.locator('#editor').fill('Alpha\nBeta');
+    await page.locator('#commitMsg').fill('alpha');
+    await page.locator('#commitBtn').click();
+
+    // Attempt to diff with an invalid commit id: prompt should be responded and then an alert 'Commit not found' shown
+    const diffBtn = page.locator('#diffBtn');
+
+    // Click diff button, wait for prompt, respond with an invalid id
+    const promptPromise = page.waitForEvent('dialog');
+    await diffBtn.click();
+    const promptDialog1 = await promptPromise;
+    // Provide a non-existing prefix and accept
+    await promptDialog.accept('deadbeef');
+
+    // The code should then trigger an alert dialog with message 'Commit not found'
+    const alertDialog = await page.waitForEvent('dialog');
+    expect(alertDialog.type()).toBe('alert');
+    expect(alertDialog.message()).toMatch(/Commit not found/);
+    await alertDialog.accept();
+  });
+
+  test('Edge case: creating a branch with empty name triggers alert and does not create branch', async ({ page }) => {
+    // Initialize repo
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+
+    // Ensure newBranchInput is empty and click create branch
+    await page.locator('#newBranchInput').fill('');
+    const dialogPromise1 = page.waitForEvent('dialog');
+    await page.locator('#createBranchBtn').click();
+    const alertDialog1 = await dialogPromise;
+    // Should be an alert telling to enter branch name
+    expect(alertDialog.type()).toBe('alert');
+    expect(alertDialog.message()).toMatch(/Enter branch name/);
+    await alertDialog.accept();
+
+    // branchSelect should not have an empty option created; ensure currentBranch remains 'main' or unchanged
+    const currentBranch = await page.locator('#currentBranch').textContent();
+    expect(currentBranch).toBeTruthy();
+  });
+
+  test('Edge case: merge into self triggers alert and is prevented', async ({ page }) => {
+    // Initialize and commit
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+    await page.locator('#editor').fill('Line 1');
+    await page.locator('#commitMsg').fill('c1');
+    await page.locator('#commitBtn').click();
+
+    // Ensure branchSelect has 'main' selected (current branch)
+    await page.locator('#branchSelect').selectOption('main');
+
+    // Click merge - code will check target === repo.head.branch and alert 'Cannot merge a branch into itself'
+    const dialogPromise2 = page.waitForEvent('dialog');
+    await page.locator('#mergeBtn').click();
+    const alertDialog2 = await dialogPromise;
+    expect(alertDialog.type()).toBe('alert');
+    expect(alertDialog.message()).toMatch(/Cannot merge a branch into itself/);
+    await alertDialog.accept();
+  });
+
+  test('Export and Show Graph buttons trigger expected flows (download anchor & alert)', async ({ page }) {
+    // Initialize and commit to have something to export/show
+    await Promise.all([page.waitForEvent('dialog'), page.locator('#initBtn').click()]).then(([d]) => d.accept());
+    await page.locator('#editor').fill('export test');
+    await page.locator('#commitMsg').fill('exp');
+    await page.locator('#commitBtn').click();
+
+    // Show Graph triggers an alert listing branches
+    const graphDialogPromise = page.waitForEvent('dialog');
+    await page.locator('#showGraph').click();
+    const graphDialog = await graphDialogPromise;
+    expect(graphDialog.type()).toBe('alert');
+    expect(graphDialog.message()).toContain('Branches:');
+    await graphDialog.accept();
+
+    // Export triggers a download via an anchor creation and click; we can't access the OS download easily,
+    // but ensure no dialog appears and the button is clickable (no errors).
+    await page.locator('#exportBtn').click();
+    // If no errors occurred up to this point, the export flow is considered exercised.
+    expect(true).toBeTruthy();
+  });
+});

@@ -73,9 +73,9 @@ test.describe('Decision Trees Demo - Interactive End-to-End Tests (Application I
     // This test clicks the Yes button present after load and validates the resulting DOM.
     // Note: Because the implementation calls showResult(children.yes) where children.yes is an object,
     // the resulting inserted string will be "[object Object]" rather than the human-readable result text expected in the FSM.
-    const container = page.locator('#treeContainer');
-    const questionNode = container.locator('.node').first();
-    const yesButton = questionNode.locator('div', { hasText: 'Yes' });
+    const container1 = page.locator('#treeContainer');
+    const questionNode1 = container.locator('.node').first();
+    const yesButton1 = questionNode.locator('div', { hasText: 'Yes' });
 
     await yesButton.click();
 
@@ -99,23 +99,23 @@ test.describe('Decision Trees Demo - Interactive End-to-End Tests (Application I
 
   test('Restart button restores the original root node (#A) with text "Is it raining?"', async ({ page }) => {
     // This test ensures that clicking Restart returns the UI to the original root markup.
-    const container = page.locator('#treeContainer');
+    const container2 = page.locator('#treeContainer');
 
     // Ensure we are in a state with a Restart button (click Yes first if needed)
     const maybeBack = container.locator('div', { hasText: 'Restart' });
     if ((await maybeBack.count()) === 0) {
       // Click Yes to reach a state that contains Restart
-      const questionNode = container.locator('.node').first();
-      const yesButton = questionNode.locator('div', { hasText: 'Yes' });
+      const questionNode2 = container.locator('.node').first();
+      const yesButton2 = questionNode.locator('div', { hasText: 'Yes' });
       await yesButton.click();
     }
 
-    const backButton = container.locator('div', { hasText: 'Restart' });
+    const backButton1 = container.locator('div', { hasText: 'Restart' });
     await expect(backButton).toHaveCount(1);
     await backButton.click();
 
     // After restart, container.innerHTML is reset to a root node with id="A" and text "Is it raining?"
-    const rootNode = container.locator('#A');
+    const rootNode1 = container.locator('#A');
     await expect(rootNode).toHaveCount(1);
     await expect(rootNode).toHaveText('Is it raining?');
 
@@ -127,12 +127,12 @@ test.describe('Decision Trees Demo - Interactive End-to-End Tests (Application I
 
   test('Clicking the restored #A (ShowChildren) reproduces the same (buggy) child view with undefined question', async ({ page }) => {
     // Verify that clicking the restored #A triggers showChildren and leads to the same state observed on load:
-    const container = page.locator('#treeContainer');
+    const container3 = page.locator('#treeContainer');
 
     // Ensure #A exists. If not, click Restart to restore it.
-    const rootNode = container.locator('#A');
+    const rootNode2 = container.locator('#A');
     if ((await rootNode.count()) === 0) {
-      const backButton = container.locator('div', { hasText: 'Restart' });
+      const backButton2 = container.locator('div', { hasText: 'Restart' });
       await backButton.click();
     }
 
@@ -142,7 +142,7 @@ test.describe('Decision Trees Demo - Interactive End-to-End Tests (Application I
     await clickableA.click();
 
     // After clicking, the question node should again show "undefined" as children.question is not present
-    const questionNode = container.locator('.node').first();
+    const questionNode3 = container.locator('.node').first();
     await expect(questionNode).toBeVisible();
     await expect(questionNode).toHaveText(/undefined/);
 
@@ -159,14 +159,14 @@ test.describe('Decision Trees Demo - Interactive End-to-End Tests (Application I
     // This test attempts to follow the FSM transitions conceptually and asserts where the implementation diverges.
     // FSM expects "Is it cold?" or "Is it hot?" to be displayed as intermediate questions and final result strings
     // like "Take an umbrella and wear a coat." to appear. The implementation's shape prevents those strings from ever rendering.
-    const container = page.locator('#treeContainer');
+    const container4 = page.locator('#treeContainer');
 
     // Ensure we have the Yes button and click it to get to result state
-    const questionNode = container.locator('.node').first();
+    const questionNode4 = container.locator('.node').first();
     await questionNode.locator('div', { hasText: 'Yes' }).click();
 
     // The result text in implementation will be "[object Object]" and not the human friendly strings
-    const resultNode = container.locator('.node').first();
+    const resultNode1 = container.locator('.node').first();
     await expect(resultNode).toBeVisible();
 
     // Assert that FSM-expected specific result texts are NOT present
@@ -183,10 +183,10 @@ test.describe('Decision Trees Demo - Interactive End-to-End Tests (Application I
 
   test('Edge case: Rapidly clicking Yes/No/Restart repeatedly does not throw uncaught exceptions', async ({ page }) => {
     // This test simulates rapid interactions to ensure the page does not crash with unhandled exceptions.
-    const container = page.locator('#treeContainer');
+    const container5 = page.locator('#treeContainer');
 
     // Ensure in initial runtime view (where showChildren already ran)
-    const questionNode = container.locator('.node').first();
+    const questionNode5 = container.locator('.node').first();
     const yes = questionNode.locator('div', { hasText: 'Yes' });
     const no = questionNode.locator('div', { hasText: 'No' });
 

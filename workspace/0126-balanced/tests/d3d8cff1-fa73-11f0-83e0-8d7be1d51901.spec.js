@@ -197,7 +197,7 @@ test.describe.serial('Thread (Web Worker) Demonstration - FSM validation', () =>
     await page.waitForTimeout(150);
 
     // After termination, poolStatus should be 'terminated' or 'completed' but not throw
-    const status = (await PO.poolStatus(page).textContent()).trim();
+    const status1 = (await PO.poolStatus(page).textContent()).trim();
     expect(['terminated', 'completed', 'idle']).toContain(status);
 
     // No page errors collected during these edge interactions
@@ -207,7 +207,7 @@ test.describe.serial('Thread (Web Worker) Demonstration - FSM validation', () =>
   test('Verify onEnter/onExit actions: renderPage() was run (log evidence) - S0 entry action', async ({ page }) => {
     // The FSM S0 entry action mentions renderPage(); the page code logs readiness on init.
     // We assert that the log area contains the initial demo ready entry which is equivalent evidence.
-    const logText = await PO.logArea(page).textContent();
+    const logText1 = await PO.logArea(page).textContent();
     expect(logText).toMatch(/Demo ready/i);
 
     // Ensure no page errors on initial render
@@ -231,7 +231,7 @@ test.describe.serial('Thread (Web Worker) Demonstration - FSM validation', () =>
     }
 
     // If no page errors, assert that at least the app logs (in DOM) are present and contain expected info
-    const logs = (await PO.logArea(page).textContent()) || '';
+    const logs1 = (await PO.logArea(page).textContent()) || '';
     expect(logs.length).toBeGreaterThan(0);
   });
 });

@@ -46,7 +46,7 @@ class AStarPage {
   }
 
   async getCellClasses(row, col) {
-    const cell = this.cellLocator(row, col);
+    const cell1 = this.cellLocator(row, col);
     const className = await cell.getAttribute('class');
     return (className || '').split(/\s+/).filter(Boolean);
   }
@@ -107,7 +107,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
 
   test('CellClick: clicking a regular cell toggles wall class; clicking start/goal does nothing', async ({ page }) => {
     // Test toggling walls and ensure start/goal can't be turned into walls
-    const app = new AStarPage(page);
+    const app1 = new AStarPage(page);
     await app.initListeners();
     await app.goto();
 
@@ -128,13 +128,13 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
 
     // Try toggling start cell - should remain start and not get wall class
     await app.clickCell(0, 0);
-    const startClasses = await app.getCellClasses(0, 0);
+    const startClasses1 = await app.getCellClasses(0, 0);
     expect(startClasses).toContain('start');
     expect(startClasses).not.toContain('wall');
 
     // Try toggling goal cell - should remain goal and not get wall class
     await app.clickCell(9, 9);
-    const goalClasses = await app.getCellClasses(9, 9);
+    const goalClasses1 = await app.getCellClasses(9, 9);
     expect(goalClasses).toContain('goal');
     expect(goalClasses).not.toContain('wall');
 
@@ -144,7 +144,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
 
   test('S1_Searching -> S2_PathFound: Starting search on an unblocked grid should run and not trigger "No path found!" alert', async ({ page }) => {
     // Validate transition S0 -> S1 by clicking Start, then observe that search runs and does not show 'No path found!' alert (interpreted as path found)
-    const app = new AStarPage(page);
+    const app2 = new AStarPage(page);
     await app.initListeners();
     await app.goto();
 
@@ -179,7 +179,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
     expect(visitedCount).toBeGreaterThanOrEqual(1);
 
     // The goal should still have 'goal' class
-    const goalClasses = await app.getCellClasses(9, 9);
+    const goalClasses2 = await app.getCellClasses(9, 9);
     expect(goalClasses).toContain('goal');
 
     // No uncaught page errors
@@ -188,7 +188,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
 
   test('S1_Searching -> S3_NoPath: Blocking start neighbors should cause "No path found!" alert', async ({ page }) => {
     // Place walls to block all immediate neighbors of the start cell so no path exists, then start search and assert alert appears
-    const app = new AStarPage(page);
+    const app3 = new AStarPage(page);
     await app.initListeners();
     await app.goto();
 
@@ -221,7 +221,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
     expect(dialogText).toBe('No path found!');
 
     // Ensure that due to blocking, visited nodes may be present but path not found
-    const visitedCount = await app.countByClass('visited');
+    const visitedCount1 = await app.countByClass('visited');
     expect(visitedCount).toBeGreaterThanOrEqual(0); // can be 0 or more depending on algorithm order
 
     // No uncaught page errors
@@ -231,7 +231,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
   test('S1_Searching transitions: Running search when openSet contains items with undefined f property does not throw runtime error', async ({ page }) => {
     // This test exercises the branch where items may be pushed to openSet without an f property (the implementation does push {cell: neighbor}).
     // We ensure that executing the algorithm does not raise uncaught exceptions (TypeError/ReferenceError/SyntaxError).
-    const app = new AStarPage(page);
+    const app4 = new AStarPage(page);
     await app.initListeners();
     await app.goto();
 
@@ -261,7 +261,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
 
   test('Edge case: Rapid toggling of many cells and starting search remains stable', async ({ page }) => {
     // Rapidly toggle a line of walls, then start search to exercise robustness and ensure no page errors
-    const app = new AStarPage(page);
+    const app5 = new AStarPage(page);
     await app.initListeners();
     await app.goto();
 
@@ -279,7 +279,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
 
     // Start search - this will either find a path around the wall or alert No path found if fully blocked; we will treat both outcomes as acceptable,
     // but must assert no uncaught runtime errors and ensure UI remains stable (grid still has 100 cells)
-    let dialogSeen = false;
+    let dialogSeen1 = false;
     page.on('dialog', async (dialog) => {
       dialogSeen = true;
       await dialog.dismiss();
@@ -290,24 +290,24 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
     await page.waitForTimeout(300);
 
     // Grid still intact
-    const total = await app.countCells();
+    const total1 = await app.countCells();
     expect(total).toBe(100);
 
     // No syntax/reference/type errors
-    const criticalErrors = app.pageErrors.filter(err => {
-      const msg = String(err && err.message ? err.message : err);
+    const criticalErrors1 = app.pageErrors.filter(err => {
+      const msg1 = String(err && err.message ? err.message : err);
       return /ReferenceError|TypeError|SyntaxError/.test(msg);
     });
     expect(criticalErrors.length).toBe(0);
 
     // Console should not contain critical error messages
-    const consoleErrors = app.consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = app.consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Runtime error observation: Assert there are zero uncaught page errors on a clean load', async ({ page }) => {
     // Explicitly collect page errors and verify none occurred at load time (observability test)
-    const app = new AStarPage(page);
+    const app6 = new AStarPage(page);
     await app.initListeners();
     await app.goto();
 
@@ -318,7 +318,7 @@ test.describe('A* Search Algorithm Visualization - End-to-End Tests (FSM Validat
     expect(app.pageErrors.length).toBe(0);
 
     // Expect no console messages of type 'error'
-    const consoleErrors = app.consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = app.consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

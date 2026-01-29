@@ -122,7 +122,7 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
 
   test('Sorting -> Sorted transition with valid input produces steps and final sorted output (S1_Sorting -> S3_Sorted)', async ({ page }) => {
     // This test validates the normal successful sorting path.
-    const app = new CountingSortPage(page);
+    const app1 = new CountingSortPage(page);
     await app.goto();
 
     // Use a known unsorted array (default or custom) and click sort.
@@ -142,13 +142,13 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     expect(sortedText, 'Sorted array text should show numbers in non-decreasing order').toBe('1, 2, 2, 3, 3, 4, 8');
 
     // Ensure error container remains empty.
-    const errorText = await app.getErrorText();
+    const errorText1 = await app.getErrorText();
     expect(errorText?.trim() || '', 'No error should be shown for valid input').toBe('');
   });
 
   test('Sorting -> Error transition when input is empty (S1_Sorting -> S2_Error)', async ({ page }) => {
     // Validate error path when the user provides no valid numbers.
-    const app = new CountingSortPage(page);
+    const app2 = new CountingSortPage(page);
     await app.goto();
 
     // Clear input to trigger the empty-input guard.
@@ -162,13 +162,13 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     expect(await app.isSortedResultVisible(), 'Sorted result should remain hidden on error').toBeFalsy();
 
     // Steps should remain empty because sorting did not proceed.
-    const stepCount = await app.getStepCount();
+    const stepCount1 = await app.getStepCount();
     expect(stepCount, 'No steps should be displayed when input is invalid/empty').toBe(0);
   });
 
   test('Sorting -> Error transition when input contains negative numbers (S1_Sorting -> S2_Error)', async ({ page }) => {
     // Validate guard for negative numbers - counting sort only supports non-negative integers.
-    const app = new CountingSortPage(page);
+    const app3 = new CountingSortPage(page);
     await app.goto();
 
     // Input with a negative number to provoke the error.
@@ -182,13 +182,13 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     expect(await app.isSortedResultVisible(), 'Sorted result should remain hidden when negative numbers present').toBeFalsy();
 
     // No algorithmic steps should be shown.
-    const stepCount = await app.getStepCount();
+    const stepCount2 = await app.getStepCount();
     expect(stepCount, 'No steps should be displayed when negative input exists').toBe(0);
   });
 
   test('Edge case: non-numeric tokens are filtered and remaining numbers are sorted', async ({ page }) => {
     // The implementation filters out non-numeric tokens. Ensure this behavior works.
-    const app = new CountingSortPage(page);
+    const app4 = new CountingSortPage(page);
     await app.goto();
 
     // Provide input with alphabets and extra commas - non-numeric items should be ignored.
@@ -199,15 +199,15 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     await expect(app.sortedResult).toBeVisible();
 
     // The numbers that remain are [5,2,5] -> sorted [2,5,5]
-    const sortedText = (await app.getSortedArrayText()).trim();
+    const sortedText1 = (await app.getSortedArrayText()).trim();
     expect(sortedText, 'Non-numeric tokens should be ignored; remaining numbers should be sorted').toBe('2, 5, 5');
 
     // Steps should show the process at least once.
-    const stepCount = await app.getStepCount();
+    const stepCount3 = await app.getStepCount();
     expect(stepCount).toBeGreaterThanOrEqual(3);
 
     // Error should be empty.
-    const errorText = await app.getErrorText();
+    const errorText2 = await app.getErrorText();
     expect(errorText?.trim() || '', 'No error should be displayed when valid numeric tokens remain').toBe('');
   });
 
@@ -216,12 +216,12 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     // - sortArray() clears #stepsContainer.innerHTML
     // - countingSort steps append children to #stepsContainer
     // - final display toggles #sortedResult.style.display = "block"
-    const app = new CountingSortPage(page);
+    const app5 = new CountingSortPage(page);
     await app.goto();
 
     // Pre-populate steps container with a dummy node to ensure it gets cleared.
     await page.evaluate(() => {
-      const steps = document.getElementById('stepsContainer');
+      const steps1 = document.getElementById('stepsContainer');
       steps.innerHTML = '<div class="step">DUMMY</div>';
       const sorted = document.getElementById('sortedResult');
       sorted.style.display = 'none';
@@ -235,7 +235,7 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     await app.clickSort();
 
     // After clicking, steps container should have been cleared and then populated by the algorithm.
-    const stepCount = await app.getStepCount();
+    const stepCount4 = await app.getStepCount();
     expect(stepCount, 'Steps container should be replaced with algorithm steps (not the dummy) after sort').toBeGreaterThanOrEqual(3);
 
     // Final sortedResult should be visible (style.display = 'block' evidence).
@@ -244,7 +244,7 @@ test.describe('Counting Sort Demonstration - FSM states and transitions', () => 
     expect(displayStyle, "sortedResult should be displayed with 'block' or visible style").toBe('block');
 
     // The sorted array content should match the expected sorted order.
-    const sortedText = (await app.getSortedArrayText()).trim();
+    const sortedText2 = (await app.getSortedArrayText()).trim();
     expect(sortedText).toBe('1, 2, 3');
   });
 });

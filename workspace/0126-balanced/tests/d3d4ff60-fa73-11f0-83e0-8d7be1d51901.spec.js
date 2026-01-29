@@ -132,7 +132,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await expect(page.locator('#lastResult')).toHaveText(/Updated/);
 
       // Log should reflect update
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog1 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Updated key="k-update"');
 
       // Find the node and confirm its displayed value changed to 'second'
@@ -152,7 +152,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await expect(page.locator('#lastResult')).toHaveText(/Found:/);
 
       // Top log should include JSON stringified representation of the value ({"nested":true})
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog2 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Get key="123" found at index');
       expect(topLog).toContain('{"nested":true}');
 
@@ -166,7 +166,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
 
       await expect(page.locator('#lastResult')).toHaveText('Not found');
 
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog3 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('NOT FOUND');
 
       // renderTable called with predicted index: at least one bucket highlighted
@@ -179,7 +179,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await page.click('#btnContains');
       await expect(page.locator('#lastResult')).toHaveText(/Yes/);
 
-      let topLog = await page.locator('#log').locator('div').first().textContent();
+      let topLog4 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Contains key="apple"? true');
 
       // Non-existing key
@@ -201,13 +201,13 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       // Deleted missing key should show Not found in lastResult
       await expect(page.locator('#lastResult')).toHaveText('Not found');
 
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog5 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Failed to remove key=');
     });
 
     test('Delete via node Delete button removes specific entry, updates UI and logs', async ({ page }) => {
       // Ensure 'banana' exists in initial pairs; find its node and click its Delete button.
-      const node = page.locator('#hashTable .node').filter({ has: page.locator('.key', { hasText: 'banana' }) });
+      const node1 = page.locator('#hashTable .node1').filter({ has: page.locator('.key', { hasText: 'banana' }) });
       await expect(node).toHaveCount(1);
 
       // Click the Delete button within that node
@@ -217,7 +217,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await expect(page.locator('#lastResult')).toHaveText(/Removed/);
 
       // top log should mention removal of banana
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog6 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Removed key="banana"');
 
       // The node with 'banana' should no longer exist
@@ -232,7 +232,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await page.click('#btnRandom');
 
       // Log contains the seeded message
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog7 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Inserted some random keys');
 
       // Size should have increased
@@ -251,7 +251,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await expect(page.locator('#statSize')).toHaveText('0');
 
       // Log top line mentions 'Cleared table.'
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog8 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Cleared table.');
     });
 
@@ -261,7 +261,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await page.click('#btnResize');
 
       // Log should mention resizing
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog9 = await page.locator('#log').locator('div').first().textContent();
       expect(topLog).toContain('Resized table to capacity 16.');
 
       // Capacity stat should update to 16
@@ -280,7 +280,7 @@ test.describe('Hash Map Interactive Demo - End-to-end', () => {
       await toggle.click();
 
       // Log should reflect new state ON/OFF
-      const topLog = await page.locator('#log').locator('div').first().textContent();
+      const topLog10 = await page.locator('#log').locator('div').first().textContent();
       if (isChecked) {
         expect(topLog).toContain('Auto-resize is now OFF');
       } else {

@@ -77,7 +77,7 @@ test.describe('Agile Methodology FSM - End-to-End', () => {
     // Give time for console logs to be emitted
     await page.waitForTimeout(100);
 
-    const texts = newMessages.map(m => m.text);
+    const texts1 = newMessages.map(m => m.text);
 
     // Verify expected meeting lifecycle logs and topic logs
     expect(texts.some(t => t.includes('Meeting started!'))).toBeTruthy();
@@ -113,7 +113,7 @@ test.describe('Agile Methodology FSM - End-to-End', () => {
 
     await page.waitForTimeout(100);
 
-    const texts = sprintMessages.map(m => m.text);
+    const texts2 = sprintMessages.map(m => m.text);
 
     // Validate sprint lifecycle logs and the member work logs and topics
     expect(texts.some(t => t.includes('Sprint started!'))).toBeTruthy();
@@ -155,7 +155,7 @@ test.describe('Agile Methodology FSM - End-to-End', () => {
 
     await page.waitForTimeout(150);
 
-    const texts = transitionMessages.map(m => m.text);
+    const texts3 = transitionMessages.map(m => m.text);
 
     // Expected observables from FSM transitions
     expect(texts.some(t => t.includes('Meeting started!'))).toBeTruthy();
@@ -209,7 +209,7 @@ test.describe('Agile Methodology FSM - End-to-End', () => {
     // This test invokes sprint with a null argument to produce an error and asserts it appears in page errors/console
     const { consoleMessages, pageErrors } = await openPageWithListeners(page);
 
-    let evaluateError = null;
+    let evaluateError1 = null;
     try {
       await page.evaluate(() => {
         // This call is expected to throw because sprint expects an object with .members
@@ -225,10 +225,10 @@ test.describe('Agile Methodology FSM - End-to-End', () => {
     expect(evaluateError !== null || pageErrors.length > 0).toBeTruthy();
 
     if (pageErrors.length > 0) {
-      const errMsg = pageErrors[0].message || String(pageErrors[0]);
+      const errMsg1 = pageErrors[0].message || String(pageErrors[0]);
       expect(/members|Cannot read properties|TypeError/i.test(errMsg)).toBeTruthy();
     } else {
-      const msg = evaluateError ? String(evaluateError.message || evaluateError) : '';
+      const msg1 = evaluateError ? String(evaluateError.message || evaluateError) : '';
       expect(/members|Cannot read properties|TypeError/i.test(msg)).toBeTruthy();
     }
   });
@@ -250,7 +250,7 @@ test.describe('Agile Methodology FSM - End-to-End', () => {
 
     await page.waitForTimeout(200);
 
-    const texts = repeatedMessages.map(m => m.text);
+    const texts4 = repeatedMessages.map(m => m.text);
 
     // Expect at least two occurrences of meeting lifecycle markers and sprint lifecycle markers
     const meetingStartCount = texts.filter(t => t.includes('Meeting started!')).length;

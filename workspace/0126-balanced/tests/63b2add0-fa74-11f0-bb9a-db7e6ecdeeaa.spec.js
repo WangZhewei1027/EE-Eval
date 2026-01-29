@@ -101,7 +101,7 @@ test.describe('CPU Scheduling Demonstration - FSM and UI tests', () => {
 
   test.describe('Algorithm change events and UI effects (AlgorithmChange)', () => {
     test('selecting Round Robin shows quantum input; selecting Priority shows priority column', async ({ page }) => {
-      const app = new CpuSchedulingPage(page);
+      const app1 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Initially priority column hidden
@@ -127,14 +127,14 @@ test.describe('CPU Scheduling Demonstration - FSM and UI tests', () => {
       // Select priority algorithm and ensure priority column is shown
       await app.selectAlgorithm('priority');
       const priorityDisplay = await page.evaluate(() => {
-        const el = document.querySelector('.priorityCol');
+        const el1 = document.querySelector('.priorityCol');
         return el ? el.style.display : null;
       });
       expect(priorityDisplay !== 'none').toBeTruthy();
 
       // Check for runtime console/page errors during algorithm changes
-      const errorMsgs = consoleMessages.concat(pageErrors.map(e => ({ type: 'pageerror', text: String(e) })));
-      const problematic = errorMsgs.filter(m =>
+      const errorMsgs1 = consoleMessages.concat(pageErrors.map(e => ({ type: 'pageerror', text: String(e) })));
+      const problematic1 = errorMsgs.filter(m =>
         /ReferenceError|TypeError|SyntaxError/.test(m.text)
       );
       expect(problematic.length).toBe(0);
@@ -144,7 +144,7 @@ test.describe('CPU Scheduling Demonstration - FSM and UI tests', () => {
   test.describe('Run Simulation and Results (Transitions S0->S1->S2)', () => {
     test('FCFS simulation: runs, displays results table, gantt chart and averages', async ({ page }) => {
       // This test follows the transition: Idle -> SimulationRunning -> ResultsDisplayed
-      const app = new CpuSchedulingPage(page);
+      const app2 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Provide a simple process list for FCFS
@@ -189,15 +189,15 @@ P3 2 2`;
       expect(timelineChildren).toBeGreaterThanOrEqual(2);
 
       // Ensure no runtime ReferenceError/TypeError/SyntaxError occurred
-      const errorMsgs = consoleMessages.concat(pageErrors.map(e => ({ type: 'pageerror', text: String(e) })));
-      const problematic = errorMsgs.filter(m =>
+      const errorMsgs2 = consoleMessages.concat(pageErrors.map(e => ({ type: 'pageerror', text: String(e) })));
+      const problematic2 = errorMsgs.filter(m =>
         /ReferenceError|TypeError|SyntaxError/.test(m.text)
       );
       expect(problematic.length).toBe(0);
     });
 
     test('Round Robin with invalid (zero) quantum shows alert and does not show results', async ({ page }) => {
-      const app = new CpuSchedulingPage(page);
+      const app3 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Choose RR and set quantum to zero to trigger validation
@@ -224,13 +224,13 @@ P2 1 3`);
       await expect(app.resultsDiv).toHaveCSS('display', 'none');
 
       // Also assert no uncaught page errors (console alerts are not page errors)
-      const problematic = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
+      const problematic3 = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
         .filter(m => /ReferenceError|TypeError|SyntaxError/.test(m.text));
       expect(problematic.length).toBe(0);
     });
 
     test('Priority non-preemptive without priorities triggers validation alert', async ({ page }) => {
-      const app = new CpuSchedulingPage(page);
+      const app4 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Select priority scheduling
@@ -241,7 +241,7 @@ P2 1 3`);
 P2 1 3`);
 
       // Listen for alert
-      let dialogMessage = null;
+      let dialogMessage1 = null;
       page.once('dialog', async dialog => {
         dialogMessage = dialog.message();
         await dialog.dismiss();
@@ -256,7 +256,7 @@ P2 1 3`);
       await expect(app.resultsDiv).toHaveCSS('display', 'none');
 
       // No runtime Reference/Type/Syntax errors
-      const problematic = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
+      const problematic4 = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
         .filter(m => /ReferenceError|TypeError|SyntaxError/.test(m.text));
       expect(problematic.length).toBe(0);
     });
@@ -264,7 +264,7 @@ P2 1 3`);
 
   test.describe('Reset functionality and transitions (S2->S3->S0)', () => {
     test('Reset clears inputs, hides results, and returns to idle', async ({ page }) => {
-      const app = new CpuSchedulingPage(page);
+      const app5 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Populate inputs and run a small simulation to populate results
@@ -292,7 +292,7 @@ P2 1 1`);
       await expect(app.ganttChart.locator('.gantt-block')).toHaveCount(0);
 
       // No runtime Reference/Type/Syntax errors
-      const problematic = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
+      const problematic5 = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
         .filter(m => /ReferenceError|TypeError|SyntaxError/.test(m.text));
       expect(problematic.length).toBe(0);
     });
@@ -300,7 +300,7 @@ P2 1 1`);
 
   test.describe('Edge cases and parsing errors', () => {
     test('Invalid process line shows alert and prevents simulation', async ({ page }) => {
-      const app = new CpuSchedulingPage(page);
+      const app6 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Provide malformed process input (missing burst time in second line)
@@ -311,7 +311,7 @@ P2 1`; // second line invalid
       await app.selectAlgorithm('fcfs');
 
       // Listen for dialog alert
-      let dialogMessage = null;
+      let dialogMessage2 = null;
       page.once('dialog', async dialog => {
         dialogMessage = dialog.message();
         await dialog.dismiss();
@@ -325,20 +325,20 @@ P2 1`; // second line invalid
       await expect(app.resultsDiv).toHaveCSS('display', 'none');
 
       // No uncaught Reference/Type/Syntax errors
-      const problematic = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
+      const problematic6 = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
         .filter(m => /ReferenceError|TypeError|SyntaxError/.test(m.text));
       expect(problematic.length).toBe(0);
     });
 
     test('Negative arrival time or non-numeric burst triggers validation alert', async ({ page }) => {
-      const app = new CpuSchedulingPage(page);
+      const app7 = new CpuSchedulingPage(page);
       await app.goto();
 
       // Negative arrival
       await app.setProcesses(`P1 -1 4`);
       await app.selectAlgorithm('fcfs');
 
-      let dialogMessage = null;
+      let dialogMessage3 = null;
       page.once('dialog', async dialog => {
         dialogMessage = dialog.message();
         await dialog.dismiss();
@@ -358,7 +358,7 @@ P2 1`; // second line invalid
       expect(dialogMessage).toContain('Invalid burst time');
 
       // No uncaught Reference/Type/Syntax errors
-      const problematic = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
+      const problematic7 = consoleMessages.concat(pageErrors.map(e => ({ text: String(e) })))
         .filter(m => /ReferenceError|TypeError|SyntaxError/.test(m.text));
       expect(problematic.length).toBe(0);
     });

@@ -125,14 +125,14 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
   test.describe('Add / Get / Remove Transitions', () => {
     test('AddItem: adding a key-value pair updates output and clears inputs', async ({ page: p }) => {
       // This validates transition S0_Idle -> S1_ItemAdded
-      const hm = new HashMapPage(p);
+      const hm1 = new HashMapPage(p);
       await hm.goto();
 
       // Add a key/value pair
       await hm.addItem('alpha', '123');
 
       // After adding, the output should show JSON containing the new pair
-      const out = await hm.getOutputText();
+      const out1 = await hm.getOutputText();
       // output is JSON string produced by hashMap.getAll()
       let parsed;
       try {
@@ -151,7 +151,7 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
 
     test('GetItem: retrieving existing and non-existing keys shows correct messages', async ({ page: p }) => {
       // This validates transition S0_Idle -> S2_ItemRetrieved
-      const hm = new HashMapPage(p);
+      const hm2 = new HashMapPage(p);
       await hm.goto();
 
       // Precondition: add a known key
@@ -159,7 +159,7 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
 
       // Retrieve existing key
       await hm.getItem('beta');
-      let out = await hm.getOutputText();
+      let out2 = await hm.getOutputText();
       expect(out, 'Get on existing key should display a value message').toBe('Value for "beta": 456');
 
       // Retrieve non-existing key should show "Key not found."
@@ -170,7 +170,7 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
 
     test('RemoveItem: removing a key updates the hash map output (key removed)', async ({ page: p }) => {
       // This validates transition S0_Idle -> S3_ItemRemoved
-      const hm = new HashMapPage(p);
+      const hm3 = new HashMapPage(p);
       await hm.goto();
 
       // Add two keys
@@ -178,7 +178,7 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
       await hm.addItem('k2', 'v2');
 
       // Ensure both are present
-      let out = await hm.getOutputText();
+      let out3 = await hm.getOutputText();
       let parsed = JSON.parse(out);
       expect(parsed.k1).toBe('v1');
       expect(parsed.k2).toBe('v2');
@@ -196,12 +196,12 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
 
   test.describe('Edge cases and additional behaviors', () => {
     test('Adding a duplicate key overwrites the previous value', async ({ page: p }) => {
-      const hm = new HashMapPage(p);
+      const hm4 = new HashMapPage(p);
       await hm.goto();
 
       await hm.addItem('dup', 'first');
-      let out = await hm.getOutputText();
-      let parsed = JSON.parse(out);
+      let out4 = await hm.getOutputText();
+      let parsed1 = JSON.parse(out);
       expect(parsed.dup).toBe('first');
 
       // Add same key with different value
@@ -212,15 +212,15 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
     });
 
     test('Empty key is accepted and retrievable/removable (edge case)', async ({ page: p }) => {
-      const hm = new HashMapPage(p);
+      const hm5 = new HashMapPage(p);
       await hm.goto();
 
       // Add empty key
       await hm.addItem('', 'emptyValue');
 
       // Output JSON should contain an empty-string key
-      let out = await hm.getOutputText();
-      let parsed = JSON.parse(out);
+      let out5 = await hm.getOutputText();
+      let parsed2 = JSON.parse(out);
       expect(Object.prototype.hasOwnProperty.call(parsed, ''), 'Map should contain empty string key').toBeTruthy();
       expect(parsed['']).toBe('emptyValue');
 
@@ -237,7 +237,7 @@ test.describe('Hash Map Demonstration - States, Transitions and Edge Cases', () 
     });
 
     test('Removing a non-existent key does not alter the map', async ({ page: p }) => {
-      const hm = new HashMapPage(p);
+      const hm6 = new HashMapPage(p);
       await hm.goto();
 
       // Setup a key

@@ -95,7 +95,7 @@ test.describe('B+ Tree Interactive Application - FSM Validation', () => {
   test('S2_SearchResults: Verify search outputs for existing keys', async () => {
     // Verify that the search outputs printed to console match the expected values.
     // The page logs the search results in order.
-    const logs = treePage.consoleMessages;
+    const logs1 = treePage.consoleMessages;
 
     // Check presence and ordering of specific search outputs
     const expected = ['five', 'eight', 'three', 'nine', 'one', 'four'];
@@ -113,7 +113,7 @@ test.describe('B+ Tree Interactive Application - FSM Validation', () => {
 
   test('S3_TreeModified: Delete transition occurred and search after delete returns null', async () => {
     // The page deletes key 5 and then logs tree.search(5) which should be null.
-    const logs = treePage.consoleMessages;
+    const logs2 = treePage.consoleMessages;
 
     // Ensure 'five' appeared earlier (search before delete)
     const indexFiveBefore = logs.indexOf('five');
@@ -159,7 +159,7 @@ test.describe('B+ Tree Interactive Application - FSM Validation', () => {
   test('FSM transition coverage sanity: ensure console logs reflect full transition sequence', async () => {
     // This test ties together the FSM's transitions:
     // S0 -> S1 (inserts) -> S2 (search logs) -> S3 (delete) -> S2 (search after delete)
-    const logs = treePage.consoleMessages;
+    const logs3 = treePage.consoleMessages;
 
     // Expected lifecycle in console logs (search logs before delete, then null after delete)
     // Find positions for the first block of search logs and the final null after delete

@@ -73,14 +73,14 @@ class TcpIpPage {
   }
 
   async selectDestByValue(value) {
-    const options = await this.destSelect.locator('option').all();
-    const values = await Promise.all(options.map(o => o.getAttribute('value')));
+    const options1 = await this.destSelect.locator('option').all();
+    const values1 = await Promise.all(options.map(o => o.getAttribute('value')));
     if (values.includes(value)) {
       await this.destSelect.selectOption({ value });
     } else {
       await this.page.evaluate((v) => { document.getElementById('destSelect').value = v; }, value);
       await this.page.evaluate(() => {
-        const sel = document.getElementById('destSelect');
+        const sel1 = document.getElementById('destSelect');
         sel.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
@@ -132,12 +132,12 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
   });
 
   test('Selecting source and destination updates selects (SelectSource & SelectDestination events)', async ({ page }) => {
-    const app = new TcpIpPage(page);
+    const app1 = new TcpIpPage(page);
     await app.goto();
 
     // Change source to second option and destination to third option (if available)
     const srcOptions = await app.sourceSelect.locator('option').allTextContents();
-    const destOptions = await app.destSelect.locator('option').allTextContents();
+    const destOptions1 = await app.destSelect.locator('option').allTextContents();
 
     // choose indices safely
     const srcIndex = srcOptions.length > 1 ? 1 : 0;
@@ -160,7 +160,7 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
   });
 
   test('Clicking Send with same source and destination triggers alert and stays in Idle (edge case)', async ({ page }) => {
-    const app = new TcpIpPage(page);
+    const app2 = new TcpIpPage(page);
     await app.goto();
 
     // Make both selects the same value (pick the first option)
@@ -187,7 +187,7 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
     expect(alertDialog.message).toBe('Source and destination IP cannot be the same.');
 
     // Ensure no sending logs were added - 'User requests sending message' should not be present
-    const logs = await app.getLogsText();
+    const logs1 = await app.getLogsText();
     expect(logs).not.toContain('User requests sending message');
 
     // sendButton should remain enabled (we did not enter sending state)
@@ -199,12 +199,12 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
   });
 
   test('Successful send sequence transitions: S0 -> S1 -> S2 -> S3 and button disabled/enabled as expected', async ({ page }) => {
-    const app = new TcpIpPage(page);
+    const app3 = new TcpIpPage(page);
     await app.goto();
 
     // Choose two different devices (first and second)
-    const srcValue = await app.sourceSelect.locator('option').first().getAttribute('value');
-    const destValue = await app.destSelect.locator('option').nth(1).getAttribute('value');
+    const srcValue1 = await app.sourceSelect.locator('option').first().getAttribute('value');
+    const destValue1 = await app.destSelect.locator('option').nth(1).getAttribute('value');
 
     await app.selectSourceByValue(srcValue);
     await app.selectDestByValue(destValue);
@@ -256,18 +256,18 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
   }, 20000); // increase timeout to allow animation to complete
 
   test('Sending with empty message triggers "Message cannot be empty." and does not send', async ({ page }) => {
-    const app = new TcpIpPage(page);
+    const app4 = new TcpIpPage(page);
     await app.goto();
 
     // Choose two different devices
-    const srcValue = await app.sourceSelect.locator('option').first().getAttribute('value');
-    const destValue = await app.destSelect.locator('option').nth(1).getAttribute('value');
+    const srcValue2 = await app.sourceSelect.locator('option').first().getAttribute('value');
+    const destValue2 = await app.destSelect.locator('option').nth(1).getAttribute('value');
 
     await app.selectSourceByValue(srcValue);
     await app.selectDestByValue(destValue);
 
     // Dialog handling: respond to prompt with empty string and capture the subsequent alert
-    const dialogs = [];
+    const dialogs1 = [];
     page.on('dialog', async dialog => {
       dialogs.push({ type: dialog.type(), message: dialog.message() });
       if (dialog.type() === 'prompt') {
@@ -288,7 +288,7 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
     expect(foundAlert).toBeTruthy();
 
     // Ensure sending did not start: no "User requests sending message" log
-    const logs = await app.getLogsText();
+    const logs2 = await app.getLogsText();
     expect(logs).not.toContain('User requests sending message');
 
     // sendButton should remain enabled
@@ -300,11 +300,11 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
   });
 
   test('Invalid destination IP (manually set) logs error and re-enables send button', async ({ page }) => {
-    const app = new TcpIpPage(page);
+    const app5 = new TcpIpPage(page);
     await app.goto();
 
     // Pick a valid source but set destination to an invalid IP value (not in devicePositions)
-    const srcValue = await app.sourceSelect.locator('option').first().getAttribute('value');
+    const srcValue3 = await app.sourceSelect.locator('option').first().getAttribute('value');
     await app.selectSourceByValue(srcValue);
 
     // Force destSelect to an invalid IP string (direct DOM mutation)
@@ -332,7 +332,7 @@ test.describe('TCP/IP Concept Demonstration - FSM states & transitions', () => {
     await expect(app.sendButton).toBeEnabled();
 
     // Ensure 'Packet arrived' or 'Message received' did NOT occur
-    const logs = await app.getLogsText();
+    const logs3 = await app.getLogsText();
     expect(logs).not.toContain('Packet arrived at destination device.');
     expect(logs).not.toContain('Message received:');
 

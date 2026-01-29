@@ -47,7 +47,7 @@ class HashPage {
 
   async waitForHashGenerated(timeout = 5000) {
     await this.page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out1 = document.getElementById('output');
       if (!out) return false;
       return out.innerHTML.includes('SHA-256 hash:') || out.textContent?.startsWith('Error generating hash:') || out.textContent === 'Please enter some text to hash.';
     }, null, { timeout });
@@ -135,7 +135,7 @@ test.describe('Hash Functions Demo - FSM state and transition tests', () => {
     // - Transition Hashing -> Hash Generated: final output contains SHA-256 label and a 64-hex-character hash
     // - Determinism: known input produces known SHA-256 value
 
-    const app = new HashPage(page);
+    const app1 = new HashPage(page);
     await app.goto();
 
     // Type a known input "hello" and click generate
@@ -171,7 +171,7 @@ test.describe('Hash Functions Demo - FSM state and transition tests', () => {
     // Validate the edge case when the input is empty: FSM should remain in Idle or show validation text,
     // and not attempt to calculate the hash.
 
-    const app = new HashPage(page);
+    const app2 = new HashPage(page);
     await app.goto();
 
     // Ensure input is empty
@@ -180,7 +180,7 @@ test.describe('Hash Functions Demo - FSM state and transition tests', () => {
 
     // The code checks for empty string and sets the output to a helpful message.
     await app.waitForHashGenerated(2000);
-    const out = (await app.getOutputTextContent()) || '';
+    const out2 = (await app.getOutputTextContent()) || '';
     expect(out.trim()).toBe('Please enter some text to hash.');
   });
 
@@ -188,7 +188,7 @@ test.describe('Hash Functions Demo - FSM state and transition tests', () => {
     // FSM included an InputTextChange transition but the implementation commented the handler out.
     // This test verifies that typing into the input does not automatically trigger hashing.
 
-    const app = new HashPage(page);
+    const app3 = new HashPage(page);
     await app.goto();
 
     // Ensure initial output is empty
@@ -212,7 +212,7 @@ test.describe('Hash Functions Demo - FSM state and transition tests', () => {
     // Validate clicking the button multiple times enters the Hashing state each time
     // and finally displays the same deterministic hash for identical input.
 
-    const app = new HashPage(page);
+    const app4 = new HashPage(page);
     await app.goto();
 
     await app.typeInput('repeatable');
@@ -243,7 +243,7 @@ test.describe('Hash Functions Demo - FSM state and transition tests', () => {
   test('Error observation: captured page errors and console errors (if any) are of allowed JS error types', async ({ page }) => {
     // This test's goal is to explicitly demonstrate that we observe page errors and console errors,
     // and to assert that if they occur, they are ReferenceError, SyntaxError, or TypeError as required.
-    const app = new HashPage(page);
+    const app5 = new HashPage(page);
     await app.goto();
 
     // Perform a normal action that might reveal runtime problems

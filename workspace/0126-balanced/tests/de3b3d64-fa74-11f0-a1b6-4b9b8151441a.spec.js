@@ -143,7 +143,7 @@ test.describe('B+ Tree Visualization - FSM and UI surface tests', () => {
       const beforeCount = capturedPageErrors.length + capturedConsoleErrors.length;
 
       // Click Insert and await an error event
-      const ev = await clickAndAwaitError(async () => await app.clickInsert());
+      const ev1 = await clickAndAwaitError(async () => await app.clickInsert());
       expect(ev).not.toBeNull();
 
       // Validate that the error message indicates a runtime problem (e.g., ReferenceError)
@@ -160,43 +160,43 @@ test.describe('B+ Tree Visualization - FSM and UI surface tests', () => {
       // Set a key to delete (may be unused in this broken runtime)
       await app.setKey(42);
 
-      const beforeCount = capturedPageErrors.length + capturedConsoleErrors.length;
-      const ev = await clickAndAwaitError(async () => await app.clickDelete());
+      const beforeCount1 = capturedPageErrors.length + capturedConsoleErrors.length;
+      const ev2 = await clickAndAwaitError(async () => await app.clickDelete());
       expect(ev).not.toBeNull();
 
-      const text = extractErrorMessage(ev);
-      const matches = /(ReferenceError|TypeError|SyntaxError|deleteKey)/i.test(text);
+      const text1 = extractErrorMessage(ev);
+      const matches1 = /(ReferenceError|TypeError|SyntaxError|deleteKey)/i.test(text);
       expect(matches).toBeTruthy();
 
-      const afterCount = capturedPageErrors.length + capturedConsoleErrors.length;
+      const afterCount1 = capturedPageErrors.length + capturedConsoleErrors.length;
       expect(afterCount).toBeGreaterThanOrEqual(beforeCount + 1);
     });
 
     test('SearchKey event: clicking Search should attempt to call searchKey() and produce an error', async () => {
       await app.setKey(7);
 
-      const beforeCount = capturedPageErrors.length + capturedConsoleErrors.length;
-      const ev = await clickAndAwaitError(async () => await app.clickSearch());
+      const beforeCount2 = capturedPageErrors.length + capturedConsoleErrors.length;
+      const ev3 = await clickAndAwaitError(async () => await app.clickSearch());
       expect(ev).not.toBeNull();
 
-      const text = extractErrorMessage(ev);
-      const matches = /(ReferenceError|TypeError|SyntaxError|searchKey)/i.test(text);
+      const text2 = extractErrorMessage(ev);
+      const matches2 = /(ReferenceError|TypeError|SyntaxError|searchKey)/i.test(text);
       expect(matches).toBeTruthy();
 
-      const afterCount = capturedPageErrors.length + capturedConsoleErrors.length;
+      const afterCount2 = capturedPageErrors.length + capturedConsoleErrors.length;
       expect(afterCount).toBeGreaterThanOrEqual(beforeCount + 1);
     });
 
     test('RandomTree event: clicking Random Tree should attempt to call randomTree() and produce an error', async () => {
-      const beforeCount = capturedPageErrors.length + capturedConsoleErrors.length;
-      const ev = await clickAndAwaitError(async () => await app.clickRandom());
+      const beforeCount3 = capturedPageErrors.length + capturedConsoleErrors.length;
+      const ev4 = await clickAndAwaitError(async () => await app.clickRandom());
       expect(ev).not.toBeNull();
 
-      const text = extractErrorMessage(ev);
-      const matches = /(ReferenceError|TypeError|SyntaxError|randomTree)/i.test(text);
+      const text3 = extractErrorMessage(ev);
+      const matches3 = /(ReferenceError|TypeError|SyntaxError|randomTree)/i.test(text);
       expect(matches).toBeTruthy();
 
-      const afterCount = capturedPageErrors.length + capturedConsoleErrors.length;
+      const afterCount3 = capturedPageErrors.length + capturedConsoleErrors.length;
       expect(afterCount).toBeGreaterThanOrEqual(beforeCount + 1);
     });
 
@@ -209,14 +209,14 @@ test.describe('B+ Tree Visualization - FSM and UI surface tests', () => {
 
       // Now click Clear and expect an error as well (clearTree likely undefined)
       const beforeClear = capturedPageErrors.length + capturedConsoleErrors.length;
-      const ev = await clickAndAwaitError(async () => await app.clickClear());
+      const ev5 = await clickAndAwaitError(async () => await app.clickClear());
       expect(ev).not.toBeNull();
 
-      const text = extractErrorMessage(ev);
-      const matches = /(ReferenceError|TypeError|SyntaxError|clearTree)/i.test(text);
+      const text4 = extractErrorMessage(ev);
+      const matches4 = /(ReferenceError|TypeError|SyntaxError|clearTree)/i.test(text);
       expect(matches).toBeTruthy();
 
-      const afterCount = capturedPageErrors.length + capturedConsoleErrors.length;
+      const afterCount4 = capturedPageErrors.length + capturedConsoleErrors.length;
       expect(afterCount).toBeGreaterThanOrEqual(beforeClear + 1);
     });
   });
@@ -226,10 +226,10 @@ test.describe('B+ Tree Visualization - FSM and UI surface tests', () => {
       // Ensure key input is empty
       await app.setKey('');
       const before = capturedPageErrors.length + capturedConsoleErrors.length;
-      const ev = await clickAndAwaitError(async () => await app.clickInsert());
+      const ev6 = await clickAndAwaitError(async () => await app.clickInsert());
       expect(ev).not.toBeNull();
 
-      const text = extractErrorMessage(ev);
+      const text5 = extractErrorMessage(ev);
       // Expect either a JS runtime error or something indicating the missing input handler
       expect(/(ReferenceError|TypeError|SyntaxError|insertKey)/i.test(text)).toBeTruthy();
 
@@ -240,14 +240,14 @@ test.describe('B+ Tree Visualization - FSM and UI surface tests', () => {
     test('Inserting a negative key value (violates min): the UI allows setting it; clicking Insert should attempt insertion and produce an error', async () => {
       // Even though input min=0, programmatic set is allowed
       await app.setKey(-5);
-      const before = capturedPageErrors.length + capturedConsoleErrors.length;
-      const ev = await clickAndAwaitError(async () => await app.clickInsert());
+      const before1 = capturedPageErrors.length + capturedConsoleErrors.length;
+      const ev7 = await clickAndAwaitError(async () => await app.clickInsert());
       expect(ev).not.toBeNull();
 
-      const text = extractErrorMessage(ev);
+      const text6 = extractErrorMessage(ev);
       expect(/(ReferenceError|TypeError|SyntaxError|insertKey)/i.test(text)).toBeTruthy();
 
-      const after = capturedPageErrors.length + capturedConsoleErrors.length;
+      const after1 = capturedPageErrors.length + capturedConsoleErrors.length;
       expect(after).toBeGreaterThanOrEqual(before + 1);
     });
   });

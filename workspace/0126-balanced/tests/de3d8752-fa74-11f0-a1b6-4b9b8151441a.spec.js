@@ -110,7 +110,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
 
   // Transition: Run Calculator Tests -> CalculatorTestsRunning state
   test('Transition: Run Calculator Tests shows running header then test results', async ({ page }) => {
-    const app = new UnitTestingDemoPage(page);
+    const app1 = new UnitTestingDemoPage(page);
     await app.goto();
 
     // Click the Run Calculator Tests button (event trigger)
@@ -128,7 +128,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
     expect(failCount).toBe(0);
 
     // Verify that expected test labels are present in the results
-    const texts = await app.getAllResultTexts(app.test1Results);
+    const texts1 = await app.getAllResultTexts(app.test1Results);
     expect(texts.some(t => t.includes('Add 2 and 3'))).toBeTruthy();
     expect(texts.some(t => t.includes('Subtract 3 from 5'))).toBeTruthy();
     expect(texts.some(t => t.includes('Multiply 2 and 4'))).toBeTruthy();
@@ -142,7 +142,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
 
   // Transition: Run String Tests -> StringTestsRunning state
   test('Transition: Run String Tests shows running header then string test results', async ({ page }) => {
-    const app = new UnitTestingDemoPage(page);
+    const app2 = new UnitTestingDemoPage(page);
     await app.goto();
 
     // Click Run String Tests
@@ -155,11 +155,11 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
     await expect(app.test2Results.locator('.pass')).toHaveCount(4, { timeout: 3000 });
 
     // Ensure no fail classes present
-    const failCount = await app.countFail(app.test2Results);
+    const failCount1 = await app.countFail(app.test2Results);
     expect(failCount).toBe(0);
 
     // Validate expected test names are present
-    const texts = await app.getAllResultTexts(app.test2Results);
+    const texts2 = await app.getAllResultTexts(app.test2Results);
     expect(texts.some(t => t.includes('Reverse "hello"'))).toBeTruthy();
     expect(texts.some(t => t.includes('Check "racecar" is palindrome'))).toBeTruthy();
     expect(texts.some(t => t.includes('Check "hello" is not palindrome'))).toBeTruthy();
@@ -172,7 +172,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
 
   // Transition: Run Async Tests -> AsyncTestsRunning state
   test('Transition: Run Async Tests shows running header then async test results', async ({ page }) => {
-    const app = new UnitTestingDemoPage(page);
+    const app3 = new UnitTestingDemoPage(page);
     await app.goto();
 
     // Click Run Async Tests
@@ -185,11 +185,11 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
     await expect(app.test3Results.locator('.pass')).toHaveCount(2, { timeout: 3000 });
 
     // Confirm no failures
-    const failCount = await app.countFail(app.test3Results);
+    const failCount2 = await app.countFail(app.test3Results);
     expect(failCount).toBe(0);
 
     // Confirm expected labels for async results
-    const texts = await app.getAllResultTexts(app.test3Results);
+    const texts3 = await app.getAllResultTexts(app.test3Results);
     expect(texts.some(t => t.includes('Check returned data id'))).toBeTruthy();
     expect(texts.some(t => t.includes('Check returned data name'))).toBeTruthy();
 
@@ -200,7 +200,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
 
   // Edge case: multiple rapid clicks while tests are running
   test('Edge case: Multiple clicks while tests are running should still produce expected results (idempotency/duplication check)', async ({ page }) => {
-    const app = new UnitTestingDemoPage(page);
+    const app4 = new UnitTestingDemoPage(page);
     await app.goto();
 
     // Rapidly click the calculator button twice to simulate concurrency/race condition
@@ -220,7 +220,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
     expect(passCount).toBeGreaterThanOrEqual(5);
 
     // Ensure no fail elements are present
-    const failCount = await app.countFail(app.test1Results);
+    const failCount3 = await app.countFail(app.test1Results);
     expect(failCount).toBe(0);
 
     // Assert no unexpected console or page errors
@@ -230,7 +230,7 @@ test.describe('Unit Testing Demo - FSM States and Transitions', () => {
 
   // Validate that running headers are present as onEnter actions for each event (extra verification)
   test('onEnter action verification: Running headers are used as entry indicators for each test type', async ({ page }) => {
-    const app = new UnitTestingDemoPage(page);
+    const app5 = new UnitTestingDemoPage(page);
     await app.goto();
 
     // Calculator

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Virtual Memory Simulator</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1724; --panel:#0b1220; --muted:#9aa8c0; --accent:#40c4ff; --accent2:#7ef0c7;
+      --card:#0c1726; --good:#21d07a; --bad:#ff6b6b;
+    }
+    html,body{height:100%; margin:0; font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial; background:linear-gradient(180deg,#071025 0%, #061028 100%); color:#d8e6f3; }
+    .wrap{max-width:1200px;margin:20px auto;padding:18px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); box-shadow: 0 8px 30px rgba(2,6,23,0.7);}
+    h1{margin:0 0 6px;font-size:20px}
+    p.lead{margin:0 0 14px;color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+    .card{background:var(--card); padding:12px;border-radius:10px;flex:1; min-width:220px;border:1px solid rgba(255,255,255,0.03)}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=number], input[type=text], select, textarea{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04); background:transparent;color:inherit; font-size:13px}
+    .row{display:flex;gap:10px}
+    .btn{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.05); color:var(--accent); padding:8px 10px;border-radius:8px; cursor:pointer}
+    .btn.secondary{color:var(--accent2)}
+    .btn.warn{color:var(--bad)}
+    .btn.small{padding:6px 8px;font-size:13px}
+    .layout{display:grid;grid-template-columns: 1fr 420px;gap:12px}
+    .vis{display:flex;flex-direction:column;gap:10px}
+    .panel{background:var(--panel);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
+    .tlb{display:flex;gap:8px;flex-wrap:wrap}
+    .tlb .entry{min-width:96px;padding:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border:1px solid rgba(255,255,255,0.03);font-size:13px}
+    .grid{display:grid;gap:8px}
+    .ptable{display:grid;grid-template-columns: 1fr 70px 60px 60px 60px;align-items:center;gap:6px}
+    .ptable .head{font-size:12px;color:var(--muted);padding:6px}
+    .ptable .row{padding:6px;border-radius:6px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border:1px solid rgba(255,255,255,0.02);font-size:13px}
+    .frames{display:flex;gap:8px;flex-wrap:wrap}
+    .frame{width:100px;height:60px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;justify-content:center;align-items:center;font-size:13}
+    .frame.empty{opacity:0.45}
+    .legend{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot.allocated{background:var(--accent)}
+    .dot.free{background:#576f86}
+    .log{height:220px;overflow:auto;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00)); padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03); font-family:monospace; font-size:13px}
+    .stats{display:flex;gap:10px;flex-wrap:wrap}
+    .stat{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;font-size:13px;min-width:120px}
+    .highlight{box-shadow:0 0 0 3px rgba(64,196,255,0.06) inset}
+    .small-muted{font-size:12px;color:var(--muted)}
+    footer{margin-top:12px;text-align:center;color:var(--muted);font-size:12px}
+    input[type=range]{width:100%}
+    .addr-preview{font-family:monospace;background:rgba(255,255,255,0.02);padding:8px;border-radius:6px}
+    @media(max-width:980px){ .layout{grid-template-columns: 1fr} .tlb .entry{min-width:140px} .frame{width:84px;height:56px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Virtual Memory Simulator</h1>
+    <p class="lead">Interactive demonstration of virtual memory, paging, page tables, TLB, page faults and replacement. Configure the virtual address space, page size and physical frames, then generate or enter memory accesses and step through how addresses map to frames and when page faults occur.</p>
+
+    <div class="controls">
+      <div class="card">
+        <label>Virtual pages</label>
+        <input id="virtualPages" type="number" min="4" max="256" step="1" value="16">
+        <div style="height:8px"></div>
+        <label>Page size (bytes)</label>
+        <input id="pageSize" type="number" min="4" max="1024" step="4" value="64">
+      </div>
+
+      <div class="card">
+        <label>Physical frames</label>
+        <input id="numFrames" type="number" min="1" max="64" step="1" value="4">
+        <div style="height:8px"></div>
+        <label>TLB entries</label>
+        <input id="tlbSize" type="number" min="0" max="16" step="1" value="4">
+      </div>
+
+      <div class="card">
+        <label>Replacement algorithm</label>
+        <select id="algorithm">
+          <option value="FIFO">FIFO</option>
+          <option value="LRU">LRU</option>
+          <option value="Clock">Clock (2nd chance)</option>
+        </select>
+        <div style="height:8px"></div>
+        <label>Access mode</label>
+        <select id="mode">
+          <option value="R">Read (R)</option>
+          <option value="W">Write (W)</option>
+          <option value="Mixed">Mixed: sequence-specified</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <label>Access sequence (comma-separated addresses, optionally add :W or :R)</label>
+        <textarea id="sequence" rows="4" placeholder="e.g. 10, 128:W, 34, 10:W"></textarea>
+        <div style="height:8px"></div>
+        <div class="row">
+          <button class="btn" id="genRandom">Generate Random</button>
+          <button class="btn secondary" id="initBtn">Init</button>
+          <button class="btn warn" id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="vis">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div>
+              <div class="small-muted">TLB (Translation Lookaside Buffer)</div>
+              <div class="tlb" id="tlbArea"></div>
+            </div>
+            <div style="text-align:right">
+              <div class="small-muted">Access step</div>
+              <div class="addr-preview" id="currentAddr">-</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+            <button class="btn small" id="stepBtn">Step</button>
+            <button class="btn small secondary" id="runBtn">Run</button>
+            <button class="btn small" id="pauseBtn">Pause</button>
+            <label style="margin-left:8px" class="small-muted">Speed</label>
+            <input id="speed" type="range" min="100" max="2000" value="600">
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <label class="small-muted">Mode for new accesses</label>
+            <select id="singleMode" style="width:120px">
+              <option value="R">Read</option>
+              <option value="W">Write</option>
+            </select>
+            <input id="singleAddr" type="number" min="0" placeholder="Address" style="width:140px;margin-left:6px">
+            <button class="btn small" id="accessBtn">Access</button>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+            <div class="legend"><div class="dot free"></div><div class="small-muted">free</div></div>
+            <div class="legend"><div class="dot allocated"></div><div class="small-muted">allocated</div></div>
+            <div style="flex:1"></div>
+            <div class="small-muted">Algorithm: <b id="algName">FIFO</b></div>
+          </div>
+
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div style="flex:1">
+              <div class="small-muted">Page Table</div>
+              <div style="margin-top:8px" class="ptable" id="pageTable">
+                <!-- header -->
+              </div>
+            </div>
+
+            <div style="width:300px">
+              <div class="small-muted">Physical Frames</div>
+              <div style="margin-top:8px" class="frames" id="framesArea"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="small-muted">Statistics</div>
+            <div class="small-muted">Swap area shown at right</div>
+          </div>
+          <div class="stats" id="statsArea">
+            <div class="stat">Accesses: <b id="stAccesses">0</b></div>
+            <div class="stat">TLB hits: <b id="stTlbHits">0</b></div>
+            <div class="stat">Page faults: <b id="stFaults">0</b></div>
+            <div class="stat">Swap-outs: <b id="stSwaps">0</b></div>
+            <div class="stat">Page hits: <b id="stPageHits">0</b></div>
+            <div class="stat">Hit rate: <b id="stHitRate">0%</b></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="small-muted">Log</div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:12px">
+          <div class="small-muted">Swap / Evicted Pages</div>
+          <div id="swapArea" style="margin-top:8px"></div>
+        </div>
+
+        <div class="panel">
+          <div class="small-muted">Help & explanation</div>
+          <div style="margin-top:8px;font-size:13px;color:var(--muted)">
+            This simulator models a simple paging virtual memory system:
+            <ul style="margin:6px 0 0 18px;padding:0">
+              <li>Virtual addresses = page number + offset (page size configurable).</li>
+              <li>A TLB caches recent page→frame translations (optional).</li>
+              <li>On access: check TLB → page table. If the page isn't resident, a page fault occurs and the page is loaded into a physical frame. If no free frame, an existing page is evicted using the selected replacement algorithm. Writes set the page dirty and must be swapped-out if evicted.</li>
+              <li>Use Step to advance one access, Run to replay the sequence automatically.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Built for learning: virtual pages, page tables, TLB, page faults and replacement.</footer>
+  </div>
+
+  <script>
+    // Virtual Memory Simulator - Single-file
+    (function(){
+      // UI elements
+      const virtualPagesEl = document.getElementById('virtualPages');
+      const pageSizeEl = document.getElementById('pageSize');
+      const numFramesEl = document.getElementById('numFrames');
+      const tlbSizeEl = document.getElementById('tlbSize');
+      const algorithmEl = document.getElementById('algorithm');
+      const modeEl = document.getElementById('mode');
+      const sequenceEl = document.getElementById('sequence');
+      const initBtn = document.getElementById('initBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const genRandomBtn = document.getElementById('genRandom');
+      const tlbArea = document.getElementById('tlbArea');
+      const pageTableEl = document.getElementById('pageTable');
+      const framesArea = document.getElementById('framesArea');
+      const swapArea = document.getElementById('swapArea');
+      const logEl = document.getElementById('log');
+      const stAccesses = document.getElementById('stAccesses');
+      const stTlbHits = document.getElementById('stTlbHits');
+      const stFaults = document.getElementById('stFaults');
+      const stSwaps = document.getElementById('stSwaps');
+      const stPageHits = document.getElementById('stPageHits');
+      const stHitRate = document.getElementById('stHitRate');
+      const stepBtn = document.getElementById('stepBtn');
+      const runBtn = document.getElementById('runBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const speedEl = document.getElementById('speed');
+      const currentAddrEl = document.getElementById('currentAddr');
+      const algNameEl = document.getElementById('algName');
+      const singleAddrEl = document.getElementById('singleAddr');
+      const singleModeEl = document.getElementById('singleMode');
+      const accessBtn = document.getElementById('accessBtn');
+
+      // State
+      let numVirtualPages = 16;
+      let pageSize = 64;
+      let numFrames = 4;
+      let tlbSize = 4;
+      let algorithm = 'FIFO';
+      let accessModeGlobal = 'R';
+
+      let pageTable = []; // entries: {valid, frame, dirty, referenced, swapped}
+      let frames = []; // frames: {page: number|null, loadedAt: tick, referenced}
+      let freeFrames = [];
+      let tlb = []; // entries: {page, frame, time}
+      let swap = {}; // map page->true (evicted)
+      let seq = []; // sequence of accesses: {addr, op}
+      let seqIdx = 0;
+      let stats = {accesses:0, tlbHits:0, faults:0, swaps:0, pageHits:0};
+      let ticker = 0;
+      let running = false;
+      let runTimer = null;
+      let clockHand = 0; // for Clock algorithm
+
+      function log(msg, type='info'){
+        const now = new Date().toLocaleTimeString();
+        const line = document.createElement('div');
+        line.textContent = `[${now}] ${msg}`;
+        if(type==='error') line.style.color = 'var(--bad)';
+        logEl.prepend(line);
+      }
+
+      function initStructures(){
+        // read inputs
+        numVirtualPages = clamp(parseInt(virtualPagesEl.value)||16, 4, 256);
+        pageSize = clamp(parseInt(pageSizeEl.value)||64, 4, 4096);
+        numFrames = clamp(parseInt(numFramesEl.value)||4, 1, 128);
+        tlbSize = clamp(parseInt(tlbSizeEl.value)||4, 0, 32);
+        algorithm = algorithmEl.value;
+        accessModeGlobal = modeEl.value;
+        algNameEl.textContent = algorithm;
+
+        // initialize page table
+        pageTable = [];
+        for(let i=0;i<numVirtualPages;i++){
+          pageTable.push({valid:false, frame:null, dirty:false, referenced:false, swapped:false});
+        }
+        // frames
+        frames = [];
+        for(let i=0;i<numFrames;i++){
+          frames.push({page:null, loadedAt:0, referenced:false});
+        }
+        freeFrames = [...Array(numFrames).keys()];
+
+        // TLB
+        tlb = [];
+        for(let i=0;i<tlbSize;i++) tlb.push(null);
+
+        swap = {};
+        seqIdx = 0;
+        ticker = 0;
+        clockHand = 0;
+
+        stats = {accesses:0, tlbHits:0, faults:0, swaps:0, pageHits:0};
+        updateUI();
+        log(`Initialized: ${numVirtualPages} pages, page size ${pageSize} bytes, ${numFrames} frames, TLB ${tlbSize} entries, algorithm=${algorithm}`);
+      }
+
+      function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+      function parseSequence(){
+        // parse sequence textarea based on current mode option
+        const text = sequenceEl.value.trim();
+        seq = [];
+        if(text.length===0){
+          // nothing - keep empty
+          return;
+        }
+        const parts = text.split(',');
+        for(let p of parts){
+          p = p.trim();
+          if(!p) continue;
+          let op = null;
+          let addrStr = p;
+          if(p.includes(':')){
+            const sp = p.split(':');
+            addrStr = sp[0].trim();
+            op = sp[1].trim().toUpperCase() === 'W' ? 'W' : 'R';
+          } else {
+            if(accessModeGlobal === 'Mixed') op = 'R';
+            else op = accessModeGlobal;
+          }
+          const addr = parseInt(addrStr);
+          if(Number.isNaN(addr)) continue;
+          seq.push({addr:addr, op:op});
+        }
+      }
+
+      function generateRandom(){
+        // create random sequence matching current address space
+        parseInputsToVars();
+        const count = Math.max(8, Math.round(numVirtualPages * 2));
+        const arr = [];
+        for(let i=0;i<count;i++){
+          const page = randInt(0, numVirtualPages-1);
+          const offset = randInt(0, pageSize-1);
+          const addr = page * pageSize + offset;
+          let op = (Math.random() < 0.25) ? 'W' : 'R';
+          arr.push(`${addr}${op==='W'?':W':''}`);
+        }
+        sequenceEl.value = arr.join(', ');
+        parseSequence();
+        seqIdx = 0;
+        updateUI();
+      }
+
+      function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+      function parseInputsToVars(){
+        numVirtualPages = clamp(parseInt(virtualPagesEl.value)||16, 4, 256);
+        pageSize = clamp(parseInt(pageSizeEl.value)||64, 4, 4096);
+        numFrames = clamp(parseInt(numFramesEl.value)||4, 1, 128);
+        tlbSize = clamp(parseInt(tlbSizeEl.value)||4, 0, 32);
+        algorithm = algorithmEl.value;
+        accessModeGlobal = modeEl.value;
+      }
+
+      // Update UI visualization
+      function updateUI(){
+        // TLB
+        tlbArea.innerHTML = '';
+        for(let i=0;i<tlb.length;i++){
+          const e = tlb[i];
+          const div = document.createElement('div');
+          div.className = 'entry';
+          if(e){
+            div.innerHTML = `<div style="font-weight:600">Entry ${i}</div><div>VPN=${e.page} → F=${e.frame}</div><div class="small-muted">time:${e.time}</div>`;
+          } else {
+            div.innerHTML = `<div style="font-weight:600">Entry ${i}</div><div class="small-muted">empty</div>`;
+            div.style.opacity = '0.6';
+          }
+          tlbArea.appendChild(div);
+        }
+
+        // Page table header
+        pageTableEl.innerHTML = '';
+        ['VPN','Valid','Frame','Dirty','Swapped'].forEach(h=>{
+          const hd = document.createElement('div'); hd.className='head'; hd.textContent = h; pageTableEl.appendChild(hd);
+        });
+        for(let i=0;i<pageTable.length;i++){
+          const e = pageTable[i];
+          const r = document.createElement('div'); r.className='row';
+          const validTxt = e.valid ? 'Yes' : 'No';
+          const frameTxt = e.valid ? e.frame : '-';
+          const dirtyTxt = e.dirty ? 'Yes' : '-';
+          const swappedTxt = e.swapped ? 'Yes' : '-';
+          r.innerHTML = `<div style="font-weight:600">#${i}</div><div>${validTxt}</div><div>${frameTxt}</div><div>${dirtyTxt}</div><div>${swappedTxt}</div>`;
+          if(e.valid) r.classList.add('highlight');
+          pageTableEl.appendChild(r);
+        }
+
+        // Frames
+        framesArea.innerHTML = '';
+        for(let i=0;i<frames.length;i++){
+          const f = frames[i];
+          const div = document.createElement('div'); div.className = 'frame';
+          if(f.page === null){
+            div.classList.add('empty');
+            div.innerHTML = `<div>F${i}</div><div class="small-muted">free</div>`;
+          } else {
+            const p = pageTable[f.page];
+            div.innerHTML = `<div style="font-weight:700">F${i} → P${f.page}</div><div class="small-muted">loaded:${f.loadedAt} ref:${p.referenced?1:0}</div>`;
+            if(p.dirty) div.style.boxShadow = '0 0 0 3px rgba(255,107,107,0.06) inset';
+          }
+          framesArea.appendChild(div);
+        }
+
+        // Swap area
+        swapArea.innerHTML = '';
+        const keys = Object.keys(swap);
+        if(keys.length===0){
+          swapArea.innerHTML = '<div class="small-muted">No evicted pages</div>';
+        } else {
+          const ul = document.createElement('div');
+          ul.style.display = 'flex'; ul.style.flexWrap = 'wrap'; ul.style.gap = '6px';
+          keys.forEach(k=>{
+            const box = document.createElement('div');
+            box.style.padding='8px'; box.style.borderRadius='6px'; box.style.background='rgba(255,255,255,0.02)'; box.style.fontFamily='monospace';
+            box.textContent = `P${k}`;
+            ul.appendChild(box);
+          });
+          swapArea.appendChild(ul);
+        }
+
+        // stats
+        stAccesses.textContent = stats.accesses;
+        stTlbHits.textContent = stats.tlbHits;
+        stFaults.textContent = stats.faults;
+        stSwaps.textContent = stats.swaps;
+        stPageHits.textContent = stats.pageHits;
+        const hitRate = stats.accesses>0 ? Math.round((stats.tlbHits + stats.pageHits)/stats.accesses*100) : 0;
+        stHitRate.textContent = `${hitRate}%`;
+      }
+
+      // Core: access memory address
+      function accessAddress(addr, op='R', autocheckRange=true){
+        parseInputsToVars();
+        if(autocheckRange){
+          const maxAddr = numVirtualPages * pageSize - 1;
+          if(addr < 0 || addr > maxAddr){
+            log(`Address ${addr} out of range. Valid: 0..${maxAddr}`, 'error'); return;
+          }
+        }
+        const vpn = Math.floor(addr / pageSize);
+        const offset = addr % pageSize;
+        ticker++;
+        stats.accesses++;
+        currentAddrEl.textContent = `A=${addr} (P${vpn} + ${offset}) ${op}`;
+        log(`Accessing addr=${addr} → VPN=${vpn} (offset ${offset}) op=${op}`);
+        // 1) TLB lookup
+        let tlbHitIndex = -1;
+        for(let i=0;i<tlb.length;i++){
+          const e = tlb[i];
+          if(e && e.page === vpn){
+            tlbHitIndex = i; break;
+          }
+        }
+        if(tlbHitIndex >= 0){
+          stats.tlbHits++;
+          const e = tlb[tlbHitIndex];
+          // page should be resident
+          const frameNum = e.frame;
+          const pte = pageTable[vpn];
+          pte.referenced = true;
+          frames[frameNum].referenced = true;
+          frames[frameNum].loadedAt = ticker;
+          if(op==='W'){ pte.dirty = true; }
+          // update tlb time
+          tlb[tlbHitIndex].time = ticker;
+          log(`TLB hit: VPN ${vpn} → frame ${frameNum}`);
+          stats.pageHits++;
+          updateUI();
+          return;
+        }
+        // TLB miss
+        log(`TLB miss for VPN ${vpn}`);
+        // Check page table
+        const pte = pageTable[vpn];
+        if(pte.valid){
+          // page resident but TLB miss: update TLB
+          stats.pageHits++;
+          pte.referenced = true;
+          if(op==='W') pte.dirty = true;
+          // update frame referenced/time
+          frames[pte.frame].referenced = true;
+          frames[pte.frame].loadedAt = ticker;
+          insertToTLB(vpn, pte.frame);
+          log(`Page table hit: loaded in frame ${pte.frame}. Inserted into TLB.`);
+          updateUI();
+          return;
+        }
+        // Page fault
+        stats.faults++;
+        log(`Page fault: VPN ${vpn} not resident. Handling page fault...`);
+        handlePageFault(vpn, op);
+        updateUI();
+      }
+
+      function insertToTLB(page, frame){
+        if(tlbSize === 0) return;
+        // find empty slot
+        for(let i=0;i<tlb.length;i++){
+          if(tlb[i] === null){
+            tlb[i] = {page:page, frame:frame, time:ticker};
+            return;
+          }
+        }
+        // replacement: LRU (based on time)
+        let lruIdx = 0; let minTime = tlb[0].time;
+        for(let i=1;i<tlb.length;i++){
+          if(tlb[i].time < minTime){ minTime = tlb[i].time; lruIdx = i; }
+        }
+        tlb[lruIdx] = {page:page, frame:frame, time:ticker};
+      }
+
+      function handlePageFault(vpn, op){
+        // find free frame or evict
+        let frameNum = null;
+        if(freeFrames.length > 0){
+          frameNum = freeFrames.shift();
+          log(`Allocating free frame F${frameNum} for P${vpn}`);
+        } else {
+          // need to evict based on algorithm
+          if(algorithm === 'FIFO'){
+            // choose frame with smallest loadedAt
+            let oldest = 0; let minLoad = frames[0].loadedAt;
+            for(let i=1;i<frames.length;i++){
+              if(frames[i].loadedAt < minLoad){ minLoad = frames[i].loadedAt; oldest = i; }
+            }
+            frameNum = oldest;
+            log(`No free frame. Evicting (FIFO) frame F${frameNum} (page P${frames[frameNum].page})`);
+          } else if(algorithm === 'LRU'){
+            // choose frame least recently referenced (low loadedAt or referenced false)
+            let lru = 0; let minTime = frames[0].loadedAt;
+            for(let i=1;i<frames.length;i++){
+              if(frames[i].loadedAt < minTime){ minTime = frames[i].loadedAt; lru = i; }
+            }
+            frameNum = lru;
+            log(`No free frame. Evicting (LRU) frame F${frameNum} (page P${frames[frameNum].page})`);
+          } else if(algorithm === 'Clock'){
+            // second-chance clock
+            let cycles = 0;
+            while(true){
+              const f = frames[clockHand];
+              const p = f.page;
+              if(!pageTable[p].referenced){
+                frameNum = clockHand;
+                log(`No free frame. Evicting (Clock) frame F${frameNum} (page P${p})`);
+                // advance hand for next time
+                clockHand = (clockHand + 1) % frames.length;
+                break;
+              } else {
+                // give second chance
+                pageTable[p].referenced = false;
+                frames[clockHand].referenced = false;
+                clockHand = (clockHand + 1) % frames.length;
+                cycles++;
+                if(cycles > frames.length*2){
+                  // fallback
+                  frameNum = clockHand;
+                  break;
+                }
+              }
+            }
+            if(frameNum === null) frameNum = 0;
+          } else {
+            // default: evict frame 0
+            frameNum = 0;
+          }
+          // evict the page currently in that frame
+          const victim = frames[frameNum].page;
+          if(victim !== null){
+            const vpte = pageTable[victim];
+            // if dirty - simulate swap out
+            if(vpte.dirty){
+              stats.swaps++;
+              swap[victim] = true;
+              log(`Evicting dirty page P${victim} from F${frameNum} → swapped out`);
+            } else {
+              log(`Evicting clean page P${victim} from F${frameNum}`);
+            }
+            // invalidate victim
+            vpte.valid = false;
+            vpte.frame = null;
+            vpte.referenced = false;
+            vpte.dirty = false;
+            vpte.swapped = !!swap[victim];
+            // Remove from TLB if present
+            for(let i=0;i<tlb.length;i++){
+              if(tlb[i] && tlb[i].page === victim) tlb[i] = null;
+            }
+          }
+        }
+        // "load" vpn into frameNum
+        frames[frameNum].page = vpn;
+        frames[frameNum].loadedAt = ticker;
+        frames[frameNum].referenced = true;
+        pageTable[vpn].valid = true;
+        pageTable[vpn].frame = frameNum;
+        pageTable[vpn].referenced = true;
+        pageTable[vpn].dirty = (op === 'W');
+        // if it was previously swapped, mark it not swapped now
+        if(pageTable[vpn].swapped) pageTable[vpn].swapped = false;
+        // insert into TLB
+        insertToTLB(vpn, frameNum);
+        log(`Loaded P${vpn} into F${frameNum} (dirty=${pageTable[vpn].dirty})`);
+      }
+
+      // Step through the sequence once
+      function stepOnce(){
+        if(seq.length === 0){
+          parseSequence();
+          if(seq.length === 0){
+            log('No access sequence defined. Enter addresses or generate random.', 'error');
+            return;
+          }
+        }
+        if(seqIdx >= seq.length){
+          log('Sequence complete.');
+          running = false;
+          clearInterval(runTimer);
+          return;
+        }
+        const item = seq[seqIdx++];
+        accessAddress(item.addr, item.op);
+        updateUI();
+        if(seqIdx >= seq.length){
+          log('Sequence finished.');
+          running = false;
+          clearInterval(runTimer);
+        }
+      }
+
+      // Run automatically at speed
+      function runAuto(){
+        if(running) return;
+        running = true;
+        const interval = clamp(parseInt(speedEl.value)||600, 100, 5000);
+        runTimer = setInterval(()=>{
+          if(!running) { clearInterval(runTimer); return; }
+          stepOnce();
+          if(seqIdx >= seq.length) { running = false; clearInterval(runTimer); }
+        }, interval);
+      }
+
+      function pauseRun(){ running=false; clearInterval(runTimer); log('Run paused.'); }
+
+      // UI actions
+      initBtn.addEventListener('click', ()=>{
+        initStructures();
+        parseSequence();
+      });
+      resetBtn.addEventListener('click', ()=>{
+        initStructures();
+        sequenceEl.value = '';
+        seq = [];
+        seqIdx = 0;
+        log('Reset simulation.');
+      });
+      genRandomBtn.addEventListener('click', ()=>{
+        generateRandom();
+        initStructures(); // re-init to reset mappings
+        parseSequence();
+      });
+      stepBtn.addEventListener('click', ()=>{ parseSequence(); stepOnce(); });
+      runBtn.addEventListener('click', ()=>{
+        parseSequence();
+        runAuto();
+      });
+      pauseBtn.addEventListener('click', pauseRun);
+      speedEl.addEventListener('input', ()=>{ if(running){ pauseRun(); runAuto(); } });
+      algorithmEl.addEventListener('change', ()=>{ algNameEl.textContent = algorithmEl.value; });
+      accessBtn.addEventListener('click', ()=>{
+        const addr = parseInt(singleAddrEl.value);
+        const op = singleModeEl.value;
+        if(Number.isNaN(addr)){ log('Enter a valid address to access.','error'); return;}
+        accessAddress(addr, op, true);
+        updateUI();
+      });
+
+      // helpers
+      function resetAll(){ initStructures(); sequenceEl.value = ''; seq=[]; seqIdx=0; log('Simulator reset.'); }
+
+      // initialize defaults
+      initStructures();
+
+      // small demo prefill
+      sequenceEl.value = '10, 130:W, 64, 10, 130, 200, 12:W, 64, 300, 130';
+      parseSequence();
+
+    })();
+  </script>
+</body>
+</html>

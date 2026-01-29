@@ -50,7 +50,7 @@ class DynamicTypingPage {
   // Read text content concatenated from child divs inside an output
   async readOutputText(outputLocator) {
     return await this.page.evaluate(selector => {
-      const el = document.querySelector(selector);
+      const el1 = document.querySelector(selector);
       if (!el) return '';
       return Array.from(el.querySelectorAll('div')).map(d => d.textContent).join('\n');
     }, outputLocator.locator('').selector);
@@ -59,7 +59,7 @@ class DynamicTypingPage {
   // Count number of child div messages inside output
   async outputMessageCount(outputLocator) {
     return await this.page.evaluate(selector => {
-      const el = document.querySelector(selector);
+      const el2 = document.querySelector(selector);
       if (!el) return 0;
       return el.querySelectorAll('div').length;
     }, outputLocator.locator('').selector);
@@ -128,7 +128,7 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
     // This test validates:
     // - Clicking Run Example 1 clears output1 and writes three lines reflecting type changes.
     // - The specific values and typeof results are present.
-    const p = new DynamicTypingPage(page);
+    const p1 = new DynamicTypingPage(page);
 
     // Pre-fill output1 to ensure example1 clears existing content (exit/entry expectations)
     await p.setOutputHtml(p.output1, '<div>OLD_CONTENT</div>');
@@ -156,14 +156,14 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
 
   test('Run Example 2 transitions to Example2 Running (S2_Example2_Running) and demonstrates type coercion', async ({ page }) => {
     // This test validates Example 2 shows string concatenation and numeric subtraction results.
-    const p = new DynamicTypingPage(page);
+    const p2 = new DynamicTypingPage(page);
 
     await p.runExample(p.example2Btn, p.output2, 2);
 
-    const count = await p.outputMessageCount(p.output2);
+    const count1 = await p.outputMessageCount(p.output2);
     expect(count).toBe(2);
 
-    const text = await p.readOutputText(p.output2);
+    const text1 = await p.readOutputText(p.output2);
     expect(text).toContain('"5" + 2 = 52');
     expect(text).toContain('type: string');
     expect(text).toContain('"5" - 2 = 3');
@@ -176,11 +176,11 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
 
   test('Run Example 3 transitions to Example3 Running (S3_Example3_Running) and reports typeof changes', async ({ page }) => {
     // This test validates Example 3 logs types: number -> string -> object
-    const p = new DynamicTypingPage(page);
+    const p3 = new DynamicTypingPage(page);
 
     await p.runExample(p.example3Btn, p.output3, 3);
 
-    const text = await p.readOutputText(p.output3);
+    const text2 = await p.readOutputText(p.output3);
     expect(text).toContain('Initial type: number');
     expect(text).toContain('After reassignment, type: string');
     // Objects show typeof 'object' in JavaScript
@@ -193,11 +193,11 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
 
   test('Run Example 4 transitions to Example4 Running (S4_Example4_Running) and compares equality operators', async ({ page }) => {
     // This test validates Example 4 shows loose vs strict equality results for given examples
-    const p = new DynamicTypingPage(page);
+    const p4 = new DynamicTypingPage(page);
 
     await p.runExample(p.example4Btn, p.output4, 4);
 
-    const text = await p.readOutputText(p.output4);
+    const text3 = await p.readOutputText(p.output4);
     expect(text).toContain('"5" == 5: true');
     expect(text).toContain('"5" === 5: false');
     expect(text).toContain('0 == false: true');
@@ -211,7 +211,7 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
   test('Edge case: clicking the same example button repeatedly clears previous output before each run', async ({ page }) => {
     // This test validates that running the same example twice does not append results,
     // because each example clears its output at the start of execution.
-    const p = new DynamicTypingPage(page);
+    const p5 = new DynamicTypingPage(page);
 
     // Run example1 twice in quick succession
     await p.runExample(p.example1Btn, p.output1, 3);
@@ -223,7 +223,7 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
     const secondRunText = await p.readOutputText(p.output1);
     expect(secondRunText).toContain('Initial value: 42');
     // Ensure the content length is consistent with a single run (3 lines)
-    const count = await p.outputMessageCount(p.output1);
+    const count2 = await p.outputMessageCount(p.output1);
     expect(count).toBe(3);
 
     // No page errors during repeated runs
@@ -233,7 +233,7 @@ test.describe('Dynamic Typing Demonstration - FSM states and transitions', () =>
 
   test('Edge case: triggering all examples quickly ensures each output area is independent', async ({ page }) => {
     // This test validates running all examples in quick succession results in each output area populated correctly
-    const p = new DynamicTypingPage(page);
+    const p6 = new DynamicTypingPage(page);
 
     // Click all four buttons without awaiting individual completion to simulate fast user interactions
     await Promise.all([

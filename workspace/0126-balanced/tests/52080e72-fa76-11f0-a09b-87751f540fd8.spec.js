@@ -119,12 +119,12 @@ test.describe('Queue FSM - states and transitions', () => {
   });
 
   test('EnqueueEvent: from S0_Empty to S1_NonEmpty - enqueue increases queue length and updates message (implementation specifics)', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors1 = [];
+    const consoleErrors1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const q = new QueuePage(page);
+    const q1 = new QueuePage(page);
     await q.goto();
 
     // Click enqueue from empty state
@@ -150,12 +150,12 @@ test.describe('Queue FSM - states and transitions', () => {
   });
 
   test('PeekEvent: on S1_NonEmpty remains in S1_NonEmpty and shows front item representation', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors2 = [];
+    const consoleErrors2 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const q = new QueuePage(page);
+    const q2 = new QueuePage(page);
     await q.goto();
 
     // Ensure we have an item: enqueue once
@@ -166,7 +166,7 @@ test.describe('Queue FSM - states and transitions', () => {
 
     // After peek, updateMessage(item) where item is the event object.
     // The string representation will typically contain "object" or "MouseEvent".
-    const msg = await q.getMessageText();
+    const msg1 = await q.getMessageText();
     // We assert that it is neither empty nor the literal "undefined"
     expect(msg.length > 0, 'Peek should set a non-empty message').toBe(true);
     expect(msg, 'Peek result should not be the literal "undefined"').not.toBe('undefined');
@@ -178,7 +178,7 @@ test.describe('Queue FSM - states and transitions', () => {
     ).toBe(true);
 
     // Queue should still be non-empty after peek
-    const len = await q.getQueueLength();
+    const len1 = await q.getQueueLength();
     expect(len, 'Queue should remain non-empty after peek').toBeGreaterThan(0);
 
     expect(pageErrors.length, 'No page errors during peek').toBe(0);
@@ -186,12 +186,12 @@ test.describe('Queue FSM - states and transitions', () => {
   });
 
   test('DequeueEvent: on S1_NonEmpty returns item and may transition to S0_Empty when last element removed', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors3 = [];
+    const consoleErrors3 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const q = new QueuePage(page);
+    const q3 = new QueuePage(page);
     await q.goto();
 
     // Enqueue one item to ensure single-element queue
@@ -219,18 +219,18 @@ test.describe('Queue FSM - states and transitions', () => {
   });
 
   test('ClearEvent: clears queue from non-empty and from empty, updating message to "Queue cleared."', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors4 = [];
+    const consoleErrors4 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const q = new QueuePage(page);
+    const q4 = new QueuePage(page);
     await q.goto();
 
     // Enqueue two items to make queue non-empty
     await q.clickEnqueue();
     await q.clickEnqueue();
-    let len = await q.getQueueLength();
+    let len2 = await q.getQueueLength();
     expect(len).toBeGreaterThanOrEqual(1);
 
     // Clear should empty the queue and set message to "Queue cleared."
@@ -251,12 +251,12 @@ test.describe('Queue FSM - states and transitions', () => {
   });
 
   test('Edge cases: Peek and Dequeue on empty both show "Queue is empty."', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors5 = [];
+    const consoleErrors5 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const q = new QueuePage(page);
+    const q5 = new QueuePage(page);
     await q.goto();
 
     // Ensure queue is empty
@@ -282,12 +282,12 @@ test.describe('Queue FSM - states and transitions', () => {
 
   test('Observes console and page errors during a sequence of interactions (should be none)', async ({ page }) => {
     // This test explicitly watches for runtime errors across many interactions
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors6 = [];
+    const consoleErrors6 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-    const q = new QueuePage(page);
+    const q6 = new QueuePage(page);
     await q.goto();
 
     // Perform a sequence that exercises the app thoroughly

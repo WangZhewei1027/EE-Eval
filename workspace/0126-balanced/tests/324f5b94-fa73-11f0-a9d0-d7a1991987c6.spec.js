@@ -113,7 +113,7 @@ test.describe('Git Concept Demo - FSM validation and DOM behavior', () => {
   test('Commit Transition: adding a commit updates history and clears input', async ({ page }) => {
     // This test validates the Commit event and the transition actions:
     // commits.push(...) and updateCommitHistory()
-    const repo = new RepoPage(page);
+    const repo1 = new RepoPage(page);
 
     // Add first commit
     await repo.addCommit('Initial commit message');
@@ -141,7 +141,7 @@ test.describe('Git Concept Demo - FSM validation and DOM behavior', () => {
   test('Edge Case: empty commit message triggers alert and does not change history', async ({ page }) => {
     // This test validates that when commitMessage is empty the UI alerts the user
     // and no commit is added (transition should not occur).
-    const repo = new RepoPage(page);
+    const repo2 = new RepoPage(page);
 
     // Ensure starting point has no commits
     const initialHistory = await repo.getHistoryText();
@@ -170,7 +170,7 @@ test.describe('Git Concept Demo - FSM validation and DOM behavior', () => {
   test('Reset Transition: clears commit history and resets commit numbering', async ({ page }) => {
     // This test validates the Reset event and its transition actions:
     // commits = []; commitCount = 0; updateCommitHistory()
-    const repo = new RepoPage(page);
+    const repo3 = new RepoPage(page);
 
     // Create two commits first to move into Committed state
     await repo.addCommit('Commit A');
@@ -203,7 +203,7 @@ test.describe('Git Concept Demo - FSM validation and DOM behavior', () => {
   test('Entry actions: updateCommitHistory called on load and after commit (observable via DOM)', async ({ page }) => {
     // The FSM describes updateCommitHistory() as an entry action for both states.
     // We validate its effects by observing the commitHistory DOM output after load and after a commit.
-    const repo = new RepoPage(page);
+    const repo4 = new RepoPage(page);
 
     // On load (S0_Initial) commitHistory must be populated by updateCommitHistory()
     const initialText = await repo.getHistoryText();
@@ -220,7 +220,7 @@ test.describe('Git Concept Demo - FSM validation and DOM behavior', () => {
   // Validate that the page produces no runtime JS errors across a sequence of interactions
   test('Stability: sequence of interactions should not produce JS errors', async ({ page }) => {
     // This test performs multiple interactions and at the end asserts no page errors or console errors were emitted.
-    const repo = new RepoPage(page);
+    const repo5 = new RepoPage(page);
 
     // Perform a series of interactions
     await repo.addCommit('Stable commit 1');

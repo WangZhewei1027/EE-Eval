@@ -104,7 +104,7 @@ test.describe('Bubble Sort Static Page and FSM (S0_Idle) validations', () => {
   });
 
   test('No interactive elements or transitions exist on the page (per FSM extraction)', async ({ page }) => {
-    const bsp = new BubbleSortPage(page);
+    const bsp1 = new BubbleSortPage(page);
 
     // Expect zero interactive form elements and controls
     const interactiveCount = await bsp.countInteractiveElements();

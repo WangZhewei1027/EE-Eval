@@ -103,7 +103,7 @@ test.describe('JavaScript Thread Demonstration - FSM (de3cc400-fa74-11f0-a1b6-4b
   test('StartWorker event: clicking "Start Worker" should trigger page error (if startWorker not defined) and not crash the page', async ({ page }) => {
     // This test performs the StartWorker event and asserts runtime behavior.
     // Per instructions we must not modify the page; we let any ReferenceError / TypeError occur naturally and assert it.
-    const demo = new ThreadDemoPage(page);
+    const demo1 = new ThreadDemoPage(page);
 
     // Ensure button present before clicking
     await expect(demo.startButton).toBeVisible();
@@ -136,20 +136,20 @@ test.describe('JavaScript Thread Demonstration - FSM (de3cc400-fa74-11f0-a1b6-4b
 
   test('StopWorker event: clicking "Stop Worker" should trigger page error (if stopWorker not defined) and not crash the page', async ({ page }) => {
     // This test performs the StopWorker event and asserts runtime behavior.
-    const demo = new ThreadDemoPage(page);
+    const demo2 = new ThreadDemoPage(page);
 
     await expect(demo.stopButton).toBeVisible();
 
-    const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 3000 }).catch(e => e);
+    const pageErrorPromise1 = page.waitForEvent('pageerror', { timeout: 3000 }).catch(e => e);
 
     await demo.clickStop();
 
-    const pageError = await pageErrorPromise;
+    const pageError1 = await pageErrorPromise;
 
     expect(pageError).toBeTruthy();
     if (pageError instanceof Error && typeof pageError.message === 'string') {
-      const msg = pageError.message;
-      const matches = /stopWorker|ReferenceError|TypeError|is not defined|not defined/i.test(msg);
+      const msg1 = pageError.message;
+      const matches1 = /stopWorker|ReferenceError|TypeError|is not defined|not defined/i.test(msg);
       expect(matches).toBeTruthy();
     } else {
       throw new Error(`Expected a runtime page error after clicking Stop Worker, got: ${String(pageError)}`);
@@ -163,7 +163,7 @@ test.describe('JavaScript Thread Demonstration - FSM (de3cc400-fa74-11f0-a1b6-4b
   test('Edge case: double-clicking "Start Worker" produces multiple page errors (if handler missing)', async ({ page }) => {
     // Validate behavior when the user triggers StartWorker twice quickly.
     // We expect multiple runtime errors if the onclick handler is undefined and the event fires each time.
-    const demo = new ThreadDemoPage(page);
+    const demo3 = new ThreadDemoPage(page);
 
     await expect(demo.startButton).toBeVisible();
 
@@ -189,25 +189,25 @@ test.describe('JavaScript Thread Demonstration - FSM (de3cc400-fa74-11f0-a1b6-4b
 
   test('Edge case: clicking "Stop Worker" before "Start Worker" should not crash the browser and should surface errors if handlers missing', async ({ page }) => {
     // Some apps expect a worker to be running before stopping; clicking Stop early may still call a missing function.
-    const demo = new ThreadDemoPage(page);
+    const demo4 = new ThreadDemoPage(page);
 
     await expect(demo.stopButton).toBeVisible();
 
-    const pageErrorPromise = page.waitForEvent('pageerror', { timeout: 3000 }).catch(e => e);
+    const pageErrorPromise2 = page.waitForEvent('pageerror', { timeout: 3000 }).catch(e => e);
     await demo.clickStop();
-    const pageError = await pageErrorPromise;
+    const pageError2 = await pageErrorPromise;
 
     expect(pageError).toBeTruthy();
     if (pageError instanceof Error && typeof pageError.message === 'string') {
-      const msg = pageError.message;
-      const matches = /stopWorker|ReferenceError|TypeError|is not defined/i.test(msg);
+      const msg2 = pageError.message;
+      const matches2 = /stopWorker|ReferenceError|TypeError|is not defined/i.test(msg);
       expect(matches).toBeTruthy();
     }
   });
 
   test('Observability: captured console messages and page errors are available for debugging', async ({ page }) => {
     // This test demonstrates that we are capturing console messages and runtime errors across page interactions.
-    const demo = new ThreadDemoPage(page);
+    const demo5 = new ThreadDemoPage(page);
     // Trigger both actions to populate the listeners (if handlers are missing errors will be recorded).
     const p1 = page.waitForEvent('pageerror', { timeout: 3000 }).catch(e => e);
     await demo.clickStart();

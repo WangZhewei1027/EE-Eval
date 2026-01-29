@@ -307,7 +307,7 @@ function wordsMatch(str1, str2) {
 /**
  * 批量FSM相似度评估主函数
  */
-async function runBatchSimilarityEval(workspaceName) {
+async function runBatchSimilarityEval(workspaceName, concurrency = 10) {
   // Load concept categories first
   await loadConceptCategories();
 
@@ -360,7 +360,8 @@ FSM目录: ${fsmDir}
   console.log(`找到 ${fsmFiles.length} 个FSM文件`);
 
   // 初始化并发限制器
-  const limiter = new ConcurrencyLimiter(3); // 降低并发数以避免过多输出
+  const limiter = new ConcurrencyLimiter(concurrency); // 并发worker数量可通过参数指定
+  console.log(`⚡ 并发数: ${concurrency}`);
 
   // 统计信息
   const stats = {
@@ -426,20 +427,12 @@ FSM目录: ${fsmDir}
 
         stats.success++;
 
-        const similarity = Math.round(
-          similarityResult.combined_similarity * 100,
-        );
+        const similarity = similarityResult.combined_similarity.percentage;
         console.log(
           `✅ [${taskId}] ${fsmFile.fileName} - 相似度: ${similarity}%`,
         );
         console.log(
-          `   📊 结构: ${Math.round(
-            similarityResult.structural_similarity.overall * 100,
-          )}% | 语义: ${Math.round(
-            similarityResult.semantic_similarity.overall * 100,
-          )}% | 同构: ${Math.round(
-            similarityResult.isomorphism_similarity * 100,
-          )}%`,
+          `   📊 维度1: ${similarityResult.dimension1_interaction_capacity.percentage}% | 维度2: ${similarityResult.dimension2_behavioral_coherence.percentage}% | 维度3: ${similarityResult.dimension3_interaction_meaningfulness.percentage}%`,
         );
 
         // 5. 保存结果
@@ -454,13 +447,15 @@ FSM目录: ${fsmDir}
           success: true,
           similarityResult,
           summary: {
-            combined_similarity: similarityResult.combined_similarity,
-            structural_similarity:
-              similarityResult.structural_similarity.overall,
-            semantic_similarity: similarityResult.semantic_similarity.overall,
-            isomorphism_similarity: similarityResult.isomorphism_similarity,
+            combined_similarity: similarityResult.combined_similarity.score,
+            interaction_capacity:
+              similarityResult.dimension1_interaction_capacity.score,
+            behavioral_coherence:
+              similarityResult.dimension2_behavioral_coherence.score,
+            interaction_meaningfulness:
+              similarityResult.dimension3_interaction_meaningfulness.score,
             score: similarity,
-            interpretation: similarityResult.summary.interpretation,
+            interpretation: similarityResult.combined_similarity.interpretation,
           },
         });
       } catch (error) {
@@ -514,27 +509,27 @@ FSM目录: ${fsmDir}
   const avgSimilarity =
     successfulResults.length > 0
       ? successfulResults.reduce(
-          (sum, r) => sum + r.similarityResult.combined_similarity,
+          (sum, r) => sum + r.similarityResult.combined_similarity.score,
           0,
         ) / successfulResults.length
       : 0;
 
   const similarityDistribution = {
     excellent: successfulResults.filter(
-      (r) => r.similarityResult.combined_similarity >= 0.9,
+      (r) => r.similarityResult.combined_similarity.score >= 0.9,
     ).length,
     good: successfulResults.filter(
       (r) =>
-        r.similarityResult.combined_similarity >= 0.7 &&
-        r.similarityResult.combined_similarity < 0.9,
+        r.similarityResult.combined_similarity.score >= 0.7 &&
+        r.similarityResult.combined_similarity.score < 0.9,
     ).length,
     fair: successfulResults.filter(
       (r) =>
-        r.similarityResult.combined_similarity >= 0.5 &&
-        r.similarityResult.combined_similarity < 0.7,
+        r.similarityResult.combined_similarity.score >= 0.5 &&
+        r.similarityResult.combined_similarity.score < 0.7,
     ).length,
     poor: successfulResults.filter(
-      (r) => r.similarityResult.combined_similarity < 0.5,
+      (r) => r.similarityResult.combined_similarity.score < 0.5,
     ).length,
   };
 
@@ -554,8 +549,8 @@ FSM目录: ${fsmDir}
       topSimilar: successfulResults
         .sort(
           (a, b) =>
-            b.similarityResult.combined_similarity -
-            a.similarityResult.combined_similarity,
+            b.similarityResult.combined_similarity.score -
+            a.similarityResult.combined_similarity.score,
         )
         .slice(0, 5)
         .map((r) => ({
@@ -567,8 +562,8 @@ FSM目录: ${fsmDir}
       bottomSimilar: successfulResults
         .sort(
           (a, b) =>
-            a.similarityResult.combined_similarity -
-            b.similarityResult.combined_similarity,
+            a.similarityResult.combined_similarity.score -
+            b.similarityResult.combined_similarity.score,
         )
         .slice(0, 5)
         .map((r) => ({
@@ -628,28 +623,51 @@ ${finalReport.summary.bottomSimilar
 function parseArgs() {
   const args = process.argv.slice(2);
 
-  if (args.length === 0) {
+  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     console.log(`
-用法: node batch-similarity-eval.mjs <workspace-name>
+用法: node batch-similarity-eval.mjs <workspace-name> [options]
 
 参数:
   <workspace-name>    工作空间文件夹名称 (在workspace目录下)
 
+选项:
+  -c, --concurrency <num>    并发worker数量 (默认: 10)
+  -h, --help                 显示帮助信息
+
 示例:
-  node batch-similarity-eval.mjs batch-fsm-similarity
-  node batch-similarity-eval.mjs "batch-2025-11-25T23-45-53 copy"
+  node batch-similarity-eval.mjs aied
+  node batch-similarity-eval.mjs aied --concurrency 20
+  node batch-similarity-eval.mjs aied -c 5
+  node batch-similarity-eval.mjs "batch-2025-11-25T23-45-53 copy" -c 15
     `);
     process.exit(0);
   }
 
-  return args[0];
+  const workspaceName = args[0];
+  let concurrency = 10; // 默认值
+
+  // 解析并发数参数
+  for (let i = 1; i < args.length; i++) {
+    if ((args[i] === "-c" || args[i] === "--concurrency") && args[i + 1]) {
+      const parsed = parseInt(args[i + 1], 10);
+      if (!isNaN(parsed) && parsed > 0 && parsed <= 300) {
+        concurrency = parsed;
+      } else {
+        console.error("❌ 并发数必须是1-300之间的整数");
+        process.exit(1);
+      }
+      break;
+    }
+  }
+
+  return { workspaceName, concurrency };
 }
 
 // 如果直接运行此文件
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const workspaceName = parseArgs();
+  const { workspaceName, concurrency } = parseArgs();
 
-  runBatchSimilarityEval(workspaceName)
+  runBatchSimilarityEval(workspaceName, concurrency)
     .then((result) => {
       console.log("🎉 批量FSM相似度评估完成！");
       process.exit(0);

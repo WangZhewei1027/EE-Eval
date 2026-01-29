@@ -84,7 +84,7 @@ test.describe('Linear Search Demonstration - FSM validation (de3bb294-fa74-11f0-
     expect(stepsHtml.trim().length > 0, 'Expected stepsDisplay to contain at least one step').toBeTruthy();
 
     // Confirm there were no critical runtime errors during the search process
-    const criticalErrors = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
+    const criticalErrors1 = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
     expect(criticalErrors.length, `Critical errors during Found search: ${pageErrors.join(' | ')}`).toBe(0);
   });
 
@@ -92,15 +92,15 @@ test.describe('Linear Search Demonstration - FSM validation (de3bb294-fa74-11f0-
     // This test validates the transition: Idle -> Searching -> ResultNotFound
 
     // Set a search value that does not exist in the array
-    const searchInput = page.locator('#searchValue');
+    const searchInput1 = page.locator('#searchValue');
     await searchInput.fill('999'); // value not present in default array
 
     // Click Search
-    const searchButton = page.locator("button[onclick='performSearch()']");
+    const searchButton1 = page.locator("button[onclick='performSearch()']");
     await searchButton.click();
 
     // Wait for result text to appear (not-found)
-    const resultLocator = page.locator('#searchResult');
+    const resultLocator1 = page.locator('#searchResult');
     await resultLocator.waitFor({ state: 'visible', timeout: 15000 });
 
     // Validate the not-found message uses the provided search value
@@ -116,7 +116,7 @@ test.describe('Linear Search Demonstration - FSM validation (de3bb294-fa74-11f0-
     expect(stepCountMatches >= 1, `Expected at least one recorded step, got ${stepCountMatches}`).toBeTruthy();
 
     // Confirm there were no critical runtime errors during the not-found search
-    const criticalErrors = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
+    const criticalErrors2 = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
     expect(criticalErrors.length, `Critical errors during Not Found search: ${pageErrors.join(' | ')}`).toBe(0);
   });
 
@@ -124,40 +124,40 @@ test.describe('Linear Search Demonstration - FSM validation (de3bb294-fa74-11f0-
     // This test checks robustness: malformed or empty inputs shouldn't crash the page.
 
     // Clear the array input to simulate an empty array scenario
-    const arrayInput = page.locator('#arrayInput');
+    const arrayInput1 = page.locator('#arrayInput1');
     await arrayInput.fill(''); // empty string
 
     // Set the search value to 5
-    const searchInput = page.locator('#searchValue');
+    const searchInput2 = page.locator('#searchValue');
     await searchInput.fill('5');
 
     // Click Search
-    const searchButton = page.locator("button[onclick='performSearch()']");
+    const searchButton2 = page.locator("button[onclick='performSearch()']");
     await searchButton.click();
 
     // Wait for search result to appear
-    const resultLocator = page.locator('#searchResult');
+    const resultLocator2 = page.locator('#searchResult');
     await resultLocator.waitFor({ state: 'visible', timeout: 15000 });
 
     // The implementation will parse [''] -> [NaN], and result should likely say "5 not found in the array."
     await expect(resultLocator).toHaveText(/5 not found in the array\.|NaN not found in the array\./);
 
     // Ensure that no uncaught runtime errors occurred while processing empty input
-    const criticalErrors = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
+    const criticalErrors3 = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
     expect(criticalErrors.length, `Critical errors for empty array case: ${pageErrors.join(' | ')}`).toBe(0);
   });
 
   test('Edge case: Non-numeric search value (blank) should be represented as "NaN" in result and handled safely', async ({ page }) => {
     // Clear the search value input to create a non-numeric search value
-    const searchInput = page.locator('#searchValue');
+    const searchInput3 = page.locator('#searchValue');
     await searchInput.fill(''); // this typically results in empty string -> parseInt -> NaN
 
     // Use the default array
-    const searchButton = page.locator("button[onclick='performSearch()']");
+    const searchButton3 = page.locator("button[onclick='performSearch()']");
     await searchButton.click();
 
     // Wait for result to appear
-    const resultLocator = page.locator('#searchResult');
+    const resultLocator3 = page.locator('#searchResult');
     await resultLocator.waitFor({ state: 'visible', timeout: 15000 });
 
     // The page code uses template string with searchValue (which will be "NaN" if parseInt('') -> NaN and stringified)
@@ -166,17 +166,17 @@ test.describe('Linear Search Demonstration - FSM validation (de3bb294-fa74-11f0-
     expect(/NaN not found in the array\.| not found in the array\./.test(resultText)).toBeTruthy();
 
     // There should be no crash (no critical errors)
-    const criticalErrors = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
+    const criticalErrors4 = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
     expect(criticalErrors.length, `Critical errors for blank search value: ${pageErrors.join(' | ')}`).toBe(0);
   });
 
   test('FSM transitions summary and console observation: ensure no unexpected errors occurred across interactions', async ({ page }) => {
     // This test performs a sequence of interactions to exercise multiple transitions and then inspects collected console/page errors.
 
-    const arrayInput = page.locator('#arrayInput');
-    const searchInput = page.locator('#searchValue');
-    const searchButton = page.locator("button[onclick='performSearch()']");
-    const resultLocator = page.locator('#searchResult');
+    const arrayInput2 = page.locator('#arrayInput2');
+    const searchInput4 = page.locator('#searchValue');
+    const searchButton4 = page.locator("button[onclick='performSearch()']");
+    const resultLocator4 = page.locator('#searchResult');
 
     // 1) Perform a successful search
     await searchInput.fill('8');
@@ -201,7 +201,7 @@ test.describe('Linear Search Demonstration - FSM validation (de3bb294-fa74-11f0-
 
     // After several transitions, inspect the captured console and page errors.
     // We assert that no ReferenceError/SyntaxError/TypeError occurred. If they did, they will be listed in pageErrors.
-    const criticalErrors = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
+    const criticalErrors5 = pageErrors.filter(msg => /ReferenceError|SyntaxError|TypeError/.test(msg));
     expect(criticalErrors.length, `Critical runtime errors occurred during interaction sequence: ${pageErrors.join(' | ')}`).toBe(0);
 
     // Also assert that console was used for at least some informational logs / html updates occurred

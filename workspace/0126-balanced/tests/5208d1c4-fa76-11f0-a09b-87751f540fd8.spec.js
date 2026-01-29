@@ -134,7 +134,7 @@ test.describe('Counting Sort FSM and page behavior (Application ID: 5208d1c4-fa7
     expect(hasSortedArrayLog).toBe(false);
 
     // Verify that the button is still present and clickable after the error (no destructive DOM change)
-    const button = await countingPage.page.$('#counting-sort-button');
+    const button1 = await countingPage.page.$('#counting-sort-button1');
     expect(button).not.toBeNull();
     await expect(button).toBeVisible();
     await expect(button).toBeEnabled();
@@ -160,12 +160,12 @@ test.describe('Counting Sort FSM and page behavior (Application ID: 5208d1c4-fa7
     }
 
     // The console should not contain any successful sorted array logs after repeated errors.
-    const consoleTexts = countingPage.getConsoleTexts();
+    const consoleTexts1 = countingPage.getConsoleTexts();
     const anySortedLogs = consoleTexts.some(t => /\[.*2.*802.*\]/.test(t) || t.includes('Sorted array') || t.includes('sortedArr'));
     expect(anySortedLogs).toBe(false);
 
     // As the sorting never actually ran, read arr (if accessible) and ensure it remains the initial unsorted array.
-    const arrRead = await countingPage.evaluateSafe(() => arr);
+    const arrRead1 = await countingPage.evaluateSafe(() => arr);
     if (arrRead.success) {
       expect(arrRead.value).toEqual([170, 45, 75, 90, 802, 24, 2, 66]);
     } else {

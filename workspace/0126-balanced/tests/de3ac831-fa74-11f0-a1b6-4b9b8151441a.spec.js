@@ -150,7 +150,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
 
   test('Insert at End (InsertAtEnd) from Idle transitions to List Not Empty (S1_ListNotEmpty) and visualizes node', async ({ page }) => {
     // Validate inserting at end creates a node and updates visualization and internal size
-    const po = new CLLPage(page);
+    const po1 = new CLLPage(page);
 
     // Insert value 10 at end
     await po.fillValue(10);
@@ -166,24 +166,24 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     expect(info).toContain('Tail (10) points back to Head (10)');
 
     // Check cll.size incremented to 1
-    const size = await po.getCllSize();
+    const size1 = await po.getCllSize();
     expect(size).toBe(1);
   });
 
   test('Insert at Start (InsertAtStart) from Idle transitions to List Not Empty and places node at head', async ({ page }) => {
     // Validate insert at start works when list is empty and when non-empty
-    const po = new CLLPage(page);
+    const po2 = new CLLPage(page);
 
     // Insert 5 at start (from empty)
     await po.fillValue(5);
     await po.clickInsertStart();
 
     // There should be a node with value 5 and size 1
-    let nodeValues = await po.getNodeValues();
+    let nodeValues1 = await po.getNodeValues();
     expect(nodeValues.length).toBe(1);
     expect(nodeValues[0]).toBe('5');
 
-    let size = await po.getCllSize();
+    let size2 = await po.getCllSize();
     expect(size).toBe(1);
 
     // Insert at end 7, then insert at start 3 to verify head changes
@@ -205,7 +205,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
 
   test('Traverse event highlights nodes and outputs traversal text (Traverse) for non-empty list', async ({ page }) => {
     // Validate traversal prints output and triggers highlightTraversal animation
-    const po = new CLLPage(page);
+    const po3 = new CLLPage(page);
 
     // Build a small list: 1 -> 2 -> 3
     await po.fillValue(1);
@@ -215,7 +215,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     await po.fillValue(3);
     await po.clickInsertEnd();
 
-    const size = await po.getCllSize();
+    const size3 = await po.getCllSize();
     expect(size).toBe(3);
 
     // Start traversal
@@ -240,7 +240,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
 
   test('Delete existing node (DeleteNode) updates visualization and outputs deletion message', async ({ page }) => {
     // Validate deleting a node when present works and reduces list size
-    const po = new CLLPage(page);
+    const po4 = new CLLPage(page);
 
     // Build a list: 10 -> 20 -> 30
     await po.fillValue(10);
@@ -250,7 +250,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     await po.fillValue(30);
     await po.clickInsertEnd();
 
-    let nodeValues = await po.getNodeValues();
+    let nodeValues2 = await po.getNodeValues();
     expect(nodeValues).toEqual(['10', '20', '30']);
 
     // Delete middle node 20
@@ -258,7 +258,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     await po.clickDelete();
 
     // Output should report the deletion
-    const out = await po.getOutputText();
+    const out1 = await po.getOutputText();
     expect(out).toContain('Deleted node with value 20');
 
     // Visualization should no longer contain '20'
@@ -266,25 +266,25 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     expect(nodeValues).toEqual(['10', '30']);
 
     // Size should have decreased (from 3 to 2)
-    const size = await po.getCllSize();
+    const size4 = await po.getCllSize();
     expect(size).toBe(2);
   });
 
   test('Delete non-existent node and delete with no input (edge cases)', async ({ page }) => {
     // Validate proper messages when deleting a non-existent value and when input is invalid
-    const po = new CLLPage(page);
+    const po5 = new CLLPage(page);
 
     // Ensure list is empty first by clicking clear
     await po.clickClear();
     // Visualization should indicate empty
-    const visText = await po.getVisualizationText();
+    const visText1 = await po.getVisualizationText();
     expect(visText).toContain('List is empty');
 
     // 1) Delete with no input should prompt user to enter a valid number
     await po.clearInput();
     await po.clickDelete();
 
-    let out = await po.getOutputText();
+    let out2 = await po.getOutputText();
     expect(out).toContain('Please enter a valid number');
 
     // 2) Insert a value and attempt to delete a non-existent value
@@ -301,7 +301,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
 
   test('ClearList event clears the list (transition S1_ListNotEmpty -> S2_ListEmpty) and visualizes empty state', async ({ page }) => {
     // Validate clearList sets head/tail to null and size to 0 and updates visualization and output
-    const po = new CLLPage(page);
+    const po6 = new CLLPage(page);
 
     // Build a small list
     await po.fillValue(11);
@@ -309,18 +309,18 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     await po.fillValue(22);
     await po.clickInsertEnd();
 
-    let size = await po.getCllSize();
+    let size5 = await po.getCllSize();
     expect(size).toBe(2);
 
     // Click clear list
     await po.clickClear();
 
     // Visualization should now show 'List is empty'
-    const visText = await po.getVisualizationText();
+    const visText2 = await po.getVisualizationText();
     expect(visText).toContain('List is empty');
 
     // Output should indicate list cleared
-    const out = await po.getOutputText();
+    const out3 = await po.getOutputText();
     expect(out).toContain('List cleared');
 
     // Internal size should be zero
@@ -330,7 +330,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
 
   test('Traverse on empty list outputs "List is empty" (edge case)', async ({ page }) => {
     // Validate traverse behavior on an empty list
-    const po = new CLLPage(page);
+    const po7 = new CLLPage(page);
 
     // Ensure empty
     await po.clickClear();
@@ -338,13 +338,13 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     // Click traverse when empty
     await po.clickTraverse();
 
-    const out = await po.getOutputText();
+    const out4 = await po.getOutputText();
     expect(out).toContain('List is empty');
   });
 
   test('Comprehensive scenario: build, traverse, delete head/tail, clear to cover multiple transitions', async ({ page }) => {
     // A combined test to exercise several FSM transitions in sequence
-    const po = new CLLPage(page);
+    const po8 = new CLLPage(page);
 
     // Start fresh
     await po.clickClear();
@@ -357,7 +357,7 @@ test.describe('Circular Linked List Visualization - FSM tests (de3ac831-fa74-11f
     await po.fillValue(3);
     await po.clickInsertEnd();
 
-    let nodeValues = await po.getNodeValues();
+    let nodeValues3 = await po.getNodeValues();
     expect(nodeValues).toEqual(['1', '2', '3']);
 
     // Delete head (value 1)

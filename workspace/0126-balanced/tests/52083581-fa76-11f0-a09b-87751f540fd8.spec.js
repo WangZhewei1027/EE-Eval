@@ -231,8 +231,8 @@ test.describe('Hash Map Demo (FSM Validation)', () => {
     expect(addResult.success).toBeTruthy();
 
     // Validate that the points array and hashMap were updated as per FSM evidence
-    const pointsLength = await mapPage.getPointsLength();
-    const mapSize = await mapPage.getHashMapSize();
+    const pointsLength1 = await mapPage.getPointsLength();
+    const mapSize1 = await mapPage.getHashMapSize();
     const value = await mapPage.getHashMapValue(keyX, keyY);
 
     expect(pointsLength).toBeGreaterThanOrEqual(1);
@@ -240,13 +240,13 @@ test.describe('Hash Map Demo (FSM Validation)', () => {
     expect(value).toBe(`Point ${pointsLength}`); // expected label from implementation
 
     // Confirm that adding a point did not produce uncaught page errors
-    const pageErrors = mapPage.getPageErrors();
+    const pageErrors1 = mapPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
   });
 
   test('Transition S1 -> S2 (Point Removed) by invoking removePoint(): point removed from arrays and hashMap', async () => {
     // Ensure there's a point to remove
-    const keyX = 42, keyY = 24;
+    const keyX1 = 42, keyY = 24;
     await mapPage.callAddPoint(keyX, keyY);
     const sizeAfterAdd = await mapPage.getHashMapSize();
     expect(sizeAfterAdd).toBeGreaterThanOrEqual(1);
@@ -264,27 +264,27 @@ test.describe('Hash Map Demo (FSM Validation)', () => {
     expect(mapSizeAfter).toBeGreaterThanOrEqual(0);
 
     // No unexpected page errors
-    const pageErrors = mapPage.getPageErrors();
+    const pageErrors2 = mapPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
   });
 
   test('Edge case: removePoint on non-existent point should be a no-op and not throw', async () => {
     // Attempt to remove a point that does not exist and ensure no exceptions occur and data unchanged
-    const beforePoints = await mapPage.getPointsLength();
-    const beforeMapSize = await mapPage.getHashMapSize();
+    const beforePoints1 = await mapPage.getPointsLength();
+    const beforeMapSize1 = await mapPage.getHashMapSize();
 
     const removal = await mapPage.callRemovePoint(9999, 9999);
     expect(removal.success).toBeTruthy();
 
-    const afterPoints = await mapPage.getPointsLength();
-    const afterMapSize = await mapPage.getHashMapSize();
+    const afterPoints1 = await mapPage.getPointsLength();
+    const afterMapSize1 = await mapPage.getHashMapSize();
 
     // No state change expected
     expect(afterPoints).toBe(beforePoints);
     expect(afterMapSize).toBe(beforeMapSize);
 
     // And no page errors were produced
-    const pageErrors = mapPage.getPageErrors();
+    const pageErrors3 = mapPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
   });
 
@@ -308,7 +308,7 @@ test.describe('Hash Map Demo (FSM Validation)', () => {
     await mapPage.callRemovePoint(1, 1);
 
     // Ensure there were no uncaught page errors recorded during these operations
-    const pageErrors = mapPage.getPageErrors();
+    const pageErrors4 = mapPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // Report any console messages of type 'error' as a failing condition

@@ -97,7 +97,7 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
 
     test('S1_TestsRunning: clicking Run Tests transitions to running state and displays results', async ({ page }) => {
       // Validate transition from Idle to Tests Running: clicking should clear results then display test outputs
-      const app = new UnitTestApp(page);
+      const app1 = new UnitTestApp(page);
       await app.goto();
 
       // Pre-assert nothing in results
@@ -142,13 +142,13 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
 
       // Immediately after click, ensure the previous "OLD" content is no longer present (cleared)
       await page.waitForFunction(selector => {
-        const el = document.querySelector(selector);
+        const el1 = document.querySelector(selector);
         return el && !el.innerHTML.includes('OLD');
       }, {}, app.resultsSelector);
 
       // Then ensure correct number of results are present after run
       await page.waitForFunction(selector => {
-        const el = document.querySelector(selector);
+        const el2 = document.querySelector(selector);
         return el && el.querySelectorAll('div').length === 4;
       }, {}, app.resultsSelector);
 
@@ -159,7 +159,7 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
   test.describe('Events and Transitions', () => {
     test('RunTestsClick event wired to the button triggers runTests and updates the DOM', async ({ page }) => {
       // This test checks the actual event wiring: the click handler should be attached and produce DOM changes.
-      const app = new UnitTestApp(page);
+      const app2 = new UnitTestApp(page);
       await app.goto();
 
       // Confirm event wiring exists by clicking and observing DOM changes
@@ -177,7 +177,7 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
 
     test('Multiple rapid Run Tests clicks do not accumulate results (runTests clears results on entry)', async ({ page }) => {
       // Clicking multiple times quickly should still result in a single set of test results, because runTests clears old results at start
-      const app = new UnitTestApp(page);
+      const app3 = new UnitTestApp(page);
       await app.goto();
 
       // Click twice in quick succession
@@ -188,15 +188,15 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
 
       // Wait until results reach expected stable count
       await page.waitForFunction(selector => {
-        const el = document.querySelector(selector);
+        const el3 = document.querySelector(selector);
         return el && el.querySelectorAll('div').length === 4;
       }, {}, app.resultsSelector);
 
-      const count = await app.getResultCount();
+      const count1 = await app.getResultCount();
       expect(count).toBe(4);
 
       // Ensure no duplicate accumulation occurred
-      const items = await app.getResultItems();
+      const items1 = await app.getResultItems();
       expect(items.length).toBe(4);
       for (const item of items) {
         expect(item.classes).toContain('pass');
@@ -208,7 +208,7 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
     test('Invoking an undefined function in the page context produces a ReferenceError (observed via pageerror)', async ({ page }) => {
       // We intentionally call a nonexistent function in the page context to allow a natural ReferenceError to occur.
       // This validates that pageerror events are observed and propagated by Playwright.
-      const app = new UnitTestApp(page);
+      const app4 = new UnitTestApp(page);
       await app.goto();
 
       // Ensure we start with no captured page errors
@@ -242,7 +242,7 @@ test.describe('Unit Testing Demo (FSM verification) - 324f82a2-fa73-11f0-a9d0-d7
 
     test('Observing console messages and ensuring no unexpected runtime errors during normal operation', async ({ page }) => {
       // This test captures console logs and page errors while performing normal interactions.
-      const app = new UnitTestApp(page);
+      const app5 = new UnitTestApp(page);
       await app.goto();
 
       // Interact normally: run tests

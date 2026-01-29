@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ternary Search Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background-color: white;
+    color: black;
+  }
+  #container {
+    max-width: 800px;
+  }
+  textarea, input[type=number] {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  button, input[type=number] {
+    margin-top: 4px;
+    margin-bottom: 8px;
+  }
+  table {
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  td, th {
+    border: 1px solid black;
+    padding: 2px 6px;
+    text-align: center;
+  }
+  fieldset {
+    margin-bottom: 1em;
+  }
+  legend {
+    font-weight: bold;
+  }
+  #stateinfo, #log {
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 4px;
+  }
+  label {
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="container">
+<h1>Ternary Search Interactive Explorer</h1>
+
+<fieldset>
+<legend>Step 1: Define and Configure the Search</legend>
+<label for="arrayInput">Enter sorted array (comma separated integers):</label><br />
+<textarea id="arrayInput" rows="3" aria-label="Input sorted integer array" placeholder="e.g. 1,3,5,7,9,11,13,15,17"></textarea>
+<br />
+<label for="targetInput">Target value to find:</label><br />
+<input type="number" id="targetInput" aria-label="Target number input" />
+<br />
+
+<label><input type="checkbox" id="modeFindMax" /> Search for maximum element less than or equal to target (ternary search on unimodal function)</label><br />
+<label><input type="checkbox" id="modeFindExact" checked /> Search for exact element (classic ternary search in sorted array)</label><br />
+<small>Check only one mode at a time. "Exact" for classic ternary search in a sorted array, "Max" mode for finding max within unimodal function approximation (see notes).</small>
+<br />
+<button id="loadSearch">Load Search</button>
+<div id="loadError" style="color:red;"></div>
+</fieldset>
+
+<fieldset>
+<legend>Step 2: Search Controls and Visualization</legend>
+<div>
+<label for="lowIndex">Low Index (L): </label><input type="number" id="lowIndex" min="0" step="1" aria-label="Low index for current search range" />
+<label for="highIndex" style="margin-left:1em;">High Index (R): </label><input type="number" id="highIndex" min="0" step="1" aria-label="High index for current search range" />
+</div>
+<div style="margin-top:8px;">
+<button id="stepForward">Step Forward</button>
+<button id="stepBackward">Step Backward</button>
+<button id="autoPlay">Auto Play</button>
+<button id="pauseAutoPlay" disabled>Pause</button>
+<button id="resetSearch">Reset Search</button>
+</div>
+<div style="margin-top:8px;">
+<label for="speedRange">Auto Play Speed (steps/sec):</label>
+<input type="range" id="speedRange" min="1" max="10" value="2" aria-label="Auto play speed slider" />
+<span id="speedValue">2</span>
+</div>
+<div style="margin-top:12px;">
+<label for="stepJump">Jump to step #: </label><input type="number" id="stepJump" min="0" value="0" aria-label="Jump to step number" />
+<button id="jumpStep">Jump</button>
+</div>
+</fieldset>
+
+<fieldset>
+<legend>Step 3: Search Visualization and Logs</legend>
+<div><strong>Current state information:</strong></div>
+<div id="stateinfo" aria-live="polite" aria-atomic="true" aria-relevant="additions"></div>
+
+<div style="margin-top:12px;"><strong>Search Log:</strong></div>
+<div id="log" aria-live="polite" aria-atomic="false" aria-relevant="additions"></div>
+<button id="clearLog" style="margin-top:4px;">Clear Log</button>
+</fieldset>
+
+<fieldset>
+<legend>Step 4: Manual Override and Exploration</legend>
+<div>
+<button id="manualSetLow">Set Low (L) Manually</button>
+<input type="number" id="manualLowInput" min="0" step="1" placeholder="New L index" aria-label="Input new Low index" />
+</div>
+<div>
+<button id="manualSetHigh">Set High (R) Manually</button>
+<input type="number" id="manualHighInput" min="0" step="1" placeholder="New R index" aria-label="Input new High index" />
+</div>
+<button id="manualEvalBoth" style="margin-top:4px;">Evaluate m1 and m2 at current L,R</button>
+<button id="manualAddLog" style="margin-top:2px;">Add custom log entry</button>
+<input type="text" id="manualLogText" placeholder="Custom log message" aria-label="Custom log message input" style="width: 100%;" />
+</fieldset>
+
+<fieldset>
+<legend>Step 5: Notes and Explanation</legend>
+<p>
+This interactive tool visualizes the classic ternary search algorithm exploring a sorted integer array to find a target value (Exact mode), or the ternary search approach used to find the maximum of a unimodal discrete function (Max mode).
+</p>
+<p><strong>Exact mode:</strong> The array must be sorted. The search repeatedly divides the range into three parts and compares the values at two midpoints to decide which range to keep searching in.</p>
+<p><strong>Max mode:</strong> The array represents a unimodal function's sampled values. The search tries to find the maximum element's index efficiently using ternary search by comparing function values at two midpoints.</p>
+<p>You may load your own array and target value, step forward and backward through the search steps, auto-play with adjustable speed, jump to any step, and manually override the search range to experiment fully.</p>
+</fieldset>
+</div>
+
+<script>
+(function() {
+  // State variables
+  let array = [];
+  let target = null;
+  let modeFindExact = true; // default
+  let modeFindMax = false;
+
+  let steps = []; // all states captured for stepping back and forward
+  let currentStepIndex = 0;
+
+  let autoPlayTimer = null;
+  let autoPlaySpeed = 2; // steps per second
+
+  const arrayInput = document.getElementById('arrayInput');
+  const targetInput = document.getElementById('targetInput');
+  const modeFindExactCheckbox = document.getElementById('modeFindExact');
+  const modeFindMaxCheckbox = document.getElementById('modeFindMax');
+  const loadSearchBtn = document.getElementById('loadSearch');
+  const loadErrorDiv = document.getElementById('loadError');
+
+  const lowIndexInput = document.getElementById('lowIndex');
+  const highIndexInput = document.getElementById('highIndex');
+
+  const stepForwardBtn = document.getElementById('stepForward');
+  const stepBackwardBtn = document.getElementById('stepBackward');
+  const autoPlayBtn = document.getElementById('autoPlay');
+  const pauseAutoPlayBtn = document.getElementById('pauseAutoPlay');
+  const resetSearchBtn = document.getElementById('resetSearch');
+  const speedRange = document.getElementById('speedRange');
+  const speedValueSpan = document.getElementById('speedValue');
+
+  const stepJumpInput = document.getElementById('stepJump');
+  const jumpStepBtn = document.getElementById('jumpStep');
+
+  const stateInfoDiv = document.getElementById('stateinfo');
+  const logDiv = document.getElementById('log');
+  const clearLogBtn = document.getElementById('clearLog');
+
+  const manualSetLowBtn = document.getElementById('manualSetLow');
+  const manualLowInput = document.getElementById('manualLowInput');
+
+  const manualSetHighBtn = document.getElementById('manualSetHigh');
+  const manualHighInput = document.getElementById('manualHighInput');
+
+  const manualEvalBothBtn = document.getElementById('manualEvalBoth');
+  const manualAddLogBtn = document.getElementById('manualAddLog');
+  const manualLogTextInput = document.getElementById('manualLogText');
+
+  // State structure per step:
+  // {
+  //   low: number,
+  //   high: number,
+  //   m1: number,
+  //   m2: number,
+  //   valM1: number|null,
+  //   valM2: number|null,
+  //   decision: string,
+  //   foundIndex: number|null, (for exact mode)
+  //   note: string,
+  //   logEntry: string
+  // }
+
+  function parseArrayInput(text) {
+    // Parses and validates input as sorted int array
+    const parts = text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    if(parts.length === 0) return {error: 'Array is empty.'};
+    const nums = [];
+    for(let i=0;i<parts.length;i++){
+      let v = Number(parts[i]);
+      if(!Number.isInteger(v)) {
+        return {error: 'All values must be integers.'};
+      }
+      nums.push(v);
+    }
+    // Validate sorted order (non-decreasing)
+    for(let i=1; i<nums.length; i++){
+      if(nums[i]<nums[i-1]){
+        return {error: 'Array must be sorted in non-decreasing order.'};
+      }
+    }
+    return {array: nums};
+  }
+
+  // Interactive step generator for Exact mode ternary search
+  // This generator yields successive states for each step of the search.
+  function* ternarySearchExact(arr, targetVal) {
+    let low = 0;
+    let high = arr.length -1;
+
+    let stepCount = 0;
+    while(low <= high){
+      let m1 = low + Math.floor((high - low) / 3);
+      let m2 = high - Math.floor((high - low) / 3);
+
+      let valM1 = arr[m1];
+      let valM2 = arr[m2];
+      let decision = '';
+      let found = null;
+
+      if(valM1 === targetVal){
+        found = m1;
+        decision = `Found target at m1 (${m1}). Search ends.`;
+      } else if (valM2 === targetVal){
+        found = m2;
+        decision = `Found target at m2 (${m2}). Search ends.`;
+      } else if(targetVal < valM1){
+        decision = `Target < arr[m1]. New high = m1 - 1 (${m1 - 1}).`;
+        high = m1 - 1;
+      } else if(targetVal > valM2){
+        decision = `Target > arr[m2]. New low = m2 + 1 (${m2 + 1}).`;
+        low = m2 + 1;
+      } else {
+        decision = `Target in middle third. New low = m1 + 1 (${m1 +1}), new high = m2 - 1 (${m2 - 1}).`;
+        low = m1 + 1;
+        high = m2 - 1;
+      }
+
+      yield {
+        low, high,
+        m1, m2,
+        valM1, valM2,
+        decision,
+        foundIndex: found,
+        logEntry: `Step ${stepCount}: low=${low}, high=${high}, m1=${m1}, m2=${m2}, valM1=${valM1}, valM2=${valM2}, decision="${decision}"`
+      };
+      stepCount++;
+      if(found !== null) break;
+    }
+    if(low > high){
+      yield {
+        low, high,
+        m1: null, m2: null,
+        valM1: null, valM2: null,
+        decision: 'Target not found in array. Search ends.',
+        foundIndex: null,
+        logEntry: `Step ${stepCount}: Search ended unsuccessfully. Target not in array.`
+      };
+    }
+  }
+
+  // Interactive step generator for Max mode ternary search over unimodal function sampled in array
+  function* ternarySearchMax(arr) {
+    // Assumes arr corresponds to values of unimodal function at discrete points: arr[0]...arr[n-1].
+    // We find index of maximum element.
+    let low = 0;
+    let high = arr.length - 1;
+    let stepCount = 0;
+
+    while(high - low > 1){
+      let m1 = low + Math.floor((high-low)/3);
+      let m2 = high - Math.floor((high-low)/3);
+      let valM1 = arr[m1];
+      let valM2 = arr[m2];
+      let decision = '';
+
+      if(valM1 < valM2) {
+        decision = `arr[m1] < arr[m2], new low = m1 + 1 (${m1 + 1})`;
+        low = m1 + 1;
+      } else {
+        decision = `arr[m1] >= arr[m2], new high = m2 - 1 (${m2 - 1})`;
+        high = m2 - 1;
+      }
+
+      yield {
+        low, high,
+        m1, m2,
+        valM1, valM2,
+        decision,
+        foundIndex: null,
+        logEntry: `Step ${stepCount}: low=${low}, high=${high}, m1=${m1}, m2=${m2}, valM1=${valM1}, valM2=${valM2}, decision="${decision}"`
+      };
+      stepCount++;
+    }
+    // After loop ends, max is the max element in range low..high inclusive
+    let maxIndex = low;
+    for(let i=low+1; i<=high; i++){
+      if(arr[i] > arr[maxIndex]) maxIndex = i;
+    }
+    yield {
+      low, high,
+      m1: null, m2: null,
+      valM1: null, valM2: null,
+      decision: `Search narrowed down to [${low},${high}]. Maximum at index ${maxIndex} with value ${arr[maxIndex]}.`,
+      foundIndex: maxIndex,
+      logEntry: `Final step: max found at index ${maxIndex} with value ${arr[maxIndex]}`
+    };
+  }
+
+  // Controller for managing the search and stepping
+  let searchGenerator = null;
+  let lastReturnedState = null;
+
+  function captureState(state) {
+    // Add to steps array and update currentStepIndex
+    // If stepping forward after stepBack, overwrite steps beyond currentStepIndex
+    if(currentStepIndex < steps.length -1){
+      steps = steps.slice(0, currentStepIndex + 1);
+    }
+    steps.push(state);
+    currentStepIndex = steps.length -1;
+    updateUI();
+  }
+
+  // Public UI update function for all elements affected by current step
+  function updateUI() {
+    if(steps.length === 0) {
+      stateInfoDiv.textContent = 'No search loaded.';
+      logDiv.textContent = '';
+      stepForwardBtn.disabled = true;
+      stepBackwardBtn.disabled = true;
+      autoPlayBtn.disabled = true;
+      pauseAutoPlayBtn.disabled = true;
+      lowIndexInput.value = '';
+      highIndexInput.value = '';
+      stepJumpInput.max = 0;
+      stepJumpInput.value = 0;
+      return;
+    }
+    let state = steps[currentStepIndex];
+    // Show current step state summary
+    const foundStr = (state.foundIndex !== null) ? `Found index: ${state.foundIndex}` : 'Not found/Not determined yet';
+
+    let infoText = '';
+    infoText += `Step ${currentStepIndex} of ${steps.length - 1}\n`;
+    infoText += `Current search range: low=${state.low}, high=${state.high}\n`;
+    if(state.m1 !== null && state.m1 !== undefined) infoText += `m1 = ${state.m1}, arr[m1] = ${state.valM1}\n`;
+    if(state.m2 !== null && state.m2 !== undefined) infoText += `m2 = ${state.m2}, arr[m2] = ${state.valM2}\n`;
+    infoText += `Decision: ${state.decision}\n`;
+    infoText += `${foundStr}\n`;
+
+    stateInfoDiv.textContent = infoText;
+
+    lowIndexInput.value = state.low;
+    highIndexInput.value = state.high;
+
+    stepForwardBtn.disabled = (currentStepIndex >= steps.length - 1 || (state.foundIndex !== null)); // disable forward if no next step or found
+    stepBackwardBtn.disabled = (currentStepIndex <= 0);
+    autoPlayBtn.disabled = (state.foundIndex !== null);
+    pauseAutoPlayBtn.disabled = true;
+
+    stepJumpInput.max = steps.length - 1;
+
+    // Append new logs only forward
+    // Here we just show all logs accumulated
+    let logText = '';
+    for(let i=0; i <= currentStepIndex; i++) {
+      if(steps[i].logEntry){
+        logText += steps[i].logEntry + '\n';
+      }
+    }
+    logDiv.textContent = logText;
+  }
+
+  function loadSearch() {
+    // Parse input, validate and set up generator & states
+    loadErrorDiv.textContent = '';
+    const parseResult = parseArrayInput(arrayInput.value);
+    if(parseResult.error){
+      loadErrorDiv.textContent = 'Error: ' + parseResult.error;
+      return;
+    }
+    array = parseResult.array;
+    target = Number(targetInput.value);
+    if(modeFindExactCheckbox.checked && modeFindMaxCheckbox.checked){
+      loadErrorDiv.textContent = 'Select only one mode at a time.';
+      return;
+    }
+    if(!modeFindExactCheckbox.checked && !modeFindMaxCheckbox.checked) {
+      loadErrorDiv.textContent = 'Select at least one mode.';
+      return;
+    }
+    modeFindExact = modeFindExactCheckbox.checked;
+    modeFindMax = modeFindMaxCheckbox.checked;
+
+    steps = [];
+    currentStepIndex = 0;
+    if(modeFindExact){
+      searchGenerator = ternarySearchExact(array, target);
+    } else {
+      searchGenerator = ternarySearchMax(array);
+    }
+    lastReturnedState = null;
+
+    // load first step eagerly to initialize
+    let first = searchGenerator.next();
+    if(first.done){
+      loadErrorDiv.textContent = 'Search generator ended immediately.';
+      return;
+    } else {
+      captureState(first.value);
+    }
+  }
+
+  function stepForward() {
+    if(!searchGenerator) return;
+    if(currentStepIndex < steps.length -1){
+      // Move forward in existing states history
+      currentStepIndex++;
+      lastReturnedState = steps[currentStepIndex];
+      updateUI();
+    } else {
+      // Generate next step from generator
+      let nextStep = searchGenerator.next();
+      if(nextStep.done){
+        // No more steps
+        stepForwardBtn.disabled = true;
+        autoPlayBtn.disabled = true;
+        pauseAutoPlayBtn.disabled = true;
+        updateUI();
+        return;
+      } else {
+        captureState(nextStep.value);
+        lastReturnedState = nextStep.value;
+      }
+    }
+  }
+
+  function stepBackward() {
+    if(currentStepIndex > 0){
+      currentStepIndex--;
+      lastReturnedState = steps[currentStepIndex];
+      updateUI();
+    }
+  }
+
+  function resetSearch() {
+    if(steps.length === 0) return;
+    currentStepIndex = 0;
+    lastReturnedState = steps[0];
+    updateUI();
+  }
+
+  function toggleAutoPlay(enable) {
+    if(enable){
+      autoPlayBtn.disabled = true;
+      pauseAutoPlayBtn.disabled = false;
+      let delay = 1000 / autoPlaySpeed;
+      autoPlayTimer = setInterval(() => {
+        if(currentStepIndex >= steps.length -1){
+          // Try advancing generator
+          let nextStep = searchGenerator.next();
+          if(nextStep.done){
+            stopAutoPlay();
+            return;
+          } else {
+            captureState(nextStep.value);
+          }
+        } else {
+          currentStepIndex++;
+        }
+        updateUI();
+        if(steps[currentStepIndex].foundIndex !== null){
+          stopAutoPlay();
+        }
+      }, delay);
+    } else {
+      stopAutoPlay();
+    }
+  }
+
+  function stopAutoPlay() {
+    if(autoPlayTimer){
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    autoPlayBtn.disabled = false;
+    pauseAutoPlayBtn.disabled = true;
+  }
+
+  // Jump to arbitrary step in history if valid step index
+  function jumpToStep(n) {
+    n = Number(n);
+    if(Number.isInteger(n) && n >= 0 && n < steps.length){
+      currentStepIndex = n;
+      lastReturnedState = steps[n];
+      updateUI();
+    }
+  }
+
+  // Manual controls handlers
+  function manualSetLow() {
+    if(steps.length === 0) return;
+    let newLow = Number(manualLowInput.value);
+    if(!Number.isInteger(newLow) || newLow<0 || newLow > array.length - 1){
+      alert('Invalid low index.');
+      return;
+    }
+    if(newLow > steps[currentStepIndex].high){
+      alert('Low index cannot be greater than high index.');
+      return;
+    }
+    // Update current step low index & disable forward history because manual override breaks normal flow
+    steps[currentStepIndex].low = newLow;
+    // eslint-disable-next-line no-undef
+    recalcCurrentStepMids();
+    trimHistoryAtCurrent();
+    updateUI();
+  }
+
+  function manualSetHigh() {
+    if(steps.length === 0) return;
+    let newHigh = Number(manualHighInput.value);
+    if(!Number.isInteger(newHigh) || newHigh<0 || newHigh > array.length - 1){
+      alert('Invalid high index.');
+      return;
+    }
+    if(newHigh < steps[currentStepIndex].low){
+      alert('High index cannot be less than low index.');
+      return;
+    }
+    // Update current step high index & recalc mids
+    steps[currentStepIndex].high = newHigh;
+    // eslint-disable-next-line no-undef
+    recalcCurrentStepMids();
+    trimHistoryAtCurrent();
+    updateUI();
+  }
+
+  function recalcCurrentStepMids() {
+    // Helper to recalc m1,m2,valM1,valM2 and decision on current step base on low/high and mode
+    if(steps.length === 0) return;
+    let st = steps[currentStepIndex];
+    let l = st.low;
+    let h = st.high;
+    if(l > h) {
+      st.m1 = null; st.m2 = null;
+      st.valM1 = null; st.valM2 = null;
+      st.decision = 'Invalid range after manual override.';
+      st.foundIndex = null;
+      st.logEntry = `Manual override led to invalid search range [${l},${h}].`;
+      return;
+    }
+    if(modeFindExact){
+      let m1 = l + Math.floor((h - l)/3);
+      let m2 = h - Math.floor((h - l)/3);
+      let valM1 = array[m1];
+      let valM2 = array[m2];
+      let decision = '';
+      let found = null;
+
+      if(valM1 === target){
+        found = m1;
+        decision = `Found target at m1 (${m1}) due to manual override.`;
+      } else if(valM2 === target){
+        found = m2;
+        decision = `Found target at m2 (${m2}) due to manual override.`;
+      } else if(target < valM1){
+        decision = `Target < arr[m1]. Next search range would be [${l},${m1-1}] in next step.`;
+      } else if(target > valM2){
+        decision = `Target > arr[m2]. Next search range would be [${m2+1},${h}] in next step.`;
+      } else {
+        decision = `Target in middle third. Next search range would be [${m1+1},${m2-1}] in next step.`;
+      }
+      st.m1 = m1;
+      st.m2 = m2;
+      st.valM1 = valM1;
+      st.valM2 = valM2;
+      st.decision = decision;
+      st.foundIndex = found;
+      st.logEntry = `Manual override step: low=${l}, high=${h}, m1=${m1}, m2=${m2}, valM1=${valM1}, valM2=${valM2}, decision="${decision}"`;
+    } else if(modeFindMax) {
+      // max mode manual override recalculation
+      if(h - l <=1){
+        st.m1 = null; st.m2 = null;
+        st.valM1 = null; st.valM2 = null;
+        let maxIndex = l;
+        for(let i=l+1; i<=h; i++){
+          if(array[i] > array[maxIndex]) maxIndex = i;
+        }
+        st.decision = `Range small. Max possibly at index ${maxIndex}.`;
+        st.foundIndex = maxIndex;
+        st.logEntry = `Manual override step: narrow range [${l},${h}]. Potential max at index ${maxIndex}.`;
+      } else {
+        let m1 = l + Math.floor((h - l)/3);
+        let m2 = h - Math.floor((h - l)/3);
+        let valM1 = array[m1];
+        let valM2 = array[m2];
+        let decision = '';
+        if(valM1 < valM2){
+          decision = `arr[m1] < arr[m2]. Would update low to m1 + 1 (${m1+1}) next step.`;
+        } else {
+          decision = `arr[m1] >= arr[m2]. Would update high to m2 -1 (${m2-1}) next step.`;
+        }
+        st.m1 = m1;
+        st.m2 = m2;
+        st.valM1 = valM1;
+        st.valM2 = valM2;
+        st.decision = decision;
+        st.foundIndex = null;
+        st.logEntry = `Manual override step: low=${l}, high=${h}, m1=${m1}, m2=${m2}, valM1=${valM1}, valM2=${valM2}, decision="${decision}"`;
+      }
+    }
+  }
+
+  function trimHistoryAtCurrent() {
+    // Remove future steps beyond currentStepIndex, to allow manual override to branch correctly
+    if(currentStepIndex < steps.length -1){
+      steps = steps.slice(0, currentStepIndex + 1);
+    }
+    if(searchGenerator){
+      // Restart generator from current state to allow correct continuation, but to keep complexity low, just stop it because manual override is breaking normal flow.
+      searchGenerator = null;
+      stepForwardBtn.disabled = true;
+      autoPlayBtn.disabled = true;
+      pauseAutoPlayBtn.disabled = true;
+    }
+  }
+
+  function manualEvalBoth() {
+    if(steps.length === 0) return;
+    recalcCurrentStepMids();
+    trimHistoryAtCurrent();
+    updateUI();
+  }
+
+  function manualAddLogEntry() {
+    if(steps.length === 0) return;
+    let text = manualLogTextInput.value.trim();
+    if(!text){
+      alert('Enter some text to add to log.');
+      return;
+    }
+    // Append log text to logDiv and also store in current step with prefix "Manual log:"
+    const logEntry = `Manual log (step ${currentStepIndex}): ${text}`;
+    // Append to existing stored log entry if present
+    if(steps[currentStepIndex].manualLogs === undefined){
+      steps[currentStepIndex].manualLogs = [];
+    }
+    steps[currentStepIndex].manualLogs.push(logEntry);
+    // Update logDiv with combined logs (all previous + manual logs)
+    let baseLogText = '';
+    for(let i=0;i<=currentStepIndex;i++) {
+      if(steps[i].logEntry) baseLogText += steps[i].logEntry + '\n';
+      if(steps[i].manualLogs){
+        for(let ml of steps[i].manualLogs){
+          baseLogText += ml + '\n';
+        }
+      }
+    }
+    logDiv.textContent = baseLogText;
+    manualLogTextInput.value = '';
+  }
+
+  // Event handlers
+  loadSearchBtn.addEventListener('click', () => {
+    stopAutoPlay();
+    loadSearch();
+  });
+  stepForwardBtn.addEventListener('click', () => {
+    stepForward();
+  });
+  stepBackwardBtn.addEventListener('click', () => {
+    stepBackward();
+  });
+  resetSearchBtn.addEventListener('click', () => {
+    resetSearch();
+  });
+
+  autoPlayBtn.addEventListener('click', () => {
+    if(autoPlayTimer === null){
+      autoPlaySpeed = Number(speedRange.value);
+      if(isNaN(autoPlaySpeed) || autoPlaySpeed <=0) autoPlaySpeed = 2;
+      toggleAutoPlay(true);
+    }
+  });
+  pauseAutoPlayBtn.addEventListener('click', () => {
+    toggleAutoPlay(false);
+  });
+  speedRange.addEventListener('input', () => {
+    speedValueSpan.textContent = speedRange.value;
+    autoPlaySpeed = Number(speedRange.value);
+    if(autoPlayTimer !== null){
+      toggleAutoPlay(false);
+      toggleAutoPlay(true); // restart with new speed
+    }
+  });
+  jumpStepBtn.addEventListener('click', () => {
+    let stepN = Number(stepJumpInput.value);
+    jumpToStep(stepN);
+  });
+
+  clearLogBtn.addEventListener('click', () => {
+    // Clear all manual logs from all steps and log display
+    for(let s of steps){
+      if(s.manualLogs) s.manualLogs = [];
+    }
+    updateUI();
+  });
+
+  manualSetLowBtn.addEventListener('click', manualSetLow);
+  manualSetHighBtn.addEventListener('click', manualSetHigh);
+  manualEvalBothBtn.addEventListener('click', manualEvalBoth);
+  manualAddLogBtn.addEventListener('click', manualAddLogEntry);
+
+  // Keep the two mode checkboxes mutually exclusive
+  modeFindExactCheckbox.addEventListener('change', () => {
+    if(modeFindExactCheckbox.checked){
+      modeFindMaxCheckbox.checked = false;
+    }
+  });
+  modeFindMaxCheckbox.addEventListener('change', () => {
+    if(modeFindMaxCheckbox.checked){
+      modeFindExactCheckbox.checked = false;
+    }
+  });
+
+  // Initialize with example data:
+  arrayInput.value = '1,3,5,7,9,11,13,15,17,19,21,23,25';
+  targetInput.value = '13';
+  modeFindExactCheckbox.checked = true;
+  modeFindMaxCheckbox.checked = false;
+
+  updateUI();
+
+})();
+</script>
+</body>
+</html>

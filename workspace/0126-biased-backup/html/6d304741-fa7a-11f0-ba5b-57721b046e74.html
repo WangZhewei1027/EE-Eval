@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mutex Interactive Demonstration</title>
+    <script>
+        let sharedResource = {
+            value: 0,
+            locked: false,
+            owner: null,
+            waitingThreads: []
+        };
+
+        let threads = [];
+        let currentThreadId = 0;
+        let speed = 500;
+        let running = false;
+        let intervalId = null;
+
+        function Thread(id) {
+            this.id = id;
+            this.state = 'ready';
+            this.operations = [];
+            this.currentOp = 0;
+            this.log = [];
+            
+            this.addOperation = function(op) {
+                this.operations.push(op);
+            };
+            
+            this.executeNext = function() {
+                if (this.currentOp >= this.operations.length) {
+                    this.state = 'finished';
+                    return false;
+                }
+                
+                const op = this.operations[this.currentOp];
+                this.log.push(`Executing: ${op}`);
+                
+                if (op === 'lock') {
+                    if (sharedResource.locked && sharedResource.owner !== this.id) {
+                        this.state = 'waiting';
+                        sharedResource.waitingThreads.push(this.id);
+                        this.log.push(`Waiting for mutex (owned by Thread ${sharedResource.owner})`);
+                        return false;
+                    } else {
+                        sharedResource.locked = true;
+                        sharedResource.owner = this.id;
+                        this.log.push(`Acquired mutex`);
+                    }
+                } else if (op === 'unlock') {
+                    if (sharedResource.owner === this.id) {
+                        sharedResource.locked = false;
+                        this.log.push(`Released mutex`);
+                        
+                        if (sharedResource.waitingThreads.length > 0) {
+                            const nextThread = sharedResource.waitingThreads.shift();
+                            sharedResource.owner = nextThread;
+                            sharedResource.locked = true;
+                            threads.find(t => t.id === nextThread).state = 'ready';
+                            this.log.push(`Passed mutex to Thread ${nextThread}`);
+                        } else {
+                            sharedResource.owner = null;
+                        }
+                    }
+                } else if (op === 'read') {
+                    this.log.push(`Read value: ${sharedResource.value}`);
+                } else if (op === 'increment') {
+                    if (sharedResource.owner === this.id) {
+                        sharedResource.value++;
+                        this.log.push(`Incremented value to ${sharedResource.value}`);
+                    } else {
+                        this.log.push(`Failed to increment - don't own mutex`);
+                    }
+                } else if (op === 'decrement') {
+                    if (sharedResource.owner === this.id) {
+                        sharedResource.value--;
+                        this.log.push(`Decremented value to ${sharedResource.value}`);
+                    } else {
+                        this.log.push(`Failed to decrement - don't own mutex`);
+                    }
+                }
+                
+                this.currentOp++;
+                return true;
+            };
+        }
+
+        function addThread() {
+            const thread = new Thread(++currentThreadId);
+            threads.push(thread);
+            updateUI();
+        }
+
+        function removeThread() {
+            if (threads.length > 0) {
+                const thread = threads.pop();
+                if (sharedResource.owner === thread.id) {
+                    sharedResource.locked = false;
+                    sharedResource.owner = null;
+                }
+                updateUI();
+            }
+        }
+
+        function addOperation(threadId, op) {
+            const thread = threads.find(t => t.id === threadId);
+            if (thread) {
+                thread.addOperation(op);
+                updateUI();
+            }
+        }
+
+        function clearThreadOperations(threadId) {
+            const thread = threads.find(t => t.id === threadId);
+            if (thread) {
+                thread.operations = [];
+                thread.currentOp = 0;
+                thread.state = 'ready';
+                updateUI();
+            }
+        }
+
+        function step() {
+            let anyExecuted = false;
+            
+            threads.forEach(thread => {
+                if (thread.state === 'ready') {
+                    if (thread.executeNext()) {
+                        anyExecuted = true;
+                    }
+                }
+            });
+            
+            if (!anyExecuted) {
+                // Check if all threads are finished
+                if (threads.every(t => t.state === 'finished' || 
+                    threads.every(t => t.state === 'waiting' && t.currentOp >= t.operations.length)) {
+                    stopExecution();
+                }
+            }
+            
+            updateUI();
+            return anyExecuted;
+        }
+
+        function startExecution() {
+            if (!running) {
+                running = true;
+                intervalId = setInterval(step, speed);
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('stepBtn').disabled = true;
+            }
+        }
+
+        function stopExecution() {
+            if (running) {
+                clearInterval(intervalId);
+                running = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('stepBtn').disabled = false;
+            }
+        }
+
+        function setSpeed(newSpeed) {
+            speed = 1100 - newSpeed;
+            if (running) {
+                stopExecution();
+                startExecution();
+            }
+        }
+
+        function updateUI() {
+            // Update shared resource display
+            const resourceDiv = document.getElementById('sharedResource');
+            resourceDiv.innerHTML = `
+                <h3>Shared Resource</h3>
+                <p>Value: ${sharedResource.value}</p>
+                <p>Locked: ${sharedResource.locked ? 'Yes (Thread ' + sharedResource.owner + ')' : 'No'}</p>
+                <p>Waiting Threads: ${sharedResource.waitingThreads.join(', ') || 'None'}</p>
+            `;
+            
+            // Update threads display
+            const threadsDiv = document.getElementById('threads');
+            threadsDiv.innerHTML = '<h3>Threads</h3>';
+            
+            threads.forEach(thread => {
+                const threadDiv = document.createElement('div');
+                threadDiv.style.border = '1px solid black';
+                threadDiv.style.margin = '5px';
+                threadDiv.style.padding = '5px';
+                
+                let operationsHtml = thread.operations.map((op, idx) => 
+                    `<span style="${idx === thread.currentOp && thread.state !== 'finished' ? 'font-weight:bold;' : ''}">${op}</span>`
+                ).join(' | ');
+                
+                threadDiv.innerHTML = `
+                    <h4>Thread ${thread.id} (${thread.state})</h4>
+                    <p>Operations: ${operationsHtml}</p>
+                    <div>
+                        <button onclick="addOperation(${thread.id}, 'lock')">Add Lock</button>
+                        <button onclick="addOperation(${thread.id}, 'unlock')">Add Unlock</button>
+                        <button onclick="addOperation(${thread.id}, 'read')">Add Read</button>
+                        <button onclick="addOperation(${thread.id}, 'increment')">Add Increment</button>
+                        <button onclick="addOperation(${thread.id}, 'decrement')">Add Decrement</button>
+                        <button onclick="clearThreadOperations(${thread.id})">Clear Operations</button>
+                    </div>
+                    <div style="max-height: 100px; overflow-y: auto; border: 1px solid #ccc; padding: 5px;">
+                        ${thread.log.map(log => `<div>${log}</div>`).reverse().join('')}
+                    </div>
+                `;
+                
+                threadsDiv.appendChild(threadDiv);
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Mutex Interactive Demonstration</h1>
+    
+    <div>
+        <button onclick="addThread()">Add Thread</button>
+        <button onclick="removeThread()">Remove Thread</button>
+        <button id="startBtn" onclick="startExecution()">Start Execution</button>
+        <button id="stopBtn" onclick="stopExecution()" disabled>Stop Execution</button>
+        <button id="stepBtn" onclick="step()">Step</button>
+        <div>
+            <label>Speed: </label>
+            <input type="range" min="100" max="1000" value="500" oninput="setSpeed(this.value)">
+        </div>
+    </div>
+    
+    <div id="sharedResource"></div>
+    <div id="threads"></div>
+    
+    <div>
+        <h3>Instructions</h3>
+        <ol>
+            <li>Add one or more threads</li>
+            <li>Add operations to each thread (lock/unlock to control access to shared resource)</li>
+            <li>Run the simulation to see how mutex controls access</li>
+            <li>Watch for deadlocks when threads wait indefinitely</li>
+        </ol>
+        
+        <h3>Key Concepts</h3>
+        <ul>
+            <li><strong>Mutex</strong>: Mutual exclusion lock that prevents simultaneous access</li>
+            <li><strong>Lock</strong>: Thread acquires exclusive access to shared resource</li>
+            <li><strong>Unlock</strong>: Thread releases access to shared resource</li>
+            <li><strong>Deadlock</strong>: When threads wait indefinitely for each other</li>
+        </ul>
+    </div>
+    
+    <script>
+        // Initialize with two threads
+        addThread();
+        addThread();
+        updateUI();
+    </script>
+</body>
+</html>

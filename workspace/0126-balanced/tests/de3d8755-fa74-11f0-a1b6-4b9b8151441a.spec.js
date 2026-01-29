@@ -81,13 +81,13 @@ test.describe('Refactoring Demonstration - FSM states and transitions', () => {
 
   test('Run Refactored transition: clicking Run Refactored updates refactoredResult (S0_Idle -> S2_Refactored_Running)', async ({ page }) => {
     // Clicking 'Run Refactored' should trigger runRefactored() and update #refactoredResult
-    const expected = 'Total: $418.00 (Refactored)';
+    const expected1 = 'Total: $418.00 (Refactored)';
 
     // Ensure the runRefactored function exists on window and onclick attribute is set
     const typeofRunRefactored = await page.evaluate(() => typeof runRefactored);
     expect(typeofRunRefactored).toBe('function');
 
-    const onclickAttr = await page.$eval("button[onclick='runRefactored()']", (btn) => btn.getAttribute('onclick'));
+    const onclickAttr1 = await page.$eval("button[onclick='runRefactored()']", (btn) => btn.getAttribute('onclick'));
     expect(onclickAttr).toBe('runRefactored()');
 
     // Click and assert

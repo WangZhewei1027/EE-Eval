@@ -92,7 +92,7 @@ class SortingPage {
   async waitForCurrentStep(expected, timeout = 3000) {
     await this.page.waitForFunction(
       (sel, expectedText) => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         return el && el.textContent && el.textContent.trim() === expectedText;
       },
       this.selectors.currentStep,
@@ -104,7 +104,7 @@ class SortingPage {
   async waitForCurrentStepNotEqual(original, timeout = 3000) {
     await this.page.waitForFunction(
       (sel, originalText) => {
-        const el = document.querySelector(sel);
+        const el2 = document.querySelector(sel);
         return el && el.textContent && el.textContent.trim() !== originalText;
       },
       this.selectors.currentStep,
@@ -230,7 +230,7 @@ test.describe('Selection Sort Visualization - FSM and UI behavior', () => {
     expect(await sorting.isButtonDisabled(sorting.selectors.completeBtn)).toBeFalsy();
 
     // Array should be restored to the original ordering
-    const values = await sorting.getArrayValues();
+    const values1 = await sorting.getArrayValues();
     expect(values).toEqual([64, 25, 12, 22, 11, 35, 45, 3]);
   });
 
@@ -247,7 +247,7 @@ test.describe('Selection Sort Visualization - FSM and UI behavior', () => {
     // Click Next repeatedly until completion or until a safe iteration limit
     const maxClicks = 200; // guard to avoid infinite loops if something goes wrong
     let clicks = 0;
-    let currentText = await sorting.getCurrentStepText();
+    let currentText1 = await sorting.getCurrentStepText();
     while (currentText !== 'Sorting complete!' && clicks < maxClicks) {
       await sorting.clickNext();
       // performStep runs synchronously on click; fetch new text immediately
@@ -257,8 +257,8 @@ test.describe('Selection Sort Visualization - FSM and UI behavior', () => {
 
     expect(currentText).toBe('Sorting complete!');
     expect(clicks).toBeGreaterThan(0);
-    const finalValues = await sorting.getArrayValues();
-    const expectedSorted = [...finalValues].sort((a, b) => a - b);
+    const finalValues1 = await sorting.getArrayValues();
+    const expectedSorted1 = [...finalValues].sort((a, b) => a - b);
     expect(finalValues).toEqual(expectedSorted);
   });
 
@@ -270,7 +270,7 @@ test.describe('Selection Sort Visualization - FSM and UI behavior', () => {
     expect(isNextDisabled).toBeTruthy();
 
     // To ensure the UI does not change inadvertently, assert the current step text remains the idle text
-    const currentText = await sorting.getCurrentStepText();
+    const currentText2 = await sorting.getCurrentStepText();
     expect(currentText).toBe('Click "Start" to begin');
 
     // Confirm no page errors were produced by simply querying the page
@@ -296,7 +296,7 @@ test.describe('Selection Sort Visualization - FSM and UI behavior', () => {
     // Stop the automatic sorting by invoking Complete All after first stopping of interval (UI currently disables complete).
     // To return to a stable state for teardown, call Reset (reset is always enabled per implementation).
     await sorting.clickReset();
-    const resetText = await sorting.getCurrentStepText();
+    const resetText1 = await sorting.getCurrentStepText();
     expect(resetText).toBe('Click "Start" to begin');
   });
 });

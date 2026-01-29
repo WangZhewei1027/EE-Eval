@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Socket Programming Concepts — Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; color: #111; background: #f7f8fb; }
+    header { display:flex; align-items:center; gap:14px; margin-bottom: 18px; }
+    header h1 { margin:0; font-size:20px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .panel { background: white; border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px rgba(20,20,40,0.06); }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    label { font-weight:600; font-size:13px; margin-right:6px;}
+    input[type="text"], select, textarea { padding:7px 8px; border-radius:6px; border:1px solid #d6dbe8; background: #fff; font:inherit; }
+    button { padding:8px 10px; border-radius:6px; border:1px solid #9aa7e6; background:#2f63f6; color:white; cursor:pointer; }
+    button.secondary { background:#f0f4ff; color:#20306b; border:1px solid #d1dbff; }
+    button.warn { background:#fff6ee; color:#a84b00; border:1px solid #f6d5c3; }
+    pre { background:#0b1220; color:#cfe8ff; padding:12px; border-radius:6px; overflow:auto; max-height:300px; }
+    .log { background:#0f1724; color:#e6eefc; padding:12px; border-radius:6px; height:200px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace; font-size:13px;}
+    .muted { color:#556; font-size:13px; }
+    .small { font-size:13px; color:#334; }
+    .badge { background:#eef2ff; color:#213; padding:6px 8px; border-radius:999px; font-weight:700; font-size:12px; border:1px solid #dde6ff; }
+    .col { display:flex; flex-direction:column; gap:8px; }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .split { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .explain { font-size:13px; color:#334; line-height:1.4; }
+    footer { margin-top:18px; font-size:12px; color:#445; }
+    .status { display:inline-block; padding:6px 8px; border-radius:6px; font-weight:600; background:#f0f6ff; border:1px solid #dbeaff; color:#1b3a8a; }
+    .metric { font-weight:700; color:#0b3; }
+    input[type=number] { width:86px; padding:6px 8px; border-radius:6px; border:1px solid #d6dbe8; }
+    .codebox { background:#fafbfd; padding:10px; border-radius:6px; border:1px solid #eef2ff; font-family: ui-monospace, Menlo, monospace; font-size:13px; color:#112; overflow:auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="badge">Socket Programming Demo</div>
+    <h1>Socket Programming Concepts — WebSocket, WebRTC DataChannel & Virtual Sockets</h1>
+  </header>
+
+  <div class="grid">
+    <!-- Explanation Panel -->
+    <section class="panel">
+      <div class="explain">
+        This single-page demo illustrates core socket programming concepts:
+        - how clients and servers exchange data over persistent connections,
+        - different socket types: TCP-like streams, WebSockets (browser ↔ server), and WebRTC DataChannels (peer-to-peer),
+        - message framing, fragmentation, binary vs text data, and connection lifecycle events.
+        The demos are interactive; try the WebSocket echo server (real network), and a local WebRTC DataChannel that simulates two peers inside your browser. There's also a simple virtual socket that shows fragmentation and reassembly logic you would implement in a real TCP/UDP app.
+      </div>
+    </section>
+
+    <!-- WebSocket Panel -->
+    <section class="panel">
+      <h2 style="margin-top:0">WebSocket (network socket-like) — Client to an Echo Server</h2>
+      <div class="row">
+        <label for="wsUrl">Server URL</label>
+        <input id="wsUrl" type="text" value="wss://echo.websocket.events" style="flex:1" />
+        <button id="wsToggle">Connect</button>
+        <button id="wsClear" class="secondary">Clear Log</button>
+        <div style="margin-left:auto" class="small">State: <span id="wsState" class="status">closed</span></div>
+      </div>
+      <div style="margin-top:10px" class="row">
+        <input id="wsMessage" type="text" placeholder="Message to send" style="flex:1" />
+        <button id="wsSend">Send</button>
+        <button id="wsSendBinary" class="secondary">Send Binary</button>
+      </div>
+      <div style="margin-top:10px" class="row">
+        <div class="muted">Bytes sent: <span id="wsSent">0</span></div>
+        <div class="muted" style="margin-left:12px">Bytes received: <span id="wsRecv">0</span></div>
+        <div class="muted" style="margin-left:12px">Messages received: <span id="wsMsgs">0</span></div>
+      </div>
+      <div style="margin-top:12px" class="log" id="wsLog" aria-live="polite"></div>
+    </section>
+
+    <!-- WebRTC DataChannel Panel -->
+    <section class="panel">
+      <h2 style="margin-top:0">WebRTC DataChannel (peer-to-peer) — Two Local Peers</h2>
+      <div class="row">
+        <button id="createConn">Create Local Peers</button>
+        <button id="closeConn" class="secondary">Close Peers</button>
+        <div style="margin-left:auto" class="muted">DataChannel is bidirectional; this page creates both peers locally so you can inspect events and exchange messages like sockets.</div>
+      </div>
+      <div style="margin-top:10px" class="split">
+        <div>
+          <h4 style="margin:6px 0">Peer A</h4>
+          <div class="row">
+            <input id="aMsg" type="text" placeholder="Message from A" style="flex:1"/>
+            <button id="aSend">Send A→B</button>
+            <button id="aBin" class="secondary">Send Binary</button>
+          </div>
+          <div style="margin-top:8px" class="log" id="aLog"></div>
+        </div>
+        <div>
+          <h4 style="margin:6px 0">Peer B</h4>
+          <div class="row">
+            <input id="bMsg" type="text" placeholder="Message from B" style="flex:1"/>
+            <button id="bSend">Send B→A</button>
+            <button id="bBin" class="secondary">Send Binary</button>
+          </div>
+          <div style="margin-top:8px" class="log" id="bLog"></div>
+        </div>
+      </div>
+      <div style="margin-top:10px" class="muted">Connection states: <span id="pcState">none</span></div>
+    </section>
+
+    <!-- Virtual Socket Panel -->
+    <section class="panel">
+      <h2 style="margin-top:0">Virtual Socket — Simulate Fragmentation & Framing</h2>
+      <div class="explain">
+        This demonstrates how a length-prefixed framing protocol reassembles fragmented TCP messages.
+        You can send a long message, configure a small MTU to force fragmentation, and see how the receiver reassembles complete logical messages.
+      </div>
+      <div style="margin-top:8px" class="row">
+        <label>MTU (bytes)</label>
+        <input id="mtu" type="number" min="8" value="16" />
+        <label style="margin-left:8px">Fragment Delay (ms)</label>
+        <input id="fragDelay" type="number" min="0" value="120" />
+        <button id="vsCreate">Create Virtual Socket</button>
+        <button id="vsClose" class="secondary">Close</button>
+      </div>
+      <div style="margin-top:8px" class="row">
+        <input id="vsMsg" type="text" placeholder="Logical message to send" style="flex:1" />
+        <button id="vsSend">Send</button>
+      </div>
+      <div style="margin-top:10px" class="split">
+        <div>
+          <h4 style="margin:6px 0">Sender (fragments shown)</h4>
+          <div class="log" id="vsSendLog"></div>
+        </div>
+        <div>
+          <h4 style="margin:6px 0">Receiver (reassembly)</h4>
+          <div class="log" id="vsRecvLog"></div>
+        </div>
+      </div>
+      <div style="margin-top:10px" class="codebox">
+        <strong>Length-prefixed framing (concept)</strong><br>
+        Before sending: prefix each message with a fixed-size length header (e.g. 2 or 4 bytes). The receiver reads bytes until the length header is complete, then reads the declared payload size, even if it arrives in fragments.
+        This demo uses a 2-byte big-endian length prefix.
+      </div>
+    </section>
+
+    <!-- Node.js Example Panel -->
+    <section class="panel">
+      <h2 style="margin-top:0">Server & Client (Node.js) — Raw TCP Example</h2>
+      <div class="explain">
+        The browser cannot open raw TCP sockets, but below is a small Node.js example using the net module showing how a TCP server and client work. Run on your machine to test real sockets.
+      </div>
+      <pre>
+/* TCP server (Node.js)
+const net = require('net');
+const server = net.createServer(socket =&gt; {
+  console.log('client connected', socket.remoteAddress);
+  socket.on('data', data =&gt; {
+    console.log('received:', data.toString());
+    // echo back
+    socket.write(Buffer.from('Echo: ' + data.toString()));
+  });
+  socket.on('close', () =&gt; console.log('client closed'));
+});
+server.listen(9000, () =&gt; console.log('listening on 9000'));
+
+
+/* TCP client (Node.js)
+const net = require('net');
+const client = net.createConnection({ port: 9000 }, () =&gt; {
+  console.log('connected to server');
+  client.write('Hello server!');
+});
+client.on('data', data =&gt; {
+  console.log('server says:', data.toString());
+  client.end();
+});
+client.on('end', () =&gt; console.log('disconnected'));
+*/
+      </pre>
+    </section>
+
+    <footer>
+      Note: WebSocket demo uses public echo server wss://echo.websocket.events (may be rate-limited). WebRTC DataChannel here creates both peers locally (no STUN required for local loopback) and thus works entirely in your browser. The virtual socket demonstrates framing and fragmentation logic used in socket programming.
+    </footer>
+  </div>
+
+  <script>
+    // Utility: append to log
+    function appendLog(el, text, opts = {}) {
+      const d = document.createElement('div');
+      d.style.whiteSpace = 'pre-wrap';
+      d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+      if (opts.color) d.style.color = opts.color;
+      el.appendChild(d);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // ---------- WebSocket Demo ----------
+    (function(){
+      const wsUrlInput = document.getElementById('wsUrl');
+      const wsToggle = document.getElementById('wsToggle');
+      const wsState = document.getElementById('wsState');
+      const wsLog = document.getElementById('wsLog');
+      const wsSend = document.getElementById('wsSend');
+      const wsSendBinary = document.getElementById('wsSendBinary');
+      const wsMessage = document.getElementById('wsMessage');
+      const wsClear = document.getElementById('wsClear');
+      const wsSent = document.getElementById('wsSent');
+      const wsRecv = document.getElementById('wsRecv');
+      const wsMsgs = document.getElementById('wsMsgs');
+
+      let socket = null;
+      let bytesSent = 0, bytesRecv = 0, msgs = 0;
+
+      function setState(s) {
+        wsState.textContent = s;
+      }
+
+      function connect() {
+        const url = wsUrlInput.value.trim();
+        if (!url) return alert('Enter WebSocket server URL');
+        appendLog(wsLog, 'Connecting to ' + url + ' ...');
+        try {
+          socket = new WebSocket(url);
+        } catch (e) {
+          appendLog(wsLog, 'Failed to construct WebSocket: ' + e, {color:'#f66'});
+          return;
+        }
+        socket.binaryType = 'arraybuffer';
+        setState('connecting');
+        wsToggle.textContent = 'Disconnect';
+
+        socket.addEventListener('open', () => {
+          appendLog(wsLog, 'OPEN');
+          setState('open');
+        });
+        socket.addEventListener('message', ev => {
+          let payload = ev.data;
+          if (payload instanceof ArrayBuffer) {
+            const view = new Uint8Array(payload);
+            bytesRecv += view.byteLength;
+            appendLog(wsLog, 'RECV (binary) ' + view.byteLength + ' bytes: ' + bytesToHex(view));
+          } else {
+            bytesRecv += new TextEncoder().encode(payload).length;
+            appendLog(wsLog, 'RECV (text): ' + payload);
+          }
+          msgs++;
+          wsRecv.textContent = bytesRecv;
+          wsMsgs.textContent = msgs;
+        });
+        socket.addEventListener('close', ev => {
+          appendLog(wsLog, 'CLOSE (' + (ev.code||'') + ')');
+          setState('closed');
+          wsToggle.textContent = 'Connect';
+        });
+        socket.addEventListener('error', ev => {
+          appendLog(wsLog, 'ERROR', {color:'#f66'});
+        });
+      }
+
+      function disconnect() {
+        if (socket) {
+          socket.close();
+          socket = null;
+          setState('closed');
+          wsToggle.textContent = 'Connect';
+        }
+      }
+
+      wsToggle.addEventListener('click', () => {
+        if (!socket || socket.readyState === WebSocket.CLOSED) connect();
+        else disconnect();
+      });
+
+      wsSend.addEventListener('click', () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return alert('Socket not open');
+        const text = wsMessage.value;
+        socket.send(text);
+        const size = new TextEncoder().encode(text).length;
+        bytesSent += size;
+        wsSent.textContent = bytesSent;
+        appendLog(wsLog, 'SENT (text): ' + text);
+      });
+
+      wsSendBinary.addEventListener('click', () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return alert('Socket not open');
+        // Example binary payload: current timestamp + random bytes
+        const buf = new Uint8Array(12);
+        const view = new DataView(buf.buffer);
+        view.setFloat64(0, Date.now());
+        crypto.getRandomValues(buf.subarray(8));
+        socket.send(buf.buffer);
+        bytesSent += buf.byteLength;
+        wsSent.textContent = bytesSent;
+        appendLog(wsLog, 'SENT (binary) ' + buf.byteLength + ' bytes: ' + bytesToHex(buf));
+      });
+
+      wsClear.addEventListener('click', () => {
+        wsLog.innerHTML = '';
+        bytesRecv = bytesSent = msgs = 0;
+        wsRecv.textContent = 0; wsSent.textContent = 0; wsMsgs.textContent = 0;
+      });
+
+      function bytesToHex(arr) {
+        return Array.from(new Uint8Array(arr)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+      }
+    })();
+
+    // ---------- WebRTC DataChannel Demo ----------
+    (function(){
+      const createBtn = document.getElementById('createConn');
+      const closeBtn = document.getElementById('closeConn');
+      const aSendBtn = document.getElementById('aSend');
+      const bSendBtn = document.getElementById('bSend');
+      const aBinBtn = document.getElementById('aBin');
+      const bBinBtn = document.getElementById('bBin');
+      const aMsg = document.getElementById('aMsg');
+      const bMsg = document.getElementById('bMsg');
+      const aLog = document.getElementById('aLog');
+      const bLog = document.getElementById('bLog');
+      const pcState = document.getElementById('pcState');
+
+      let pc1 = null, pc2 = null;
+      let dc1 = null, dc2 = null;
+
+      function reset() {
+        if (pc1) { pc1.close(); pc1 = null; }
+        if (pc2) { pc2.close(); pc2 = null; }
+        dc1 = dc2 = null;
+        aLog.innerHTML = ''; bLog.innerHTML = '';
+        pcState.textContent = 'none';
+      }
+
+      async function createPeers() {
+        reset();
+        pcState.textContent = 'creating';
+        pc1 = new RTCPeerConnection();
+        pc2 = new RTCPeerConnection();
+
+        // local event logging
+        pc1.oniceconnectionstatechange = () => updateState();
+        pc2.oniceconnectionstatechange = () => updateState();
+
+        // Create channel on pc1 (A→B)
+        dc1 = pc1.createDataChannel('channel');
+        dc1.onopen = () => appendLog(aLog, 'DataChannel OPEN (A)');
+        dc1.onclose = () => appendLog(aLog, 'DataChannel CLOSED (A)');
+        dc1.onmessage = (ev) => {
+          const data = ev.data;
+          if (data instanceof ArrayBuffer) appendLog(aLog, 'RECV (binary) ' + (new Uint8Array(data)).length + ' bytes');
+          else appendLog(aLog, 'RECV: ' + data);
+        };
+
+        // pc2: react to incoming channel
+        pc2.ondatachannel = (e) => {
+          dc2 = e.channel;
+          dc2.onopen = () => appendLog(bLog, 'DataChannel OPEN (B)');
+          dc2.onclose = () => appendLog(bLog, 'DataChannel CLOSED (B)');
+          dc2.onmessage = ev => {
+            const data = ev.data;
+            if (data instanceof ArrayBuffer) appendLog(bLog, 'RECV (binary) ' + (new Uint8Array(data)).length + ' bytes');
+            else appendLog(bLog, 'RECV: ' + data);
+          };
+        };
+
+        // Simple ICE candidate exchange local-only:
+        pc1.onicecandidate = e => { if (e.candidate) pc2.addIceCandidate(e.candidate).catch(err => console.warn(err)); };
+        pc2.onicecandidate = e => { if (e.candidate) pc1.addIceCandidate(e.candidate).catch(err => console.warn(err)); };
+
+        // Create offer/answer
+        const offer = await pc1.createOffer();
+        await pc1.setLocalDescription(offer);
+        await pc2.setRemoteDescription(offer);
+        const answer = await pc2.createAnswer();
+        await pc2.setLocalDescription(answer);
+        await pc1.setRemoteDescription(answer);
+
+        updateState();
+      }
+
+      function updateState() {
+        const s1 = pc1 ? pc1.iceConnectionState : 'none';
+        const s2 = pc2 ? pc2.iceConnectionState : 'none';
+        pcState.textContent = 'pc1: ' + s1 + ' | pc2: ' + s2;
+      }
+
+      createBtn.addEventListener('click', createPeers);
+      closeBtn.addEventListener('click', reset);
+
+      aSendBtn.addEventListener('click', () => {
+        if (!dc1 || dc1.readyState !== 'open') return alert('DataChannel not open');
+        dc1.send(aMsg.value);
+        appendLog(aLog, 'SENT: ' + aMsg.value);
+      });
+      bSendBtn.addEventListener('click', () => {
+        if (!dc2 || dc2.readyState !== 'open') return alert('DataChannel not open');
+        dc2.send(bMsg.value);
+        appendLog(bLog, 'SENT: ' + bMsg.value);
+      });
+
+      aBinBtn.addEventListener('click', () => {
+        if (!dc1 || dc1.readyState !== 'open') return alert('DataChannel not open');
+        const arr = new Uint8Array(20);
+        crypto.getRandomValues(arr);
+        dc1.send(arr.buffer);
+        appendLog(aLog, 'SENT (binary) 20 bytes');
+      });
+      bBinBtn.addEventListener('click', () => {
+        if (!dc2 || dc2.readyState !== 'open') return alert('DataChannel not open');
+        const arr = new Uint8Array(12);
+        crypto.getRandomValues(arr);
+        dc2.send(arr.buffer);
+        appendLog(bLog, 'SENT (binary) 12 bytes');
+      });
+    })();
+
+    // ---------- Virtual Socket (length-prefixed fragmentation) ----------
+    (function(){
+      const mtuInput = document.getElementById('mtu');
+      const fragDelayInput = document.getElementById('fragDelay');
+      const vsCreate = document.getElementById('vsCreate');
+      const vsClose = document.getElementById('vsClose');
+      const vsSendBtn = document.getElementById('vsSend');
+      const vsMsgInput = document.getElementById('vsMsg');
+      const vsSendLog = document.getElementById('vsSendLog');
+      const vsRecvLog = document.getElementById('vsRecvLog');
+
+      let running = false;
+      let sender = null, receiver = null;
+
+      // VirtualSocket simulates sending bytes over a "wire" that fragments based on MTU and delay.
+      class VirtualSocket {
+        constructor({mtu=16, delay=80, onRecv=null}) {
+          this.mtu = mtu;
+          this.delay = delay;
+          this.onRecv = onRecv;
+          this._readBuffer = new Uint8Array(0); // bytes that have arrived but not yet processed
+        }
+        // sendLogical: will prefix message with 2-byte length, then fragment into MTU-sized chunks,
+        // and deliver fragments asynchronously to the receiver._receiveFragment
+        sendLogical(msg) {
+          // encode message
+          const payload = new TextEncoder().encode(msg);
+          const len = payload.length;
+          // 2-byte big-endian header
+          const header = new Uint8Array(2);
+          header[0] = (len >> 8) & 0xff;
+          header[1] = (len & 0xff);
+          const framed = new Uint8Array(2 + len);
+          framed.set(header, 0);
+          framed.set(payload, 2);
+
+          // fragment the framed bytes
+          const chunks = [];
+          for (let i=0;i<framed.length;i+=this.mtu) {
+            chunks.push(framed.slice(i, i+this.mtu));
+          }
+          // schedule delivery
+          chunks.forEach((chunk, idx) => {
+            const t = idx * this.delay;
+            setTimeout(() => {
+              if (this.onRecv) this.onRecv(chunk);
+            }, t);
+          });
+          return chunks;
+        }
+        // receiver side: add bytes and try to reassemble messages
+        receiveFragment(bytes) {
+          // append
+          const newBuf = new Uint8Array(this._readBuffer.length + bytes.length);
+          newBuf.set(this._readBuffer, 0);
+          newBuf.set(bytes, this._readBuffer.length);
+          this._readBuffer = newBuf;
+          const messages = [];
+          // parse as many complete length-prefixed messages as available
+          while (this._readBuffer.length >= 2) {
+            const view = new DataView(this._readBuffer.buffer, this._readBuffer.byteOffset, this._readBuffer.byteLength);
+            const len = view.getUint16(0);
+            if (this._readBuffer.length >= 2 + len) {
+              const msgBytes = this._readBuffer.slice(2, 2+len);
+              const text = new TextDecoder().decode(msgBytes);
+              messages.push(text);
+              // drop consumed bytes
+              this._readBuffer = this._readBuffer.slice(2+len);
+            } else {
+              // wait for more
+              break;
+            }
+          }
+          return messages;
+        }
+      }
+
+      function create() {
+        const mtu = Number(mtuInput.value) || 16;
+        const delay = Number(fragDelayInput.value) || 80;
+        vsSendLog.innerHTML = ''; vsRecvLog.innerHTML = '';
+        // receiver object
+        receiver = new VirtualSocket({mtu, delay, onRecv: (frag) => {
+          appendLog(vsSendLog, 'FRAG SENT ('+frag.length+' bytes): ' + bytesToHex(frag));
+          // deliver to receiver.receiveFragment after a tiny network delay
+          setTimeout(() => {
+            appendLog(vsRecvLog, 'FRAG RECV ('+frag.length+' bytes): ' + bytesToHex(frag));
+            const msgs = receiver.receiveFragment(frag);
+            msgs.forEach(m => appendLog(vsRecvLog, 'REASSEMBLED MSG: ' + m));
+          }, 10);
+        }});
+        running = true;
+        appendLog(vsSendLog, 'Virtual socket created (MTU=' + mtu + ', delay=' + delay + 'ms)');
+        appendLog(vsRecvLog, 'Receiver ready');
+      }
+
+      function close() {
+        running = false;
+        receiver = null;
+        appendLog(vsSendLog, 'Closed');
+        appendLog(vsRecvLog, 'Closed');
+      }
+
+      vsCreate.addEventListener('click', create);
+      vsClose.addEventListener('click', close);
+
+      vsSendBtn.addEventListener('click', () => {
+        if (!receiver) return alert('Create virtual socket first');
+        const text = vsMsgInput.value;
+        if (!text) return alert('Enter message');
+        const mtu = Number(mtuInput.value) || 16;
+        const delay = Number(fragDelayInput.value) || 80;
+        // Use a temporary sender just to compute chunks; we reuse receiver.onRecv to accept fragments.
+        const senderTmp = new VirtualSocket({mtu, delay, onRecv: (frag) => {
+          // when sender "sends" a fragment, we schedule the receiver to get it (onRecv defined in create)
+        }});
+        // But in create() we already configured receiver.onRecv to log and deliver to receiver.receiveFragment.
+        // We'll call receiver.onRecv for each chunk to simulate network send.
+        const chunks = senderTmp.sendLogical(text);
+        // Instead of relying solely on senderTmp.onRecv, call receiver.onRecv per chunk with same timing
+        chunks.forEach((chunk, idx) => {
+          setTimeout(() => {
+            // Simulate sending the fragment through the wire to receiver
+            if (receiver && receiver.onRecv) receiver.onRecv(chunk);
+          }, idx * delay);
+        });
+      });
+
+      function bytesToHex(arr) {
+        return Array.from(new Uint8Array(arr)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+      }
+    })();
+
+  </script>
+</body>
+</html>

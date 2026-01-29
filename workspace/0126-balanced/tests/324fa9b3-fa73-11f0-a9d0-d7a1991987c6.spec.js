@@ -136,7 +136,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
 
   test('Transition S0_Idle -> S1_ObjectCreated via Create Object click', async ({ page }) => {
     // Validate clicking Create Object transitions to "Object Created" state.
-    const app = new GarbagePage(page);
+    const app1 = new GarbagePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -168,7 +168,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
 
   test('Transition S1_ObjectCreated -> S2_ObjectDereferenced via Make Object Null click', async ({ page }) => {
     // Click create then make null and validate dereference state
-    const app = new GarbagePage(page);
+    const app2 = new GarbagePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -201,7 +201,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
 
   test('Edge case: clicking Make Object Null before Create Object (dereference without prior creation)', async ({ page }) => {
     // Validate making null when no object exists does not throw and still shows dereference message
-    const app = new GarbagePage(page);
+    const app3 = new GarbagePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -220,7 +220,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
     expect(after).toEqual({ type: 'null' });
 
     // Console should include the dereference message
-    const derefLog = await app.waitForConsoleMessage(
+    const derefLog1 = await app.waitForConsoleMessage(
       (m) => typeof m.text === 'string' && m.text.includes('Object dereferenced.'),
       2000
     );
@@ -234,7 +234,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
 
   test('Robustness: multiple Create Object clicks remain consistent and do not produce errors', async ({ page }) => {
     // Validate repeated creation is idempotent for this UI and does not produce runtime errors.
-    const app = new GarbagePage(page);
+    const app4 = new GarbagePage(page);
     await app.attachListeners();
     await app.goto();
 
@@ -254,7 +254,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
     expect(myObj.snapshot.name).toBe('Garbage Collector');
 
     // Console should contain at least one log with the object's name
-    const objLog = await app.waitForConsoleMessage(
+    const objLog1 = await app.waitForConsoleMessage(
       (m) => typeof m.text === 'string' && m.text.includes('Garbage Collector'),
       2000
     );
@@ -269,7 +269,7 @@ test.describe('Garbage Collection Interactive App (FSM validation)', () => {
   test('Verify that no unexpected ReferenceError / SyntaxError related to missing FSM actions (renderPage) occurs', async ({ page }) => {
     // The FSM mentions an entry action renderPage() for Idle but the implementation does not call renderPage.
     // We assert that the page does not throw a ReferenceError complaining about renderPage being missing.
-    const app = new GarbagePage(page);
+    const app5 = new GarbagePage(page);
     await app.attachListeners();
     await app.goto();
 

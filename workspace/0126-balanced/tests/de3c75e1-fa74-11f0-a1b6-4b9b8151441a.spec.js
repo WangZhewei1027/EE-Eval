@@ -35,13 +35,13 @@ class TwoPointersPage {
   }
 
   async getExecuteOnclickAttr() {
-    const btn = await this.getExecuteButton();
+    const btn1 = await this.getExecuteButton();
     if (!btn) return null;
     return this.page.evaluate(el => el.getAttribute('onclick'), btn);
   }
 
   async clickExecute() {
-    const btn = await this.getExecuteButton();
+    const btn2 = await this.getExecuteButton();
     if (!btn) throw new Error('Execute button not found');
     await btn.click();
   }
@@ -112,7 +112,7 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     expect(title).toContain('Two Pointers Technique');
 
     // Verify presence of the Execute button and its attributes
-    const btn = await model.getExecuteButton();
+    const btn3 = await model.getExecuteButton();
     expect(btn).not.toBeNull();
     const btnText = await model.getExecuteButtonText();
     expect(btnText.trim()).toBe('Execute');
@@ -148,7 +148,7 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     // This test validates the transition S0_Idle -> S1_Executing:
     // - Clicking the #execute button should attempt to run executeAlgorithm()
     // - We observe console/page errors indicating the invocation or failing call
-    const model = new TwoPointersPage(page, consoleMessages, pageErrors);
+    const model1 = new TwoPointersPage(page, consoleMessages, pageErrors);
 
     await model.goto();
 
@@ -167,7 +167,7 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     expect(urlAfter).toBe(APP_URL);
 
     // The onclick attribute should still be present
-    const onclickAttr = await model.getExecuteOnclickAttr();
+    const onclickAttr1 = await model.getExecuteOnclickAttr();
     expect(onclickAttr).toBeTruthy();
     expect(onclickAttr.replace(/\s/g, '')).toContain('executeAlgorithm()');
 
@@ -199,7 +199,7 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     }
 
     // Validate that the button still exists and is interactable after click
-    const btn = await model.getExecuteButton();
+    const btn4 = await model.getExecuteButton();
     expect(btn).not.toBeNull();
   });
 
@@ -207,12 +207,12 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     // This test performs multiple rapid clicks on the Execute button to emulate edge usage.
     // Validate the app does not navigate away and that repeated clicks either produce repeated errors
     // or the error messages are stable. We assert that error patterns are observed.
-    const model = new TwoPointersPage(page, consoleMessages, pageErrors);
+    const model2 = new TwoPointersPage(page, consoleMessages, pageErrors);
 
     await model.goto();
 
     // Ensure button exists
-    const btn = await model.getExecuteButton();
+    const btn5 = await model.getExecuteButton();
     expect(btn).not.toBeNull();
 
     // Click multiple times rapidly
@@ -227,8 +227,8 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     }
 
     // After multiple clicks, collect errors and console logs
-    const afterErrors = model.getPageErrors();
-    const afterConsole = model.getConsoleMessages();
+    const afterErrors1 = model.getPageErrors();
+    const afterConsole1 = model.getConsoleMessages();
 
     // Combine and search for known problematic patterns
     const combined = [
@@ -243,7 +243,7 @@ test.describe('Two Pointers Technique - FSM validation', () => {
     expect(await model.currentUrl()).toBe(APP_URL);
 
     // Validate that the button text remains 'Execute' if it still exists
-    const btnText = await model.getExecuteButtonText();
+    const btnText1 = await model.getExecuteButtonText();
     if (btnText !== null) {
       expect(btnText.trim()).toBe('Execute');
     }

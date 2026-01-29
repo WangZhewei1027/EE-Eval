@@ -104,7 +104,7 @@ test.describe('d3d54d81-fa73-11f0-83e0-8d7be1d51901 - BST Interactive Demo (FSM 
     expect(exists15).not.toBeNull();
 
     // Log should contain insert messages
-    const logText = await page.locator('#log').innerText();
+    const logText1 = await page.locator('#log').innerText();
     expect(/Insert/.test(logText) || /Inserted/.test(logText)).toBeTruthy();
   });
 
@@ -190,7 +190,7 @@ test.describe('d3d54d81-fa73-11f0-83e0-8d7be1d51901 - BST Interactive Demo (FSM 
     expect(node40After).toBeNull();
 
     // Log should reflect deletions
-    const logText = await page.locator('#log').innerText();
+    const logText2 = await page.locator('#log').innerText();
     expect(/Deleted/.test(logText) || /Deleted leaf|Deleted \(one child\)/i.test(logText)).toBeTruthy();
   });
 
@@ -210,7 +210,7 @@ test.describe('d3d54d81-fa73-11f0-83e0-8d7be1d51901 - BST Interactive Demo (FSM 
     const inputAfterClear = await page.locator('#valueInput').inputValue();
     expect(inputAfterClear).toBe('');
 
-    const logText = await page.locator('#log').innerText();
+    const logText3 = await page.locator('#log').innerText();
     expect(logText).toBe(''); // logBox.innerHTML is set to '' on clearAll()
   });
 
@@ -221,7 +221,7 @@ test.describe('d3d54d81-fa73-11f0-83e0-8d7be1d51901 - BST Interactive Demo (FSM 
     // Wait for the insertion to finish by waiting for at least 5 nodes (the code inserts between 5 and 11)
     await page.waitForFunction(() => document.querySelectorAll('svg g.node').length >= 5, null, { timeout: 15000 });
 
-    const nodeCount = await page.evaluate(() => document.querySelectorAll('svg g.node').length);
+    const nodeCount1 = await page.evaluate(() => document.querySelectorAll('svg g.node').length);
     expect(nodeCount).toBeGreaterThanOrEqual(5);
   });
 
@@ -250,7 +250,7 @@ test.describe('d3d54d81-fa73-11f0-83e0-8d7be1d51901 - BST Interactive Demo (FSM 
     // Post-order
     await page.click('#postorderBtn');
     await page.waitForTimeout(200);
-    const lastDialog = dialogs[dialogs.length - 1];
+    const lastDialog1 = dialogs[dialogs.length - 1];
     expect(/Post-order traversal/i.test(lastDialog) || /Post-order traversal/i.test(dialogs[dialogs.length - 2])).toBeTruthy();
     const logTextPostorder = await page.locator('#log').innerText();
     expect(/Post-order:/.test(logTextPostorder)).toBeTruthy();

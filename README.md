@@ -43,6 +43,12 @@ node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt
 node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
 
 
+node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0128-test" -q "./question-list-short.json"
+
+
+
+
+
 # --- 0126-biased ---- 生成3轮
 
 node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
@@ -76,8 +82,28 @@ node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mi
 # 补充生成 Ideal FSM
 node batch-workflow.mjs -c 100 --ideal-fsm -w "batch-1207" -q "./question-list.json"
 
-node batch-workflow.mjs -c 100 --ideal-fsm -w "batch-1210-subtest2" -q "./question-list.json"
+node batch-workflow.mjs -c 100 --ideal-fsm -w "0126-balanced" -q "./question-list.json"
 
+
+
+
+
+# =================================== Screenshot Capture ==========================================
+# 批量截图工具 - 为所有HTML文件生成截图
+node capture-screenshots.mjs workspace/0126-balanced --workers 20
+node capture-screenshots.mjs workspace/0126-biased --workers 50
+
+
+
+
+# =================================== VLM Evaluation ===============================================
+# VLM评估工具 - 使用Vision API评估截图（视觉质量 + 教学质量）
+node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-balanced"
+node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-biased"
+
+
+# VLM结果查看器 - 在浏览器中查看所有评估结果
+# 然后打开: http://localhost:5500/vlm-viewer.html?workspace=0126-balanced
 
 
 
@@ -88,6 +114,7 @@ node validate-tests.mjs workspace/{workspace}
 
 # 运行Playwright Test Baseline: (10+ min)
 npx playwright test workspace/{workspace}/tests/ --workers=100
+npx playwright test workspace/0126-balanced/tests/ --workers=10
 
 # 统计测试结果:
 node analyze-pass-rate.mjs workspace/{workspace}
@@ -104,12 +131,23 @@ node test-embedding.mjs
 # batch-similarity-eval.mjs
 # lib\fsm-similarity.mjs
 node batch-similarity-eval.mjs aied
+
+node batch-similarity-eval.mjs 0126-balanced
+node batch-similarity-eval.mjs 0126-biased
+
+
+
+
 # output: 各文件夹内 fsm-similarity-results.json
 
 # # =================================== 结果分析 ==========================================
 node analyze-fsm-differentiation.mjs workspace\aied
 node analyze-correlation.mjs workspace\aied
 node analyze-fsm-dimensions.mjs workspace\aied
+
+node analyze-fsm-differentiation.mjs workspace\0126-balanced
+node analyze-correlation.mjs workspace\0126-balanced
+node analyze-fsm-dimensions.mjs workspace\0126-balanced
 
 
 

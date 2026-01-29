@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Random Forest Interactive Demo</title>
+    <script>
+        // Global state
+        let state = {
+            nTrees: 10,
+            maxDepth: 5,
+            minSamplesSplit: 2,
+            nSamples: 100,
+            noiseLevel: 0.1,
+            datasetType: 'moons',
+            currentTree: 0,
+            showAllTrees: false,
+            showDecisionBoundary: true,
+            showSamples: true,
+            showTreeStructure: false
+        };
+
+        // Data
+        let samples = [];
+        let labels = [];
+        let trees = [];
+        let predictions = [];
+
+        // DOM elements
+        let canvas, ctx;
+        let treeCanvas, treeCtx;
+
+        // Initialize
+        window.onload = function() {
+            canvas = document.getElementById('mainCanvas');
+            ctx = canvas.getContext('2d');
+            treeCanvas = document.getElementById('treeCanvas');
+            treeCtx = treeCanvas.getContext('2d');
+            
+            generateData();
+            trainModel();
+            render();
+            
+            // Set up event listeners
+            document.getElementById('nTrees').addEventListener('input', updateNTrees);
+            document.getElementById('maxDepth').addEventListener('input', updateMaxDepth);
+            document.getElementById('minSamplesSplit').addEventListener('input', updateMinSamplesSplit);
+            document.getElementById('nSamples').addEventListener('input', updateNSamples);
+            document.getElementById('noiseLevel').addEventListener('input', updateNoiseLevel);
+            document.getElementById('datasetType').addEventListener('change', updateDatasetType);
+            document.getElementById('currentTree').addEventListener('input', updateCurrentTree);
+            document.getElementById('showAllTrees').addEventListener('change', toggleShowAllTrees);
+            document.getElementById('showDecisionBoundary').addEventListener('change', toggleShowDecisionBoundary);
+            document.getElementById('showSamples').addEventListener('change', toggleShowSamples);
+            document.getElementById('showTreeStructure').addEventListener('change', toggleShowTreeStructure);
+            document.getElementById('trainBtn').addEventListener('click', retrainModel);
+            document.getElementById('generateDataBtn').addEventListener('click', regenerateData);
+        };
+
+        // Data generation
+        function generateData() {
+            samples = [];
+            labels = [];
+            
+            if (state.datasetType === 'moons') {
+                generateMoons();
+            } else if (state.datasetType === 'circles') {
+                generateCircles();
+            } else if (state.datasetType === 'blobs') {
+                generateBlobs();
+            } else if (state.datasetType === 'xor') {
+                generateXOR();
+            }
+            
+            // Add noise
+            for (let i = 0; i < samples.length; i++) {
+                samples[i][0] += (Math.random() - 0.5) * state.noiseLevel;
+                samples[i][1] += (Math.random() - 0.5) * state.noiseLevel;
+            }
+        }
+
+        function generateMoons() {
+            for (let i = 0; i < state.nSamples; i++) {
+                const angle = Math.PI * Math.random();
+                const radius = 0.4 + 0.1 * Math.random();
+                
+                if (i < state.nSamples / 2) {
+                    samples.push([radius * Math.cos(angle) + 0.5, radius * Math.sin(angle) + 0.5]);
+                    labels.push(0);
+                } else {
+                    samples.push([radius * Math.cos(angle) + 1.5, radius * Math.sin(angle) + 0.5]);
+                    labels.push(1);
+                }
+            }
+        }
+
+        function generateCircles() {
+            for (let i = 0; i < state.nSamples; i++) {
+                const angle = 2 * Math.PI * Math.random();
+                const radius = 0.1 + 0.3 * Math.random();
+                
+                if (i < state.nSamples / 2) {
+                    samples.push([radius * Math.cos(angle) + 0.5, radius * Math.sin(angle) + 0.5]);
+                    labels.push(0);
+                } else {
+                    samples.push([radius * Math.cos(angle) + 0.5, radius * Math.sin(angle) + 0.5]);
+                    labels.push(1);
+                }
+            }
+        }
+
+        function generateBlobs() {
+            for (let i = 0; i < state.nSamples; i++) {
+                if (i < state.nSamples / 2) {
+                    samples.push([0.3 + 0.2 * Math.random(), 0.3 + 0.4 * Math.random()]);
+                    labels.push(0);
+                } else {
+                    samples.push([0.7 + 0.2 * Math.random(), 0.3 + 0.4 * Math.random()]);
+                    labels.push(1);
+                }
+            }
+        }
+
+        function generateXOR() {
+            for (let i = 0; i < state.nSamples; i++) {
+                if (i < state.nSamples / 2) {
+                    if (Math.random() < 0.5) {
+                        samples.push([0.2 + 0.2 * Math.random(), 0.2 + 0.2 * Math.random()]);
+                    } else {
+                        samples.push([0.6 + 0.2 * Math.random(), 0.6 + 0.2 * Math.random()]);
+                    }
+                    labels.push(0);
+                } else {
+                    if (Math.random() < 0.5) {
+                        samples.push([0.6 + 0.2 * Math.random(), 0.2 + 0.2 * Math.random()]);
+                    } else {
+                        samples.push([0.2 + 0.2 * Math.random(), 0.6 + 0.2 * Math.random()]);
+                    }
+                    labels.push(1);
+                }
+            }
+        }
+
+        // Decision Tree implementation
+        class DecisionTree {
+            constructor(maxDepth, minSamplesSplit) {
+                this.maxDepth = maxDepth;
+                this.minSamplesSplit = minSamplesSplit;
+                this.root = null;
+            }
+
+            fit(X, y) {
+                this.root = this.buildTree(X, y, 0);
+            }
+
+            buildTree(X, y, depth) {
+                const nSamples = X.length;
+                const nFeatures = X[0].length;
+                const nClasses = new Set(y).size;
+
+                // Stopping conditions
+                if (depth >= this.maxDepth || nSamples < this.minSamplesSplit || nClasses === 1) {
+                    return {
+                        isLeaf: true,
+                        class: this.majorityVote(y),
+                        samples: nSamples
+                    };
+                }
+
+                // Find best split
+                let bestSplit = this.findBestSplit(X, y, nFeatures);
+
+                // If no split improves purity
+                if (bestSplit.gain <= 0) {
+                    return {
+                        isLeaf: true,
+                        class: this.majorityVote(y),
+                        samples: nSamples
+                    };
+                }
+
+                // Split the data
+                const leftIndices = [];
+                const rightIndices = [];
+                
+                for (let i = 0; i < X.length; i++) {
+                    if (X[i][bestSplit.feature] <= bestSplit.threshold) {
+                        leftIndices.push(i);
+                    } else {
+                        rightIndices.push(i);
+                    }
+                }
+
+                const leftX = leftIndices.map(i => X[i]);
+                const leftY = leftIndices.map(i => y[i]);
+                const rightX = rightIndices.map(i => X[i]);
+                const rightY = rightIndices.map(i => y[i]);
+
+                // Build subtrees
+                return {
+                    isLeaf: false,
+                    feature: bestSplit.feature,
+                    threshold: bestSplit.threshold,
+                    left: this.buildTree(leftX, leftY, depth + 1),
+                    right: this.buildTree(rightX, rightY, depth + 1),
+                    samples: nSamples
+                };
+            }
+
+            findBestSplit(X, y, nFeatures) {
+                let bestSplit = { gain: -1 };
+                const currentGini = this.gini(y);
+
+                // Try random subset of features
+                const featureSubset = [];
+                while (featureSubset.length < Math.sqrt(nFeatures)) {
+                    const f = Math.floor(Math.random() * nFeatures);
+                    if (!featureSubset.includes(f)) {
+                        featureSubset.push(f);
+                    }
+                }
+
+                for (const feature of featureSubset) {
+                    const featureValues = X.map(x => x[feature]);
+                    const uniqueValues = [...new Set(featureValues)].sort((a, b) => a - b);
+
+                    // Try thresholds at midpoints between unique values
+                    for (let i = 1; i < uniqueValues.length; i++) {
+                        const threshold = (uniqueValues[i - 1] + uniqueValues[i]) / 2;
+
+                        // Split the data
+                        const leftY = [];
+                        const rightY = [];
+                        
+                        for (let j = 0; j < X.length; j++) {
+                            if (X[j][feature] <= threshold) {
+                                leftY.push(y[j]);
+                            } else {
+                                rightY.push(y[j]);
+                            }
+                        }
+
+                        // Calculate information gain
+                        const n = y.length;
+                        const giniLeft = this.gini(leftY);
+                        const giniRight = this.gini(rightY);
+                        const gain = currentGini - 
+                                    (leftY.length / n) * giniLeft - 
+                                    (rightY.length / n) * giniRight;
+
+                        if (gain > bestSplit.gain) {
+                            bestSplit = {
+                                feature,
+                                threshold,
+                                gain,
+                                leftGini: giniLeft,
+                                rightGini: giniRight
+                            };
+                        }
+                    }
+                }
+
+                return bestSplit;
+            }
+
+            gini(y) {
+                if (y.length === 0) return 0;
+                
+                const counts = {};
+                for (const label of y) {
+                    counts[label] = (counts[label] || 0) + 1;
+                }
+                
+                let impurity = 1;
+                for (const key in counts) {
+                    const prob = counts[key] / y.length;
+                    impurity -= prob * prob;
+                }
+                
+                return impurity;
+            }
+
+            majorityVote(y) {
+                const counts = {};
+                for (const label of y) {
+                    counts[label] = (counts[label] || 0) + 1;
+                }
+                
+                let maxCount = -1;
+                let majorityClass = null;
+                
+                for (const key in counts) {
+                    if (counts[key] > maxCount) {
+                        maxCount = counts[key];
+                        majorityClass = parseInt(key);
+                    }
+                }
+                
+                return majorityClass;
+            }
+
+            predictSingle(x) {
+                let node = this.root;
+                while (!node.isLeaf) {
+                    if (x[node.feature] <= node.threshold) {
+                        node = node.left;
+                    } else {
+                        node = node.right;
+                    }
+                }
+                return node.class;
+            }
+
+            predict(X) {
+                return X.map(x => this.predictSingle(x));
+            }
+        }
+
+        // Random Forest implementation
+        class RandomForest {
+            constructor(nTrees, maxDepth, minSamplesSplit) {
+                this.nTrees = nTrees;
+                this.maxDepth = maxDepth;
+                this.minSamplesSplit = minSamplesSplit;
+                this.trees = [];
+            }
+
+            fit(X, y) {
+                this.trees = [];
+                const nSamples = X.length;
+                
+                for (let i = 0; i < this.nTrees; i++) {
+                    // Bootstrap sample
+                    const indices = [];
+                    for (let j = 0; j < nSamples; j++) {
+                        indices.push(Math.floor(Math.random() * nSamples));
+                    }
+                    
+                    const X_sample = indices.map(idx => X[idx]);
+                    const y_sample = indices.map(idx => y[idx]);
+                    
+                    const tree = new DecisionTree(this.maxDepth, this.minSamplesSplit);
+                    tree.fit(X_sample, y_sample);
+                    this.trees.push(tree);
+                }
+            }
+
+            predict(X) {
+                const predictions = this.trees.map(tree => tree.predict(X));
+                const finalPredictions = [];
+                
+                for (let i = 0; i < X.length; i++) {
+                    const votes = {};
+                    for (let j = 0; j < this.trees.length; j++) {
+                        const vote = predictions[j][i];
+                        votes[vote] = (votes[vote] || 0) + 1;
+                    }
+                    
+                    let maxVotes = -1;
+                    let predictedClass = null;
+                    for (const key in votes) {
+                        if (votes[key] > maxVotes) {
+                            maxVotes = votes[key];
+                            predictedClass = parseInt(key);
+                        }
+                    }
+                    
+                    finalPredictions.push(predictedClass);
+                }
+                
+                return finalPredictions;
+            }
+        }
+
+        // Model training
+        function trainModel() {
+            const rf = new RandomForest(state.nTrees, state.maxDepth, state.minSamplesSplit);
+            rf.fit(samples, labels);
+            trees = rf.trees;
+            predictions = rf.predict(samples);
+        }
+
+        // Rendering
+        function render() {
+            // Clear canvases
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            treeCtx.clearRect(0, 0, treeCanvas.width, treeCanvas.height);
+            
+            // Draw decision boundary
+            if (state.showDecisionBoundary) {
+                drawDecisionBoundary();
+            }
+            
+            // Draw samples
+            if (state.showSamples) {
+                drawSamples();
+            }
+            
+            // Draw tree structure
+            if (state.showTreeStructure) {
+                drawTreeStructure();
+            }
+            
+            // Update stats
+            updateStats();
+        }
+
+        function drawDecisionBoundary() {
+            const resolution = 20;
+            const cellSize = canvas.width / resolution;
+            
+            // Create grid points
+            const gridPoints = [];
+            for (let i = 0; i < resolution; i++) {
+                for (let j = 0; j < resolution; j++) {
+                    const x = i / resolution;
+                    const y = j / resolution;
+                    gridPoints.push([x, y]);
+                }
+            }
+            
+            // Predict for grid points
+            let gridPredictions;
+            if (state.showAllTrees) {
+                // Show ensemble prediction
+                const rf = new RandomForest(state.nTrees, state.maxDepth, state.minSamplesSplit);
+                rf.trees = trees;
+                gridPredictions = rf.predict(gridPoints);
+            } else {
+                // Show single tree prediction
+                gridPredictions = trees[state.currentTree].predict(gridPoints);
+            }
+            
+            // Draw grid
+            for (let i = 0; i < gridPoints.length; i++) {
+                const [x, y] = gridPoints[i];
+                const pred = gridPredictions[i];
+                
+                ctx.fillStyle = pred === 0 ? 'rgba(200, 200, 255, 0.5)' : 'rgba(255, 200, 200, 0.5)';
+                ctx.fillRect(x * canvas.width, y * canvas.height, cellSize, cellSize);
+            }
+        }
+
+        function drawSamples() {
+            for (let i = 0; i < samples.length; i++) {
+                const [x, y] = samples[i];
+                const label = labels[i];
+                const pred = predictions[i];
+                
+                ctx.beginPath();
+                ctx.arc(x * canvas.width, y * canvas.height, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = label === 0 ? 'blue' : 'red';
+                ctx.fill();
+                
+                // Draw border if misclassified
+                if (label !== pred) {
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawTreeStructure() {
+            const tree = trees[state.currentTree];
+            const nodePositions = {};
+            const levelHeights = {};
+            const maxDepth = getTreeDepth(tree.root);
+            
+            // Calculate positions
+            calculateNodePositions(tree.root, 0, 0, 1, nodePositions, levelHeights, maxDepth);
+            
+            // Draw connections
+            drawTreeConnections(tree.root, nodePositions);
+            
+            // Draw nodes
+            drawTreeNodes(tree.root, nodePositions);
+        }
+
+        function calculateNodePositions(node, level, position, index, nodePositions, levelHeights, maxDepth) {
+            const treeWidth = treeCanvas.width;
+            const treeHeight = treeCanvas.height;
+            const nodeRadius = 15;
+            const levelHeight = treeHeight / (maxDepth + 1);
+            
+            if (node.isLeaf) {
+                const x = position * treeWidth;
+                const y = (level + 1) * levelHeight;
+                nodePositions[index] = { x, y, node };
+                levelHeights[level] = (levelHeights[level] || 0) + 1;
+                return { count: 1, width: 1 };
+            } else {
+                const left = calculateNodePositions(node.left, level + 1, position, index * 2, nodePositions, levelHeights, maxDepth);
+                const right = calculateNodePositions(node.right, level + 1, position + left.width, index * 2 + 1, nodePositions, levelHeights, maxDepth);
+                
+                const totalWidth = left.width + right.width;
+                const x = (position + totalWidth / 2) * treeWidth;
+                const y = (level + 1) * levelHeight;
+                
+                nodePositions[index] = { x, y, node };
+                levelHeights[level] = (levelHeights[level] || 0) + 1;
+                
+                return { count: left.count + right.count, width: totalWidth };
+            }
+        }
+
+        function drawTreeConnections(node, nodePositions, parentIndex = 1) {
+            if (node.isLeaf) return;
+            
+            const parentPos = nodePositions[parentIndex];
+            const leftPos = nodePositions[parentIndex * 2];
+            const rightPos = nodePositions[parentIndex * 2 + 1];
+            
+            // Draw lines to children
+            treeCtx.beginPath();
+            treeCtx.moveTo(parentPos.x, parentPos.y);
+            treeCtx.lineTo(leftPos.x, leftPos.y);
+            treeCtx.stroke();
+            
+            treeCtx.beginPath();
+            treeCtx.moveTo(parentPos.x, parentPos.y);
+            treeCtx.lineTo(rightPos.x, rightPos.y);
+            treeCtx.stroke();
+            
+            // Recurse
+            drawTreeConnections(node.left, nodePositions, parentIndex * 2);
+            drawTreeConnections(node.right, nodePositions, parentIndex * 2 + 1);
+        }
+
+        function drawTreeNodes(node, nodePositions, parentIndex = 1) {
+            const pos = nodePositions[parentIndex];
+            
+            // Draw node
+            treeCtx.beginPath();
+            treeCtx.arc(pos.x, pos.y, 15, 0, 2 * Math.PI);
+            treeCtx.fillStyle = 'white';
+            treeCtx.fill();
+            treeCtx.stroke();
+            
+            // Draw node info
+            treeCtx.fillStyle = 'black';
+            treeCtx.font = '10px Arial';
+            treeCtx.textAlign = 'center';
+            treeCtx.textBaseline = 'middle';
+            
+            if (node.isLeaf) {
+                treeCtx.fillText(node.class, pos.x, pos.y);
+            } else {
+                treeCtx.fillText(`X${node.feature} ≤ ${node.threshold.toFixed(2)}`, pos.x, pos.y);
+            }
+            
+            // Recurse
+            if (!node.isLeaf) {
+                drawTreeNodes(node.left, nodePositions, parentIndex * 2);
+                drawTreeNodes(node.right, nodePositions, parentIndex * 2 + 1);
+            }
+        }
+
+        function getTreeDepth(node) {
+            if (node.isLeaf) return 0;
+            return 1 + Math.max(getTreeDepth(node.left), getTreeDepth(node.right));
+        }
+
+        function updateStats() {
+            // Calculate accuracy
+            let correct = 0;
+            for (let i = 0; i < labels.length; i++) {
+                if (labels[i] === predictions[i]) {
+                    correct++;
+                }
+            }
+            const accuracy = (correct / labels.length * 100).toFixed(1);
+            
+            document.getElementById('accuracy').textContent = accuracy;
+            document.getElementById('nSamplesValue').textContent = state.nSamples;
+            document.getElementById('nTreesValue').textContent = state.nTrees;
+            document.getElementById('maxDepthValue').textContent = state.maxDepth;
+            document.getElementById('minSamplesSplitValue').textContent = state.minSamplesSplit;
+            document.getElementById('noiseLevelValue').textContent = state.noiseLevel.toFixed(2);
+            document.getElementById('currentTreeValue').textContent = state.currentTree + 1;
+        }
+
+        // Event handlers
+        function updateNTrees(e) {
+            state.nTrees = parseInt(e.target.value);
+            document.getElementById('nTreesValue').textContent = state.nTrees;
+            retrainModel();
+        }
+
+        function updateMaxDepth(e) {
+            state.maxDepth = parseInt(e.target.value);
+            document.getElementById('maxDepthValue').textContent = state.maxDepth;
+            retrainModel();
+        }
+
+        function updateMinSamplesSplit(e) {
+            state.minSamplesSplit = parseInt(e.target.value);
+            document.getElementById('minSamplesSplitValue').textContent = state.minSamplesSplit;
+            retrainModel();
+        }
+
+        function updateNSamples(e) {
+            state.nSamples = parseInt(e.target.value);
+            document.getElementById('nSamplesValue').textContent = state.nSamples;
+            regenerateData();
+        }
+
+        function updateNoiseLevel(e) {
+            state.noiseLevel = parseFloat(e.target.value);
+            document.getElementById('noiseLevelValue').textContent = state.noiseLevel.toFixed(2);
+            regenerateData();
+        }
+
+        function updateDatasetType(e) {
+            state.datasetType = e.target.value;
+            regenerateData();
+        }
+
+        function updateCurrentTree(e) {
+            state.currentTree = parseInt(e.target.value);
+            document.getElementById('currentTreeValue').textContent = state.currentTree + 1;
+            render();
+        }
+
+        function toggleShowAllTrees(e) {
+            state.showAllTrees = e.target.checked;
+            render();
+        }
+
+        function toggleShowDecisionBoundary(e) {
+            state.showDecisionBoundary = e.target.checked;
+            render();
+        }
+
+        function toggleShowSamples(e) {
+            state.showSamples = e.target.checked;
+            render();
+        }
+
+        function toggleShowTreeStructure(e) {
+            state.showTreeStructure = e.target.checked;
+            render();
+        }
+
+        function retrainModel() {
+            trainModel();
+            render();
+        }
+
+        function regenerateData() {
+            generateData();
+            trainModel();
+            render();
+        }
+    </script>
+</head>
+<body>
+    <h1>Random Forest Interactive Demo</h1>
+    
+    <div style="display: flex; flex-wrap: wrap;">
+        <!-- Main visualization -->
+        <div style="margin: 10px;">
+            <canvas id="mainCanvas" width="400" height="400" style="border: 1px solid black;"></canvas>
+            <div>
+                <p>Accuracy: <span id="accuracy">0</span>%</p>
+            </div>
+        </div>
+        
+        <!-- Tree visualization -->
+        <div style="margin: 10px;">
+            <canvas id="treeCanvas" width="400" height="400" style="border: 1px solid black;"></canvas>
+        </div>
+        
+        <!-- Controls -->
+        <div style="margin: 10px; width: 300px;">
+            <h3>Dataset Controls</h3>
+            <div>
+                <label>Dataset type:
+                    <select id="datasetType">
+                        <option value="moons">Moons</option>
+                        <option value="circles">Circles</option>
+                        <option value="blobs">Blobs</option>
+                        <option value="xor">XOR</option>
+                    </select>
+                </label>
+            </div>
+            <div>
+                <label>Number of samples: <span id="nSamplesValue">100</span>
+                    <input type="range" id="nSamples" min="10" max="500" value="100">
+                </label>
+            </div>
+            <div>
+                <label>Noise level: <span id="noiseLevelValue">0.10</span>
+                    <input type="range" id="noiseLevel" min="0" max="0.5" step="0.01" value="0.1">
+                </label>
+            </div>
+            <button id="generateDataBtn">Generate New Data</button>
+            
+            <h3>Model Controls</h3>
+            <div>
+                <label>Number of trees: <span id="nTreesValue">10</span>
+                    <input type="range" id="nTrees" min="1" max="50" value="10">
+                </label>
+            </div>
+            <div>
+                <label>Max depth: <span id="maxDepthValue">5</span>
+                    <input type="range" id="maxDepth" min="1" max="10" value="5">
+                </label>
+            </div>
+            <div>
+                <label>Min samples to split: <span id="minSamplesSplitValue">2</span>
+                    <input type="range" id="minSamplesSplit" min="2" max="20" value="2">
+                </label>
+            </div>
+            <button id="trainBtn">Retrain Model</button>
+            
+            <h3>Visualization Controls</h3>
+            <div>
+                <label>Show all trees (ensemble):
+                    <input type="checkbox" id="showAllTrees">
+                </label>
+            </div>
+            <div>
+                <label>Current tree: <span id="currentTreeValue">1</span>
+                    <input type="range" id="currentTree" min="0" max="9" value="0">
+                </label>
+            </div>
+            <div>
+                <label>Show decision boundary:
+                    <input type="checkbox" id="showDecisionBoundary" checked>
+                </label>
+            </div>
+            <div>
+                <label>Show samples:
+                    <input type="checkbox" id="showSamples" checked>
+                </label>
+            </div>
+            <div>
+                <label>Show tree structure:
+                    <input type="checkbox" id="showTreeStructure">
+                </label>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin: 20px;">
+        <h3>How to Use This Demo</h3>
+        <ul>
+            <li>Adjust dataset parameters to change the training data distribution</li>
+            <li>Modify model hyperparameters to see their effect on the decision boundary</li>
+            <li>Toggle between viewing individual trees and the full ensemble</li>
+            <li>Explore the structure of individual decision trees</li>
+            <li>Red points are class 1, blue points are class 0</li>
+            <li>Black borders indicate misclassified points</li>
+        </ul>
+    </div>
+</body>
+</html>

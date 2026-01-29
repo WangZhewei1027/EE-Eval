@@ -29,7 +29,7 @@ class AStarPage {
 
   // Focus a cell and press a key (for keyboard interactions)
   async keyToggleCell(row, col, key = ' ') {
-    const locator = this.cell(row, col);
+    const locator1 = this.cell(row, col);
     await locator.focus();
     await this.page.keyboard.press(key);
   }
@@ -111,13 +111,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   test('Transition: Set Start mode -> clicking a cell sets the start, resets pathfinding visuals', async ({ page }) => {
     // Comments: Click Set Start button and then click a target cell; verify start moves and visuals update.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app1 = new AStarPage(page);
 
     // Enter Set Start mode
     await app.clickSetStart();
@@ -146,13 +146,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   test('Transition: Set End mode -> clicking a cell sets the end, resets pathfinding visuals', async ({ page }) => {
     // Comments: Click Set End and set a new end cell; verify end moves and visuals reset.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app2 = new AStarPage(page);
 
     // Enter Set End mode
     await app.clickSetEnd();
@@ -160,7 +160,7 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
     await expect(app.info).toHaveText('Click on a cell to set the end position.');
 
     // Choose target cell (23,23)
-    const target = app.cell(23, 23);
+    const target1 = app.cell(23, 23);
     await target.click();
 
     // Ensure the old end lost 'end' class and new cell has it
@@ -168,9 +168,9 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
     await expect(target).toHaveClass(/end/);
 
     // Verify pathfinding visuals were reset
-    const hasOpen = await app.anyCellHasClass('open');
-    const hasClosed = await app.anyCellHasClass('closed');
-    const hasPath = await app.anyCellHasClass('path');
+    const hasOpen1 = await app.anyCellHasClass('open');
+    const hasClosed1 = await app.anyCellHasClass('closed');
+    const hasPath1 = await app.anyCellHasClass('path');
     expect(hasOpen, 'No open cells after setting end').toBe(false);
     expect(hasClosed, 'No closed cells after setting end').toBe(false);
     expect(hasPath, 'No path cells after setting end').toBe(false);
@@ -181,13 +181,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   test('Add/Remove Walls: toggle walls via mouse and keyboard (space/Enter)', async ({ page }) => {
     // Comments: Ensure walls can be toggled with click and keyboard accessibility works.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app3 = new AStarPage(page);
 
     // Default mode is Add/Remove Walls
     await expect(app.addWallsBtn).toHaveAttribute('aria-pressed', 'true');
@@ -218,13 +218,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
     // Increase timeout for this test as the visualization runs asynchronously
     test.setTimeout(60000);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app4 = new AStarPage(page);
 
     // Ensure no walls to allow a path to exist
     // (By default, there are no walls, so we proceed to run)
@@ -267,13 +267,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   test('Clear Board: clears walls and resets info message', async ({ page }) => {
     // Comments: Create walls, click clear, and verify walls removed and info updates.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors5 = [];
+    const pageErrors5 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app5 = new AStarPage(page);
 
     // Add walls at some locations
     await app.clickCell(2, 2);
@@ -303,13 +303,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
 
   test('Edge case: cannot set start on a wall (mode Set Start should ignore walls)', async ({ page }) => {
     // Comments: Place a wall, switch to Set Start mode, click the wall cell, and ensure start did not move.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors6 = [];
+    const pageErrors6 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app6 = new AStarPage(page);
 
     // Make (10,10) a wall
     await app.clickCell(10, 10);
@@ -334,13 +334,13 @@ test.describe('A* Search Visualization - FSM and UI integration tests', () => {
     // Comments: Verify that on entering Running state controls are disabled and on exit they are re-enabled.
     test.setTimeout(60000);
 
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors7 = [];
+    const pageErrors7 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto(APP_URL);
-    const app = new AStarPage(page);
+    const app7 = new AStarPage(page);
 
     // Start run
     await app.clickRun();

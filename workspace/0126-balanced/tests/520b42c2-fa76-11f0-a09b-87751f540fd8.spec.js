@@ -110,11 +110,11 @@ test.describe('Interpreter FSM end-to-end tests (Application ID: 520b42c2-fa76-1
   // Test full processing for simple non-keyword code -> S2_CodeProcessed logged
   test('S1_CodeInput -> S2_CodeProcessed: simple multiline input is processed and printed via console.log', async ({ page }) => {
     // This test validates that normal input (non-keywords) flows through interpreter(), and console.log(output) occurs.
-    const ip = new InterpreterPage(page);
+    const ip1 = new InterpreterPage(page);
 
     const code = `hello
 world`;
-    const result = await ip.loadAndHandlePrompt({ response: code, dismiss: false });
+    const result1 = await ip.loadAndHandlePrompt({ response: code, dismiss: false });
 
     // No page errors expected for valid string input
     expect(result.pageErrors.length).toBe(0);
@@ -135,14 +135,14 @@ world`;
   test('S2_CodeProcessed: keyword-only input produces "Invalid ..." messages (edge behavior)', async ({ page }) => {
     // This test validates interpreter behavior for keyword lines given the current implementation:
     // because stack is empty, all keyword checks will fall through to "Invalid ..." messages.
-    const ip = new InterpreterPage(page);
+    const ip2 = new InterpreterPage(page);
 
-    const code = `if
+    const code1 = `if
 else
 for
 while
 print`;
-    const result = await ip.loadAndHandlePrompt({ response: code, dismiss: false });
+    const result2 = await ip.loadAndHandlePrompt({ response: code, dismiss: false });
 
     expect(result.pageErrors.length).toBe(0);
     expect(result.consoleMessages.length).toBeGreaterThanOrEqual(1);
@@ -160,15 +160,15 @@ print`;
   // Edge case: user enters an empty string -> interpreter should return a single newline (empty line)
   test('Edge case: empty string input results in a single newline output (treated as empty line)', async ({ page }) => {
     // Validate how interpreter handles an empty string input (""), which splits to [''] and results in '\n'
-    const ip = new InterpreterPage(page);
+    const ip3 = new InterpreterPage(page);
 
-    const result = await ip.loadAndHandlePrompt({ response: '', dismiss: false });
+    const result3 = await ip.loadAndHandlePrompt({ response: '', dismiss: false });
 
     expect(result.pageErrors.length).toBe(0);
     // Should log something (likely a newline)
     expect(result.consoleMessages.length).toBeGreaterThanOrEqual(1);
 
-    const output = result.consoleMessages.join('\n');
+    const output1 = result.consoleMessages.join('\n');
     // The output should contain at least a newline character (representing the empty line)
     expect(output.includes('\n')).toBe(true);
   });
@@ -177,10 +177,10 @@ print`;
   test('Error scenario: canceling the prompt leads to a runtime TypeError (null.split) and an uncaught page error', async ({ page }) => {
     // This test intentionally simulates the user pressing Cancel on the prompt.
     // According to the page script, code will be null and calling code.split will throw a TypeError.
-    const ip = new InterpreterPage(page);
+    const ip4 = new InterpreterPage(page);
 
     // Dismiss the prompt to simulate cancel; interpreter(code) will receive null and then calling split should error.
-    const result = await ip.loadAndHandlePrompt({ dismiss: true });
+    const result4 = await ip.loadAndHandlePrompt({ dismiss: true });
 
     // We expect at least one page error to have been emitted
     expect(result.pageErrors.length).toBeGreaterThanOrEqual(1);
@@ -202,11 +202,11 @@ print`;
   test('Integration: assert the FSM-like sequence on a normal run (prompt seen, accepted, and console logged)', async ({ page }) => {
     // This test checks the sequence: on loading the app user sees prompt (S1 entry),
     // user provides code and then console.log fires indicating S2 entry action was executed.
-    const ip = new InterpreterPage(page);
+    const ip5 = new InterpreterPage(page);
 
-    const code = `line1
+    const code2 = `line1
 line2`;
-    const result = await ip.loadAndHandlePrompt({ response: code, dismiss: false });
+    const result5 = await ip.loadAndHandlePrompt({ response: code, dismiss: false });
 
     // Prompt must have occurred (S1_CodeInput entry action)
     expect(result.dialogSeen).toBe(true);
@@ -217,7 +217,7 @@ line2`;
 
     // Console output should contain the processed content (S2_CodeProcessed entry action evidence)
     expect(result.consoleMessages.length).toBeGreaterThanOrEqual(1);
-    const output = result.consoleMessages.join('\n');
+    const output2 = result.consoleMessages.join('\n');
     expect(output).toContain('line1');
     expect(output).toContain('line2');
   });

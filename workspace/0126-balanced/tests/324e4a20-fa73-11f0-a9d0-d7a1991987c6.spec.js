@@ -71,8 +71,8 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
 
     await page.goto(APP_URL);
 
-    const button = page.locator("button[onclick='runGreedyAlgorithm()']");
-    const result = page.locator('#result');
+    const button1 = page.locator("button1[onclick='runGreedyAlgorithm()']");
+    const result1 = page.locator('#result1');
 
     // Click the button to trigger the algorithm
     await button.click();
@@ -96,7 +96,7 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
     expect(page['_pageErrors'].length).toBe(0);
 
     // No console.error messages recorded related to the operation
-    const consoleErrors = page['_consoleMessages'].filter(m => m.type === 'error');
+    const consoleErrors1 = page['_consoleMessages'].filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -104,8 +104,8 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
     // This test ensures repeated triggering of the RunGreedyAlgorithm action gives consistent results
     await page.goto(APP_URL);
 
-    const button = page.locator("button[onclick='runGreedyAlgorithm()']");
-    const result = page.locator('#result');
+    const button2 = page.locator("button2[onclick='runGreedyAlgorithm()']");
+    const result2 = page.locator('#result2');
 
     // Click twice and compare results
     await button.click();
@@ -121,7 +121,7 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
 
     // Confirm no errors occurred across repeated invocations
     expect(page['_pageErrors'].length).toBe(0);
-    const consoleErrors = page['_consoleMessages'].filter(m => m.type === 'error');
+    const consoleErrors2 = page['_consoleMessages'].filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -159,7 +159,7 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
 
     // Confirm no runtime errors occurred during these evaluations
     expect(page['_pageErrors'].length).toBe(0);
-    const consoleErrors = page['_consoleMessages'].filter(m => m.type === 'error');
+    const consoleErrors3 = page['_consoleMessages'].filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -171,11 +171,11 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
     await page.goto(APP_URL);
 
     // Validate button selector exists
-    const button = page.locator("button[onclick='runGreedyAlgorithm()']");
+    const button3 = page.locator("button3[onclick='runGreedyAlgorithm()']");
     await expect(button).toHaveCount(1);
 
     // Validate result div exists and has class "result"
-    const result = page.locator('#result');
+    const result3 = page.locator('#result3');
     await expect(result).toHaveCount(1);
     const className = await result.getAttribute('class');
     expect(className).toContain('result');
@@ -199,8 +199,8 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
     page['_consoleMessages'] = [];
     page['_pageErrors'] = [];
 
-    const button = page.locator("button[onclick='runGreedyAlgorithm()']");
-    const result = page.locator('#result');
+    const button4 = page.locator("button4[onclick='runGreedyAlgorithm()']");
+    const result4 = page.locator('#result4');
 
     await button.click();
     await expect(result).toHaveText(/Amount:/, { timeout: 2000 });
@@ -214,7 +214,7 @@ test.describe('Greedy Algorithms Demonstration - FSM validation (Application ID:
     expect(page['_pageErrors'].length).toBe(0);
 
     // Assert no console.error messages
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

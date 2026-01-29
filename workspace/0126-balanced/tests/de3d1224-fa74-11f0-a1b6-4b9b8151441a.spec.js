@@ -106,7 +106,7 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
 
   test.describe('Layer toggle interactions (ToggleLayerInfo event -> states S1..S7)', () => {
     test('Clicking each layer reveals its info (enter info state) and toggles back', async ({ page }) => {
-      const osi = new OSIPage(page);
+      const osi1 = new OSIPage(page);
 
       // For each layer 7 down to 1 (matching the FSM listing), click and verify visibility
       for (let n = 7; n >= 1; n--) {
@@ -116,7 +116,7 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
         // Click the layer to enter state Sx_Layer_N_Info
         await osi.clickLayer(n);
 
-        // The expected observable is that the layer-info becomes visible (display:block)
+        // The expected observable is that the layer-info becomes visible (display)
         await expect(osi.infoLocator(n)).toBeVisible();
 
         // Additional check: the inner text should contain meaningful explanatory text from the HTML
@@ -131,13 +131,13 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
         expect(pageErrors.length, `Page errors after toggling layer ${n}: ${pageErrors.map(e => e.message).join('; ')}`).toBe(0);
 
         // Also assert there are no console 'error' messages produced by this interaction
-        const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+        const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
         expect(consoleErrors.length, `Console errors after toggling layer ${n}: ${JSON.stringify(consoleErrors)}`).toBe(0);
       }
     });
 
     test('Toggling one layer does not inadvertently hide another (independent toggles)', async ({ page }) => {
-      const osi = new OSIPage(page);
+      const osi2 = new OSIPage(page);
 
       // Open two different layers: 7 and 4
       await osi.clickLayer(7);
@@ -158,12 +158,12 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
 
       // Verify no runtime errors
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Clicking on inner elements of a layer still toggles the layer (event bubbling)', async ({ page }) => {
-      const osi = new OSIPage(page);
+      const osi3 = new OSIPage(page);
 
       // Click the paragraph inside layer-3 (when hidden it is present but not visible)
       // The inner element will be matched even if not visible; click forces action on the container
@@ -177,14 +177,14 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
 
       // Verify no runtime errors
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
 
   test.describe('Data flow demonstration (ShowDataFlow event -> state S8_Data_Flow_Shown)', () => {
     test('Clicking Show Data Flow populates the data flow container with expected steps', async ({ page }) => {
-      const osi = new OSIPage(page);
+      const osi4 = new OSIPage(page);
 
       // Ensure data-flow is initially empty
       let initialText = await osi.getDataFlowText();
@@ -211,12 +211,12 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
 
       // Verify no runtime errors occurred during data flow rendering
       expect(pageErrors.length, `Page errors after showing data flow: ${pageErrors.map(e => e.message).join('; ')}`).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length, `Console errors after showing data flow: ${JSON.stringify(consoleErrors)}`).toBe(0);
     });
 
     test('Edge case: rapid repeated clicks on Show Data Flow do not crash the page', async ({ page }) => {
-      const osi = new OSIPage(page);
+      const osi5 = new OSIPage(page);
 
       // Perform rapid clicks
       await Promise.all([
@@ -229,12 +229,12 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
       await expect(page.locator('#data-flow')).toContainText('Data flow when requesting a webpage');
 
       // Ensure list item count remains reasonable (7 steps)
-      const itemCount = await osi.dataFlowItemCount();
+      const itemCount1 = await osi.dataFlowItemCount();
       expect(itemCount).toBe(7);
 
       // Confirm no uncaught errors
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
@@ -249,7 +249,7 @@ test.describe('OSI Model Demonstration - FSM state & transitions', () => {
       expect(pageErrors.length, `Expected zero page errors but found: ${pageErrors.map(e => e.message).join(' | ')}`).toBe(0);
 
       // Assert that console does not contain messages flagged as 'error' (which could be uncaught Reference/Type/Syntax errors)
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length, `Expected zero console errors but found: ${JSON.stringify(consoleErrors)}`).toBe(0);
 
       // Additionally, assert that no console message text contains common error keywords as a safety net

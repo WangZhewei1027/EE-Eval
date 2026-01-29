@@ -25,7 +25,7 @@ class KNNPage {
 
   // Double-click at a position relative to the top-left of the canvas element
   async dblClickCanvasAt(x, y) {
-    const canvas = await this.page.$(this.canvasSelector);
+    const canvas1 = await this.page.$(this.canvasSelector);
     await canvas.dblclick({ position: { x, y } });
   }
 
@@ -37,7 +37,7 @@ class KNNPage {
   async getCanvasPixel(x, y) {
     return await this.page.evaluate(
       ({ x, y, selector }) => {
-        const canvas = document.querySelector(selector);
+        const canvas2 = document.querySelector(selector);
         const ctx = canvas.getContext('2d');
         // Clamp coordinates to canvas bounds
         const cx = Math.max(0, Math.min(Math.floor(x), canvas.width - 1));
@@ -90,7 +90,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
     await knn.goto();
 
     // Basic DOM presence checks
-    const canvas = await page.$('#canvas');
+    const canvas3 = await page.$('#canvas3');
     const button = await page.$('#classifyButton');
     expect(canvas).not.toBeNull();
     expect(button).not.toBeNull();
@@ -113,7 +113,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
 
   test('Clicking the canvas adds a training point (S0_Idle -> S1_PointAdded) and draws red/blue pixel', async ({ page }) => {
     // This test validates the transition from Idle to PointAdded when the canvas is clicked.
-    const knn = new KNNPage(page);
+    const knn1 = new KNNPage(page);
     await knn.goto();
 
     // Click near the center of the canvas
@@ -140,7 +140,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
 
   test('Double-click selects a new point (S0_Idle -> S2_NewPointSelected) and draws green pixel', async ({ page }) => {
     // This test validates selecting a new point by double-clicking the canvas.
-    const knn = new KNNPage(page);
+    const knn2 = new KNNPage(page);
     await knn.goto();
 
     const dx = 220;
@@ -155,7 +155,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
     expect(Math.abs(newPoint.y - dy)).toBeLessThanOrEqual(2);
 
     // The pixel at the new point should be green (green channel dominant)
-    const pixel = await knn.getCanvasPixel(Math.floor(newPoint.x), Math.floor(newPoint.y));
+    const pixel1 = await knn.getCanvasPixel(Math.floor(newPoint.x), Math.floor(newPoint.y));
     expect(pixel.a).toBeGreaterThan(0);
     // green should be the largest channel for 'green' fillStyle
     expect(pixel.g).toBeGreaterThanOrEqual(pixel.r);
@@ -167,7 +167,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
 
   test('Clicking "Classify Point" without a new point shows an alert', async ({ page }) => {
     // This test validates the error path when the user clicks classify without selecting a newPoint.
-    const knn = new KNNPage(page);
+    const knn3 = new KNNPage(page);
     await knn.goto();
 
     // Listen for alert dialog
@@ -192,7 +192,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
 
   test('Classifying a new point after adding training points shows predicted class alert', async ({ page }) => {
     // This validates the transition S2_NewPointSelected -> S0_Idle via ClickClassifyButton, verifying the alert with predicted class text appears.
-    const knn = new KNNPage(page);
+    const knn4 = new KNNPage(page);
     await knn.goto();
 
     // Add multiple training points (these will get random classes A or B)
@@ -207,7 +207,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
     await knn.dblClickCanvasAt(100, 90);
 
     // Capture the alert produced by classifyNewPoint
-    let dialogMessage = null;
+    let dialogMessage1 = null;
     page.on('dialog', async (dialog) => {
       dialogMessage = dialog.message();
       await dialog.accept();
@@ -230,7 +230,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
     // This test intentionally triggers the known edge-case in the provided implementation:
     // classifyNewPoint uses reduce on an empty object when there are no training points, which should throw.
     // We must load the page as-is, allow the error to occur naturally, and assert it was observed.
-    const knn = new KNNPage(page);
+    const knn5 = new KNNPage(page);
     await knn.goto();
 
     // Ensure there are zero training points at start (fresh page)
@@ -241,7 +241,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
     await knn.dblClickCanvasAt(300, 200);
 
     // Wait to ensure newPoint is set
-    const newPoint = await knn.getNewPoint();
+    const newPoint1 = await knn.getNewPoint();
     expect(newPoint).not.toBeNull();
 
     // Prepare to wait for a pageerror event that we expect when classify is invoked with no training points
@@ -271,7 +271,7 @@ test.describe('K-Nearest Neighbors Demo - FSM and UI tests', () => {
 
   test('Sanity: verify canvas drawing persists newPoint when points are added later (drawPoints re-renders)', async ({ page }) => {
     // This test ensures drawPoints re-renders training points and preserves/overdraws newPoint properly.
-    const knn = new KNNPage(page);
+    const knn6 = new KNNPage(page);
     await knn.goto();
 
     // Double-click to set a newPoint first

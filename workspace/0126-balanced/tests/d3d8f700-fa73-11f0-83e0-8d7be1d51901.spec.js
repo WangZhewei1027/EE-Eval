@@ -209,7 +209,7 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
 
   test.describe('Process Management (S1 ProcessAdded)', () => {
     test('Load sample loads 4 sample processes and renders list', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app1 = new SchedulerApp(page);
       // First, clear all to start fresh and accept confirmation dialog
       // Set up a one-off dialog handler to accept confirm
       page.once('dialog', async (d) => {
@@ -221,13 +221,13 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
       await app.loadSample();
 
       // Assert process list now contains at least 4 items and contains expected names
-      const procCount = await app.getProcessCount();
+      const procCount1 = await app.getProcessCount();
       expect(procCount).toBeGreaterThanOrEqual(4);
 
       // The rendered info contains id:1..4; assert that at least 'id:1' appears
       const plistText = await page.locator('#plist').textContent();
-      expect(plistText).toContain('(id:1)');
-      expect(plistText).toContain('(id:4)');
+      expect(plistText).toContain('(id)');
+      expect(plistText).toContain('(id)');
 
       // Confirm renderProcessList was executed by checking delete buttons exist
       const deleteButtons = page.locator('#plist button');
@@ -235,7 +235,7 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Add process via form appends to list (transition S0->S1)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app2 = new SchedulerApp(page);
 
       // Count before add
       const before = await app.getProcessCount();
@@ -248,17 +248,17 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
       expect(after).toBe(before + 1);
 
       // Verify the new process is present in the list text
-      const plistText = await page.locator('#plist').textContent();
+      const plistText1 = await page.locator('#plist').textContent();
       expect(plistText).toContain('TestProc');
       expect(plistText).toContain('Arrival: 3');
       expect(plistText).toContain('Burst: 2');
     });
 
     test('Clear All triggers confirm and empties list (transition S1->S0)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app3 = new SchedulerApp(page);
 
       // Ensure there is at least one process (script likely did sample)
-      const before = await app.getProcessCount();
+      const before1 = await app.getProcessCount();
       expect(before).toBeGreaterThanOrEqual(1);
 
       // Intercept confirm to accept
@@ -269,30 +269,30 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
 
       await app.locators.clearBtn.click();
 
-      const after = await app.getProcessCount();
+      const after1 = await app.getProcessCount();
       expect(after).toBe(0);
     });
 
     test('Delete button on process removes it from list', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app4 = new SchedulerApp(page);
 
       // Ensure sample loaded
       await app.loadSample();
-      const before = await app.getProcessCount();
+      const before2 = await app.getProcessCount();
       expect(before).toBeGreaterThanOrEqual(1);
 
       // Click first process's Delete button
       const firstDelete = page.locator('#plist .proc').first().locator('button');
       await firstDelete.click();
 
-      const after = await app.getProcessCount();
+      const after2 = await app.getProcessCount();
       expect(after).toBe(before - 1);
     });
   });
 
   test.describe('Simulation Execution & Playback (S2,S3,S4)', () => {
     test('Run simulation builds timeline, renders Gantt & metrics (S1->S2)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app5 = new SchedulerApp(page);
 
       // Ensure sample present
       await app.loadSample();
@@ -315,15 +315,15 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Play/Pause toggles playback state (S2 <-> S3)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app6 = new SchedulerApp(page);
 
       // Ensure there is a timeline
       await app.runSimulation();
-      const segCount = await app.getGanttSegmentCount();
+      const segCount1 = await app.getGanttSegmentCount();
       expect(segCount).toBeGreaterThan(0);
 
       // Initially Play button text should be 'Play'
-      let txt = await app.getPlayPauseText();
+      let txt1 = await app.getPlayPauseText();
       expect(['Play', 'Pause']).toContain(txt); // could be Play after resetPlayback
 
       // Click play -> expect 'Pause'
@@ -338,10 +338,10 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Click Gantt block jumps play position and updates UI', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app7 = new SchedulerApp(page);
 
       await app.runSimulation();
-      const segCount = await app.getGanttSegmentCount();
+      const segCount2 = await app.getGanttSegmentCount();
       expect(segCount).toBeGreaterThan(0);
 
       // Click the first visible gseg
@@ -353,7 +353,7 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Step forward and backward adjust play position (S2 self-transitions)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app8 = new SchedulerApp(page);
 
       await app.runSimulation();
 
@@ -378,7 +378,7 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Change playback speed while playing restarts play interval (S2 ChangeSpeed)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app9 = new SchedulerApp(page);
 
       await app.runSimulation();
 
@@ -398,7 +398,7 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Reset View stops playback and updates UI (S2->S4)', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app10 = new SchedulerApp(page);
 
       await app.runSimulation();
 
@@ -417,7 +417,7 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
     });
 
     test('Export CSV attempts to download without throwing', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app11 = new SchedulerApp(page);
 
       await app.runSimulation();
 
@@ -435,11 +435,11 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
 
   test.describe('Edge cases, validation & error handling', () => {
     test('Adding process with invalid arrival shows alert and does not add', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app12 = new SchedulerApp(page);
 
       // Ensure a clean starting count
       await app.loadSample();
-      const before = await app.getProcessCount();
+      const before3 = await app.getProcessCount();
 
       // Intercept alert and verify it happens (the page script uses alert)
       let dialogSeen = false;
@@ -457,18 +457,18 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
       // Wait a short moment for dialog to be processed
       await page.waitForTimeout(200);
 
-      const after = await app.getProcessCount();
+      const after3 = await app.getProcessCount();
       expect(dialogSeen).toBe(true);
       // Process shouldn't have been added
       expect(after).toBe(before);
     });
 
     test('Adding process with empty name triggers alert and is rejected', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app13 = new SchedulerApp(page);
 
-      const before = await app.getProcessCount();
+      const before4 = await app.getProcessCount();
 
-      let dialogSeen = false;
+      let dialogSeen1 = false;
       page.once('dialog', async (d) => {
         dialogSeen = true;
         expect(d.type()).toBe('alert');
@@ -482,13 +482,13 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
 
       await page.waitForTimeout(200);
 
-      const after = await app.getProcessCount();
+      const after4 = await app.getProcessCount();
       expect(dialogSeen).toBe(true);
       expect(after).toBe(before);
     });
 
     test('Scheduling algorithms produce reasonable non-empty timelines for sample data', async ({ page }) => {
-      const app = new SchedulerApp(page);
+      const app14 = new SchedulerApp(page);
 
       // Ensure sample processes present
       await app.loadSample();
@@ -507,11 +507,11 @@ test.describe('CPU Scheduling Visualizer - E2E (FSM validation)', () => {
         await app.runSimulation();
 
         // Gantt should have segments (non-empty timeline)
-        const segCount = await app.getGanttSegmentCount();
+        const segCount3 = await app.getGanttSegmentCount();
         expect(segCount).toBeGreaterThan(0);
 
         // Metrics should show at least one completed process
-        const metricsRows = await app.getMetricsRowsCount();
+        const metricsRows1 = await app.getMetricsRowsCount();
         expect(metricsRows).toBeGreaterThan(0);
 
         // No uncaught page errors

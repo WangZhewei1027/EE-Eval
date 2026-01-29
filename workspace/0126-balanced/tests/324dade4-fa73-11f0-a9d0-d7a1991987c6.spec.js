@@ -148,7 +148,7 @@ test.describe('BFS Visualization - FSM state and transitions (Application ID: 32
     test('clicking a node selects it (queue class toggled) and selecting another node moves selection', async ({
       page,
     }) => {
-      const gp = new GraphPage(page);
+      const gp1 = new GraphPage(page);
       await gp.startCollectingErrors();
       await gp.goto();
 
@@ -176,7 +176,7 @@ test.describe('BFS Visualization - FSM state and transitions (Application ID: 32
   // Group: Start BFS and BFSInProgress (S2_BFSInProgress & S3_ProcessingQueue)
   test.describe('Starting BFS and processing queue (S2_BFSInProgress -> S3_ProcessingQueue)', () => {
     test('clicking Start BFS without selecting a node shows alert and does not start BFS', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp2 = new GraphPage(page);
       await gp.startCollectingErrors();
       await gp.goto();
 
@@ -204,7 +204,7 @@ test.describe('BFS Visualization - FSM state and transitions (Application ID: 32
     });
 
     test('starting BFS after selecting a node triggers performBFS and processes nodes over time', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp3 = new GraphPage(page);
       await gp.startCollectingErrors();
       await gp.goto();
 
@@ -246,7 +246,7 @@ test.describe('BFS Visualization - FSM state and transitions (Application ID: 32
     });
 
     test('processing queue continues (setTimeout loop) and eventually empties or processes multiple nodes', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp4 = new GraphPage(page);
       await gp.startCollectingErrors();
       await gp.goto();
 
@@ -275,7 +275,7 @@ test.describe('BFS Visualization - FSM state and transitions (Application ID: 32
   // Group: Evidence / introspection tests (validate functions and FSM evidence strings where applicable)
   test.describe('Evidence introspection and FSM-related checks', () => {
     test('global helper functions and expected behavior exist on the page', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp5 = new GraphPage(page);
       await gp.startCollectingErrors();
       await gp.goto();
 

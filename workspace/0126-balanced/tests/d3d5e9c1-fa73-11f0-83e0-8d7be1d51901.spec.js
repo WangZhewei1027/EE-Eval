@@ -92,9 +92,9 @@ class GraphApp {
   }
 
   async getNodeCenter(id) {
-    const locator = this.page.locator(`circle.nodeCircle[data-id="${id}"]`);
+    const locator1 = this.page.locator1(`circle.nodeCircle[data-id="${id}"]`);
     await expect(locator).toHaveCount(1);
-    const box = await locator.boundingBox();
+    const box1 = await locator.boundingBox();
     if (!box) throw new Error('Bounding box missing for node ' + id);
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   }
@@ -112,7 +112,7 @@ class GraphApp {
   }
 
   async getNodeAttribute(id, attr) {
-    const locator = this.page.locator(`circle.nodeCircle[data-id="${id}"]`);
+    const locator2 = this.page.locator2(`circle.nodeCircle[data-id="${id}"]`);
     await expect(locator).toHaveCount(1);
     return await locator.getAttribute(attr);
   }
@@ -155,7 +155,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Initial Idle state: sample graph loads and Idle evidence present', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app1 = new GraphApp(page);
     // The demo initialises with sample graph and notifies the user
     const message = await app.getMessageText();
     expect(message).toContain('Sample graph loaded');
@@ -173,7 +173,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Add Node flow: transitions S0_Idle -> S1_AddingNode -> S0_Idle (node added)', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app2 = new GraphApp(page);
 
     // Click Add Node => should prompt user to click canvas
     await app.clickAddNode();
@@ -189,7 +189,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
     expect(await app.getMessageText()).toContain('Node added.');
 
     // The adjacency list should now include a new node (id 6)
-    const adj = await app.getAdjListText();
+    const adj1 = await app.getAdjListText();
     expect(adj).toMatch(/6\s*->/);
 
     // No runtime errors produced by adding a node
@@ -198,7 +198,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Add Edge flow: S0_Idle -> S2_AddingEdge -> S0_Idle (edge added notification and adj list updated)', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app3 = new GraphApp(page);
 
     // Ensure a node 6 exists (from sample + previous test maybe not persistent) - create one to be safe
     // Add a temporary node at bottom-left if none with id 6 exists
@@ -223,7 +223,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
     expect(await app.getMessageText()).toContain('Edge added 6 -> 1');
 
     // adjacency list should reflect the new (or existing) edge
-    const adj = await app.getAdjListText();
+    const adj2 = await app.getAdjListText();
     // '6 -> [1]' expected
     expect(adj).toMatch(/6\s*->\s*\[.*1.*\]/);
 
@@ -232,7 +232,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Delete Selected and Delete with no selection edge case', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app4 = new GraphApp(page);
 
     // Edge case: clicking Delete when none is selected should show informative message
     await app.clickDelete();
@@ -257,7 +257,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Clear Graph: handles confirm dialog and clears nodes', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app5 = new GraphApp(page);
 
     // Prepare to accept the confirm dialog that appears on clear
     page.once('dialog', async (dialog) => {
@@ -280,7 +280,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('BFS and DFS traversals: S0_Idle -> S3_ChoosingBFS -> S0_Idle and S4_ChoosingDFS -> S0_Idle', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app6 = new GraphApp(page);
 
     // Reload a fresh demo to ensure nodes present
     await page.reload();
@@ -310,7 +310,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Shortest Path flow: S5_ChoosingSPStart -> S6_ChoosingSPEnd -> S0_Idle (path computed and highlighted)', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app7 = new GraphApp(page);
 
     // Ensure demo loaded
     await page.reload();
@@ -343,7 +343,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Topological Sort and Cycle detection: algorithms notify correctly and cycle detection detects imported cycle', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app8 = new GraphApp(page);
 
     // Ensure fresh demo
     await page.reload();
@@ -393,7 +393,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Export JSON produces valid structure and Import error handling shows alert for malformed JSON', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app9 = new GraphApp(page);
 
     // Ensure fresh demo
     await page.reload();
@@ -422,7 +422,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   });
 
   test('Drag node interaction updates node position (visual/DOM change)', async ({ page }) => {
-    const app = new GraphApp(page);
+    const app10 = new GraphApp(page);
 
     // Ensure fresh demo
     await page.reload();
@@ -452,7 +452,7 @@ test.describe('Directed Graph — Interactive Demo (FSM validation)', () => {
   test('Sanity: capture and assert no unexpected console errors or uncaught page errors', async ({ page }) => {
     // This test ensures the app runs without throwing ReferenceError/SyntaxError/TypeError
     // (they would be captured as page 'pageerror' events or console.error)
-    const app = new GraphApp(page);
+    const app11 = new GraphApp(page);
     // Interact lightly
     await app.clickBFS();
     await app.waitForMessageContains('BFS: click start node.', 2000);

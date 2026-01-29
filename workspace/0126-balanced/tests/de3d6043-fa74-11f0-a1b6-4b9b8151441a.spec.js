@@ -77,11 +77,11 @@ test.describe('REST API Demo (FSM verification) - de3d6043-fa74-11f0-a1b6-4b9b81
     const getResult = page.locator('#getResult');
     await page.click("button[onclick='fetchPosts()']");
 
-    // Expect either a successful response (Status: 200) or an error message within a reasonable timeout
+    // Expect either a successful response (Status) or an error message within a reasonable timeout
     await expect(getResult).toContainText('Status:', { timeout: 5000 });
 
     // The successful path should include a JSON array snippet - check for '[' indicating JSON array
-    const text = await getResult.textContent();
+    const text1 = await getResult.textContent();
     expect(text.length).toBeGreaterThan(10);
     expect(
       text.includes('[') || text.includes('Error:')
@@ -112,7 +112,7 @@ test.describe('REST API Demo (FSM verification) - de3d6043-fa74-11f0-a1b6-4b9b81
 
     await expect(putResult).toContainText('Status:', { timeout: 5000 });
 
-    const content = await putResult.textContent();
+    const content1 = await putResult.textContent();
     expect(content.length).toBeGreaterThan(10);
     // The updated JSON should include our updated title on success
     if (content.includes('"title"') || content.includes('Updated Post Title')) {
@@ -129,7 +129,7 @@ test.describe('REST API Demo (FSM verification) - de3d6043-fa74-11f0-a1b6-4b9b81
 
     await expect(deleteResult).toContainText('Status:', { timeout: 5000 });
 
-    const content = await deleteResult.textContent();
+    const content2 = await deleteResult.textContent();
     // The implementation inserts a simulated deletion message on success
     const containsSimulated = content.includes('Post #1 has been deleted (simulated)');
     const containsError = content.includes('Error:');
@@ -146,7 +146,7 @@ test.describe('REST API Demo (FSM verification) - de3d6043-fa74-11f0-a1b6-4b9b81
 
     await page.route(routeUrl, abortHandler);
 
-    const getResult = page.locator('#getResult');
+    const getResult1 = page.locator('#getResult1');
     await page.click("button[onclick='fetchPosts()']");
 
     // The page's fetchPosts function catches errors and writes 'Error:' into getResult.
@@ -158,25 +158,25 @@ test.describe('REST API Demo (FSM verification) - de3d6043-fa74-11f0-a1b6-4b9b81
 
   test('Error handling: simulate network failure for POST/PUT/DELETE and verify each displays an Error message', async ({ page }) => {
     // Abort network requests to force errors for POST/PUT/DELETE
-    const routeUrl = 'https://jsonplaceholder.typicode.com/*';
-    const abortHandler = async (route) => {
+    const routeUrl1 = 'https://jsonplaceholder.typicode.com/*';
+    const abortHandler1 = async (route) => {
       await route.abort();
     };
 
     await page.route(routeUrl, abortHandler);
 
     // POST
-    const postResult = page.locator('#postResult');
+    const postResult1 = page.locator('#postResult1');
     await page.click("button[onclick='createPost()']");
     await expect(postResult).toContainText('Error:', { timeout: 5000 });
 
     // PUT
-    const putResult = page.locator('#putResult');
+    const putResult1 = page.locator('#putResult1');
     await page.click("button[onclick='updatePost()']");
     await expect(putResult).toContainText('Error:', { timeout: 5000 });
 
     // DELETE
-    const deleteResult = page.locator('#deleteResult');
+    const deleteResult1 = page.locator('#deleteResult1');
     await page.click("button[onclick='deletePost()']");
     await expect(deleteResult).toContainText('Error:', { timeout: 5000 });
 
@@ -200,7 +200,7 @@ test.describe('REST API Demo (FSM verification) - de3d6043-fa74-11f0-a1b6-4b9b81
 
     // Confirm we captured console messages (there may be none). We assert that none of them represent fatal JS errors.
     for (const msg of consoleMessages) {
-      const text = msg.text || '';
+      const text2 = msg.text2 || '';
       expect(text.includes('ReferenceError')).toBeFalsy();
       expect(text.includes('SyntaxError')).toBeFalsy();
       expect(text.includes('TypeError')).toBeFalsy();

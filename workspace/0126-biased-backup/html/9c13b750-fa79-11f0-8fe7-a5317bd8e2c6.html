@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Suffix Tree Interactive Explorer</title>
+</head>
+<body>
+
+<h1>Suffix Tree Interactive Explorer</h1>
+
+<!-- Controls: Input and algorithm selection -->
+<div>
+  <label>Mode:
+    <select id="modeSelect">
+      <option value="single">Single String</option>
+      <option value="generalized">Generalized (two strings)</option>
+    </select>
+  </label>
+</div>
+
+<div>
+  <label>String (S):
+    <input type="text" id="inputString" value="banana" size="40">
+  </label>
+</div>
+
+<div id="secondStringRow" style="display:none;">
+  <label>String 2 (T):
+    <input type="text" id="inputString2" value="panama" size="40">
+  </label>
+</div>
+
+<div>
+  <label>Algorithm:
+    <select id="algoSelect">
+      <option value="ukkonen">Ukkonen (online, step-by-step)</option>
+      <option value="naive">Naive insert-all-suffixes (step-by-step)</option>
+    </select>
+  </label>
+</div>
+
+<div>
+  <label>Terminator for S:
+    <input type="text" id="termS" value="#" size="1">
+  </label>
+  <label id="termTLabel" style="display:none;">Terminator for T:
+    <input type="text" id="termT" value="$" size="1">
+  </label>
+</div>
+
+<div>
+  <button id="buildBtn">Build (generate steps)</button>
+  <button id="resetBtn">Reset</button>
+  <button id="randomBtn">Randomize S</button>
+  <label>Random length:
+    <input type="range" id="randLen" min="3" max="16" value="6">
+    <span id="randLenVal">6</span>
+  </label>
+</div>
+
+<hr>
+
+<!-- Playback controls -->
+<div>
+  <button id="stepBackBtn">Step Back</button>
+  <button id="stepForwardBtn">Step Forward</button>
+  <button id="playPauseBtn">Play</button>
+  <label>Speed:
+    <input type="range" id="speedSlider" min="100" max="2000" value="600">
+    <span id="speedVal">600ms</span>
+  </label>
+  <label>Auto-step amount:
+    <input type="number" id="autoStepAmount" value="1" min="1" max="10" style="width:60px;">
+  </label>
+  <button id="jumpStartBtn">Jump to Start</button>
+  <button id="jumpEndBtn">Jump to End</button>
+</div>
+
+<hr>
+
+<!-- Tree visualization and options -->
+<div>
+  <label><input type="checkbox" id="showSuffixLinks" checked> Show suffix links</label>
+  <label><input type="checkbox" id="showEdgeIndexes" checked> Show edge indexes (start,end)</label>
+  <label><input type="checkbox" id="showEdgeSubstrings" checked> Show edge substring</label>
+  <label><input type="checkbox" id="collapseLeaves" > Collapse leaf listings</label>
+</div>
+
+<div>
+  <button id="exportBtn">Export Tree JSON</button>
+  <button id="importBtn">Import JSON</button>
+  <input type="file" id="importFile" style="display:none;">
+</div>
+
+<hr>
+
+<!-- Pattern search -->
+<div>
+  <label>Pattern search:
+    <input type="text" id="patternInput" size="30">
+  </label>
+  <button id="searchAllBtn">Find All (fast)</button>
+  <button id="searchStepBtn">Step Search</button>
+  <button id="searchResetBtn">Reset Search</button>
+  <label>Match result max:
+    <input type="number" id="maxMatches" value="50" style="width:60px;">
+  </label>
+</div>
+
+<hr>
+
+<!-- Advanced queries -->
+<div>
+  <button id="computeSA">Compute Suffix Array & LCP</button>
+  <button id="computeLRS">Longest Repeated Substring</button>
+  <button id="computeLCS">Longest Common Substring (generalized)</button>
+  <button id="countDistinct">Count Distinct Substrings</button>
+</div>
+
+<hr>
+
+<!-- Visualization areas -->
+<div>
+  <h3>Current Phase / Step Info</h3>
+  <div id="stepInfo" style="white-space:pre-wrap; font-family:monospace;"></div>
+</div>
+
+<div>
+  <h3>Tree View (text)</h3>
+  <div id="treeView" style="white-space:pre-wrap; font-family:monospace; max-height:400px; overflow:auto; border:1px solid #000; padding:6px;"></div>
+</div>
+
+<div>
+  <h3>Suffix Array / LCP View</h3>
+  <div id="saView" style="white-space:pre-wrap; font-family:monospace; max-height:180px; overflow:auto; border:1px solid #000; padding:6px;"></div>
+</div>
+
+<div>
+  <h3>Search / Query Results</h3>
+  <div id="queryView" style="white-space:pre-wrap; font-family:monospace; max-height:180px; overflow:auto; border:1px solid #000; padding:6px;"></div>
+</div>
+
+<div>
+  <h3>Operation Log</h3>
+  <label>Filter:
+    <input type="text" id="logFilter" placeholder="filter text">
+  </label>
+  <button id="clearLogBtn">Clear Log</button>
+  <div id="opLog" style="white-space:pre-wrap; font-family:monospace; max-height:260px; overflow:auto; border:1px solid #000; padding:6px;"></div>
+</div>
+
+<script>
+// Minimal visual styling intentionally omitted. Focus on functionality.
+
+// Data structures for tree builder and step snapshots
+(function(){
+
+// Utility functions
+function deepClone(obj){
+  return JSON.parse(JSON.stringify(obj));
+}
+function idGen(prefix){
+  let i=0;
+  return function(){ return prefix + (++i); };
+}
+
+// DOM elements
+const modeSelect = document.getElementById('modeSelect');
+const inputString = document.getElementById('inputString');
+const inputString2 = document.getElementById('inputString2');
+const secondStringRow = document.getElementById('secondStringRow');
+const algoSelect = document.getElementById('algoSelect');
+const termS = document.getElementById('termS');
+const termT = document.getElementById('termT');
+const termTLabel = document.getElementById('termTLabel');
+
+const buildBtn = document.getElementById('buildBtn');
+const resetBtn = document.getElementById('resetBtn');
+const randomBtn = document.getElementById('randomBtn');
+const randLen = document.getElementById('randLen');
+const randLenVal = document.getElementById('randLenVal');
+
+const stepBackBtn = document.getElementById('stepBackBtn');
+const stepForwardBtn = document.getElementById('stepForwardBtn');
+const playPauseBtn = document.getElementById('playPauseBtn');
+const speedSlider = document.getElementById('speedSlider');
+const speedVal = document.getElementById('speedVal');
+const autoStepAmount = document.getElementById('autoStepAmount');
+const jumpStartBtn = document.getElementById('jumpStartBtn');
+const jumpEndBtn = document.getElementById('jumpEndBtn');
+
+const showSuffixLinks = document.getElementById('showSuffixLinks');
+const showEdgeIndexes = document.getElementById('showEdgeIndexes');
+const showEdgeSubstrings = document.getElementById('showEdgeSubstrings');
+const collapseLeaves = document.getElementById('collapseLeaves');
+
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const importFile = document.getElementById('importFile');
+
+const patternInput = document.getElementById('patternInput');
+const searchAllBtn = document.getElementById('searchAllBtn');
+const searchStepBtn = document.getElementById('searchStepBtn');
+const searchResetBtn = document.getElementById('searchResetBtn');
+const maxMatches = document.getElementById('maxMatches');
+
+const computeSA = document.getElementById('computeSA');
+const computeLRS = document.getElementById('computeLRS');
+const computeLCSBtn = document.getElementById('computeLCS');
+const countDistinct = document.getElementById('countDistinct');
+
+const stepInfo = document.getElementById('stepInfo');
+const treeView = document.getElementById('treeView');
+const saView = document.getElementById('saView');
+const queryView = document.getElementById('queryView');
+const opLog = document.getElementById('opLog');
+const logFilter = document.getElementById('logFilter');
+const clearLogBtn = document.getElementById('clearLogBtn');
+
+// State
+let snapshots = []; // array of snapshots representing states
+let currentSnapshotIndex = 0;
+let playing = false;
+let playTimer = null;
+
+let logEntries = [];
+function log(msg){
+  const entry = {ts: (new Date()).toISOString(), msg};
+  logEntries.push(entry);
+  renderLog();
+}
+function renderLog(){
+  const f = logFilter.value.trim().toLowerCase();
+  opLog.innerText = logEntries.filter(e=> !f || e.msg.toLowerCase().includes(f)).map(e=> e.ts + " | " + e.msg).join("\n");
+}
+
+randLen.addEventListener('input', ()=> { randLenVal.innerText = randLen.value; });
+
+modeSelect.addEventListener('change', ()=> {
+  if(modeSelect.value === 'generalized'){
+    secondStringRow.style.display = '';
+    termTLabel.style.display = '';
+  } else {
+    secondStringRow.style.display = 'none';
+    termTLabel.style.display = 'none';
+  }
+});
+
+importBtn.addEventListener('click', ()=> importFile.click());
+importFile.addEventListener('change', (ev)=> {
+  const f = ev.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      // Expect an exported snapshot set
+      if(data && data.snapshots){
+        snapshots = data.snapshots;
+        currentSnapshotIndex = Math.max(0, Math.min(snapshots.length-1, data.currentIndex || 0));
+        log('Imported snapshots JSON. ' + snapshots.length + ' snapshots loaded.');
+        renderSnapshot();
+      } else {
+        alert('JSON did not contain snapshots[]');
+      }
+    } catch(err){
+      alert('Invalid JSON: ' + err);
+    }
+  };
+  reader.readAsText(f);
+});
+
+// Export
+exportBtn.addEventListener('click', ()=>{
+  const payload = {snapshots, currentIndex: currentSnapshotIndex};
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload));
+  const a = document.createElement('a');
+  a.href = dataStr;
+  a.download = 'suffix_tree_snapshots.json';
+  a.click();
+  log('Exported snapshots JSON.');
+});
+
+// Reset
+resetBtn.addEventListener('click', ()=>{
+  snapshots = [];
+  currentSnapshotIndex = 0;
+  playing = false;
+  clearInterval(playTimer);
+  renderSnapshot();
+  log('Reset explorer state.');
+});
+
+// Randomize string
+randomBtn.addEventListener('click', ()=>{
+  const len = parseInt(randLen.value,10);
+  // Basic alphabet letters
+  const alpha = "abcdefghijklmnopqrstuvwxyz";
+  let s = "";
+  for(let i=0;i<len;i++) s += alpha[Math.floor(Math.random()*alpha.length)];
+  inputString.value = s;
+  log('Randomized input string: ' + s);
+});
+
+// Play controls
+speedSlider.addEventListener('input', ()=> { speedVal.innerText = speedSlider.value + "ms"; });
+
+stepBackBtn.addEventListener('click', ()=> { step(-1); });
+stepForwardBtn.addEventListener('click', ()=> { step(1); });
+jumpStartBtn.addEventListener('click', ()=> { goTo(0); });
+jumpEndBtn.addEventListener('click', ()=> { goTo(snapshots.length - 1); });
+
+playPauseBtn.addEventListener('click', ()=> {
+  if(playing){ stopPlay(); } else { startPlay(); }
+});
+
+function startPlay(){
+  if(!snapshots || snapshots.length===0) return;
+  playing = true;
+  playPauseBtn.innerText = 'Pause';
+  const delay = parseInt(speedSlider.value,10);
+  const amt = Math.max(1, parseInt(autoStepAmount.value,10));
+  playTimer = setInterval(()=> {
+    step(amt);
+  }, delay);
+  log('Play started.');
+}
+function stopPlay(){
+  playing = false;
+  playPauseBtn.innerText = 'Play';
+  clearInterval(playTimer);
+  playTimer = null;
+  log('Play paused.');
+}
+
+// Core operations: generate snapshots by algorithms
+buildBtn.addEventListener('click', ()=> {
+  stopPlay();
+  snapshots = [];
+  currentSnapshotIndex = 0;
+  saView.innerText = "";
+  queryView.innerText = "";
+  opLog.innerText = "";
+  logEntries = [];
+  log('Build started: algo=' + algoSelect.value + ' mode=' + modeSelect.value);
+  if(modeSelect.value === 'generalized'){
+    const S = inputString.value + termS.value;
+    const T = inputString2.value + termT.value;
+    // Ensure terminators are unique
+    if(termS.value === termT.value){
+      alert('Terminators for the two strings must differ. Change one.');
+      log('Build aborted: identical terminators.');
+      return;
+    }
+    if(algoSelect.value === 'ukkonen'){
+      buildGeneralizedUkkonenSteps(inputString.value, inputString2.value, termS.value, termT.value);
+    } else {
+      buildGeneralizedNaiveSteps(inputString.value, inputString2.value, termS.value, termT.value);
+    }
+  } else {
+    const S = inputString.value + termS.value;
+    if(algoSelect.value === 'ukkonen'){
+      buildUkkonenSteps(inputString.value, termS.value);
+    } else {
+      buildNaiveSteps(inputString.value, termS.value);
+    }
+  }
+  renderSnapshot();
+});
+
+// Snapshot rendering
+function renderSnapshot(){
+  if(!snapshots || snapshots.length===0){
+    treeView.innerText = "(no snapshots)";
+    stepInfo.innerText = "";
+    saView.innerText = "";
+    queryView.innerText = "";
+    return;
+  }
+  const snap = snapshots[currentSnapshotIndex];
+  // Step info
+  let info = "Step " + (currentSnapshotIndex+1) + " / " + snapshots.length + "\n";
+  if(snap.phase) info += "Phase: " + snap.phase + "\n";
+  if(snap.message) info += "Note: " + snap.message + "\n";
+  if(snap.meta) info += "Meta: " + JSON.stringify(snap.meta) + "\n";
+  stepInfo.innerText = info;
+  // Tree view
+  treeView.innerText = renderTreeText(snap);
+  // SA view might be in snapshot
+  saView.innerText = snap.saText || "";
+  queryView.innerText = snap.queryText || "";
+  renderLog();
+}
+
+// Tree text rendering
+function renderTreeText(snap){
+  if(!snap.root) return "(empty snapshot)";
+  const lines = [];
+  const s = snap.fullString || "";
+  lines.push("Full string: \"" + s + "\"");
+  lines.push("Nodes: " + snap.nodes.length + "   Edges: " + snap.edges.length);
+  lines.push("");
+  function nodeLine(n){
+    const parts = ["[" + n.id + "]"];
+    if(showSuffixLinks.checked && n.suffixLink) parts.push("->sl:" + n.suffixLink);
+    if(n.leafIndices && n.leafIndices.length){
+      if(collapseLeaves.checked){
+        parts.push("leaves:" + n.leafIndices.length);
+      } else {
+        parts.push("leaves:" + JSON.stringify(n.leafIndices));
+      }
+    }
+    return parts.join(" ");
+  }
+  function edgeLine(e){
+    const parts = [];
+    if(showEdgeIndexes.checked) parts.push("(" + e.start + "," + e.endDisplay + ")");
+    if(showEdgeSubstrings.checked) parts.push('"' + e.substr + '"');
+    parts.push(" -> " + e.dest);
+    return parts.join(" ");
+  }
+  function dfs(nodeId, indent){
+    const n = snap.nodeMap[nodeId];
+    lines.push(indent + nodeLine(n));
+    for(const e of n.edges){
+      lines.push(indent + "  - " + edgeLine(e));
+      dfs(e.dest, indent + "    ");
+    }
+  }
+  dfs("n1", "");
+  return lines.join("\n");
+}
+
+// Step navigation
+function step(delta){
+  if(!snapshots || snapshots.length===0) return;
+  let newIndex = currentSnapshotIndex + delta;
+  if(newIndex < 0) newIndex = 0;
+  if(newIndex >= snapshots.length) newIndex = snapshots.length - 1;
+  currentSnapshotIndex = newIndex;
+  renderSnapshot();
+}
+
+function goTo(idx){
+  if(!snapshots || snapshots.length===0) return;
+  currentSnapshotIndex = Math.max(0, Math.min(snapshots.length - 1, idx));
+  renderSnapshot();
+}
+
+// Operation log controls
+clearLogBtn.addEventListener('click', ()=> { logEntries = []; renderLog(); });
+
+// Searches
+let searchStepper = null;
+searchAllBtn.addEventListener('click', ()=> {
+  if(!snapshots || snapshots.length===0) return;
+  const pattern = patternInput.value;
+  if(!pattern) { alert('Enter a pattern to search'); return; }
+  const snap = snapshots[currentSnapshotIndex];
+  const s = snap.fullString || "";
+  // naive SA search: compute all occurrences
+  const res = [];
+  for(let i=0;i+pattern.length<=s.length;i++){
+    if(s.substr(i, pattern.length) === pattern) res.push(i);
+    if(res.length >= parseInt(maxMatches.value,10)) break;
+  }
+  queryView.innerText = "Pattern: \"" + pattern + "\"\nOccurrences: " + res.length + "\nPositions: " + JSON.stringify(res);
+  log('Pattern search all: "' + pattern + '" found ' + res.length + ' occurrences.');
+});
+
+let searchSteps = [];
+let searchStepIndex = 0;
+searchStepBtn.addEventListener('click', ()=> {
+  if(!snapshots || snapshots.length===0) return;
+  const pattern = patternInput.value;
+  if(!pattern) { alert('Enter pattern'); return; }
+  // Build a sequence of step messages that mimic traversing the tree per character
+  const snap = snapshots[currentSnapshotIndex];
+  const steps = [];
+  let nodeId = "n1"; // start at root
+  let i = 0;
+  steps.push({msg: "Start at root", nodeId});
+  while(i < pattern.length){
+    const c = pattern[i];
+    const node = snap.nodeMap[nodeId];
+    // find edge starting with c among edges
+    let edge = null;
+    for(const e of node.edges){
+      if(e.substr[0] === c){ edge = e; break; }
+    }
+    if(!edge){
+      steps.push({msg: "No edge starting with '" + c + "' from node " + nodeId + ". Pattern not found."});
+      break;
+    }
+    // traverse along edge
+    let j = 0;
+    while(j < edge.substr.length && i < pattern.length){
+      steps.push({msg: "Match char segment: edge " + edge.start + "-" + edge.endDisplay + " substr '" + edge.substr + "', comparing pattern[" + i + "] = '" + pattern[i] + "' with edge[" + j + "] = '" + edge.substr[j] + "'"});
+      if(pattern[i] !== edge.substr[j]){
+        steps.push({msg: "Mismatch at pattern pos " + i + " -> pattern not found."});
+        i = pattern.length; // end
+        break;
+      }
+      i++; j++;
+    }
+    if(i >= pattern.length){
+      steps.push({msg: "Pattern completely matched. Occurrences are leaves under node " + edge.dest});
+      break;
+    }
+    if(j === edge.substr.length){
+      // continue at dest node
+      nodeId = edge.dest;
+      steps.push({msg: "Reached node " + nodeId + " after consuming edge. Continue."});
+    } else {
+      // mismatch already handled above
+      break;
+    }
+  }
+  searchSteps = steps;
+  searchStepIndex = 0;
+  // Show first step
+  if(searchSteps.length>0){
+    queryView.innerText = "Search stepping (" + searchSteps.length + " steps):\n" + searchSteps[0].msg;
+    log('Pattern search stepping started for "' + pattern + '"');
+  } else {
+    queryView.innerText = "No steps generated.";
+  }
+  // wire step forward/back with existing step controls: map them when active
+});
+
+searchResetBtn.addEventListener('click', ()=> {
+  searchSteps = [];
+  searchStepIndex = 0;
+  queryView.innerText = "";
+  log('Search steps reset.');
+});
+
+// Use step forward/back to traverse search steps if available
+const originalStep = stepForwardBtn.onclick;
+stepForwardBtn.addEventListener('click', ()=> {
+  if(searchSteps && searchSteps.length > 0){
+    searchStepIndex = Math.min(searchSteps.length-1, searchStepIndex + 1);
+    queryView.innerText = "Search stepping (" + searchSteps.length + " steps):\n" + searchSteps[searchStepIndex].msg;
+  }
+});
+stepBackBtn.addEventListener('click', ()=> {
+  if(searchSteps && searchSteps.length > 0){
+    searchStepIndex = Math.max(0, searchStepIndex - 1);
+    queryView.innerText = "Search stepping (" + searchSteps.length + " steps):\n" + searchSteps[searchStepIndex].msg;
+  }
+});
+
+function ensureSnapshotExists(){
+  if(!snapshots || snapshots.length===0) return false;
+  return true;
+}
+
+// Compute SA and LCP from final string directly (fast) or from tree
+computeSA.addEventListener('click', ()=> {
+  if(!ensureSnapshotExists()) return;
+  const snap = snapshots[currentSnapshotIndex];
+  const s = snap.fullString || "";
+  const SA = [];
+  for(let i=0;i<s.length;i++) SA.push(i);
+  SA.sort((a,b)=> {
+    if(a===b) return 0;
+    return s.substring(a) < s.substring(b) ? -1 : 1;
+  });
+  const LCP = [];
+  for(let i=1;i<SA.length;i++){
+    const a = SA[i-1], b = SA[i];
+    let l=0;
+    while(a+l < s.length && b+l < s.length && s[a+l]===s[b+l]) l++;
+    LCP.push(l);
+  }
+  let text = "Suffix Array (indices):\n[" + SA.join(",") + "]\n\nLCP between adjacent:\n[" + LCP.join(",") + "]";
+  saView.innerText = text;
+  // Attach to snapshot for display when navigating
+  snapshots[currentSnapshotIndex].saText = text;
+  log('Computed SA and LCP for current snapshot.');
+});
+
+// Longest repeated substring (LRS)
+computeLRS.addEventListener('click', ()=> {
+  if(!ensureSnapshotExists()) return;
+  // Use SA & LCP above approach for simplicity
+  const snap = snapshots[currentSnapshotIndex];
+  const s = snap.fullString || "";
+  const SA = [];
+  for(let i=0;i<s.length;i++) SA.push(i);
+  SA.sort((a,b)=> s.substring(a) < s.substring(b) ? -1 : 1);
+  let bestLen = 0;
+  let bestPos = 0;
+  for(let i=1;i<SA.length;i++){
+    let l=0;
+    const a = SA[i-1], b = SA[i];
+    while(a+l < s.length && b+l < s.length && s[a+l]===s[b+l]) l++;
+    if(l > bestLen){ bestLen=l; bestPos = a; }
+  }
+  if(bestLen === 0){
+    queryView.innerText = "No repeated substring (other than terminator).";
+    log('LRS computed: none.');
+  } else {
+    queryView.innerText = "Longest repeated substring: \"" + s.substr(bestPos, bestLen) + "\" length=" + bestLen + " at pos " + bestPos;
+    log('LRS computed: "' + s.substr(bestPos,bestLen) + '"');
+  }
+});
+
+// Count distinct substrings using formula n*(n+1)/2 - sum LCP
+countDistinct.addEventListener('click', ()=> {
+  if(!ensureSnapshotExists()) return;
+  const snap = snapshots[currentSnapshotIndex];
+  const s = snap.fullString || "";
+  const SA = [];
+  for(let i=0;i<s.length;i++) SA.push(i);
+  SA.sort((a,b)=> s.substring(a) < s.substring(b) ? -1 : 1);
+  const LCP = [];
+  for(let i=1;i<SA.length;i++){
+    let l=0;
+    const a = SA[i-1], b = SA[i];
+    while(a+l < s.length && b+l < s.length && s[a+l]===s[b+l]) l++;
+    LCP.push(l);
+  }
+  const n = s.length;
+  const total = n*(n+1)/2 - LCP.reduce((a,b)=>a+b,0);
+  queryView.innerText = "Distinct substrings count: " + total;
+  log('Distinct substrings counted: ' + total);
+});
+
+// Generalized LCS
+computeLCSBtn.addEventListener('click', ()=> {
+  if(modeSelect.value !== 'generalized'){
+    alert('Switch to generalized mode with two strings to compute LCS.');
+    return;
+  }
+  if(!ensureSnapshotExists()) return;
+  const snap = snapshots[currentSnapshotIndex];
+  // We'll find deepest internal node with leaves from both strings
+  let best = {len:0, substr:"", nodeId:null};
+  function dfs(nodeId, curDepth){
+    const node = snap.nodeMap[nodeId];
+    let ownerSet = new Set(node.leafOwners || []);
+    if(ownerSet.size >= 2 && curDepth > best.len){
+      best.len = curDepth;
+      // Build substring by walking up parent edges (we store edges with parent info in snapshot)
+      best.substr = buildSubstringFromNode(snap, nodeId);
+      best.nodeId = nodeId;
+    }
+    for(const e of node.edges){
+      dfs(e.dest, curDepth + e.substr.length);
+    }
+  }
+  dfs("n1", 0);
+  if(best.len === 0){
+    queryView.innerText = "No common substring found.";
+    log('LCS: none.');
+  } else {
+    queryView.innerText = "LCS length " + best.len + " substring: \"" + best.substr + "\" (node " + best.nodeId + ")";
+    log('LCS found: "' + best.substr + '" length ' + best.len);
+  }
+});
+
+function buildSubstringFromNode(snap, nodeId){
+  // Walk backwards from node to root using parent pointers included in snapshot (we will maintain parent in snapshots)
+  const node = snap.nodeMap[nodeId];
+  const parts = [];
+  let cur = nodeId;
+  while(cur && cur !== "n1"){
+    const edge = snap.parentEdge[cur];
+    if(!edge) break;
+    parts.push(edge.substr);
+    cur = snap.parentNode[cur];
+  }
+  return parts.reverse().join("");
+}
+
+// ---------- Building algorithms (generate snapshots) ----------
+
+// Snapshot building helper: create an exported representation of current tree
+function makeSnapshotFromTree(tree, metaMessage){
+  // tree: {fullString, nodes map, edges ...}
+  // We'll produce nodes array and edges with substrings computed up to tree.pos
+  const s = tree.S;
+  const pos = tree.pos;
+  const nodeList = [];
+  const edgeList = [];
+  const nodeMapExport = {};
+  // We'll ensure each node has unique id "nX"
+  for(const nid in tree.nodes){
+    const n = tree.nodes[nid];
+    nodeList.push({id: nid, suffixLink: n.suffixLink || null, leafIndices: Array.from(n.leafIndices || [])});
+  }
+  // For edges, gather from parent
+  const parentEdge = {}; // map child->edge
+  const parentNode = {};
+  for(const pid in tree.nodes){
+    const n = tree.nodes[pid];
+    for(const ekey in n.edges){
+      const e = n.edges[ekey];
+      // compute substring display until pos
+      const endIdx = (e.end === Infinity) ? pos : e.end;
+      const substr = s.substring(e.start, Math.min(endIdx+1, s.length));
+      const eobj = {start: e.start, endDisplay: (e.end===Infinity ? ('..' + pos) : e.end), substr: substr, dest: e.dest};
+      edgeList.push(eobj);
+      if(!nodeMapExport[pid]) nodeMapExport[pid] = {id: pid, edges: [], suffixLink: tree.nodes[pid].suffixLink || null, leafIndices: Array.from(tree.nodes[pid].leafIndices || [])};
+      nodeMapExport[pid].edges.push({start:e.start, endDisplay:eobj.endDisplay, substr:substr, dest:e.dest});
+      parentEdge[e.dest] = {start:e.start, endDisplay:eobj.endDisplay, substr:substr, dest:e.dest};
+      parentNode[e.dest] = pid;
+    }
+  }
+  const nodesArray = Object.values(nodeMapExport);
+  // Also compute owner info for generalized tree leaves
+  const nodeOwners = {};
+  for(const nid in tree.nodes){
+    nodeOwners[nid] = new Set();
+    const li = tree.nodes[nid].leafIndices || new Set();
+    for(const posi of li){
+      if(tree.ownerOfSuffix && tree.ownerOfSuffix[posi]) nodeOwners[nid].add(tree.ownerOfSuffix[posi]);
+    }
+  }
+  // Transform sets to arrays
+  for(const nid in nodeOwners){
+    nodeOwners[nid] = Array.from(nodeOwners[nid]);
+  }
+  // Export snapshot object
+  const snap = {
+    phase: tree.phase || null,
+    message: metaMessage || null,
+    meta: {pos: tree.pos},
+    fullString: s,
+    nodes: nodesArray,
+    edges: edgeList,
+    nodeMap: nodeMapExport,
+    parentEdge: parentEdge,
+    parentNode: parentNode,
+    ownerInfo: nodeOwners
+  };
+  // attach leafOwners to node map
+  for(const nid in snap.nodeMap){
+    snap.nodeMap[nid].leafOwners = nodeOwners[nid] || [];
+  }
+  // compute and attach leafIndices for convenience (already in nodeMap)
+  for(const nid in snap.nodeMap){
+    snap.nodeMap[nid].leafIndices = snap.nodeMap[nid].leafIndices || [];
+  }
+  // Also make quick lookup map for recursion earlier
+  snapshots.push(snap);
+}
+
+// ---------- Ukkonen algorithm (single string) ----------
+function buildUkkonenSteps(baseString, terminator){
+  const S = baseString + terminator;
+  // Node structure: nodes map with edges keyed by first char; edges: {start,end,dest}
+  const nodes = {};
+  const nodeId = idGen('n');
+  // Create root
+  const rootId = nodeId();
+  nodes[rootId] = {edges: {}, suffixLink: null, leafIndices: new Set()};
+  const tree = {S: S, pos: -1, nodes: nodes, phase: null, ownerOfSuffix: {}};
+  tree.root = rootId;
+  tree.nextNodeId = nodeId;
+  // Add snapshot of empty root
+  tree.pos = -1;
+  makeSnapshotFromTree(tree, "Initial empty tree");
+
+  let activeNode = rootId;
+  let activeEdge = -1;
+  let activeLength = 0;
+  let remainder = 0;
+  let lastNewNode = null;
+
+  for(let i=0;i<S.length;i++){
+    tree.pos = i;
+    tree.phase = "phase " + i + " (adding '" + S[i] + "')";
+    const ch = S[i];
+    remainder++;
+    lastNewNode = null;
+    makeSnapshotFromTree(tree, "Start phase " + i + ", remainder now " + remainder);
+
+    while(remainder > 0){
+      if(activeLength === 0) activeEdge = i;
+      const activeEdgeChar = S[activeEdge];
+      const activeNodeObj = tree.nodes[activeNode];
+      let edge = activeNodeObj.edges[activeEdgeChar];
+      if(!edge){
+        // Rule 2: create a new leaf edge
+        const leafId = nodeId();
+        tree.nodes[leafId] = {edges:{}, suffixLink: null, leafIndices: new Set([i - (S.length - 1 - i) /* dummy */])};
+        // In our representation, we'll keep leafIndices updated via a DFS after each crucial change for readability
+        activeNodeObj.edges[activeEdgeChar] = {start: i, end: Infinity, dest: leafId};
+        // assign ownerOfSuffix: suffix begins at i
+        tree.ownerOfSuffix[i] = 1;
+        makeSnapshotFromTree(tree, "Created new leaf for char '" + ch + "' at pos " + i);
+        if(lastNewNode){
+          tree.nodes[lastNewNode].suffixLink = activeNode;
+          makeSnapshotFromTree(tree, "Set suffix link of lastNewNode " + lastNewNode + " -> " + activeNode);
+          lastNewNode = null;
+        }
+        remainder--;
+      } else {
+        // Walk down if necessary
+        const edgeSpan = (edge.end === Infinity ? (i - edge.start + 1) : (edge.end - edge.start + 1));
+        if(activeLength >= edgeSpan){
+          activeEdge += edgeSpan;
+          activeLength -= edgeSpan;
+          activeNode = edge.dest;
+          continue;
+        }
+        // Check next character on edge
+        const nextChar = S[edge.start + activeLength];
+        if(nextChar === ch){
+          // Rule 3: no insertion, increment activeLength
+          activeLength++;
+          makeSnapshotFromTree(tree, "Character already on edge, increment activeLength to " + activeLength);
+          if(lastNewNode){
+            tree.nodes[lastNewNode].suffixLink = activeNode;
+            makeSnapshotFromTree(tree, "Set suffix link of lastNewNode " + lastNewNode + " -> " + activeNode);
+            lastNewNode = null;
+          }
+          break;
+        } else {
+          // Rule 2 + split edge: create internal node
+          const splitId = nodeId();
+          tree.nodes[splitId] = {edges:{}, suffixLink: null, leafIndices: new Set()};
+          // Old edge becomes child of split
+          const oldDest = edge.dest;
+          const oldStart = edge.start;
+          const oldEnd = edge.end;
+          // New edge from activeNode to split
+          activeNodeObj.edges[activeEdgeChar] = {start: oldStart, end: oldStart + activeLength - 1, dest: splitId};
+          // Edge from split to oldDest with adjusted start
+          tree.nodes[splitId].edges[S[oldStart + activeLength]] = {start: oldStart + activeLength, end: oldEnd, dest: oldDest};
+          // New leaf from split
+          const leafId = nodeId();
+          tree.nodes[leafId] = {edges:{}, suffixLink: null, leafIndices: new Set([i])};
+          tree.nodes[splitId].edges[ch] = {start: i, end: Infinity, dest: leafId};
+
+          makeSnapshotFromTree(tree, "Split edge and created internal node " + splitId + " and leaf " + leafId);
+
+          // manage suffix link
+          if(lastNewNode){
+            tree.nodes[lastNewNode].suffixLink = splitId;
+            makeSnapshotFromTree(tree, "Set suffix link of lastNewNode " + lastNewNode + " -> " + splitId);
+          }
+          lastNewNode = splitId;
+
+          remainder--;
+          if(activeNode === rootId && activeLength > 0){
+            activeLength--;
+            activeEdge = i - remainder + 1;
+          } else {
+            activeNode = tree.nodes[activeNode].suffixLink || rootId;
+          }
+        }
+      }
+    } // end while remainder
+    // After phase, update a readable mapping of leafIndices by performing a DFS to collect leaf positions
+    updateLeafIndices(tree);
+    makeSnapshotFromTree(tree, "End phase " + i);
+  } // end for each char
+
+  // Final snapshot marking completion
+  tree.pos = S.length - 1;
+  makeSnapshotFromTree(tree, "Final tree built (Ukkonen).");
+  log('Ukkonen build generated ' + snapshots.length + ' snapshots for string "' + S + '"');
+  currentSnapshotIndex = 0;
+}
+
+// ---------- Naive builder for single string ----------
+function buildNaiveSteps(baseString, terminator){
+  const S = baseString + terminator;
+  const nodes = {};
+  const nodeId = idGen('n');
+  const rootId = nodeId();
+  nodes[rootId] = {edges:{}, suffixLink:null, leafIndices:new Set()};
+  const tree = {S: S, pos: -1, nodes: nodes, phase: null, ownerOfSuffix:{}};
+  tree.root = rootId;
+  tree.nextNodeId = nodeId;
+  tree.pos = -1;
+  makeSnapshotFromTree(tree, "Initial empty tree (naive)");
+
+  // Insert each suffix
+  for(let start=0; start<S.length; start++){
+    tree.pos = start;
+    tree.phase = "Insert suffix starting at " + start;
+    let cur = rootId;
+    let i = start;
+    while(i < S.length){
+      const c = S[i];
+      const node = tree.nodes[cur];
+      if(!node.edges[c]){
+        // create leaf
+        const leafId = nodeId();
+        tree.nodes[leafId] = {edges:{}, suffixLink:null, leafIndices:new Set([start])};
+        node.edges[c] = {start: i, end: Infinity, dest: leafId};
+        tree.ownerOfSuffix[start] = 1;
+        makeSnapshotFromTree(tree, "Inserted new leaf for suffix starting " + start + " at char '" + c + "'");
+        break;
+      } else {
+        const e = node.edges[c];
+        // match along edge
+        let j = e.start;
+        while(j <= (e.end === Infinity ? S.length-1 : e.end) && i < S.length && S[j] === S[i]){
+          j++; i++;
+        }
+        if(j <= (e.end === Infinity ? S.length-1 : e.end) && i < S.length && S[j] !== S[i]){
+          // split
+          const splitId = nodeId();
+          tree.nodes[splitId] = {edges:{}, suffixLink:null, leafIndices:new Set()};
+          // existing child becomes child of split
+          const oldDest = e.dest;
+          const oldStart = e.start;
+          const oldEnd = e.end;
+          node.edges[c] = {start: oldStart, end: j-1, dest: splitId};
+          tree.nodes[splitId].edges[S[j]] = {start: j, end: oldEnd, dest: oldDest};
+          // new leaf
+          const leafId = nodeId();
+          tree.nodes[leafId] = {edges:{}, suffixLink:null, leafIndices:new Set([start])};
+          tree.nodes[splitId].edges[S[i]] = {start: i, end: Infinity, dest: leafId};
+          makeSnapshotFromTree(tree, "Split and inserted for mismatch during insertion of suffix " + start);
+          break;
+        } else {
+          // moved past edge
+          cur = e.dest;
+          continue;
+        }
+      }
+    }
+    updateLeafIndices(tree);
+    makeSnapshotFromTree(tree, "Finished inserting suffix " + start);
+  }
+  makeSnapshotFromTree(tree, "Final naive-built tree");
+  log('Naive build generated ' + snapshots.length + ' snapshots for string "' + S + '"');
+  currentSnapshotIndex = 0;
+}
+
+// ---------- Generalized versions (two strings) ----------
+function buildGeneralizedUkkonenSteps(s1, s2, term1, term2){
+  // We'll build a generalized suffix tree by concatenating with distinct terminators and tracking ownerOfSuffix by start pos
+  const S = s1 + term1 + s2 + term2;
+  const n1 = s1.length + 1; // including term1
+  // Build similar to single Ukkonen but track ownerOfSuffix: if suffix start < n1 => owner 1 else owner 2
+  const nodes = {};
+  const nodeId = idGen('n');
+  const rootId = nodeId();
+  nodes[rootId] = {edges:{}, suffixLink:null, leafIndices:new Set()};
+  const tree = {S: S, pos: -1, nodes: nodes, phase: null, ownerOfSuffix: {}};
+  tree.root = rootId;
+  tree.nextNodeId = nodeId;
+  tree.pos = -1;
+  makeSnapshotFromTree(tree, "Initial empty generalized tree");
+
+  let activeNode = rootId;
+  let activeEdge = -1;
+  let activeLength = 0;
+  let remainder = 0;
+  let lastNewNode = null;
+
+  for(let i=0;i<S.length;i++){
+    tree.pos = i;
+    tree.phase = "phase " + i + " (adding '" + S[i] + "')";
+    remainder++;
+    lastNewNode = null;
+    makeSnapshotFromTree(tree, "Start phase " + i + ", remainder now " + remainder);
+
+    while(remainder > 0){
+      if(activeLength === 0) activeEdge = i;
+      const activeEdgeChar = S[activeEdge];
+      const activeNodeObj = tree.nodes[activeNode];
+      let edge = activeNodeObj.edges[activeEdgeChar];
+      if(!edge){
+        // create leaf
+        const leafId = nodeId();
+        tree.nodes[leafId] = {edges:{}, suffixLink:null, leafIndices:new Set([i])};
+        activeNodeObj.edges[activeEdgeChar] = {start: i, end: Infinity, dest: leafId};
+        tree.ownerOfSuffix[i] = (i < n1) ? 1 : 2;
+        makeSnapshotFromTree(tree, "Created new generalized leaf for char '" + S[i] + "' at pos " + i);
+        if(lastNewNode){
+          tree.nodes[lastNewNode].suffixLink = activeNode;
+          makeSnapshotFromTree(tree, "Set suffix link of lastNewNode " + lastNewNode + " -> " + activeNode);
+          lastNewNode = null;
+        }
+        remainder--;
+      } else {
+        const edgeSpan = (edge.end === Infinity ? (i - edge.start + 1) : (edge.end - edge.start + 1));
+        if(activeLength >= edgeSpan){
+          activeEdge += edgeSpan;
+          activeLength -= edgeSpan;
+          activeNode = edge.dest;
+          continue;
+        }
+        const nextChar = S[edge.start + activeLength];
+        if(nextChar === S[i]){
+          activeLength++;
+          makeSnapshotFromTree(tree, "Character already on edge, increment activeLength to " + activeLength);
+          if(lastNewNode){
+            tree.nodes[lastNewNode].suffixLink = activeNode;
+            makeSnapshotFromTree(tree, "Set suffix link of lastNewNode " + lastNewNode + " -> " + activeNode);
+            lastNewNode = null;
+          }
+          break;
+        } else {
+          // split
+          const splitId = nodeId();
+          tree.nodes[splitId] = {edges:{}, suffixLink:null, leafIndices:new Set()};
+          const oldDest = edge.dest;
+          const oldStart = edge.start;
+          const oldEnd = edge.end;
+          activeNodeObj.edges[activeEdgeChar] = {start: oldStart, end: oldStart + activeLength - 1, dest: splitId};
+          tree.nodes[splitId].edges[S[oldStart + activeLength]] = {start: oldStart + activeLength, end: oldEnd, dest: oldDest};
+          const leafId = nodeId();
+          tree.nodes[leafId] = {edges:{}, suffixLink:null, leafIndices:new Set([i])};
+          tree.nodes[splitId].edges[S[i]] = {start: i, end: Infinity, dest: leafId};
+          tree.ownerOfSuffix[i] = (i < n1) ? 1 : 2;
+          makeSnapshotFromTree(tree, "Split and created generalized internal node " + splitId + " and leaf " + leafId);
+          if(lastNewNode){
+            tree.nodes[lastNewNode].suffixLink = splitId;
+            makeSnapshotFromTree(tree, "Set suffix link of lastNewNode " + lastNewNode + " -> " + splitId);
+          }
+          lastNewNode = splitId;
+          remainder--;
+          if(activeNode === rootId && activeLength > 0){
+            activeLength--;
+            activeEdge = i - remainder + 1;
+          } else {
+            activeNode = tree.nodes[activeNode].suffixLink || rootId;
+          }
+        }
+      }
+    }
+    updateLeafIndices(tree);
+    makeSnapshotFromTree(tree, "End phase " + i);
+  }
+
+  tree.pos = S.length - 1;
+  makeSnapshotFromTree(tree, "Final generalized tree (Ukkonen)");
+  log('Generalized Ukkonen build generated ' + snapshots.length + ' snapshots for S+T "' + S + '"');
+  currentSnapshotIndex = 0;
+}
+
+function buildGeneralizedNaiveSteps(s1, s2, term1, term2){
+  const S = s1 + term1 + s2 + term2;
+  const n1 = s1.length + 1;
+  const nodes = {};
+  const nodeId = idGen('n');
+  const rootId = nodeId();
+  nodes[rootId] = {edges:{}, suffixLink:null, leafIndices:new Set()};
+  const tree = {S: S, pos: -1, nodes: nodes, phase: null, ownerOfSuffix: {}};
+  tree.root = rootId;
+  tree.nextNodeId = nodeId;
+  makeSnapshotFromTree(tree, "Initial empty generalized tree (naive)");
+
+  for(let start=0; start<S.length; start++){
+    tree.pos = start;
+    tree.phase = "Insert generalized suffix at " + start;
+    let cur = rootId;
+    let i = start;
+    while(i < S.length){
+      const c = S[i];
+      const node = tree.nodes[cur];
+      if(!node.edges[c]){
+        const leafId = nodeId();
+        tree.nodes[leafId] = {edges:{}, suffixLink:null, leafIndices:new Set([start])};
+        node.edges[c] = {start: i, end: Infinity, dest: leafId};
+        tree.ownerOfSuffix[start] = (start < n1) ? 1 : 2;
+        makeSnapshotFromTree(tree, "Inserted new generalized leaf for suffix " + start + " at char '" + c + "'");
+        break;
+      } else {
+        const e = node.edges[c];
+        let j = e.start;
+        while(j <= (e.end === Infinity ? S.length-1 : e.end) && i < S.length && S[j] === S[i]){
+          j++; i++;
+        }
+        if(j <= (e.end === Infinity ? S.length-1 : e.end) && i < S.length && S[j] !== S[i]){
+          const splitId = nodeId();
+          tree.nodes[splitId] = {edges:{}, suffixLink:null, leafIndices:new Set()};
+          const oldDest = e.dest;
+          const oldStart = e.start;
+          const oldEnd = e.end;
+          node.edges[c] = {start: oldStart, end: j-1, dest: splitId};
+          tree.nodes[splitId].edges[S[j]] = {start: j, end: oldEnd, dest: oldDest};
+          const leafId = nodeId();
+          tree.nodes[leafId] = {edges:{}, suffixLink:null, leafIndices:new Set([start])};
+          tree.nodes[splitId].edges[S[i]] = {start: i, end: Infinity, dest: leafId};
+          tree.ownerOfSuffix[start] = (start < n1) ? 1 : 2;
+          makeSnapshotFromTree(tree, "Split and inserted generalized leaf during naive insertion of suffix " + start);
+          break;
+        } else {
+          cur = e.dest;
+          continue;
+        }
+      }
+    }
+    updateLeafIndices(tree);
+    makeSnapshotFromTree(tree, "Finished inserting generalized suffix " + start);
+  }
+  makeSnapshotFromTree(tree, "Final generalized naive-built tree");
+  log('Generalized naive build generated ' + snapshots.length + ' snapshots for S+T "' + S + '"');
+  currentSnapshotIndex = 0;
+}
+
+// Helper: update leafIndices and ownerOfSuffix mapping for tree readability
+function updateLeafIndices(tree){
+  // reset
+  for(const nid in tree.nodes){
+    tree.nodes[nid].leafIndices = new Set();
+  }
+  const S = tree.S;
+  // DFS from root to collect leaves
+  function dfs(nodeId, pathStart){
+    const n = tree.nodes[nodeId];
+    let isLeaf = Object.keys(n.edges).length === 0;
+    if(isLeaf){
+      // fallback: find position by scanning edges? We assume leaves were created with a single start index that may not be stored
+      // We'll find leaves by checking for no children and attempt to find a start index by looking at parent edges in parent relationships
+      // To simplify: we will populate leafIndices by scanning all suffix starts and checking if path exists from root
+      return;
+    }
+    for(const key in n.edges){
+      const e = n.edges[key];
+      dfs(e.dest, e.start);
+    }
+  }
+  // Instead of DFS leaf detection, for clarity compute leafIndices per node by checking all suffixes
+  for(let start=0; start<tree.S.length; start++){
+    let cur = tree.root;
+    let i = start;
+    while(i < tree.S.length){
+      const c = tree.S[i];
+      const n = tree.nodes[cur];
+      if(!n) break;
+      const e = n.edges[c];
+      if(!e) break;
+      let j = e.start;
+      while(j <= (e.end === Infinity ? tree.S.length-1 : e.end) && i < tree.S.length && tree.S[j] === tree.S[i]){
+        j++; i++;
+      }
+      // assign leafIndices to nodes along the path
+      tree.nodes[cur].leafIndices.add(start);
+      if(j > (e.end === Infinity ? tree.S.length-1 : e.end)){
+        cur = e.dest;
+      } else {
+        // ended in middle of edge -> then leaf not under current node, but split would have been needed; still assign
+        tree.nodes[cur].leafIndices.add(start);
+        break;
+      }
+    }
+    // assign leaf to final node if ended exactly at node
+    if(cur && tree.nodes[cur]) tree.nodes[cur].leafIndices.add(start);
+  }
+}
+
+// Export function to build a standalone snapshot immediately from a simple final tree representation
+// Not used directly but handy
+
+// Initialize display
+renderSnapshot();
+
+})(); // end closure
+</script>
+
+</body>
+</html>

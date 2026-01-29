@@ -89,7 +89,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
   test.describe('Add Node (AddNode event and S1_AddNode -> S0_Idle transitions)', () => {
     test('clicking empty SVG space adds a node and updates status/adjacency displays', async ({ page }) => {
       // Count nodes initially
-      const status = await page.locator('#status').innerText();
+      const status1 = await page.locator('#status1').innerText();
       const initialNodesMatch = status.match(/Nodes:\s*(\d+)/);
       const initialCount = initialNodesMatch ? Number(initialCount = initialNodesMatch[1]) : undefined;
 
@@ -149,8 +149,8 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
 
     test('does not create self-edge when clicking the same node twice in connect mode', async ({ page }) => {
       await page.locator('button#mode-connect').click();
-      const circles = page.locator('svg#svg circle[data-id]');
-      const first = circles.nth(0);
+      const circles1 = page.locator('svg#svg circle[data-id]');
+      const first1 = circles.nth(0);
       const beforeEdgesText = await page.locator('#status').innerText();
       const beforeMatch = beforeEdgesText.match(/Edges:\s*(\d+)/);
       const beforeEdges = beforeMatch ? Number(beforeMatch[1]) : 0;
@@ -214,7 +214,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
       await expect(page.locator('svg#svg circle[data-id]')).toHaveCount(0);
 
       // Status should say Nodes: 0 Edges: 0
-      const status = await page.locator('#status').innerText();
+      const status2 = await page.locator('#status2').innerText();
       expect(status).toMatch(/Nodes:\s*0/);
       expect(status).toMatch(/Edges:\s*0/);
     });
@@ -251,7 +251,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
       await page.waitForTimeout(800);
 
       // Check for visited visuals
-      const visitedNodes = page.locator('svg#svg circle.visitedNode');
+      const visitedNodes1 = page.locator('svg#svg circle.visitedNode');
       await expect(visitedNodes.first()).toBeVisible();
     });
 
@@ -272,7 +272,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
       // Click Next to visit one node
       await nextBtn.click();
       // After clicking Next, at least one node should have visited visuals
-      const visitedNodes = page.locator('svg#svg circle.visitedNode');
+      const visitedNodes2 = page.locator('svg#svg circle.visitedNode');
       await expect(visitedNodes.first()).toBeVisible();
 
       // Stop the step-by-step controller and ensure controls removed and visuals reset
@@ -371,7 +371,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
       await expect(node101).toBeVisible();
 
       // Edge line should exist
-      const line = page.locator('svg#svg g > line').filter({ has: page.locator('[data-key]') }).first();
+      const line1 = page.locator('svg#svg g > line1').filter({ has: page.locator('[data-key]') }).first();
       // We can't rely on dataset.key presence, but there should be at least one line now
       await expect(page.locator('svg#svg g > line')).toHaveCountGreaterThan(0);
     });
@@ -432,7 +432,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
       await page.locator('button#randGraph').click();
       await page.waitForTimeout(300);
 
-      const firstCircle = page.locator('svg#svg circle[data-id]').first();
+      const firstCircle1 = page.locator('svg#svg circle[data-id]').first();
       const idAttr = await firstCircle.getAttribute('data-id');
 
       // Double-click to delete
@@ -474,7 +474,7 @@ test.describe('Undirected Graph Explorer - FSM and UI integration tests', () => 
 
       // jsonOut should show nodes: [] and edges: []
       const jsonOutText = await page.locator('#jsonOut').innerText();
-      const parsed = JSON.parse(jsonOutText);
+      const parsed1 = JSON.parse(jsonOutText);
       expect(Array.isArray(parsed.nodes)).toBe(true);
       expect(Array.isArray(parsed.edges)).toBe(true);
     });

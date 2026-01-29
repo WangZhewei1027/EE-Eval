@@ -140,12 +140,12 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
 
   test('Create Hash Map: clicking Create Hash Map shows creation message (transition CreateHashMap)', async ({ page }) => {
     // This validates the CreateHashMap event and expected observable text
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj1 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     await pageObj.clickCreate();
 
-    const outText = await pageObj.getOutputText();
+    const outText1 = await pageObj.getOutputText();
     expect(outText).toContain('New empty hash map created.');
 
     // No console errors
@@ -154,7 +154,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
 
   test('Add Item: adds a key/value and updates current size (transition AddItem) ', async ({ page }) => {
     // This validates adding an item using prompt inputs
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj2 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     // Ensure map is fresh
@@ -164,7 +164,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
     pageObj.setPromptResponses(['foo', 'bar']);
     await pageObj.clickAdd();
 
-    const outText = await pageObj.getOutputText();
+    const outText2 = await pageObj.getOutputText();
     // Should show the Added line and size
     expect(outText).toContain('Added: foo => bar');
     expect(outText).toContain('Current size: 1');
@@ -175,7 +175,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
 
   test('Get Item: retrieves existing value and reports not found for missing key (transition GetItem)', async ({ page }) => {
     // Validate both success and failure cases for getItem()
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj3 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     // Setup: create and add an entry
@@ -200,7 +200,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
   });
 
   test('Remove Item: removes existing key and updates size; missing key reports not found (transition RemoveItem)', async ({ page }) => {
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj4 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     // Setup: create and add two entries
@@ -213,14 +213,14 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
     // Remove an existing key
     pageObj.setPromptResponses(['k1']);
     await pageObj.clickRemove();
-    const outText1 = await pageObj.getOutputText();
+    const outText11 = await pageObj.getOutputText();
     expect(outText1).toContain('Key "k1" removed successfully.');
     expect(outText1).toContain('Current size: 1');
 
     // Attempt to remove a key that doesn't exist
     pageObj.setPromptResponses(['nonexistent']);
     await pageObj.clickRemove();
-    const outText2 = await pageObj.getOutputText();
+    const outText21 = await pageObj.getOutputText();
     expect(outText2).toContain('Key "nonexistent" not found in the hash map.');
 
     // No console errors
@@ -228,7 +228,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
   });
 
   test('Show All Items: shows list of entries when present and empty message when no items (transition ShowAllItems)', async ({ page }) => {
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj5 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     // Ensure empty map yields "Hash map is empty."
@@ -255,7 +255,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
   });
 
   test('Clear Hash Map: clears items and sets size to 0 (transition ClearHashMap)', async ({ page }) => {
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj6 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     // Add an item then clear
@@ -264,7 +264,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
     await pageObj.clickAdd();
 
     await pageObj.clickClear();
-    const outText = await pageObj.getOutputText();
+    const outText3 = await pageObj.getOutputText();
     expect(outText).toContain('Hash map cleared. Current size: 0');
 
     // After clearing, showAll should indicate empty
@@ -277,7 +277,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
   });
 
   test('Edge case: user cancels prompts - operations should abort gracefully (prompt dismissed)', async ({ page }) => {
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj7 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     // Starting output snapshot
@@ -308,7 +308,7 @@ test.describe('JavaScript Hash Map Demo (FSM validation)', () => {
   });
 
   test('Stress: add multiple items, remove some, and verify final map contents and no runtime errors', async ({ page }) => {
-    const pageObj = new HashMapPage(page, consoleErrors);
+    const pageObj8 = new HashMapPage(page, consoleErrors);
     await pageObj.goto();
 
     await pageObj.clickCreate();

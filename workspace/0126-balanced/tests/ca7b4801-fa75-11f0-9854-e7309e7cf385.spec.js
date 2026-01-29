@@ -68,7 +68,7 @@ test.describe('Indexing app FSM - ca7b4801-fa75-11f0-9854-e7309e7cf385', () => {
     // This test validates the transition described in the FSM:
     // - Clicking the button (event IndexButtonClick) attempts to run index()
     // - Because index() is not defined in the page, a ReferenceError (pageerror) should occur naturally
-    const indexButton = page.locator("button[onclick='index()']");
+    const indexButton1 = page.locator("button[onclick='index()']");
     await expect(indexButton).toBeVisible();
 
     // Set up a promise that waits for the pageerror event, then click the button
@@ -106,7 +106,7 @@ test.describe('Indexing app FSM - ca7b4801-fa75-11f0-9854-e7309e7cf385', () => {
     // This test validates repeated triggering of the event handler when function is missing.
     // Each click should produce a pageerror since index() remains undefined.
 
-    const indexButton = page.locator("button[onclick='index()']");
+    const indexButton2 = page.locator("button[onclick='index()']");
     await expect(indexButton).toBeVisible();
 
     // Do 3 rapid clicks, capturing a pageerror for each click
@@ -130,7 +130,7 @@ test.describe('Indexing app FSM - ca7b4801-fa75-11f0-9854-e7309e7cf385', () => {
 
   test('Console and error observability when interacting - ensure natural errors are visible', async ({ page }) => {
     // This test inspects console messages and page errors produced by interacting with the app.
-    const indexButton = page.locator("button[onclick='index()']");
+    const indexButton3 = page.locator("button[onclick='index()']");
     await expect(indexButton).toBeVisible();
 
     // Trigger the page error by clicking

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Depth-First Search (DFS) Interactive Demo</title>
+<style>
+  body { background: white; color: black; font-family: monospace, monospace; }
+  textarea, input, button, select {
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  textarea { width: 100%; height: 100px; }
+  #graph-input, #log { width: 100%; }
+  #graph-input { height: 150px; }
+  #controls > * { margin: 2px 0; display: block; }
+  #graph-list { max-height: 150px; overflow-y: auto; white-space: pre-wrap; font-family: monospace, monospace; border: 1px solid #000; }
+  #stack-list, #visited-list { max-height: 120px; overflow-y: auto; border: 1px solid #000; margin-bottom: 10px; }
+  #stack-list div, #visited-list div { padding: 2px; }
+  label { margin-top: 10px; display: block; }
+</style>
+</head>
+<body>
+<h1>Depth-First Search (DFS) Interactive Demo</h1>
+
+<div>
+  <label for="graph-input">
+    Enter Graph Adjacency List (one node per line, format: node:neighbor1,neighbor2,...)
+  </label>
+  <textarea id="graph-input" aria-label="Graph adjacency list input" spellcheck="false">
+A:B,C
+B:D,E
+C:F
+D:
+E:F
+F:
+  </textarea>
+  <button id="load-graph-btn" type="button">Load Graph</button>
+</div>
+
+<div id="status" aria-live="polite" style="margin-top:1em;"></div>
+
+<hr />
+
+<div id="controls" aria-label="DFS controls" style="margin-top:1em;">
+
+  <label for="start-node-input">Start Node:</label>
+  <input type="text" id="start-node-input" aria-describedby="status" size="3" value="A" />
+
+  <button id="start-dfs-btn" type="button" disabled>Start DFS</button>
+  <button id="step-btn" type="button" disabled>Next Step</button>
+  <button id="auto-run-btn" type="button" disabled>Auto Run</button>
+  <button id="pause-btn" type="button" disabled>Pause</button>
+  <button id="reset-btn" type="button" disabled>Reset</button>
+
+  <label for="speed-range">Auto Run Speed (steps/second):</label>
+  <input type="range" id="speed-range" min="0.5" max="5" step="0.1" value="1" />
+  <span id="speed-display">1</span>
+
+  <label for="inspect-node-input">Inspect Node State:</label>
+  <input type="text" id="inspect-node-input" size="3" />
+  <button id="inspect-btn" type="button">Inspect</button>
+  <pre id="inspect-output" style="white-space: pre-wrap; max-height: 100px; overflow-y: auto;"></pre>
+
+  <label for="manual-push-node">Manual Push Node onto Stack:</label>
+  <input type="text" id="manual-push-node" size="3" />
+  <button id="manual-push-btn" type="button">Push Node</button>
+
+  <label for="manual-pop-count">Manual Pop Stack (count):</label>
+  <input type="number" id="manual-pop-count" min="1" max="10" value="1" />
+  <button id="manual-pop-btn" type="button">Pop</button>
+</div>
+
+<hr />
+
+<div aria-label="Graph display and DFS state" style="margin-top:1em;">
+
+  <h2>Graph (Adjacency List)</h2>
+  <pre id="graph-list" tabindex="0" aria-live="polite"></pre>
+
+  <h3>Stack (Top → Bottom)</h3>
+  <div id="stack-list" tabindex="0" aria-live="polite"></div>
+
+  <h3>Visited Nodes</h3>
+  <div id="visited-list" tabindex="0" aria-live="polite"></div>
+
+  <h3>Log</h3>
+  <pre id="log" tabindex="0" aria-live="polite" style="height: 150px; overflow-y: auto;"></pre>
+
+</div>
+
+<script>
+(() => {
+  // State variables
+  let graph = {};
+  let stack = [];
+  let visited = new Set();
+  let currentNode = null;
+  let running = false;
+  let intervalId = null;
+  let speed = 1000;
+  let logElem, graphListElem, stackListElem, visitedListElem, statusElem, inspectOutput;
+  let startNodeInput, startDfsBtn, stepBtn, autoRunBtn, pauseBtn, resetBtn;
+  let speedRange, speedDisplay;
+  let inspectNodeInput, inspectBtn;
+  let manualPushNodeInput, manualPushBtn;
+  let manualPopCountInput, manualPopBtn;
+  let loadGraphBtn, graphInput;
+
+  // Utility for safe parse adjacency input
+  function parseGraphInput(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const g = {};
+    for (const line of lines) {
+      // Format: node:neighbor1,neighbor2,...
+      const parts = line.split(':');
+      if (parts.length !== 2) {
+        throw new Error(`Invalid line (missing colon): "${line}"`);
+      }
+      const node = parts[0].trim();
+      if (!node) throw new Error(`Empty node in line: "${line}"`);
+      const neighborsRaw = parts[1].trim();
+      const neighbors = neighborsRaw.length === 0 ? [] : neighborsRaw.split(',').map(n => n.trim()).filter(n => n.length > 0);
+      g[node] = neighbors;
+    }
+    return g;
+  }
+
+  // Rendering functions
+  function renderGraph() {
+    let text = '';
+    for (const node of Object.keys(graph).sort()) {
+      text += node + ': ' + graph[node].join(', ') + '\n';
+    }
+    graphListElem.textContent = text.trim();
+  }
+
+  function renderStack() {
+    if (stack.length === 0) {
+      stackListElem.textContent = '(empty)';
+      return;
+    }
+    stackListElem.innerHTML = '';
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const div = document.createElement('div');
+      let label = stack[i];
+      if (i === stack.length - 1) label += ' ← top';
+      div.textContent = label;
+      stackListElem.appendChild(div);
+    }
+  }
+
+  function renderVisited() {
+    const visitedArr = Array.from(visited).sort();
+    if (visitedArr.length === 0) {
+      visitedListElem.textContent = '(none)';
+      return;
+    }
+    visitedListElem.textContent = visitedArr.join(', ');
+  }
+
+  function log(msg) {
+    const time = new Date().toLocaleTimeString();
+    logElem.textContent += `[${time}] ${msg}\n`;
+    logElem.scrollTop = logElem.scrollHeight;
+  }
+
+  function setStatus(msg) {
+    statusElem.textContent = msg;
+  }
+
+  // DFS Step function
+  // Returns true if step taken, false if finished
+  function dfsStep() {
+    // If stack empty, done
+    if (stack.length === 0) {
+      setStatus('DFS complete: Stack empty.');
+      running = false;
+      updateControls(false, false, false, true);
+      return false;
+    }
+
+    const node = stack.pop();
+    log(`Popped node "${node}" from stack`);
+
+    if (!visited.has(node)) {
+      visited.add(node);
+      log(`Visiting node "${node}"`);
+
+      // Push neighbors in reverse order so leftmost neighbor is processed first
+      // To comply with conventional DFS order (preorder)
+      const neighbors = graph[node] || [];
+      for (let i = neighbors.length - 1; i >= 0; i--) {
+        const nbr = neighbors[i];
+        if (!visited.has(nbr)) {
+          stack.push(nbr);
+          log(`Pushed neighbor "${nbr}" onto stack`);
+        }
+      }
+    } else {
+      log(`Node "${node}" already visited; skipping`);
+    }
+
+    renderStack();
+    renderVisited();
+
+    return true;
+  }
+
+  // Control buttons management
+  function updateControls(canStart, canStep, canAutoRun, canReset) {
+    startDfsBtn.disabled = !canStart;
+    stepBtn.disabled = !canStep;
+    autoRunBtn.disabled = !canAutoRun;
+    pauseBtn.disabled = !running;
+    resetBtn.disabled = !canReset;
+    manualPushBtn.disabled = !canStep && !running;
+    manualPopBtn.disabled = !canStep && !running;
+  }
+
+  // Reset all state but keep graph loaded
+  function resetState() {
+    stack = [];
+    visited = new Set();
+    currentNode = null;
+    running = false;
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    renderStack();
+    renderVisited();
+    log('State reset.');
+    setStatus('Ready.');
+    updateControls(true, false, true, false);
+  }
+
+  // Initialize DFS starting stack and visited
+  function startDFS(startNode) {
+    if (!(startNode in graph)) {
+      setStatus(`Start node "${startNode}" not in graph.`);
+      return false;
+    }
+    stack = [startNode];
+    visited = new Set();
+    renderStack();
+    renderVisited();
+    log(`DFS started at node "${startNode}".`);
+    setStatus(`DFS started at "${startNode}".`);
+    updateControls(false, true, true, true);
+    return true;
+  }
+
+  // Auto run functions
+  function autoRunStart() {
+    if (running) return;
+    running = true;
+    updateControls(false, false, false, true);
+    setStatus('Auto running DFS...');
+    const delay = 1000 / speed;
+    intervalId = setInterval(() => {
+      const stepped = dfsStep();
+      if (!stepped) stopAutoRun();
+    }, delay);
+  }
+
+  function stopAutoRun() {
+    if (!running) return;
+    running = false;
+    setStatus('Auto run paused.');
+    updateControls(false, true, true, true);
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+  }
+
+  // Inspect node info
+  function inspectNode(node) {
+    if (!(node in graph)) {
+      inspectOutput.textContent = `Node "${node}" does not exist in the graph.`;
+      return;
+    }
+    const neighbors = graph[node];
+    const visitedStatus = visited.has(node) ? 'visited' : 'not visited';
+    const inStack = stack.includes(node) ? 'in stack' : 'not in stack';
+    inspectOutput.textContent =
+      `Node "${node}":\n` +
+      ` - Neighbors: ${neighbors.length > 0 ? neighbors.join(', ') : '(none)'}\n` +
+      ` - Status: ${visitedStatus}\n` +
+      ` - Stack presence: ${inStack}\n` +
+      ` - Position in stack: ${inStack === 'in stack' ? stack.length - 1 - stack.lastIndexOf(node) : 'N/A'}`;
+  }
+
+  // Manual push / pop functions:
+  // Manual push node (can push duplicates in stack)
+  function manualPush(node) {
+    if (!(node in graph)) {
+      setStatus(`Cannot push: node "${node}" does not exist.`);
+      return;
+    }
+    stack.push(node);
+    log(`Manually pushed node "${node}" on stack.`);
+    renderStack();
+    updateControls(false, true, true, true);
+  }
+
+  // Manual pop count times
+  function manualPop(count) {
+    if (stack.length === 0) {
+      setStatus('Stack is empty. Cannot pop.');
+      return;
+    }
+    let poppedNodes = [];
+    for (let i = 0; i < count; i++) {
+      if (stack.length === 0) break;
+      poppedNodes.push(stack.pop());
+    }
+    log(`Manually popped node(s): ${poppedNodes.join(', ')}`);
+    renderStack();
+    updateControls(false, true, true, true);
+  }
+
+  // Event bindings and init
+  function init() {
+    graphInput = document.getElementById('graph-input');
+    loadGraphBtn = document.getElementById('load-graph-btn');
+    logElem = document.getElementById('log');
+    graphListElem = document.getElementById('graph-list');
+    stackListElem = document.getElementById('stack-list');
+    visitedListElem = document.getElementById('visited-list');
+    statusElem = document.getElementById('status');
+
+    startNodeInput = document.getElementById('start-node-input');
+    startDfsBtn = document.getElementById('start-dfs-btn');
+    stepBtn = document.getElementById('step-btn');
+    autoRunBtn = document.getElementById('auto-run-btn');
+    pauseBtn = document.getElementById('pause-btn');
+    resetBtn = document.getElementById('reset-btn');
+
+    speedRange = document.getElementById('speed-range');
+    speedDisplay = document.getElementById('speed-display');
+
+    inspectNodeInput = document.getElementById('inspect-node-input');
+    inspectBtn = document.getElementById('inspect-btn');
+    inspectOutput = document.getElementById('inspect-output');
+
+    manualPushNodeInput = document.getElementById('manual-push-node');
+    manualPushBtn = document.getElementById('manual-push-btn');
+    manualPopCountInput = document.getElementById('manual-pop-count');
+    manualPopBtn = document.getElementById('manual-pop-btn');
+
+    // Load graph button
+    loadGraphBtn.addEventListener('click', () => {
+      try {
+        graph = parseGraphInput(graphInput.value);
+        renderGraph();
+        log('Graph loaded successfully.');
+        setStatus('Graph loaded. Ready to start DFS.');
+        resetState();
+        startDfsBtn.disabled = false;
+      } catch (e) {
+        setStatus('Error loading graph: ' + e.message);
+      }
+    });
+
+    // Start DFS button
+    startDfsBtn.addEventListener('click', () => {
+      const startNode = startNodeInput.value.trim();
+      if (!startNode) {
+        setStatus('Enter a valid start node.');
+        return;
+      }
+      if (startDFS(startNode)) {
+        updateControls(false, true, true, true);
+        setStatus(`DFS started at "${startNode}". Use "Next Step" or "Auto Run".`);
+      }
+    });
+
+    // Step button
+    stepBtn.addEventListener('click', () => {
+      if (running) return; // ignore step clicks during auto run
+      const stepped = dfsStep();
+      if (!stepped) {
+        setStatus('DFS is complete.');
+        updateControls(false, false, false, true);
+      }
+    });
+
+    // Auto run button
+    autoRunBtn.addEventListener('click', () => {
+      if (running) return;
+      autoRunStart();
+    });
+
+    // Pause button
+    pauseBtn.addEventListener('click', () => {
+      stopAutoRun();
+    });
+
+    // Reset button
+    resetBtn.addEventListener('click', () => {
+      resetState();
+    });
+
+    // Speed input
+    speedRange.addEventListener('input', () => {
+      speed = parseFloat(speedRange.value);
+      speedDisplay.textContent = speed.toFixed(1);
+      if (running && intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = setInterval(() => {
+          const stepped = dfsStep();
+          if (!stepped) stopAutoRun();
+        }, 1000 / speed);
+      }
+    });
+
+    // Inspect node button
+    inspectBtn.addEventListener('click', () => {
+      const node = inspectNodeInput.value.trim();
+      if (!node) {
+        inspectOutput.textContent = 'Enter node to inspect.';
+        return;
+      }
+      inspectNode(node);
+    });
+
+    // Manual push button
+    manualPushBtn.addEventListener('click', () => {
+      if (running) {
+        setStatus('Cannot manually push nodes while auto running.');
+        return;
+      }
+      const node = manualPushNodeInput.value.trim();
+      if (!node) {
+        setStatus('Enter a node to push.');
+        return;
+      }
+      manualPush(node);
+    });
+
+    // Manual pop button
+    manualPopBtn.addEventListener('click', () => {
+      if (running) {
+        setStatus('Cannot manually pop stack while auto running.');
+        return;
+      }
+      let count = parseInt(manualPopCountInput.value, 10);
+      if (isNaN(count) || count < 1) {
+        setStatus('Enter a valid pop count >= 1.');
+        return;
+      }
+      manualPop(count);
+    });
+
+    // Initial load from default textarea content
+    try {
+      graph = parseGraphInput(graphInput.value);
+      renderGraph();
+      log('Graph loaded successfully.');
+      setStatus('Graph loaded. Ready to start DFS.');
+      resetState();
+      startDfsBtn.disabled = false;
+    } catch (e) {
+      setStatus('Error loading graph: ' + e.message);
+    }
+
+    speed = parseFloat(speedRange.value);
+    speedDisplay.textContent = speed.toFixed(1);
+  }
+
+  window.addEventListener('load', init);
+})();
+</script>
+</body>
+</html>

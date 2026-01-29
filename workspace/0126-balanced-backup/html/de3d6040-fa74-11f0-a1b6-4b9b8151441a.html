@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congestion Control Demonstration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        #networkCanvas {
+            width: 100%;
+            height: 300px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            margin: 20px 0;
+        }
+        .button-group {
+            margin: 15px 0;
+        }
+        button {
+            padding: 8px 15px;
+            margin-right: 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0,0,0,0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            display: none;
+        }
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border: 1px solid #999;
+        }
+        .stats {
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        #congestionWarning {
+            color: #e74c3c;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Congestion Control Demonstration</h1>
+        <p>This simulation demonstrates congestion control in computer networks. Watch how the system responds to network congestion by adjusting transmission rates.</p>
+        
+        <div class="button-group">
+            <button id="startBtn">Start Simulation</button>
+            <button id="fastBtn">Add Fast Connection</button>
+            <button id="slowBtn">Add Slow Connection</button>
+            <button id="stopBtn">Stop Simulation</button>
+        </div>
+        
+        <div id="congestionWarning">Congestion Detected: Transmission rates are being adjusted!</div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #3498db;"></div>
+                <div>Normal Traffic</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e74c3c;"></div>
+                <div>Congested Traffic</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #2ecc71;"></div>
+                <div>Recovery Phase</div>
+            </div>
+        </div>
+        
+        <canvas id="networkCanvas"></canvas>
+        
+        <div class="stats">
+            <div>Active Connections: <span id="connectionCount">0</span></div>
+            <div>Network Capacity: <span id="networkCapacity">100</span> packets/second</div>
+            <div>Current Traffic: <span id="currentTraffic">0</span> packets/second</div>
+            <div>Congestion Window Size: <span id="windowSize">1</span> packets</div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>How Congestion Control Works</h2>
+        <p>Congestion control is a mechanism that prevents network overload by regulating the rate of data transmission. Key concepts:</p>
+        <ul>
+            <li><strong>Congestion Window:</strong> Limits how much data can be sent before receiving acknowledgments</li>
+            <li><strong>Slow Start:</strong> Begins with small window and doubles it until congestion is detected</li>
+            <li><strong>Congestion Avoidance:</strong> Grows window more conservatively after reaching threshold</li>
+            <li><strong>Fast Retransmit:</strong> Quickly retransmits lost packets without waiting for timeout</li>
+            <li><strong>Fast Recovery:</strong> Resumes normal operation quickly after packet loss</li>
+        </ul>
+        <p>In this simulation, connections will automatically adjust their transmission rates when congestion is detected.</p>
+    </div>
+    
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        const canvas = document.getElementById('networkCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const startBtn = document.getElementById('startBtn');
+        const fastBtn = document.getElementById('fastBtn');
+        const slowBtn = document.getElementById('slowBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const connectionCount = document.getElementById('connectionCount');
+        const currentTraffic = document.getElementById('currentTraffic');
+        const windowSize = document.getElementById('windowSize');
+        const congestionWarning = document.getElementById('congestionWarning');
+        
+        // Set canvas dimensions
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        // Network parameters
+        const NETWORK_CAPACITY = 100;
+        let connections = [];
+        let animationId = null;
+        let globalWindowSize = 1;
+        let slowStartThreshold = 16;
+        let isCongested = false;
+        let simulationTime = 0;
+        
+        // Connection types
+        const FAST_CONNECTION = { rate: 5, color: '#3498db', packetsPerSecond: 20 };
+        const SLOW_CONNECTION = { rate: 2, color: '#3498db', packetsPerSecond: 10 };
+        
+        // Update stats display
+        function updateStats() {
+            connectionCount.textContent = connections.length;
+            
+            // Calculate total traffic
+            let totalTraffic = connections.reduce((sum, conn) => {
+                return sum + conn.packetsPerSecond * conn.rate;
+            }, 0);
+            
+            currentTraffic.textContent = Math.min(totalTraffic, NETWORK_CAPACITY);
+            windowSize.textContent = globalWindowSize;
+            
+            // Check for congestion
+            const newCongestionState = totalTraffic > NETWORK_CAPACITY;
+            if (newCongestionState && !isCongested) {
+                // Enter congestion state
+                isCongested = true;
+                congestionWarning.style.display = 'block';
+                
+                // Adjust congestion window (TCP-style)
+                slowStartThreshold = Math.max(globalWindowSize / 2, 1);
+                globalWindowSize = 1;
+            } else if (!newCongestionState && isCongested) {
+                // Recover from congestion
+                isCongestion = false;
+                congestionWarning.style.display = 'none';
+            }
+        }
+        
+        // Create a new connection
+        function addConnection(type) {
+            const connection = {
+                id: connections.length + 1,
+                type: type,
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                dx: (Math.random() - 0.5) * 2,
+                dy: (Math.random() - 0.5) * 2,
+                targetX: Math.random() * canvas.width,
+                targetY: Math.random() * canvas.height,
+                packets: [],
+                ...type
+            };
+            
+            connections.push(connection);
+            updateStats();
+            return connection;
+        }
+        
+        // Draw the network visualization
+        function drawNetwork() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw connections
+            connections.forEach(conn => {
+                // Update position
+                const speed = 0.5;
+                conn.x += (conn.targetX - conn.x) * 0.01 * speed;
+                conn.y += (conn.targetY - conn.y) * 0.01 * speed;
+                
+                // Change target if close enough
+                if (Math.abs(conn.x - conn.targetX) < 10 && Math.abs(conn.y - conn.targetY) < 10) {
+                    conn.targetX = Math.random() * canvas.width;
+                    conn.targetY = Math.random() * canvas.height;
+                }
+                
+                // Draw connection node
+                ctx.beginPath();
+                ctx.arc(conn.x, conn.y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = conn.color;
+                ctx.fill();
+                ctx.strokeStyle = '#999';
+                ctx.stroke();
+                
+                // Draw connection ID
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(conn.id, conn.x, conn.y);
+                
+                // Draw packets
+                ctx.strokeStyle = '#999';
+                for (let i = 0; i < globalWindowSize; i++) {
+                    if (Math.random() < 0.05) {
+                        conn.packets.push({
+                            x: conn.x,
+                            y: conn.y,
+                            dx: (Math.random() - 0.5) * 3,
+                            dy: (Math.random() - 0.5) * 3,
+                            life: 100,
+                            color: isCongested ? '#e74c3c' : (globalWindowSize < slowStartThreshold ? '#2ecc71' : conn.color)
+                        });
+                    }
+                }
+                
+                // Update and draw packets
+                for (let i = conn.packets.length - 1; i >= 0; i--) {
+                    const packet = conn.packets[i];
+                    packet.x += packet.dx;
+                    packet.y += packet.dy;
+                    packet.life--;
+                    
+                    ctx.globalAlpha = packet.life / 100;
+                    ctx.beginPath();
+                    ctx.arc(packet.x, packet.y, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = packet.color;
+                    ctx.fill();
+                    
+                    if (packet.life <= 0) {
+                        conn.packets.splice(i, 1);
+                    }
+                }
+                ctx.globalAlpha = 1;
+            });
+            
+            // Draw network router in center
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, 20, 0, Math.PI * 2);
+            ctx.fillStyle = isCongested ? '#e74c3c' : '#2c3e50';
+            ctx.fill();
+            ctx.strokeStyle = '#999';
+            ctx.stroke();
+            
+            // Draw lines from connections to router
+            connections.forEach(conn => {
+                ctx.beginPath();
+                ctx.moveTo(conn.x, conn.y);
+                ctx.lineTo(canvas.width / 2, canvas.height / 2);
+                ctx.strokeStyle = isCongested ? 'rgba(231, 76, 60, 0.3)' : 'rgba(52, 152, 219, 0.3)';
+                ctx.lineWidth = 1 + (conn.rate / 5);
+                ctx.stroke();
+            });
+            
+            // Update congestion window
+            if (!isCongested) {
+                if (globalWindowSize < slowStartThreshold) {
+                    // Slow start phase - exponential growth
+                    globalWindowSize = Math.min(globalWindowSize + 1, slowStartThreshold);
+                } else {
+                    // Congestion avoidance phase - linear growth
+                    globalWindowSize = Math.min(globalWindowSize + (1 / globalWindowSize), NETWORK_CAPACITY / connections.length);
+                }
+            }
+            
+            updateStats();
+            simulationTime++;
+        }
+        
+        // Animation loop
+        function animate() {
+            drawNetwork();
+            animationId = requestAnimationFrame(animate);
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', () => {
+            if (!animationId) {
+                animate();
+            }
+        });
+        
+        fastBtn.addEventListener('click', () => {
+            addConnection(FAST_CONNECTION);
+        });
+        
+        slowBtn.addEventListener('click', () => {
+            addConnection(SLOW_CONNECTION);
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        });
+        
+        // Resize handler
+        window.addEventListener('resize', () => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        });
+        
+        // Tooltip for showing connection info
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            let hoveredConn = null;
+            
+            connections.forEach(conn => {
+                const distance = Math.sqrt((mouseX - conn.x) ** 2 + (mouseY - conn.y) ** 2);
+                if (distance < 15) {
+                    hoveredConn = conn;
+                }
+            });
+            
+            if (hoveredConn) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = e.clientX + 15 + 'px';
+                tooltip.style.top = e.clientY + 15 + 'px';
+                tooltip.innerHTML = `Connection ${hoveredConn.id}<br>
+                                    Speed: ${hoveredConn.rate}x<br>
+                                    Rate: ${hoveredConn.packetsPerSecond} packets/s<br>
+                                    Window: ${globalWindowSize.toFixed(2)}`;
+            } else {
+                tooltip.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

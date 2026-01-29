@@ -76,7 +76,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     await expect(tsp.solveBtn).toBeVisible({ timeout: 2000 });
     await expect(tsp.solveBtn).toHaveText('Solve with Branch and Bound');
 
-    // Result should be hidden initially (display: none)
+    // Result should be hidden initially (display)
     const display = await tsp.getResultDisplayStyle();
     expect(display === 'none' || display === 'hidden' || display === '').toBeTruthy();
 
@@ -98,7 +98,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     // This test validates the transition from Idle -> Solving -> Completed:
     // - Clicking solveBtn triggers solveTSP (S1 entry action)
     // - The algorithm populates steps and then shows #result (S2 evidence)
-    const tsp = new TSPPage(page);
+    const tsp1 = new TSPPage(page);
     await tsp.goto();
 
     // Click Solve to start algorithm
@@ -111,11 +111,11 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     await expect(tsp.result).toBeVisible();
 
     // Steps container should have nodes appended (evidence of solving process)
-    const stepsCount = await tsp.stepsCount();
+    const stepsCount1 = await tsp.stepsCount1();
     expect(stepsCount).toBeGreaterThan(0);
 
     // Solution should contain Optimal Path and Minimum Cost, and cost should be 80 (expected optimal)
-    const solutionText = await tsp.getSolutionText();
+    const solutionText1 = await tsp.getSolutionText();
     expect(solutionText).toContain('Optimal Path');
     expect(solutionText).toContain('Minimum Cost');
 
@@ -139,7 +139,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     expect(normalizedPath === allowed1 || normalizedPath === allowed2).toBeTruthy();
 
     // Inspect console and page errors: ensure no uncaught errors were thrown during solving
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     // If any page errors occurred, surface them in assertion message for easier debugging
     if (pageErrors.length > 0 || consoleErrors.length > 0) {
       // Fail with helpful diagnostics
@@ -159,7 +159,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     // - Clicking the Solve button multiple times quickly should not crash the page
     // - Each run should produce a visible result and a minimum cost of 80
     // - No uncaught page errors or console errors should occur
-    const tsp = new TSPPage(page);
+    const tsp2 = new TSPPage(page);
     await tsp.goto();
 
     // Rapid clicks: click 3 times in quick succession
@@ -178,13 +178,13 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     expect(stepsCountAfter).toBeGreaterThan(0);
 
     // Validate solution min cost remains 80
-    const solutionText = await tsp.getSolutionText();
-    const minCostMatch = solutionText.match(/Minimum Cost:\s*([0-9]+)/);
+    const solutionText2 = await tsp.getSolutionText();
+    const minCostMatch1 = solutionText.match(/Minimum Cost:\s*([0-9]+)/);
     expect(minCostMatch).not.toBeNull();
     expect(Number(minCostMatch[1])).toBe(80);
 
     // Ensure no page-level errors or console errors occurred during rapid runs
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -193,7 +193,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     // This test directly calls the page-defined utility functions to validate internal computations:
     // - firstMin(matrix, 0) should be 10 for node A
     // - secondMin(matrix, 0) should be 15 for node A
-    const tsp = new TSPPage(page);
+    const tsp3 = new TSPPage(page);
     await tsp.goto();
 
     // Evaluate the functions in page context and assert results
@@ -220,7 +220,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     expect(results.second).toBe(15);
 
     // Ensure no uncaught errors due to evaluation
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -229,7 +229,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     // This test verifies the explicit pieces of evidence extracted from the FSM:
     // - There is an event listener linking #solveBtn to solveTSP (inferred by click behavior)
     // - After clicking, #result.style.display becomes 'block'
-    const tsp = new TSPPage(page);
+    const tsp4 = new TSPPage(page);
     await tsp.goto();
 
     // Precondition check: result hidden
@@ -252,7 +252,7 @@ test.describe('Branch and Bound TSP Interactive App - FSM Validation', () => {
     expect(stepsHtml).toContain('Starting Branch and Bound');
 
     // No errors on console or page
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });

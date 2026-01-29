@@ -109,8 +109,8 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
 
   // Test transition: StageFile from FileAdded -> FileStaged
   test('Staging a file transitions to File Staged and updates status', async ({ page }) => {
-    const recordedDialogs = [];
-    const responses = []; // no prompt/confirm
+    const recordedDialogs1 = [];
+    const responses1 = []; // no prompt/confirm
     await attachDialogHandler(page, responses, recordedDialogs);
     await page.goto(APP_URL);
 
@@ -132,14 +132,14 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
     expect(stagedAlert.message).toContain('File "app.js" staged.');
 
     // Status should now mention staged files
-    const status = await page.locator('#status').innerText();
+    const status1 = await page.locator('#status1').innerText();
     expect(status).toContain('Staged files: app.js');
   });
 
   // Test transition: Commit from FileStaged -> CommitSuccessful
   test('Committing staged files creates a commit and updates status and files (Commit Successful)', async ({ page }) => {
-    const recordedDialogs = [];
-    const responses = []; // no prompt/confirm in this flow
+    const recordedDialogs2 = [];
+    const responses2 = []; // no prompt/confirm in this flow
     await attachDialogHandler(page, responses, recordedDialogs);
     await page.goto(APP_URL);
 
@@ -171,23 +171,23 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
     expect(commitAlert.message).toContain('Commit successful on branch "master".');
 
     // Status should indicate working directory clean and no staged files
-    const status = await page.locator('#status').innerText();
+    const status2 = await page.locator('#status2').innerText();
     expect(status).toContain('Working directory clean');
     expect(status).toContain('No files staged');
 
     // Log should contain commit entry after clicking Show Log
     await page.click('#btn-log');
-    const logText = await page.locator('#log').innerText();
+    const logText1 = await page.locator('#log').innerText();
     expect(logText).toContain('commit C'); // commit hash starts with C#
     expect(logText).toContain('Add readme');
   });
 
   // Creating a branch (without immediate checkout) - S0 -> S4 (BranchCreated)
   test('Create a new branch but do NOT checkout immediately (Branch Created, remain on master)', async ({ page }) => {
-    const recordedDialogs = [];
+    const recordedDialogs3 = [];
     // First dialog is prompt for branch name (provide 'feature-x'), an alert will follow (auto-accepted),
     // then a confirm will appear asking whether to checkout; respond with dismiss -> do not checkout
-    const responses = [
+    const responses3 = [
       { type: 'prompt', input: 'feature-x' },
       // alert will be auto-accepted, no entry required
       { type: 'confirm', accept: false },
@@ -208,15 +208,15 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
     expect(alertDialog).toBeTruthy();
 
     // Since we chose not to checkout, current branch should remain 'master'
-    const currentBranch = await page.locator('#current-branch').innerText();
+    const currentBranch1 = await page.locator('#current-branch').innerText();
     expect(currentBranch).toBe('master');
   });
 
   // Creating a branch and checking out immediately - S0 -> S4 -> (checkout inside CreateBranch) -> S5
   test('Create a new branch and checkout immediately (Branch Created and Branch Checked Out)', async ({ page }) => {
-    const recordedDialogs = [];
+    const recordedDialogs4 = [];
     // Prompt for branch name then accept confirm to checkout
-    const responses = [
+    const responses4 = [
       { type: 'prompt', input: 'feature-y' },
       { type: 'confirm', accept: true },
     ];
@@ -230,13 +230,13 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
     expect(branchCreatedAlert).toBeTruthy();
 
     // After checkout, current-branch should update to 'feature-y'
-    const currentBranch = await page.locator('#current-branch').innerText();
+    const currentBranch2 = await page.locator('#current-branch').innerText();
     expect(currentBranch).toBe('feature-y');
   });
 
   // Checkout branch by clicking current branch span (S4 -> S5)
   test('Checkout an existing branch via current branch click (Branch Checked Out)', async ({ page }) => {
-    const recordedDialogs = [];
+    const recordedDialogs5 = [];
     await page.goto(APP_URL);
 
     // Create a branch first and checkout it to ensure it exists (use dialog responses)
@@ -272,14 +272,14 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
     expect(checkoutAlert).toBeTruthy();
 
     // Verify UI updated: current branch text is 'temp-branch'
-    const currentBranch = await page.locator('#current-branch').innerText();
+    const currentBranch3 = await page.locator('#current-branch').innerText();
     expect(currentBranch).toBe('temp-branch');
   });
 
   // Edge case: Attempt to stage a non-existent file
   test('Staging a non-existent file shows an error alert', async ({ page }) => {
-    const recordedDialogs = [];
-    const responses = []; // alerts auto-accepted
+    const recordedDialogs6 = [];
+    const responses5 = []; // alerts auto-accepted
     await attachDialogHandler(page, responses, recordedDialogs);
     await page.goto(APP_URL);
 
@@ -296,8 +296,8 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
 
   // Edge case: Commit with empty commit message and also commit with no staged files
   test('Commit validations: empty commit message and nothing to commit scenarios', async ({ page }) => {
-    const recordedDialogs = [];
-    const responses = []; // alerts auto-accepted
+    const recordedDialogs7 = [];
+    const responses6 = []; // alerts auto-accepted
     await attachDialogHandler(page, responses, recordedDialogs);
     await page.goto(APP_URL);
 
@@ -329,7 +329,7 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
 
   // Edge case: Creating an existing branch should show an error
   test('Creating an already existing branch shows an error alert', async ({ page }) => {
-    const recordedDialogs = [];
+    const recordedDialogs8 = [];
     await page.goto(APP_URL);
 
     // Create branch 'dup-branch' first
@@ -358,13 +358,13 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
 
   // Monitor for unexpected JS errors and console errors during a typical user flow
   test('No unexpected JS runtime errors during common interaction sequence', async ({ page }) => {
-    const pageErrors = [];
-    const consoleEntries = [];
+    const pageErrors1 = [];
+    const consoleEntries1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (m) => consoleEntries.push({ type: m.type(), text: m.text() }));
 
-    const recordedDialogs = [];
-    const responses = [
+    const recordedDialogs9 = [];
+    const responses7 = [
       // For new branch prompt + confirm accept
       { type: 'prompt', input: 'flow-branch' },
       { type: 'confirm', accept: true },
@@ -391,12 +391,12 @@ test.describe('Git Concept Demonstration - FSM tests (63b39832-fa74-11f0-bb9a-db
 
     // Show log
     await page.click('#btn-log');
-    const logText = await page.locator('#log').innerText();
+    const logText2 = await page.locator('#log').innerText();
     expect(logText).toContain('flow commit');
 
     // Assert that there were no uncaught page errors and no console errors logged
     expect(pageErrors).toHaveLength(0);
-    const consoleErrors = consoleEntries.filter(c => c.type === 'error');
+    const consoleErrors1 = consoleEntries.filter(c => c.type === 'error');
     expect(consoleErrors).toHaveLength(0);
   });
 });

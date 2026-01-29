@@ -96,7 +96,7 @@ test.describe('Big-Omega Notation Demonstration - End-to-End', () => {
 
   test('Transition RunCodeClick: Clicking Run Code enters CodeRunning state and displays the minimum value', async ({ page }) => {
     // This test validates the transition from S0_Idle -> S1_CodeRunning triggered by clicking #runCode
-    const po = new BigOmegaPage(page);
+    const po1 = new BigOmegaPage(page);
     await po.goto();
 
     // Click the Run Code button to trigger the code path described by the FSM.
@@ -114,13 +114,13 @@ test.describe('Big-Omega Notation Demonstration - End-to-End', () => {
     expect(pageErrors.length).toBe(0);
 
     // Confirm that console did not emit errors during the run
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error' || m.type === 'warning');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error' || m.type === 'warning');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('S1_CodeRunning - Direct function invocation: findMin returns correct values for various inputs', async ({ page }) => {
     // This test exercises the implementation of findMin directly, without modifying page code.
-    const po = new BigOmegaPage(page);
+    const po2 = new BigOmegaPage(page);
     await po.goto();
 
     // Normal array: expect minimum 1
@@ -141,7 +141,7 @@ test.describe('Big-Omega Notation Demonstration - End-to-End', () => {
 
   test('Error scenario: calling findMin with undefined should throw a TypeError (natural error propagation)', async ({ page }) => {
     // This test intentionally calls findMin with an invalid argument to allow a runtime error to surface.
-    const po = new BigOmegaPage(page);
+    const po3 = new BigOmegaPage(page);
     await po.goto();
 
     // We expect the page's implementation to throw when called with undefined, because it uses array.length
@@ -165,7 +165,7 @@ test.describe('Big-Omega Notation Demonstration - End-to-End', () => {
 
   test('Robustness: repeated UI interactions do not produce additional unexpected console errors', async ({ page }) => {
     // This test performs a sequence of UI interactions to ensure stability.
-    const po = new BigOmegaPage(page);
+    const po4 = new BigOmegaPage(page);
     await po.goto();
 
     // Perform multiple clicks, interleaved with checks.
@@ -175,7 +175,7 @@ test.describe('Big-Omega Notation Demonstration - End-to-End', () => {
     }
 
     // Ensure console did not accumulate error-level messages during repeated interactions
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error' || m.type === 'warning');
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error' || m.type === 'warning');
     expect(consoleErrors.length).toBe(0);
 
     // No unhandled page errors should have occurred
@@ -184,7 +184,7 @@ test.describe('Big-Omega Notation Demonstration - End-to-End', () => {
 
   test('DOM Integrity: Ensure critical components exist and have expected attributes', async ({ page }) => {
     // Validate the components detected in the FSM mapping are present in the DOM.
-    const po = new BigOmegaPage(page);
+    const po5 = new BigOmegaPage(page);
     await po.goto();
 
     const buttonExists = await page.$('#runCode');

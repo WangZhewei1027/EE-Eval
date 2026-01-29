@@ -29,7 +29,7 @@ class KnapsackPage {
   }
 
   async setCapacity(value) {
-    // fill as string to support non-numeric testing
+    // fill to support non-numeric testing
     await this.capacity.fill(String(value));
   }
 
@@ -89,14 +89,14 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
   // Test transition S0_Idle -> S1_Solving -> S2_Result with a normal valid input set
   test('SolveKnapsack event: valid inputs produce correct Maximum Value and result text', async ({ page }) => {
     // Collect console errors and page errors for this test
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const knapsack = new KnapsackPage(page);
+    const knapsack1 = new KnapsackPage(page);
     await knapsack.goto();
 
     // Provide inputs known to produce a deterministic result:
@@ -127,14 +127,14 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
 
   // Edge case: empty inputs - ensure algorithm handles them without throwing and reports Maximum Value: 0
   test('Edge case: empty inputs should not throw and should produce "Maximum Value: 0"', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const knapsack = new KnapsackPage(page);
+    const knapsack2 = new KnapsackPage(page);
     await knapsack.goto();
 
     // Set empty strings for weights and values (user might clear fields)
@@ -147,7 +147,7 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
     // Expect the app to handle gracefully and display at least "Maximum Value: 0"
     await expect.poll(async () => (await knapsack.getResultText()).trim(), { timeout: 2000 }).toContain('Maximum Value:');
 
-    const resultText = await knapsack.getResultText();
+    const resultText1 = await knapsack.getResultText();
     // Given the implementation, in many empty/NaN scenarios maxValue remains 0 and result string may be empty after newline
     expect(resultText).toContain('Maximum Value: 0');
 
@@ -158,14 +158,14 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
 
   // Edge case: mismatched array lengths (weights longer than values) - should not throw exceptions
   test('Edge case: mismatched weights/values lengths does not throw and result is produced', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const knapsack = new KnapsackPage(page);
+    const knapsack3 = new KnapsackPage(page);
     await knapsack.goto();
 
     // Provide more weights than values intentionally
@@ -178,7 +178,7 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
     // Ensure the result area is updated with "Maximum Value:" even if some numeric computations become NaN
     await expect.poll(async () => (await knapsack.getResultText()).trim(), { timeout: 2000 }).toContain('Maximum Value:');
 
-    const resultText = await knapsack.getResultText();
+    const resultText2 = await knapsack.getResultText();
     expect(resultText).toMatch(/Maximum Value:\s*[-\dNaN]+/); // Accept numeric or NaN-like outputs
 
     // Confirm no page-level exceptions were thrown
@@ -188,14 +188,14 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
 
   // Edge case: non-numeric capacity - ensure parseInt produces NaN and the app still doesn't throw
   test('Edge case: non-numeric capacity should not crash the app', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const knapsack = new KnapsackPage(page);
+    const knapsack4 = new KnapsackPage(page);
     await knapsack.goto();
 
     await knapsack.setWeights('1,2,3');
@@ -207,7 +207,7 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
     // Expect UI to update with some "Maximum Value:" line and no thrown errors
     await expect.poll(async () => (await knapsack.getResultText()).trim(), { timeout: 2000 }).toContain('Maximum Value:');
 
-    const resultText = await knapsack.getResultText();
+    const resultText3 = await knapsack.getResultText();
     expect(resultText).toContain('Maximum Value:');
 
     // No runtime errors should have been emitted
@@ -217,7 +217,7 @@ test.describe('324e4a22-fa73-11f0-a9d0-d7a1991987c6 - Branch and Bound Knapsack 
 
   // Validate that the Solve button has the onclick handler exactly as in the FSM evidence
   test('UI contract: Solve Knapsack button uses onclick="solveKnapsack()" as declared in FSM evidence', async ({ page }) => {
-    const knapsack = new KnapsackPage(page);
+    const knapsack5 = new KnapsackPage(page);
     await knapsack.goto();
 
     // Check the attribute value for the onclick handler

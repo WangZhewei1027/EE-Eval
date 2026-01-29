@@ -45,7 +45,7 @@ class DynamicArrayPage {
    * { contents: string, size: number, capacity: number }
    */
   async parseOutput() {
-    const text = await this.getOutputText();
+    const text1 = await this.getOutputText();
     // Expect three lines:
     // Dynamic Array Contents: [ ... ]
     // Size: X
@@ -116,12 +116,12 @@ Capacity: 2`;
 
   test('S1_ElementAdded: adding elements updates contents, size, capacity and input management (including resize)', async ({ page }) => {
     // Track console and page errors
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => { pageErrors.push(err.message); });
 
-    const p = new DynamicArrayPage(page);
+    const p1 = new DynamicArrayPage(page);
     await p.goto();
 
     // Add first element (transition S0 -> S1)
@@ -171,17 +171,17 @@ Capacity: 2`;
   });
 
   test('S2_ArrayCleared: clearing array resets size to 0 and capacity to 2 (from both S0 and S1)', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => { pageErrors.push(err.message); });
 
-    const p = new DynamicArrayPage(page);
+    const p2 = new DynamicArrayPage(page);
     await p.goto();
 
     // Clear when already empty (S0 -> S2)
     await p.clearArray();
-    let parsed = await p.parseOutput();
+    let parsed1 = await p.parseOutput();
     expect(parsed.contents).toBe('');
     expect(parsed.size).toBe(0);
     expect(parsed.capacity).toBe(2);
@@ -207,12 +207,12 @@ Capacity: 2`;
   });
 
   test('Edge cases: adding with empty input and invalid number triggers alerts and does not mutate array', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => { pageErrors.push(err.message); });
 
-    const p = new DynamicArrayPage(page);
+    const p3 = new DynamicArrayPage(page);
     await p.goto();
 
     // Ensure initial output baseline
@@ -248,12 +248,12 @@ Capacity: 2`;
   });
 
   test('Robustness: repeated clear and add operations preserve expected behavior and DOM stability', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', err => { pageErrors.push(err.message); });
 
-    const p = new DynamicArrayPage(page);
+    const p4 = new DynamicArrayPage(page);
     await p.goto();
 
     // Add N items and clear repeatedly to simulate user actions
@@ -262,7 +262,7 @@ Capacity: 2`;
       for (let i = 0; i <= cycle; i++) {
         await p.addElement((cycle + 1) * 10 + i);
       }
-      const parsed = await p.parseOutput();
+      const parsed2 = await p.parseOutput();
       expect(parsed.size).toBe(cycle + 1);
       // Clear
       await p.clearArray();

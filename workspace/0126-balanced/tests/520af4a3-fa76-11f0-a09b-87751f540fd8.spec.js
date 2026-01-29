@@ -118,7 +118,7 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
 
   test.describe('Event handlers and transitions', () => {
     test('CloneRepository click sets href property and preserves text (transition observable)', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git1 = new GitDemoPage(page);
       await git.goto();
 
       // Click the Clone button
@@ -148,16 +148,16 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
     });
 
     test('PushToGitHub click sets href property and preserves text', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git2 = new GitDemoPage(page);
       await git.goto();
 
       await git.clickPush();
 
-      const hrefProp = await git.getButtonHrefProperty('#git-push-button');
-      const hrefAttr = await git.getButtonHrefAttribute('#git-push-button');
-      const text = await git.getButtonText('#git-push-button');
+      const hrefProp1 = await git.getButtonHrefProperty('#git-push-button');
+      const hrefAttr1 = await git.getButtonHrefAttribute('#git-push-button');
+      const text1 = await git.getButtonText('#git-push-button');
 
-      const expectedUrl = 'https://github.com/your-username/your-repo-name.git';
+      const expectedUrl1 = 'https://github.com/your-username/your-repo-name.git';
       expect(hrefProp).toBe(expectedUrl);
       expect(hrefAttr).toBeNull();
       expect(text).toBe('Push to GitHub');
@@ -167,16 +167,16 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
     });
 
     test('CreateNewBranch click sets href property and preserves text', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git3 = new GitDemoPage(page);
       await git.goto();
 
       await git.clickBranch();
 
-      const hrefProp = await git.getButtonHrefProperty('#git-branch-button');
-      const hrefAttr = await git.getButtonHrefAttribute('#git-branch-button');
-      const text = await git.getButtonText('#git-branch-button');
+      const hrefProp2 = await git.getButtonHrefProperty('#git-branch-button');
+      const hrefAttr2 = await git.getButtonHrefAttribute('#git-branch-button');
+      const text2 = await git.getButtonText('#git-branch-button');
 
-      const expectedUrl = 'https://github.com/your-username/your-repo-name.git';
+      const expectedUrl2 = 'https://github.com/your-username/your-repo-name.git';
       expect(hrefProp).toBe(expectedUrl);
       expect(hrefAttr).toBeNull();
       expect(text).toBe('Create New Branch');
@@ -186,16 +186,16 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
     });
 
     test('CommitChanges click sets href property and preserves text', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git4 = new GitDemoPage(page);
       await git.goto();
 
       await git.clickCommit();
 
-      const hrefProp = await git.getButtonHrefProperty('#git-commit-button');
-      const hrefAttr = await git.getButtonHrefAttribute('#git-commit-button');
-      const text = await git.getButtonText('#git-commit-button');
+      const hrefProp3 = await git.getButtonHrefProperty('#git-commit-button');
+      const hrefAttr3 = await git.getButtonHrefAttribute('#git-commit-button');
+      const text3 = await git.getButtonText('#git-commit-button');
 
-      const expectedUrl = 'https://github.com/your-username/your-repo-name.git';
+      const expectedUrl3 = 'https://github.com/your-username/your-repo-name.git';
       expect(hrefProp).toBe(expectedUrl);
       expect(hrefAttr).toBeNull();
       expect(text).toBe('Commit Changes');
@@ -205,16 +205,16 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
     });
 
     test('GetGitStatus click sets href property and preserves text', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git5 = new GitDemoPage(page);
       await git.goto();
 
       await git.clickStatus();
 
-      const hrefProp = await git.getButtonHrefProperty('#git-status-button');
-      const hrefAttr = await git.getButtonHrefAttribute('#git-status-button');
-      const text = await git.getButtonText('#git-status-button');
+      const hrefProp4 = await git.getButtonHrefProperty('#git-status-button');
+      const hrefAttr4 = await git.getButtonHrefAttribute('#git-status-button');
+      const text4 = await git.getButtonText('#git-status-button');
 
-      const expectedUrl = 'https://github.com/your-username/your-repo-name.git';
+      const expectedUrl4 = 'https://github.com/your-username/your-repo-name.git';
       expect(hrefProp).toBe(expectedUrl);
       expect(hrefAttr).toBeNull();
       expect(text).toBe('Get Git Status');
@@ -226,7 +226,7 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
 
   test.describe('Edge cases and robustness', () => {
     test('Clicking a button repeatedly is idempotent and does not raise errors', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git6 = new GitDemoPage(page);
       await git.goto();
 
       // Click Clone three times
@@ -234,9 +234,9 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
       await git.clickClone();
       await git.clickClone();
 
-      const hrefProp = await git.getButtonHrefProperty('#git-clone-button');
-      const text = await git.getButtonText('#git-clone-button');
-      const expectedUrl = 'https://github.com/your-username/your-repo-name.git';
+      const hrefProp5 = await git.getButtonHrefProperty('#git-clone-button');
+      const text5 = await git.getButtonText('#git-clone-button');
+      const expectedUrl5 = 'https://github.com/your-username/your-repo-name.git';
 
       // Expect property persists and text unchanged
       expect(hrefProp).toBe(expectedUrl);
@@ -248,7 +248,7 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
     });
 
     test('Attempting to call missing renderPage should not exist (verifies onEnter not invoked)', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git7 = new GitDemoPage(page);
       await git.goto();
 
       // Attempt to call renderPage only to verify it is not present; do not execute if undefined.
@@ -265,7 +265,7 @@ test.describe('Git Demo (FSM) - 520af4a3-fa76-11f0-a09b-87751f540fd8', () => {
     });
 
     test('Clicking a non-existent element selector should surface a Playwright error (edge-case testing)', async ({ page }) => {
-      const git = new GitDemoPage(page);
+      const git8 = new GitDemoPage(page);
       await git.goto();
 
       // This verifies that attempting to interact with an element that isn't present will throw from Playwright.

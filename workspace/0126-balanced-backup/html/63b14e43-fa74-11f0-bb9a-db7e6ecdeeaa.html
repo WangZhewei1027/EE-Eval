@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interpolation Search Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 2em;
+    background: #f9f9f9;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+  }
+  #inputSection, #resultSection {
+    max-width: 600px;
+    margin: 1em auto;
+    padding: 1.5em;
+    background: white;
+    box-shadow: 0 0 10px #ccc;
+    border-radius: 8px;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 0.5em;
+    font-size: 1em;
+    margin-top: 0.3em;
+    margin-bottom: 1em;
+    box-sizing: border-box;
+  }
+  button {
+    background-color: #0078d7;
+    border: none;
+    color: white;
+    padding: 0.7em 1.3em;
+    font-size: 1em;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+  }
+  pre {
+    background: #eee;
+    padding: 1em;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  #arrayDisplay {
+    font-family: monospace;
+    font-size: 1.1em;
+    margin-bottom: 1em;
+    word-wrap: break-word;
+  }
+  .highlight {
+    color: #d9534f;
+    font-weight: bold;
+  }
+  #steps {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    background: #fafafa;
+    padding: 1em;
+    border-radius: 6px;
+    font-size: 0.95em;
+    line-height: 1.4;
+  }
+  footer {
+    text-align: center;
+    font-size: 0.85em;
+    margin-top: 3em;
+    color: #666;
+  }
+  @media (max-width: 600px) {
+    #inputSection, #resultSection {
+      margin: 1em 1em;
+    }
+  }
+</style>
+</head>
+<body>
+
+<h1>Interpolation Search Visualization</h1>
+
+<section id="inputSection" aria-label="Interpolation search input">
+  <label for="arrayInput"><strong>Enter sorted array (comma separated integers):</strong></label>
+  <input type="text" id="arrayInput" aria-describedby="arrayHelp" placeholder="e.g. 10, 20, 30, 40, 50, 60, 70" value="10, 20, 30, 40, 50, 60, 70, 80, 90, 100" />
+  <small id="arrayHelp" style="display:block; margin-bottom:1em; color:#555;">
+    Please enter sorted numbers separated by commas.
+  </small>
+
+  <label for="targetInput"><strong>Enter value to search for:</strong></label>
+  <input type="number" id="targetInput" placeholder="e.g. 70" value="70" />
+
+  <button id="searchBtn" type="button">Search</button>
+</section>
+
+<section id="resultSection" aria-live="polite" aria-atomic="true">
+  <div id="arrayDisplay" aria-label="Array content"></div>
+
+  <div id="steps" aria-label="Search steps" tabindex="0"></div>
+
+  <div id="finalResult" aria-live="assertive" style="margin-top:1em; font-weight:bold;"></div>
+</section>
+
+<script>
+(() => {
+  const arrayInput = document.getElementById('arrayInput');
+  const targetInput = document.getElementById('targetInput');
+  const searchBtn = document.getElementById('searchBtn');
+  const arrayDisplay = document.getElementById('arrayDisplay');
+  const stepsDiv = document.getElementById('steps');
+  const finalResult = document.getElementById('finalResult');
+
+  function parseArray(input) {
+    // Parse and verify sorted integer array
+    let vals = input.split(',').map(v => v.trim());
+    let nums = [];
+    for(let v of vals) {
+      if(v === '') continue;
+      if(!/^(-?\d+)$/.test(v)) return null;
+      nums.push(parseInt(v,10));
+    }
+    // Verify sorted ascending (strict or equal?)
+    for(let i=1; i<nums.length; i++) {
+      if(nums[i] < nums[i-1]) return null;
+    }
+    return nums;
+  }
+
+  function highlightArray(arr, low, mid, high) {
+    // Returns HTML string with low, mid, high highlighted differently
+    // low: green, mid: red, high: blue
+    const lowColor = '#28a745';
+    const midColor = '#d9534f';
+    const highColor = '#007bff';
+    return arr.map((v,i) => {
+      let style = '';
+      let label = '';
+      if(i === low) {
+        style = `color:${lowColor}; font-weight:bold;`;
+        label = 'L';
+      }
+      if(i === mid) {
+        style = `color:${midColor}; font-weight:bold;`;
+        label = 'M';
+      }
+      if(i === high) {
+        style = `color:${highColor}; font-weight:bold;`;
+        label = 'H';
+      }
+      // If overlap, mid priority > low and high
+      if(i === mid) {
+        style = `color:${midColor}; font-weight:bold; text-decoration: underline;`;
+        label = 'M';
+      } else if(i === low && i === high) {
+        // rare case low==high and not mid
+        style = `color: purple; font-weight:bold;`;
+        label = 'L/H';
+      }
+      return `<span style="${style}">${v}${label ? `<sub>${label}</sub>` : ''}</span>`;
+    }).join(', ');
+  }
+
+  // Interpolation Search function with steps recording
+
+  /*
+   Interpolation Search algorithm steps:
+   - Consider a sorted array arr with indices low and high,
+     we want to find key.
+   - Interpolation formula to estimate the probable position to check:
+     pos = low + ((key - arr[low]) * (high - low)) / (arr[high] - arr[low])
+   - If arr[pos] == key, found.
+   - Else if key < arr[pos], search low to pos-1.
+   - Else search pos+1 to high.
+   - Repeat until low <= high and key in range.
+  */
+
+  function interpolationSearch(arr, key, stepCallback) {
+    let low = 0;
+    let high = arr.length - 1;
+    let stepsCount = 0;
+
+    while(low <= high && key >= arr[low] && key <= arr[high]) {
+      stepsCount++;
+      if(arr[high] === arr[low]) {
+        // Avoid division by zero: if arr[low] == arr[high], only one possible value
+        if(arr[low] === key) {
+          stepCallback(low, low, high, `Only one value in current search range and it matches the key.`);
+          return low;
+        } else {
+          stepCallback(low, low, high, `Only one value in current search range but does NOT match the key.`);
+          break;
+        }
+      }
+
+      // Calculate probable position using interpolation
+      const pos = low + Math.floor(
+        ((key - arr[low]) * (high - low)) / (arr[high] - arr[low])
+      );
+
+      stepCallback(low, pos, high, `Step ${stepsCount}: Calculated position pos = ${pos}. Comparing arr[${pos}] = ${arr[pos]} with key = ${key}.`);
+
+      if(arr[pos] === key) {
+        stepCallback(low, pos, high, `Found key ${key} at position ${pos}.`);
+        return pos;
+      } else if(arr[pos] < key) {
+        stepCallback(low, pos, high, `Key is greater than arr[${pos}]. Move search range from [${pos + 1}...${high}].`);
+        low = pos + 1;
+      } else {
+        stepCallback(low, pos, high, `Key is less than arr[${pos}]. Move search range from [${low}...${pos - 1}].`);
+        high = pos - 1;
+      }
+    }
+
+    stepCallback(low, -1, high, `Key ${key} not found in array.`);
+    return -1;
+  }
+
+  function clearDisplay() {
+    arrayDisplay.textContent = '';
+    stepsDiv.textContent = '';
+    finalResult.textContent = '';
+  }
+
+  searchBtn.addEventListener('click', () => {
+    clearDisplay();
+
+    const arr = parseArray(arrayInput.value);
+    if(!arr) {
+      finalResult.textContent = 'Array invalid or not sorted ascending! Please check your input.';
+      return;
+    }
+
+    if(arr.length === 0) {
+      finalResult.textContent = 'Array is empty.';
+      return;
+    }
+
+    const targetVal = Number(targetInput.value);
+    if(isNaN(targetVal)) {
+      finalResult.textContent = 'Target value is not a valid number.';
+      return;
+    }
+
+    // Show initial array
+    arrayDisplay.innerHTML = `<strong>Array:</strong> ${arr.join(', ')}`;
+
+    // To display steps incrementally and highlight array at each step:
+    function stepCallback(low, mid, high, message) {
+      // Update array display with highlights
+      arrayDisplay.innerHTML = `<strong>Array:</strong> ${highlightArray(arr, low, mid, high)}`;
+      // Append message to stepsDiv
+      let p = document.createElement('p');
+      p.textContent = message;
+      stepsDiv.appendChild(p);
+      // Scroll steps to bottom for user visibility
+      stepsDiv.scrollTop = stepsDiv.scrollHeight;
+    }
+
+    // Clear steps before search for fresh start
+    stepsDiv.textContent = '';
+
+    // Run interpolation search
+    setTimeout(() => {
+      const idx = interpolationSearch(arr, targetVal, stepCallback);
+      if(idx === -1) {
+        finalResult.textContent = `Result: Element ${targetVal} NOT found in the array.`;
+      } else {
+        finalResult.textContent = `Result: Element ${targetVal} found at index ${idx}.`;
+      }
+    }, 10);
+  });
+})();
+</script>
+
+<footer>
+  &copy; 2024 Interpolation Search Demo
+</footer>
+
+</body>
+</html>

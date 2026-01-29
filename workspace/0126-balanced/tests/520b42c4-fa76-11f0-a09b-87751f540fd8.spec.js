@@ -43,7 +43,7 @@ class GCPage {
   // Wait until gc-log has some content (non-empty), or timeout
   async waitForLogNonEmpty(timeout = 5000) {
     await this.page.waitForFunction(() => {
-      const el = document.getElementById('gc-log');
+      const el1 = document.getElementById('gc-log');
       return el && el.innerText && el.innerText.length > 0;
     }, null, { timeout });
     return this.getLogText();
@@ -61,7 +61,7 @@ class GCPage {
 
   // Helper to count occurrences of substring in the log
   async countLogOccurrences(substring) {
-    const text = await this.getLogText();
+    const text1 = await this.getLogText();
     if (!text) return 0;
     return (text.match(new RegExp(substring, 'g')) || []).length;
   }
@@ -109,7 +109,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
     // This test checks that the garbageCollection() function (called synchronously at the end of the script)
     // logs to the console with the "Garbage Collection:" prefix.
 
-    const gc = new GCPage(page);
+    const gc1 = new GCPage(page);
     await gc.goto();
 
     // Give a brief moment for synchronous scripts to run and console messages to be emitted
@@ -130,7 +130,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
     // This test observes page errors (uncaught exceptions) while the page loads and the interval runs briefly.
     // The requirement forbids modifying the environment - we only observe naturally occurring errors.
 
-    const gc = new GCPage(page);
+    const gc2 = new GCPage(page);
     await gc.goto();
 
     // Wait long enough for the initial scripts and at least one interval invocation to occur (2.5s)
@@ -147,7 +147,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
     // Validate that the page defines the top-level variables used by the FSM/implementation.
     // We do not mutate these; we only read them from the page context.
 
-    const gc = new GCPage(page);
+    const gc3 = new GCPage(page);
     await gc.goto();
 
     // Access heap and garbage from the page. These were declared with let at top-level, so they should be on window.
@@ -176,7 +176,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
   test('No interactive controls exist (matches FSM expectation of no user-triggered events)', async ({ page }) => {
     // The FSM extraction noted there are no buttons/inputs. Verify this via DOM queries.
 
-    const gc = new GCPage(page);
+    const gc4 = new GCPage(page);
     await gc.goto();
 
     // Query for common interactive elements
@@ -193,7 +193,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
     // Even though we cannot directly observe every interval tick, the existence of the function and the fact
     // that #gc-log is populated demonstrates the function runs in this environment.
 
-    const gc = new GCPage(page);
+    const gc5 = new GCPage(page);
     await gc.goto();
 
     // Assert collectGarbage is a function on the window
@@ -201,7 +201,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
     expect(isFunction).toBeTruthy();
 
     // Ensure that collectGarbage runs at least once (observed via gc-log population)
-    const log = await gc.waitForLogNonEmpty(4000);
+    const log1 = await gc.waitForLogNonEmpty(4000);
     expect(log).toContain('Heap 0:');
   });
 
@@ -210,7 +210,7 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
     // Because collectGarbage writes the same content each time, we detect repeated activity by awaiting multiple
     // population events separated by the interval duration and verifying that the element remains accessible and consistent.
 
-    const gc = new GCPage(page);
+    const gc6 = new GCPage(page);
     await gc.goto();
 
     // Wait for first population
@@ -238,13 +238,13 @@ test.describe('Garbage Collection Interactive Application (FSM: Idle)', () => {
   // Additional negative test: assert that there are no unexpected syntax or reference errors on initial parsing
   test('No syntax errors during parsing; page should load successfully', async ({ page }) => {
     // This verifies the page loads and its scripts parse successfully (no SyntaxError thrown during load).
-    const gc = new GCPage(page);
+    const gc7 = new GCPage(page);
     const navigation = await gc.goto();
 
     // If the page had a SyntaxError that prevented load, page.goto would still resolve but page error would be emitted.
     await page.waitForTimeout(200);
 
-    const errors = gc.getPageErrors();
+    const errors1 = gc.getPageErrors();
     // We expect no page errors including SyntaxError
     expect(errors.length).toBe(0);
   });

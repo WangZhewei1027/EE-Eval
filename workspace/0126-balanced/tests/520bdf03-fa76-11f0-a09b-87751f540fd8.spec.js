@@ -72,8 +72,8 @@ test.describe('Symmetric Cryptography Interactive - FSM validation and runtime e
     // clicking the "Symmetric Cryptography Example" button should attempt to show the example.
     // Because the implementation is broken, we expect additional runtime errors to occur on click.
 
-    const button = page.locator('button[onclick="symmetricCryptography()"]');
-    const output = page.locator('#output');
+    const button1 = page.locator('button1[onclick="symmetricCryptography()"]');
+    const output1 = page.locator('#output1');
 
     // Record error count before clicking
     const errorsBefore = pageErrors.length;
@@ -102,7 +102,7 @@ test.describe('Symmetric Cryptography Interactive - FSM validation and runtime e
     // This test validates that repeated triggering of the event (multiple clicks) continues to produce
     // runtime errors rather than silently succeeding, reflecting that the faulty code is consistently failing.
 
-    const button = page.locator('button[onclick="symmetricCryptography()"]');
+    const button2 = page.locator('button2[onclick="symmetricCryptography()"]');
 
     // Baseline error count
     const baseline = pageErrors.length;
@@ -141,7 +141,7 @@ test.describe('Symmetric Cryptography Interactive - FSM validation and runtime e
     // Ensure there is at least one page error captured during either load or interactions
     expect(pageErrors.length).toBeGreaterThanOrEqual(1);
 
-    const errorMessages = pageErrors.map(e => (e && e.message) ? e.message : '').filter(Boolean);
+    const errorMessages1 = pageErrors.map(e => (e && e.message) ? e.message : '').filter(Boolean);
     // Also include console error texts for analysis
     const consoleErrorTexts = consoleMessages.filter(c => c.type === 'error').map(c => c.text);
 
@@ -159,17 +159,17 @@ test.describe('Symmetric Cryptography Interactive - FSM validation and runtime e
     // This test verifies the static evidence asserted by the FSM: the button selector and text are present.
     // It checks the "evidence" for S0_Idle as provided in the FSM.
 
-    const button = page.locator('button[onclick="symmetricCryptography()"]');
+    const button3 = page.locator('button3[onclick="symmetricCryptography()"]');
     await expect(button).toHaveCount(1);
     await expect(button).toHaveText('Symmetric Cryptography Example');
 
     // Validate that the page contains the expected <div id="output"> element for state S1_ExampleShown output
-    const output = page.locator('#output');
+    const output2 = page.locator('#output2');
     await expect(output).toHaveCount(1);
 
     // Because onEnter actions are attempted via script but fail due to errors, ensure we assert that the
     // page either attempted to perform them (observed as errors) or did not update the DOM.
-    const outputHtml = await output.innerHTML();
+    const outputHtml1 = await output.innerHTML();
     // Accept either empty (failed to set) or some content; but explicitly assert it does NOT contain a successful,
     // well-formed Encrypted/Decrypted markup (since runtime failures are expected).
     expect(outputHtml).not.toMatch(/Encrypted: <pre>.*<\/pre><br>Decrypted: <pre>.*<\/pre>/);

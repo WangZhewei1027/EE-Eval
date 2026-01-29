@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Semaphore Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; color: #111; }
+    h1 { margin: 0 0 8px; }
+    p.lead { margin: 6px 0 18px; color:#333; max-width: 70ch; }
+    .controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+    .card { border: 1px solid #ddd; border-radius:8px; padding:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); background:#fff; }
+    label { font-size:13px; color:#333; margin-right:6px; }
+    input[type="number"], input[type="text"], select { padding:6px 8px; border-radius:6px; border:1px solid #ccc; min-width:80px; }
+    button { padding:8px 10px; border-radius:6px; border:1px solid #bbb; background: #f7f7f7; cursor:pointer; }
+    button.primary { background:#2563eb; color:white; border-color:#1f52c8; }
+    button.warn { background:#ffedd5; border-color:#f59e0b; color:#7a3e00; }
+    .visual { display:flex; gap:20px; margin-top:12px; }
+    .tokens { display:flex; gap:6px; align-items:center; }
+    .token { width:28px; height:28px; border-radius:50%; background:#10b981; display:inline-flex; align-items:center; justify-content:center; color:white; font-weight:700; box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
+    .token.empty { background:#e6e6e6; color:#888; box-shadow:none; border:1px dashed #ddd; }
+    .panel { flex:1; min-width:240px; }
+    .workers, .queue, .logs { margin-top:10px; }
+    .worker { padding:8px; border-radius:6px; background:linear-gradient(180deg,#fff 0,#fbfbfb 100%); border:1px solid #eee; display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+    .dot { width:12px; height:12px; border-radius:50%; background:#2563eb; }
+    .progress { height:8px; background:#f1f5f9; border-radius:6px; overflow:hidden; flex:1; }
+    .progress > i { display:block; height:100%; background:linear-gradient(90deg,#60a5fa,#2563eb); width:0%; transition:width 150ms linear; }
+    .queue-item { padding:6px 8px; border-radius:6px; background:#fff; border:1px dashed #e6e6e6; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
+    .logs { max-height:240px; overflow:auto; background:#0f172a; color:#d1d5db; padding:8px; border-radius:6px; font-family: monospace; font-size:12px; }
+    .muted { color:#666; font-size:13px; }
+    footer { margin-top:18px; color:#555; font-size:13px; }
+    small.inline { font-size:12px; color:#666; margin-left:6px; }
+    .flexcol { display:flex; flex-direction:column; gap:8px; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .toggle { display:inline-flex; gap:6px; align-items:center; }
+  </style>
+</head>
+<body>
+  <h1>Semaphore — Interactive Demo</h1>
+  <p class="lead">A semaphore is a sync primitive that manages a set of permits. acquire() consumes a permit (or waits if none available), and release() returns a permit (possibly waking a waiting task). This demo simulates workers trying to acquire permits, run for a short time, then release them. Toggle fairness, spawn workers, and watch how permits and the wait queue change.</p>
+
+  <div class="controls card">
+    <div class="row">
+      <label>Initial permits:</label>
+      <input id="permCount" type="number" value="3" min="1" max="10" />
+      <label>Fairness:</label>
+      <select id="fairness">
+        <option value="fifo" selected>FIFO (first waiting -> first served)</option>
+        <option value="lifo">LIFO (stack)</option>
+      </select>
+      <button id="createBtn" class="primary">Create Semaphore</button>
+      <button id="resetBtn" class="warn">Reset</button>
+    </div>
+
+    <div style="margin-top:10px;" class="row">
+      <label>Worker name prefix:</label>
+      <input id="prefix" type="text" value="W" />
+      <button id="spawnBtn">Spawn 1 Worker</button>
+      <label>Spawn N:</label>
+      <input id="spawnN" type="number" value="5" min="1" max="50" style="width:70px" />
+      <button id="spawnNBtn">Spawn N</button>
+      <label>Auto spawn every (ms):</label>
+      <input id="autoMs" type="number" value="800" min="100" style="width:90px" />
+      <button id="toggleAuto">Start Auto</button>
+    </div>
+
+    <div style="margin-top:8px;" class="row">
+      <label>Worker duration (ms):</label>
+      <input id="minDur" type="number" value="1200" min="50" style="width:90px" />
+      <label>—</label>
+      <input id="maxDur" type="number" value="2800" min="60" style="width:90px" />
+      <small class="inline muted">Workers run for a random time in this range.</small>
+    </div>
+  </div>
+
+  <div class="visual">
+    <div class="panel card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Permits</strong> <small class="muted">available / capacity</small></div>
+        <div id="capacityLabel" class="muted"></div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="tokens" id="tokensArea"></div>
+      </div>
+
+      <div class="queue" style="margin-top:10px;">
+        <div><strong>Wait Queue</strong> <small class="muted">(<span id="queueLen">0</span>)</small></div>
+        <div id="queueList" style="margin-top:6px;"></div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <button id="manualRelease">Manual release (+1 permit)</button>
+        <small class="inline muted">Use to simulate external release.</small>
+      </div>
+    </div>
+
+    <div class="panel card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Running Workers</strong></div>
+        <div class="muted">Active: <span id="runningCount">0</span></div>
+      </div>
+
+      <div class="workers" id="workersArea" style="margin-top:10px;"></div>
+
+      <div style="margin-top:10px;">
+        <strong>Actions</strong>
+        <div style="margin-top:6px;" class="row">
+          <button id="releaseAll">Release all permits</button>
+          <button id="drainQueue">Clear wait queue (reject waiters)</button>
+        </div>
+        <small class="muted">"Clear wait queue" simulates canceling waiting tasks.</small>
+      </div>
+    </div>
+
+    <div class="panel card" style="flex:0.9;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Event Log</strong></div>
+        <div class="muted"><span id="timeNow"></span></div>
+      </div>
+      <div class="logs" id="logArea" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <footer>
+    Tip: Try setting permits to 1 to observe a mutex-like behavior. Toggle FIFO vs LIFO to see who gets served next.
+  </footer>
+
+  <script>
+    // --- Semaphore implementation with optional fairness (FIFO/LIFO) ---
+    class Semaphore {
+      constructor(initial = 1, options = { fifo: true }) {
+        this.capacity = Math.max(1, Math.floor(initial));
+        this.count = this.capacity; // available permits
+        this.queue = []; // queued waiters: {id, resolve}
+        this.fifo = !!options.fifo;
+      }
+
+      // Try to acquire synchronously. Returns true if acquired.
+      tryAcquire() {
+        if (this.count > 0) {
+          this.count--;
+          return true;
+        }
+        return false;
+      }
+
+      // Acquire and optionally attach an id for UI. Returns a Promise resolved when permit granted.
+      acquire(id) {
+        if (this.tryAcquire()) {
+          return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+          this.queue.push({ id: id || null, resolve });
+          // UI should update externally
+        });
+      }
+
+      // Release a permit. If waiters exist, grant to next (according to fairness).
+      release() {
+        // If someone waiting -> hand the permit to them (do not increase count overall)
+        if (this.queue.length > 0) {
+          const next = this.fifo ? this.queue.shift() : this.queue.pop();
+          // grant permit directly to waiter (count unchanged)
+          next.resolve();
+        } else {
+          // no waiting tasks -> increase available permits up to capacity
+          this.count = Math.min(this.count + 1, this.capacity);
+        }
+      }
+
+      // Remove and reject all queued waiters (simulate cancellation)
+      clearQueue() {
+        while (this.queue.length > 0) {
+          const w = this.queue.shift();
+          // reject by resolving with a special symbol? We'll simply call resolve and let caller ignore.
+          // For demo, we'll signal via UI elsewhere.
+          try {
+            w.resolve({ canceled: true });
+          } catch (_) {}
+        }
+      }
+
+      setFairness(fifo) {
+        this.fifo = !!fifo;
+      }
+    }
+
+    // --- UI + demo logic ---
+    const permCountInput = document.getElementById('permCount');
+    const createBtn = document.getElementById('createBtn');
+    const spawnBtn = document.getElementById('spawnBtn');
+    const spawnNBtn = document.getElementById('spawnNBtn');
+    const spawnNInput = document.getElementById('spawnN');
+    const prefixInput = document.getElementById('prefix');
+    const minDur = document.getElementById('minDur');
+    const maxDur = document.getElementById('maxDur');
+    const tokensArea = document.getElementById('tokensArea');
+    const capacityLabel = document.getElementById('capacityLabel');
+    const queueList = document.getElementById('queueList');
+    const queueLen = document.getElementById('queueLen');
+    const workersArea = document.getElementById('workersArea');
+    const runningCount = document.getElementById('runningCount');
+    const logArea = document.getElementById('logArea');
+    const manualRelease = document.getElementById('manualRelease');
+    const fairnessSelect = document.getElementById('fairness');
+    const toggleAuto = document.getElementById('toggleAuto');
+    const autoMsInput = document.getElementById('autoMs');
+    const resetBtn = document.getElementById('resetBtn');
+    const releaseAllBtn = document.getElementById('releaseAll');
+    const drainQueueBtn = document.getElementById('drainQueue');
+    const timeNowLabel = document.getElementById('timeNow');
+
+    let sem = null;
+    let workerCounter = 0;
+    let runningWorkers = new Map(); // id -> {el, timer}
+    let autoSpawnHandle = null;
+
+    function nowStamp() {
+      return (new Date()).toLocaleTimeString();
+    }
+
+    function log(msg) {
+      const line = document.createElement('div');
+      line.textContent = `[${nowStamp()}] ${msg}`;
+      logArea.appendChild(line);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    function updateTime() {
+      timeNowLabel.textContent = nowStamp();
+    }
+    setInterval(updateTime, 1000);
+    updateTime();
+
+    function createSemaphore() {
+      const count = Math.max(1, parseInt(permCountInput.value || 1, 10));
+      const fifo = (fairnessSelect.value === 'fifo');
+      sem = new Semaphore(count, { fifo });
+      runningWorkers.clear();
+      workerCounter = 0;
+      workersArea.innerHTML = '';
+      queueList.innerHTML = '';
+      logArea.innerHTML = '';
+      log(`Semaphore created with capacity=${sem.capacity}, fairness=${sem.fifo ? 'FIFO' : 'LIFO'}`);
+      updateUI();
+    }
+
+    function resetAll() {
+      if (autoSpawnHandle) {
+        clearInterval(autoSpawnHandle);
+        autoSpawnHandle = null;
+        toggleAuto.textContent = 'Start Auto';
+      }
+      if (sem) {
+        sem.clearQueue();
+      }
+      sem = null;
+      runningWorkers.forEach((v) => {
+        clearInterval(v.timer);
+      });
+      runningWorkers.clear();
+      workersArea.innerHTML = '';
+      queueList.innerHTML = '';
+      tokensArea.innerHTML = '';
+      log('Reset demo.');
+      updateUI();
+    }
+
+    function updateUI() {
+      // tokens
+      tokensArea.innerHTML = '';
+      if (!sem) return;
+      capacityLabel.textContent = `${sem.count} / ${sem.capacity}`;
+      for (let i = 0; i < sem.capacity; i++) {
+        const el = document.createElement('div');
+        const availableIndex = i < sem.count;
+        el.className = 'token' + (availableIndex ? '' : ' empty');
+        el.textContent = availableIndex ? '✓' : '';
+        tokensArea.appendChild(el);
+      }
+
+      // queue
+      queueList.innerHTML = '';
+      queueLen.textContent = sem.queue.length;
+      sem.queue.forEach((q, idx) => {
+        const qi = document.createElement('div');
+        qi.className = 'queue-item';
+        qi.innerHTML = `<div style="flex:1;"><strong>${q.id || '(anon)'}</strong></div><div class="muted">pos ${idx+1}</div>`;
+        queueList.appendChild(qi);
+      });
+
+      // running count
+      runningCount.textContent = runningWorkers.size;
+    }
+
+    function spawnWorkerBatch(n) {
+      for (let i = 0; i < n; i++) spawnOneWorker();
+    }
+
+    function spawnOneWorker() {
+      if (!sem) {
+        log('Create the semaphore first (click "Create Semaphore").');
+        return;
+      }
+      const id = `${prefixInput.value || 'W'}${++workerCounter}`;
+      const duration = randomInt(parseInt(minDur.value,10) || 1000, parseInt(maxDur.value,10) || 2000);
+
+      // If immediate permit available, consume and start; otherwise queue.
+      if (sem.tryAcquire()) {
+        log(`${id} acquired permit immediately (starts, will run ${duration}ms).`);
+        startWorker(id, duration);
+      } else {
+        // queued: call sem.acquire(id) so semaphore can store id with resolver for UI
+        sem.acquire(id).then((maybeObj) => {
+          // If some clearing mechanism resolves with canceled object, detect it.
+          if (maybeObj && maybeObj.canceled) {
+            log(`${id} was canceled while waiting.`);
+            updateUI();
+            return;
+          }
+          log(`${id} granted a permit (woke from queue).`);
+          startWorker(id, duration);
+        });
+        log(`${id} queued (no permits).`);
+      }
+      updateUI();
+    }
+
+    function startWorker(id, duration) {
+      // Visualize running worker with progress bar
+      const row = document.createElement('div');
+      row.className = 'worker';
+      row.innerHTML = `<div style="width:120px;"><strong>${id}</strong></div>
+                       <div class="progress"><i></i></div>
+                       <div style="width:50px; text-align:right;" class="muted">0%</div>`;
+      workersArea.appendChild(row);
+
+      const progressBar = row.querySelector('.progress > i');
+      const pctLabel = row.querySelector('div:last-child');
+      let start = Date.now();
+      const timer = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const p = Math.min(1, elapsed / duration);
+        progressBar.style.width = (p * 100) + '%';
+        pctLabel.textContent = Math.floor(p * 100) + '%';
+        if (p >= 1) {
+          clearInterval(timer);
+          // release permit
+          sem.release();
+          log(`${id} finished and released permit.`);
+          // remove element after small fade
+          setTimeout(() => {
+            row.remove();
+          }, 220);
+          runningWorkers.delete(id);
+          updateUI();
+        }
+      }, 80);
+
+      runningWorkers.set(id, { el: row, timer });
+      updateUI();
+    }
+
+    function randomInt(a,b) {
+      return Math.floor(Math.random() * (b - a + 1)) + a;
+    }
+
+    // --- event wiring ---
+    createBtn.addEventListener('click', () => {
+      createSemaphore();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      resetAll();
+    });
+
+    spawnBtn.addEventListener('click', () => {
+      spawnOneWorker();
+    });
+
+    spawnNBtn.addEventListener('click', () => {
+      const n = Math.max(1, parseInt(spawnNInput.value || 1, 10));
+      spawnWorkerBatch(n);
+    });
+
+    manualRelease.addEventListener('click', () => {
+      if (!sem) return log('No semaphore exists.');
+      sem.release();
+      log('Manual release: +1 permit (or handed to a queued waiter).');
+      updateUI();
+    });
+
+    fairnessSelect.addEventListener('change', () => {
+      if (!sem) return;
+      sem.setFairness(fairnessSelect.value === 'fifo');
+      log(`Fairness changed to ${sem.fifo ? 'FIFO' : 'LIFO'}.`);
+      updateUI();
+    });
+
+    toggleAuto.addEventListener('click', () => {
+      if (!sem) {
+        log('Create the semaphore first.');
+        return;
+      }
+      if (!autoSpawnHandle) {
+        const ms = Math.max(50, parseInt(autoMsInput.value || 800, 10));
+        autoSpawnHandle = setInterval(() => spawnOneWorker(), ms);
+        toggleAuto.textContent = 'Stop Auto';
+        log(`Auto-spawning every ${ms}ms.`);
+      } else {
+        clearInterval(autoSpawnHandle);
+        autoSpawnHandle = null;
+        toggleAuto.textContent = 'Start Auto';
+        log('Stopped auto-spawn.');
+      }
+    });
+
+    releaseAllBtn.addEventListener('click', () => {
+      if (!sem) return;
+      // release permits until count reaches capacity and no waiters
+      let released = 0;
+      while ((sem.count < sem.capacity) || sem.queue.length > 0) {
+        sem.release();
+        released++;
+        // avoid infinite loop in case of bug
+        if (released > 1000) break;
+      }
+      log(`Release-all invoked (attempted ${released}).`);
+      updateUI();
+    });
+
+    drainQueueBtn.addEventListener('click', () => {
+      if (!sem) return;
+      const n = sem.queue.length;
+      sem.clearQueue();
+      log(`Cleared ${n} queued waiters (they were cancelled).`);
+      updateUI();
+    });
+
+    // Initialize default
+    createSemaphore();
+
+    // Helpful keyboard: space to spawn one worker
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        spawnOneWorker();
+      }
+    });
+
+    // ensure UI updates are synced occasionally (e.g., after queue changes inside Semaphore)
+    setInterval(() => {
+      if (sem) updateUI();
+    }, 200);
+
+    // small guide in the log at start
+    log('Press "Spawn 1 Worker" or press Space. Create semaphore with desired number of permits.');
+    log('Workers that cannot acquire a permit immediately will be queued. When a permit becomes available it will be granted according to fairness.');
+  </script>
+</body>
+</html>

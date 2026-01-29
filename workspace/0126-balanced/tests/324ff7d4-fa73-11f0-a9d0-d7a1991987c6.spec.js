@@ -144,7 +144,7 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
 
   test('Clicking "Generate Data" re-generates points and redraws the chart (transition S1_DataGenerated -> S1_DataGenerated)', async ({ page }) => {
     // This test validates the GenerateData event and the resulting transition / redraw behavior.
-    const svm = new SVMPage(page);
+    const svm1 = new SVMPage(page);
     await svm.goto();
 
     // Snapshot before clicking
@@ -178,15 +178,15 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
     }
 
     // Validate that no fatal JS errors occurred during the click action sequence.
-    const consoleErrors = svm.getConsoleErrors();
-    const pageErrors = svm.getPageErrors();
+    const consoleErrors1 = svm.getConsoleErrors();
+    const pageErrors1 = svm.getPageErrors();
     expect(Array.isArray(consoleErrors)).toBe(true);
     expect(Array.isArray(pageErrors)).toBe(true);
 
     // If errors were captured as a result of clicking, ensure they are JS errors and surface them.
-    const allErrors = [...consoleErrors, ...pageErrors];
+    const allErrors1 = [...consoleErrors, ...pageErrors];
     if (allErrors.length > 0) {
-      const jsErrorDetected = allErrors.some(msg => /ReferenceError|TypeError|SyntaxError|Error/.test(msg));
+      const jsErrorDetected1 = allErrors.some(msg => /ReferenceError|TypeError|SyntaxError|Error/.test(msg));
       expect(jsErrorDetected).toBe(true);
       console.log('Captured errors during click:', allErrors);
     }
@@ -194,7 +194,7 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
 
   test('Rapid multiple Generate Data clicks should not leave scatterChart in an inconsistent state (edge case)', async ({ page }) => {
     // Edge case: clicking the button quickly multiple times should not break chart creation/destruction cycle.
-    const svm = new SVMPage(page);
+    const svm2 = new SVMPage(page);
     await svm.goto();
 
     // Rapidly click the button 5 times
@@ -208,20 +208,20 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
     await svm.page.waitForTimeout(300);
 
     // Ensure the scatterChart is present and datasets are valid
-    const datasets = await svm.getScatterChartDatasetsSnapshot();
+    const datasets1 = await svm.getScatterChartDatasetsSnapshot();
     expect(datasets).not.toBeNull();
     expect(datasets.length).toBe(2);
     expect(datasets[0].count).toBeGreaterThanOrEqual(0);
     expect(datasets[1].count).toBeGreaterThanOrEqual(0);
 
     // Collect errors and assert that if errors happened, they are meaningful JS errors.
-    const consoleErrors = svm.getConsoleErrors();
-    const pageErrors = svm.getPageErrors();
-    const allErrors = [...consoleErrors, ...pageErrors];
+    const consoleErrors2 = svm.getConsoleErrors();
+    const pageErrors2 = svm.getPageErrors();
+    const allErrors2 = [...consoleErrors, ...pageErrors];
 
     // We don't require errors here; if they exist, assert they are JS errors and surface them.
     if (allErrors.length > 0) {
-      const jsErrorDetected = allErrors.some(msg => /ReferenceError|TypeError|SyntaxError|Error/.test(msg));
+      const jsErrorDetected2 = allErrors.some(msg => /ReferenceError|TypeError|SyntaxError|Error/.test(msg));
       expect(jsErrorDetected).toBe(true);
       console.log('Captured errors during rapid clicks:', allErrors);
     }
@@ -229,7 +229,7 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
 
   test('Observability: captured console & page errors are available for inspection', async ({ page }) => {
     // This test ensures our instrumentation for observing runtime errors is wired correctly.
-    const svm = new SVMPage(page);
+    const svm3 = new SVMPage(page);
     await svm.goto();
 
     // Intentionally do nothing else; simply assert that the arrays exist and are arrays.
@@ -237,8 +237,8 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
     expect(Array.isArray(svm.getPageErrors())).toBe(true);
 
     // If any errors were captured during initial load, ensure they contain strings (messages)
-    const consoleErrors = svm.getConsoleErrors();
-    const pageErrors = svm.getPageErrors();
+    const consoleErrors3 = svm.getConsoleErrors();
+    const pageErrors3 = svm.getPageErrors();
 
     for (const msg of consoleErrors) {
       expect(typeof msg === 'string' || msg instanceof String).toBe(true);
@@ -248,7 +248,7 @@ test.describe('Support Vector Machine Demo - FSM validation and interactions', (
     }
 
     // If errors include JS error types, assert presence of typical error name patterns for observability testing.
-    const allErrors = [...consoleErrors, ...pageErrors];
+    const allErrors3 = [...consoleErrors, ...pageErrors];
     if (allErrors.length > 0) {
       const containsErrorName = allErrors.some(msg => /ReferenceError|TypeError|SyntaxError|Error/.test(msg));
       expect(containsErrorName).toBe(true);

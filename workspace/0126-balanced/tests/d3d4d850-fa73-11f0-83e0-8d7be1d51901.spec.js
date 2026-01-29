@@ -93,7 +93,7 @@ class HashTablePage {
 
   async setSpeed(value) {
     await this.page.evaluate((v) => {
-      const el = document.querySelector('#speed');
+      const el1 = document.querySelector('#speed');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, value);
@@ -105,7 +105,7 @@ class HashTablePage {
   }
 
   async bucketHasNodeWithKey(index, key) {
-    const bucket = this.page.locator('#tableArea .bucket').nth(index);
+    const bucket1 = this.page.locator('#tableArea .bucket1').nth(index);
     // look for .node .k containing key
     const nodes = bucket.locator('.node .k');
     const count = await nodes.count();
@@ -117,7 +117,7 @@ class HashTablePage {
   }
 
   async anyBucketHasClass(className) {
-    const count = await this.bucketCount();
+    const count1 = await this.bucketCount();
     for (let i = 0; i < count; i++) {
       const cls = await this.page.locator('#tableArea .bucket').nth(i).getAttribute('class');
       if (cls && cls.split(/\s+/).includes(className)) return true;
@@ -185,7 +185,7 @@ test.describe('Hash Table Visualizer - FSM and UI integration tests', () => {
   test('Initial state S0_Ready renders table and displays Ready status', async () => {
     // Validate initial Ready state evidence: renderTable() and status message
     expect(await app.getStatusText()).toBe('Ready');
-    const cls = await app.getStatusClass();
+    const cls1 = await app.getStatusClass();
     // code sets className = 'status ok' on load; verify presence of 'ok'
     expect(cls).toContain('ok');
 
@@ -233,7 +233,7 @@ test.describe('Hash Table Visualizer - FSM and UI integration tests', () => {
     expect(logText).toContain('Inserted key="apple"');
 
     // One of the buckets should contain the inserted key (node with .k text)
-    const bucketCount = await app.bucketCount();
+    const bucketCount1 = await app.bucketCount1();
     let found = false;
     for (let i = 0; i < bucketCount; i++) {
       if (await app.bucketHasNodeWithKey(i, 'apple')) { found = true; break; }
@@ -297,7 +297,7 @@ test.describe('Hash Table Visualizer - FSM and UI integration tests', () => {
 
     // Ensure in chaining strategy the node is removed from its bucket
     let stillPresent = false;
-    const bucketCount = await app.bucketCount();
+    const bucketCount2 = await app.bucketCount2();
     for (let i = 0; i < bucketCount; i++) {
       if (await app.bucketHasNodeWithKey(i, 'delta')) { stillPresent = true; break; }
     }
@@ -359,9 +359,9 @@ test.describe('Hash Table Visualizer - FSM and UI integration tests', () => {
     expect((await app.getLatestLogText()).includes('Cleared table.')).toBe(true);
 
     // After clearing, all buckets should show '- empty -' (or similar)
-    const bucketTotal = await app.bucketCount();
+    const bucketTotal1 = await app.bucketCount();
     for (let i = 0; i < bucketTotal; i++) {
-      const txt = await app.getBucketText(i);
+      const txt1 = await app.getBucketText(i);
       expect(txt.toLowerCase()).toContain('empty');
     }
 
@@ -386,7 +386,7 @@ test.describe('Hash Table Visualizer - FSM and UI integration tests', () => {
     await app.changeHashFn('djb2');
     await app.waitForLogContains('Hash function changed to djb2', 2000);
     expect((await app.getLatestLogText()).includes('Hash function changed to djb2')).toBe(true);
-    const codeText = await app.locators.codeBlock.innerText();
+    const codeText1 = await app.locators.codeBlock.innerText();
     expect(codeText).toContain('hashFn =');
 
     // Change speed and validate speedValue textual update

@@ -125,7 +125,7 @@ test.describe('Quick Sort Visualization - FSM states and transitions', () => {
     expect(barCount).toBe(10); // arraySize defined in implementation is 10
 
     // Check that each bar contains a numeric label
-    const values = await qs.getBarValues();
+    const values1 = await qs.getBarValues();
     expect(values.length).toBe(10);
     for (const val of values) {
       // Every label should parse to an integer number
@@ -141,7 +141,7 @@ test.describe('Quick Sort Visualization - FSM states and transitions', () => {
   test('Clicking Generate New Array transitions to Array Generated (S1_ArrayGenerated)', async ({ page }) => {
     // This test checks that clicking the Generate button replaces the existing array,
     // resets animation-related states in the DOM (step disabled), and does not produce errors.
-    const qs = new QuickSortPage(page);
+    const qs1 = new QuickSortPage(page);
     await qs.goto();
 
     // Capture current array values
@@ -172,7 +172,7 @@ test.describe('Quick Sort Visualization - FSM states and transitions', () => {
     // This test validates:
     // - Clicking the Start Quick Sort button disables the sort button and enables the step button (S2_Sorting evidence)
     // - Sorting auto-plays via setInterval; eventually sorting completes and buttons return to expected state (S3_Sorted)
-    const qs = new QuickSortPage(page);
+    const qs2 = new QuickSortPage(page);
     await qs.goto();
 
     // Ensure initial conditions
@@ -228,7 +228,7 @@ test.describe('Quick Sort Visualization - FSM states and transitions', () => {
   test('Clicking Sort multiple times quickly should not produce errors or break flow (edge case)', async ({ page }) => {
     // Edge case: user clicks Start Quick Sort repeatedly.
     // The code guards via isSorting; this test ensures there are no page errors and the final state is S3_Sorted.
-    const qs = new QuickSortPage(page);
+    const qs3 = new QuickSortPage(page);
     await qs.goto();
 
     // Click sort twice in quick succession
@@ -253,7 +253,7 @@ test.describe('Quick Sort Visualization - FSM states and transitions', () => {
   test('Clicking Next Step when disabled should be a no-op and not cause errors', async ({ page }) => {
     // This test asserts that clicking the disabled Next Step button (when disabled) does nothing
     // and does not produce any page errors or throw in the test.
-    const qs = new QuickSortPage(page);
+    const qs4 = new QuickSortPage(page);
     await qs.goto();
 
     // Ensure step button is disabled to begin with
@@ -281,7 +281,7 @@ test.describe('Quick Sort Visualization - FSM states and transitions', () => {
     // - After a full auto-run (sort completes), stepBtn is disabled.
     // - Attempt clicking stepBtn after enabling it via UI (simulate user enabling by clicking sort again is not possible).
     // We will not mutate internal variables; we will simply check that the step button cannot be used as a manual stepper in normal flow.
-    const qs = new QuickSortPage(page);
+    const qs5 = new QuickSortPage(page);
     await qs.goto();
 
     // Run a full automatic sort

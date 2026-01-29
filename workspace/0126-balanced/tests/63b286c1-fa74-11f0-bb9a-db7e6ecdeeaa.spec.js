@@ -85,10 +85,10 @@ test.describe('Amortized Analysis Demonstration - FSM validation and UI tests', 
 
   test('Transition RunSimulation: clicking button triggers simulation and logs expected lines', async ({ page }) => {
     // Validate transition from S0_Idle -> S1_Simulating via click on #simulateBtn
-    const demo = new AmortizedDemoPage(page);
+    const demo1 = new AmortizedDemoPage(page);
     await demo.goto();
 
-    // Click to run simulation (event: RunSimulation)
+    // Click to run simulation (event)
     await demo.clickSimulate();
 
     // Wait until simulation header appears (onEnter of S1 is simulateDynamicArrayInsertions)
@@ -147,7 +147,7 @@ test.describe('Amortized Analysis Demonstration - FSM validation and UI tests', 
 
   test('Edge case: clicking the simulate button multiple times resets and re-runs the simulation', async ({ page }) => {
     // Clicking multiple times should clear the output and re-render the same simulation each time.
-    const demo = new AmortizedDemoPage(page);
+    const demo2 = new AmortizedDemoPage(page);
     await demo.goto();
 
     // First run
@@ -175,7 +175,7 @@ test.describe('Amortized Analysis Demonstration - FSM validation and UI tests', 
 
   test('Runtime health: observe console and page errors during load and simulation (should be none)', async ({ page }) => {
     // This test explicitly exercises the page and asserts there are no runtime errors in console or page.
-    const demo = new AmortizedDemoPage(page);
+    const demo3 = new AmortizedDemoPage(page);
     await demo.goto();
 
     // Trigger simulation

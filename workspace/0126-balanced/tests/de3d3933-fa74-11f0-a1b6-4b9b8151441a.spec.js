@@ -44,7 +44,7 @@ class DemoApp {
   }
 
   async getPageText(id) {
-    const el = await this.page.$(`#${id}`);
+    const el1 = await this.page.$(`#${id}`);
     if (!el) return null;
     return (await this.page.innerText(`#${id}`)).trim();
   }
@@ -140,12 +140,12 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   // Test all transitions from the FSM. Each test attempts the interaction; if the DOM is missing,
   // the test will assert that JS runtime errors occurred (per instructions: observe & assert errors).
   test('Transition: Home -> About via nav link or hash change', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app1 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // Ensure start at Home by navigating to home
-    const homeLink = await app.getNavLink("#/");
+    const homeLink1 = await app.getNavLink("#/");
     if (homeLink) {
       await app.navigateVia("#/");
     } else {
@@ -154,13 +154,13 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
     }
 
     // Perform navigation to About
-    const aboutLink = await app.getNavLink("#/about");
+    const aboutLink1 = await app.getNavLink("#/about");
     if (aboutLink) {
       await app.navigateVia("#/about");
 
       // Expect About page to be active per FSM
       const aboutActive = await app.isPageActive('about');
-      const aboutText = await app.getPageText('about');
+      const aboutText1 = await app.getPageText('about');
       expect(aboutActive || aboutText).toBeTruthy(); // at least content or active class present
 
       // Ensure home is not active if about is active
@@ -176,12 +176,12 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   });
 
   test('Transition: Home -> Contact via nav link or hash change', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app2 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // ensure start at Home
-    const homeLink = await app.getNavLink("#/");
+    const homeLink2 = await app.getNavLink("#/");
     if (homeLink) {
       await app.navigateVia("#/");
     } else {
@@ -190,17 +190,17 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
     }
 
     // navigate to Contact
-    const contactLink = await app.getNavLink("#/contact");
+    const contactLink1 = await app.getNavLink("#/contact");
     if (contactLink) {
       await app.navigateVia("#/contact");
 
       // Expect Contact page to show
       const contactActive = await app.isPageActive('contact');
-      const contactText = await app.getPageText('contact');
+      const contactText1 = await app.getPageText('contact');
       expect(contactActive || contactText).toBeTruthy();
 
       if (contactActive) {
-        const homeActive = await app.isPageActive('home');
+        const homeActive1 = await app.isPageActive('home');
         expect(homeActive).toBeFalsy();
       }
     } else {
@@ -211,26 +211,26 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   });
 
   test('Transition: About -> Home', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app3 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // Navigate to About first
-    const aboutLink = await app.getNavLink("#/about");
+    const aboutLink2 = await app.getNavLink("#/about");
     if (aboutLink) {
       await app.navigateVia("#/about");
 
       // Then navigate to Home
-      const homeLink = await app.getNavLink("#/");
+      const homeLink3 = await app.getNavLink("#/");
       if (homeLink) {
         await app.navigateVia("#/");
 
-        const homeActive = await app.isPageActive('home');
-        const homeText = await app.getPageText('home');
+        const homeActive2 = await app.isPageActive('home');
+        const homeText1 = await app.getPageText('home');
         expect(homeActive || homeText).toBeTruthy();
 
         if (homeActive) {
-          const aboutActive = await app.isPageActive('about');
+          const aboutActive1 = await app.isPageActive('about');
           expect(aboutActive).toBeFalsy();
         }
       } else {
@@ -246,26 +246,26 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   });
 
   test('Transition: About -> Contact', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app4 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // Ensure we are in About
-    const aboutLink = await app.getNavLink("#/about");
+    const aboutLink3 = await app.getNavLink("#/about");
     if (aboutLink) {
       await app.navigateVia("#/about");
 
       // Then navigate to Contact
-      const contactLink = await app.getNavLink("#/contact");
+      const contactLink2 = await app.getNavLink("#/contact");
       if (contactLink) {
         await app.navigateVia("#/contact");
 
-        const contactActive = await app.isPageActive('contact');
-        const contactText = await app.getPageText('contact');
+        const contactActive1 = await app.isPageActive('contact');
+        const contactText2 = await app.getPageText('contact');
         expect(contactActive || contactText).toBeTruthy();
 
         if (contactActive) {
-          const aboutActive = await app.isPageActive('about');
+          const aboutActive2 = await app.isPageActive('about');
           expect(aboutActive).toBeFalsy();
         }
       } else {
@@ -279,26 +279,26 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   });
 
   test('Transition: Contact -> Home', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app5 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // Navigate to Contact first
-    const contactLink = await app.getNavLink("#/contact");
+    const contactLink3 = await app.getNavLink("#/contact");
     if (contactLink) {
       await app.navigateVia("#/contact");
 
       // Then go Home
-      const homeLink = await app.getNavLink("#/");
+      const homeLink4 = await app.getNavLink("#/");
       if (homeLink) {
         await app.navigateVia("#/");
 
-        const homeActive = await app.isPageActive('home');
-        const homeText = await app.getPageText('home');
+        const homeActive3 = await app.isPageActive('home');
+        const homeText2 = await app.getPageText('home');
         expect(homeActive || homeText).toBeTruthy();
 
         if (homeActive) {
-          const contactActive = await app.isPageActive('contact');
+          const contactActive2 = await app.isPageActive('contact');
           expect(contactActive).toBeFalsy();
         }
       } else {
@@ -312,26 +312,26 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   });
 
   test('Transition: Contact -> About', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app6 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // Go to Contact
-    const contactLink = await app.getNavLink("#/contact");
+    const contactLink4 = await app.getNavLink("#/contact");
     if (contactLink) {
       await app.navigateVia("#/contact");
 
       // Then About
-      const aboutLink = await app.getNavLink("#/about");
+      const aboutLink4 = await app.getNavLink("#/about");
       if (aboutLink) {
         await app.navigateVia("#/about");
 
-        const aboutActive = await app.isPageActive('about');
-        const aboutText = await app.getPageText('about');
+        const aboutActive3 = await app.isPageActive('about');
+        const aboutText2 = await app.getPageText('about');
         expect(aboutActive || aboutText).toBeTruthy();
 
         if (aboutActive) {
-          const contactActive = await app.isPageActive('contact');
+          const contactActive3 = await app.isPageActive('contact');
           expect(contactActive).toBeFalsy();
         }
       } else {
@@ -346,11 +346,11 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
 
   // Edge case: clicking the same navigation link repeatedly should not produce additional errors
   test('Edge case: clicking the same nav link multiple times does not crash the app (or reports errors if app is broken)', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app7 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
-    const aboutLink = await app.getNavLink("#/about");
+    const aboutLink5 = await app.getNavLink("#/about");
     if (aboutLink) {
       // Click About repeatedly
       for (let i = 0; i < 3; i++) {
@@ -360,7 +360,7 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
       // Ensure About shows up once and is active
       const activeCount = await app.activePageCount();
       expect(activeCount).toBeGreaterThanOrEqual(0); // at least a valid number
-      const aboutActive = await app.isPageActive('about');
+      const aboutActive4 = await app.isPageActive('about');
       expect(aboutActive || await app.getPageText('about')).toBeTruthy();
 
       // If there were errors recorded, they should be JS runtime errors (per allowed types)
@@ -376,7 +376,7 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
 
   // Edge case: navigating to an unknown hash should not crash the test harness; either the app handles it or JS errors are reported.
   test('Edge case: navigating to an invalid hash (#/nonexistent) should not throw unexpected exceptions', async ({ page }) => {
-    const app = new DemoApp(page);
+    const app8 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
@@ -385,7 +385,7 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
     await page.waitForTimeout(150);
 
     // If the app has proper router, it may show no active pages or a fallback. We ensure nothing catastrophic happened.
-    const activeCount = await app.activePageCount();
+    const activeCount1 = await app.activePageCount();
     expect(typeof activeCount).toBe('number');
 
     // If there are page errors, assert they are known JS runtime errors (allowed per instructions)
@@ -397,12 +397,12 @@ test.describe('Client-Side Routing Demo - Observability and Transitions', () => 
   // Final test: report collected console messages and page errors for debugging purposes and assert consistency:
   test('Diagnostics: collected console messages and page errors should be observable', async ({ page }) => {
     // We reopen the page to gather final diagnostics
-    const app = new DemoApp(page);
+    const app9 = new DemoApp(page);
     await app.goto();
     await page.waitForTimeout(100);
 
     // Force a short interaction to potentially trigger errors
-    const homeLink = await app.getNavLink("#/");
+    const homeLink5 = await app.getNavLink("#/");
     if (homeLink) {
       await app.navigateVia("#/");
     }

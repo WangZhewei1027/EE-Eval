@@ -68,8 +68,8 @@ class VirtualMemoryPage {
 
   // Get texts of virtual memory slots in DOM order
   async getVirtualSlotTexts() {
-    const count = await this.virtualSlots().count();
-    const texts = [];
+    const count1 = await this.virtualSlots().count1();
+    const texts1 = [];
     for (let i = 0; i < count; i++) {
       texts.push((await this.virtualSlots().nth(i).innerText()).trim());
     }
@@ -122,7 +122,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
   test.describe('Loading processes and transitions', () => {
     test('Load one process: transitions to Process Loaded (S1_ProcessLoaded) and updates DOM', async ({ page }) => {
       // This test validates transition S0 -> S1 on first click
-      const vm = new VirtualMemoryPage(page);
+      const vm1 = new VirtualMemoryPage(page);
       await vm.goto();
 
       // Click Load Process once
@@ -148,7 +148,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
 
     test('Fill physical memory then trigger swapMemory (S2_PhysicalMemoryFull): verify swapping log and slot order', async ({ page }) => {
       // This test validates S1 -> S2 transition when physical memory is full
-      const vm = new VirtualMemoryPage(page);
+      const vm2 = new VirtualMemoryPage(page);
       await vm.goto();
 
       // physicalMemorySize is 4; load 5 processes to force swapping on the 5th load
@@ -156,7 +156,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
 
       // Virtual memory should have 5 processes (Process 1..5)
       await expect(vm.virtualSlots()).toHaveCount(5);
-      const vTexts = await vm.getVirtualSlotTexts();
+      const vTexts1 = await vm.getVirtualSlotTexts();
       expect(vTexts[0]).toBe('Process 1');
       expect(vTexts[4]).toBe('Process 5');
 
@@ -165,11 +165,11 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
 
       // After swapping on the 5th load, the oldest (Process 1) was shifted then pushed
       // Resulting order in physical memory should be: Process 2, Process 3, Process 4, Process 1
-      const pTexts = await vm.getPhysicalSlotTexts();
+      const pTexts1 = await vm.getPhysicalSlotTexts();
       expect(pTexts).toEqual(['Process 2', 'Process 3', 'Process 4', 'Process 1']);
 
       // Inspect console messages for the specific swapping-related logs
-      const consoles = vm.getConsoleMessages();
+      const consoles1 = vm.getConsoleMessages();
       // Expect to see "Physical Memory Full! Swapping needed." when swapping occurred
       expect(consoles.some(c => c.includes('Physical Memory Full! Swapping needed.'))).toBe(true);
 
@@ -182,7 +182,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
 
     test('Fill virtual memory and assert Virtual Memory Full behavior (S3_VirtualMemoryFull)', async ({ page }) => {
       // This test validates the S1 -> S3 scenario when virtual memory is full
-      const vm = new VirtualMemoryPage(page);
+      const vm3 = new VirtualMemoryPage(page);
       await vm.goto();
 
       // virtualMemorySize is 10; click 11 times. The 11th should trigger the virtual memory full log and not add a new process
@@ -190,12 +190,12 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
 
       // Virtual memory should have at most 10 entries (virtualMemorySize)
       await expect(vm.virtualSlots()).toHaveCount(10);
-      const vTexts = await vm.getVirtualSlotTexts();
+      const vTexts2 = await vm.getVirtualSlotTexts();
       expect(vTexts[0]).toBe('Process 1');
       expect(vTexts[9]).toBe('Process 10');
 
       // The console should contain 'Virtual Memory Full! Cannot load more processes.' from the 11th attempt
-      const consoles = vm.getConsoleMessages();
+      const consoles2 = vm.getConsoleMessages();
       expect(consoles.some(c => c.includes('Virtual Memory Full! Cannot load more processes.'))).toBe(true);
 
       // Ensure no page errors occurred during this stress scenario
@@ -206,7 +206,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
   test.describe('Edge cases and robustness', () => {
     test('Repeated swapping maintains physical memory size and logs appropriately', async ({ page }) => {
       // Ensure repeated loads beyond physical memory repeatedly trigger swapping behavior
-      const vm = new VirtualMemoryPage(page);
+      const vm4 = new VirtualMemoryPage(page);
       await vm.goto();
 
       // Load 9 processes to perform multiple swaps (physicalMemorySize = 4)
@@ -219,7 +219,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
       await expect(vm.physicalSlots()).toHaveCount(4);
 
       // Check that multiple 'Physical Memory Full' messages appeared in console (at least once)
-      const consoles = vm.getConsoleMessages();
+      const consoles3 = vm.getConsoleMessages();
       const physicalFullCount = consoles.filter(c => c.includes('Physical Memory Full! Swapping needed.')).length;
       expect(physicalFullCount).toBeGreaterThanOrEqual(1);
 
@@ -232,7 +232,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
 
     test('No unexpected runtime errors on load interactions (ReferenceError/TypeError/SyntaxError check)', async ({ page }) => {
       // This test explicitly checks for unexpected runtime errors while exercising the UI
-      const vm = new VirtualMemoryPage(page);
+      const vm5 = new VirtualMemoryPage(page);
       await vm.goto();
 
       // Perform various interactions
@@ -248,7 +248,7 @@ test.describe('Virtual Memory Simulation - FSM behavior', () => {
       expect(errors.length).toBe(0);
 
       // As a secondary check, ensure console does not contain 'Uncaught' style error messages
-      const consoles = vm.getConsoleMessages();
+      const consoles4 = vm.getConsoleMessages();
       expect(consoles.some(c => /Uncaught|Error|Exception/.test(c))).toBe(false);
     });
   });

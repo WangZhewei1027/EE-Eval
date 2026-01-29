@@ -38,7 +38,7 @@ class SocketPage {
   async waitForOutputContainsAny(substrings, opts = { timeout: 7000 }) {
     await this.page.waitForFunction(
       (sel, subs) => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         if (!el || !el.innerText) return false;
         const text = el.innerText;
         return subs.some(s => text.includes(s));
@@ -119,7 +119,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
   });
 
   test('Connect event: clicking Connect produces connection attempt and either success or error/close logs', async ({ page }) => {
-    const socketPage = new SocketPage(page);
+    const socketPage1 = new SocketPage(page);
 
     // Click connect
     await socketPage.clickConnect();
@@ -138,7 +138,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
       'Connection closed.'
     ], { timeout: 10000 });
 
-    const outputText = await socketPage.getOutputText();
+    const outputText1 = await socketPage.getOutputText();
 
     // Validate that at least one of the expected observables is present
     const hasEstablished = outputText.includes('Connection established! Ready to send messages.');
@@ -174,7 +174,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
   });
 
   test('SendMessage event via click and Enter: when connected, messages are sent and received; when not, proper errors shown', async ({ page }) => {
-    const socketPage = new SocketPage(page);
+    const socketPage2 = new SocketPage(page);
 
     // Click connect first
     await socketPage.clickConnect();
@@ -188,7 +188,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
 
     const outputTextAfterConnect = await socketPage.getOutputText();
     const isConnected = outputTextAfterConnect.includes('Connection established! Ready to send messages.');
-    const hasError = outputTextAfterConnect.includes('Error:') || outputTextAfterConnect.includes('Connection closed.');
+    const hasError1 = outputTextAfterConnect.includes('Error:') || outputTextAfterConnect.includes('Connection closed.');
 
     if (isConnected) {
       // Validate send via click
@@ -235,7 +235,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
   });
 
   test('Disconnect event: when connected, clicking Disconnect triggers close; when not connected, button stays disabled', async ({ page }) => {
-    const socketPage = new SocketPage(page);
+    const socketPage3 = new SocketPage(page);
 
     // Connect attempt first
     await socketPage.clickConnect();
@@ -248,7 +248,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
     ], { timeout: 10000 });
 
     const outputNow = await socketPage.getOutputText();
-    const isConnected = outputNow.includes('Connection established! Ready to send messages.');
+    const isConnected1 = outputNow.includes('Connection established! Ready to send messages.');
 
     if (isConnected) {
       // Click disconnect and expect 'Closing connection...' is logged from the click handler and then 'Connection closed.' from onclose
@@ -278,7 +278,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
   });
 
   test('Edge cases and error scenarios: attempting to send empty message when connected logs guidance', async ({ page }) => {
-    const socketPage = new SocketPage(page);
+    const socketPage4 = new SocketPage(page);
 
     await socketPage.clickConnect();
 
@@ -290,7 +290,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
     ], { timeout: 10000 });
 
     const outNow = await socketPage.getOutputText();
-    const isConnected = outNow.includes('Connection established! Ready to send messages.');
+    const isConnected2 = outNow.includes('Connection established! Ready to send messages.');
 
     if (isConnected) {
       // Ensure send button is enabled
@@ -302,7 +302,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
       await socketPage.clickSend();
 
       await socketPage.waitForOutputContains('Please enter a message to send', { timeout: 3000 });
-      const out = await socketPage.getOutputText();
+      const out1 = await socketPage.getOutputText();
       expect(out).toContain('Please enter a message to send');
     } else {
       // Not connected: ensure attempt to send is disabled and that an error/close message exists
@@ -319,7 +319,7 @@ test.describe('Socket Programming Demo - FSM verification', () => {
   });
 
   test('Console and page error observation: ensure console messages include key FSM logs', async ({ page }) => {
-    const socketPage = new SocketPage(page);
+    const socketPage5 = new SocketPage(page);
 
     // We rely on previously captured console messages from earlier page events.
     // Clear prior arrays first to only capture events from this interaction

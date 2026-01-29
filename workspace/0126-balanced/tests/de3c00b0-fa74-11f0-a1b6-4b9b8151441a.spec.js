@@ -114,7 +114,7 @@ test.describe('Dijkstra Visualization App (de3c00b0-fa74-11f0-a1b6-4b9b8151441a)
       await page.click('#add-edge');
 
       // Simulate clicks on graph (would normally select nodes) - here nothing should happen
-      const graphBox = await page.locator('#graph-container').boundingBox();
+      const graphBox1 = await page.locator('#graph-container').boundingBox();
       expect(graphBox).not.toBeNull();
 
       if (graphBox) {
@@ -164,7 +164,7 @@ test.describe('Dijkstra Visualization App (de3c00b0-fa74-11f0-a1b6-4b9b8151441a)
       await page.waitForTimeout(50);
 
       // Assert graph remains empty
-      const nodesCount = await page.locator('#graph-container .node').count();
+      const nodesCount1 = await page.locator('#graph-container .node').count();
       expect(nodesCount).toBe(0);
 
       // Distance table should be empty as script didn't initialize it
@@ -231,7 +231,7 @@ test.describe('Dijkstra Visualization App (de3c00b0-fa74-11f0-a1b6-4b9b8151441a)
     test('Ensure initial FSM idle evidence (mode = add-node) is not present due to script parse failure', async ({ page }) => {
       // The FSM S0_Idle suggests mode = 'add-node' should be set on entry via renderPage()/init.
       // Because the script failed, window.mode should be undefined.
-      const modeType = await page.evaluate(() => typeof window.mode);
+      const modeType1 = await page.evaluate(() => typeof window.mode);
       expect(modeType).toBe('undefined');
     });
 

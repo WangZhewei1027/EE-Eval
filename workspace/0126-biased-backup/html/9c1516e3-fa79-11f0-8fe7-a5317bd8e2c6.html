@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Amortized Analysis Simulator</title>
+<style>
+  /* Extremely minimal visual styling: plain black on white, basic layout */
+  html,body { background: white; color: black; font-family: sans-serif; margin: 8px; }
+  .row { display: flex; gap: 8px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  fieldset { padding: 8px; }
+  label { display: block; font-size: 13px; margin-bottom: 2px; }
+  input[type="text"], input[type="number"], select, textarea { font-size: 13px; padding: 4px; }
+  button { font-size: 13px; padding: 6px; }
+  .small { font-size: 12px; }
+  .log { white-space: pre; font-family: monospace; font-size: 12px; border: 1px solid black; padding: 6px; height: 160px; overflow: auto; }
+  canvas { border: 1px solid black; background: white; }
+  .ops-list { font-family: monospace; font-size: 12px; border: 1px solid black; padding: 6px; height: 160px; overflow: auto; }
+  .state-box { font-family: monospace; font-size: 13px; border: 1px solid black; padding: 6px; min-width: 220px; white-space: pre; }
+  .controls-grid { display: grid; grid-template-columns: repeat(2, auto); gap: 6px; align-items: center; }
+  .flex-space { flex: 1; }
+</style>
+</head>
+<body>
+<h2>Amortized Analysis Simulator</h2>
+
+<div class="row">
+  <div class="col" style="flex:1; min-width:420px;">
+    <fieldset>
+      <legend>Sequence / Workload</legend>
+      <div class="row">
+        <div style="flex:1;">
+          <label>Manual Operations</label>
+          <div class="row">
+            <button id="btnPush">Push</button>
+            <button id="btnPop">Pop</button>
+            <input id="pushValue" type="text" placeholder="value (optional)" style="width:120px;">
+            <button id="btnAppendOp">Append Op to Sequence</button>
+          </div>
+        </div>
+        <div style="width:260px;">
+          <label>Generate Random Sequence</label>
+          <div class="controls-grid">
+            <label class="small">Length</label><input id="randLen" type="number" value="30" min="1" style="width:70px;">
+            <label class="small">Push Prob (0-1)</label><input id="randProb" type="number" step="0.05" min="0" max="1" value="0.7" style="width:70px;">
+            <label class="small">Seed (optional)</label><input id="randSeed" type="text" placeholder="seed" style="width:70px;">
+            <div></div>
+            <button id="btnGenRand">Generate</button>
+            <button id="btnClearSeq">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <label>Sequence (editable text: one op per line: push or pop)</label>
+      <textarea id="sequenceText" rows="6" style="width:100%; font-family: monospace;">push
+push
+push
+pop
+push</textarea>
+
+      <div class="row">
+        <button id="btnLoadSeq">Load Sequence</button>
+        <button id="btnSaveSeq">Export Sequence</button>
+        <input id="exportOut" type="text" readonly style="flex:1;">
+      </div>
+
+      <label>Ops list (click an op to edit/remove)</label>
+      <div id="opsList" class="ops-list"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Snapshots & Branching</legend>
+      <div class="row">
+        <div style="flex:1;">
+          <label>Snapshots</label>
+          <div id="snapshotsList" class="ops-list"></div>
+          <div class="row">
+            <button id="btnSaveSnapshot">Save Snapshot</button>
+            <button id="btnRestoreSnapshot">Restore Selected</button>
+            <button id="btnDeleteSnapshot">Delete Selected</button>
+          </div>
+        </div>
+        <div style="width:260px;">
+          <label>Forks (compare up to 3 strategies)</label>
+          <div class="row">
+            <button id="btnAddStrategy">Add Strategy</button>
+            <button id="btnRemoveStrategy">Remove Strategy</button>
+          </div>
+          <div class="small">Tip: Save snapshot, change parameters, fork and run different policies from same state.</div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Simulation Controls</legend>
+      <div class="row">
+        <button id="btnStep">Step</button>
+        <button id="btnBack">Back</button>
+        <button id="btnRun">Run</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnReset">Reset</button>
+        <label class="small">Speed</label>
+        <input id="speed" type="range" min="10" max="1000" value="200">
+      </div>
+
+      <label>Mode</label>
+      <div class="row">
+        <select id="modeSelect">
+          <option value="auto">Auto-simulate sequence</option>
+          <option value="manual">Manual only</option>
+        </select>
+        <div class="flex-space"></div>
+        <label class="small">Show methods</label>
+        <input type="checkbox" id="showAggregate" checked>Aggregate
+        <input type="checkbox" id="showAccounting" checked>Accounting
+        <input type="checkbox" id="showPotential" checked>Potential
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="col" style="width:820px;">
+    <fieldset>
+      <legend>Strategies (up to 3) — click strategy header to configure</legend>
+      <div id="strategiesContainer" class="row"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Visualizations / Logs</legend>
+      <canvas id="costCanvas" width="800" height="160"></canvas>
+      <div class="row">
+        <div style="flex:1;">
+          <label>Per-operation log (selected strategy)</label>
+          <div id="log" class="log"></div>
+        </div>
+        <div style="width:320px;">
+          <label>Selected strategy state</label>
+          <div id="stateBox" class="state-box"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Help / Notes</legend>
+      <div style="font-size:13px;">
+        This simulator demonstrates amortized analysis for dynamic arrays (push/pop) under different resizing policies.
+        You can run sequences, step through operations, save snapshots, fork strategies, and compare costs.
+        Methods shown:
+        - Aggregate: total cost / operations.
+        - Accounting: assign charges per op, track saved credits.
+        - Potential: use a potential function phi; amortized = actual + phi_after - phi_before.
+        Configure parameters per strategy and watch costs, potentials, and credits change.
+      </div>
+    </fieldset>
+  </div>
+</div>
+
+<script>
+/* Amortized Analysis Simulator
+   Extremely minimal UI, many interactive controls and branching.
+   Keep logic clear and allow multiple strategies running in parallel.
+*/
+
+// Utility functions
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function copy(obj){return JSON.parse(JSON.stringify(obj));}
+function seededRandom(seed) {
+  // simple LCG
+  let s = 0;
+  for (let i=0;i<seed.length;i++) s = (s*31 + seed.charCodeAt(i))|0;
+  return function() {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  }
+}
+
+// Core strategy class
+class Strategy {
+  constructor(id, config) {
+    this.id = id;
+    this.name = config.name || ("Strategy "+id);
+    // Parameters
+    this.growthMode = config.growthMode || 'factor'; // 'factor'|'increment'|'custom'
+    this.growthFactor = config.growthFactor || 2.0;
+    this.increment = config.increment || 1;
+    this.customRule = config.customRule || ''; // JS expression newCap = ...
+    this.shrinkEnabled = config.shrinkEnabled || false;
+    this.shrinkFactor = config.shrinkFactor || 0.25;
+    this.copyCost = config.copyCost || 1; // cost per element copy
+    this.baseOpCost = config.baseOpCost || 1; // cost for regular push/pop
+    this.allocCost = config.allocCost || 0; // fixed cost to allocate new array
+    this.freeCost = config.freeCost || 0;
+    // Accounting method parameter
+    this.chargePush = config.chargePush || 3;
+    this.chargePop = config.chargePop || 1;
+    // Potential method parameter
+    this.potentialType = config.potentialType || 'cap_minus_size'; // 'cap_minus_size'|'size'|'custom'
+    this.potentialCoeff = config.potentialCoeff || 1.0;
+    this.customPotential = config.customPotential || ''; // JS expression phi(state)
+    // Simulation state
+    this.reset();
+  }
+
+  reset() {
+    this.size = 0;
+    this.capacity = 1;
+    this.array = new Array(this.capacity);
+    this.opIndex = 0;
+    this.totalCost = 0;
+    this.history = []; // per op: {op, actualCost, amortizedAggregate, accountBalance, potentialBefore, potentialAfter, amortizedPotential, details}
+    this.accountBalance = 0;
+    this.savedStates = [];
+    this.lastAction = null;
+  }
+
+  // decide next capacity based on rule
+  computeNewCapacity(requiredSize) {
+    const cap = this.capacity;
+    if (this.growthMode === 'factor') {
+      let g = Math.max(1.0001, this.growthFactor);
+      let newCap = cap;
+      while (newCap < requiredSize) newCap = Math.floor(Math.max(1, Math.floor(newCap * g)));
+      if (newCap < requiredSize) newCap = requiredSize;
+      return newCap;
+    } else if (this.growthMode === 'increment') {
+      const inc = Math.max(1, Math.floor(this.increment));
+      let newCap = cap;
+      while (newCap < requiredSize) newCap += inc;
+      return newCap;
+    } else {
+      // customRule: user supplies JS that sets newCap based on capacity, required, size
+      try {
+        const fn = new Function('capacity','size','required','Math','Number','parseInt','parseFloat', this.customRule + '; return newCap;');
+        const result = fn(cap, this.size, requiredSize, Math, Number, parseInt, parseFloat);
+        let parsed = Number(result);
+        if (!isFinite(parsed) || parsed < requiredSize) parsed = requiredSize;
+        return Math.max(1, Math.floor(parsed));
+      } catch (e) {
+        return requiredSize;
+      }
+    }
+  }
+
+  potentialValue() {
+    // phi(state)
+    const state = {capacity:this.capacity, size:this.size};
+    if (this.potentialType === 'cap_minus_size') {
+      return this.potentialCoeff * Math.max(0, this.capacity - this.size);
+    } else if (this.potentialType === 'size') {
+      return this.potentialCoeff * this.size;
+    } else {
+      // custom JS expression using state, Math
+      try {
+        const fn = new Function('state','Math', this.customPotential + '; return phi;');
+        const val = fn(state, Math);
+        if (!isFinite(val)) return 0;
+        return val;
+      } catch (e) {
+        return 0;
+      }
+    }
+  }
+
+  performOp(op) {
+    // op: {type:'push'|'pop', value: any}
+    let actualCost = 0;
+    let details = '';
+    const potentialBefore = this.potentialValue();
+    if (op.type === 'push') {
+      // default cost to place element
+      actualCost += this.baseOpCost;
+      // if capacity insufficient -> resize
+      if (this.size + 1 > this.capacity) {
+        const newCap = this.computeNewCapacity(this.size + 1);
+        // cost to copy existing elements
+        const copyCost = this.copyCost * this.size;
+        actualCost += copyCost + this.allocCost;
+        details += `resize ${this.capacity}→${newCap} copyCost=${copyCost} alloc=${this.allocCost}; `;
+        // perform resize
+        const newArray = new Array(newCap);
+        for (let i=0;i<this.size;i++) newArray[i] = this.array[i];
+        this.array = newArray;
+        this.capacity = newCap;
+      }
+      // push element
+      this.array[this.size] = op.value;
+      this.size += 1;
+    } else if (op.type === 'pop') {
+      if (this.size === 0) {
+        // popping empty - define as no op cost 0
+        details += 'pop empty -> no-op; ';
+      } else {
+        actualCost += this.baseOpCost;
+        this.size -= 1;
+        this.array[this.size] = undefined;
+        // possibly shrink
+        if (this.shrinkEnabled && this.size <= Math.floor(this.capacity * this.shrinkFactor)) {
+          // shrink to max(size,1) or compute new capacity
+          const newCap = Math.max(1, Math.floor(Math.max(this.size, this.capacity * this.shrinkFactor)));
+          // don't shrink below size
+          if (newCap < this.capacity) {
+            const copyCost = this.copyCost * this.size;
+            actualCost += copyCost + this.freeCost;
+            const newArray = new Array(newCap);
+            for (let i=0;i<this.size;i++) newArray[i] = this.array[i];
+            this.array = newArray;
+            details += `shrink ${this.capacity}→${newCap} copyCost=${copyCost} free=${this.freeCost}; `;
+            this.capacity = newCap;
+          }
+        }
+      }
+    }
+    const potentialAfter = this.potentialValue();
+    // Accounting charges
+    if (op.type === 'push') {
+      this.accountBalance += this.chargePush;
+    } else {
+      this.accountBalance += this.chargePop;
+    }
+    // update totals
+    this.totalCost += actualCost;
+    this.history.push({
+      op: op,
+      actualCost: actualCost,
+      cumulativeCost: this.totalCost,
+      potentialBefore: potentialBefore,
+      potentialAfter: potentialAfter,
+      amortizedPotential: actualCost + potentialAfter - potentialBefore,
+      accountBalance: this.accountBalance,
+      details: details
+    });
+    this.lastAction = {op:op, actualCost: actualCost};
+    this.opIndex += 1;
+    return this.history[this.history.length-1];
+  }
+
+  // revert last op (for stepping back)
+  undoLast() {
+    if (this.history.length === 0) return false;
+    // naive undo: reconstruct from scratch by replaying history up to length-1
+    const hist = this.history.slice(0, this.history.length-1);
+    const savedConfig = this.extractConfig();
+    this.reset();
+    this.applyConfig(savedConfig);
+    // replay hist
+    for (let h of hist) {
+      // we need to re-run performOp with same op (but performOp mutates history too)
+      // to avoid double-pushing history we temporarily store and restore
+      this.performOp(h.op);
+      // override actualCost & details to match old (actualCost should match)
+    }
+    // restore accountBalance as from last item or from history
+    if (this.history.length > 0) {
+      this.accountBalance = this.history[this.history.length-1].accountBalance;
+      this.totalCost = this.history[this.history.length-1].cumulativeCost;
+    } else {
+      this.accountBalance = 0;
+      this.totalCost = 0;
+    }
+    return true;
+  }
+
+  extractConfig() {
+    return {
+      name:this.name,
+      growthMode:this.growthMode, growthFactor:this.growthFactor, increment:this.increment, customRule:this.customRule,
+      shrinkEnabled:this.shrinkEnabled, shrinkFactor:this.shrinkFactor,
+      copyCost:this.copyCost, baseOpCost:this.baseOpCost, allocCost:this.allocCost, freeCost:this.freeCost,
+      chargePush:this.chargePush, chargePop:this.chargePop,
+      potentialType:this.potentialType, potentialCoeff:this.potentialCoeff, customPotential:this.customPotential
+    };
+  }
+
+  applyConfig(cfg) {
+    this.name = cfg.name || this.name;
+    this.growthMode = cfg.growthMode || this.growthMode;
+    this.growthFactor = cfg.growthFactor || this.growthFactor;
+    this.increment = cfg.increment || this.increment;
+    this.customRule = cfg.customRule || this.customRule;
+    this.shrinkEnabled = cfg.shrinkEnabled || this.shrinkEnabled;
+    this.shrinkFactor = cfg.shrinkFactor || this.shrinkFactor;
+    this.copyCost = cfg.copyCost || this.copyCost;
+    this.baseOpCost = cfg.baseOpCost || this.baseOpCost;
+    this.allocCost = cfg.allocCost || this.allocCost;
+    this.freeCost = cfg.freeCost || this.freeCost;
+    this.chargePush = cfg.chargePush || this.chargePush;
+    this.chargePop = cfg.chargePop || this.chargePop;
+    this.potentialType = cfg.potentialType || this.potentialType;
+    this.potentialCoeff = cfg.potentialCoeff || this.potentialCoeff;
+    this.customPotential = cfg.customPotential || this.customPotential;
+  }
+
+  clone() {
+    const cfg = this.extractConfig();
+    return new Strategy(this.id, cfg);
+  }
+
+  snapshotState() {
+    return {
+      name:this.name, size:this.size, capacity:this.capacity, array:copy(this.array),
+      totalCost:this.totalCost, history: copy(this.history), accountBalance:this.accountBalance, opIndex:this.opIndex
+    };
+  }
+
+  restoreState(snap) {
+    this.name = snap.name;
+    this.size = snap.size;
+    this.capacity = snap.capacity;
+    this.array = snap.array.slice();
+    this.totalCost = snap.totalCost;
+    this.history = copy(snap.history);
+    this.accountBalance = snap.accountBalance;
+    this.opIndex = snap.opIndex;
+  }
+}
+
+// Simulation manager handling multiple strategies and sequence
+class SimulationManager {
+  constructor() {
+    this.strategies = [];
+    this.maxStrategies = 3;
+    this.sequence = []; // array of ops {type:'push'|'pop', value}
+    this.index = 0;
+    this.isRunning = false;
+    this.timer = null;
+  }
+
+  addStrategy(config) {
+    if (this.strategies.length >= this.maxStrategies) return null;
+    const id = this.strategies.length+1;
+    const s = new Strategy(id, config || {});
+    this.strategies.push(s);
+    return s;
+  }
+
+  removeLastStrategy() {
+    if (this.strategies.length === 0) return;
+    this.strategies.pop();
+  }
+
+  resetAll() {
+    for (let s of this.strategies) s.reset();
+    this.index = 0;
+    this.isRunning = false;
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+  }
+
+  stepAll() {
+    if (this.index >= this.sequence.length) return false;
+    const op = this.sequence[this.index];
+    for (let s of this.strategies) {
+      s.performOp(op);
+    }
+    this.index += 1;
+    return true;
+  }
+
+  backAll() {
+    if (this.index === 0) return false;
+    // undo each strategy last op
+    for (let s of this.strategies) {
+      s.undoLast();
+    }
+    this.index -= 1;
+    return true;
+  }
+
+  run(speedMs, onTick) {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    this.timer = setInterval(() => {
+      if (!this.stepAll()) {
+        this.pause();
+        if (onTick) onTick();
+        return;
+      }
+      if (onTick) onTick();
+    }, speedMs);
+  }
+
+  pause() {
+    this.isRunning = false;
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+  }
+
+  importSequenceFromText(text) {
+    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s.length>0);
+    this.sequence = [];
+    for (let ln of lines) {
+      const parts = ln.split(/\s+/);
+      const op = parts[0].toLowerCase();
+      if (op === 'push' || op === 'p') {
+        const val = parts.length>1 ? parts.slice(1).join(' ') : null;
+        this.sequence.push({type:'push', value:val});
+      } else if (op === 'pop') {
+        this.sequence.push({type:'pop', value:null});
+      } else {
+        // try JSON?
+        if (ln.toLowerCase().startsWith('push')) {
+          this.sequence.push({type:'push', value:ln.substring(4).trim() || null});
+        } else {
+          // unknown -> ignore
+        }
+      }
+    }
+  }
+
+  exportSequenceAsText() {
+    return this.sequence.map(o => o.type + (o.value ? (' ' + String(o.value)) : '')).join('\n');
+  }
+}
+
+// Initialize manager and default strategies
+const manager = new SimulationManager();
+manager.addStrategy({
+  name:'Doubling (factor=2)',
+  growthMode:'factor',
+  growthFactor:2.0,
+  copyCost:1,
+  chargePush:3,
+  potentialType:'cap_minus_size',
+  potentialCoeff:1
+});
+manager.addStrategy({
+  name:'Incremental (+1)',
+  growthMode:'increment',
+  increment:1,
+  copyCost:1,
+  chargePush:2,
+  potentialType:'size',
+  potentialCoeff:0.5
+});
+// third default - 1.5x
+manager.addStrategy({
+  name:'Factor 1.5',
+  growthMode:'factor',
+  growthFactor:1.5,
+  copyCost:1,
+  chargePush:2,
+  potentialType:'cap_minus_size',
+  potentialCoeff:1
+});
+
+// UI wiring
+const opsListEl = document.getElementById('opsList');
+const sequenceTextEl = document.getElementById('sequenceText');
+const btnLoadSeq = document.getElementById('btnLoadSeq');
+const btnSaveSeq = document.getElementById('btnSaveSeq');
+const exportOut = document.getElementById('exportOut');
+const btnGenRand = document.getElementById('btnGenRand');
+const randLen = document.getElementById('randLen');
+const randProb = document.getElementById('randProb');
+const randSeed = document.getElementById('randSeed');
+const btnClearSeq = document.getElementById('btnClearSeq');
+const btnPush = document.getElementById('btnPush');
+const btnPop = document.getElementById('btnPop');
+const pushValue = document.getElementById('pushValue');
+const btnAppendOp = document.getElementById('btnAppendOp');
+
+const btnStep = document.getElementById('btnStep');
+const btnBack = document.getElementById('btnBack');
+const btnRun = document.getElementById('btnRun');
+const btnPause = document.getElementById('btnPause');
+const btnReset = document.getElementById('btnReset');
+const speedEl = document.getElementById('speed');
+const modeSelect = document.getElementById('modeSelect');
+const showAggregate = document.getElementById('showAggregate');
+const showAccounting = document.getElementById('showAccounting');
+const showPotential = document.getElementById('showPotential');
+
+const strategiesContainer = document.getElementById('strategiesContainer');
+const btnAddStrategy = document.getElementById('btnAddStrategy');
+const btnRemoveStrategy = document.getElementById('btnRemoveStrategy');
+
+const costCanvas = document.getElementById('costCanvas');
+const logEl = document.getElementById('log');
+const stateBox = document.getElementById('stateBox');
+
+const snapshotsList = document.getElementById('snapshotsList');
+const btnSaveSnapshot = document.getElementById('btnSaveSnapshot');
+const btnRestoreSnapshot = document.getElementById('btnRestoreSnapshot');
+const btnDeleteSnapshot = document.getElementById('btnDeleteSnapshot');
+
+let selectedStrategyIndex = 0;
+let snapshots = [];
+
+// Render operations list
+function renderOpsList() {
+  opsListEl.innerHTML = '';
+  manager.sequence.forEach((op, i) => {
+    const div = document.createElement('div');
+    div.textContent = `${i}: ${op.type}` + (op.value ? (' ' + op.value) : '');
+    div.style.cursor = 'pointer';
+    div.onclick = () => {
+      const newVal = prompt('Edit operation (push <value> or pop). Leave blank to delete.', op.type + (op.value ? (' ' + op.value) : ''));
+      if (newVal === null) return;
+      const trimmed = newVal.trim();
+      if (trimmed === '') {
+        manager.sequence.splice(i,1);
+      } else {
+        const parts = trimmed.split(/\s+/);
+        const t = parts[0].toLowerCase();
+        if (t === 'push') {
+          const val = parts.length>1 ? parts.slice(1).join(' ') : null;
+          manager.sequence[i] = {type:'push', value:val};
+        } else if (t === 'pop') {
+          manager.sequence[i] = {type:'pop', value:null};
+        } else {
+          alert('Invalid op. Use "push <value>" or "pop".');
+        }
+      }
+      sequenceTextEl.value = manager.exportSequenceAsText();
+      renderOpsList();
+    };
+    opsListEl.appendChild(div);
+  });
+}
+
+// Render strategies UI
+function renderStrategies() {
+  strategiesContainer.innerHTML = '';
+  manager.strategies.forEach((s, idx) => {
+    const box = document.createElement('div');
+    box.style.border = '1px solid black';
+    box.style.padding = '6px';
+    box.style.minWidth = '240px';
+    box.style.display = 'flex';
+    box.style.flexDirection = 'column';
+
+    const header = document.createElement('div');
+    header.textContent = `${idx+1}. ${s.name}`;
+    header.style.cursor = 'pointer';
+    header.onclick = () => { editStrategyConfig(idx); };
+    box.appendChild(header);
+
+    const stateDiv = document.createElement('div');
+    stateDiv.style.fontFamily = 'monospace';
+    stateDiv.style.fontSize = '12px';
+    stateDiv.style.marginTop = '6px';
+    stateDiv.textContent = `size=${s.size} cap=${s.capacity} ops=${s.history.length}\ncost=${s.totalCost.toFixed(2)} bal=${s.accountBalance}`;
+    box.appendChild(stateDiv);
+
+    const miniLog = document.createElement('div');
+    miniLog.style.fontFamily = 'monospace';
+    miniLog.style.fontSize = '12px';
+    miniLog.style.marginTop = '6px';
+    miniLog.style.height = '70px';
+    miniLog.style.overflow = 'auto';
+    miniLog.textContent = s.history.slice(-6).map((h, i) => {
+      return `${s.history.length-6+i+1||''}: ${h.op.type} c=${h.actualCost} aPot=${h.amortizedPotential.toFixed(2)}`;
+    }).join('\n');
+    box.appendChild(miniLog);
+
+    box.onclick = () => { selectedStrategyIndex = idx; updateDetails(); };
+
+    strategiesContainer.appendChild(box);
+  });
+}
+
+// Edit a strategy's parameters
+function editStrategyConfig(idx) {
+  const s = manager.strategies[idx];
+  const cfg = s.extractConfig();
+  // build a simple prompt-driven editor (plain UI)
+  let msg = 'Edit strategy parameters, one per line as key=value. Available keys:\n' +
+            'name,growthMode(factor|increment|custom),growthFactor,increment,customRule,shrinkEnabled,shrinkFactor,copyCost,baseOpCost,allocCost,freeCost,chargePush,chargePop,potentialType(cap_minus_size|size|custom),potentialCoeff,customPotential\n';
+  msg += 'Current config:\n';
+  for (let k in cfg) msg += `${k}=${cfg[k]}\n`;
+  const res = prompt(msg, Object.keys(cfg).map(k=>`${k}=${cfg[k]}`).join('\n'));
+  if (res === null) return;
+  // parse lines
+  const lines = res.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+  for (let line of lines) {
+    const idxEq = line.indexOf('=');
+    if (idxEq < 0) continue;
+    const key = line.substring(0,idxEq).trim();
+    const val = line.substring(idxEq+1).trim();
+    if (!(key in cfg)) continue;
+    // convert types
+    if (['growthFactor','increment','shrinkFactor','copyCost','baseOpCost','allocCost','freeCost','chargePush','chargePop','potentialCoeff'].includes(key)) {
+      cfg[key] = Number(val);
+    } else if (['shrinkEnabled'].includes(key)) {
+      cfg[key] = (val.toLowerCase() === 'true');
+    } else {
+      cfg[key] = val;
+    }
+  }
+  s.applyConfig(cfg);
+  renderStrategies();
+  updateDetails();
+}
+
+// update details and logs for selected strategy
+function updateDetails() {
+  renderStrategies();
+  // update canvas and logs
+  drawCanvas();
+  const s = manager.strategies[selectedStrategyIndex];
+  if (!s) {
+    logEl.textContent = '';
+    stateBox.textContent = '';
+    return;
+  }
+  // show full history
+  logEl.textContent = s.history.map((h,i)=> {
+    return `${i}: ${h.op.type}${h.op.value ? ' '+h.op.value : ''} | actual=${h.actualCost} | cum=${h.cumulativeCost} | potΔ=${(h.potentialAfter-h.potentialBefore).toFixed(2)} | amortizedPot=${h.amortizedPotential.toFixed(2)} | accBal=${h.accountBalance} | ${h.details}`;
+  }).join('\n');
+  stateBox.textContent = `Strategy: ${s.name}\nsize=${s.size}\ncapacity=${s.capacity}\narrayIndices=${s.array.slice(0,s.size).map((v,i)=> i+':'+(v===undefined?'_':v)).join(' ')}\nopsRun=${s.history.length}\ntotalCost=${s.totalCost}\naccountBalance=${s.accountBalance.toFixed(2)}\npotential=${s.potentialValue().toFixed(2)}`;
+}
+
+// draw simple plot of cumulative cost per operation for each strategy
+function drawCanvas() {
+  const ctx = costCanvas.getContext('2d');
+  ctx.clearRect(0,0,costCanvas.width,costCanvas.height);
+  // find max ops across strategies
+  let maxOps = 1;
+  for (let s of manager.strategies) maxOps = Math.max(maxOps, s.history.length);
+  // find max cost
+  let maxCost = 1;
+  for (let s of manager.strategies) {
+    for (let h of s.history) maxCost = Math.max(maxCost, h.cumulativeCost);
+  }
+  // draw simple axes
+  ctx.fillStyle = 'black';
+  ctx.font = '11px monospace';
+  ctx.fillText('Cumulative cost vs op index', 6, 12);
+  // draw grid lines
+  const padding = 36;
+  const w = costCanvas.width - padding - 6;
+  const h = costCanvas.height - 36;
+  // draw each strategy as a polyline with different dash offsets (no colors)
+  manager.strategies.forEach((s, idx) => {
+    const hist = s.history;
+    if (hist.length === 0) return;
+    ctx.beginPath();
+    for (let i=0;i<hist.length;i++) {
+      const x = padding + (i / Math.max(1, maxOps-1)) * w;
+      const y = 20 + (1 - (hist[i].cumulativeCost / maxCost)) * h;
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = 'black';
+    // emulate different style by line width + dash pattern variations (still black)
+    ctx.lineWidth = 1 + idx*0.5;
+    ctx.setLineDash(idx===0 ? [] : (idx===1 ? [4,4] : [2,6]));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // label final point
+    const last = hist[hist.length-1];
+    const x = padding + ((hist.length-1) / Math.max(1, maxOps-1)) * w;
+    const y = 20 + (1 - (last.cumulativeCost / maxCost)) * h;
+    ctx.fillText(`${idx+1}:${s.name.split(' ')[0]}(${last.cumulativeCost})`, x+4, y+4);
+  });
+  // reset
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+}
+
+// Sequence editing handlers
+btnLoadSeq.onclick = () => {
+  manager.importSequenceFromText(sequenceTextEl.value);
+  renderOpsList();
+};
+
+btnSaveSeq.onclick = () => {
+  const t = manager.exportSequenceAsText();
+  exportOut.value = t;
+  alert('Sequence exported to the box on the right. You can copy it.');
+};
+
+btnGenRand.onclick = () => {
+  const n = Math.max(1, Number(randLen.value)||1);
+  const p = clamp(Number(randProb.value)||0.5, 0, 1);
+  const seed = randSeed.value || '';
+  const rnd = seed ? seededRandom(seed) : Math.random;
+  manager.sequence = [];
+  for (let i=0;i<n;i++) {
+    if (rnd() < p) {
+      manager.sequence.push({type:'push', value:Math.floor(rnd()*1000)});
+    } else {
+      manager.sequence.push({type:'pop', value:null});
+    }
+  }
+  sequenceTextEl.value = manager.exportSequenceAsText();
+  renderOpsList();
+};
+
+btnClearSeq.onclick = () => {
+  manager.sequence = [];
+  sequenceTextEl.value = '';
+  renderOpsList();
+};
+
+btnAppendOp.onclick = () => {
+  const val = pushValue.value.trim();
+  manager.sequence.push({type:'push', value: val || null});
+  sequenceTextEl.value = manager.exportSequenceAsText();
+  renderOpsList();
+};
+
+btnPush.onclick = () => {
+  if (modeSelect.value === 'manual') {
+    // perform push on all strategies directly (no sequence)
+    const val = pushValue.value.trim() || null;
+    for (let s of manager.strategies) s.performOp({type:'push', value:val});
+    updateDetails();
+  } else {
+    // append to sequence and step
+    manager.sequence.push({type:'push', value:pushValue.value.trim() || null});
+    sequenceTextEl.value = manager.exportSequenceAsText();
+    renderOpsList();
+    // optionally step immediately
+    if (!manager.isRunning) {
+      // auto-step just this op
+      manager.stepAll();
+      updateDetails();
+    }
+  }
+};
+
+btnPop.onclick = () => {
+  if (modeSelect.value === 'manual') {
+    for (let s of manager.strategies) s.performOp({type:'pop', value:null});
+    updateDetails();
+  } else {
+    manager.sequence.push({type:'pop', value:null});
+    sequenceTextEl.value = manager.exportSequenceAsText();
+    renderOpsList();
+    if (!manager.isRunning) {
+      manager.stepAll();
+      updateDetails();
+    }
+  }
+};
+
+// Simulation controls
+btnStep.onclick = () => {
+  manager.stepAll();
+  updateDetails();
+};
+
+btnBack.onclick = () => {
+  manager.backAll();
+  updateDetails();
+};
+
+btnRun.onclick = () => {
+  const ms = clamp(Number(speedEl.value)||200, 10, 10000);
+  manager.run(ms, updateDetails);
+};
+
+btnPause.onclick = () => {
+  manager.pause();
+  updateDetails();
+};
+
+btnReset.onclick = () => {
+  manager.resetAll();
+  updateDetails();
+};
+
+// Strategy add/remove
+btnAddStrategy.onclick = () => {
+  if (manager.strategies.length >= manager.maxStrategies) { alert('Max strategies reached.'); return; }
+  // clone selected strategy if exists
+  const base = manager.strategies[selectedStrategyIndex] || manager.strategies[0];
+  const cfg = base ? base.extractConfig() : {name:'New'};
+  cfg.name = cfg.name + ' (clone)';
+  const s = manager.addStrategy(cfg);
+  renderStrategies();
+  updateDetails();
+};
+
+btnRemoveStrategy.onclick = () => {
+  if (manager.strategies.length <= 1) { alert('At least one strategy required.'); return; }
+  manager.removeLastStrategy();
+  selectedStrategyIndex = Math.max(0, selectedStrategyIndex-1);
+  renderStrategies();
+  updateDetails();
+};
+
+// Snapshots
+btnSaveSnapshot.onclick = () => {
+  const snap = {
+    index: manager.index,
+    seq: copy(manager.sequence),
+    strategies: manager.strategies.map(s => ({cfg:s.extractConfig(), state:s.snapshotState()})),
+    ts: new Date().toISOString()
+  };
+  snapshots.push(snap);
+  renderSnapshots();
+};
+
+function renderSnapshots() {
+  snapshotsList.innerHTML = '';
+  snapshots.forEach((snap, i) => {
+    const d = document.createElement('div');
+    d.textContent = `${i}: ${snap.ts} (opIndex=${snap.index} seq=${snap.seq.length} ops)`;
+    d.style.cursor = 'pointer';
+    d.onclick = () => {
+      Array.from(snapshotsList.children).forEach(c=>c.style.background='white');
+      d.style.background='#eee';
+      d.dataset.selected = '1';
+    };
+    snapshotsList.appendChild(d);
+  });
+}
+
+btnRestoreSnapshot.onclick = () => {
+  const sel = Array.from(snapshotsList.children).findIndex(c=>c.dataset.selected==='1');
+  if (sel < 0) { alert('Select a snapshot first.'); return; }
+  const snap = snapshots[sel];
+  manager.sequence = copy(snap.seq);
+  manager.index = snap.index;
+  // restore strategies configs and states
+  manager.strategies = [];
+  for (let i=0;i<snap.strategies.length;i++) {
+    const st = snap.strategies[i];
+    const s = manager.addStrategy(st.cfg);
+    s.restoreState(st.state);
+  }
+  renderOpsList();
+  renderStrategies();
+  updateDetails();
+};
+
+btnDeleteSnapshot.onclick = () => {
+  const sel = Array.from(snapshotsList.children).findIndex(c=>c.dataset.selected==='1');
+  if (sel < 0) { alert('Select a snapshot first.'); return; }
+  snapshots.splice(sel,1);
+  renderSnapshots();
+};
+
+// initialize UI
+renderOpsList();
+renderStrategies();
+updateDetails();
+
+// keyboard shortcuts for convenience
+document.addEventListener('keydown', (e) => {
+  if (e.key === ' ') { // space toggles run/pause
+    if (manager.isRunning) { manager.pause(); } else { manager.run(Number(speedEl.value)); }
+    e.preventDefault();
+    updateDetails();
+  }
+});
+
+// Simple autosave of sequence textarea on change
+sequenceTextEl.addEventListener('change', () => {
+  // no auto-parse; leave to user to click Load Sequence
+});
+
+// Basic export/import of full simulation
+document.getElementById('btnSaveSeq').addEventListener('click', () => {
+  // also allow full export of strategies and state
+  const exportAll = {
+    sequence: manager.sequence,
+    strategies: manager.strategies.map(s => ({cfg:s.extractConfig(), state:s.snapshotState()})),
+    index: manager.index
+  };
+  exportOut.value = JSON.stringify(exportAll, null, 2);
+});
+
+// allow loading a full export by pasting JSON into sequence textbox then clicking Load Sequence
+// simple detection: if sequenceTextEl contains JSON object with 'sequence' property
+btnLoadSeq.addEventListener('click', () => {
+  const text = sequenceTextEl.value.trim();
+  if (text.startsWith('{') && text.includes('"sequence"')) {
+    try {
+      const obj = JSON.parse(text);
+      if (obj.sequence) {
+        manager.sequence = obj.sequence;
+        sequenceTextEl.value = manager.exportSequenceAsText();
+        // if contains strategies
+        if (obj.strategies) {
+          manager.strategies = [];
+          for (let st of obj.strategies) {
+            const s = manager.addStrategy(st.cfg);
+            s.restoreState(st.state);
+          }
+        }
+        renderOpsList();
+        renderStrategies();
+        updateDetails();
+        return;
+      }
+    } catch(e){}
+  }
+  // otherwise treat as plain sequence text
+  manager.importSequenceFromText(text);
+  renderOpsList();
+});
+
+// initial quick tip
+console.log('Amortized Analysis Simulator ready. Use the UI to configure strategies, generate sequences, step/run, and save snapshots.');
+
+</script>
+</body>
+</html>

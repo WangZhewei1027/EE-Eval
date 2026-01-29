@@ -1,0 +1,46 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - heading "Transaction Flow" [level=1] [ref=e4]
+    - paragraph [ref=e5]: Visualizing the journey of a blockchain transaction
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - generic [ref=e10]: 👤
+      - generic [ref=e11]: Sender
+    - generic [ref=e12]:
+      - generic [ref=e13]: 🌐
+      - generic [ref=e14]: Network
+    - generic [ref=e15]:
+      - generic [ref=e16]: ⛓️
+      - generic [ref=e17]: Blockchain
+    - generic [ref=e18]:
+      - generic [ref=e19]: 👤
+      - generic [ref=e20]: Receiver
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e23]: Transaction Details
+      - generic [ref=e24]: Pending
+    - generic [ref=e25]:
+      - generic [ref=e26]: "Transaction ID:"
+      - generic [ref=e27]: 0x8a3f...c72d
+    - generic [ref=e28]:
+      - generic [ref=e29]: "Amount:"
+      - generic [ref=e30]: 1.5 ETH
+    - generic [ref=e31]:
+      - generic [ref=e32]: "From:"
+      - generic [ref=e33]: 0x4b3a...f9e2
+    - generic [ref=e34]:
+      - generic [ref=e35]: "To:"
+      - generic [ref=e36]: 0x7d1f...a4c6
+    - generic [ref=e37]:
+      - generic [ref=e38]: "Gas Fee:"
+      - generic [ref=e39]: 0.0021 ETH
+    - generic [ref=e40]:
+      - generic [ref=e41]: "Timestamp:"
+      - generic [ref=e42]: 2023-06-15 14:32:45 UTC
+  - generic [ref=e43]:
+    - button "Start Transaction" [ref=e44] [cursor=pointer]
+    - button "Reset" [ref=e45] [cursor=pointer]
+```

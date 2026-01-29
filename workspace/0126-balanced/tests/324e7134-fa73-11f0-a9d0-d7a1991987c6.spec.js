@@ -171,7 +171,7 @@ test.describe('NP-Completeness Demonstration - App 324e7134-fa73-11f0-a9d0-d7a19
     expect(notSolvedMessages.length).toBe(0);
 
     // We also verify that the Solved message did occur (sanity)
-    const solvedMessages = consoleMessages.filter(m => m.type === 'log' && m.text.startsWith('The graph can be colored with 3 colors:'));
+    const solvedMessages1 = consoleMessages.filter(m => m.type === 'log' && m.text.startsWith('The graph can be colored with 3 colors:'));
     expect(solvedMessages.length).toBeGreaterThanOrEqual(1);
 
     // No page errors were observed

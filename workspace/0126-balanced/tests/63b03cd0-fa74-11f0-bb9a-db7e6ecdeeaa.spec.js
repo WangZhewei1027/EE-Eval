@@ -122,7 +122,7 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Put key-value pair: inserts and renders new entry and logs the action', async ({ page }) => {
     // Validates the PutKeyValue event and transition actions (map.put, log, renderHashMap)
-    const app = new HashMapPage(page);
+    const app1 = new HashMapPage(page);
     await app.navigate();
 
     const key = 'alpha';
@@ -141,10 +141,10 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Put same key updates value and re-renders (update path)', async ({ page }) => {
     // Validates updating an existing key: should log "Updated" and render new value
-    const app = new HashMapPage(page);
+    const app2 = new HashMapPage(page);
     await app.navigate();
 
-    const key = 'alpha';
+    const key1 = 'alpha';
     const initialValue = 'one';
     const updatedValue = 'uno';
 
@@ -167,11 +167,11 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Get value by key: logs found message and does not change map rendering', async ({ page }) => {
     // Validates GetValue event and associated log action
-    const app = new HashMapPage(page);
+    const app3 = new HashMapPage(page);
     await app.navigate();
 
-    const key = 'beta';
-    const value = 'two';
+    const key2 = 'beta';
+    const value1 = 'two';
 
     // Insert entry to be retrieved
     await app.put(key, value);
@@ -193,10 +193,10 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Get non-existent key: logs not found message', async ({ page }) => {
     // Validates get when key is absent (edge case)
-    const app = new HashMapPage(page);
+    const app4 = new HashMapPage(page);
     await app.navigate();
 
-    const key = 'nonexistent';
+    const key3 = 'nonexistent';
 
     // Ensure key input has the non-existent key and trigger get
     await app.get(key);
@@ -208,11 +208,11 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Remove key-value pair: removes, re-renders and logs removal', async ({ page }) => {
     // Validates RemoveKeyValue transition, renderHashMap and logging
-    const app = new HashMapPage(page);
+    const app5 = new HashMapPage(page);
     await app.navigate();
 
-    const key = 'gamma';
-    const value = 'three';
+    const key4 = 'gamma';
+    const value2 = 'three';
 
     // Insert then remove
     await app.put(key, value);
@@ -231,10 +231,10 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Remove non-existent key: logs cannot remove message (edge case)', async ({ page }) => {
     // Validates removing a key that doesn't exist
-    const app = new HashMapPage(page);
+    const app6 = new HashMapPage(page);
     await app.navigate();
 
-    const key = 'absent';
+    const key5 = 'absent';
 
     await app.remove(key);
 
@@ -245,7 +245,7 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Put with empty key triggers alert and aborts insertion (error scenario)', async ({ page }) => {
     // Validates alert handling when key is missing on put
-    const app = new HashMapPage(page);
+    const app7 = new HashMapPage(page);
     await app.navigate();
 
     // Ensure inputs are empty
@@ -264,7 +264,7 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
     await expect(app.hashmapBody).not.toContainText('somevalue');
 
     // And the log should not have an insertion message
-    const logText = await app.getLogText();
+    const logText1 = await app.getLogText();
     expect(logText).not.toContain('Inserted key');
 
     expect(pageErrors.length).toBe(0);
@@ -272,7 +272,7 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Put with empty value triggers alert and aborts insertion (error scenario)', async ({ page }) => {
     // Validates alert handling when value is missing on put
-    const app = new HashMapPage(page);
+    const app8 = new HashMapPage(page);
     await app.navigate();
 
     await app.fillKey('delta');
@@ -293,11 +293,11 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Clear map: dismiss confirm preserves entries, accept confirm clears and logs', async ({ page }) => {
     // Validates ClearHashMap transition, both cancel and accept paths
-    const app = new HashMapPage(page);
+    const app9 = new HashMapPage(page);
     await app.navigate();
 
-    const key = 'toClear';
-    const value = 'temp';
+    const key6 = 'toClear';
+    const value3 = 'temp';
 
     // Insert an entry to be affected by clear
     await app.put(key, value);
@@ -329,9 +329,9 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
     // And the table should show all buckets as (empty)
     // Checking first and last row as representative
-    const firstPairsCell = page.locator('#hashmapBody tr:nth-child(1) td:nth-child(2)');
+    const firstPairsCell1 = page.locator('#hashmapBody tr:nth-child(1) td:nth-child(2)');
     await expect(firstPairsCell).toHaveText('(empty)');
-    const lastPairsCell = page.locator('#hashmapBody tr:nth-child(10) td:nth-child(2)');
+    const lastPairsCell1 = page.locator('#hashmapBody tr:nth-child(10) td:nth-child(2)');
     await expect(lastPairsCell).toHaveText('(empty)');
 
     expect(pageErrors.length).toBe(0);
@@ -339,7 +339,7 @@ test.describe('Hash Map Demo (63b03cd0-fa74-11f0-bb9a-db7e6ecdeeaa)', () => {
 
   test('Console and runtime monitoring: collect console messages and ensure no unexpected errors', async ({ page }) => {
     // This test demonstrates collection of console messages and page errors while performing operations.
-    const app = new HashMapPage(page);
+    const app10 = new HashMapPage(page);
     await app.navigate();
 
     // Perform a couple of operations

@@ -169,7 +169,7 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       expect(exists).toBe(0);
 
       // repo.workdir should not have the file
-      const present = await page.evaluate(() => Object.prototype.hasOwnProperty.call(repo.workdir, 'commit-this.txt'));
+      const present1 = await page.evaluate(() => Object.prototype.hasOwnProperty.call(repo.workdir, 'commit-this.txt'));
       expect(present).toBe(false);
     });
   });
@@ -197,9 +197,9 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       // Ensure current branch is main, then checkout 'feature' branch via prompt
       await page.waitForTimeout(50);
       // Click Checkout and accept prompt with 'feature'
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise1 = page.waitForEvent('dialog');
       await page.click('#btnCheckout');
-      const dialog = await dialogPromise;
+      const dialog1 = await dialogPromise;
       expect(dialog.type()).toBe('prompt');
       await dialog.accept('feature');
 
@@ -219,7 +219,7 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
 
     test('Attempt checkout of non-existent branch triggers alert "No such branch"', async ({ page }) => {
       // Click Checkout and respond with a branch that doesn't exist
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise2 = page.waitForEvent('dialog');
       await page.click('#btnCheckout');
       const promptDialog = await dialogPromise;
       expect(promptDialog.type()).toBe('prompt');
@@ -248,7 +248,7 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       await prompt.accept('main');
 
       // Should result in an alert "Cannot merge a branch into itself"
-      const alertPromise = page.waitForEvent('dialog');
+      const alertPromise1 = page.waitForEvent('dialog');
       const alert = await alertPromise;
       expect(alert.type()).toBe('alert');
       expect(alert.message()).toMatch(/Cannot merge a branch into itself/);
@@ -261,9 +261,9 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       await page.waitForTimeout(120);
 
       // Click Merge and respond with 'feature' which is expected to conflict on README.md
-      const promptPromise = page.waitForEvent('dialog');
+      const promptPromise1 = page.waitForEvent('dialog');
       await page.click('#btnMerge');
-      const prompt = await promptPromise;
+      const prompt1 = await promptPromise;
       expect(prompt.type()).toBe('prompt');
       await prompt.accept('feature');
 
@@ -301,9 +301,9 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       }
 
       // Now abort merge: the abortMerge function invokes confirm "Abort merge? ...". We must accept it.
-      const confirmPromise = page.waitForEvent('dialog');
+      const confirmPromise1 = page.waitForEvent('dialog');
       await page.click('#btnAbortMerge');
-      const confirmDialog = await confirmPromise;
+      const confirmDialog1 = await confirmPromise;
       expect(confirmDialog.type()).toBe('confirm');
       await confirmDialog.accept();
 
@@ -342,7 +342,7 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
         page.click('#btnShowBranches')
       ]);
       expect(dialog.type()).toBe('alert');
-      const msg = dialog.message();
+      const msg1 = dialog.message();
       expect(msg).toMatch(/"main"/);
       expect(msg).toMatch(/"feature"/);
       await dialog.accept();
@@ -363,14 +363,14 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
 
     test('Edge case: adding a file with existing name triggers alert "File exists"', async ({ page }) => {
       // Choose an existing filename e.g., README.md
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise3 = page.waitForEvent('dialog');
       await page.click('#btnAddFile');
-      const promptDialog = await dialogPromise;
+      const promptDialog1 = await dialogPromise;
       expect(promptDialog.type()).toBe('prompt');
       await promptDialog.accept('README.md');
 
       // Should receive an alert "File exists"
-      const alertDialog = await page.waitForEvent('dialog');
+      const alertDialog1 = await page.waitForEvent('dialog');
       expect(alertDialog.type()).toBe('alert');
       expect(alertDialog.message()).toMatch(/File exists/);
       await alertDialog.accept();
@@ -381,9 +381,9 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       await page.evaluate(() => { repo.index = {}; renderAll(); });
       await page.fill('#commitMsg', 'Should not commit');
       // Click commit and capture alert
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise4 = page.waitForEvent('dialog');
       await page.click('#btnCommit');
-      const dialog = await dialogPromise;
+      const dialog2 = await dialogPromise;
       // Because there is nothing staged, commitStaged alerts "Nothing staged to commit."
       expect(dialog.type()).toBe('alert');
       expect(dialog.message()).toMatch(/Nothing staged to commit/);
@@ -396,9 +396,9 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
       // Ensure no file selected
       await page.evaluate(() => { selectedFile = null; document.getElementById('fileEditor').value = ''; renderAll(); });
       // click Unstage -> will trigger alert "Select a file to unstage"
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise5 = page.waitForEvent('dialog');
       await page.click('#btnUnstage');
-      const dialog = await dialogPromise;
+      const dialog3 = await dialogPromise;
       expect(dialog.type()).toBe('alert');
       expect(dialog.message()).toMatch(/Select a file to unstage/);
       await dialog.accept();
@@ -407,9 +407,9 @@ test.describe('Interactive Git Concept Demo — FSM and UI integration tests', (
     test('Attempt to stage without selecting a file triggers alert "Select a file to stage"', async ({ page }) => {
       // Ensure no file selected
       await page.evaluate(() => { selectedFile = null; document.getElementById('fileEditor').value = ''; renderAll(); });
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise6 = page.waitForEvent('dialog');
       await page.click('#btnStage');
-      const dialog = await dialogPromise;
+      const dialog4 = await dialogPromise;
       expect(dialog.type()).toBe('alert');
       expect(dialog.message()).toMatch(/Select a file to stage/);
       await dialog.accept();

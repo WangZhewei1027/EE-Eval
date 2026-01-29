@@ -196,7 +196,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
 
   test('Generate button creates a new array respecting size bounds and renders buckets (S0_Idle -> S1_Generated)', async ({ page }) => {
     // This test verifies Generate event handling, including clamping of invalid size inputs.
-    const rp = new RadixPage(page);
+    const rp1 = new RadixPage(page);
     await rp.goto();
 
     // Edge case: set size below minimum -> generate should clamp to 2
@@ -204,7 +204,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
     await rp.setMaxVal('50');
     await rp.clickGenerate();
 
-    const arrCount = await rp.arrayCount();
+    const arrCount1 = await rp.arrayCount();
     expect(arrCount).toBeGreaterThanOrEqual(2);
 
     // Now set a reasonable size and generate
@@ -215,14 +215,14 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
     expect(arrCount2).toBe(6);
 
     // Buckets reflect current base (default 10)
-    const bucketsCount = await rp.bucketsCount();
+    const bucketsCount1 = await rp.bucketsCount1();
     expect(bucketsCount).toBe(10);
   });
 
   test('Start button toggles running/paused states and auto-progresses (S1_Generated <-> S2_Running <-> S3_Paused)', async ({ page }) => {
     // This test toggles Start to begin automatic stepping and verifies progress (pass count increments),
     // then toggles again to pause.
-    const rp = new RadixPage(page);
+    const rp2 = new RadixPage(page);
     await rp.goto();
 
     // Use small array and fast speed to observe progress quickly
@@ -252,7 +252,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
 
   test('Step button advances sorting small steps and can reach Done (S2_Running -> S4_Collecting -> S5_Done)', async ({ page }) => {
     // This test uses Step clicks to drive the algorithm to completion for a small dataset.
-    const rp = new RadixPage(page);
+    const rp3 = new RadixPage(page);
     await rp.goto();
 
     // Small data for deterministic step-through
@@ -263,7 +263,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
     await rp.clickGenerate();
 
     // Fetch the total number of passes we need to complete (digits)
-    const totalPassesText = await rp.getTotalPasses();
+    const totalPassesText1 = await rp.getTotalPasses();
     const totalPasses = parseInt(totalPassesText, 10);
     expect(totalPasses).toBeGreaterThanOrEqual(1);
 
@@ -295,7 +295,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
 
   test('Reset returns to initial prepared state after partial work (Reset event)', async ({ page }) => {
     // This test performs some steps, then resets and verifies state resets but array remains same length.
-    const rp = new RadixPage(page);
+    const rp4 = new RadixPage(page);
     await rp.goto();
 
     await rp.setSize('6');
@@ -315,17 +315,17 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
 
     // After reset, pass should be 0 and array restored to initial length
     expect(await rp.getPass()).toBe('0');
-    const arrCount = await rp.arrayCount();
+    const arrCount2 = await rp.arrayCount();
     expect(arrCount).toBe(6);
 
     // Buckets re-rendered and exist (count equals base)
-    const bucketsCount = await rp.bucketsCount();
+    const bucketsCount2 = await rp.bucketsCount2();
     expect(bucketsCount).toBe(10);
   });
 
   test('Changing speed updates display and restarts auto-timer when running (ChangeSpeed event)', async ({ page }) => {
     // This test ensures the speed control updates the UI value and that when running the auto-timer adapts.
-    const rp = new RadixPage(page);
+    const rp5 = new RadixPage(page);
     await rp.goto();
 
     await rp.setSize('5');
@@ -352,7 +352,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
 
   test('Changing base repopulates buckets (ChangeBase event) and updates metadata', async ({ page }) => {
     // This test changes the radix base and verifies that buckets and metadata update accordingly.
-    const rp = new RadixPage(page);
+    const rp6 = new RadixPage(page);
     await rp.goto();
 
     await rp.setSize('6');
@@ -367,7 +367,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
     expect(await rp.getCurrentBase()).toBe('16');
 
     // buckets count should now equal 16
-    const bucketsCount = await rp.bucketsCount();
+    const bucketsCount3 = await rp.bucketsCount3();
     expect(bucketsCount).toBe(16);
 
     // Verify that pseudocode and details are still present (smoke check)
@@ -376,7 +376,7 @@ test.describe('Radix Sort Visualizer (LSD) - FSM states & interactions', () => {
 
   test('Toggle Explanation shows and hides details (ToggleExplanation event)', async ({ page }) => {
     // This test verifies the explanation details area toggles display state.
-    const rp = new RadixPage(page);
+    const rp7 = new RadixPage(page);
     await rp.goto();
 
     // Initially details are visible (no inline style or display block)

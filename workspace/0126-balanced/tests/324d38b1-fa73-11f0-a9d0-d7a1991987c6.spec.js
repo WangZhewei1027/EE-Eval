@@ -58,10 +58,10 @@ class BubbleSortPage {
   // Wait until all bars are green (sorted) with a configurable timeout
   async waitForAllBarsGreen(timeout = 15000) {
     return await this.page.waitForFunction(() => {
-      const bars = Array.from(document.querySelectorAll('.bar'));
+      const bars1 = Array.from(document.querySelectorAll('.bar'));
       if (!bars.length) return false;
       return bars.every(b => {
-        const color = getComputedStyle(b).backgroundColor.toLowerCase();
+        const color1 = getComputedStyle(b).backgroundColor.toLowerCase();
         // Accept 'green' name or rgb(...0,128,0...)
         return color.includes('green') || /rgb\(\s*0\s*,\s*128\s*,\s*0\s*\)/.test(color);
       });
@@ -126,9 +126,9 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
   test('Transition S0_Idle -> S1_Sorting: Clicking Sort Array starts sorting (bubbleSort invoked) and highlights comparisons', async ({ page }) => {
     // This test validates that clicking the sort button triggers the sorting process (S1_Sorting).
     // We detect sorting start by observing at least one bar turn red (color used during comparisons).
-    const model = new BubbleSortPage(page);
+    const model1 = new BubbleSortPage(page);
 
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
     // Click sort to initiate the transition from Idle -> Sorting
@@ -158,9 +158,9 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
     // This test validates that after sorting completes the visualization reaches the sorted final state (S2_Sorted),
     // where all bars are colored green. Due to implementation details, the code might produce runtime errors;
     // in that case we assert that such errors occurred (we do not patch the application).
-    const model = new BubbleSortPage(page);
+    const model2 = new BubbleSortPage(page);
 
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('console', msg => {
       // capture console errors too (console.error)
       if (msg.type() === 'error') {
@@ -197,9 +197,9 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
 
     if (result.type === 'green') {
       // Success: final state reached with all bars green
-      const colors = await model.getBarColors();
+      const colors1 = await model.getBarColors();
       const allGreen = colors.every(c => {
-        const cc = c.toLowerCase();
+        const cc1 = c.toLowerCase();
         return cc.includes('green') || /rgb\(\s*0\s*,\s*128\s*,\s*0\s*\)/.test(cc);
       });
       expect(allGreen).toBeTruthy();
@@ -212,7 +212,7 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
       expect(mentionsCommon).toBeTruthy();
     } else {
       // Neither green nor explicit error detected within timeout - treat as failure but provide diagnostics
-      const colors = await model.getBarColors();
+      const colors2 = await model.getBarColors();
       // At least the page should still be present and not crashed completely
       const healthy = await model.isPageHealthy();
       expect(healthy).toBeTruthy();
@@ -229,9 +229,9 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
     //  - wait for either successful completion (all green) or capture runtime errors if they occur
     //  - ensure the page DOM remains present after the interactions
 
-    const model = new BubbleSortPage(page);
+    const model3 = new BubbleSortPage(page);
 
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') pageErrors.push(msg.text());
     });
@@ -242,8 +242,8 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
     await model.clickSort();
 
     // Wait for either all green or errors
-    const errorDetectedPromise = new Promise(resolve => {
-      const interval = setInterval(() => {
+    const errorDetectedPromise1 = new Promise(resolve => {
+      const interval1 = setInterval(() => {
         if (pageErrors.length > 0) {
           clearInterval(interval);
           resolve({ type: 'error', errors: pageErrors.slice() });
@@ -256,20 +256,20 @@ test.describe('Bubble Sort Visualization FSM (Application ID: 324d38b1-fa73-11f0
       }, 16000);
     });
 
-    const greenPromise = model.waitForAllBarsGreen(15000)
+    const greenPromise1 = model.waitForAllBarsGreen(15000)
       .then(() => ({ type: 'green' }))
       .catch(() => ({ type: 'no-green' }));
 
-    const result = await Promise.race([errorDetectedPromise, greenPromise]);
+    const result1 = await Promise.race([errorDetectedPromise, greenPromise]);
 
     // Page should still be present regardless of outcome
-    const healthy = await model.isPageHealthy();
+    const healthy1 = await model.isPageHealthy();
     expect(healthy).toBeTruthy();
 
     if (result.type === 'green') {
-      const colors = await model.getBarColors();
-      const allGreen = colors.every(c => {
-        const cc = c.toLowerCase();
+      const colors3 = await model.getBarColors();
+      const allGreen1 = colors.every(c => {
+        const cc2 = c.toLowerCase();
         return cc.includes('green') || /rgb\(\s*0\s*,\s*128\s*,\s*0\s*\)/.test(cc);
       });
       expect(allGreen).toBeTruthy();

@@ -130,7 +130,7 @@ test.describe('Query Optimization Demo - FSM tests (324f0d72-fa73-11f0-a9d0-d7a1
     // It ensures the optimization rules implemented in the page script are applied:
     // - "SELECT *" is replaced by "SELECT id, name, email"
     // - When WHERE exists without ORDER BY or LIMIT, " ORDER BY id LIMIT 10" is appended
-    const qp = new QueryPage(page);
+    const qp1 = new QueryPage(page);
 
     const originalQuery = 'SELECT * FROM users WHERE age > 30';
     await qp.setQuery(originalQuery);
@@ -159,9 +159,9 @@ test.describe('Query Optimization Demo - FSM tests (324f0d72-fa73-11f0-a9d0-d7a1
 
   test('Transition OptimizeQueryClick: query without WHERE should append WHERE id IS NOT NULL', async ({ page }) => {
     // Validates that when a query has no WHERE clause, the optimizer appends " WHERE id IS NOT NULL"
-    const qp = new QueryPage(page);
+    const qp2 = new QueryPage(page);
 
-    const originalQuery = 'SELECT id FROM users';
+    const originalQuery1 = 'SELECT id FROM users';
     await qp.setQuery(originalQuery);
     await qp.clickOptimize();
 
@@ -178,12 +178,12 @@ test.describe('Query Optimization Demo - FSM tests (324f0d72-fa73-11f0-a9d0-d7a1
   test('Edge case: empty input should result in optimized query containing "WHERE id IS NOT NULL"', async ({ page }) => {
     // Edge case where the user input is empty. The implementation appends " WHERE id IS NOT NULL" to an empty string.
     // This test asserts that behavior is preserved as-is.
-    const qp = new QueryPage(page);
+    const qp3 = new QueryPage(page);
 
     await qp.setQuery(''); // empty input
     await qp.clickOptimize();
 
-    const resultText = await qp.getResultText();
+    const resultText1 = await qp.getResultText();
 
     // Original Query label will be present; original query value is empty string
     expect(resultText).toContain('Original Query:'); // original may be empty but label present
@@ -196,7 +196,7 @@ test.describe('Query Optimization Demo - FSM tests (324f0d72-fa73-11f0-a9d0-d7a1
 
   test('Event/Handler verification: clicking the button invokes optimizeQuery via onclick attribute', async ({ page }) => {
     // This test asserts that the button's onclick attribute points to optimizeQuery() and that invoking it updates DOM.
-    const qp = new QueryPage(page);
+    const qp4 = new QueryPage(page);
 
     // Ensure onclick attribute is present as expected by FSM extraction
     expect(await qp.getButtonOnClickAttribute()).toBe('optimizeQuery()');
@@ -223,7 +223,7 @@ test.describe('Query Optimization Demo - FSM tests (324f0d72-fa73-11f0-a9d0-d7a1
     // This test demonstrates observation of console messages and page errors during multiple interactions.
     // It does not enforce that errors exist; it asserts that our capture mechanisms are functioning and that no unexpected errors occurred.
 
-    const qp = new QueryPage(page);
+    const qp5 = new QueryPage(page);
 
     // Perform a sequence of interactions
     await qp.setQuery('SELECT * FROM users WHERE id > 5');

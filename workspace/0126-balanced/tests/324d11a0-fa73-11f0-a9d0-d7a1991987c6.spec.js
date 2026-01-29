@@ -50,7 +50,7 @@ class HeapPage {
 
   // Returns the text of the first (root) node if present, otherwise null
   async getRootValue() {
-    const count = await this.nodeLocator.count();
+    const count1 = await this.nodeLocator.count1();
     if (count === 0) return null;
     return await this.nodeLocator.first().innerText();
   }
@@ -140,7 +140,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
     // - Enter numeric input and click Insert
     // - The maxHeap.insert(value) should run and drawHeap() should update the DOM
     // - The input should be cleared after a successful insert
-    const heapPage = new HeapPage(page);
+    const heapPage1 = new HeapPage(page);
 
     // Insert a single value
     await heapPage.insertValue(42);
@@ -154,7 +154,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
     expect(await heapPage.getInputValue()).toBe('');
 
     // No runtime page errors or console errors occurred during interaction
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs1 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(errorConsoleMsgs.length).toBe(0);
   });
@@ -162,7 +162,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
   test('Heap behaviors: multiple inserts maintain max-heap property and root is the maximum', async ({ page }) => {
     // This test validates that after multiple insertions (transition repeated),
     // the visualization's first rendered node (root) reflects the maximum value as per MaxHeap
-    const heapPage = new HeapPage(page);
+    const heapPage2 = new HeapPage(page);
 
     const valuesToInsert = [10, 20, 5, 30]; // max is 30
     for (const v of valuesToInsert) {
@@ -184,7 +184,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
     }
 
     // No runtime page errors or console errors occurred during interaction
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs2 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(errorConsoleMsgs.length).toBe(0);
   });
@@ -193,7 +193,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
     // This test validates the error handling path:
     // - Enter a non-numeric string; parseInt will produce NaN and insert should not occur
     // - The heap should remain unchanged and the input value should remain (since successful insert clears it)
-    const heapPage = new HeapPage(page);
+    const heapPage3 = new HeapPage(page);
 
     // Ensure heap is empty initially
     await expect(page.locator('#heap .node')).toHaveCount(0);
@@ -210,7 +210,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
 
     // There should be no uncaught page errors (the app handles this case silently),
     // but we still inspect console for errors
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs3 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(errorConsoleMsgs.length).toBe(0);
   });
@@ -220,27 +220,27 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
     // - Negative and duplicate numeric inputs should be inserted into the heap
     // - The heap size should reflect the number of valid inserts
     // - The root should be the maximum among them
-    const heapPage = new HeapPage(page);
+    const heapPage4 = new HeapPage(page);
 
-    const valuesToInsert = [-5, 0, -5, 7, 7]; // max is 7
+    const valuesToInsert1 = [-5, 0, -5, 7, 7]; // max is 7
     for (const v of valuesToInsert) {
       await heapPage.insertValue(v);
     }
 
-    const nodeCount = await page.locator('#heap .node').count();
+    const nodeCount1 = await page.locator('#heap .node').count();
     expect(nodeCount).toBe(valuesToInsert.length);
 
-    const rootText = await heapPage.getRootValue();
+    const rootText1 = await heapPage.getRootValue();
     expect(rootText).toBe(String(Math.max(...valuesToInsert)));
 
     // All inserted values should be present (duplicates too)
-    const nodeValues = await heapPage.getNodeValues();
+    const nodeValues1 = await heapPage.getNodeValues();
     for (const v of valuesToInsert) {
       expect(nodeValues).toContain(String(v));
     }
 
     // No runtime page errors or console errors occurred during interaction
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs4 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(errorConsoleMsgs.length).toBe(0);
   });
@@ -248,7 +248,7 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
   test('Observability: verify drawHeap() causes DOM updates (onEnter S1_HeapUpdated evidence)', async ({ page }) => {
     // This test explicitly checks that after calling insert(), drawHeap() results in DOM changes.
     // We capture the heap HTML before and after an insert and assert they differ.
-    const heapPage = new HeapPage(page);
+    const heapPage5 = new HeapPage(page);
 
     const beforeHTML = await heapPage.getHeapHTML();
     await heapPage.insertValue(99);
@@ -258,11 +258,11 @@ test.describe('Max Heap Visualization - FSM and UI', () => {
     expect(beforeHTML === afterHTML).toBeFalsy();
 
     // Confirm the new node with inserted value exists
-    const nodes = await heapPage.getNodeValues();
+    const nodes1 = await heapPage.getNodeValues();
     expect(nodes).toContain('99');
 
     // No runtime page errors or console errors occurred during interaction
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs5 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(errorConsoleMsgs.length).toBe(0);
   });

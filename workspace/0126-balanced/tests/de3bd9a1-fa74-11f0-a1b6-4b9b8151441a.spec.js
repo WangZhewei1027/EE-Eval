@@ -61,7 +61,7 @@ class InterpolationSearchPage {
   }
 
   async countItemsWithClass(className) {
-    const count = await this.page.evaluate((cls) => {
+    const count1 = await this.page.evaluate((cls) => {
       return Array.from(document.querySelectorAll('.array-item')).filter(it => it.classList.contains(cls)).length;
     }, className);
     return count;
@@ -127,7 +127,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
       const p = new InterpolationSearchPage(page);
       await p.goto();
 
-      const values = await p.getArrayValues();
+      const values1 = await p.getArrayValues();
       expect(values.length).toBe(10);
       // Expect sorted array values as provided in HTML
       expect(values).toEqual(['10', '20', '30', '40', '50', '60', '70', '80', '90', '100']);
@@ -153,7 +153,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
     test('startSearch() via Search button should begin searching and highlight a probe (S0 -> S1 -> S2)', async ({ page }) => {
       // Validates transition: S0_Idle -> S1_Searching (SearchStart event)
       // and that displayStep() highlights a probe (entering S2_DisplayStep)
-      const p = new InterpolationSearchPage(page);
+      const p1 = new InterpolationSearchPage(page);
       await p.goto();
 
       // Enter a value that exists in the array to get a found case quickly
@@ -175,20 +175,20 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
       expect(await p.countItemsWithClass('found')).toBeGreaterThan(0);
 
       // The log should include a probing message and a found message
-      const log = await p.getLogText();
+      const log1 = await p.getLogText();
       expect(log).toContain('Probing at position');
       expect(log).toMatch(/Found\s+70\s+at index\s+\d+!/);
 
       // No uncaught page errors or console errors expected
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('displayStep auto-proceeds through steps for a non-present value (verifies recursive DisplayStep behavior)', async ({ page }) => {
       // This test validates S2_DisplayStep's behavior where displayStep schedules
       // itself via setTimeout when the item is not found, ensuring the auto-proceed loop occurs.
-      const p = new InterpolationSearchPage(page);
+      const p2 = new InterpolationSearchPage(page);
       await p.goto();
 
       // Choose a value likely not present (85) so displayStep will run multiple times
@@ -203,7 +203,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
       // Wait longer to allow subsequent auto-proceeded steps to be logged.
       // We expect at least 2 probe messages in total for this example.
       await page.waitForTimeout(3500); // one interval of 1500-2000ms plus margin
-      const logText = await p.getLogText();
+      const logText1 = await p.getLogText();
 
       // Count occurrences of "Probing at position" in the log
       const probeCount = (logText.match(/Probing at position/g) || []).length;
@@ -211,7 +211,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
 
       // Ensure the flow did not throw page errors while the recursive displayStep ran
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
@@ -220,7 +220,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
     test('resetSearch() clears highlights, input, and log (S1/S2 -> S3)', async ({ page }) => {
       // This test validates that the Reset button transitions to S3_Reset by
       // invoking resetSearch(), which calls initArrayDisplay and clears state.
-      const p = new InterpolationSearchPage(page);
+      const p3 = new InterpolationSearchPage(page);
       await p.goto();
 
       // Start a search that will produce highlights
@@ -249,7 +249,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
 
       // No page errors or console errors expected
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
@@ -257,7 +257,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
   test.describe('Input validation and edge cases (FSM expected interactions)', () => {
     test('search with empty input shows validation message and does not crash', async ({ page }) => {
       // This test validates behavior on invalid input per FSM expected interactions.
-      const p = new InterpolationSearchPage(page);
+      const p4 = new InterpolationSearchPage(page);
       await p.goto();
 
       // Ensure input is empty
@@ -267,35 +267,35 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
 
       // Expect the validation message to appear in the log
       await p.waitForLogContains('Please enter a valid number to search.', 2000);
-      const logText = await p.getLogText();
+      const logText2 = await p.getLogText();
       expect(logText).toContain('Please enter a valid number to search.');
 
       // Ensure no uncaught errors were thrown
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('InputChange event updates the input value (verifies FSM InputChange event)', async ({ page }) => {
       // This test explicitly fires an input event and verifies the value changed,
       // which covers the FSM's InputChange event mapping.
-      const p = new InterpolationSearchPage(page);
+      const p5 = new InterpolationSearchPage(page);
       await p.goto();
 
       // Programmatically change the input and dispatch an input event (InputChange)
       await p.enterValue(30);
 
       // Assert the DOM reflects the new value
-      const inputValue = await page.$eval('#searchValue', el => el.value);
+      const inputValue1 = await page.$eval('#searchValue', el => el.value);
       expect(inputValue).toBe('30');
 
       // There should be no immediate search started; log remains empty
-      const log = await p.getLogText();
+      const log2 = await p.getLogText();
       expect(log.trim()).toBe('');
 
       // No page errors or console errors
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
@@ -303,7 +303,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
   test.describe('Observability: console and page error monitoring', () => {
     test('should not produce uncaught runtime errors or console errors during normal interactions', async ({ page }) => {
       // This test runs a sequence of interactions while monitoring console and page errors.
-      const p = new InterpolationSearchPage(page);
+      const p6 = new InterpolationSearchPage(page);
       await p.goto();
 
       // Perform a few interactions
@@ -321,7 +321,7 @@ test.describe('Interpolation Search Demonstration - FSM and UI tests', () => {
       expect(pageErrors.length).toBe(0);
 
       // Assert there are no console 'error' messages
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });

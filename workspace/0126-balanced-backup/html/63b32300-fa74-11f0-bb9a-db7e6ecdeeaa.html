@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACID Properties Demonstration</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      background: #f0f4f8;
+      color: #333;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    section {
+      background: white;
+      border-radius: 8px;
+      padding: 1rem 2rem 2rem 2rem;
+      margin: 1.5rem auto;
+      max-width: 700px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    button {
+      background-color: #2980b9;
+      border: none;
+      padding: 0.5rem 1.2rem;
+      color: white;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 1rem;
+      font-size: 1rem;
+      transition: background-color 0.2s ease;
+    }
+    button:hover {
+      background-color: #3498db;
+    }
+    .log {
+      margin-top: 1rem;
+      background: #ecf0f1;
+      border-radius: 4px;
+      padding: 0.5rem 1rem;
+      font-family: monospace;
+      height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      border: 1px solid #bdc3c7;
+    }
+    .acid-property {
+      font-weight: bold;
+      color: #2980b9;
+    }
+    .explanation {
+      margin-top: 0.3rem;
+      font-size: 0.9rem;
+      color: #555;
+      font-style: italic;
+    }
+    .error {
+      color: #c0392b;
+      font-weight: bold;
+    }
+    .success {
+      color: #27ae60;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>ACID Properties of Database Transactions</h1>
+  <section>
+    <h2>Simulated Bank Account Transfer</h2>
+    <p>
+      This demonstration simulates a simple banking transaction transferring money 
+      from <strong>Account A</strong> to <strong>Account B</strong>. It illustrates 
+      the <span class="acid-property">ACID</span> properties:
+    </p>
+    <ul>
+      <li><span class="acid-property">Atomicity:</span> All steps succeed or none do.</li>
+      <li><span class="acid-property">Consistency:</span> The data remains valid after the transaction.</li>
+      <li><span class="acid-property">Isolation:</span> Transactions appear independent and isolated.</li>
+      <li><span class="acid-property">Durability:</span> Once committed, changes persist.</li>
+    </ul>
+    <p><em>Try the transfer buttons and watch the logs below.</em></p>
+    <div>
+      <strong>Account Balances:</strong>
+      <ul>
+        <li>Account A: $<span id="accountA">1000</span></li>
+        <li>Account B: $<span id="accountB">500</span></li>
+      </ul>
+    </div>
+    <div>
+      <label>
+        Transfer Amount: $
+        <input type="number" id="transferAmount" value="100" min="1" max="2000" />
+      </label>
+    </div>
+    <div>
+      <button id="transferSuccess">Transfer (Successful)</button>
+      <button id="transferFail">Transfer (Simulate Failure)</button>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+  </section>
+
+  <section>
+    <h2>Explanation of ACID Properties</h2>
+    <ul>
+      <li><span class="acid-property">Atomicity:</span> Either the entire transfer completes (money debited and credited) or nothing happens if an error occurs.</li>
+      <li><span class="acid-property">Consistency:</span> Account balances never become negative, and total money remains constant.</li>
+      <li><span class="acid-property">Isolation:</span> Each transfer runs isolated — intermediate states aren't visible.</li>
+      <li><span class="acid-property">Durability:</span> Changes are saved to <em>localStorage</em>, so data persists even if you reload the page.</li>
+    </ul>
+  </section>
+
+  <script>
+    // Using localStorage to simulate durability
+    const STORAGE_KEY = 'acid_account_balances';
+
+    // Initialize balances if none saved
+    function initBalances() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      } else {
+        const accounts = { A: 1000, B: 500 };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+        return accounts;
+      }
+    }
+    
+    let accounts = initBalances();
+
+    const accountADoc = document.getElementById('accountA');
+    const accountBDoc = document.getElementById('accountB');
+    const logEl = document.getElementById('log');
+    const transferAmountInput = document.getElementById('transferAmount');
+
+    // Utility to log messages
+    function log(message, type) {
+      const time = new Date().toLocaleTimeString();
+      const spanClass = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+      logEl.innerHTML += `[${time}] <span class="${spanClass}">${message}</span>\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function updateDisplay() {
+      accountADoc.textContent = accounts.A.toFixed(2);
+      accountBDoc.textContent = accounts.B.toFixed(2);
+    }
+
+    function saveBalances() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+    }
+
+    /* 
+      Transaction function simulating ACID properties.
+      transfer(amount, shouldFail)
+      - amount: number to transfer from A to B.
+      - shouldFail: boolean - when true, simulate failure mid-transaction.
+    */
+    async function transfer(amount, shouldFail = false) {
+      log(`Starting transfer of $${amount.toFixed(2)} from Account A to Account B.`);
+      
+      // Atomicity & Isolation: create a private copy (transaction context)
+      let transaction = {
+        A: accounts.A,
+        B: accounts.B,
+        committed: false,
+      };
+
+      try {
+        // Step 1: Validate amount
+        if (amount <= 0) throw new Error('Transfer amount must be positive.');
+
+        // Step 2: Check sufficient funds (Consistency)
+        if (transaction.A < amount) {
+          throw new Error('Insufficient funds in Account A.');
+        }
+
+        // Step 3: Debit Account A
+        transaction.A -= amount;
+        log(`Debited $${amount.toFixed(2)} from Account A. Temporary balance: $${transaction.A.toFixed(2)}.`);
+
+        // Insert delay to simulate processing time and demonstrate isolation
+        await delay(500);
+
+        // Step 4: Simulate failure if requested before crediting Account B
+        if (shouldFail) throw new Error('Simulated failure during transaction.');
+
+        // Step 5: Credit Account B
+        transaction.B += amount;
+        log(`Credited $${amount.toFixed(2)} to Account B. Temporary balance: $${transaction.B.toFixed(2)}.`);
+
+        // Step 6: Final consistency check (total should be constant)
+        const totalBefore = accounts.A + accounts.B;
+        const totalAfter = transaction.A + transaction.B;
+        if (Math.abs(totalBefore - totalAfter) > 0.01) {
+          throw new Error('Consistency violated: total balance mismatch.');
+        }
+
+        // Commit transaction (Durability)
+        accounts = { A: transaction.A, B: transaction.B };
+        saveBalances();
+        updateDisplay();
+        transaction.committed = true;
+
+        log('Transaction committed successfully.', 'success');
+      } catch (error) {
+        // Abort transaction (Atomicity)
+        log(`Transaction aborted: ${error.message}`, 'error');
+        log('No changes applied. Data remains consistent.', 'error');
+      }
+    }
+
+    // Helper delay function (ms)
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Bind buttons
+    document.getElementById('transferSuccess').addEventListener('click', () => {
+      const amount = parseFloat(transferAmountInput.value);
+      if (isNaN(amount)) {
+        log('Invalid transfer amount.', 'error');
+        return;
+      }
+      transfer(amount, false);
+    });
+
+    document.getElementById('transferFail').addEventListener('click', () => {
+      const amount = parseFloat(transferAmountInput.value);
+      if (isNaN(amount)) {
+        log('Invalid transfer amount.', 'error');
+        return;
+      }
+      transfer(amount, true);
+    });
+
+    // Initialize display on page load
+    updateDisplay();
+    log('Welcome! You can perform transfers to see ACID properties in action.');
+  </script>
+</body>
+</html>

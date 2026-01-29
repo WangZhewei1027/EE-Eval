@@ -80,8 +80,8 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
 
     // Wait for UI update: exportedKey changes and deriveInfo text updated
     await page.waitForFunction((prev) => {
-      const exported = document.getElementById('exportedKey');
-      const deriveInfo = document.getElementById('deriveInfo');
+      const exported1 = document.getElementById('exportedKey');
+      const deriveInfo1 = document.getElementById('deriveInfo1');
       return exported && exported.value && exported.value !== prev && deriveInfo && deriveInfo.textContent.includes('Random key generated');
     }, before, { timeout: 5000 });
 
@@ -89,7 +89,7 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     expect(after).toBeTruthy();
     expect(after).not.toBe(before);
 
-    const debugText = await page.locator('#debug').innerText();
+    const debugText1 = await page.locator('#debug').innerText();
     expect(debugText).toContain('Generated random AES');
     expect(debugText).toContain('Generated random AES‑GCM key'); // tolerant to presence
   });
@@ -111,20 +111,20 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     // Wait for salt and exportedKey to be set and for deriveInfo to include iterations
     await page.waitForFunction(() => {
       const salt = document.getElementById('saltOut');
-      const exported = document.getElementById('exportedKey');
-      const deriveInfo = document.getElementById('deriveInfo');
+      const exported2 = document.getElementById('exportedKey');
+      const deriveInfo2 = document.getElementById('deriveInfo2');
       return salt && salt.value && salt.value.length > 0 && exported && exported.value && deriveInfo && deriveInfo.textContent.includes('iterations');
     }, { timeout: 10000 });
 
-    const exported = await page.locator('#exportedKey').inputValue();
-    const salt = await page.locator('#saltOut').inputValue();
-    const deriveInfo = await page.locator('#deriveInfo').innerText();
+    const exported3 = await page.locator('#exportedKey').inputValue();
+    const salt1 = await page.locator('#saltOut').inputValue();
+    const deriveInfo3 = await page.locator('#deriveInfo3').innerText();
 
     expect(exported).toBeTruthy();
     expect(salt).toBeTruthy();
     expect(deriveInfo).toContain('iterations');
 
-    const debugText = await page.locator('#debug').innerText();
+    const debugText2 = await page.locator('#debug').innerText();
     expect(debugText).toContain('Derived key from passphrase');
   });
 
@@ -149,10 +149,10 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     const exportedAfter = await page.locator('#exportedKey').inputValue();
     expect(exportedAfter).toBe(currentExported);
 
-    const deriveInfo = await page.locator('#deriveInfo').innerText();
+    const deriveInfo4 = await page.locator('#deriveInfo4').innerText();
     expect(deriveInfo).toContain('Imported raw key');
 
-    const debugText = await page.locator('#debug').innerText();
+    const debugText3 = await page.locator('#debug').innerText();
     expect(debugText).toContain('Imported raw key from base64');
   });
 
@@ -161,7 +161,7 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     await page.fill('#plaintext', originalPlain);
 
     // Ensure we have a key (app initializes one; but ensure exportedKey exists)
-    const exported = await page.locator('#exportedKey').inputValue();
+    const exported4 = await page.locator('#exportedKey').inputValue();
     expect(exported).toBeTruthy();
 
     // Clear debug to make assertions deterministic
@@ -173,7 +173,7 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     // Wait for ciphertext to appear
     await page.waitForFunction(() => {
       const ct = document.getElementById('ciphertext');
-      const dbg = document.getElementById('debug');
+      const dbg1 = document.getElementById('debug');
       return ct && ct.value && ct.value.length > 0 && dbg && dbg.textContent && dbg.textContent.includes('Encrypted data');
     }, { timeout: 5000 });
 
@@ -202,7 +202,7 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     // Wait for plaintext to be replaced with decrypted value and debug to contain decryption messages
     await page.waitForFunction((expected) => {
       const ptEl = document.getElementById('plaintext');
-      const dbg = document.getElementById('debug');
+      const dbg2 = document.getElementById('debug');
       return ptEl && ptEl.value === expected && dbg && dbg.textContent && dbg.textContent.includes('Decryption successful');
     }, originalPlain, { timeout: 5000 });
 
@@ -219,18 +219,18 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     await page.fill('#plaintext', 'Clear test');
     await page.click('#encryptBtn');
     await page.waitForFunction(() => {
-      const ct = document.getElementById('ciphertext');
+      const ct1 = document.getElementById('ciphertext');
       return ct && ct.value && ct.value.length > 0;
     }, { timeout: 5000 });
 
-    const before = await page.locator('#ciphertext').inputValue();
+    const before1 = await page.locator('#ciphertext').inputValue();
     expect(before.length).toBeGreaterThan(0);
 
     // Click Clear Ciphertext
     await page.click('#clearCipher');
 
     // Assert it's empty
-    const after = await page.locator('#ciphertext').inputValue();
+    const after1 = await page.locator('#ciphertext').inputValue();
     expect(after).toBe('');
   });
 
@@ -242,7 +242,7 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     await page.fill('#keyInput', '!!!invalid-base64###');
 
     // Expect an alert 'Failed to import key...' and we also observe page errors collection
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 5000 }).catch(() => null);
+    const dialogPromise1 = page.waitForEvent('dialog', { timeout: 5000 }).catch(() => null);
     // Trigger import
     await page.click('#importKey');
 
@@ -268,11 +268,11 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     await page.fill('#plaintext', 'Secret-for-wrong-key-test');
     await page.click('#encryptBtn');
     await page.waitForFunction(() => {
-      const ct = document.getElementById('ciphertext');
+      const ct2 = document.getElementById('ciphertext');
       return ct && ct.value && ct.value.length > 0;
     }, { timeout: 5000 });
 
-    const ciphertext = await page.locator('#ciphertext').inputValue();
+    const ciphertext1 = await page.locator('#ciphertext1').inputValue();
     expect(ciphertext).toBeTruthy();
 
     // Now generate a brand new key to make the current key incorrect for decryption
@@ -282,9 +282,9 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     await page.waitForTimeout(200); // short wait to allow UI update
 
     // Attempt to decrypt - this should fail and the page should alert 'Decryption failed.'
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 5000 }).catch(() => null);
+    const dialogPromise2 = page.waitForEvent('dialog', { timeout: 5000 }).catch(() => null);
     await page.click('#decryptBtn');
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     if (dialog) {
       expect(dialog.message()).toContain('Decryption failed');
       await dialog.accept();
@@ -293,11 +293,11 @@ test.describe('Symmetric Cryptography Demo (AES‑GCM) - FSM validation', () => 
     // Debug should contain 'Decryption error:' entry from catch block
     // Wait a bit for debug to be appended
     await page.waitForFunction(() => {
-      const dbg = document.getElementById('debug');
+      const dbg3 = document.getElementById('debug');
       return dbg && dbg.textContent && dbg.textContent.toLowerCase().includes('decryption error');
     }, { timeout: 3000 });
 
-    const debugText = await page.locator('#debug').innerText();
+    const debugText4 = await page.locator('#debug').innerText();
     expect(debugText.toLowerCase()).toContain('decryption error');
   });
 

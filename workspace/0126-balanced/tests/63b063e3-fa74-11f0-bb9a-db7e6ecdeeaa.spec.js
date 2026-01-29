@@ -138,9 +138,9 @@ test.describe('AVL Tree Visualization and Demo (FSM states & transitions)', () =
     await waitForMessage(page, 'Operation complete.', 10000);
 
     // Input cleared and focused
-    const valueAfter = await page.locator('#valueInput').inputValue();
+    const valueAfter1 = await page.locator('#valueInput').inputValue();
     expect(valueAfter).toBe('');
-    const activeId = await page.evaluate(() => document.activeElement && document.activeElement.id);
+    const activeId1 = await page.evaluate(() => document.activeElement && document.activeElement.id);
     expect(activeId).toBe('valueInput');
 
     expect(pageErrors).toEqual([]);
@@ -185,7 +185,7 @@ test.describe('AVL Tree Visualization and Demo (FSM states & transitions)', () =
 
     // Wait for the not found message to appear
     await page.waitForFunction(() => {
-      const m = document.getElementById('message');
+      const m1 = document.getElementById('message');
       return m && m.textContent.includes('not found for removal');
     }, null, { timeout: 5000 });
 
@@ -239,7 +239,7 @@ test.describe('AVL Tree Visualization and Demo (FSM states & transitions)', () =
 
     // Validation message expected immediately
     await page.waitForFunction(() => {
-      const m = document.getElementById('message');
+      const m2 = document.getElementById('message');
       return m && m.textContent === 'Please enter a valid integer.';
     }, null, { timeout: 2000 });
 
@@ -250,12 +250,12 @@ test.describe('AVL Tree Visualization and Demo (FSM states & transitions)', () =
     // Now click remove with empty input
     await page.click('#removeBtn');
     await page.waitForFunction(() => {
-      const m = document.getElementById('message');
+      const m3 = document.getElementById('message');
       return m && m.textContent === 'Please enter a valid integer.';
     }, null, { timeout: 2000 });
 
     // Ensure the input is still focused (the handlers returned early and did not change focus)
-    const activeId = await page.evaluate(() => document.activeElement && document.activeElement.id);
+    const activeId2 = await page.evaluate(() => document.activeElement && document.activeElement.id);
     // It may be the body or the input; we allow either but assert no errors
     expect(['valueInput', null, '']).toContain(activeId);
 
@@ -280,7 +280,7 @@ test.describe('AVL Tree Visualization and Demo (FSM states & transitions)', () =
 
     // During animation we expect at least one message that contains 'Balance' or 'Rotate' or 'Inserted node 30'
     await page.waitForFunction(() => {
-      const m = document.getElementById('message');
+      const m4 = document.getElementById('message');
       return m && (m.textContent.includes('Balance') || m.textContent.includes('Rotate') || m.textContent.includes('Inserted node 30'));
     }, null, { timeout: 5000 });
 

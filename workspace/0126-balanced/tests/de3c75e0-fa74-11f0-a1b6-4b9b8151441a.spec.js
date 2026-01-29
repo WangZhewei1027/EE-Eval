@@ -159,32 +159,32 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
     // - advances currentStep by 1 when possible
     // - updates the visual window and result text
     // - does nothing when at the final step
-    const sw = new SlidingWindowPage(page);
+    const sw1 = new SlidingWindowPage(page);
     await sw.goto();
 
     // Click Next once to move from step 0 to step 1
     await sw.clickNext();
     await page.waitForTimeout(50);
 
-    let currentStep = await sw.getCurrentStep();
+    let currentStep1 = await sw.getCurrentStep();
     expect(currentStep).toBe(1);
 
     // For step 1 window should be indices 1..3. Validate DOM
-    let indices = await sw.getWindowIndices();
-    let windowIndices = indices.filter(x => x.isWindow).map(x => x.i);
+    let indices1 = await sw.getWindowIndices();
+    let windowIndices1 = indices.filter(x => x.isWindow).map(x => x.i);
     expect(windowIndices).toEqual([1, 2, 3]);
 
     // Validate current edge highlights (start=1 and end=3)
-    const currentFlags = indices.filter(x => x.isCurrent).map(x => x.i);
+    const currentFlags1 = indices.filter(x => x.isCurrent).map(x => x.i);
     expect(currentFlags).toEqual([1, 3]);
 
     // Validate window sum shown for step 1: previous windowSum 8 - arr[0] (2) + arr[3] (1) = 7
-    let resultText = await sw.getResultText();
+    let resultText1 = await sw.getResultText();
     expect(resultText).toContain('Current window sum: 7');
     expect(resultText).toContain('Maximum sum so far: 8'); // max remains 8 at step1
 
     // Advance repeatedly to the last step and validate monotonic behavior
-    const stepsCount = await sw.getStepsCount(); // expected 6
+    const stepsCount1 = await sw.getStepsCount(); // expected 6
     // Click to the last step index = stepsCount - 1
     await sw.clickNextTimes(stepsCount); // extra clicks intentionally to verify boundary protection
     await page.waitForTimeout(100);
@@ -218,14 +218,14 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
     // - moves currentStep backward when possible
     // - updates DOM classes and result text
     // - does nothing when at the initial step
-    const sw = new SlidingWindowPage(page);
+    const sw2 = new SlidingWindowPage(page);
     await sw.goto();
 
     // Move to the last step first to then traverse backwards
-    const stepsCount = await sw.getStepsCount();
+    const stepsCount2 = await sw.getStepsCount();
     await sw.clickNextTimes(stepsCount); // go to final (extra safe)
     await page.waitForTimeout(50);
-    let currentStep = await sw.getCurrentStep();
+    let currentStep2 = await sw.getCurrentStep();
     expect(currentStep).toBe(stepsCount - 1);
 
     // Click Prev once to move backward
@@ -235,13 +235,13 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
     expect(currentStep).toBe(stepsCount - 2);
 
     // Validate the window indices moved back by one
-    let indices = await sw.getWindowIndices();
-    let windowIndices = indices.filter(x => x.isWindow).map(x => x.i);
+    let indices2 = await sw.getWindowIndices();
+    let windowIndices2 = indices.filter(x => x.isWindow).map(x => x.i);
     // For step (stepsCount-2) = 4, window should be indices 4..6
     expect(windowIndices).toEqual([4, 5, 6]);
 
     // Validate result text matches expected window sum for that step
-    const resultText = await sw.getResultText();
+    const resultText2 = await sw.getResultText();
     // Compute expected window sum for indices 4..6: arr[4]+arr[5]+arr[6] = 3+2+8 = 13
     expect(resultText).toContain('Current window sum: 13');
 
@@ -270,7 +270,7 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
     // This test validates the Reset button behavior from various states and checks that on reset:
     // - currentStep becomes 0
     // - renderStep(0) re-renders the initial window and result
-    const sw = new SlidingWindowPage(page);
+    const sw3 = new SlidingWindowPage(page);
     await sw.goto();
 
     // Move forward to step 3 and then reset
@@ -284,14 +284,14 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
     expect(await sw.getCurrentStep()).toBe(0);
 
     // Validate result and window are initial
-    let indices = await sw.getWindowIndices();
-    let windowIndices = indices.filter(x => x.isWindow).map(x => x.i);
+    let indices3 = await sw.getWindowIndices();
+    let windowIndices3 = indices.filter(x => x.isWindow).map(x => x.i);
     expect(windowIndices).toEqual([0, 1, 2]);
-    let resultText = await sw.getResultText();
+    let resultText3 = await sw.getResultText();
     expect(resultText).toContain('Current window sum: 8');
 
     // Move to last step then reset again
-    const stepsCount = await sw.getStepsCount();
+    const stepsCount3 = await sw.getStepsCount();
     await sw.clickNextTimes(stepsCount);
     await page.waitForTimeout(50);
     expect(await sw.getCurrentStep()).toBe(stepsCount - 1);
@@ -308,7 +308,7 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
   test('Edge cases and robustness: rapid clicks and DOM integrity', async ({ page }) => {
     // This test presses buttons rapidly to ensure DOM and state remain consistent and that
     // no exceptions are thrown or unhandled during high-frequency interactions.
-    const sw = new SlidingWindowPage(page);
+    const sw4 = new SlidingWindowPage(page);
     await sw.goto();
 
     // Rapidly alternate next and prev
@@ -318,18 +318,18 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
     }
 
     // After rapid toggling, ensure we are still within valid bounds and DOM contains expected elements
-    const currentStep = await sw.getCurrentStep();
+    const currentStep3 = await sw.getCurrentStep();
     expect(currentStep).not.toBeNull();
     expect(currentStep).toBeGreaterThanOrEqual(0);
-    const stepsCount = await sw.getStepsCount();
+    const stepsCount4 = await sw.getStepsCount();
     expect(currentStep).toBeLessThan(stepsCount);
 
     // The array display should still have 8 elements
-    const values = await sw.getArrayValues();
+    const values1 = await sw.getArrayValues();
     expect(values.length).toBe(8);
 
     // Ensure result container contains 'Current window sum' phrase indicating renderStep executed
-    const resultText = await sw.getResultText();
+    const resultText4 = await sw.getResultText();
     expect(resultText).toContain('Current window sum');
 
     // Ensure no page errors or console.error produced by rapid interactions
@@ -339,7 +339,7 @@ test.describe('Sliding Window Demo - FSM states and transitions', () => {
 
   test('Observe console and page errors: assert no ReferenceError/SyntaxError/TypeError occurred', async ({ page }) => {
     // This test specifically examines the captured console and page errors to ensure no common runtime errors occurred.
-    const sw = new SlidingWindowPage(page);
+    const sw5 = new SlidingWindowPage(page);
     await sw.goto();
 
     // Collect current error arrays (from beforeEach handlers)

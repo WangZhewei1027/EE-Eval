@@ -172,18 +172,18 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
       await expect(firstCell).toHaveClass(/highlight/);
 
       // Log should record the read action
-      const logText = await app.log.innerText();
+      const logText1 = await app.log.innerText();
       expect(logText).toMatch(/Read index: input=0, base=0/);
     });
 
     test('Read value — using 1-based index mapping (ReadIndex)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app1 = new IndexingApp(page);
 
       // Read index 1 with 1-based -> computed 0 -> "A"
       await app.readArrayCell({ inputValue: 1, base: '1' });
 
       await expect(app.arrayResult).toBeVisible();
-      const text = await app.arrayResult.textContent();
+      const text1 = await app.arrayResult.textContent();
       expect(text).toMatch(/interpreted as 0/);
       expect(text).toMatch(/value: "A"/);
 
@@ -192,7 +192,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Read value — out of range and invalid input edge cases', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app2 = new IndexingApp(page);
 
       // Out of range (e.g., 999)
       await app.readArrayCell({ inputValue: 999, base: '0' });
@@ -212,7 +212,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Shuffle and reset array (ShuffleArray -> ResetArray)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app3 = new IndexingApp(page);
 
       // Capture initial order
       const initial = await page.locator('#arrayDisplay .cell').allTextContents();
@@ -239,7 +239,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Generate dataset with invalid size triggers alert (edge case)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app4 = new IndexingApp(page);
 
       // Set dataset size to 0 which should trigger alert('Enter a positive dataset size.')
       await app.datasetSize.fill('0');
@@ -253,7 +253,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Generate dataset and build index (GenerateDataset -> BuildIndex)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app5 = new IndexingApp(page);
 
       // Generate a modest dataset for deterministic test speed
       await app.generateDataset(200);
@@ -271,7 +271,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Linear scan behavior and empty-name alert (LinearSearch)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app6 = new IndexingApp(page);
 
       // Generate small dataset
       await app.generateDataset(120);
@@ -292,7 +292,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Indexed search requires built index; test alert then successful lookup (IndexedSearch)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app7 = new IndexingApp(page);
 
       // Generate dataset but do not build index
       await app.generateDataset(150);
@@ -311,17 +311,17 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
       // Now perform indexed lookup (may find zero or more)
       await app.indexedSearch('Alice');
       await expect(app.searchResult).toBeVisible();
-      const txt = await app.searchResult.textContent();
+      const txt1 = await app.searchResult.textContent();
       expect(txt).toMatch(/Indexed lookup: found \d+ items in/);
     });
 
     test('Show sample items displays sample content (ShowSample)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app8 = new IndexingApp(page);
 
       await app.generateDataset(50);
       await app.showSample();
       await expect(app.searchResult).toBeVisible();
-      const txt = await app.searchResult.textContent();
+      const txt2 = await app.searchResult.textContent();
       expect(txt).toMatch(/Sample items \(first 12\)/i);
     });
   });
@@ -332,7 +332,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Add document updates docs list (AddDocument) and allows deletion', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app9 = new IndexingApp(page);
 
       // Count initial docs
       const initialDocs = await app.docsList.locator('.doc').count();
@@ -350,7 +350,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Build inverted index then query using index (BuildInvertedIndex -> QueryIndexed)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app10 = new IndexingApp(page);
 
       // Build inverted index from the initial docs
       await app.buildInvertedIndex();
@@ -368,7 +368,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Query by scanning docs (QueryLinear) returns matches and logs', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app11 = new IndexingApp(page);
 
       // Ensure at least initial docs exist
       await expect(app.docsList.locator('.doc')).toHaveCountGreaterThan(0);
@@ -386,7 +386,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
     });
 
     test('Clear inverted index yields cleared state (ClearIndex)', async ({ page }) => {
-      const app = new IndexingApp(page);
+      const app12 = new IndexingApp(page);
 
       // Build then clear
       await app.buildInvertedIndex();
@@ -412,7 +412,7 @@ test.describe('Indexing — Interactive Demonstration (d3d99341-fa73-11f0-83e0-8
       await page.goto(url);
 
       const consoleMessages = [];
-      const pageErrors = [];
+      const pageErrors1 = [];
 
       page.on('console', msg => {
         consoleMessages.push({ type: msg.type(), text: msg.text() });

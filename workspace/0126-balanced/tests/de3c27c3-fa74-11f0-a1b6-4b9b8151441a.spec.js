@@ -131,7 +131,7 @@ test.describe('Topological Sort Visualization - FSM states and transitions', () 
 
   // Validate the user event: clicking the sort button (PerformTopologicalSort event)
   test('PerformTopologicalSort event: clicking the button attempts transition to Sorting (S1) but runtime error occurs', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo1 = new TopoPage(page);
     await topo.goto();
 
     // Capture current counts of errors so we can detect new errors produced by the click
@@ -180,7 +180,7 @@ test.describe('Topological Sort Visualization - FSM states and transitions', () 
 
   // Validate final state S2_Sorted expectations and check source evidence strings are present in the HTML
   test('S1_Sorting -> S2_Sorted transition expected behavior and source verification', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo2 = new TopoPage(page);
     await topo.goto();
 
     // 1) The #result element should exist; in a healthy run it would show the topological ordering when sorting completes.
@@ -203,15 +203,15 @@ test.describe('Topological Sort Visualization - FSM states and transitions', () 
     expect(finalResultText.trim()).toBe('');
 
     // 5) Assert that the page error/console error observed earlier still indicates parsing/runtime problems.
-    const syntaxRegex = /SyntaxError|Unexpected end of input|Unexpected token|Unexpected end|Uncaught/i;
-    const consoleHasSyntax = topo.consoleHasErrorMatching(syntaxRegex);
-    const pageHasSyntax = topo.pageErrorsMatch(syntaxRegex);
+    const syntaxRegex1 = /SyntaxError|Unexpected end of input|Unexpected token|Unexpected end|Uncaught/i;
+    const consoleHasSyntax1 = topo.consoleHasErrorMatching(syntaxRegex);
+    const pageHasSyntax1 = topo.pageErrorsMatch(syntaxRegex);
     expect(consoleHasSyntax || pageHasSyntax).toBe(true);
   });
 
   // Edge case: attempt to interact with the graph-display nodes - ensure no nodes exist when script didn't execute
   test('Edge case: graph nodes are absent when displayGraph could not execute', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo3 = new TopoPage(page);
     await topo.goto();
 
     // Query for any elements with class 'node' inside graph-display
@@ -224,7 +224,7 @@ test.describe('Topological Sort Visualization - FSM states and transitions', () 
   // Extra assertion: assert that the application surface still loads (HTTP) even if JS is broken,
   // and that the core static content (explanation section) is present and intact.
   test('Robustness: static content is available even when runtime script fails', async ({ page }) => {
-    const topo = new TopoPage(page);
+    const topo4 = new TopoPage(page);
     await topo.goto();
 
     // Static explanatory heading should be present

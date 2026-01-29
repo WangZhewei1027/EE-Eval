@@ -120,7 +120,7 @@ test.describe('JavaScript Set Demonstration - FSM tests (de3b1651-fa74-11f0-a1b6
     // - Clicking the Add button triggers the expected function call (addItemToSet)
     // - If the implementation is missing, a ReferenceError will be raised; we assert such errors happen naturally
     // - If the function logs something to console or updates the DOM, we capture that as well
-    const demo = new SetDemoPage(page);
+    const demo1 = new SetDemoPage(page);
     await demo.goto();
 
     // Clear any initial messages/errors captured during load
@@ -151,7 +151,7 @@ test.describe('JavaScript Set Demonstration - FSM tests (de3b1651-fa74-11f0-a1b6
     // - Clicking the Delete button triggers removeItemFromSet
     // - If missing, a ReferenceError or similar is thrown and we assert it occurred
     // - Edge case: deleting when nothing has been added should either be handled or produce an error; we accept either
-    const demo = new SetDemoPage(page);
+    const demo2 = new SetDemoPage(page);
     await demo.goto();
 
     // Ensure we have a consistent starting point (don't rely on prior tests)
@@ -172,7 +172,7 @@ test.describe('JavaScript Set Demonstration - FSM tests (de3b1651-fa74-11f0-a1b6
     await demo.clickDelete();
 
     // After repeated clicks, ensure the page still contains the delete button
-    const deleteBtn = await page.$('button.delete');
+    const deleteBtn1 = await page.$('button.delete');
     expect(deleteBtn).not.toBeNull();
   });
 
@@ -182,7 +182,7 @@ test.describe('JavaScript Set Demonstration - FSM tests (de3b1651-fa74-11f0-a1b6
     // - Clicking Display triggers displaySet() action per FSM
     // - We capture whether displaySet is invoked (console) or a ReferenceError occurs
     // - If the app updates a display area (e.g., a <pre> or other element), we attempt to read it
-    const demo = new SetDemoPage(page);
+    const demo3 = new SetDemoPage(page);
     await demo.goto();
 
     demo.consoleMessages = [];
@@ -211,7 +211,7 @@ test.describe('JavaScript Set Demonstration - FSM tests (de3b1651-fa74-11f0-a1b6
     // This test validates:
     // - The FSM transitions when user performs a typical sequence of actions
     // - We assert that each action produces either a console trace or a runtime error (allowed by instructions)
-    const demo = new SetDemoPage(page);
+    const demo4 = new SetDemoPage(page);
     await demo.goto();
 
     demo.consoleMessages = [];

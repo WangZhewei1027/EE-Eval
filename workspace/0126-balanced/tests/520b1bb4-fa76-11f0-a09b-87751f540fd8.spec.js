@@ -82,7 +82,7 @@ test.describe('Design Patterns app (FSM: S0_Idle) - End-to-end checks', () => {
   });
 
   test('FSM state and transitions: verify there are no interactive transitions and main() was entry action', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', e => pageErrors.push(String(e && e.message ? e.message : e)));
 
     await page.goto(APP_URL, { waitUntil: 'load' });
@@ -107,8 +107,8 @@ test.describe('Design Patterns app (FSM: S0_Idle) - End-to-end checks', () => {
   });
 
   test('Edge cases: inspect multiple possible runtime faults without modifying page', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors2 = [];
 
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', err => pageErrors.push(String(err && err.message ? err.message : err)));

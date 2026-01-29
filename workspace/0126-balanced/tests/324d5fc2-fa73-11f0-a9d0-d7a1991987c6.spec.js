@@ -89,7 +89,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
         await csPage.goto();
 
         // Input exists and has the default value from the HTML
-        const input = page.locator('#inputArray');
+        const input1 = page.locator('#inputArray');
         await expect(input).toBeVisible();
         await expect(input).toHaveValue('4,2,2,8,3,3,1');
 
@@ -111,7 +111,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
 
     test('Transition: SortButtonClick displays original array in #arrayDiv and sorted array in #output', async ({ page }) => {
         // This validates transitions from S0 -> S1 and S1 -> S2 (implementation performs both on one click)
-        const csPage = new CountingSortPage(page);
+        const csPage1 = new CountingSortPage(page);
         await csPage.goto();
 
         // Click sort and then verify both original and sorted visualizations
@@ -146,7 +146,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
 
     test('Sorting with a custom input sorts correctly and updates DOM appropriately', async ({ page }) => {
         // Validate sorting correctness for a different input set and DOM update behavior
-        const csPage = new CountingSortPage(page);
+        const csPage2 = new CountingSortPage(page);
         await csPage.goto();
 
         // Use a custom unsorted array
@@ -156,8 +156,8 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
         await csPage.waitForBars('arrayDiv');
         await csPage.waitForBars('output');
 
-        const originalValues = await csPage.getBarValues('arrayDiv');
-        const outputValues = await csPage.getBarValues('output');
+        const originalValues1 = await csPage.getBarValues('arrayDiv');
+        const outputValues1 = await csPage.getBarValues('output');
 
         expect(originalValues).toEqual([5, 3, 4, 1]);
 
@@ -177,7 +177,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
 
     test('Edge case: empty input string should be handled without uncaught errors (treated as [0])', async ({ page }) => {
         // Empty input -> ''.split(',') -> [''] -> Number('') === 0, so array [0]
-        const csPage = new CountingSortPage(page);
+        const csPage3 = new CountingSortPage(page);
         await csPage.goto();
 
         await csPage.setInput(''); // empty input
@@ -187,8 +187,8 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
         await csPage.waitForBars('arrayDiv');
         await csPage.waitForBars('output');
 
-        const originalValues = await csPage.getBarValues('arrayDiv');
-        const outputValues = await csPage.getBarValues('output');
+        const originalValues2 = await csPage.getBarValues('arrayDiv');
+        const outputValues2 = await csPage.getBarValues('output');
 
         expect(originalValues).toEqual([0]);
         expect(outputValues).toEqual([0]);
@@ -205,7 +205,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
     test('Error scenario: non-numeric input should produce a runtime error (observed via pageerror or console error)', async ({ page }) => {
         // Intentionally feed invalid data that will likely lead to a runtime exception in countingSort
         // The implementation uses Math.max(...array) and new Array(max + 1), which will throw if max is NaN.
-        const csPage = new CountingSortPage(page);
+        const csPage4 = new CountingSortPage(page);
         await csPage.goto();
 
         // Provide invalid values that map to NaN
@@ -241,7 +241,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
 
     test('Robustness: multiple clicks do not cause unexpected crashes or duplicate severe errors', async ({ page }) => {
         // Ensure the UI remains stable across repeated interactions
-        const csPage = new CountingSortPage(page);
+        const csPage5 = new CountingSortPage(page);
         await csPage.goto();
 
         // Reset any errors and perform repeated clicks with valid input
@@ -258,7 +258,7 @@ test.describe('Counting Sort Visualization - FSM validation and behaviors', () =
 
         // After multiple valid interactions, verify output is still correct
         await csPage.waitForBars('output');
-        const outputValues = await csPage.getBarValues('output');
+        const outputValues3 = await csPage.getBarValues('output');
         expect(outputValues).toEqual([1, 2, 3]);
 
         // There should be no uncaught errors after repeated valid interactions

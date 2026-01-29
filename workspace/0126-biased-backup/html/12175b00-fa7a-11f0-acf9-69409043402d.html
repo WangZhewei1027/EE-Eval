@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Decision Tree Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+  }
+  input[type=text], input[type=number] {
+    width: 10em;
+  }
+  textarea {
+    width: 100%;
+    height: 6em;
+    font-family: monospace, monospace;
+  }
+  button {
+    margin: 0.2em 0.4em 0.2em 0;
+  }
+  label {
+    display: inline-block;
+    width: 14em;
+  }
+  #node-list {
+    max-height: 12em;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 0.4em;
+  }
+  #message {
+    font-weight: bold;
+    margin: 1em 0 0.5em 0;
+  }
+  #tree-output {
+    white-space: pre-wrap;
+    margin-top: 1em;
+    border: 1px solid black;
+    padding: 0.4em;
+    max-height: 18em;
+    overflow-y: auto;
+    font-size: 0.9em;
+  }
+  #path-trace {
+    white-space: pre-wrap;
+    margin-top: 1em;
+    border: 1px solid black;
+    padding: 0.4em;
+    max-height: 12em;
+    overflow-y: auto;
+    font-size: 0.9em;
+  }
+  hr {
+    margin:1em 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>Decision Tree Explorer</h1>
+
+<p>
+This tool lets you build, edit, and explore decision trees interactively. You can create nodes representing questions or decisions, connect nodes via branches with conditions, and simulate decision flow. 
+</p>
+
+<hr />
+
+<section>
+<h2>1. Create / Edit Nodes</h2>
+<p>Nodes represent points in your decision tree. Each node has a label (question or decision) and can have multiple branches connecting to other nodes.</p>
+
+<label for="new-node-label">New Node Label:</label>
+<input type="text" id="new-node-label" placeholder="e.g. Is it raining?" />
+<button id="btn-add-node">Add Node</button>
+<button id="btn-clear-all">Clear All Nodes & Paths</button>
+
+<div id="message" aria-live="polite"></div>
+
+<h3>Existing Nodes:</h3>
+<div id="node-list" tabindex="0" aria-label="List of nodes">
+  <!-- Dynamic list -->
+</div>
+
+</section>
+
+<hr />
+
+<section>
+<h2>2. Add / Manage Branches (Edges)</h2>
+<p>Define edges (branches) from one node to another with a condition label.</p>
+
+<form id="branch-form">
+  <label for="branch-from">From Node:</label>
+  <select id="branch-from" required></select>
+
+  <label for="branch-condition">Condition Label:</label>
+  <input type="text" id="branch-condition" placeholder="e.g. Yes" required />
+
+  <label for="branch-to">To Node:</label>
+  <select id="branch-to" required></select>
+
+  <button type="submit">Add Branch</button>
+</form>
+
+<p><small>Note: Branch conditions help guide decisions from one node to another.</small></p>
+
+<button id="btn-clear-branches">Clear All Branches</button>
+<div id="branches-list" tabindex="0" aria-label="List of branches" style="max-height:9em;overflow-y:auto;border:1px solid black;padding:0.4em;margin-top:0.5em;"></div>
+
+</section>
+
+<hr />
+
+<section>
+<h2>3. Simulation Mode</h2>
+<p>Explore the decision tree by simulating choices from a start node. You can select a start node and navigate through decisions.</p>
+
+<label for="sim-start-node">Select Start Node:</label>
+<select id="sim-start-node"></select>
+<button id="btn-start-sim">Start Simulation</button>
+
+<div id="sim-container" style="margin-top:1em;"></div>
+<button id="btn-end-sim" style="display:none;margin-top:0.8em;">End Simulation</button>
+
+<div id="path-trace" aria-live="polite" style="display:none;" aria-label="Simulation path trace"></div>
+
+</section>
+
+<hr />
+
+<section>
+<h2>4. Import / Export Decision Tree (JSON)</h2>
+
+<label for="json-textarea">Paste JSON Below:</label>
+<textarea id="json-textarea" aria-label="Decision tree JSON"></textarea>
+<br />
+<button id="btn-import-json">Import JSON</button>
+<button id="btn-export-json">Export Current Tree as JSON</button>
+
+<div id="json-message" aria-live="polite" style="margin-top:0.5em;"></div>
+
+</section>
+
+<hr />
+
+<section>
+<h2>5. Analysis & Exploration Tools</h2>
+
+<button id="btn-validate-tree">Validate Tree (Check for unconnected nodes, cycles)</button>
+<button id="btn-show-depth">Show Tree Depth</button>
+<button id="btn-show-leaves">Show Leaf Nodes</button>
+
+<div id="analysis-output" aria-live="polite" style="margin-top:1em;white-space: pre-wrap; max-height: 20em; overflow-y: auto; border: 1px solid black; padding: 0.4em; font-size: 0.9em;"></div>
+
+</section>
+
+<script>
+(function(){
+  "use strict";
+
+  // Data structure: 
+  // nodes = Map of nodeId -> {label:string, branches: [ { condition:string, toNodeId:string } ] }
+  // nodeId is numeric string, incremental
+
+  let nodes = new Map();
+  let nextNodeId = 1;
+
+  // Sim state
+  let simActive = false;
+  let simCurrentNodeId = null;
+  let simPath = []; // array of { nodeId, choiceCondition }
+
+  // HTML elements references
+  const inputNewNodeLabel = document.getElementById('new-node-label');
+  const btnAddNode = document.getElementById('btn-add-node');
+  const btnClearAll = document.getElementById('btn-clear-all');
+  const nodeListDiv = document.getElementById('node-list');
+  const messageDiv = document.getElementById('message');
+
+  const branchForm = document.getElementById('branch-form');
+  const branchFromSelect = document.getElementById('branch-from');
+  const branchToSelect = document.getElementById('branch-to');
+  const branchConditionInput = document.getElementById('branch-condition');
+  const branchesListDiv = document.getElementById('branches-list');
+  const btnClearBranches = document.getElementById('btn-clear-branches');
+
+  const simStartNodeSelect = document.getElementById('sim-start-node');
+  const btnStartSim = document.getElementById('btn-start-sim');
+  const simContainerDiv = document.getElementById('sim-container');
+  const btnEndSim = document.getElementById('btn-end-sim');
+  const pathTraceDiv = document.getElementById('path-trace');
+
+  const jsonTextarea = document.getElementById('json-textarea');
+  const btnImportJson = document.getElementById('btn-import-json');
+  const btnExportJson = document.getElementById('btn-export-json');
+  const jsonMessageDiv = document.getElementById('json-message');
+
+  const btnValidateTree = document.getElementById('btn-validate-tree');
+  const btnShowDepth = document.getElementById('btn-show-depth');
+  const btnShowLeaves = document.getElementById('btn-show-leaves');
+  const analysisOutputDiv = document.getElementById('analysis-output');
+
+  // Utilities
+
+  function resetMessage() {
+    messageDiv.textContent = '';
+    jsonMessageDiv.textContent = '';
+    analysisOutputDiv.textContent = '';
+  }
+
+  function displayMessage(msg, isError = false) {
+    messageDiv.textContent = msg;
+    messageDiv.style.color = isError ? 'red' : 'black';
+  }
+  function displayJsonMessage(msg, isError = false) {
+    jsonMessageDiv.textContent = msg;
+    jsonMessageDiv.style.color = isError ? 'red' : 'black';
+  }
+  function displayAnalysis(msg) {
+    analysisOutputDiv.textContent = msg;
+  }
+
+  function sanitizeLabel(label) {
+    return label.trim().replace(/\s+/g, ' ');
+  }
+
+  // Node management
+
+  function addNode(label) {
+    if (!label) return null;
+    let nodeId = String(nextNodeId++);
+    nodes.set(nodeId, { label: label, branches: [] });
+    return nodeId;
+  }
+
+  function deleteNode(nodeId) {
+    if (!nodes.has(nodeId)) return false;
+
+    // Remove the node
+    nodes.delete(nodeId);
+
+    // Remove any branches referencing this node
+    for (let [nid, node] of nodes.entries()) {
+      node.branches = node.branches.filter(branch => branch.toNodeId !== nodeId);
+    }
+    return true;
+  }
+
+  // Branch management
+
+  function addBranch(fromNodeId, condition, toNodeId) {
+    if (!nodes.has(fromNodeId)) return false;
+    if (!nodes.has(toNodeId)) return false;
+    if (!condition) return false;
+
+    let node = nodes.get(fromNodeId);
+    // Do not allow duplicate condition on same node
+    let exists = node.branches.some(b => b.condition === condition);
+    if (exists) return false;
+
+    node.branches.push({ condition: condition, toNodeId: toNodeId });
+    return true;
+  }
+
+  function deleteBranch(fromNodeId, condition) {
+    if (!nodes.has(fromNodeId)) return false;
+    let node = nodes.get(fromNodeId);
+    let before = node.branches.length;
+    node.branches = node.branches.filter(b => b.condition !== condition);
+    return before !== node.branches.length;
+  }
+
+  function clearAllBranches() {
+    for (let node of nodes.values()) {
+      node.branches = [];
+    }
+  }
+
+  // UI refresh functions
+
+  function refreshNodeList() {
+    nodeListDiv.innerHTML = '';
+    if (nodes.size === 0) {
+      nodeListDiv.textContent = '(No nodes created yet)';
+      return;
+    }
+    for (let [id, node] of nodes.entries()) {
+      let div = document.createElement('div');
+      div.tabIndex = -1;
+      let branchesStr = node.branches.length > 0
+        ? node.branches.map(b => `[${b.condition}]→${nodes.get(b.toNodeId)?.label ?? '(broken)'} (id:${b.toNodeId})`).join('; ')
+        : '(no branches)';
+      div.textContent = `ID:${id} - ${node.label} → ${branchesStr}`;
+
+      // Add delete node button for each node
+      let delBtn = document.createElement('button');
+      delBtn.textContent = 'Delete Node';
+      delBtn.style.marginLeft = '0.8em';
+      delBtn.addEventListener('click', () => {
+        if(simActive) {
+          alert('Stop simulation before deleting nodes.');
+          return;
+        }
+        if(confirm(`Delete node ID:${id} "${node.label}" and all referencing branches?`)) {
+          deleteNode(id);
+          refreshAll();
+          resetSimulation();
+          displayMessage(`Deleted node ID:${id}`, false);
+        }
+      });
+      div.appendChild(delBtn);
+
+      nodeListDiv.appendChild(div);
+    }
+  }
+
+  function refreshBranchDropdowns() {
+    // for branch-from and branch-to selects
+    let fragFrom = document.createDocumentFragment();
+    let fragTo = document.createDocumentFragment();
+
+    if (nodes.size === 0) {
+      branchFromSelect.innerHTML = "";
+      branchToSelect.innerHTML = "";
+      return;
+    }
+    // Sort nodes by id numeric ascending
+    let sortedNodes = Array.from(nodes.entries()).sort(([a], [b]) => (+a) - (+b));
+    sortedNodes.forEach(([id, node]) => {
+      let optFrom = document.createElement('option');
+      optFrom.value = id;
+      optFrom.textContent = `ID:${id} - ${node.label}`;
+      fragFrom.appendChild(optFrom);
+
+      let optTo = document.createElement('option');
+      optTo.value = id;
+      optTo.textContent = `ID:${id} - ${node.label}`;
+      fragTo.appendChild(optTo);
+    });
+    branchFromSelect.innerHTML = '';
+    branchToSelect.innerHTML = '';
+    branchFromSelect.appendChild(fragFrom);
+    branchToSelect.appendChild(fragTo);
+
+    // Also refresh sim start node select
+    refreshSimStartNodeSelect();
+  }
+
+  function refreshBranchesList() {
+    branchesListDiv.innerHTML = '';
+    let totalBranches = 0;
+    for(let [id, node] of nodes.entries()) {
+      if(node.branches.length === 0) continue;
+      node.branches.forEach(branch => {
+        let bdiv = document.createElement('div');
+        bdiv.tabIndex = -1;
+        let toLabel = nodes.get(branch.toNodeId)?.label ?? '(broken)';
+        bdiv.textContent = `From ID:${id} (${node.label}) [${branch.condition}] → ID:${branch.toNodeId} (${toLabel})`;
+
+        // Add delete branch button
+        let delBbtn = document.createElement('button');
+        delBbtn.textContent = 'Delete Branch';
+        delBbtn.style.marginLeft = '0.8em';
+        delBbtn.addEventListener('click', () => {
+          if(simActive) {
+            alert('Stop simulation before deleting branches.');
+            return;
+          }
+          if(confirm(`Delete this branch (From ID:${id} condition [${branch.condition}])?`)) {
+            deleteBranch(id, branch.condition);
+            refreshAll();
+            resetSimulation();
+            displayMessage('Branch deleted.', false);
+          }
+        });
+        bdiv.appendChild(delBbtn);
+
+        branchesListDiv.appendChild(bdiv);
+        totalBranches++;
+      });
+    }
+    if(totalBranches === 0){
+      branchesListDiv.textContent = '(No branches defined)';
+    }
+  }
+
+  function refreshSimStartNodeSelect() {
+    let prevVal = simStartNodeSelect.value;
+    simStartNodeSelect.innerHTML = '';
+    if(nodes.size === 0) {
+      let opt = document.createElement('option');
+      opt.textContent = '(no nodes)';
+      opt.value = '';
+      simStartNodeSelect.appendChild(opt);
+      return;
+    }
+    let sorted = Array.from(nodes.entries()).sort(([a], [b]) => (+a) - (+b));
+    for(let [id, node] of sorted){
+      let opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `ID:${id} - ${node.label}`;
+      simStartNodeSelect.appendChild(opt);
+    }
+    if(prevVal && nodes.has(prevVal)) {
+      simStartNodeSelect.value = prevVal;
+    }
+  }
+
+  function refreshAll() {
+    resetMessage();
+    refreshNodeList();
+    refreshBranchDropdowns();
+    refreshBranchesList();
+  }
+
+  // Simulation functions
+
+  function resetSimulation() {
+    simActive = false;
+    simCurrentNodeId = null;
+    simPath = [];
+    simContainerDiv.innerHTML = '';
+    btnEndSim.style.display = 'none';
+    pathTraceDiv.style.display = 'none';
+    pathTraceDiv.textContent = '';
+    btnStartSim.disabled = false;
+    simStartNodeSelect.disabled = false;
+  }
+
+  function startSimulation(startNodeId) {
+    if (!nodes.has(startNodeId)) {
+      alert('Start node does not exist.');
+      return;
+    }
+    simActive = true;
+    simCurrentNodeId = startNodeId;
+    simPath = [{nodeId: startNodeId, choiceCondition: null}]; // first node, no choice yet
+
+    btnStartSim.disabled = true;
+    simStartNodeSelect.disabled = true;
+    btnEndSim.style.display = 'inline';
+    pathTraceDiv.style.display = 'block';
+    updateSimulationUI();
+  }
+
+  function endSimulation() {
+    resetSimulation();
+    displayMessage('Simulation ended.', false);
+  }
+
+  function updateSimulationUI() {
+    simContainerDiv.innerHTML = '';
+
+    if(!simActive || !simCurrentNodeId) return;
+
+    let currentNode = nodes.get(simCurrentNodeId);
+    if(!currentNode) {
+      simContainerDiv.textContent = 'Current node not found.';
+      return;
+    }
+
+    // Show current node label:
+    let pNodeLabel = document.createElement('p');
+    pNodeLabel.textContent = `Current Node [ID:${simCurrentNodeId}]: ${currentNode.label}`;
+    simContainerDiv.appendChild(pNodeLabel);
+
+    if(currentNode.branches.length === 0){
+      // Leaf node - no branches:
+      let pLeaf = document.createElement('p');
+      pLeaf.textContent = "(Leaf node - no further branches)";
+      simContainerDiv.appendChild(pLeaf);
+      updatePathTrace();
+      return;
+    }
+
+    // Show choices as buttons:
+    let choicesContainer = document.createElement('div');
+    choicesContainer.setAttribute('role', 'list');
+    choicesContainer.setAttribute('aria-label', 'Decision choices from current node');
+    for(let branch of currentNode.branches){
+      let btnChoice = document.createElement('button');
+      let toLabel = nodes.get(branch.toNodeId)?.label ?? '(broken)';
+      btnChoice.textContent = `[${branch.condition}] → ${toLabel}`;
+      btnChoice.setAttribute('role', 'listitem');
+      btnChoice.addEventListener('click', () => {
+        chooseBranch(branch.condition, branch.toNodeId);
+      });
+      choicesContainer.appendChild(btnChoice);
+    }
+    simContainerDiv.appendChild(choicesContainer);
+
+    updatePathTrace();
+  }
+
+  function chooseBranch(condition, toNodeId) {
+    if (!nodes.has(toNodeId)) {
+      alert('Target node does not exist.');
+      return;
+    }
+    simCurrentNodeId = toNodeId;
+    simPath.push({nodeId: toNodeId, choiceCondition: condition});
+    updateSimulationUI();
+  }
+
+  function updatePathTrace() {
+    let lines = [];
+    lines.push('Decision Path Trace:');
+    for(let i=0; i<simPath.length; i++){
+      let step = simPath[i];
+      let node = nodes.get(step.nodeId);
+      let line = `${i+1}. Node [ID:${step.nodeId}]: ${node?.label ?? '(broken)'}`
+      if(i > 0){
+        line += `  (via condition [${step.choiceCondition}])`;
+      }
+      lines.push(line);
+    }
+    pathTraceDiv.textContent = lines.join('\n');
+  }
+
+  // Import/Export functions
+
+  function exportToJson() {
+    // export nodes as array of objects with id, label, branches.
+    let arr = Array.from(nodes.entries()).map(([id, node]) => {
+      return { id, label: node.label, branches: node.branches.slice() };
+    });
+    return JSON.stringify(arr, null, 2);
+  }
+
+  function importFromJson(text) {
+    try {
+      let arr = JSON.parse(text);
+      if(!Array.isArray(arr)) throw new Error('Invalid format: Expected an array.');
+      let tempNodes = new Map();
+      let maxId = 0;
+
+      for(let obj of arr){
+        if(typeof obj.id !== 'string' && typeof obj.id !== 'number'){
+          throw new Error('Node id must be string or number.');
+        }
+        let id = String(obj.id);
+        if(tempNodes.has(id)){
+          throw new Error(`Duplicate node id found: ${id}`);
+        }
+        if(typeof obj.label !== 'string'){
+          throw new Error('Node label must be string.');
+        }
+        if(!Array.isArray(obj.branches)){
+          throw new Error('Node branches must be array.');
+        }
+        // Validate branches
+        for(let b of obj.branches){
+          if(typeof b.condition !== 'string') throw new Error('Branch condition must be string.');
+          if(typeof b.toNodeId !== 'string' && typeof b.toNodeId !== 'number') throw new Error('Branch toNodeId must be string or number.');
+        }
+        tempNodes.set(id, {label: obj.label, branches: obj.branches.map(b => ({condition: b.condition, toNodeId: String(b.toNodeId)}))});
+        let numericId = (+id);
+        if(!isNaN(numericId) && numericId > maxId){
+          maxId = numericId;
+        }
+      }
+      // Verify all branch targets exist
+      for(let [nid, node] of tempNodes.entries()){
+        for(let branch of node.branches){
+          if(!tempNodes.has(branch.toNodeId)){
+            throw new Error(`Branch target node ID:${branch.toNodeId} not found for branch from node ID:${nid}`);
+          }
+        }
+      }
+      // All good - replace current nodes
+      nodes = tempNodes;
+      nextNodeId = maxId + 1;
+      resetSimulation();
+      refreshAll();
+      displayJsonMessage('Import successful.', false);
+      return true;
+    }catch(e){
+      displayJsonMessage('Import error: ' + e.message, true);
+      return false;
+    }
+  }
+
+  // Analysis and Exploration
+
+  // Detect unconnected nodes
+  function findUnconnectedNodes() {
+    if(nodes.size === 0) return [];
+
+    // Consider a node connected if it is reachable from any root node (node without inbound edges)
+    // First find inbound edges count:
+    let inbound = new Map();
+    for(let nodeId of nodes.keys()){
+      inbound.set(nodeId, 0);
+    }
+    for(let node of nodes.values()){
+      for(let b of node.branches){
+        if(inbound.has(b.toNodeId)) inbound.set(b.toNodeId, inbound.get(b.toNodeId)+1);
+      }
+    }
+    // roots = nodes with zero inbound edges
+    let roots = Array.from(inbound.entries()).filter(([nid, count]) => count === 0).map(([nid]) => nid);
+    if(roots.length === 0){
+      // Then all nodes have inbound edges, treat all nodes as roots to check connectivity:
+      roots = Array.from(nodes.keys());
+    }
+
+    let visited = new Set();
+
+    function dfs(nid) {
+      if(visited.has(nid)) return;
+      visited.add(nid);
+      let node = nodes.get(nid);
+      if(!node) return;
+      node.branches.forEach(b => dfs(b.toNodeId));
+    }
+    roots.forEach(rid => dfs(rid));
+
+    let unconnected = [];
+    for(let nid of nodes.keys()){
+      if(!visited.has(nid)){
+        unconnected.push(nid);
+      }
+    }
+    return unconnected;
+  }
+
+  // Detect cycles using DFS White/Grey/Black coloring
+  function findCycles() {
+    let color = new Map(); // white=0, grey=1, black=2
+    for(let nid of nodes.keys()){
+      color.set(nid, 0);
+    }
+    let cycles = [];
+    let stack = [];
+
+    function dfs(nodeId) {
+      color.set(nodeId, 1);
+      stack.push(nodeId);
+      let node = nodes.get(nodeId);
+      for(let b of node.branches){
+        let toId = b.toNodeId;
+        let c = color.get(toId);
+        if(c === 0){
+          if(dfs(toId)) return true;
+        } else if(c === 1){
+          // cycle found - get cycle path from stack
+          let idx = stack.indexOf(toId);
+          let cyclePath = stack.slice(idx).concat(toId);
+          cycles.push(cyclePath);
+        }
+      }
+      stack.pop();
+      color.set(nodeId, 2);
+      return false;
+    }
+
+    for(let nid of nodes.keys()){
+      if(color.get(nid) === 0){
+        dfs(nid);
+      }
+    }
+    return cycles;
+  }
+
+  // Calculate max depth of tree from all roots (nodes with no inbound edges)
+  function calcMaxDepth() {
+    if(nodes.size === 0) return 0;
+
+    // Find roots (no inbound edges)
+    let inbound = new Map();
+    for(let nid of nodes.keys()){
+      inbound.set(nid, 0);
+    }
+    for(let node of nodes.values()){
+      for(let b of node.branches){
+        if(inbound.has(b.toNodeId)) inbound.set(b.toNodeId, inbound.get(b.toNodeId)+1);
+      }
+    }
+    let roots = Array.from(inbound.entries()).filter(([nid, count]) => count === 0).map(([nid]) => nid);
+    if(roots.length === 0){
+      roots = Array.from(nodes.keys());
+    }
+
+    let memo = new Map();
+
+    function dfsDepth(nid) {
+      if(memo.has(nid)) return memo.get(nid);
+      let node = nodes.get(nid);
+      if(!node || node.branches.length === 0) {
+        memo.set(nid, 1);
+        return 1;
+      }
+      let maxChildDepth = 0;
+      for(let b of node.branches){
+        let d = dfsDepth(b.toNodeId);
+        if(d > maxChildDepth) maxChildDepth = d;
+      }
+      memo.set(nid, 1 + maxChildDepth);
+      return 1+ maxChildDepth;
+    }
+
+    let maxDepth = 0;
+    roots.forEach(rid => {
+      let d = dfsDepth(rid);
+      if(d > maxDepth) maxDepth = d;
+    });
+    return maxDepth;
+  }
+
+  // Find leaves (nodes with no branches out)
+  function findLeaves() {
+    let leaves = [];
+    for(let [nid, node] of nodes.entries()){
+      if(node.branches.length === 0){
+        leaves.push(nid);
+      }
+    }
+    return leaves;
+  }
+
+  // Event listeners
+
+  btnAddNode.addEventListener('click', () => {
+    if(simActive){
+      alert('Stop simulation before adding nodes.');
+      return;
+    }
+    let label = sanitizeLabel(inputNewNodeLabel.value);
+    if(!label) {
+      displayMessage('Please enter a valid node label.', true);
+      return;
+    }
+    addNode(label);
+    inputNewNodeLabel.value = '';
+    refreshAll();
+    displayMessage(`Node added: "${label}"`, false);
+  });
+
+  btnClearAll.addEventListener('click', () => {
+    if(!confirm('Are you sure you want to clear all nodes and branches? This cannot be undone.')) return;
+    nodes.clear();
+    nextNodeId = 1;
+    resetSimulation();
+    refreshAll();
+    displayMessage('All nodes and branches cleared.', false);
+  });
+
+  branchForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if(simActive) {
+      alert('Stop simulation before adding branches.');
+      return;
+    }
+    let fromId = branchFromSelect.value;
+    let toId = branchToSelect.value;
+    let condition = sanitizeLabel(branchConditionInput.value);
+    if(!fromId || !toId || !condition){
+      displayMessage('Please fill all branch fields.', true);
+      return;
+    }
+    if(fromId === toId){
+      if(!confirm('Branch from a node to itself. Are you sure?')) return;
+    }
+    if(!addBranch(fromId, condition, toId)) {
+      displayMessage('Failed to add branch. Condition labels must be unique for the same node.', true);
+      return;
+    }
+    branchConditionInput.value = '';
+    refreshAll();
+    displayMessage(`Branch added: From ID:${fromId} [${condition}] to ID:${toId}`, false);
+  });
+
+  btnClearBranches.addEventListener('click', () => {
+    if(simActive){
+      alert('Stop simulation before clearing branches.');
+      return;
+    }
+    if(!confirm('Clear all branches?')) return;
+    clearAllBranches();
+    refreshAll();
+    displayMessage('All branches cleared.', false);
+  });
+
+  btnStartSim.addEventListener('click', () => {
+    let startId = simStartNodeSelect.value;
+    if(!startId || !nodes.has(startId)){
+      alert('Please select a valid start node.');
+      return;
+    }
+    startSimulation(startId);
+    displayMessage(`Simulation started at node ID:${startId}`, false);
+  });
+
+  btnEndSim.addEventListener('click', () => {
+    endSimulation();
+  });
+
+  btnImportJson.addEventListener('click', () => {
+    if(simActive){
+      alert('Stop simulation before importing.');
+      return;
+    }
+    let text = jsonTextarea.value.trim();
+    if(!text) {
+      displayJsonMessage('Paste some JSON to import.', true);
+      return;
+    }
+    if(importFromJson(text)){
+      jsonTextarea.value = '';
+    }
+  });
+
+  btnExportJson.addEventListener('click', () => {
+    let json = exportToJson();
+    jsonTextarea.value = json;
+    displayJsonMessage('Export completed. JSON updated in textarea.', false);
+  });
+
+  btnValidateTree.addEventListener('click', () => {
+    let output = [];
+    let cycles = findCycles();
+    let unconnected = findUnconnectedNodes();
+
+    if(cycles.length === 0) {
+      output.push('No cycles detected.');
+    } else {
+      output.push(`Cycles found (${cycles.length}):`);
+      cycles.forEach((cycle, i) => {
+        let pathLabels = cycle.map(nid => {
+          let n = nodes.get(nid);
+          return `ID:${nid} (${n ? n.label : 'broken'})`;
+        });
+        output.push(` ${i+1}. ${pathLabels.join(' → ')}`);
+      });
+    }
+
+    if(unconnected.length === 0){
+      output.push('No unconnected nodes detected.');
+    } else {
+      output.push(`Unconnected nodes (${unconnected.length}):`);
+      unconnected.forEach(nid => {
+        let n = nodes.get(nid);
+        output.push(` - ID:${nid} (${n ? n.label : 'broken'})`);
+      });
+    }
+    displayAnalysis(output.join('\n'));
+  });
+
+  btnShowDepth.addEventListener('click', () => {
+    let depth = calcMaxDepth();
+    displayAnalysis(`Maximum decision tree depth: ${depth}`);
+  });
+
+  btnShowLeaves.addEventListener('click', () => {
+    let leaves = findLeaves();
+    if(leaves.length === 0) {
+      displayAnalysis('No leaf nodes found (every node has at least one outgoing branch).');
+    } else {
+      let lines = ['Leaf nodes (no outgoing branches):'];
+      for(let nid of leaves) {
+        let n = nodes.get(nid);
+        lines.push(` - ID:${nid} (${n ? n.label : 'broken'})`);
+      }
+      displayAnalysis(lines.join('\n'));
+    }
+  });
+
+
+  // Initialize UI on page load
+  refreshAll();
+  resetSimulation();
+
+})();
+</script>
+
+</body>
+</html>

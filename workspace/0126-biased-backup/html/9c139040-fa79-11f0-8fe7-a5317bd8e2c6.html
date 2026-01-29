@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>B+ Tree Interactive Demo</title>
+  <style>
+    /* Minimal: only layout spacing so elements don't overlap. No colors, no fancy styling. */
+    body { font-family: Arial, sans-serif; margin: 12px; color: #000; background: #fff; }
+    .row { margin-bottom: 8px; }
+    input[type="text"], input[type="number"], select { width: 220px; }
+    button { margin-right: 6px; }
+    pre { white-space: pre-wrap; }
+    .controls { max-width: 1000px; }
+    .panel { border: 1px solid #000; padding: 6px; margin-bottom: 8px; }
+    .small { font-size: 12px; }
+    .nodeBox { display: inline-block; padding: 4px; margin: 6px; border: 1px solid #000; }
+  </style>
+</head>
+<body>
+  <h2>B+ Tree Interactive Demo</h2>
+
+  <div class="controls">
+    <div class="panel">
+      <div class="row">
+        Order (m): <input id="orderInput" type="number" min="3" value="4"> (maximum children per internal node)
+        <button id="initBtn">Initialize Tree</button>
+        <button id="resetBtn">Reset & Clear History</button>
+      </div>
+      <div class="small">Notes: This demo uses order m where each internal node can have at most m children and m-1 keys. Leaves store up to m-1 keys. Many algorithmic variants exist; this implementation picks conventional split/borrow/merge rules and records detailed steps.</div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        Insert key: <input id="keyInput" type="number" value="10">
+        <button id="insertBtn">Insert (Immediate)</button>
+        <button id="insertStepBtn">Insert (Step Mode)</button>
+        Insert multiple (comma-separated): <input id="multiInsertInput" type="text" placeholder="e.g. 5,12,7">
+        <button id="multiInsertBtn">Insert Bulk (Immediate)</button>
+        <button id="multiInsertStepBtn">Insert Bulk (Step Mode)</button>
+      </div>
+
+      <div class="row">
+        Delete key: <input id="delInput" type="number">
+        <button id="delBtn">Delete (Immediate)</button>
+        <button id="delStepBtn">Delete (Step Mode)</button>
+      </div>
+
+      <div class="row">
+        Find key: <input id="findInput" type="number">
+        <button id="findBtn">Find</button>
+        Range search: from <input id="rfrom" type="number" style="width:90px"> to <input id="rto" type="number" style="width:90px">
+        <button id="rangeBtn">Range Search</button>
+      </div>
+
+      <div class="row">
+        Quick slider insert: <input id="slider" type="range" min="0" max="100" value="10"> <span id="sliderVal">10</span>
+        <button id="insertSliderBtn">Insert Slider Value</button>
+      </div>
+
+      <div class="row">
+        Random bulk: count <input id="randCount" type="number" value="10" min="1" style="width:80px"> range max <input id="randMax" type="number" value="100" style="width:80px">
+        <button id="randBtn">Random Insert (Immediate)</button>
+        <button id="randStepBtn">Random Insert (Step Mode)</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      Step controls:
+      <div class="row">
+        <button id="stepPrev">Prev Step</button>
+        <button id="stepNext">Next Step</button>
+        <button id="stepFirst">First</button>
+        <button id="stepLast">Last</button>
+        <button id="commitSteps">Commit Steps to Tree</button>
+        <button id="discardSteps">Discard Steps</button>
+        Autoplay: <input id="autoPlay" type="checkbox"> Interval (ms): <input id="interval" type="number" value="800" style="width:80px">
+      </div>
+      <div class="row">
+        Speed slider: <input id="speedSlider" type="range" min="100" max="2000" value="800"> <span id="speedVal">800ms</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      History & State:
+      <div class="row">
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+        <button id="exportBtn">Export JSON</button>
+        <input id="importArea" type="text" placeholder='Paste JSON here' style="width:420px">
+        <button id="importBtn">Import</button>
+        <button id="clearLogBtn">Clear Operation Log</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      View options:
+      <div class="row">
+        <label><input id="showNodeIds" type="checkbox" checked> Show node ids</label>
+        <label style="margin-left:12px"><input id="showCapacity" type="checkbox"> Show capacity info</label>
+        <label style="margin-left:12px"><input id="showLeafList" type="checkbox" checked> Show leaf linked list</label>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Current Tree View:</strong>
+    <div id="treeView"></div>
+    <div id="leafListView"></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <strong>Operation Log / Algorithm Trace:</strong>
+    <pre id="log" style="height:200px; overflow:auto; border:1px solid #000; padding:6px;"></pre>
+  </div>
+
+  <script>
+    // B+ Tree Interactive Demo - minimal visuals, maximal interactivity
+    (function(){
+      // Utility
+      function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+      function idGen() { return 'n' + (++idCounter); }
+      function logLine(s){ logs.push(s); renderLog(); }
+      function renderLog(){ document.getElementById('log').textContent = logs.join('\\n'); }
+
+      // state
+      var idCounter = 0;
+      var tree = null;
+      var logs = [];
+      var history = [];
+      var future = [];
+
+      // Step mode
+      var currentSteps = []; // snapshots {state, desc}
+      var stepIndex = -1;
+      var autoplayInterval = null;
+
+      // UI elements
+      var orderInput = document.getElementById('orderInput');
+      var initBtn = document.getElementById('initBtn');
+      var resetBtn = document.getElementById('resetBtn');
+
+      var keyInput = document.getElementById('keyInput');
+      var insertBtn = document.getElementById('insertBtn');
+      var insertStepBtn = document.getElementById('insertStepBtn');
+      var multiInsertInput = document.getElementById('multiInsertInput');
+      var multiInsertBtn = document.getElementById('multiInsertBtn');
+      var multiInsertStepBtn = document.getElementById('multiInsertStepBtn');
+
+      var delInput = document.getElementById('delInput');
+      var delBtn = document.getElementById('delBtn');
+      var delStepBtn = document.getElementById('delStepBtn');
+
+      var findInput = document.getElementById('findInput');
+      var findBtn = document.getElementById('findBtn');
+
+      var rfrom = document.getElementById('rfrom'), rto = document.getElementById('rto'), rangeBtn = document.getElementById('rangeBtn');
+
+      var slider = document.getElementById('slider');
+      var sliderVal = document.getElementById('sliderVal');
+      var insertSliderBtn = document.getElementById('insertSliderBtn');
+
+      var randCount = document.getElementById('randCount');
+      var randMax = document.getElementById('randMax');
+      var randBtn = document.getElementById('randBtn');
+      var randStepBtn = document.getElementById('randStepBtn');
+
+      var stepPrev = document.getElementById('stepPrev'), stepNext = document.getElementById('stepNext'),
+          stepFirst = document.getElementById('stepFirst'), stepLast = document.getElementById('stepLast'),
+          commitSteps = document.getElementById('commitSteps'), discardSteps = document.getElementById('discardSteps'),
+          autoPlay = document.getElementById('autoPlay'), intervalInput = document.getElementById('interval'),
+          speedSlider = document.getElementById('speedSlider'), speedVal = document.getElementById('speedVal');
+
+      var undoBtn = document.getElementById('undoBtn'), redoBtn = document.getElementById('redoBtn'),
+          exportBtn = document.getElementById('exportBtn'), importBtn = document.getElementById('importBtn'),
+          importArea = document.getElementById('importArea'),
+          clearLogBtn = document.getElementById('clearLogBtn');
+
+      var showNodeIds = document.getElementById('showNodeIds'), showCapacity = document.getElementById('showCapacity'),
+          showLeafList = document.getElementById('showLeafList');
+
+      var treeView = document.getElementById('treeView'), leafListView = document.getElementById('leafListView');
+
+      // B+ Tree Implementation
+      function BPlusTree(m){
+        this.m = m;
+        this.maxKeys = m - 1;
+        this.minKeys = Math.ceil(this.maxKeys / 2);
+        this.nodeMap = {}; // id -> node
+        // create root leaf
+        var root = this._createNode(true);
+        this.root = root.id;
+      }
+      BPlusTree.prototype._createNode = function(isLeaf){
+        var n = { id: idGen(), isLeaf: !!isLeaf, keys: [], children: [], parent: null, next: null };
+        this.nodeMap[n.id] = n;
+        return n;
+      };
+
+      BPlusTree.prototype._getNode = function(id){ return this.nodeMap[id] || null; };
+
+      BPlusTree.prototype.findLeaf = function(key){
+        var node = this._getNode(this.root);
+        var path = [node.id];
+        while(!node.isLeaf){
+          var i = 0;
+          while(i < node.keys.length && key >= node.keys[i]) i++;
+          var childId = node.children[i];
+          node = this._getNode(childId);
+          path.push(node.id);
+        }
+        return {leaf: node, path: path};
+      };
+
+      BPlusTree.prototype.search = function(key){
+        var r = this.findLeaf(key);
+        var leaf = r.leaf;
+        for(var i=0;i<leaf.keys.length;i++){
+          if(leaf.keys[i] === key) return {found:true, node:leaf, index:i, path:r.path};
+        }
+        return {found:false, node:leaf, index:-1, path:r.path};
+      };
+
+      // snapshot: plain serializable state
+      BPlusTree.prototype.snapshot = function(){
+        return { root: this.root, m: this.m, nodes: clone(this.nodeMap) };
+      };
+
+      BPlusTree.prototype.restoreFromSnapshot = function(snap){
+        this.m = snap.m;
+        this.maxKeys = this.m - 1;
+        this.minKeys = Math.ceil(this.maxKeys / 2);
+        this.nodeMap = clone(snap.nodes);
+        this.root = snap.root;
+      };
+
+      // Insert (immediate) with full algorithm and logging, returns array of step snapshots for debugging (not used here)
+      BPlusTree.prototype.insert = function(key, stepRecorder){
+        // ignore duplicates: allow duplicates but store multiple entries (B+ trees often allow duplicates)
+        var res = this.findLeaf(key);
+        var leaf = res.leaf;
+        var insertIndex = 0;
+        while(insertIndex < leaf.keys.length && leaf.keys[insertIndex] < key) insertIndex++;
+        leaf.keys.splice(insertIndex,0,key);
+        if(stepRecorder) stepRecorder("Inserted key " + key + " into leaf " + leaf.id);
+        // check overflow
+        if(leaf.keys.length > this.maxKeys){
+          this._splitLeaf(leaf, stepRecorder);
+        }
+      };
+
+      BPlusTree.prototype._splitLeaf = function(leaf, stepRecorder){
+        // split into two leaves
+        var total = leaf.keys.length;
+        var splitAt = Math.ceil(total / 2);
+        var rightKeys = leaf.keys.splice(splitAt);
+        var right = this._createNode(true);
+        right.keys = rightKeys;
+        right.next = leaf.next;
+        leaf.next = right.id;
+        right.parent = leaf.parent;
+        if(stepRecorder) stepRecorder("Split leaf " + leaf.id + " into " + leaf.id + " and " + right.id + ". Promote key " + right.keys[0]);
+        var promoteKey = right.keys[0];
+        this._insertIntoParent(leaf, promoteKey, right, stepRecorder);
+      };
+
+      BPlusTree.prototype._insertIntoParent = function(leftNode, key, rightNode, stepRecorder){
+        if(leftNode.id === this.root){
+          // create new root
+          var newRoot = this._createNode(false);
+          newRoot.keys = [key];
+          newRoot.children = [leftNode.id, rightNode.id];
+          leftNode.parent = newRoot.id;
+          rightNode.parent = newRoot.id;
+          this.root = newRoot.id;
+          if(stepRecorder) stepRecorder("Created new root " + newRoot.id + " with key " + key);
+          return;
+        }
+        var parent = this._getNode(leftNode.parent);
+        // find position to insert key
+        var idx = 0;
+        while(idx < parent.keys.length && parent.keys[idx] <= key) idx++;
+        parent.keys.splice(idx,0,key);
+        parent.children.splice(idx+1,0,rightNode.id);
+        rightNode.parent = parent.id;
+        if(stepRecorder) stepRecorder("Inserted key " + key + " into parent " + parent.id);
+        if(parent.keys.length > this.maxKeys){
+          this._splitInternal(parent, stepRecorder);
+        }
+      };
+
+      BPlusTree.prototype._splitInternal = function(node, stepRecorder){
+        var totalKeys = node.keys.length;
+        var splitIdx = Math.ceil(totalKeys / 2);
+        var promoteKey = node.keys[splitIdx];
+        // left keeps keys[0..splitIdx-1], right gets keys[splitIdx+1..]
+        var right = this._createNode(false);
+        right.keys = node.keys.splice(splitIdx+1);
+        // children: right gets corresponding children
+        var movedChildren = node.children.splice(splitIdx+1);
+        right.children = movedChildren;
+        right.children.forEach(function(cid){
+          var c = this._getNode(cid); if(c) c.parent = right.id;
+        }, this);
+        // remove promoteKey from left.keys (it was at position splitIdx)
+        node.keys.splice(splitIdx,1); // remove promoteKey from left
+        if(stepRecorder) stepRecorder("Split internal node " + node.id + " into " + node.id + " and " + right.id + ". Promote key " + promoteKey);
+        // insert promoteKey into parent
+        this._insertIntoParent(node, promoteKey, right, stepRecorder);
+      };
+
+      // Delete (immediate) with merge/borrow algorithm
+      BPlusTree.prototype.delete = function(key, stepRecorder){
+        var searchRes = this.search(key);
+        if(!searchRes.found){
+          if(stepRecorder) stepRecorder("Key " + key + " not found (no deletion).");
+          return;
+        }
+        var leaf = searchRes.node;
+        var idx = searchRes.index;
+        leaf.keys.splice(idx,1);
+        if(stepRecorder) stepRecorder("Removed key " + key + " from leaf " + leaf.id);
+        // if leaf is root and now empty, handle
+        if(leaf.id === this.root){
+          // nothing to do further
+          if(leaf.keys.length === 0){
+            // keep empty root leaf (allowed)
+            if(stepRecorder) stepRecorder("Root leaf is empty but remains root.");
+          }
+          return;
+        }
+        // check underflow
+        if(leaf.keys.length < this.minKeys){
+          this._rebalanceAfterDelete(leaf, stepRecorder);
+        }
+      };
+
+      BPlusTree.prototype._rebalanceAfterDelete = function(node, stepRecorder){
+        if(node.id === this.root) return;
+        var parent = this._getNode(node.parent);
+        // find index of node in parent.children
+        var idx = parent.children.indexOf(node.id);
+        var leftSibling = idx > 0 ? this._getNode(parent.children[idx-1]) : null;
+        var rightSibling = idx < parent.children.length-1 ? this._getNode(parent.children[idx+1]) : null;
+
+        // try borrow from left
+        if(leftSibling && leftSibling.keys.length > this.minKeys){
+          // borrow last key from left
+          if(node.isLeaf){
+            var borrowed = leftSibling.keys.pop();
+            node.keys.unshift(borrowed);
+            // update parent key separating them
+            parent.keys[idx-1] = node.keys[0];
+            if(stepRecorder) stepRecorder("Borrowed key " + borrowed + " from left sibling " + leftSibling.id + " into leaf " + node.id + ". Updated parent key " + parent.keys[idx-1]);
+          } else {
+            // internal: borrow child from left
+            var borrowedKey = leftSibling.keys.pop();
+            var borrowedChildId = leftSibling.children.pop();
+            node.keys.unshift(parent.keys[idx-1]);
+            node.children.unshift(borrowedChildId);
+            parent.keys[idx-1] = borrowedKey;
+            var bc = this._getNode(borrowedChildId); if(bc) bc.parent = node.id;
+            if(stepRecorder) stepRecorder("Borrowed child " + borrowedChildId + " from left internal " + leftSibling.id + " into " + node.id + ". Moved up key.");
+          }
+          return;
+        }
+
+        // try borrow from right
+        if(rightSibling && rightSibling.keys.length > this.minKeys){
+          if(node.isLeaf){
+            var borrowed = rightSibling.keys.shift();
+            node.keys.push(borrowed);
+            parent.keys[idx] = rightSibling.keys[0];
+            if(stepRecorder) stepRecorder("Borrowed key " + borrowed + " from right sibling " + rightSibling.id + " into leaf " + node.id + ". Updated parent key " + parent.keys[idx]);
+          } else {
+            var borrowedKey = rightSibling.keys.shift();
+            var borrowedChildId = rightSibling.children.shift();
+            node.keys.push(parent.keys[idx]);
+            node.children.push(borrowedChildId);
+            parent.keys[idx] = borrowedKey;
+            var bc2 = this._getNode(borrowedChildId); if(bc2) bc2.parent = node.id;
+            if(stepRecorder) stepRecorder("Borrowed child " + borrowedChildId + " from right internal " + rightSibling.id + " into " + node.id + ". Moved up key.");
+          }
+          return;
+        }
+
+        // else merge
+        if(leftSibling){
+          // merge node into leftSibling
+          if(node.isLeaf){
+            leftSibling.keys = leftSibling.keys.concat(node.keys);
+            leftSibling.next = node.next;
+            // remove node from parent
+            parent.children.splice(idx,1);
+            parent.keys.splice(idx-1,1);
+            delete this.nodeMap[node.id];
+            if(stepRecorder) stepRecorder("Merged leaf " + node.id + " into left sibling " + leftSibling.id + ". Removed separator key in parent.");
+          } else {
+            // internal: left + parent separator + node
+            var sep = parent.keys[idx-1];
+            leftSibling.keys.push(sep);
+            leftSibling.keys = leftSibling.keys.concat(node.keys);
+            leftSibling.children = leftSibling.children.concat(node.children);
+            leftSibling.children.forEach(function(cid){ var c = this._getNode(cid); if(c) c.parent = leftSibling.id; }, this);
+            parent.children.splice(idx,1);
+            parent.keys.splice(idx-1,1);
+            delete this.nodeMap[node.id];
+            if(stepRecorder) stepRecorder("Merged internal " + node.id + " into left sibling " + leftSibling.id + ". Pulled down separator " + sep);
+          }
+        } else if(rightSibling){
+          // merge rightSibling into node
+          if(node.isLeaf){
+            node.keys = node.keys.concat(rightSibling.keys);
+            node.next = rightSibling.next;
+            parent.children.splice(idx+1,1);
+            parent.keys.splice(idx,1);
+            delete this.nodeMap[rightSibling.id];
+            if(stepRecorder) stepRecorder("Merged right leaf " + rightSibling.id + " into " + node.id + ". Removed separator in parent.");
+          } else {
+            var sep2 = parent.keys[idx];
+            node.keys.push(sep2);
+            node.keys = node.keys.concat(rightSibling.keys);
+            node.children = node.children.concat(rightSibling.children);
+            node.children.forEach(function(cid){ var c = this._getNode(cid); if(c) c.parent = node.id; }, this);
+            parent.children.splice(idx+1,1);
+            parent.keys.splice(idx,1);
+            delete this.nodeMap[rightSibling.id];
+            if(stepRecorder) stepRecorder("Merged right internal " + rightSibling.id + " into " + node.id + ". Pulled down separator " + sep2);
+          }
+        }
+
+        // after merge, parent may underflow
+        if(parent.id === this.root && parent.keys.length === 0){
+          // collapse root
+          this.root = parent.children[0];
+          var newRoot = this._getNode(this.root);
+          newRoot.parent = null;
+          delete this.nodeMap[parent.id];
+          if(stepRecorder) stepRecorder("Collapsed empty root " + parent.id + ". New root is " + newRoot.id);
+          return;
+        }
+
+        if(parent.keys.length < this.minKeys){
+          this._rebalanceAfterDelete(parent, stepRecorder);
+        }
+      };
+
+      // Utility: pretty render tree by levels
+      function renderTreeFromSnapshot(snap){
+        // snap: { root, nodes: {id:node...} }
+        var output = document.createElement('div');
+        var nodes = snap.nodes;
+        if(!snap.root || !nodes[snap.root]) {
+          var p = document.createElement('div'); p.textContent = "(empty tree)"; output.appendChild(p); return output;
+        }
+        var q = [snap.root];
+        var nextLevel = [];
+        var levels = [];
+        var visited = {};
+        while(q.length){
+          var levelNodes = [];
+          for(var i=0;i<q.length;i++){
+            var nid = q[i];
+            var n = nodes[nid];
+            if(!n) continue;
+            levelNodes.push(n);
+            if(!n.isLeaf){
+              for(var j=0;j<n.children.length;j++){
+                nextLevel.push(n.children[j]);
+              }
+            }
+          }
+          levels.push(levelNodes);
+          q = nextLevel; nextLevel = [];
+          // break on infinite loops
+          if(levels.length > 100) break;
+        }
+        // create simple textual representation
+        levels.forEach(function(level, idx){
+          var row = document.createElement('div');
+          row.style.marginBottom = '6px';
+          var label = document.createElement('div'); label.textContent = 'Level ' + idx + ':';
+          row.appendChild(label);
+          var container = document.createElement('div');
+          level.forEach(function(n){
+            var nb = document.createElement('div');
+            nb.className = 'nodeBox';
+            var t = '[' + n.keys.join(', ') + ']';
+            if(showNodeIds.checked) t = n.id + ' ' + t;
+            if(showCapacity.checked){
+              t += ' (k=' + n.keys.length + ')';
+              if(!n.isLeaf) t += ' (c=' + n.children.length + ')';
+            }
+            if(!n.isLeaf){
+              t += '\\nchildren: (' + n.children.join(',') + ')';
+            } else {
+              if(showLeafList.checked) t += ' -> ' + (n.next || 'null');
+            }
+            nb.textContent = t;
+            container.appendChild(nb);
+          });
+          row.appendChild(container);
+          output.appendChild(row);
+        });
+        return output;
+      }
+
+      // Render current tree or current step snapshot
+      function renderCurrentView(){
+        var snap;
+        if(stepIndex >= 0 && currentSteps.length){
+          snap = currentSteps[stepIndex].state;
+        } else {
+          snap = tree.snapshot();
+        }
+        // render tree
+        treeView.innerHTML = '';
+        treeView.appendChild(renderTreeFromSnapshot(snap));
+        // render leaf linked list optionally
+        leafListView.innerHTML = '';
+        if(showLeafList.checked){
+          var nodes = snap.nodes;
+          var rootNode = nodes[snap.root];
+          if(rootNode){
+            // find leftmost leaf
+            var cur = rootNode;
+            while(cur && !cur.isLeaf){
+              cur = nodes[cur.children[0]];
+            }
+            var listDiv = document.createElement('div');
+            listDiv.textContent = 'Leaf linked list order: ';
+            while(cur){
+              var s = (showNodeIds.checked ? (cur.id + ' ') : '') + '[' + cur.keys.join(',') + ']';
+              var span = document.createElement('span'); span.textContent = s;
+              listDiv.appendChild(span);
+              if(!cur.next) break;
+              cur = nodes[cur.next];
+            }
+            leafListView.appendChild(listDiv);
+          }
+        }
+      }
+
+      // Step recorder: creates snapshots at key points
+      function createStepRecorder(prefix){
+        var steps = [];
+        return {
+          record: function(desc){
+            var snap = tree.snapshot();
+            steps.push({state: snap, desc: desc});
+            logLine((prefix?prefix+': ':'') + desc);
+          },
+          getSteps: function(){ return steps; }
+        };
+      }
+
+      // For step-mode wrapper on a sequence of keys
+      function performInsertWithSteps(keys, onComplete){
+        currentSteps = []; stepIndex = -1;
+        var recorder = createStepRecorder("InsertSequence");
+        recorder.record("Starting insertion sequence: [" + keys.join(', ') + "]");
+        // We'll perform each insertion but record snapshots after each microaction
+        keys.forEach(function(k){
+          recorder.record("Locate leaf for key " + k);
+          var res = tree.findLeaf(k);
+          var leaf = res.leaf;
+          var idx = 0;
+          while(idx < leaf.keys.length && leaf.keys[idx] < k) idx++;
+          leaf.keys.splice(idx,0,k);
+          recorder.record("Inserted key " + k + " into leaf " + leaf.id);
+          if(leaf.keys.length > tree.maxKeys){
+            // handle splits iteratively, inner functions will record
+            handleLeafSplitStepwise(leaf, recorder);
+          }
+        });
+        recorder.record("Finished insertion sequence.");
+        currentSteps = recorder.getSteps();
+        stepIndex = 0;
+        renderCurrentView();
+        if(onComplete) onComplete();
+      }
+
+      function handleLeafSplitStepwise(leaf, recorder){
+        // while overflow, split and propagate
+        var cur = leaf;
+        while(cur.keys.length > tree.maxKeys){
+          var total = cur.keys.length;
+          var splitAt = Math.ceil(total/2);
+          var rightKeys = cur.keys.splice(splitAt);
+          var right = tree._createNode(true);
+          right.keys = rightKeys;
+          right.next = cur.next;
+          cur.next = right.id;
+          right.parent = cur.parent;
+          recorder.record("Split leaf " + cur.id + " into " + cur.id + " and " + right.id + ". Promote key " + right.keys[0]);
+          var promoteKey = right.keys[0];
+          // insert into parent stepwise
+          cur = insertIntoParentStepwise(cur, promoteKey, right, recorder);
+        }
+      }
+
+      function insertIntoParentStepwise(leftNode, key, rightNode, recorder){
+        if(leftNode.id === tree.root){
+          var newRoot = tree._createNode(false);
+          newRoot.keys = [key];
+          newRoot.children = [leftNode.id, rightNode.id];
+          leftNode.parent = newRoot.id;
+          rightNode.parent = newRoot.id;
+          tree.root = newRoot.id;
+          recorder.record("Created new root " + newRoot.id + " with key " + key);
+          return newRoot;
+        }
+        var parent = tree._getNode(leftNode.parent);
+        var idx = 0;
+        while(idx < parent.keys.length && parent.keys[idx] <= key) idx++;
+        parent.keys.splice(idx,0,key);
+        parent.children.splice(idx+1,0,rightNode.id);
+        rightNode.parent = parent.id;
+        recorder.record("Inserted key " + key + " into parent " + parent.id);
+        if(parent.keys.length > tree.maxKeys){
+          return splitInternalStepwise(parent, recorder);
+        }
+        return parent;
+      }
+
+      function splitInternalStepwise(node, recorder){
+        var totalKeys = node.keys.length;
+        var splitIdx = Math.ceil(totalKeys/2);
+        var promoteKey = node.keys[splitIdx];
+        var right = tree._createNode(false);
+        right.keys = node.keys.splice(splitIdx+1);
+        var movedChildren = node.children.splice(splitIdx+1);
+        right.children = movedChildren;
+        right.children.forEach(function(cid){ var c = tree._getNode(cid); if(c) c.parent = right.id; });
+        node.keys.splice(splitIdx,1);
+        recorder.record("Split internal node " + node.id + " into " + node.id + " and " + right.id + ". Promote key " + promoteKey);
+        return insertIntoParentStepwise(node, promoteKey, right, recorder);
+      }
+
+      // For deletion step-mode
+      function performDeleteWithSteps(keys, onComplete){
+        currentSteps = []; stepIndex = -1;
+        var recorder = createStepRecorder("DeleteSequence");
+        recorder.record("Starting deletion sequence: [" + keys.join(', ') + "]");
+        keys.forEach(function(k){
+          var s = tree.search(k);
+          if(!s.found){
+            recorder.record("Key " + k + " not found; skip deletion.");
+            return;
+          }
+          var leaf = s.node;
+          leaf.keys.splice(s.index,1);
+          recorder.record("Deleted key " + k + " from leaf " + leaf.id);
+          if(leaf.id === tree.root){
+            recorder.record("Root leaf modified.");
+          } else if(leaf.keys.length < tree.minKeys){
+            // rebalance stepwise
+            rebalanceDeleteStepwise(leaf, recorder);
+          }
+        });
+        recorder.record("Finished deletion sequence.");
+        currentSteps = recorder.getSteps();
+        stepIndex = 0;
+        renderCurrentView();
+        if(onComplete) onComplete();
+      }
+
+      function rebalanceDeleteStepwise(node, recorder){
+        var cur = node;
+        while(true){
+          if(cur.id === tree.root) break;
+          var parent = tree._getNode(cur.parent);
+          var idx = parent.children.indexOf(cur.id);
+          var leftSibling = idx > 0 ? tree._getNode(parent.children[idx-1]) : null;
+          var rightSibling = idx < parent.children.length-1 ? tree._getNode(parent.children[idx+1]) : null;
+          if(leftSibling && leftSibling.keys.length > tree.minKeys){
+            if(cur.isLeaf){
+              var borrowed = leftSibling.keys.pop();
+              cur.keys.unshift(borrowed);
+              parent.keys[idx-1] = cur.keys[0];
+              recorder.record("Borrowed key " + borrowed + " from left sibling " + leftSibling.id + " into leaf " + cur.id + ". Updated parent key.");
+            } else {
+              var borrowedKey = leftSibling.keys.pop();
+              var borrowedChildId = leftSibling.children.pop();
+              cur.keys.unshift(parent.keys[idx-1]);
+              cur.children.unshift(borrowedChildId);
+              parent.keys[idx-1] = borrowedKey;
+              var bc = tree._getNode(borrowedChildId); if(bc) bc.parent = cur.id;
+              recorder.record("Borrowed child " + borrowedChildId + " from left internal " + leftSibling.id + " into " + cur.id + ".");
+            }
+            break;
+          } else if(rightSibling && rightSibling.keys.length > tree.minKeys){
+            if(cur.isLeaf){
+              var borrowed2 = rightSibling.keys.shift();
+              cur.keys.push(borrowed2);
+              parent.keys[idx] = rightSibling.keys[0];
+              recorder.record("Borrowed key " + borrowed2 + " from right sibling " + rightSibling.id + " into leaf " + cur.id + ". Updated parent key.");
+            } else {
+              var borrowedKey2 = rightSibling.keys.shift();
+              var borrowedChildId2 = rightSibling.children.shift();
+              cur.keys.push(parent.keys[idx]);
+              cur.children.push(borrowedChildId2);
+              parent.keys[idx] = borrowedKey2;
+              var bc2 = tree._getNode(borrowedChildId2); if(bc2) bc2.parent = cur.id;
+              recorder.record("Borrowed child " + borrowedChildId2 + " from right internal " + rightSibling.id + " into " + cur.id + ".");
+            }
+            break;
+          } else {
+            // merge
+            if(leftSibling){
+              if(cur.isLeaf){
+                leftSibling.keys = leftSibling.keys.concat(cur.keys);
+                leftSibling.next = cur.next;
+                parent.children.splice(idx,1);
+                parent.keys.splice(idx-1,1);
+                delete tree.nodeMap[cur.id];
+                recorder.record("Merged leaf " + cur.id + " into left sibling " + leftSibling.id + ".");
+                cur = parent;
+              } else {
+                var sep = parent.keys[idx-1];
+                leftSibling.keys.push(sep);
+                leftSibling.keys = leftSibling.keys.concat(cur.keys);
+                leftSibling.children = leftSibling.children.concat(cur.children);
+                leftSibling.children.forEach(function(cid){ var c = tree._getNode(cid); if(c) c.parent = leftSibling.id; });
+                parent.children.splice(idx,1);
+                parent.keys.splice(idx-1,1);
+                delete tree.nodeMap[cur.id];
+                recorder.record("Merged internal " + cur.id + " into left sibling " + leftSibling.id + ".");
+                cur = parent;
+              }
+            } else if(rightSibling){
+              if(cur.isLeaf){
+                cur.keys = cur.keys.concat(rightSibling.keys);
+                cur.next = rightSibling.next;
+                parent.children.splice(idx+1,1);
+                parent.keys.splice(idx,1);
+                delete tree.nodeMap[rightSibling.id];
+                recorder.record("Merged right leaf " + rightSibling.id + " into " + cur.id + ".");
+                cur = parent;
+              } else {
+                var sep2 = parent.keys[idx];
+                cur.keys.push(sep2);
+                cur.keys = cur.keys.concat(rightSibling.keys);
+                cur.children = cur.children.concat(rightSibling.children);
+                cur.children.forEach(function(cid){ var c = tree._getNode(cid); if(c) c.parent = cur.id; });
+                parent.children.splice(idx+1,1);
+                parent.keys.splice(idx,1);
+                delete tree.nodeMap[rightSibling.id];
+                recorder.record("Merged internal " + rightSibling.id + " into " + cur.id + ".");
+                cur = parent;
+              }
+            } else {
+              // no siblings - shouldn't happen
+              break;
+            }
+            if(cur.id === tree.root && cur.keys.length === 0){
+              tree.root = cur.children ? cur.children[0] : cur.id;
+              var newRoot = tree._getNode(tree.root);
+              if(newRoot) newRoot.parent = null;
+              delete tree.nodeMap[cur.id];
+              recorder.record("Collapsed root after merge. New root: " + tree.root);
+              break;
+            }
+            if(cur.keys.length >= tree.minKeys) break;
+            // continue up
+          }
+        }
+      }
+
+      // History management
+      function pushHistory(note){
+        history.push(tree.snapshot());
+        future = [];
+      }
+
+      // UI wiring
+      function initTree(){
+        idCounter = 0;
+        var m = parseInt(orderInput.value) || 4;
+        if(m < 3) m = 3; orderInput.value = m;
+        tree = new BPlusTree(m);
+        logs = [];
+        currentSteps = []; stepIndex = -1;
+        history = []; future = [];
+        pushHistory();
+        logLine("Initialized B+ tree with order m=" + m);
+        renderCurrentView(); renderLog();
+      }
+
+      initBtn.addEventListener('click', function(){ initTree(); });
+
+      resetBtn.addEventListener('click', function(){
+        idCounter = 0; tree = null; logs = []; history = []; future = []; currentSteps = []; stepIndex = -1;
+        document.getElementById('log').textContent = '';
+        treeView.innerHTML = ''; leafListView.innerHTML = '';
+        logLine("Reset demo. Please initialize tree.");
+      });
+
+      insertBtn.addEventListener('click', function(){
+        var k = Number(keyInput.value);
+        if(isNaN(k)) return;
+        pushHistory();
+        tree.insert(k, function(desc){ logLine(desc); });
+        logLine("Completed insertion of " + k);
+        renderCurrentView();
+      });
+
+      insertStepBtn.addEventListener('click', function(){
+        var k = Number(keyInput.value);
+        if(isNaN(k)) return;
+        performInsertWithSteps([k]);
+        logLine("Step-mode insertion prepared for key " + k + ". Use step controls to advance and commit.");
+      });
+
+      multiInsertBtn.addEventListener('click', function(){
+        var s = multiInsertInput.value.trim();
+        if(!s) return;
+        var items = s.split(',').map(function(x){ return Number(x.trim()); }).filter(function(x){ return !isNaN(x); });
+        if(items.length===0) return;
+        pushHistory();
+        items.forEach(function(k){
+          tree.insert(k, function(desc){ logLine(desc); });
+        });
+        logLine("Bulk immediate insert completed: [" + items.join(',') + "]");
+        renderCurrentView();
+      });
+
+      multiInsertStepBtn.addEventListener('click', function(){
+        var s = multiInsertInput.value.trim();
+        if(!s) return;
+        var items = s.split(',').map(function(x){ return Number(x.trim()); }).filter(function(x){ return !isNaN(x); });
+        if(items.length===0) return;
+        performInsertWithSteps(items);
+        logLine("Prepared step-mode bulk insertion of " + items.length + " keys.");
+      });
+
+      delBtn.addEventListener('click', function(){
+        var k = Number(delInput.value);
+        if(isNaN(k)) return;
+        pushHistory();
+        tree.delete(k, function(desc){ logLine(desc); });
+        logLine("Completed deletion of " + k);
+        renderCurrentView();
+      });
+
+      delStepBtn.addEventListener('click', function(){
+        var k = Number(delInput.value);
+        if(isNaN(k)) return;
+        performDeleteWithSteps([k]);
+        logLine("Prepared step-mode deletion for key " + k);
+      });
+
+      findBtn.addEventListener('click', function(){
+        var k = Number(findInput.value);
+        if(isNaN(k)) return;
+        var res = tree.search(k);
+        if(res.found){
+          logLine("Found key " + k + " in leaf " + res.node.id + " at index " + res.index + ". Path: " + res.path.join('->'));
+        } else {
+          logLine("Key " + k + " not found. Would be at leaf " + res.node.id + ". Path: " + res.path.join('->'));
+        }
+        renderCurrentView();
+      });
+
+      rangeBtn.addEventListener('click', function(){
+        var a = Number(rfrom.value), b = Number(rto.value);
+        if(isNaN(a) || isNaN(b)) return;
+        if(a > b) { var t = a; a = b; b = t; }
+        var start = tree.findLeaf(a).leaf;
+        var out = [];
+        var cur = start;
+        while(cur){
+          for(var i=0;i<cur.keys.length;i++){
+            var k = cur.keys[i];
+            if(k >= a && k <= b) out.push(k);
+            if(k > b) break;
+          }
+          if(cur.keys.length && cur.keys[cur.keys.length-1] > b) break;
+          if(!cur.next) break;
+          cur = tree._getNode(cur.next);
+        }
+        logLine("Range search [" + a + "," + b + "] => " + out.join(', '));
+      });
+
+      slider.addEventListener('input', function(){
+        sliderVal.textContent = slider.value;
+      });
+
+      insertSliderBtn.addEventListener('click', function(){
+        var v = Number(slider.value);
+        pushHistory();
+        tree.insert(v, function(desc){ logLine(desc); });
+        logLine("Inserted value from slider: " + v);
+        renderCurrentView();
+      });
+
+      randBtn.addEventListener('click', function(){
+        var cnt = Math.max(1, Number(randCount.value));
+        var maxi = Math.max(1, Number(randMax.value));
+        var arr = [];
+        for(var i=0;i<cnt;i++){
+          arr.push(Math.floor(Math.random()*maxi));
+        }
+        pushHistory();
+        arr.forEach(function(k){ tree.insert(k, function(desc){ logLine(desc); }); });
+        logLine("Random inserted " + cnt + " keys.");
+        renderCurrentView();
+      });
+
+      randStepBtn.addEventListener('click', function(){
+        var cnt = Math.max(1, Number(randCount.value));
+        var maxi = Math.max(1, Number(randMax.value));
+        var arr = [];
+        for(var i=0;i<cnt;i++){
+          arr.push(Math.floor(Math.random()*maxi));
+        }
+        performInsertWithSteps(arr);
+        logLine("Prepared step-mode random insertion of " + cnt + " keys.");
+      });
+
+      stepPrev.addEventListener('click', function(){
+        if(currentSteps.length===0) return;
+        stepIndex = Math.max(0, stepIndex-1);
+        logLine("STEP: " + (currentSteps[stepIndex].desc || ''));
+        renderCurrentView();
+      });
+      stepNext.addEventListener('click', function(){
+        if(currentSteps.length===0) return;
+        stepIndex = Math.min(currentSteps.length-1, stepIndex+1);
+        logLine("STEP: " + (currentSteps[stepIndex].desc || ''));
+        renderCurrentView();
+      });
+      stepFirst.addEventListener('click', function(){
+        if(currentSteps.length===0) return;
+        stepIndex = 0;
+        logLine("STEP: " + (currentSteps[stepIndex].desc || ''));
+        renderCurrentView();
+      });
+      stepLast.addEventListener('click', function(){
+        if(currentSteps.length===0) return;
+        stepIndex = currentSteps.length-1;
+        logLine("STEP: " + (currentSteps[stepIndex].desc || ''));
+        renderCurrentView();
+      });
+
+      commitSteps.addEventListener('click', function(){
+        if(currentSteps.length===0) { logLine("No steps to commit."); return; }
+        pushHistory();
+        var lastSnap = currentSteps[currentSteps.length-1].state;
+        tree.restoreFromSnapshot(lastSnap);
+        logLine("Committed step sequence. Tree updated to last step.");
+        currentSteps = []; stepIndex = -1;
+        renderCurrentView();
+      });
+
+      discardSteps.addEventListener('click', function(){
+        if(currentSteps.length===0) return;
+        logLine("Discarded current step sequence.");
+        currentSteps = []; stepIndex = -1;
+        renderCurrentView();
+      });
+
+      autoPlay.addEventListener('change', function(){
+        if(autoPlay.checked){
+          var intv = Number(intervalInput.value) || Number(speedSlider.value) || 800;
+          autoplayInterval = setInterval(function(){
+            if(currentSteps.length===0) { clearInterval(autoplayInterval); autoPlay.checked = false; return; }
+            if(stepIndex < currentSteps.length-1) {
+              stepIndex++;
+              logLine("AUTOPLAY STEP: " + currentSteps[stepIndex].desc);
+              renderCurrentView();
+            } else {
+              clearInterval(autoplayInterval);
+              autoPlay.checked = false;
+              logLine("Autoplay finished.");
+            }
+          }, intv);
+        } else {
+          if(autoplayInterval) clearInterval(autoplayInterval);
+        }
+      });
+
+      intervalInput.addEventListener('input', function(){
+        if(autoPlay.checked){
+          autoPlay.checked = false;
+          if(autoplayInterval) clearInterval(autoplayInterval);
+        }
+      });
+
+      speedSlider.addEventListener('input', function(){
+        speedVal.textContent = speedSlider.value + 'ms';
+        intervalInput.value = speedSlider.value;
+      });
+
+      undoBtn.addEventListener('click', function(){
+        if(history.length <= 1){
+          logLine("Nothing to undo.");
+          return;
+        }
+        var last = history.pop();
+        future.push(last);
+        var prev = history[history.length-1];
+        tree.restoreFromSnapshot(prev);
+        logLine("Undo applied.");
+        renderCurrentView();
+      });
+
+      redoBtn.addEventListener('click', function(){
+        if(future.length === 0){ logLine("Nothing to redo."); return; }
+        var s = future.pop();
+        history.push(s);
+        tree.restoreFromSnapshot(s);
+        logLine("Redo applied.");
+        renderCurrentView();
+      });
+
+      exportBtn.addEventListener('click', function(){
+        var data = JSON.stringify(tree.snapshot());
+        logLine("Exported tree JSON (copied to import area).");
+        importArea.value = data;
+      });
+
+      importBtn.addEventListener('click', function(){
+        var s = importArea.value.trim();
+        if(!s) { logLine("No JSON to import."); return; }
+        try{
+          var obj = JSON.parse(s);
+          idCounter = 0;
+          // try to update idCounter to avoid collisions
+          Object.keys(obj.nodes || {}).forEach(function(k){
+            var nid = k.replace(/^n/, '');
+            var vi = parseInt(nid);
+            if(!isNaN(vi) && vi > idCounter) idCounter = vi;
+          });
+          tree.restoreFromSnapshot(obj);
+          history.push(tree.snapshot());
+          logLine("Imported tree from JSON.");
+          renderCurrentView();
+        } catch(e){
+          logLine("Import error: " + e.message);
+        }
+      });
+
+      clearLogBtn.addEventListener('click', function(){
+        logs = []; renderLog();
+      });
+
+      showNodeIds.addEventListener('change', renderCurrentView);
+      showCapacity.addEventListener('change', renderCurrentView);
+      showLeafList.addEventListener('change', renderCurrentView);
+
+      // Initialize default
+      initTree();
+      logLine("Demo ready. Use the controls above to interact with the B+ tree.");
+
+      // Expose some debug functions in console for power users
+      window._bptree_debug = {
+        tree: function(){ return tree; },
+        snapshot: function(){ return tree.snapshot(); },
+        steps: function(){ return currentSteps; },
+        logs: function(){ return logs; }
+      };
+    })();
+  </script>
+</body>
+</html>

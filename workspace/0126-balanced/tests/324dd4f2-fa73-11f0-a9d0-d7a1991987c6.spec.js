@@ -111,7 +111,7 @@ test.describe('Floyd-Warshall Algorithm Visualization (FSM: Idle -> AlgorithmRun
     // - Clicking Run twice should still display a single header + one table in #output
     // - Results should remain identical and not accumulate multiple headers or tables
 
-    const expectedFinal = [
+    const expectedFinal1 = [
       ['0', '3', '4', '6'],
       ['9', '0', '1', '3'],
       ['8', '11', '0', '2'],
@@ -133,7 +133,7 @@ test.describe('Floyd-Warshall Algorithm Visualization (FSM: Idle -> AlgorithmRun
     expect(tables.length).toBe(1);
 
     // Validate table content remains consistent
-    const resultValues = await page.$$eval('#output table tr', (rows) =>
+    const resultValues1 = await page.$$eval('#output table tr', (rows) =>
       rows.map((row) => Array.from(row.querySelectorAll('td')).map((td) => td.textContent.trim()))
     );
 
@@ -171,7 +171,7 @@ test.describe('Floyd-Warshall Algorithm Visualization (FSM: Idle -> AlgorithmRun
     await page.waitForSelector('#output table');
 
     // Ensure no "∞" in the result table
-    const resultValues = await page.$$eval('#output table tr', (rows) =>
+    const resultValues2 = await page.$$eval('#output table tr', (rows) =>
       rows.flatMap((row) => Array.from(row.querySelectorAll('td')).map((td) => td.textContent.trim()))
     );
 

@@ -149,7 +149,7 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     // - log contains "Inserted <strong>50</strong> into the heap."
     // - SVG has one more node
     // - root becomes 50 (max heap)
-    const heap = new HeapPage(page);
+    const heap1 = new HeapPage(page);
     await heap.goto();
 
     const beforeCount = await heap.nodeCount();
@@ -157,7 +157,7 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     await heap.insertValue(50);
 
     // Validate log contains insertion message (textContent contains literal <strong> tags)
-    const logs = await heap.getLogLines();
+    const logs1 = await heap.getLogLines();
     expect(logs.some(l => l.includes('Inserted <strong>50</strong> into the heap.'))).toBeTruthy();
 
     // Node count increased by 1
@@ -165,7 +165,7 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     expect(afterCount).toBe(beforeCount + 1);
 
     // Root should be the newly inserted max value 50
-    const rootText = await heap.nodeTextAt(0);
+    const rootText1 = await heap.nodeTextAt(0);
     expect(rootText?.trim()).toBe('50');
   });
 
@@ -173,17 +173,17 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     page,
   }) => {
     // Test that pressing Enter on the input triggers the same insert flow
-    const heap = new HeapPage(page);
+    const heap2 = new HeapPage(page);
     await heap.goto();
 
-    const beforeCount = await heap.nodeCount();
+    const beforeCount1 = await heap.nodeCount();
 
     await heap.insertValueByEnter(35);
 
-    const logs = await heap.getLogLines();
+    const logs2 = await heap.getLogLines();
     expect(logs.some(l => l.includes('Inserted <strong>35</strong> into the heap.'))).toBeTruthy();
 
-    const afterCount = await heap.nodeCount();
+    const afterCount1 = await heap.nodeCount();
     expect(afterCount).toBe(beforeCount + 1);
 
     // Ensure one of the nodes contains 35 (it might not be root depending on heap order)
@@ -200,7 +200,7 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     // - log includes "Extracted max <strong>50</strong> from the heap."
     // - node count decreases by 1
     // - root value becomes next max (40 from initial demo)
-    const heap = new HeapPage(page);
+    const heap3 = new HeapPage(page);
     await heap.goto();
 
     // Start by inserting 50 so we know what max will be
@@ -209,14 +209,14 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
 
     await heap.extractMax();
 
-    const logs = await heap.getLogLines();
+    const logs3 = await heap.getLogLines();
     expect(logs.some(l => l.includes('Extracted max <strong>50</strong> from the heap.'))).toBeTruthy();
 
     const countAfterExtract = await heap.nodeCount();
     expect(countAfterExtract).toBe(countAfterInsert - 1);
 
     // After extracting 50, the root should be the next largest from the demo (40)
-    const rootText = await heap.nodeTextAt(0);
+    const rootText2 = await heap.nodeTextAt(0);
     expect(rootText?.trim()).toBe('40');
   });
 
@@ -224,7 +224,7 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     // Validate clear behavior:
     // - SVG is cleared (no children)
     // - Log is cleared and only contains "Heap cleared."
-    const heap = new HeapPage(page);
+    const heap4 = new HeapPage(page);
     await heap.goto();
 
     // Ensure there are nodes to be cleared
@@ -234,7 +234,7 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     await heap.clearHeap();
 
     // The app clears log and svg then logs 'Heap cleared.' so there should be exactly one log entry
-    const logs = await heap.getLogLines();
+    const logs4 = await heap.getLogLines();
     expect(logs.length).toBeGreaterThanOrEqual(1);
     // Last log line should be 'Heap cleared.' (exact textContent)
     const last = logs[logs.length - 1];
@@ -253,10 +253,10 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     // Validate behavior when invalid input is provided:
     // - An alert is shown with correct message
     // - No insertion occurs (node count unchanged)
-    const heap = new HeapPage(page);
+    const heap5 = new HeapPage(page);
     await heap.goto();
 
-    const beforeCount = await heap.nodeCount();
+    const beforeCount2 = await heap.nodeCount();
 
     // Ensure input empty
     await page.locator('#inputValue').fill('');
@@ -272,13 +272,13 @@ test.describe('Max Heap Visualization - FSM states and transitions', () => {
     expect(dialogs[dialogs.length - 1]).toBe('Please enter a valid number.');
 
     // Node count should remain unchanged
-    const afterCount = await heap.nodeCount();
+    const afterCount2 = await heap.nodeCount();
     expect(afterCount).toBe(beforeCount);
   });
 
   test('Edge case: Extract from empty heap shows alert and does nothing', async ({ page }) => {
     // Clear heap first, then attempt to extract to trigger the "Heap is empty" alert
-    const heap = new HeapPage(page);
+    const heap6 = new HeapPage(page);
     await heap.goto();
 
     await heap.clearHeap();

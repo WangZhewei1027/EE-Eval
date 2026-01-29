@@ -80,14 +80,14 @@ class SVMPage {
   }
   async setLambda(value) {
     await this.page.evaluate((v) => {
-      const el = document.getElementById('lambda');
+      const el1 = document.getElementById('lambda');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, value);
   }
   async setBatch(value) {
     await this.page.evaluate((v) => {
-      const el = document.getElementById('batch');
+      const el2 = document.getElementById('batch');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, value);
@@ -99,7 +99,7 @@ class SVMPage {
       (sel, exp) => {
         const s = document.querySelector(sel);
         if (!s) return false;
-        const m = s.innerText.match(/Points:\s*(\d+)/);
+        const m1 = s.innerText.match(/Points:\s*(\d+)/);
         return m ? parseInt(m[1], 10) === exp : false;
       },
       this.stats.selector,
@@ -165,14 +165,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
 
   test.describe('Events and transitions', () => {
     test('Clicking canvas adds a point (S0_Idle -> S1_PointAdded)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors1 = [];
+      const pageErrors1 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm1 = new SVMPage(page);
       await svm.goto();
 
       // Determine a safe click position near the center of canvas
@@ -197,14 +197,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Selecting negative class updates UI and adds point of new class (ClickClassNeg -> add point)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors2 = [];
+      const pageErrors2 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm2 = new SVMPage(page);
       await svm.goto();
 
       // Click class-negative button
@@ -215,7 +215,7 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
       expect(negBox).toBeTruthy();
 
       // Click canvas to add point with negative label; verify count increments
-      const box = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
+      const box1 = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
       await svm.clickCanvasAt(Math.floor(box.w * 0.25), Math.floor(box.h * 0.25));
       await svm.waitForPointsCount(31);
 
@@ -225,14 +225,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Train button triggers training and updates model (S1_PointAdded -> S2_Training)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors3 = [];
+      const pageErrors3 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm3 = new SVMPage(page);
       await svm.goto();
 
       // Ensure initial w are zeros
@@ -240,7 +240,7 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
       expect(initialStats).toMatch(/w = \[0\.000,\s*0\.000\]/);
 
       // Add one point so training has something to work on
-      const box = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
+      const box2 = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
       await svm.clickCanvasAt(Math.floor(box.w * 0.3), Math.floor(box.h * 0.6));
       await svm.waitForPointsCount(31);
 
@@ -260,14 +260,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Auto-train toggles and triggers training when on (S1_PointAdded -> S3_AutoTraining)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors4 = [];
+      const pageErrors4 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm4 = new SVMPage(page);
       await svm.goto();
 
       // Enable auto-train
@@ -277,7 +277,7 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
       expect(await svm.getAutoText()).toContain('Auto-train: on');
 
       // Click canvas to add a point. When auto is on, trainAndDraw() is called automatically.
-      const box = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
+      const box3 = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
       const beforeCount = await svm.getPointsCountFromStats();
       await svm.clickCanvasAt(Math.floor(box.w * 0.6), Math.floor(box.h * 0.4));
       await svm.waitForPointsCount(beforeCount + 1);
@@ -301,14 +301,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Clear button clears points and enters Cleared state (S4_Cleared)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors5 = [];
+      const pageErrors5 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm5 = new SVMPage(page);
       await svm.goto();
 
       // Ensure we have points to clear
@@ -325,14 +325,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Random dataset buttons generate datasets (S5_RandomDataset and S6_RandomMixedDataset)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors6 = [];
+      const pageErrors6 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm6 = new SVMPage(page);
       await svm.goto();
 
       // Click random separable
@@ -351,14 +351,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Sliders update their displayed values and internal input events fire (InputEpochs/InputLambda/InputBatchSize)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors7 = [];
+      const pageErrors7 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm7 = new SVMPage(page);
       await svm.goto();
 
       // Change epochs to 500
@@ -379,14 +379,14 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
     });
 
     test('Edge case: clicking Train with no points should not throw and shows No points (train on empty dataset)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors8 = [];
+      const pageErrors8 = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
-      const svm = new SVMPage(page);
+      const svm8 = new SVMPage(page);
       await svm.goto();
 
       // Clear points to make dataset empty
@@ -407,8 +407,8 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
 
   test.describe('Console and runtime error observation', () => {
     test('No uncaught ReferenceError / SyntaxError / TypeError on load and interactions', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors9 = [];
+      const pageErrors9 = [];
       page.on('console', (msg) => {
         // capture all console.error outputs
         if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -418,12 +418,12 @@ test.describe('SVM Interactive Demo - FSM and UI tests', () => {
         pageErrors.push(err.message);
       });
 
-      const svm = new SVMPage(page);
+      const svm9 = new SVMPage(page);
       await svm.goto();
 
       // Perform a set of interactions covering the main code paths
       // Add a point, toggle auto, random datasets, sliders, train, clear
-      const box = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
+      const box4 = await page.$eval('#plot', (c) => ({ w: c.width, h: c.height }));
       await svm.clickCanvasAt(Math.floor(box.w * 0.2), Math.floor(box.h * 0.2));
       await svm.clickClassNeg();
       await svm.clickCanvasAt(Math.floor(box.w * 0.8), Math.floor(box.h * 0.8));

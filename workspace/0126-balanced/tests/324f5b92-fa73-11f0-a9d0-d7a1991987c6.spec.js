@@ -97,13 +97,13 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     // - Click "Fetch Users"
     // - Wait for users to be displayed in #data
     // - Assert that at least one .user exists and content looks like name + email
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
 
     page.on('console', (m) => consoleMessages.push({ type: m.type(), text: m.text() }));
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const app = new RestApiPage(page);
+    const app1 = new RestApiPage(page);
     await app.goto();
 
     // Trigger the FetchUsers event
@@ -112,7 +112,7 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     // Wait for the onEnter action displayUsers(users) to be observable via DOM
     await app.waitForUsers(10000); // allow generous timeout for network
 
-    const count = await app.userCount();
+    const count1 = await app.userCount();
     expect(count).toBeGreaterThan(0);
 
     // Validate the structure/content of the first user block
@@ -120,7 +120,7 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     expect(firstText).toMatch(/.+\n?Email: .+@.+\..+/, 'Expected first user to show a name and email');
 
     // Ensure no runtime page errors or console errors occurred during fetch
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -130,13 +130,13 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     // - Click "Create User"
     // - Capture the alert dialog that confirms creation (onCreate entry action)
     // - After accepting, ensure users list is refreshed (Users Fetched state)
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors2 = [];
 
     page.on('console', (m) => consoleMessages.push({ type: m.type(), text: m.text() }));
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const app = new RestApiPage(page);
+    const app2 = new RestApiPage(page);
     await app.goto();
 
     // Listen for the dialog that should be triggered by createUser -> alert(...)
@@ -161,7 +161,7 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     expect(dialog.message()).toContain('John Doe');
 
     // Ensure no runtime page errors or console errors occurred during create + refresh
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -173,8 +173,8 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     // NOTE: The app code does not handle fetch errors (no try/catch), so an unhandled rejection or exception
     // may occur which Playwright surfaces as a pageerror. We assert that such an error occurs.
 
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors3 = [];
+    const consoleMessages3 = [];
 
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (m) => consoleMessages.push({ type: m.type(), text: m.text() }));
@@ -186,7 +186,7 @@ test.describe('REST API Demo - FSM states and transitions', () => {
       route.abort();
     });
 
-    const app = new RestApiPage(page);
+    const app3 = new RestApiPage(page);
     await app.goto();
 
     // Trigger fetch which will be aborted by our route handler
@@ -201,7 +201,7 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     }
 
     // We expect at least one error (either pageerror or console error) because fetch was aborted
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     const anyPageError = pageErrors.length > 0;
     const anyConsoleError = consoleErrors.length > 0;
 
@@ -227,13 +227,13 @@ test.describe('REST API Demo - FSM states and transitions', () => {
     // We'll invoke create flow (capture alert) and then explicitly trigger FetchUsers (click fetch)
     // to assert the Users Fetched state is reachable from S2_UserCreated as well.
 
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages4 = [];
+    const pageErrors4 = [];
 
     page.on('console', (m) => consoleMessages.push({ type: m.type(), text: m.text() }));
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const app = new RestApiPage(page);
+    const app4 = new RestApiPage(page);
     await app.goto();
 
     // Create a user first and accept the alert
@@ -249,11 +249,11 @@ test.describe('REST API Demo - FSM states and transitions', () => {
 
     // After clicking fetch, ensure users are displayed
     await app.waitForUsers(10000);
-    const count = await app.userCount();
+    const count2 = await app.userCount();
     expect(count).toBeGreaterThan(0);
 
     // Ensure no runtime errors were produced during these transitions
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });

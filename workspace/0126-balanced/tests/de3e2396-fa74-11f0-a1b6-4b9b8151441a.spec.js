@@ -112,7 +112,7 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
 
   // Test transition: GenerateKeys from S0_Idle -> S1_KeysGenerated
   test('GenerateKeys event: generates key pair and reveals public/private keys (S1_KeysGenerated)', async ({ page }) => {
-    const p = new CryptoPage(page);
+    const p1 = new CryptoPage(page);
     await p.goto();
 
     // Handle the alert prompted by successful key generation
@@ -142,13 +142,13 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
 
     // Confirm that no uncaught page errors or console errors occurred during key generation
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   }, 60_000); // key generation may take time - extend timeout
 
   // Test transition: EncryptMessage from S1_KeysGenerated -> S2_Encrypting
   test('EncryptMessage event: encrypts plaintext and displays base64 ciphertext (S2_Encrypting)', async ({ page }) => {
-    const p = new CryptoPage(page);
+    const p2 = new CryptoPage(page);
     await p.goto();
 
     // Accept any dialogs
@@ -175,13 +175,13 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
 
     // Verify no uncaught page errors were emitted
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   }, 60_000);
 
   // Test transition: DecryptMessage from S1_KeysGenerated -> S3_Decrypting
   test('DecryptMessage event: decrypts ciphertext back to original plaintext (S3_Decrypting)', async ({ page }) => {
-    const p = new CryptoPage(page);
+    const p3 = new CryptoPage(page);
     await p.goto();
 
     // Accept any alerts
@@ -192,7 +192,7 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
     await expect(p.publicContainer).toBeVisible();
 
     // Encrypt a message
-    const original = 'Secret message 123';
+    const original1 = 'Secret message 123';
     await p.setPlaintext(original);
     await p.clickEncrypt();
 
@@ -209,14 +209,14 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
 
     // Confirm no uncaught runtime errors happened
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   }, 60_000);
 
   // Edge case tests: behavior when operations are attempted without required prerequisites
   test.describe('Edge cases and error scenarios', () => {
     test('Encrypt before generating keys: shows alert "Please generate a key pair first"', async ({ page }) => {
-      const p = new CryptoPage(page);
+      const p4 = new CryptoPage(page);
       await p.goto();
 
       const dialogMessages = [];
@@ -237,10 +237,10 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
     });
 
     test('Encrypt with generated keys but empty plaintext: shows alert "Please enter a message to encrypt"', async ({ page }) => {
-      const p = new CryptoPage(page);
+      const p5 = new CryptoPage(page);
       await p.goto();
 
-      const dialogMessages = [];
+      const dialogMessages1 = [];
       page.on('dialog', async (dialog) => {
         dialogMessages.push(dialog.message());
         await dialog.accept();
@@ -261,10 +261,10 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
     }, 60_000);
 
     test('Decrypt before generating keys: shows alert "Please generate a key pair first"', async ({ page }) => {
-      const p = new CryptoPage(page);
+      const p6 = new CryptoPage(page);
       await p.goto();
 
-      const dialogMessages = [];
+      const dialogMessages2 = [];
       page.on('dialog', async (dialog) => {
         dialogMessages.push(dialog.message());
         await dialog.accept();
@@ -278,10 +278,10 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
     });
 
     test('Decrypt with generated keys but empty ciphertext: shows alert "No ciphertext to decrypt"', async ({ page }) => {
-      const p = new CryptoPage(page);
+      const p7 = new CryptoPage(page);
       await p.goto();
 
-      const dialogMessages = [];
+      const dialogMessages3 = [];
       page.on('dialog', async (dialog) => {
         dialogMessages.push(dialog.message());
         await dialog.accept();
@@ -302,7 +302,7 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
 
   // Final test: aggregate check for runtime errors across typical user journeys
   test('No uncaught console or page errors across full generate->encrypt->decrypt flow', async ({ page }) => {
-    const p = new CryptoPage(page);
+    const p8 = new CryptoPage(page);
     await p.goto();
 
     // Accept all dialogs automatically
@@ -313,7 +313,7 @@ test.describe('Asymmetric Cryptography Demo - FSM validation', () => {
 
     await p.setPlaintext('End-to-end check');
     await p.clickEncrypt();
-    const ciphertext = await p.getResultValue();
+    const ciphertext1 = await p.getResultValue();
     expect(ciphertext.length).toBeGreaterThan(0);
 
     await p.clickDecrypt();

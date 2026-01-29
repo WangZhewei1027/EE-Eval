@@ -38,7 +38,7 @@ test.describe('Process Concept Demonstration - FSM (Application ID: 324e9842-fa7
     await page.click('#startProcessBtn');
 
     // Immediately the entry action for S1_Processing should set this text
-    const output = page.locator('#output');
+    const output1 = page.locator('#output1');
     await expect(output).toHaveText('Process Started... Please wait.', { timeout: 1000 });
 
     // No runtime errors should have occurred in normal processing start
@@ -51,8 +51,8 @@ test.describe('Process Concept Demonstration - FSM (Application ID: 324e9842-fa7
 
   test('S1 -> S2 (ProcessFinished): After async processing completes, final result is shown', async ({ page }) => {
     // Observe runtime errors and console for this asynchronous flow
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors1 = [];
+    const consoleMessages1 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => consoleMessages.push({ type: msg.type(), text: msg.text() }));
 
@@ -86,7 +86,7 @@ test.describe('Process Concept Demonstration - FSM (Application ID: 324e9842-fa7
     // find the outputDiv. We do not modify application code; we only interact with the DOM
     // as a user or environment might (edge case).
     await page.evaluate(() => {
-      const el = document.getElementById('output');
+      const el1 = document.getElementById('output');
       if (el) el.remove();
     });
 
@@ -123,8 +123,8 @@ test.describe('Process Concept Demonstration - FSM (Application ID: 324e9842-fa7
 
   test('Edge case: multiple quick Start clicks - processing remains consistent and completes with final result', async ({ page }) => {
     // Observe console and page errors for multi-click scenario
-    const pageErrors = [];
-    const consoleMessages = [];
+    const pageErrors2 = [];
+    const consoleMessages2 = [];
     page.on('pageerror', (err) => pageErrors.push(err));
     page.on('console', (msg) => consoleMessages.push({ type: msg.type(), text: msg.text() }));
 
@@ -141,7 +141,7 @@ test.describe('Process Concept Demonstration - FSM (Application ID: 324e9842-fa7
     // Eventually it should settle to the final successful result
     await page.waitForFunction(
       () => {
-        const el = document.getElementById('output');
+        const el2 = document.getElementById('output');
         return !!el && el.innerText === 'Process Finished: Data Retrieved Successfully!';
       },
       null,
@@ -153,7 +153,7 @@ test.describe('Process Concept Demonstration - FSM (Application ID: 324e9842-fa7
 
     // Ensure no uncaught runtime errors happened during multiple starts
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

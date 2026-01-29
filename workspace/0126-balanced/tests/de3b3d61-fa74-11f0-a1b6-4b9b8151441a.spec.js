@@ -107,7 +107,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // S1_ValueInserted transition tests
   test('Insert Node transitions to ValueInserted and renders node and log', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl1 = new AVLPage(page);
     await avl.goto();
 
     // Insert a single value -> expect a node in DOM and correct log message
@@ -128,7 +128,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
   });
 
   test('Insert multiple nodes and in-order traversal reflects sorted order (ValueInserted -> TraversalCompleted)', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl2 = new AVLPage(page);
     await avl.goto();
 
     // Insert a set of values
@@ -168,7 +168,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // S2_ValueDeleted transition tests
   test('Delete Node transitions to ValueDeleted and removes node from DOM and logs deletion', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl3 = new AVLPage(page);
     await avl.goto();
 
     // Insert two nodes then delete one
@@ -195,7 +195,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
   });
 
   test('Delete non-existing value logs "not found" (ValueNotFound)', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl4 = new AVLPage(page);
     await avl.goto();
 
     // Insert a single node
@@ -214,7 +214,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // S3_ValueFound and S4_ValueNotFound tests (Search)
   test('Search Node when present highlights node and logs found (ValueFound)', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl5 = new AVLPage(page);
     await avl.goto();
 
     // Build a small tree
@@ -239,7 +239,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
   });
 
   test('Search Node when absent logs not found (ValueNotFound)', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl6 = new AVLPage(page);
     await avl.goto();
 
     // Ensure tree empty or with a different value
@@ -259,7 +259,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // S5_TreeCleared transition tests
   test('Clear tree transitions to TreeCleared and removes all nodes', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl7 = new AVLPage(page);
     await avl.goto();
 
     // Insert a few nodes
@@ -280,7 +280,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // Traversal completed state S6_TraversalCompleted was partially tested above, add edge-case traversal on empty tree
   test('Traversal on empty tree still logs traversal (TraversalCompleted on empty)', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl8 = new AVLPage(page);
     await avl.goto();
 
     // Ensure tree is empty
@@ -302,7 +302,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // Edge case and validation message tests
   test('Invalid inputs produce validation messages for insert, delete, and search', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl9 = new AVLPage(page);
     await avl.goto();
 
     // Insert with empty input
@@ -322,7 +322,7 @@ test.describe('AVL Tree Visualization - FSM states and transitions', () => {
 
   // Diagnostics: ensure there were no console errors emitted during a typical interaction sequence
   test('No uncaught page errors or console error-level messages during typical usage', async ({ page }) => {
-    const avl = new AVLPage(page);
+    const avl10 = new AVLPage(page);
     await avl.goto();
 
     // Perform a typical sequence of actions

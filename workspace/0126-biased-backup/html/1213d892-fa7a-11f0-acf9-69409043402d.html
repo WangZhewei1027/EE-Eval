@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Radix Sort Interactive Demonstration</title>
+<style>
+  /* Minimal styling: basic black text on white, no advanced styling */
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    white-space: pre-wrap;
+  }
+  input, button, select {
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 5em;
+    font-family: monospace, monospace;
+    font-size: 1em;
+  }
+  label {
+    user-select: none;
+  }
+  .section {
+    margin-bottom: 1.5em;
+  }
+  .flex-row > * {
+    margin-right: 0.5em;
+  }
+  #debuglog {
+    border: 1px solid #ccc;
+    height: 8em;
+    overflow-y: auto;
+    font-family: monospace, monospace;
+    font-size: 0.9em;
+    padding: 0.2em 0.4em;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  td, th {
+    padding: 0.15em 0.4em;
+    border: 1px solid black;
+    text-align: center;
+    min-width: 2.2em;
+    user-select: none;
+  }
+  .highlight {
+    font-weight: bold;
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<h1>Radix Sort Interactive Demonstration</h1>
+
+<div class="section">
+  <strong>Step 1:</strong> Input your array of non-negative integers (comma or space separated).
+  <br />
+  &gt; <input type="text" id="inputArray" size="60" aria-label="Input array" value="170, 45, 75, 90, 802, 24, 2, 66" />
+  <button id="btnSetArray">Set Array</button>
+  <button id="btnRandomArray">Random Array</button> 
+  <small>(Random array length and max value below)</small>
+  <br />
+  Length: <input type="number" id="randomLength" value="10" min="1" max="50" size="3" aria-label="Random array length" />
+  Max value: <input type="number" id="randomMax" value="999" min="1" max="999999" size="6" aria-label="Random max value" />
+</div>
+
+<div class="section">
+  <strong>Current Array:</strong>
+  <div id="currentArrayDisplay"></div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Step 2:</strong> Configure Radix Sort options:
+  <div>
+    <label><input type="checkbox" id="optStable" checked /> Stable Sort (default)</label><br />
+    <label><input type="checkbox" id="optLsd" checked /> Use LSD (Least Significant Digit) Radix Sort</label><br />
+    <label><input type="checkbox" id="optMsd" /> Use MSD (Most Significant Digit) Radix Sort</label><br />
+    <small>(Choose exactly one between LSD and MSD.)</small>
+  </div>
+  <div>
+    Base (Radix): 
+    <select id="radixBase">
+      <option value="2">2</option>
+      <option value="4">4</option>
+      <option value="8">8</option>
+      <option value="10" selected>10</option>
+      <option value="16">16</option>
+      <option value="256">256</option>
+    </select>
+    <small>(Base for digit extraction)</small>
+  </div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Step 3:</strong> Visualize and step through Radix Sort.
+  <div>
+    <button id="btnStartSort">Start Sort</button>
+    <button id="btnNextStep" disabled>Next Step</button>
+    <button id="btnPrevStep" disabled>Previous Step</button>
+    <button id="btnAutoRun" disabled>Auto Run</button>
+    <button id="btnPause" disabled>Pause</button>
+    <button id="btnReset" disabled>Reset Sort</button>
+  </div>
+  <div>
+    Delay between steps (ms): <input type="number" id="stepDelay" value="700" min="10" max="10000" size="5" />
+  </div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Step 4:</strong> Current Sorting State Visualization:
+  <div id="sortStepInfo" style="white-space: pre-wrap; font-family: monospace, monospace;"></div>
+  <br />
+  <div id="arrayTableDiv"></div>
+  <br />
+  <div><strong>Buckets at Current Pass:</strong> (Each column represents a bucket)</div>
+  <div id="bucketsDiv"></div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Additional Exploration Controls:</strong>
+  <button id="btnJumpToPass">Jump to Pass #:</button> 
+  <input type="number" id="jumpPassNumber" min="0" size="3" value="0" aria-label="Pass number" />
+  &nbsp;&nbsp;
+  <button id="btnJumpToStep">Jump to Step # within Pass:</button> 
+  <input type="number" id="jumpStepNumber" min="0" size="3" value="0" aria-label="Step number" />
+  <br />
+  <button id="btnShowFullHistory">Show Full Step History</button> 
+  <button id="btnHideFullHistory" style="display:none;">Hide Full Step History</button>
+  <div id="fullHistoryDiv" style="max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-family: monospace, monospace;"></div>
+</div>
+
+<hr />
+
+<div class="section">
+  <strong>Debug / Logs:</strong>
+  <div id="debuglog"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // === Data and State ===
+  let originalArray = [];
+  let currentArray = [];
+  let radixBase = 10;
+  let useStable = true;
+  let isLSD = true; // LSD by default if LSD checked else MSD
+  let isMSD = false;
+  let sortingStarted = false;
+  let sortingPaused = false;
+  let autoRunTimer = null;
+  let stepDelay = 700;
+
+  // Structure to hold sort states by passes and steps:
+  // For LSD:
+  // passes: each digit place (from LSD to MSD)
+  // steps per pass: usually one step - placing into buckets and then collecting
+  //
+  // For MSD:
+  // more complex, recursive subdivision
+  //
+  // We'll structure as:
+  // history = [ {passNumber, digitIndex, buckets:[...], afterCollectArray, description, ... } ... ]
+  //
+  // For MSD: the passNumber increases per recursive call
+  //
+  let history = [];
+  let currentHistoryIndex = -1;
+
+  // For MSD sorting we need a recursive approach and a way to store states for interactive stepping.
+  // We'll flatten the recursion with a stack approach for the sake of interactivity.
+
+  // Helper: parse input array from string
+  function parseInputArray(text) {
+    // Accept comma or space separated; trim and parse integers; only non-negatives allowed
+    let parts = text.split(/[\s,]+/);
+    let arr = [];
+    for(let p of parts){
+      if(p.trim()==="") continue;
+      let n = Number(p.trim());
+      if(!Number.isInteger(n) || n < 0) return null;
+      arr.push(n);
+    }
+    return arr.length > 0 ? arr : null;
+  }
+  // Helpers for digit extraction
+  function getMaxNumber(arr){
+    if(arr.length===0)return 0;
+    return Math.max(...arr);
+  }
+  function getDigit(number, base, digitIndex){
+    // digitIndex: 0 = LSD (lowest), 1= next digit in base, etc.
+    return Math.floor(number / Math.pow(base, digitIndex)) % base;
+  }
+  // MSD digit extraction: highest digit index depends on max number:
+  // MSD digit index 0 = MSD digit
+  // So we figure max digit length, then digitIndex = maxDigitLength - 1 - i for LSD order
+  // We'll adapt as needed.
+
+  // === DOM Elements ===
+  const inputArrayEl = document.getElementById("inputArray");
+  const btnSetArray = document.getElementById("btnSetArray");
+  const btnRandomArray = document.getElementById("btnRandomArray");
+  const randomLengthEl = document.getElementById("randomLength");
+  const randomMaxEl = document.getElementById("randomMax");
+  const currentArrayDisplayEl = document.getElementById("currentArrayDisplay");
+
+  const optStableEl = document.getElementById("optStable");
+  const optLsdEl = document.getElementById("optLsd");
+  const optMsdEl = document.getElementById("optMsd");
+  const radixBaseEl = document.getElementById("radixBase");
+
+  const btnStartSort = document.getElementById("btnStartSort");
+  const btnNextStep = document.getElementById("btnNextStep");
+  const btnPrevStep = document.getElementById("btnPrevStep");
+  const btnAutoRun = document.getElementById("btnAutoRun");
+  const btnPause = document.getElementById("btnPause");
+  const btnReset = document.getElementById("btnReset");
+  const stepDelayEl = document.getElementById("stepDelay");
+
+  const sortStepInfoEl = document.getElementById("sortStepInfo");
+  const arrayTableDiv = document.getElementById("arrayTableDiv");
+  const bucketsDiv = document.getElementById("bucketsDiv");
+
+  const btnJumpToPass = document.getElementById("btnJumpToPass");
+  const jumpPassNumberEl = document.getElementById("jumpPassNumber");
+  const btnJumpToStep = document.getElementById("btnJumpToStep");
+  const jumpStepNumberEl = document.getElementById("jumpStepNumber");
+  const btnShowFullHistory = document.getElementById("btnShowFullHistory");
+  const btnHideFullHistory = document.getElementById("btnHideFullHistory");
+  const fullHistoryDiv = document.getElementById("fullHistoryDiv");
+
+  const debuglogEl = document.getElementById("debuglog");
+
+  // === Utility ===
+  function logDebug(msg){
+    let dt = new Date().toLocaleTimeString();
+    debuglogEl.textContent += `[${dt}] ${msg}\n`;
+    debuglogEl.scrollTop = debuglogEl.scrollHeight;
+  }
+
+  // === Display ===
+  function displayCurrentArray(){
+    currentArrayDisplayEl.textContent = currentArray.length > 0 ? currentArray.join(", ") : "(empty)";
+  }
+  // Show array in table with possible highlights (highlightIndices: array of indices to highlight)
+  function renderArrayTable(arr, highlightIndices){
+    highlightIndices = highlightIndices || [];
+    let html = "<table><tr>";
+    for(let i=0; i<arr.length; i++){
+      let cls = highlightIndices.indexOf(i)>=0 ? "highlight" : "";
+      html += `<td class="${cls}">${arr[i]}</td>`;
+    }
+    html += "</tr><tr>";
+    for(let i=0; i<arr.length; i++){
+      html += `<td>${i}</td>`;
+    }
+    html += "</tr></table>";
+    arrayTableDiv.innerHTML = html;
+  }
+  // Render buckets, buckets is array of arrays, base is radix base
+  function renderBuckets(buckets){
+    if(!buckets || buckets.length===0){
+      bucketsDiv.textContent = "(no buckets)";
+      return;
+    }
+    let columns = buckets.length;
+    // Find max bucket length
+    let maxLen = buckets.reduce((max,c)=>Math.max(max,c.length),0);
+    let html = "<table><thead><tr>";
+    for(let i=0; i<columns; i++){
+      html += `<th>${i}</th>`;
+    }
+    html += "</tr></thead><tbody>";
+    for(let r=0; r<maxLen; r++){
+      html += "<tr>";
+      for(let c=0; c<columns; c++){
+        html += `<td>${buckets[c][r] !== undefined ? buckets[c][r] : ""}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table>";
+    bucketsDiv.innerHTML = html;
+  }
+
+  // === Radix Sort Implementation with step-by-step state saving ===
+
+  // We must generate a complete "history" of sort steps, and then allow moving forward/back through them.
+
+  // For LSD Radix Sort:
+  // Algorithm:
+  // for digitIndex from 0 (LSD) to maxDigitIndex:
+  //   place all elements into buckets by digit at digitIndex
+  //   collect from buckets back into array (preserving order if stable)
+  // We'll store states before bucket placement, after bucket placement, after collection.
+
+  // Each pass can have multiple steps:
+  // Step 0: start of pass with array state
+  // Step 1: buckets (after placement)
+  // Step 2: array after collection (ready for next pass)
+
+  // We keep history as array of objects each describing such a step.
+
+  function buildLsdHistory(arr, base, stable){
+    history = [];
+    if(arr.length === 0) return;
+    let workingArray = arr.slice();
+    let maxNum = getMaxNumber(workingArray);
+    let maxDigitIndex = maxNum === 0 ? 0 : Math.floor(Math.log(maxNum)/Math.log(base));
+
+    for(let digitIndex=0; digitIndex <= maxDigitIndex; digitIndex++){
+      // Step 0: start pass
+      history.push({
+        passNumber: digitIndex,
+        stepNumber: 0,
+        digitIndex: digitIndex,
+        description: `Pass ${digitIndex}: Start with array`,
+        array: workingArray.slice(),
+        buckets: null,
+      });
+
+      // Prepare buckets
+      let buckets = [];
+      for(let i=0; i<base; i++) buckets.push([]);
+      // Place elements in buckets
+      for(let val of workingArray){
+        let d = getDigit(val, base, digitIndex);
+        buckets[d].push(val);
+      }
+      // Step 1: buckets after placement
+      history.push({
+        passNumber: digitIndex,
+        stepNumber: 1,
+        digitIndex: digitIndex,
+        description: `Pass ${digitIndex}: Buckets after placing elements`,
+        array: workingArray.slice(),
+        buckets: buckets.map(b=>b.slice()),
+      });
+
+      // Collect from buckets preserving order if stable
+      let collected;
+      if(stable){
+        collected = [];
+        for(let b of buckets){
+          collected = collected.concat(b);
+        }
+      } else {
+        // Non-stable could do in any order - simulate as buckets collected in reverse order for variety
+        collected = [];
+        for(let i=base-1; i>=0; i--){
+          collected = collected.concat(buckets[i]);
+        }
+      }
+      
+      // Step 2: after collection
+      history.push({
+        passNumber: digitIndex,
+        stepNumber: 2,
+        digitIndex: digitIndex,
+        description: `Pass ${digitIndex}: Array after collecting from buckets`,
+        array: collected.slice(),
+        buckets: buckets.map(b=>b.slice()),
+      });
+
+      workingArray = collected;
+    }
+  }
+
+  // MSD Radix Sort with detailed stepping:
+  //
+  // MSD Radix Sort (recursive):
+  // 1. Find max digitIndex = highest digit position (based on max number)
+  // 2. Starting at digitIndex = maxDigitIndex, split array into buckets by digit at digitIndex
+  // 3. For each bucket that has >1 element and digitIndex > 0, recursively sort with digitIndex-1
+  // 4. Collect buckets in order
+  //
+  // To keep it interactive, we'll flatten recursion using a stack and store states before and after splits/sorts.
+
+  // We'll emit steps:
+  // Step 0: start of pass at digitIndex with current subarray and global pass number
+  // Step 1: bucket placement
+  // Step 2: after recursion on bucket (if needed)
+  // Step 3: after collection
+  
+  // To manage global state, we'll maintain an incrementing passNumber.
+
+  function buildMsdHistory(arr, base, stable){
+    history = [];
+    if(arr.length === 0) return;
+    let maxNum = getMaxNumber(arr);
+    let maxDigitIndex = maxNum === 0 ? 0 : Math.floor(Math.log(maxNum)/Math.log(base));
+    
+    let workingArray = arr.slice();
+
+    // We'll keep a global pass number to identify passes distinctly
+    let passCounter = 0;
+
+    // Structure on stack: 
+    // {array: [], digitIndex: n, description: string, fromIndex: index in original array (global?), depth: int, collectedArray: [] }
+    // fromIndex is used to track position for visualizations
+
+    // For MSD, we sort recursively by digitIndex starting from maxDigitIndex (MSD)
+    // We'll simulate recursion by a stack, pushing contexts on the stack and unfolding them step by step.
+
+    // Data structure to hold intermediate states for output
+    // We'll create a recursive helper that pushes all states in order.
+
+    function msdSortRecursive(arrPart, digitIndex, depth) {
+      // depth is recursion depth for info
+
+      if(arrPart.length <=1 || digitIndex < 0){
+        // No sorting needed, just emit a pass with single step showing array as is
+        history.push({
+          passNumber: passCounter++,
+          stepNumber: 0,
+          digitIndex: digitIndex,
+          description: `Depth ${depth}, digitIndex ${digitIndex}: Single or no element, no sorting needed`,
+          array: arrPart.slice(),
+          buckets: null,
+        });
+        return arrPart.slice();
+      }
+
+      // 1. Step 0: start pass with arr
+      let currentPass = passCounter++;
+      history.push({
+        passNumber: currentPass,
+        stepNumber: 0,
+        digitIndex: digitIndex,
+        description: `Depth ${depth}, digitIndex ${digitIndex}: Start with array`,
+        array: arrPart.slice(),
+        buckets: null,
+      });
+
+      // 2. Place into buckets
+      let buckets = [];
+      for(let i=0; i<base; i++) buckets.push([]);
+      for(let v of arrPart){
+        let d = getDigit(v, base, digitIndex);
+        buckets[d].push(v);
+      }
+
+      // 3. Step 1: buckets after placement
+      history.push({
+        passNumber: currentPass,
+        stepNumber: 1,
+        digitIndex: digitIndex,
+        description: `Depth ${depth}, digitIndex ${digitIndex}: Buckets after placing elements`,
+        array: arrPart.slice(),
+        buckets: buckets.map(b=>b.slice()),
+      });
+
+      // 4. Recursively sort each bucket (except buckets with length ≤1)
+      // We will remember array after each recursive sort call of bucket
+      for(let i=0; i<base; i++){
+        if(buckets[i].length > 1 && digitIndex > 0){
+          // Recursive sort of bucket i with digitIndex-1
+          // Step before recursion: (optional)
+          history.push({
+            passNumber: currentPass,
+            stepNumber: 1.5 + i*0.1, // fractional steps to keep order
+            digitIndex: digitIndex-1,
+            description: `Depth ${depth+1}, digitIndex ${digitIndex-1}: Recursively sorting bucket ${i} with ${buckets[i].length} elements`,
+            array: buckets[i].slice(),
+            buckets: null,
+          });
+          buckets[i] = msdSortRecursive(buckets[i], digitIndex-1, depth+1);
+          // Step after recursion:
+          history.push({
+            passNumber: currentPass,
+            stepNumber: 1.6 + i*0.1,
+            digitIndex: digitIndex-1,
+            description: `Depth ${depth+1}, digitIndex ${digitIndex-1}: Completed sorting bucket ${i}`,
+            array: buckets[i].slice(),
+            buckets: null,
+          });
+        }
+      }
+
+      // 5. Collect buckets (in order, stable)
+      let collected = [];
+      if(stable){
+        for(let b of buckets){
+          collected = collected.concat(b);
+        }
+      } else {
+        for(let i=base-1; i>=0; i--){
+          collected = collected.concat(buckets[i]);
+        }
+      }
+
+      // 6. Step 3: after collection (end of pass)
+      history.push({
+        passNumber: currentPass,
+        stepNumber: 3,
+        digitIndex: digitIndex,
+        description: `Depth ${depth}, digitIndex ${digitIndex}: Array after collecting buckets`,
+        array: collected.slice(),
+        buckets: buckets.map(b=>b.slice()),
+      });
+      return collected;
+    }
+
+    let sorted = msdSortRecursive(workingArray, maxDigitIndex, 0);
+  }
+
+  // === Main control functions ===
+
+  // Validate LSD/MSD selection: exactly one
+  function validateSortOptions(){
+    if(optLsdEl.checked && optMsdEl.checked){
+      alert("Choose exactly one between LSD and MSD Radix Sort.");
+      return false;
+    }
+    if(!optLsdEl.checked && !optMsdEl.checked){
+      alert("Choose exactly one between LSD and MSD Radix Sort.");
+      return false;
+    }
+    return true;
+  }
+
+  // Set current array from input
+  function setArrayFromInput(){
+    let arrText = inputArrayEl.value;
+    let arr = parseInputArray(arrText);
+    if(arr === null){
+      alert("Invalid input array. Enter a list of non-negative integers separated by commas or spaces.");
+      return false;
+    }
+    originalArray = arr;
+    currentArray = arr.slice();
+    displayCurrentArray();
+    logDebug("Array set to: "+currentArray.join(", "));
+    resetSortStateToReady();
+    return true;
+  }
+
+  // Generate random array and set input & current
+  function generateRandomArray(){
+    let len = Number(randomLengthEl.value);
+    let maxv = Number(randomMaxEl.value);
+    if(!Number.isInteger(len) || len < 1 || len > 50){
+      alert("Length must be an integer between 1 and 50.");
+      return false;
+    }
+    if(!Number.isInteger(maxv) || maxv < 1 || maxv > 999999){
+      alert("Max value must be an integer between 1 and 999999.");
+      return false;
+    }
+    let arr = [];
+    for(let i=0; i<len; i++){
+      arr.push(Math.floor(Math.random()*(maxv+1)));
+    }
+    originalArray = arr;
+    currentArray = arr.slice();
+    inputArrayEl.value = arr.join(", ");
+    displayCurrentArray();
+    logDebug("Random array generated: "+currentArray.join(", "));
+    resetSortStateToReady();
+    return true;
+  }
+
+  // Reset sort states and controls
+  function resetSortStateToReady(){
+    sortingStarted = false;
+    sortingPaused = false;
+    history = [];
+    currentHistoryIndex = -1;
+    updateSortControls();
+    clearVisualization();
+  }
+
+  // Update enabled states of buttons depending on current sort phase
+  function updateSortControls(){
+    btnStartSort.disabled = sortingStarted;
+    btnNextStep.disabled = !sortingStarted || currentHistoryIndex >= history.length-1;
+    btnPrevStep.disabled = !sortingStarted || currentHistoryIndex <= 0;
+    btnAutoRun.disabled = !sortingStarted || currentHistoryIndex >= history.length-1 || sortingPaused===false;
+    btnPause.disabled = !sortingStarted || sortingPaused===true;
+    btnReset.disabled = !sortingStarted;
+
+    // Exploration jump buttons enabled only if sortingStarted
+    btnJumpToPass.disabled = !sortingStarted;
+    btnJumpToStep.disabled = !sortingStarted;
+  }
+
+  // Clear visualization
+  function clearVisualization(){
+    sortStepInfoEl.textContent = "";
+    arrayTableDiv.innerHTML = "";
+    bucketsDiv.innerHTML = "";
+    fullHistoryDiv.textContent = "";
+    btnShowFullHistory.style.display = "";
+    btnHideFullHistory.style.display = "none";
+  }
+
+  // Render current step in history by currentHistoryIndex
+  function renderCurrentStep(){
+    if(currentHistoryIndex < 0 || currentHistoryIndex >= history.length){
+      sortStepInfoEl.textContent = "No sort steps to show.";
+      arrayTableDiv.innerHTML = "";
+      bucketsDiv.innerHTML = "";
+      return;
+    }
+    let stepObj = history[currentHistoryIndex];
+    let s = "";
+    s += `Pass #${stepObj.passNumber}, Step #${stepObj.stepNumber}\n`;
+    s += `Digit Index (base ${radixBase}): ${stepObj.digitIndex}\n`;
+    s += `Description:\n${stepObj.description}\n`;
+    sortStepInfoEl.textContent = s;
+    renderArrayTable(stepObj.array);
+    if(stepObj.buckets){
+      renderBuckets(stepObj.buckets);
+    } else {
+      bucketsDiv.innerHTML = "(no buckets to show)";
+    }
+  }
+
+  // Start sorting: build history and initialize
+  function startSort(){
+    // Validate options
+    if(!validateSortOptions()) return false;
+    if(currentArray.length===0){
+      alert("Array is empty. Set an array first.");
+      return false;
+    }
+    radixBase = Number(radixBaseEl.value);
+    useStable = optStableEl.checked;
+    isLSD = optLsdEl.checked;
+    isMSD = optMsdEl.checked;
+
+    // Build history depending on selected type
+    history = [];
+    currentHistoryIndex = -1;
+    if(isLSD){
+      buildLsdHistory(currentArray, radixBase, useStable);
+      logDebug(`Started LSD Radix Sort with base=${radixBase}, stable=${useStable}`);
+    } else {
+      buildMsdHistory(currentArray, radixBase, useStable);
+      logDebug(`Started MSD Radix Sort with base=${radixBase}, stable=${useStable}`);
+    }
+
+    if(history.length === 0){
+      alert("No steps generated - array may be empty.");
+      return false;
+    }
+    sortingStarted = true;
+    sortingPaused = true;
+    stepDelay = Number(stepDelayEl.value);
+    if(!Number.isInteger(stepDelay) || stepDelay < 10) stepDelay = 700;
+    currentHistoryIndex = 0;
+    renderCurrentStep();
+    updateSortControls();
+    return true;
+  }
+
+  // Advance one step forward
+  function nextStep(){
+    if(!sortingStarted) return;
+    if(currentHistoryIndex < history.length-1){
+      currentHistoryIndex++;
+      renderCurrentStep();
+      updateSortControls();
+    }
+  }
+  // Move one step backward
+  function prevStep(){
+    if(!sortingStarted) return;
+    if(currentHistoryIndex > 0){
+      currentHistoryIndex--;
+      renderCurrentStep();
+      updateSortControls();
+    }
+  }
+
+  // Auto run timer handler
+  function autoRunStep(){
+    if(!sortingStarted || sortingPaused) return;
+    if(currentHistoryIndex >= history.length-1){
+      pauseAutoRun();
+      return;
+    }
+    nextStep();
+  }
+  // Start auto run
+  function startAutoRun(){
+    if(!sortingStarted) return;
+    sortingPaused = false;
+    updateSortControls();
+    stepDelay = Number(stepDelayEl.value);
+    if(!Number.isInteger(stepDelay) || stepDelay < 10) stepDelay = 700;
+    autoRunTimer = setInterval(autoRunStep, stepDelay);
+  }
+  // Pause auto run
+  function pauseAutoRun(){
+    sortingPaused = true;
+    updateSortControls();
+    if(autoRunTimer){
+      clearInterval(autoRunTimer);
+      autoRunTimer = null;
+    }
+  }
+  // Reset sort: undo sorting session
+  function resetSort(){
+    sortingStarted = false;
+    sortingPaused = false;
+    history = [];
+    currentHistoryIndex = -1;
+    currentArray = originalArray.slice();
+    displayCurrentArray();
+    clearVisualization();
+    updateSortControls();
+    if(autoRunTimer){
+      clearInterval(autoRunTimer);
+      autoRunTimer = null;
+    }
+    logDebug("Sort reset.");
+  }
+
+  // Jump to pass number in history (first matching pass)
+  function jumpToPass(passNumber){
+    passNumber = Number(passNumber);
+    if(!sortingStarted) return false;
+    if(!Number.isInteger(passNumber) || passNumber < 0) return false;
+    let index = history.findIndex(h => h.passNumber === passNumber);
+    if(index < 0) return false;
+    currentHistoryIndex = index;
+    renderCurrentStep();
+    updateSortControls();
+    return true;
+  }
+  // Jump to step number within current pass
+  function jumpToStepWithinPass(stepNumber){
+    stepNumber = Number(stepNumber);
+    if(!sortingStarted) return false;
+    if(!Number.isInteger(stepNumber) || stepNumber < 0) return false;
+    let passNum = history[currentHistoryIndex] ? history[currentHistoryIndex].passNumber : null;
+    if(passNum === null) return false;
+    // find history entry with same passNumber and stepNumber
+    let index = history.findIndex(h => (h.passNumber === passNum && h.stepNumber === stepNumber));
+    if(index < 0) return false;
+    currentHistoryIndex = index;
+    renderCurrentStep();
+    updateSortControls();
+    return true;
+  }
+
+  // Show full history formatted in textarea
+  function showFullHistory(){
+    if(history.length === 0){
+      fullHistoryDiv.textContent = "(No history to show)";
+    } else {
+      let txt = "";
+      for(let i=0; i<history.length; i++){
+        let h = history[i];
+        txt += `Step ${i} | Pass ${h.passNumber} Step ${h.stepNumber} | Digit: ${h.digitIndex}\n`;
+        txt += `Description: ${h.description}\n`;
+        txt += `Array: ${h.array.join(", ")}\n`;
+        if(h.buckets){
+          txt += `Buckets:\n`;
+          for(let b=0; b<h.buckets.length; b++){
+            txt += `  Bucket ${b}: ${h.buckets[b].join(", ")}\n`;
+          }
+        }
+        txt += "\n";
+      }
+      fullHistoryDiv.textContent = txt;
+    }
+    btnShowFullHistory.style.display = "none";
+    btnHideFullHistory.style.display = "";
+  }
+  function hideFullHistory(){
+    fullHistoryDiv.textContent = "";
+    btnShowFullHistory.style.display = "";
+    btnHideFullHistory.style.display = "none";
+  }
+
+  // === Set event handlers ===
+
+  btnSetArray.addEventListener("click", function(){
+    if(sortingStarted){
+      if(!confirm("Sorting already started. Setting a new array will reset the sort. Continue?")){
+        return;
+      }
+    }
+    setArrayFromInput();
+  });
+
+  btnRandomArray.addEventListener("click", function(){
+    if(sortingStarted){
+      if(!confirm("Sorting already started. Generating a new random array will reset the sort. Continue?")){
+        return;
+      }
+    }
+    generateRandomArray();
+  });
+
+  // Mutually exclusive LSD / MSD checkboxes handler:
+  optLsdEl.addEventListener("change", function(){
+    if(optLsdEl.checked){
+      optMsdEl.checked = false;
+    } else if(!optMsdEl.checked){
+      // prevent both unchecked, force MSD checked
+      optMsdEl.checked = true;
+    }
+  });
+  optMsdEl.addEventListener("change", function(){
+    if(optMsdEl.checked){
+      optLsdEl.checked = false;
+    } else if(!optLsdEl.checked){
+      optLsdEl.checked = true;
+    }
+  });
+
+  btnStartSort.addEventListener("click", function(){
+    if(startSort()){
+      logDebug("Sort started.");
+    }
+  });
+  btnNextStep.addEventListener("click", function(){
+    nextStep();
+  });
+  btnPrevStep.addEventListener("click", function(){
+    prevStep();
+  });
+  btnAutoRun.addEventListener("click", function(){
+    startAutoRun();
+  });
+  btnPause.addEventListener("click", function(){
+    pauseAutoRun();
+  });
+  btnReset.addEventListener("click", function(){
+    if(confirm("Reset the sorting session?")){
+      resetSort();
+    }
+  });
+
+  stepDelayEl.addEventListener("change", function(){
+    let v = Number(stepDelayEl.value);
+    if(!Number.isInteger(v) || v < 10){
+      stepDelayEl.value = stepDelay;
+    } else {
+      stepDelay = v;
+      if(!sortingPaused && sortingStarted){
+        pauseAutoRun();
+        startAutoRun();
+      }
+    }
+  });
+
+  btnJumpToPass.addEventListener("click", function(){
+    let pn = Number(jumpPassNumberEl.value);
+    if(!jumpToPass(pn)){
+      alert("Invalid pass number or pass not found.");
+    }
+  });
+  btnJumpToStep.addEventListener("click", function(){
+    let sn = Number(jumpStepNumberEl.value);
+    if(!jumpToStepWithinPass(sn)){
+      alert("Invalid step number for current pass or not found.");
+    }
+  });
+
+  btnShowFullHistory.addEventListener("click", showFullHistory);
+  btnHideFullHistory.addEventListener("click", hideFullHistory);
+
+  // Initialize with default array display
+  if(parseInputArray(inputArrayEl.value)){
+    setArrayFromInput();
+  } else {
+    currentArrayDisplayEl.textContent = "(invalid default array)";
+  }
+
+})();
+</script>
+</body>
+</html>

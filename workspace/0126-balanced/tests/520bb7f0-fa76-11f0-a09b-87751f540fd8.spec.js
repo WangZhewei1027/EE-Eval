@@ -125,7 +125,7 @@ test.describe('Random Forest Interactive Application - FSM Verification', () => 
 
     // Click each heading element (if present) -- should do nothing meaningful
     const page = rfPage.page;
-    const headings = await page.$$('.card h2');
+    const headings1 = await page.$$('.card h2');
     for (const h of headings) {
       await h.click();
     }

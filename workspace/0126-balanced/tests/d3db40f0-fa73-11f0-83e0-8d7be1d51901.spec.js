@@ -108,7 +108,7 @@ test.describe('Runtime Environment — Interactive Demo (FSM validation)', () =>
   });
 
   test('Clear detection results (S1_RuntimeDetected -> S0_Idle) - Clear button resets output', async ({ page }) => {
-    const app = new RuntimeDemoPage(page);
+    const app1 = new RuntimeDemoPage(page);
 
     // Ensure initial detection completed
     await app.waitForInitialDetect();
@@ -119,7 +119,7 @@ test.describe('Runtime Environment — Interactive Demo (FSM validation)', () =>
   });
 
   test('Run demo starts visualization and sets state.running (S1_RuntimeDetected -> S2_DemoRunning)', async ({ page }) => {
-    const app = new RuntimeDemoPage(page);
+    const app2 = new RuntimeDemoPage(page);
 
     // Ensure initial detection completed
     await app.waitForInitialDetect();
@@ -143,7 +143,7 @@ test.describe('Runtime Environment — Interactive Demo (FSM validation)', () =>
   });
 
   test('Step through demo (S2_DemoRunning step behaviour) and Reset (S2 -> S0)', async ({ page }) => {
-    const app = new RuntimeDemoPage(page);
+    const app3 = new RuntimeDemoPage(page);
 
     // Start from a cleared visualization
     await app.resetDemo();
@@ -179,7 +179,7 @@ test.describe('Runtime Environment — Interactive Demo (FSM validation)', () =>
   });
 
   test('Web Worker lifecycle (S0_Idle -> S4_WorkerRunning -> S0_Idle)', async ({ page }) => {
-    const app = new RuntimeDemoPage(page);
+    const app4 = new RuntimeDemoPage(page);
 
     // Verify initial workerOut status
     await expect(app.workerOut).toContainText('Worker not started.');
@@ -208,7 +208,7 @@ test.describe('Runtime Environment — Interactive Demo (FSM validation)', () =>
   });
 
   test('Sandboxed iframe runner (S0_Idle -> S3_SandboxRunning -> S0_Idle) and code forwarding', async ({ page }) => {
-    const app = new RuntimeDemoPage(page);
+    const app5 = new RuntimeDemoPage(page);
 
     // Provide code that posts a message and uses console.log inside the iframe
     const code = `
@@ -237,7 +237,7 @@ test.describe('Runtime Environment — Interactive Demo (FSM validation)', () =>
   });
 
   test('Sandbox handles thrown errors and reports them back (assert error evidence)', async ({ page }) => {
-    const app = new RuntimeDemoPage(page);
+    const app6 = new RuntimeDemoPage(page);
 
     // Provide code that throws a ReferenceError inside the sandbox
     const codeThrowRef = `throw new ReferenceError('test-ref');`;

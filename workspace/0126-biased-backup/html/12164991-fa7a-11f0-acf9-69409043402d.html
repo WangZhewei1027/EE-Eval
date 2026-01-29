@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HTTP Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  textarea, input[type=text], select {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace, monospace;
+  }
+  label {
+    display: block;
+    margin-top: 1em;
+  }
+  button {
+    margin-top: 0.5em;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border: 1px solid black;
+    padding: 0.5em;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+<h1>HTTP Interactive Explorer</h1>
+
+<p>This tool lets you build, send, and inspect HTTP requests and responses in multiple stages with deep exploration of HTTP concepts.<br>
+You can create requests, send them, view responses, modify parts, add headers or body data, switch HTTP methods, simulate redirects, and more.</p>
+
+<hr/>
+
+<label for="urlInput">Request URL:</label>
+<input type="text" id="urlInput" placeholder="https://example.com/path?query=1" />
+
+<label for="methodSelect">HTTP Method:</label>
+<select id="methodSelect">
+  <option>GET</option>
+  <option>POST</option>
+  <option>PUT</option>
+  <option>DELETE</option>
+  <option>HEAD</option>
+  <option>OPTIONS</option>
+  <option>PATCH</option>
+</select>
+
+<label for="httpVersionSelect">HTTP Version:</label>
+<select id="httpVersionSelect">
+  <option>HTTP/1.1</option>
+  <option>HTTP/1.0</option>
+  <option>HTTP/2.0 (simulated)</option>
+</select>
+
+<label for="headerCountInput">Number of Headers:</label>
+<input type="number" id="headerCountInput" min="0" max="20" value="2" />
+
+<div id="headersArea"></div>
+
+<label for="bodyInput">Request Body (optional):</label>
+<textarea id="bodyInput" rows="6" placeholder="Enter request body here..."></textarea>
+
+<button id="buildRequestBtn">Build Raw HTTP Request</button>
+<button id="sendRequestBtn">Send Request (simulated)</button>
+<button id="clearLogsBtn">Clear Logs</button>
+
+<h2>Raw HTTP Request</h2>
+<pre id="rawRequestView" tabindex="0"></pre>
+
+<h2>Raw HTTP Response</h2>
+<pre id="rawResponseView" tabindex="0">(No response yet)</pre>
+
+<h2>Response Insights and Controls</h2>
+<div id="responseControls" style="display:none;">
+  <label for="followRedirectToggle"><input type="checkbox" id="followRedirectToggle" checked> Auto-follow Redirects</label>
+  <label for="maxRedirectsInput">Max Redirects:</label>
+  <input type="number" id="maxRedirectsInput" min="0" max="10" value="3" />
+
+  <button id="viewParsedHeadersBtn">View Parsed Headers</button>
+  <button id="viewCookiesBtn">View Response Cookies</button>
+  <button id="viewStatusCodeBtn">View Status Code Info</button>
+</div>
+
+<div id="parsedHeadersArea" style="display:none;">
+  <h3>Parsed Response Headers</h3>
+  <pre id="parsedHeadersPre"></pre>
+</div>
+
+<div id="cookiesArea" style="display:none;">
+  <h3>Cookies from Response</h3>
+  <pre id="cookiesPre"></pre>
+</div>
+
+<div id="statusCodeInfoArea" style="display:none;">
+  <h3>Status Code Information</h3>
+  <pre id="statusCodeInfoPre"></pre>
+</div>
+
+<hr />
+
+<h2>Interactive HTTP Concepts Explorer</h2>
+
+<p>Try these interactive explorations:</p>
+
+<button id="simulateRedirectBtn">Simulate Complex Redirect Chain</button>
+<button id="simulateErrorBtn">Simulate HTTP Error Response</button>
+<button id="simulateChunkedBtn">Simulate Chunked Transfer Encoding</button>
+<button id="simulateAuthBtn">Simulate HTTP Basic Auth</button>
+<button id="simulateCacheBtn">Simulate Cache-Control and Conditional Requests</button>
+<button id="simulateCompressionBtn">Simulate Compressed Response (gzip)</button>
+
+<div id="simulationOutput" style="white-space: pre-wrap; max-height: 400px; overflow-y: auto; border: 1px solid black; margin-top:1em; padding:0.5em;">
+</div>
+
+<script>
+(() => {
+  // Utilities
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, m => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#39;',
+    }[m]));
+  }
+
+  // Elements
+  const urlInput = document.getElementById('urlInput');
+  const methodSelect = document.getElementById('methodSelect');
+  const httpVersionSelect = document.getElementById('httpVersionSelect');
+  const headerCountInput = document.getElementById('headerCountInput');
+  const headersArea = document.getElementById('headersArea');
+  const bodyInput = document.getElementById('bodyInput');
+  const buildRequestBtn = document.getElementById('buildRequestBtn');
+  const sendRequestBtn = document.getElementById('sendRequestBtn');
+  const clearLogsBtn = document.getElementById('clearLogsBtn');
+  const rawRequestView = document.getElementById('rawRequestView');
+  const rawResponseView = document.getElementById('rawResponseView');
+  const responseControls = document.getElementById('responseControls');
+  const followRedirectToggle = document.getElementById('followRedirectToggle');
+  const maxRedirectsInput = document.getElementById('maxRedirectsInput');
+  const viewParsedHeadersBtn = document.getElementById('viewParsedHeadersBtn');
+  const parsedHeadersArea = document.getElementById('parsedHeadersArea');
+  const parsedHeadersPre = document.getElementById('parsedHeadersPre');
+  const viewCookiesBtn = document.getElementById('viewCookiesBtn');
+  const cookiesArea = document.getElementById('cookiesArea');
+  const cookiesPre = document.getElementById('cookiesPre');
+  const viewStatusCodeBtn = document.getElementById('viewStatusCodeBtn');
+  const statusCodeInfoArea = document.getElementById('statusCodeInfoArea');
+  const statusCodeInfoPre = document.getElementById('statusCodeInfoPre');
+  const simulateRedirectBtn = document.getElementById('simulateRedirectBtn');
+  const simulateErrorBtn = document.getElementById('simulateErrorBtn');
+  const simulateChunkedBtn = document.getElementById('simulateChunkedBtn');
+  const simulateAuthBtn = document.getElementById('simulateAuthBtn');
+  const simulateCacheBtn = document.getElementById('simulateCacheBtn');
+  const simulateCompressionBtn = document.getElementById('simulateCompressionBtn');
+  const simulationOutput = document.getElementById('simulationOutput');
+
+  // State
+  let headersInputs = [];
+  let currentRawRequest = '';
+  let currentRawResponse = '';
+  let currentParsedResponseHeaders = {};
+  let currentCookies = [];
+  let currentStatusCode = 0;
+  let currentResponseBody = '';
+  let accumulatedRedirects = 0;
+
+  // Status code info database (simplified)
+  const statusCodeInfoDB = {
+    100: 'Continue: The server has received the request headers, and the client should proceed to send the request body.',
+    200: 'OK: The request has succeeded.',
+    201: 'Created: The request has been fulfilled and resulted in a new resource being created.',
+    204: 'No Content: The server successfully processed the request but is not returning any content.',
+    301: 'Moved Permanently: The requested resource has been assigned a new permanent URI.',
+    302: 'Found: The requested resource resides temporarily under a different URI.',
+    303: 'See Other: The response can be found under another URI using a GET method.',
+    304: 'Not Modified: The resource has not been modified since last requested.',
+    400: 'Bad Request: The request could not be understood by the server due to malformed syntax.',
+    401: 'Unauthorized: The request requires user authentication.',
+    403: 'Forbidden: The server understood the request, but refuses to authorize it.',
+    404: 'Not Found: The server has not found anything matching the Request-URI.',
+    500: 'Internal Server Error: The server encountered an unexpected condition.',
+    502: 'Bad Gateway: The server received an invalid response from the upstream server.',
+    503: 'Service Unavailable: The server is currently unable to handle the request due to maintenance or overload.',
+  };
+
+  // Functions
+  function buildHeadersInputs(num) {
+    headersArea.innerHTML = '';
+    headersInputs = [];
+    for(let i=0; i<num; i++) {
+      const headerDiv = document.createElement('div');
+      headerDiv.style.marginBottom = '0.3em';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = `Header name #${i+1}`;
+      nameInput.style.width = '40%';
+      const valueInput = document.createElement('input');
+      valueInput.type = 'text';
+      valueInput.placeholder = `Header value #${i+1}`;
+      valueInput.style.width = '55%';
+      headerDiv.appendChild(nameInput);
+      headerDiv.appendChild(document.createTextNode(' : '));
+      headerDiv.appendChild(valueInput);
+      headersArea.appendChild(headerDiv);
+      headersInputs.push({nameInput, valueInput});
+    }
+  }
+
+  function getHeadersObject() {
+    const headers = {};
+    for(const {nameInput, valueInput} of headersInputs) {
+      const n = nameInput.value.trim();
+      if(n) {
+        let v = valueInput.value.trim();
+        if(headers[n]) {
+          // Multiple same headers concatenated with comma if repeated?
+          headers[n] = headers[n]+', '+v;
+        } else {
+          headers[n] = v;
+        }
+      }
+    }
+    return headers;
+  }
+
+  function buildRawRequest() {
+    const urlStr = urlInput.value.trim();
+    if(!urlStr) {
+      alert('Please enter a URL');
+      return '';
+    }
+    let urlObj;
+    try {
+      urlObj = new URL(urlStr);
+    } catch(e) {
+      alert('Invalid URL');
+      return '';
+    }
+    const method = methodSelect.value;
+    const httpVersion = httpVersionSelect.value;
+    const pathAndQuery = urlObj.pathname + (urlObj.search||'');
+    let raw = `${method} ${pathAndQuery} ${httpVersion}\r\n`;
+
+    // Host header mandatory for HTTP/1.1
+    const headers = getHeadersObject();
+    if(!headers['Host']) {
+      raw += `Host: ${urlObj.host}\r\n`;
+    }
+
+    // Add other headers
+    for(const hName in headers) {
+      raw += `${hName}: ${headers[hName]}\r\n`;
+    }
+
+    // Content-Length for methods with body and if body exists
+    const body = bodyInput.value;
+    if(body && ['POST','PUT','PATCH','DELETE'].includes(method)) {
+      // Only add content-length if it's not already sent
+      if(!headers['Content-Length']) {
+        raw += `Content-Length: ${new Blob([body]).size}\r\n`;
+      }
+    }
+
+    raw += `\r\n`;
+    if(body && ['POST','PUT','PATCH','DELETE'].includes(method)) {
+      raw += body;
+    }
+    return raw;
+  }
+
+  function parseRawResponse(raw) {
+    // Basic parser for raw HTTP response text
+    // Split header and body by first double CRLF sequence
+    const splitIndex = raw.indexOf('\r\n\r\n');
+    if(splitIndex === -1) {
+      return {statusLine: '', headers: {}, body: ''};
+    }
+    const headerPart = raw.substring(0, splitIndex);
+    let bodyPart = raw.substring(splitIndex+4);
+
+    const headerLines = headerPart.split('\r\n');
+    const statusLine = headerLines[0];
+
+    const headers = {};
+    for(let i=1; i<headerLines.length; i++) {
+      const line = headerLines[i];
+      const sepIndex = line.indexOf(':');
+      if(sepIndex > 0) {
+        const name = line.substring(0, sepIndex).trim();
+        const value = line.substring(sepIndex+1).trim();
+        const lname = name.toLowerCase();
+        if(headers[lname]) {
+          headers[lname] += ', ' + value;
+        } else {
+          headers[lname] = value;
+        }
+      }
+    }
+
+    return {statusLine, headers, body: bodyPart};
+  }
+
+  function extractStatusCode(statusLine) {
+    // e.g. HTTP/1.1 200 OK
+    const parts = statusLine.split(' ');
+    if(parts.length < 2) return 0;
+    return parseInt(parts[1], 10) || 0;
+  }
+
+  function parseCookies(setCookieHeader) {
+    // Accepts single string or array of strings
+    if(!setCookieHeader) return [];
+    const cookies = [];
+    if(typeof setCookieHeader === 'string') {
+      setCookieHeader = [setCookieHeader];
+    }
+    for(const sc of setCookieHeader) {
+      // Parse cookie string
+      // e.g. sessionId=abc123; Path=/; HttpOnly
+      const parts = sc.split(';').map(s=>s.trim());
+      const [nameVal, ...attr] = parts;
+      const eqIdx = nameVal.indexOf('=');
+      if(eqIdx<0) continue;
+      const name = nameVal.substring(0, eqIdx);
+      const value = nameVal.substring(eqIdx+1);
+      const attributes = {};
+      for(const a of attr) {
+        const [k,v] = a.split('=').map(x=>x.trim());
+        attributes[k.toLowerCase()] = v===undefined ? true : v;
+      }
+      cookies.push({name,value,attributes});
+    }
+    return cookies;
+  }
+
+  function updateResponseControlsVisibility(show) {
+    responseControls.style.display = show ? '' : 'none';
+    parsedHeadersArea.style.display = 'none';
+    cookiesArea.style.display = 'none';
+    statusCodeInfoArea.style.display = 'none';
+  }
+
+  function displayParsedHeaders() {
+    parsedHeadersPre.textContent = '';
+    const h = currentParsedResponseHeaders;
+    const lines = [];
+    for(const k in h) {
+      lines.push(`${k}: ${h[k]}`);
+    }
+    parsedHeadersPre.textContent = lines.join('\n');
+    parsedHeadersArea.style.display = '';
+  }
+
+  function displayCookies() {
+    cookiesPre.textContent = '';
+    if(currentCookies.length === 0) {
+      cookiesPre.textContent = '(No cookies)';
+    } else {
+      const lines = currentCookies.map(c => {
+        let attrStr = '';
+        for(const a in c.attributes) {
+          attrStr += '; ' + a + (c.attributes[a]===true ? '' : '='+c.attributes[a]);
+        }
+        return `${c.name}=${c.value}${attrStr}`;
+      });
+      cookiesPre.textContent = lines.join('\n');
+    }
+    cookiesArea.style.display = '';
+  }
+
+  function displayStatusCodeInfo() {
+    const info = statusCodeInfoDB[currentStatusCode] || 'Unknown status code or no info available.';
+    statusCodeInfoPre.textContent = `${currentStatusCode} - ${info}`;
+    statusCodeInfoArea.style.display = '';
+  }
+
+  // Event handlers
+  headerCountInput.addEventListener('change', () => {
+    let n = parseInt(headerCountInput.value, 10);
+    if(Number.isNaN(n) || n<0) n=0;
+    if(n>20) n=20;
+    headerCountInput.value = n;
+    buildHeadersInputs(n);
+  });
+
+  buildRequestBtn.addEventListener('click', () => {
+    accumulatedRedirects = 0;
+    const raw = buildRawRequest();
+    if(raw) {
+      currentRawRequest = raw;
+      rawRequestView.textContent = raw;
+      rawResponseView.textContent = '(No response yet)';
+      updateResponseControlsVisibility(false);
+      simulationOutput.textContent = '';
+    }
+  });
+
+  // Simulate sending requests - since no real network, simulate common HTTP responses
+  sendRequestBtn.addEventListener('click', () => {
+    if(!currentRawRequest) {
+      alert('Build the request first.');
+      return;
+    }
+    accumulatedRedirects = 0;
+    simulationOutput.textContent = '';
+    simulateSendRequest(currentRawRequest, followRedirectToggle.checked, parseInt(maxRedirectsInput.value,10)||3);
+  });
+
+  clearLogsBtn.addEventListener('click', () => {
+    rawRequestView.textContent = '';
+    rawResponseView.textContent = '(No response yet)';
+    parsedHeadersArea.style.display = 'none';
+    cookiesArea.style.display = 'none';
+    statusCodeInfoArea.style.display = 'none';
+    responseControls.style.display = 'none';
+    simulationOutput.textContent = '';
+    currentRawRequest = '';
+    currentRawResponse = '';
+    currentParsedResponseHeaders = {};
+    currentCookies = [];
+    currentStatusCode = 0;
+    currentResponseBody = '';
+    accumulatedRedirects = 0;
+  });
+
+  viewParsedHeadersBtn.addEventListener('click', () => {
+    if(!currentRawResponse) return;
+    displayParsedHeaders();
+  });
+
+  viewCookiesBtn.addEventListener('click', () => {
+    if(!currentRawResponse) return;
+    displayCookies();
+  });
+
+  viewStatusCodeBtn.addEventListener('click', () => {
+    if(!currentRawResponse) return;
+    displayStatusCodeInfo();
+  });
+
+  // Simulation Explorers
+
+  // Helper: simulate sending request and receiving responses with redirects if enabled
+  function simulateSendRequest(rawRequest, autoRedirect=true, maxRedirects=3) {
+    // Parse request
+    // Basic: parse first line for method and URL path
+    const requestLines = rawRequest.split('\r\n');
+    if(requestLines.length<1) return;
+    const requestLine = requestLines[0];
+    const [method, path] = requestLine.split(' ');
+    if(!method || !path) return;
+
+    // For simulation: We'll emulate some basic URL-path based responses
+    // Extract host header from request headers
+    let host = null;
+    for(let i=1;i<requestLines.length;i++) {
+      const l = requestLines[i];
+      if(!l) break; // end headers
+      const idx = l.indexOf(':');
+      if(idx>0) {
+        const hn = l.substring(0, idx).trim().toLowerCase();
+        const hv = l.substring(idx+1).trim();
+        if(hn === 'host') {
+          host = hv;
+          break;
+        }
+      }
+    }
+    if(!host) host = 'example.com';
+
+    // For simulation: base URL = http://host
+    const fullURL = 'http://' + host + path;
+
+    simulationOutput.textContent = 'Sending request to ' + fullURL + '\n';
+
+    // Simulation logic: several paths
+    function createResponse(statusCode, statusText, headers, body, httpVer) {
+      httpVer = httpVer || 'HTTP/1.1';
+      let resp = `${httpVer} ${statusCode} ${statusText}\r\n`;
+      for(const k in headers) {
+        resp += `${k}: ${headers[k]}\r\n`;
+      }
+      resp += `\r\n`;
+      resp += body;
+      return resp;
+    }
+
+    // Simulated servers and behaviors
+    const serverResponses = {
+      '/': () => createResponse(200, 'OK', {'Content-Type': 'text/plain'}, 'Welcome to the root page.', 'HTTP/1.1'),
+      '/redirect1': () => createResponse(301, 'Moved Permanently', {'Location': '/redirect2'}, 'Redirecting to /redirect2'),
+      '/redirect2': () => createResponse(302, 'Found', {'Location': '/redirect3'}, 'Redirecting to /redirect3'),
+      '/redirect3': () => createResponse(303, 'See Other', {'Location': '/'}, 'Redirecting to /'),
+      '/error400': () => createResponse(400, 'Bad Request', {'Content-Type': 'text/plain'}, 'Bad Request error simulated.'),
+      '/error404': () => createResponse(404, 'Not Found', {'Content-Type': 'text/plain'}, 'Page not found.'),
+      '/error500': () => createResponse(500, 'Internal Server Error', {'Content-Type': 'text/plain'}, 'Something went wrong.'),
+      '/auth': () => {
+        // Check Authorization header
+        let authHeader = null;
+        for(let i=1;i<requestLines.length;i++) {
+          let l = requestLines[i];
+          if(!l) break;
+          let idx = l.indexOf(':');
+          if(idx>0) {
+            let hn = l.substring(0,idx).trim().toLowerCase();
+            let hv = l.substring(idx+1).trim();
+            if(hn === 'authorization') {
+              authHeader = hv;
+              break;
+            }
+          }
+        }
+        if(authHeader === 'Basic dXNlcjpwYXNz') { // user:pass base64
+          return createResponse(200, 'OK', {'Content-Type': 'text/plain'}, 'Authorized content here.');
+        } else {
+          return createResponse(401, 'Unauthorized', {'WWW-Authenticate': 'Basic realm="User Visible Realm"'}, 'Authentication required.');
+        }
+      },
+      '/chunked': () => {
+        // Simulate chunked transfer encoding (simple text chunks)
+        let resp = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n';
+        resp += 'A\r\nHello World\r\n';
+        resp += '5\r\n12345\r\n';
+        resp += '0\r\n\r\n';
+        return resp;
+      },
+      '/cache': () => {
+        // Return ETag and Cache-Control headers
+        return createResponse(200, 'OK', {
+          'Content-Type': 'text/plain',
+          'Cache-Control': 'max-age=30',
+          'ETag': '"123456789"',
+        }, 'Cached content with ETag.');
+      },
+      '/gzip': () => {
+        // Simulate compressed response (fake content for demo)
+        return createResponse(200, 'OK', {
+          'Content-Type': 'text/plain',
+          'Content-Encoding': 'gzip',
+        }, '(\u001f\u008b\u0008\u0000\u0000\u0000\u0000\u0000\u0000\u0003'); // truncated binary-like content
+      },
+    };
+
+    // Extract path without query
+    let pathOnly = path.split('?')[0];
+
+    let responseRaw = null;
+    if(serverResponses[pathOnly]) {
+      responseRaw = serverResponses[pathOnly]();
+    } else {
+      responseRaw = createResponse(404, 'Not Found', {'Content-Type': 'text/plain'}, 'No simulation for this path.');
+    }
+
+    // Parse response for redirects
+    const respParsed = parseRawResponse(responseRaw);
+    currentRawResponse = responseRaw;
+    currentParsedResponseHeaders = respParsed.headers;
+    currentStatusCode = extractStatusCode(respParsed.statusLine);
+    currentResponseBody = respParsed.body;
+    currentCookies = parseCookies(respParsed.headers['set-cookie'] || respParsed.headers['Set-Cookie']);
+
+    rawResponseView.textContent = responseRaw;
+    updateResponseControlsVisibility(true);
+
+    simulationOutput.textContent += `Received response: ${respParsed.statusLine}\n`;
+
+    function isRedirect(code) {
+      return [301,302,303,307,308].includes(code);
+    }
+
+    if(autoRedirect && isRedirect(currentStatusCode) && currentParsedResponseHeaders.location) {
+      if(accumulatedRedirects >= maxRedirects) {
+        simulationOutput.textContent += 'Maximum redirects reached, stopping.\n';
+        return;
+      }
+      accumulatedRedirects++;
+      const loc = currentParsedResponseHeaders.location;
+      simulationOutput.textContent += `Redirect ${accumulatedRedirects}: following Location header to ${loc}\n`;
+
+      // Build new raw request for redirected location using GET and HTTP/1.1 (standard behavior for 301/302/303)
+      const newMethod = (currentStatusCode === 303) ? 'GET' : method;
+      // For simplicity, keep HTTP/1.1 version for all
+      const newUrl = new URL(loc, fullURL).href;
+
+      urlInput.value = newUrl;
+      methodSelect.value = newMethod;
+      httpVersionSelect.value = 'HTTP/1.1';
+      bodyInput.value = '';
+
+      const rebuiltRaw = buildRawRequest();
+      currentRawRequest = rebuiltRaw;
+      rawRequestView.textContent = rebuiltRaw;
+
+      // Recursively send the new request with updated request
+      setTimeout(() => simulateSendRequest(rebuiltRaw, autoRedirect, maxRedirects), 500);
+    }
+  }
+
+  // Interactive Simulations below
+
+  simulateRedirectBtn.addEventListener('click', () => {
+    simulationOutput.textContent = '';
+    accumulatedRedirects = 0;
+    // Start with /redirect1 which chains to /redirect2, /redirect3 and back to /
+    urlInput.value = 'http://example.com/redirect1';
+    methodSelect.value = 'GET';
+    httpVersionSelect.value = 'HTTP/1.1';
+    headerCountInput.value = 0;
+    buildHeadersInputs(0);
+    bodyInput.value = '';
+    buildRequestBtn.click();
+    simulateSendRequest(currentRawRequest, true, 10);
+  });
+
+  simulateErrorBtn.addEventListener('click', () => {
+    simulationOutput.textContent = 'Simulating various HTTP error responses:\n\n';
+    const errorPaths = ['/error400', '/error404', '/error500'];
+    let idx = 0;
+    function next() {
+      if(idx >= errorPaths.length) {
+        simulationOutput.textContent += '\nFinished error simulation.\n';
+        return;
+      }
+      const p = errorPaths[idx++];
+      urlInput.value = 'http://example.com' + p;
+      methodSelect.value = 'GET';
+      httpVersionSelect.value = 'HTTP/1.1';
+      headerCountInput.value = 0;
+      buildHeadersInputs(0);
+      bodyInput.value = '';
+      buildRequestBtn.click();
+      simulationOutput.textContent += `Sending request to ${urlInput.value}\n`;
+      simulateSendRequest(currentRawRequest, false, 0);
+      simulationOutput.textContent += `${rawResponseView.textContent}\n\n`;
+      setTimeout(next, 700);
+    }
+    next();
+  });
+
+  simulateChunkedBtn.addEventListener('click', () => {
+    simulationOutput.textContent = 'Simulating chunked transfer encoding response:\n\n';
+    urlInput.value = 'http://example.com/chunked';
+    methodSelect.value = 'GET';
+    httpVersionSelect.value = 'HTTP/1.1';
+    headerCountInput.value = 0;
+    buildHeadersInputs(0);
+    bodyInput.value = '';
+    buildRequestBtn.click();
+    simulateSendRequest(currentRawRequest, false, 0);
+  });
+
+  simulateAuthBtn.addEventListener('click', () => {
+    simulationOutput.textContent = 'Simulate HTTP Basic Authentication flow:\n\n';
+    const makeRequest = (auth) => {
+      urlInput.value = 'http://example.com/auth';
+      methodSelect.value = 'GET';
+      httpVersionSelect.value = 'HTTP/1.1';
+      headerCountInput.value = auth ? 1 : 0;
+      buildHeadersInputs(auth?1:0);
+      if(auth) {
+        headersInputs[0].nameInput.value = 'Authorization';
+        headersInputs[0].valueInput.value = 'Basic dXNlcjpwYXNz'; // "user:pass" base64 encoded
+      }
+      bodyInput.value = '';
+      buildRequestBtn.click();
+      simulateSendRequest(currentRawRequest, false, 0);
+    };
+    simulationOutput.textContent += 'Sending unauthenticated request...\n';
+    makeRequest(false);
+    setTimeout(() => {
+      simulationOutput.textContent += '\nSending authenticated request with Basic Auth header...\n';
+      makeRequest(true);
+    }, 1500);
+  });
+
+  simulateCacheBtn.addEventListener('click', () => {
+    simulationOutput.textContent = 'Simulate Cache-Control and Conditional Requests:\n\n';
+    // Step 1: fetch resource with ETag, Cache-Control
+    urlInput.value = 'http://example.com/cache';
+    methodSelect.value = 'GET';
+    httpVersionSelect.value = 'HTTP/1.1';
+    headerCountInput.value = 0;
+    buildHeadersInputs(0);
+    bodyInput.value = '';
+    buildRequestBtn.click();
+    simulateSendRequest(currentRawRequest, false, 0);
+
+    setTimeout(() => {
+      simulationOutput.textContent += '\nNow simulate client sends conditional GET with If-None-Match header\n';
+      headerCountInput.value = 1;
+      buildHeadersInputs(1);
+      headersInputs[0].nameInput.value = 'If-None-Match';
+      headersInputs[0].valueInput.value = '"123456789"';
+      bodyInput.value = '';
+      buildRequestBtn.click();
+
+      // Override simulateSendRequest for conditional GET to simulate 304 Not Modified
+      function simulateConditionalGet(rawRequest) {
+        const resp304 = [
+          'HTTP/1.1 304 Not Modified',
+          'Cache-Control: max-age=30',
+          'ETag: "123456789"',
+          '\r\n'
+        ].join('\r\n');
+        currentRawResponse = resp304;
+        rawResponseView.textContent = resp304;
+        const parsed = parseRawResponse(resp304);
+        currentParsedResponseHeaders = parsed.headers;
+        currentStatusCode = extractStatusCode(parsed.statusLine);
+        currentResponseBody = parsed.body;
+        currentCookies = [];
+        updateResponseControlsVisibility(true);
+        simulationOutput.textContent += 'Received 304 Not Modified response, client should use cached content.\n';
+      }
+
+      simulateConditionalGet(currentRawRequest);
+    }, 2000);
+  });
+
+  simulateCompressionBtn.addEventListener('click', () => {
+    simulationOutput.textContent = 'Simulate GZIP compressed response:\n\n';
+    urlInput.value = 'http://example.com/gzip';
+    methodSelect.value = 'GET';
+    httpVersionSelect.value = 'HTTP/1.1';
+    headerCountInput.value = 0;
+    buildHeadersInputs(0);
+    bodyInput.value = '';
+    buildRequestBtn.click();
+    simulateSendRequest(currentRawRequest, false, 0);
+
+    simulationOutput.textContent += '\nNote: actual decompression not performed. Content-Encoding header shows "gzip".\n';
+  });
+
+  // Initialize default headers inputs
+  buildHeadersInputs(2);
+
+})();
+</script>
+
+</body>
+</html>

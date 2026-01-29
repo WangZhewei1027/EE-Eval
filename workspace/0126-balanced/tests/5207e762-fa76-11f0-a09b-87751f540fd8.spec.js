@@ -74,7 +74,7 @@ test.describe('Doubly Linked List - FSM validation and runtime behavior', () => 
     // We assert the entire numeric console log sequence includes both prints:
     // first: 0..5, second: 0..4
 
-    const numericLogs = consoleMessages
+    const numericLogs1 = consoleMessages
       .filter(m => m.type === 'log' && /^\d+$/.test(m.text))
       .map(m => m.text);
 
@@ -163,7 +163,7 @@ test.describe('Doubly Linked List - FSM validation and runtime behavior', () => 
     // This validates the onEnter behavior of the S1_Deleted_1 state when the deleted node is head.
 
     const result = await page.evaluate(() => {
-      const d = new DoublyLinkedList();
+      const d1 = new DoublyLinkedList();
       d.append(999);
       // After append, head and tail should point to the same node with data 999
       const before = { headData: d.head ? d.head.data : null, tailData: d.tail ? d.tail.data : null };

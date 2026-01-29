@@ -94,7 +94,7 @@ test.describe('JavaScript Arrays — Interactive Demo (FSM tests)', () => {
     test('Clear Output empties the output console (S1 -> S0 transition)', async ({ page }) => {
       // Ensure some content exists
       await page.locator('#runAll').click();
-      const examplesCount = Number(await page.locator('#count').textContent());
+      const examplesCount1 = Number(await page.locator('#count').textContent());
       await expect(page.locator('#output .log')).toHaveCount(examplesCount, { timeout: 5000 });
 
       // Click clear

@@ -209,12 +209,12 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
   });
 
   test('Set random target event: Random button picks a value from the array', async () => {
-    const values = await demo.getCellValues();
+    const values1 = await demo.getCellValues();
     expect(values.length).toBeGreaterThan(0);
     await demo.click(demo.selectors.randomTargetBtn);
     // target input should equal one of the values
     const target = await demo.getTargetValue();
-    const found = values.includes(target);
+    const found1 = values.includes(target);
     expect(found).toBe(true);
     // No page errors
     expect(pageErrors.length).toBe(0);
@@ -222,7 +222,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
 
   test('Step through interpolation search (S1_ArrayGenerated -> S3_Stepping): manual stepping updates stats and highlights', async () => {
     // Ensure a known target: choose middle value which should exist
-    const values = await demo.getCellValues();
+    const values2 = await demo.getCellValues();
     const midIndex = Math.floor(values.length / 2);
     const midValue = values[midIndex];
     await demo.setTarget(midValue);
@@ -254,7 +254,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     expect(foundClassCount).toBeGreaterThanOrEqual(0); // can be 0 if search finished but highlight not applied (defensive)
 
     // Ensure log includes 'found' or 'Result: found' at some point
-    const logText = await demo.getLogText();
+    const logText1 = await demo.getLogText();
     expect(logText.includes('found') || logText.includes('Result:')).toBe(true);
 
     // No page errors
@@ -266,7 +266,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     await demo.setSpeed(50);
 
     // pick a known existing value
-    const values = await demo.getCellValues();
+    const values3 = await demo.getCellValues();
     const val = values[Math.floor(values.length / 3)];
     await demo.setTarget(val);
 
@@ -278,7 +278,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     await demo.waitForLogContains('Result:', 5000);
 
     // Stats should reflect completion: iters > 0
-    const stats = await demo.getStats();
+    const stats1 = await demo.getStats();
     expect(parseInt(stats.iters)).toBeGreaterThan(0);
 
     // Ensure probe/comparison numbers are non-negative integers
@@ -293,11 +293,11 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     // Click Reset and expect 'Reset demo.' in log and array re-generated
     await demo.click(demo.selectors.resetBtn);
     await demo.waitForLogContains('Reset demo.', 2000);
-    const log = await demo.getLogText();
+    const log1 = await demo.getLogText();
     expect(log).toContain('Reset demo.');
 
     // After reset, probes/comps/iters should have been reset
-    const stats = await demo.getStats();
+    const stats2 = await demo.getStats();
     expect(stats.probes).toBe('0');
     expect(stats.comps).toBe('0');
     expect(stats.iters).toBe('0');
@@ -308,7 +308,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
 
   test('Run both searches (S1_ArrayGenerated -> S5_BothSearchesRun): Run both logs interpolation and binary results and updates stats', async () => {
     // Ensure target is a known value to produce a found result
-    const values = await demo.getCellValues();
+    const values4 = await demo.getCellValues();
     const pick = values[Math.max(0, Math.floor(values.length / 4))];
     await demo.setTarget(pick);
 
@@ -319,12 +319,12 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     await demo.waitForLogContains('Interpolation:', 2000);
     await demo.waitForLogContains('Binary:', 2000);
 
-    const log = await demo.getLogText();
+    const log2 = await demo.getLogText();
     expect(log).toContain('Interpolation:');
     expect(log).toContain('Binary:');
 
     // Stats should reflect interpolation result (probes >= 0)
-    const stats = await demo.getStats();
+    const stats3 = await demo.getStats();
     expect(parseInt(stats.probes)).toBeGreaterThanOrEqual(0);
 
     // If interpolation found, highlight should show found cell (defensive)
@@ -335,7 +335,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
 
   test('Run binary search animation (S2_Searching -> S6_BinarySearchRunning): clicking Run binary starts animated binary search and logs start', async () => {
     // pick an existing target
-    const values = await demo.getCellValues();
+    const values5 = await demo.getCellValues();
     const value = values[Math.floor(values.length / 2)];
     await demo.setTarget(value);
 
@@ -352,13 +352,13 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     await demo.page.waitForTimeout(800);
 
     // Expect some probes/iters to be non-zero while animation runs or after completion
-    const stats = await demo.getStats();
+    const stats4 = await demo.getStats();
     expect(parseInt(stats.iters)).toBeGreaterThanOrEqual(0);
 
     // Expect 'Result:' eventually (animation finalizes)
     // We give it a bit more time to finish
     await demo.page.waitForTimeout(1500);
-    const log = await demo.getLogText();
+    const log3 = await demo.getLogText();
     expect(log.includes('Result:') || log.includes('found') || log.includes('not found')).toBe(true);
 
     // No page errors
@@ -379,8 +379,8 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
 
     // Start a search, then modify target input (should clear currentGenerator and stop autoplay)
     // Pick an existing value and start
-    const values = await demo.getCellValues();
-    const v = values[0];
+    const values6 = await demo.getCellValues();
+    const v1 = values[0];
     await demo.setTarget(v);
     await demo.click(demo.selectors.startBtn);
     await demo.waitForLogContains('Auto-play started.', 2000);
@@ -394,7 +394,7 @@ test.describe('Interpolation Search — Interactive Demo (FSM validation)', () =
     await demo.waitForLogContains('Starting interpolation search for', 2000);
 
     // Confirm that the log now contains an entry for the new target start
-    const log = await demo.getLogText();
+    const log4 = await demo.getLogText();
     expect(log).toContain('Starting interpolation search for');
 
     // No page errors

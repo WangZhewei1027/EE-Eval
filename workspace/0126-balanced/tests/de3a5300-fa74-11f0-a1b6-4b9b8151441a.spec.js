@@ -119,7 +119,7 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
 
     test('S0 -> S1 ArraysCreated: clicking Create Arrays renders fruit, numbers, empty and mixed arrays', async ({ page }) => {
       // This test validates the CreateArrays transition and evidence paragraphs
-      const p = new ArraysDemoPage(page);
+      const p1 = new ArraysDemoPage(page);
 
       // Click the button to trigger createArrays()
       await p.clickCreate();
@@ -149,14 +149,14 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
 
     test('S0 -> S2 ElementsAccessed: clicking Access Elements shows first/second/last color evidence', async ({ page }) => {
       // Validate accessElements() output
-      const p = new ArraysDemoPage(page);
+      const p2 = new ArraysDemoPage(page);
 
       await p.clickAccess();
 
       // Expect 4 paragraphs: Colors array + First + Second + Last
       await expect(p.accessOutput.locator('p')).toHaveCount(4);
 
-      const text = await p.getAccessText();
+      const text1 = await p.getAccessText();
       expect(text).toContain('Colors array:');
       expect(text).toContain('First color: Red');
       expect(text).toContain('Second color: Green');
@@ -172,13 +172,13 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
 
     test('S0 -> S3 ArraysModified: clicking Modify Arrays shows modification sequence including push/pop/unshift/shift', async ({ page }) => {
       // Validate modifyArrays() output
-      const p = new ArraysDemoPage(page);
+      const p3 = new ArraysDemoPage(page);
 
       await p.clickModify();
 
       // The function appends multiple <p> elements describing each step.
       // Check the presence of each step's evidence text
-      const text = await p.getModifyText();
+      const text2 = await p.getModifyText();
       expect(text).toContain('Original array:');
       expect(text).toContain('["Dog","Cat","Elephant"]'); // original array stringified
       expect(text).toContain('After modifying index 1:');
@@ -199,11 +199,11 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
 
     test('S0 -> S4 ArrayMethodsShown: clicking Show Array Methods demonstrates join, slice, splice, concat, indexOf', async ({ page }) => {
       // Validate arrayMethods() output
-      const p = new ArraysDemoPage(page);
+      const p4 = new ArraysDemoPage(page);
 
       await p.clickMethods();
 
-      const text = await p.getMethodsText();
+      const text3 = await p.getMethodsText();
       expect(text).toContain('Original array:');
       expect(text).toContain('Joined with \'-\': 1-2-3-4-5');
       expect(text).toContain('Sliced (1-4):'); // slice evidence
@@ -221,11 +221,11 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
 
     test('S0 -> S5 ArraysIterated: clicking Iterate Arrays shows for loop, for...of, forEach and map results', async ({ page }) => {
       // Validate iterateArrays() output: headings and lists existence plus map method (lengths)
-      const p = new ArraysDemoPage(page);
+      const p5 = new ArraysDemoPage(page);
 
       await p.clickIterate();
 
-      const text = await p.getIterateText();
+      const text4 = await p.getIterateText();
       expect(text).toContain('Languages array:');
       expect(text).toContain('for loop:');
       expect(text).toContain('for...of loop:');
@@ -255,11 +255,11 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
 
     test('S0 -> S6 DestructuringShown: clicking Show Destructuring demonstrates basic destructuring, skipping and default values', async ({ page }) => {
       // Validate arrayDestructuring() output
-      const p = new ArraysDemoPage(page);
+      const p6 = new ArraysDemoPage(page);
 
       await p.clickDestruct();
 
-      const text = await p.getDestructText();
+      const text5 = await p.getDestructText();
       expect(text).toContain('Original array:');
       expect(text).toContain('Basic destructuring: first=Red, second=Green, third=Blue');
       expect(text).toContain('Skipping elements: r=Red, b=Blue');
@@ -277,7 +277,7 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
   test.describe('Integration and edge-case flows', () => {
     test('Clicking multiple different buttons in quick succession updates each section independently', async ({ page }) => {
       // Ensure independent output areas remain coherent after rapid interactions
-      const p = new ArraysDemoPage(page);
+      const p7 = new ArraysDemoPage(page);
 
       // Rapidly trigger create, access, and destructuring
       await Promise.all([
@@ -301,7 +301,7 @@ test.describe('JavaScript Arrays Demo (FSM-driven tests)', () => {
     });
 
     test('Edge: rapid double-click on all buttons sequentially does not produce JS runtime errors', async ({ page }) => {
-      const p = new ArraysDemoPage(page);
+      const p8 = new ArraysDemoPage(page);
 
       // Double-click each button quickly
       await p.clickCreate();

@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tim Sort Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    white-space: pre-wrap;
+    margin: 1em;
+  }
+  button, input[type=number], input[type=text], select {
+    margin: 0.2em 0.5em 0.2em 0;
+  }
+  label {
+    margin-right: 0.5em;
+  }
+  .section {
+    margin-bottom: 1.2em;
+  }
+  #log {
+    border: 1px solid #000;
+    height: 180px;
+    overflow-y: auto;
+    padding: 4px;
+    white-space: pre-wrap;
+  }
+  #arrayContainer {
+    font-family: monospace, monospace;
+    line-height: 1.3em;
+  }
+  input[type=checkbox] {
+    vertical-align: middle;
+    margin-right: 0.3em;
+  }
+  select {
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+<h1>Tim Sort Interactive Explorer</h1>
+
+<div class="section" id="inputSection">
+  <label for="arrayInputText">Input Array (comma or space separated integers):</label><br />
+  <textarea id="arrayInputText" rows="3" cols="60" placeholder="e.g. 5, 3, 1, 4, 2"></textarea><br />
+
+  <label for="runLengthInput">Manual Min Run Length (optional):</label>
+  <input type="number" id="runLengthInput" min="1" step="1" placeholder="let auto-calc if blank" size="5" />
+  <button id="setMinRunBtn">Set/Apply Min Run Length</button><br />
+
+  <label>
+    <input type="checkbox" id="useNaturalRuns" />
+    Use natural runs detection (pre-sorted runs)
+  </label><br />
+
+  <label for="sortOrderSelect">Sort Order:</label>
+  <select id="sortOrderSelect">
+    <option value="asc" selected>Ascending</option>
+    <option value="desc">Descending</option>
+  </select><br />
+</div>
+
+<div class="section" id="commandsSection">
+  <button id="parseArrayBtn">Parse & Prepare Array</button>
+  <button id="autoMinRunBtn" disabled>Auto-calc Min Run Length</button>
+  <button id="detectRunsBtn" disabled>Detect Runs</button>
+  <button id="pushNextRunBtn" disabled>Push Next Run onto Stack</button>
+  <button id="tryCollapseBtn" disabled>Try Collapse Stack (Run merges)</button>
+  <button id="mergeTopRunsBtn" disabled>Manually Merge Top Runs</button>
+  <button id="runSortBtn" disabled>Sort Current Run (if unsorted)</button>
+  <button id="fullSortBtn" disabled>Run Full TimSort Automatically</button>
+  <button id="resetBtn">Reset All</button>
+</div>
+
+<div class="section" id="settingsSection">
+  <label for="runSortMethodSelect">Run Sort Method:</label>
+  <select id="runSortMethodSelect">
+    <option value="insertion">Insertion Sort (default for small runs)</option>
+    <option value="binary">Binary Insertion Sort</option>
+    <option value="builtin">Built-in Array.sort()</option>
+  </select>
+</div>
+
+<div class="section" id="statusSection">
+  <h3>Current Status:</h3>
+  <div><b>Array:</b></div>
+  <div id="arrayContainer"></div>
+  <div><b>Min Run Length:</b> <span id="minRunLengthDisplay">N/A</span></div>
+  <div><b>Runs Detected:</b> <span id="runsDetectedCount">0</span></div>
+  <div><b>Run Stack (top at right):</b> <span id="runStackDisplay">[]</span></div>
+</div>
+
+<div class="section" id="logsSection">
+  <h3>Logs & Step Info:</h3>
+  <div id="log" tabindex="0"></div>
+</div>
+
+<script>
+(() => {
+  // Data and states
+  let array = [];
+  let minRunLength = 0;
+  let runs = []; // array of {start, length, sorted:bool}
+  let runStack = []; // indexes into runs, stack holding the runs to be merged
+  let sortedOrder = 'asc';
+
+  let naturalRunsEnabled = false;
+  let runSortMethod = 'insertion';
+
+  // DOM Elements
+  const arrayInputText = document.getElementById('arrayInputText');
+  const runLengthInput = document.getElementById('runLengthInput');
+  const setMinRunBtn = document.getElementById('setMinRunBtn');
+  const useNaturalRunsCheckbox = document.getElementById('useNaturalRuns');
+  const sortOrderSelect = document.getElementById('sortOrderSelect');
+
+  const parseArrayBtn = document.getElementById('parseArrayBtn');
+  const autoMinRunBtn = document.getElementById('autoMinRunBtn');
+  const detectRunsBtn = document.getElementById('detectRunsBtn');
+  const pushNextRunBtn = document.getElementById('pushNextRunBtn');
+  const tryCollapseBtn = document.getElementById('tryCollapseBtn');
+  const mergeTopRunsBtn = document.getElementById('mergeTopRunsBtn');
+  const runSortBtn = document.getElementById('runSortBtn');
+  const fullSortBtn = document.getElementById('fullSortBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const runSortMethodSelect = document.getElementById('runSortMethodSelect');
+
+  const arrayContainer = document.getElementById('arrayContainer');
+  const minRunLengthDisplay = document.getElementById('minRunLengthDisplay');
+  const runsDetectedCount = document.getElementById('runsDetectedCount');
+  const runStackDisplay = document.getElementById('runStackDisplay');
+
+  const logDiv = document.getElementById('log');
+
+  // Helper functions for logging and state display
+  function log(msg) {
+    const timeStr = new Date().toLocaleTimeString();
+    logDiv.textContent += `[${timeStr}] ${msg}\n`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i=0;i<a.length;i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  function updateDisplays() {
+    // Show array with runs highlighted (by underlining runs)
+    if (array.length === 0) {
+      arrayContainer.textContent = '[Empty Array]';
+      minRunLengthDisplay.textContent = 'N/A';
+      runsDetectedCount.textContent = '0';
+      runStackDisplay.textContent = '[]';
+      return;
+    }
+    // Compose a text representation, runs underlined by _ or | marks
+    // For minimal: Just show the array with brackets and runs counts
+    // More info: show array elements and runs as [run0],[run1],...
+    let parts = [];
+    if (runs.length === 0) {
+      parts.push(`[${array.join(', ')}]`);
+    } else {
+      // Show runs as separate segments
+      for (let i = 0; i < runs.length; i++) {
+        let r = runs[i];
+        let runElements = array.slice(r.start, r.start + r.length);
+        let runText = runElements.join(', ');
+        let sortedMark = r.sorted ? '(sorted)' : '(unsorted)';
+        parts.push(`[${runText}]${sortedMark}`);
+      }
+    }
+    arrayContainer.textContent = parts.join('  ');
+
+    minRunLengthDisplay.textContent = minRunLength > 0 ? minRunLength : 'N/A';
+    runsDetectedCount.textContent = runs.length.toString();
+
+    // Show run stack as something like: [RunIdx:length] for each run in runStack top at right
+    let stackText = runStack.map(i => {
+      let r = runs[i];
+      if (!r) return '?';
+      return `[Idx:${i} Start:${r.start} Len:${r.length} ${r.sorted ? 'S' : 'U'}]`;
+    }).join(' ← ');
+    runStackDisplay.textContent = stackText || '[]';
+  }
+
+  // Core: TimSort helper methods
+
+  // Calculate min run length according to python timsort logic (minimum run length between 32 and 64)
+  function calcMinRunLength(n) {
+    let r = 0;
+    while (n >= 64) {
+      r |= (n & 1);
+      n >>= 1;
+    }
+    return n + r;
+  }
+
+  // Detect natural runs in the array based on ascending or descending order
+  // Returns array of runs {start, length, sorted}
+  function detectNaturalRuns(arr, orderAsc) {
+    let runsDetected = [];
+    let n = arr.length;
+    if (n === 0) return runsDetected;
+    let i = 0;
+    while (i < n) {
+      let runStart = i;
+      i++;
+      if (i === n) {
+        runsDetected.push({start: runStart, length: 1, sorted: true});
+        break;
+      }
+      // Determine if ascending or descending run
+      let runAsc = undefined;
+      if (arr[i-1] === arr[i]) {
+        runAsc = true; // treat equal as ascending by default
+      } else {
+        runAsc = orderAsc ? true : false; // fallback default
+        // We try to detect actual order of run
+        runAsc = (arr[i-1] < arr[i]);
+      }
+      // Extend the run while order matches
+      while (i < n) {
+        if (runAsc) {
+          if (arr[i-1] <= arr[i]) {
+            i++;
+          } else break;
+        } else {
+          if (arr[i-1] >= arr[i]) {
+            i++;
+          } else break;
+        }
+      }
+      let runLength = i - runStart;
+      let sorted = true;
+      if (!runAsc) {
+        // Reverse descending runs for TimSort usage ascending anyway - timsort reverses descending runs
+        sorted = false; // mark unsorted so user can manually reverse or sort if desired
+      }
+      runsDetected.push({start: runStart, length: runLength, sorted: sorted, descending: !runAsc});
+    }
+    return runsDetected;
+  }
+
+  // Push runs of length minRunLength from remaining array part as unsorted runs if natural runs disabled
+  // or push detected runs from natural runs one by one.
+  // Returns the run object pushed or null if no runs left.
+  let pushIndex = 0;
+  function pushNextRun() {
+    if (runs.length === 0) {
+      log('No runs detected to push onto runStack.');
+      return null;
+    }
+    if (pushIndex >= runs.length) {
+      log('All runs have been pushed onto the run stack.');
+      return null;
+    }
+    let r = runs[pushIndex];
+    runStack.push(pushIndex);
+    log(`Pushed run #${pushIndex} (start: ${r.start}, length: ${r.length}, sorted: ${r.sorted}) onto the run stack.`);
+    pushIndex++;
+    updateDisplays();
+    return r;
+  }
+
+  // Merge two runs indexed by indices in runs: runStack top two
+  // Returns true if a merge was done, false otherwise
+  function tryMergeCollapse() {
+    while (true) {
+      let n = runStack.length;
+      if (n < 2) return false;
+      let i = runStack[n-2]; // second from top
+      let j = runStack[n-1]; // top
+      let runX = runs[i];
+      let runY = runs[j];
+      // TimSort invariants for merging runs:
+      // From Tim Peters' paper:
+      // Let X, Y, Z be the lengths of the last three runs on the stack
+      // (Run A on top has length Z, below it Run B length Y, below that Run C length X)
+      // Merge occurs when these conditions meet:
+      // 1) X > Y + Z and Y > Z is false - merge the smaller runs
+      // Implementing simplified version: merge top two runs whenever run before last length <= run last length
+      // For demo, let's just try to merge top two runs if possible
+      // ... since no third run info needed here, we merge top two runs if their sum <= minRunLength * 2 or top run smaller
+      // We'll allow manual merge or full auto to be precise
+
+      // We leave decision to user or separate function
+      return false; // this function only tries collapse in full auto or manual merge triggered externally
+    }
+  }
+
+  // Manually merge top two runs on stack
+  // Merge runs[i] and runs[j] where i=runStack[n-2], j=runStack[n-1]
+  // The runs must be consecutive in array, left run starts before right run
+  // Returns true on success, false if runs are not mergeable
+  function mergeTopRuns() {
+    if (runStack.length < 2) {
+      log('Need at least two runs on stack to merge.');
+      return false;
+    }
+    let n = runStack.length;
+    let i = runStack[n-2], j = runStack[n-1];
+    let run1 = runs[i];
+    let run2 = runs[j];
+
+    if (run1.start + run1.length !== run2.start) {
+      log('Runs are not contiguous and cannot be merged.');
+      return false;
+    }
+
+    log(`Merging runs #${i} (start: ${run1.start}, len: ${run1.length}) and #${j} (start: ${run2.start}, len: ${run2.length})`);
+
+    // Merge arrays slices with respect to sortedOrder
+    const mergedArray = mergeArrays(
+      array.slice(run1.start, run1.start + run1.length),
+      array.slice(run2.start, run2.start + run2.length),
+      sortedOrder
+    );
+
+    // Replace in the array
+    array.splice(run1.start, run1.length + run2.length, ...mergedArray);
+
+    // Update runs array
+    runs[i] = {start: run1.start, length: mergedArray.length, sorted: true};
+    runs.splice(j, 1); // remove run2 from runs array
+
+    // Update runStack, remove top run index
+    runStack.pop();
+
+    // Adjust runStack indices after removing run at j
+    for (let k = 0; k < runStack.length; k++) {
+      if (runStack[k] > j) runStack[k]--;
+    }
+
+    // Adjust pushIndex because runs array reduced by 1
+    if (pushIndex > j) pushIndex--;
+
+    log(`Runs merged. New run #${i} length: ${mergedArray.length}.`);
+
+    updateDisplays();
+    return true;
+  }
+
+  // Merge two sorted arrays into one sorted array given order ('asc' or 'desc')
+  function mergeArrays(left, right, order) {
+    let result = [];
+    let i = 0, j = 0;
+    while (i < left.length && j < right.length) {
+      if ((order === 'asc' && left[i] <= right[j]) || (order === 'desc' && left[i] >= right[j])) {
+        result.push(left[i++]);
+      } else {
+        result.push(right[j++]);
+      }
+    }
+    while (i < left.length) result.push(left[i++]);
+    while (j < right.length) result.push(right[j++]);
+    return result;
+  }
+
+  // Perform insertion sort on array slice [start, start+length), ascending or descending
+  function insertionSort(arr, start, length, order) {
+    let comp = (a,b) => order === 'asc' ? a > b : a < b;
+    let end = start + length;
+    for (let i = start + 1; i < end; i++) {
+      let temp = arr[i];
+      let j = i - 1;
+      while (j >= start && comp(arr[j], temp)) {
+        arr[j+1] = arr[j];
+        j--;
+      }
+      arr[j+1] = temp;
+    }
+  }
+
+  // Perform binary insertion sort on array slice [start, start+length)
+  function binaryInsertionSort(arr, start, length, order) {
+    let comp = (a,b) => order === 'asc' ? a > b : a < b;
+    let end = start + length;
+    for (let i = start + 1; i < end; i++) {
+      let key = arr[i];
+      // Find location to insert with binary search
+      let left = start, right = i - 1;
+      while (left <= right) {
+        let mid = Math.floor((left + right) / 2);
+        if (comp(arr[mid], key)) left = mid + 1;
+        else right = mid - 1;
+      }
+      // Shift all elements right from left to i-1
+      for (let j = i - 1; j >= left; j--) {
+        arr[j + 1] = arr[j];
+      }
+      arr[left] = key;
+    }
+  }
+
+  // Sort a run if unsorted by chosen method
+  function sortRun(runIndex) {
+    if (runIndex < 0 || runIndex >= runs.length) {
+      log('Invalid run index for sorting.');
+      return;
+    }
+    let r = runs[runIndex];
+    if (r.sorted) {
+      log(`Run #${runIndex} is already sorted.`);
+      return;
+    }
+
+    log(`Sorting run #${runIndex} (start: ${r.start}, length: ${r.length}) using ${runSortMethod} method.`);
+
+    // If run is descending, reverse first (simulate timsort behavior)
+    if (r.descending) {
+      // Reverse array slice
+      for (let i = 0; i < Math.floor(r.length / 2); i++) {
+        let leftIdx = r.start + i;
+        let rightIdx = r.start + r.length - 1 - i;
+        let tmp = array[leftIdx];
+        array[leftIdx] = array[rightIdx];
+        array[rightIdx] = tmp;
+      }
+      r.descending = false;
+      log(`Run #${runIndex} was descending and reversed.`);
+    }
+
+    // Choose method
+    if (runSortMethod === 'insertion') {
+      insertionSort(array, r.start, r.length, sortedOrder);
+    } else if (runSortMethod === 'binary') {
+      binaryInsertionSort(array, r.start, r.length, sortedOrder);
+    } else {
+      // builtin
+      let slice = array.slice(r.start, r.start + r.length);
+      slice.sort((a,b) => {
+        if (sortedOrder === 'asc') return a - b;
+        else return b - a;
+      });
+      for(let i = 0; i < r.length; i++) {
+        array[r.start+i] = slice[i];
+      }
+    }
+    r.sorted = true;
+    log(`Run #${runIndex} sorted.`);
+    updateDisplays();
+  }
+
+  // Full automatic timsort simulation: 1) detect runs, 2) push runs, 3) sort if needed, 4) merge to one run
+  // We allow a blocking loop with manual yield by intervals to remain responsive
+  async function fullTimSortAuto() {
+    if (array.length === 0) {
+      log('No array to sort.');
+      return;
+    }
+    log('Starting full automatic TimSort simulation...');
+
+    // Step 1: detect runs if natural runs enabled, else create runs of minRunLength
+    if (naturalRunsEnabled) {
+      log('Detecting natural runs...');
+      runs = detectNaturalRuns(array, sortedOrder === 'asc');
+    } else {
+      // Create fixed length runs of minRunLength
+      runs = [];
+      let n = array.length;
+      let idx = 0;
+      while (idx < n) {
+        let runLen = Math.min(minRunLength, n - idx);
+        runs.push({start: idx, length: runLen, sorted: false, descending: false});
+        idx += runLen;
+      }
+    }
+    minRunLengthDisplay.textContent = minRunLength.toString();
+    runsDetectedCount.textContent = runs.length.toString();
+    runStack = [];
+    pushIndex = 0;
+    updateDisplays();
+
+    // Step 2: push runs and sort if needed
+    while(pushIndex < runs.length) {
+      pushNextRun();
+      let runIdx = runStack[runStack.length - 1];
+      if (!runs[runIdx].sorted) {
+        sortRun(runIdx);
+        await pause(100);
+      }
+      // Check collapse rules: simplified merge runs at top if length criteria met (simulate)
+      await collapseRunsAuto();
+      await pause(100);
+    }
+
+    // Step 3: final merges until one run remains
+    while (runStack.length > 1) {
+      mergeTopRuns();
+      await pause(200);
+    }
+    log('Full TimSort automatic simulation complete.');
+    updateDisplays();
+  }
+
+  // Automated collapsing of runs based on basic TimSort merging invariant:
+  // Merge when run length conditions are met according to TimSort rules:
+  // For simplicity, we implement the merging invariants from Tim Peters' algorithm:
+  // Let stack runs length from bottom: A, B, C (C top)
+  // While (|A| > |B| + |C| == false OR |B| > |C|)
+  // Merge runs accordingly
+  async function collapseRunsAuto() {
+    while (true) {
+      let n = runStack.length;
+      if (n < 2) return;
+      let X = n >= 3 ? runs[runStack[n-3]].length : Infinity;
+      let Y = runs[runStack[n-2]].length;
+      let Z = runs[runStack[n-1]].length;
+
+      if (n >= 3 && X <= Y + Z) {
+        if (X < Z) {
+          mergeAt(n - 3);
+        } else {
+          mergeAt(n - 2);
+        }
+        await pause(100);
+      } else if (Y <= Z) {
+        mergeAt(n - 2);
+        await pause(100);
+      } else break;
+    }
+  }
+
+  // Merge runs at position i and i+1 on runStack
+  function mergeAt(iOnStack) {
+    if (iOnStack < 0 || iOnStack + 1 >= runStack.length) {
+      log('mergeAt: invalid indices on runStack.');
+      return;
+    }
+    let a = runStack[iOnStack];
+    let b = runStack[iOnStack + 1];
+    let runA = runs[a];
+    let runB = runs[b];
+
+    if (runA.start + runA.length !== runB.start) {
+      log(`mergeAt: runs #${a} and #${b} are not adjacent, cannot merge.`);
+      return;
+    }
+    log(`mergeAt: Merging runs #${a} and #${b}.`);
+    const mergedArray = mergeArrays(
+      array.slice(runA.start, runA.start + runA.length),
+      array.slice(runB.start, runB.start + runB.length),
+      sortedOrder
+    );
+
+    array.splice(runA.start, runA.length + runB.length, ...mergedArray);
+
+    runs[a] = {start: runA.start, length: mergedArray.length, sorted: true};
+    runs.splice(b, 1);
+
+    runStack.splice(iOnStack + 1, 1);
+
+    // Update indices in the runStack above removed index
+    for (let k = iOnStack + 1; k < runStack.length; k++) {
+      if (runStack[k] > b) runStack[k]--;
+    }
+
+    // Adjust pushIndex
+    if (pushIndex > b) pushIndex--;
+
+    updateDisplays();
+  }
+
+  function pause(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Parsing input array from textarea
+  function parseInputArray() {
+    const text = arrayInputText.value.trim();
+    if (!text) {
+      log('Input array is empty.');
+      return false;
+    }
+    // Split by comma or whitespace
+    let parts = text.split(/[\s,]+/);
+    let nums = [];
+    for (let p of parts) {
+      let n = Number(p);
+      if (Number.isNaN(n)) {
+        log(`Invalid number detected: "${p}"`);
+        return false;
+      }
+      nums.push(n);
+    }
+    if (nums.length === 0) {
+      log('No valid numbers found in input.');
+      return false;
+    }
+    array = nums;
+    log(`Parsed array with ${array.length} elements.`);
+    updateDisplays();
+    return true;
+  }
+
+  // Reset all state
+  function resetAll() {
+    array = [];
+    minRunLength = 0;
+    runs = [];
+    runStack = [];
+    pushIndex = 0;
+    sortedOrder = 'asc';
+    naturalRunsEnabled = false;
+    runSortMethod = 'insertion';
+    arrayInputText.value = '';
+    runLengthInput.value = '';
+    useNaturalRunsCheckbox.checked = false;
+    runSortMethodSelect.value = 'insertion';
+    sortOrderSelect.value = 'asc';
+    minRunLengthDisplay.textContent = 'N/A';
+    runsDetectedCount.textContent = '0';
+    runStackDisplay.textContent = '[]';
+    arrayContainer.textContent = '[Empty Array]';
+    logDiv.textContent = '';
+    log('Reset all states and inputs.');
+    // Disable all except initial controls
+    disableButtonsOnReset();
+  }
+
+  function disableButtonsOnReset() {
+    autoMinRunBtn.disabled = true;
+    detectRunsBtn.disabled = true;
+    pushNextRunBtn.disabled = true;
+    tryCollapseBtn.disabled = true;
+    mergeTopRunsBtn.disabled = true;
+    runSortBtn.disabled = true;
+    fullSortBtn.disabled = true;
+  }
+
+  // Enable buttons after parse
+  function enableButtonsAfterParse() {
+    autoMinRunBtn.disabled = false;
+    detectRunsBtn.disabled = false;
+    pushNextRunBtn.disabled = false;
+    tryCollapseBtn.disabled = false;
+    mergeTopRunsBtn.disabled = false;
+    runSortBtn.disabled = false;
+    fullSortBtn.disabled = false;
+  }
+
+  // Button event handlers
+
+  parseArrayBtn.addEventListener('click', () => {
+    if (parseInputArray()) {
+      sortedOrder = sortOrderSelect.value;
+      naturalRunsEnabled = useNaturalRunsCheckbox.checked;
+      runSortMethod = runSortMethodSelect.value;
+
+      // Auto-calc min run length when user did not set manually
+      if (runLengthInput.value && Number(runLengthInput.value) > 0) {
+        minRunLength = Number(runLengthInput.value);
+        log(`Using user-set min run length: ${minRunLength}`);
+      } else {
+        minRunLength = calcMinRunLength(array.length);
+        log(`Auto-calculated min run length: ${minRunLength}`);
+      }
+
+      // Reset runs, stack indices
+      runs = [];
+      runStack = [];
+      pushIndex = 0;
+      updateDisplays();
+
+      enableButtonsAfterParse();
+    }
+  });
+
+  autoMinRunBtn.addEventListener('click', () => {
+    minRunLength = calcMinRunLength(array.length);
+    runLengthInput.value = minRunLength.toString();
+    minRunLengthDisplay.textContent = minRunLength.toString();
+    log(`Auto-calculated min run length: ${minRunLength}`);
+  });
+
+  detectRunsBtn.addEventListener('click', () => {
+    if (array.length === 0) {
+      log('Array empty. Parse array first.');
+      return;
+    }
+    if (naturalRunsEnabled) {
+      runs = detectNaturalRuns(array, sortedOrder === 'asc');
+      log(`Detected ${runs.length} natural run(s).`);
+    } else {
+      // Create fixed-length runs based on minRunLength (except last run)
+      runs = [];
+      let n = array.length;
+      let idx = 0;
+      while (idx < n) {
+        let len = Math.min(minRunLength, n - idx);
+        runs.push({start: idx, length: len, sorted: false, descending:false});
+        idx += len;
+      }
+      log(`Created fixed runs (length ${minRunLength}), total runs: ${runs.length}.`);
+    }
+    runStack = [];
+    pushIndex = 0;
+    updateDisplays();
+  });
+
+  pushNextRunBtn.addEventListener('click', () => {
+    if (runs.length === 0) {
+      log('No runs available. Detect runs first.');
+      return;
+    }
+    if (pushIndex >= runs.length) {
+      log('All runs have been pushed onto the stack.');
+      return;
+    }
+    pushNextRun();
+    // Enable runSortBtn only if top run unsorted
+    const runIdx = runStack[runStack.length - 1];
+    runSortBtn.disabled = runs[runIdx].sorted;
+  });
+
+  tryCollapseBtn.addEventListener('click', async () => {
+    log('Attempting automated collapse according to TimSort run merging rules...');
+    await collapseRunsAuto();
+    updateDisplays();
+  });
+
+  mergeTopRunsBtn.addEventListener('click', () => {
+    if (!mergeTopRuns()) {
+      log('Manual merge unable to proceed.');
+    }
+  });
+
+  runSortBtn.addEventListener('click', () => {
+    if (runStack.length === 0) {
+      log('No runs on stack to sort.');
+      return;
+    }
+    const runIdx = runStack[runStack.length - 1];
+    sortRun(runIdx);
+    runSortBtn.disabled = true;
+  });
+
+  fullSortBtn.addEventListener('click', async () => {
+    await fullTimSortAuto();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    resetAll();
+  });
+
+  runSortMethodSelect.addEventListener('change', () => {
+    runSortMethod = runSortMethodSelect.value;
+    log(`Run sort method changed to "${runSortMethod}".`);
+  });
+
+  useNaturalRunsCheckbox.addEventListener('change', () => {
+    naturalRunsEnabled = useNaturalRunsCheckbox.checked;
+    log(`Natural runs detection ${naturalRunsEnabled ? 'enabled' : 'disabled'}.`);
+  });
+
+  sortOrderSelect.addEventListener('change', () => {
+    sortedOrder = sortOrderSelect.value;
+    log(`Sort order changed to "${sortedOrder}".`);
+  });
+
+  setMinRunBtn.addEventListener('click', () => {
+    let val = Number(runLengthInput.value);
+    if (Number.isInteger(val) && val > 0) {
+      minRunLength = val;
+      minRunLengthDisplay.textContent = minRunLength.toString();
+      log(`Min run length manually set to ${minRunLength}.`);
+    } else {
+      log('Invalid min run length input.');
+    }
+  });
+
+  // Initialize page state
+  resetAll();
+
+})();
+</script>
+</body>
+</html>

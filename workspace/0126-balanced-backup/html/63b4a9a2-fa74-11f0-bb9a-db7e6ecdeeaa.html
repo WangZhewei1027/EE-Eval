@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Asymmetric Cryptography Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 2rem;
+    background: #f9f9f9;
+    color: #333;
+  }
+  h1 {
+    color: #007acc;
+  }
+  label {
+    display: block;
+    margin-top: 1rem;
+    font-weight: bold;
+  }
+  textarea, input[type="text"] {
+    width: 100%;
+    font-family: monospace;
+    font-size: 1rem;
+    padding: 0.4rem;
+    margin-top: 0.3rem;
+    box-sizing: border-box;
+  }
+  button {
+    margin-top: 1rem;
+    padding: 0.6rem 1rem;
+    font-size: 1rem;
+    background-color: #007acc;
+    border: none;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+  }
+  .output {
+    background: #eaeaea;
+    padding: 1rem;
+    margin-top: 0.5rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border-radius: 4px;
+  }
+  .section {
+    margin-bottom: 2rem;
+  }
+  .key-info {
+    font-size: 0.9rem;
+    color: #555;
+    margin-top: 0.25rem;
+  }
+</style>
+</head>
+<body>
+<h1>Asymmetric Cryptography Demo (RSA with Web Crypto API)</h1>
+<p>This demo uses your browser's <strong>Web Crypto API</strong> to generate an RSA key pair and demonstrate asymmetric encryption and decryption. The private key is never shared and is used to decrypt; the public key is used to encrypt.</p>
+
+<div class="section">
+  <button id="generate-keys-btn">Generate RSA Key Pair</button>
+  <div id="keys-info" class="key-info"></div>
+  <label for="publicKeyPem">Public Key (PEM encoded):</label>
+  <textarea id="publicKeyPem" readonly rows="8" placeholder="Public key will appear here..."></textarea>
+
+  <label for="privateKeyPem">Private Key (PEM encoded):</label>
+  <textarea id="privateKeyPem" readonly rows="10" placeholder="Private key will appear here..."></textarea>
+</div>
+
+<div class="section">
+  <label for="plaintext">Plaintext to Encrypt:</label>
+  <textarea id="plaintext" rows="4" placeholder="Type message here..."></textarea>
+  <button id="encrypt-btn" disabled>Encrypt with Public Key</button>
+
+  <label for="ciphertextBase64">Ciphertext (Base64):</label>
+  <textarea id="ciphertextBase64" readonly rows="4" placeholder="Encrypted message appears here..."></textarea>
+
+  <button id="decrypt-btn" disabled>Decrypt with Private Key</button>
+  <label for="decryptedText">Decrypted Text:</label>
+  <textarea id="decryptedText" readonly rows="4" placeholder="Decrypted message appears here..."></textarea>
+</div>
+
+<script>
+(async function() {
+  // Elements
+  const generateBtn = document.getElementById('generate-keys-btn');
+  const keysInfo = document.getElementById('keys-info');
+  const publicKeyPemEl = document.getElementById('publicKeyPem');
+  const privateKeyPemEl = document.getElementById('privateKeyPem');
+  const plaintextEl = document.getElementById('plaintext');
+  const encryptBtn = document.getElementById('encrypt-btn');
+  const ciphertextEl = document.getElementById('ciphertextBase64');
+  const decryptBtn = document.getElementById('decrypt-btn');
+  const decryptedTextEl = document.getElementById('decryptedText');
+
+  let publicKey, privateKey;
+
+  function bufToBase64(buffer) {
+    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  }
+
+  function base64ToBuf(base64) {
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for(let i=0; i<len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  // Convert CryptoKey to PEM format
+  async function exportKey(key) {
+    let exported = await window.crypto.subtle.exportKey(
+      key.type === 'public' ? 'spki' : 'pkcs8',
+      key
+    );
+    const exportedAsBase64 = bufToBase64(exported);
+    const exportedAsPem = pemFormat(exportedAsBase64, key.type === 'public' ? 'PUBLIC KEY' : 'PRIVATE KEY');
+    return exportedAsPem;
+  }
+
+  function pemFormat(base64String, label) {
+    const lineLength = 64;
+    const lines = [];
+    for (let i=0; i < base64String.length; i += lineLength) {
+      lines.push(base64String.slice(i, i + lineLength));
+    }
+    return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
+  }
+
+  // Import PEM key string back to CryptoKey
+  async function importPublicKey(pem) {
+    // Remove PEM header/footer and line breaks
+    const b64 = pem.replace(/-----BEGIN PUBLIC KEY-----/, '')
+                   .replace(/-----END PUBLIC KEY-----/, '')
+                   .replace(/\s/g, '');
+    const binaryDer = base64ToBuf(b64);
+    return await window.crypto.subtle.importKey(
+      'spki',
+      binaryDer,
+      {
+        name: 'RSA-OAEP',
+        hash: 'SHA-256',
+      },
+      true,
+      ['encrypt']
+    );
+  }
+
+  async function importPrivateKey(pem) {
+    const b64 = pem.replace(/-----BEGIN PRIVATE KEY-----/, '')
+                   .replace(/-----END PRIVATE KEY-----/, '')
+                   .replace(/\s/g, '');
+    const binaryDer = base64ToBuf(b64);
+    return await window.crypto.subtle.importKey(
+      'pkcs8',
+      binaryDer,
+      {
+        name: 'RSA-OAEP',
+        hash: 'SHA-256',
+      },
+      true,
+      ['decrypt']
+    );
+  }
+
+  // Generate RSA key pair
+  async function generateKeyPair() {
+    keysInfo.textContent = "Generating keys, please wait...";
+    try {
+      const keypair = await window.crypto.subtle.generateKey(
+        {
+          name: 'RSA-OAEP',
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+          hash: 'SHA-256',
+        },
+        true,
+        ['encrypt', 'decrypt']
+      );
+      publicKey = keypair.publicKey;
+      privateKey = keypair.privateKey;
+
+      const pubPem = await exportKey(publicKey);
+      const privPem = await exportKey(privateKey);
+
+      publicKeyPemEl.value = pubPem;
+      privateKeyPemEl.value = privPem;
+
+      keysInfo.textContent = "RSA 2048-bit key pair generated successfully.";
+      encryptBtn.disabled = false;
+      decryptBtn.disabled = true;
+      ciphertextEl.value = "";
+      decryptedTextEl.value = "";
+    } catch (e) {
+      keysInfo.textContent = "Error generating keys: " + e.message;
+    }
+  }
+
+  // Encrypt plaintext with public key
+  async function encryptText() {
+    if (!publicKey) return;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(plaintextEl.value);
+    try {
+      const encrypted = await window.crypto.subtle.encrypt(
+        {
+          name: "RSA-OAEP"
+        },
+        publicKey,
+        data
+      );
+      const base64Cipher = bufToBase64(encrypted);
+      ciphertextEl.value = base64Cipher;
+      decryptBtn.disabled = false;
+      decryptedTextEl.value = "";
+    } catch(e) {
+      alert('Encryption failed: ' + e.message);
+    }
+  }
+
+  // Decrypt ciphertext with private key
+  async function decryptText() {
+    if (!privateKey) return;
+    try {
+      const cipherBuffer = base64ToBuf(ciphertextEl.value.trim());
+      const decrypted = await window.crypto.subtle.decrypt(
+        {
+          name: "RSA-OAEP"
+        },
+        privateKey,
+        cipherBuffer
+      );
+      const decoder = new TextDecoder();
+      decryptedTextEl.value = decoder.decode(decrypted);
+    } catch(e) {
+      alert('Decryption failed: ' + e.message);
+    }
+  }
+
+  generateBtn.addEventListener('click', generateKeyPair);
+  encryptBtn.addEventListener('click', encryptText);
+  decryptBtn.addEventListener('click', decryptText);
+
+})();
+</script>
+</body>
+</html>

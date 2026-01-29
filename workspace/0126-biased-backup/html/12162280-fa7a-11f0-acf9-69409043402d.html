@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Transaction Simulator</title>
+</head>
+<body>
+<h1>Transaction Simulator</h1>
+
+<p>
+  This simulator allows you to perform a transaction through multiple steps with complex state transitions.
+  You can create an account, deposit funds, initiate transactions, adjust fees, retry failed transactions,
+  cancel transactions, and more. Explore different paths and experiment with the process.
+</p>
+
+<hr />
+
+<div id="state-display">
+  <strong>Current State:</strong> <span id="current-state">No Account</span>
+</div>
+
+<hr />
+
+<!-- User Account Setup -->
+<div id="account-section">
+  <h2>Account Setup</h2>
+  <label>
+    Enter Username:
+    <input type="text" id="username-input" />
+  </label>
+  <button id="create-account-btn" disabled>Create Account</button>
+  <p id="account-error" style="color:black;"></p>
+</div>
+
+<hr />
+
+<!-- Balance Management -->
+<div id="balance-section" style="display:none;">
+  <h2>Balance Management</h2>
+  <p><strong>Username:</strong> <span id="display-username"></span></p>
+  <p><strong>Account Balance:</strong> $<span id="account-balance">0.00</span></p>
+  <label>
+    Deposit Amount:
+    <input type="number" id="deposit-amount" min="0" step="0.01" value="0" />
+  </label>
+  <button id="deposit-btn">Deposit</button>
+  <p id="deposit-message" style="color:black;"></p>
+</div>
+
+<hr />
+
+<!-- Transaction Initiation -->
+<div id="transaction-section" style="display:none;">
+  <h2>Initiate Transaction</h2>
+  <label>
+    Recipient:
+    <input type="text" id="recipient-input" />
+  </label>
+  <br /><br />
+  <label>
+    Amount ($):
+    <input type="number" id="transaction-amount" min="0" step="0.01" value="0" />
+  </label>
+  <br /><br />
+  <label>
+    Fee (% slider):
+    <input type="range" id="fee-slider" min="0" max="10" step="0.1" value="1" />
+  </label>
+  <span id="fee-value">1.0%</span>
+  <br /><br />
+  <button id="start-transaction-btn" disabled>Start Transaction</button>
+  <p id="transaction-error" style="color:black;"></p>
+</div>
+
+<hr />
+
+<!-- Transaction Progress -->
+<div id="progress-section" style="display:none;">
+  <h2>Transaction Progress</h2>
+  <p><strong>From:</strong> <span id="progress-from"></span></p>
+  <p><strong>To:</strong> <span id="progress-to"></span></p>
+  <p><strong>Amount:</strong> $<span id="progress-amount"></span></p>
+  <p><strong>Fee (%):</strong> <span id="progress-fee"></span>%</p>
+  <p><strong>Total Deducted:</strong> $<span id="progress-total"></span></p>
+  <p><strong>Status:</strong> <span id="progress-status">Pending</span></p>
+
+  <button id="confirm-transaction-btn">Confirm Transaction</button>
+  <button id="fail-transaction-btn">Fail Transaction</button>
+  <button id="cancel-transaction-btn">Cancel Transaction</button>
+</div>
+
+<hr />
+
+<!-- History and Controls -->
+<div id="history-section" style="display:none;">
+  <h2>Transaction History and Controls</h2>
+  <button id="view-history-btn">View History</button>
+  <button id="reset-btn">Reset All</button>
+  <button id="retry-transaction-btn" disabled>Retry Last Failed Transaction</button>
+  <div id="history-list" style="white-space: pre-wrap; max-height: 200px; overflow-y: auto; border: 1px solid black; padding:5px; margin-top:10px;"></div>
+</div>
+
+<script>
+// Application State
+const appState = {
+  username: null,
+  balance: 0.00,
+  transactions: [], // Each: {id, from, to, amount, feePct, total, status: 'confirmed'|'failed'|'cancelled'}
+  transactionInProgress: null, // {id, from, to, amount, feePct, total, status: 'pending'|'confirmed'|'failed'|'cancelled'}
+  lastTransactionId: 0,
+};
+
+// State Constants for display
+const STATES = {
+  NO_ACCOUNT: 'No Account',
+  ACCOUNT_CREATED: 'Account Created',
+  IDLE: 'Idle',
+  TRANSACTION_PENDING: 'Transaction Pending',
+  TRANSACTION_CONFIRMED: 'Transaction Confirmed',
+  TRANSACTION_FAILED: 'Transaction Failed',
+  TRANSACTION_CANCELLED: 'Transaction Cancelled',
+};
+
+// Helper to update the current state display
+function updateStateDisplay() {
+  let stateText = STATES.NO_ACCOUNT;
+  if (!appState.username) {
+    stateText = STATES.NO_ACCOUNT;
+  } else if (!appState.transactionInProgress && appState.transactions.length === 0) {
+    stateText = STATES.ACCOUNT_CREATED;
+  } else if (!appState.transactionInProgress) {
+    stateText = STATES.IDLE;
+  } else {
+    switch (appState.transactionInProgress.status) {
+      case 'pending':
+        stateText = STATES.TRANSACTION_PENDING;
+        break;
+      case 'confirmed':
+        stateText = STATES.TRANSACTION_CONFIRMED;
+        break;
+      case 'failed':
+        stateText = STATES.TRANSACTION_FAILED;
+        break;
+      case 'cancelled':
+        stateText = STATES.TRANSACTION_CANCELLED;
+        break;
+      default:
+        stateText = 'Unknown State';
+    }
+  }
+  document.getElementById('current-state').textContent = stateText;
+}
+
+// UI Components
+const usernameInput = document.getElementById('username-input');
+const createAccountBtn = document.getElementById('create-account-btn');
+const accountError = document.getElementById('account-error');
+
+const balanceSection = document.getElementById('balance-section');
+const displayUsername = document.getElementById('display-username');
+const accountBalanceEl = document.getElementById('account-balance');
+const depositAmountInput = document.getElementById('deposit-amount');
+const depositBtn = document.getElementById('deposit-btn');
+const depositMessage = document.getElementById('deposit-message');
+
+const transactionSection = document.getElementById('transaction-section');
+const recipientInput = document.getElementById('recipient-input');
+const transactionAmountInput = document.getElementById('transaction-amount');
+const feeSlider = document.getElementById('fee-slider');
+const feeValueSpan = document.getElementById('fee-value');
+const startTransactionBtn = document.getElementById('start-transaction-btn');
+const transactionError = document.getElementById('transaction-error');
+
+const progressSection = document.getElementById('progress-section');
+const progressFrom = document.getElementById('progress-from');
+const progressTo = document.getElementById('progress-to');
+const progressAmount = document.getElementById('progress-amount');
+const progressFee = document.getElementById('progress-fee');
+const progressTotal = document.getElementById('progress-total');
+const progressStatus = document.getElementById('progress-status');
+const confirmTransactionBtn = document.getElementById('confirm-transaction-btn');
+const failTransactionBtn = document.getElementById('fail-transaction-btn');
+const cancelTransactionBtn = document.getElementById('cancel-transaction-btn');
+
+const historySection = document.getElementById('history-section');
+const viewHistoryBtn = document.getElementById('view-history-btn');
+const historyList = document.getElementById('history-list');
+const resetBtn = document.getElementById('reset-btn');
+const retryTransactionBtn = document.getElementById('retry-transaction-btn');
+
+// Enable create account button only if username valid
+usernameInput.addEventListener('input', () => {
+  const val = usernameInput.value.trim();
+  createAccountBtn.disabled = val.length === 0;
+  accountError.textContent = '';
+});
+
+// Create account handler
+createAccountBtn.addEventListener('click', () => {
+  const username = usernameInput.value.trim();
+  if (!username) {
+    accountError.textContent = 'Username cannot be empty.';
+    return;
+  }
+  appState.username = username;
+  appState.balance = 0.00;
+  appState.transactions.length = 0;
+  appState.transactionInProgress = null;
+  appState.lastTransactionId = 0;
+
+  usernameInput.disabled = true;
+  createAccountBtn.disabled = true;
+
+  displayUsername.textContent = appState.username;
+  accountBalanceEl.textContent = appState.balance.toFixed(2);
+  depositAmountInput.value = '0';
+  depositMessage.textContent = '';
+
+  balanceSection.style.display = '';
+  transactionSection.style.display = '';
+  historySection.style.display = '';
+
+  resetTransactionSection();
+  updateStateDisplay();
+  clearTransactionInputs();
+  updateRetryButtonState();
+});
+
+// Deposit funds
+depositBtn.addEventListener('click', () => {
+  const depositStr = depositAmountInput.value.trim();
+  const depositVal = parseFloat(depositStr);
+  if (isNaN(depositVal) || depositVal <= 0) {
+    depositMessage.textContent = 'Enter a valid positive number to deposit.';
+    return;
+  }
+  appState.balance += depositVal;
+  accountBalanceEl.textContent = appState.balance.toFixed(2);
+  depositMessage.textContent = `Deposited $${depositVal.toFixed(2)} successfully.`;
+  depositAmountInput.value = '0';
+  updateRetryButtonState();
+});
+
+// Fee slider update
+feeSlider.addEventListener('input', () => {
+  feeValueSpan.textContent = feeSlider.value;
+  validateTransactionInputs();
+});
+
+// Validate transaction inputs to enable/disable start button
+function validateTransactionInputs() {
+  const recip = recipientInput.value.trim();
+  const amountStr = transactionAmountInput.value.trim();
+  const amountVal = parseFloat(amountStr);
+  const feePct = parseFloat(feeSlider.value);
+
+  let valid = true;
+  let errMsg = '';
+
+  if (!recip) {
+    valid = false;
+    errMsg = 'Recipient is required.';
+  } else if (!amountStr || isNaN(amountVal) || amountVal <= 0) {
+    valid = false;
+    errMsg = 'Enter a valid positive amount.';
+  } else if (feePct < 0 || feePct > 10) {
+    valid = false;
+    errMsg = 'Fee must be between 0% and 10%.';
+  } else {
+    const totalCost = amountVal * (1 + feePct / 100);
+    if (totalCost > appState.balance) {
+      valid = false;
+      errMsg = `Insufficient balance. Total needed: $${totalCost.toFixed(2)}.`;
+    }
+  }
+
+  startTransactionBtn.disabled = !valid;
+  transactionError.textContent = errMsg;
+}
+
+// Inputs event listeners for validation
+recipientInput.addEventListener('input', validateTransactionInputs);
+transactionAmountInput.addEventListener('input', validateTransactionInputs);
+
+// Clear transaction input fields
+function clearTransactionInputs() {
+  recipientInput.value = '';
+  transactionAmountInput.value = '0';
+  feeSlider.value = 1;
+  feeValueSpan.textContent = '1.0';
+  startTransactionBtn.disabled = true;
+  transactionError.textContent = '';
+}
+
+// Start transaction
+startTransactionBtn.addEventListener('click', () => {
+  const recipient = recipientInput.value.trim();
+  const amount = parseFloat(transactionAmountInput.value.trim());
+  const feePct = parseFloat(feeSlider.value);
+
+  const total = amount * (1 + feePct / 100);
+
+  // Sanity check - balance already checked in validation but double check
+  if (total > appState.balance) {
+    transactionError.textContent = 'Balance changed, insufficient funds.';
+    return;
+  }
+
+  appState.lastTransactionId++;
+  const tx = {
+    id: appState.lastTransactionId,
+    from: appState.username,
+    to: recipient,
+    amount,
+    feePct,
+    total,
+    status: 'pending',
+  };
+  appState.transactionInProgress = tx;
+
+  // Update UI
+  updateTransactionProgressUI(tx);
+  progressSection.style.display = '';
+  transactionSection.style.display = 'none';
+  depositMessage.textContent = '';
+
+  updateStateDisplay();
+});
+
+// Update transaction progress UI
+function updateTransactionProgressUI(tx) {
+  progressFrom.textContent = tx.from;
+  progressTo.textContent = tx.to;
+  progressAmount.textContent = tx.amount.toFixed(2);
+  progressFee.textContent = tx.feePct.toFixed(2);
+  progressTotal.textContent = tx.total.toFixed(2);
+  progressStatus.textContent = tx.status.charAt(0).toUpperCase() + tx.status.slice(1);
+
+  // Confirm/Fails enabled only if pending
+  confirmTransactionBtn.disabled = tx.status !== 'pending';
+  failTransactionBtn.disabled = tx.status !== 'pending';
+  cancelTransactionBtn.disabled = tx.status !== 'pending';
+}
+
+confirmTransactionBtn.addEventListener('click', () => {
+  const tx = appState.transactionInProgress;
+  if (!tx || tx.status !== 'pending') return;
+
+  // Deduct balance
+  appState.balance -= tx.total;
+  accountBalanceEl.textContent = appState.balance.toFixed(2);
+
+  tx.status = 'confirmed';
+  appState.transactions.push(tx);
+  appState.transactionInProgress = null;
+
+  progressStatus.textContent = 'Confirmed';
+
+  // Hide progress and show transaction section
+  progressSection.style.display = 'none';
+  transactionSection.style.display = '';
+  depositMessage.textContent = 'Transaction confirmed and processed.';
+  clearTransactionInputs();
+  updateStateDisplay();
+  updateRetryButtonState();
+});
+
+failTransactionBtn.addEventListener('click', () => {
+  const tx = appState.transactionInProgress;
+  if (!tx || tx.status !== 'pending') return;
+
+  tx.status = 'failed';
+  appState.transactions.push(tx);
+  appState.transactionInProgress = null;
+
+  progressStatus.textContent = 'Failed';
+
+  // Hide progress and show transaction section
+  progressSection.style.display = 'none';
+  transactionSection.style.display = '';
+  depositMessage.textContent = 'Transaction failed. You may retry it.';
+  clearTransactionInputs();
+  updateStateDisplay();
+  updateRetryButtonState();
+});
+
+cancelTransactionBtn.addEventListener('click', () => {
+  const tx = appState.transactionInProgress;
+  if (!tx || tx.status !== 'pending') return;
+
+  tx.status = 'cancelled';
+  appState.transactions.push(tx);
+  appState.transactionInProgress = null;
+
+  progressStatus.textContent = 'Cancelled';
+
+  // Hide progress and show transaction section
+  progressSection.style.display = 'none';
+  transactionSection.style.display = '';
+  depositMessage.textContent = 'Transaction cancelled.';
+  clearTransactionInputs();
+  updateStateDisplay();
+  updateRetryButtonState();
+});
+
+viewHistoryBtn.addEventListener('click', () => {
+  if (appState.transactions.length === 0) {
+    historyList.textContent = 'No transaction history.';
+    return;
+  }
+  let output = '';
+  for (const tx of appState.transactions) {
+    output += `ID: ${tx.id}\nFrom: ${tx.from}\nTo: ${tx.to}\nAmount: $${tx.amount.toFixed(2)}\nFee: ${tx.feePct.toFixed(2)}%\nTotal: $${tx.total.toFixed(2)}\nStatus: ${tx.status}\n---\n`;
+  }
+  historyList.textContent = output.trim();
+});
+
+// Reset all state
+resetBtn.addEventListener('click', () => {
+  appState.username = null;
+  appState.balance = 0.00;
+  appState.transactions.length = 0;
+  appState.transactionInProgress = null;
+  appState.lastTransactionId = 0;
+
+  // Reset UI elements
+  usernameInput.value = '';
+  usernameInput.disabled = false;
+  createAccountBtn.disabled = true;
+  accountError.textContent = '';
+  balanceSection.style.display = 'none';
+  transactionSection.style.display = 'none';
+  progressSection.style.display = 'none';
+  historySection.style.display = 'none';
+
+  depositAmountInput.value = '0';
+  depositMessage.textContent = '';
+  clearTransactionInputs();
+
+  historyList.textContent = '';
+  updateStateDisplay();
+  updateRetryButtonState();
+});
+
+// Retry last failed transaction implementation
+
+function findLastFailedTransaction() {
+  for (let i = appState.transactions.length - 1; i >= 0; i--) {
+    if (appState.transactions[i].status === 'failed') return appState.transactions[i];
+  }
+  return null;
+}
+
+retryTransactionBtn.addEventListener('click', () => {
+  const lastFailed = findLastFailedTransaction();
+  if (!lastFailed) return;
+
+  // Check if balance sufficient to retry
+  if (lastFailed.total > appState.balance) {
+    depositMessage.textContent = `Not enough balance to retry transaction ID ${lastFailed.id}. Deposit more funds.`;
+    return;
+  }
+
+  // Remove from history (simulate removing failed)
+  appState.transactions = appState.transactions.filter(tx => tx.id !== lastFailed.id);
+
+  // Set as transaction in progress again but status pending
+  const retryTx = Object.assign({}, lastFailed);
+  retryTx.status = 'pending';
+  appState.transactionInProgress = retryTx;
+
+  // Update UI
+  updateTransactionProgressUI(retryTx);
+  progressSection.style.display = '';
+  transactionSection.style.display = 'none';
+  depositMessage.textContent = `Retrying transaction ID ${retryTx.id}.`;
+  updateStateDisplay();
+  updateRetryButtonState();
+});
+
+// Enable/disable retry button depending on failed tx and balance
+function updateRetryButtonState() {
+  const lastFailed = findLastFailedTransaction();
+  if (lastFailed && lastFailed.total <= appState.balance) {
+    retryTransactionBtn.disabled = false;
+  } else {
+    retryTransactionBtn.disabled = true;
+  }
+}
+
+// Reset transaction input UI and validation state
+function resetTransactionSection() {
+  clearTransactionInputs();
+  transactionError.textContent = '';
+  startTransactionBtn.disabled = true;
+}
+
+// Initialize: show no account state
+updateStateDisplay();
+
+</script>
+</body>
+</html>

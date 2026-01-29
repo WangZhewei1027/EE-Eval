@@ -116,7 +116,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
 
   test.describe('AppendNode (S1_NodeAppended) and TraverseList (S5_ListTraversed)', () => {
     test('append a node updates visual and output then traverse shows correct sequence', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll1 = new CLLPage(page);
       await cll.goto();
 
       // Append node value "1"
@@ -140,7 +140,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
     });
 
     test('traverse on empty list shows empty message', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll2 = new CLLPage(page);
       await cll.goto();
 
       // Ensure list is empty initially
@@ -151,7 +151,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
 
   test.describe('PrependNode (S2_NodePrepended)', () => {
     test('prepend works and updates visual order', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll3 = new CLLPage(page);
       await cll.goto();
 
       // Append a node then prepend to observe order change
@@ -163,7 +163,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
       await expect(cll.output).toHaveText('Prepended node with value: 5');
 
       // Visual should show two nodes in order with first being '5'
-      const nodeValues = await cll.getNodeValues();
+      const nodeValues1 = await cll.getNodeValues();
       expect(nodeValues).toEqual(['5', '10']);
 
       // Traverse confirms ordering in output format
@@ -176,7 +176,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
 
   test.describe('RemoveNode (S3_NodeRemoved and S4_NodeNotFound)', () => {
     test('remove existing node updates visual and outputs removal', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll4 = new CLLPage(page);
       await cll.goto();
 
       // Setup: append two nodes
@@ -196,13 +196,13 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
       await expect(cll.output).toHaveText('Removed node with value: b');
 
       // Visual should show empty message
-      const visualText = await cll.getVisualText();
+      const visualText1 = await cll.getVisualText();
       expect(visualText).toMatch(/List is empty\./);
       expect(await cll.getNodeValues()).toEqual([]);
     });
 
     test('remove non-existent node prints not found and leaves list unchanged', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll5 = new CLLPage(page);
       await cll.goto();
 
       // Append '100' to have some content
@@ -214,14 +214,14 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
       await expect(cll.output).toHaveText('Node with value 999 not found.');
 
       // Visual should remain unchanged (still contains '100')
-      const nodeValuesAfter = await cll.getNodeValues();
+      const nodeValuesAfter1 = await cll.getNodeValues();
       expect(nodeValuesAfter).toEqual(['100']);
     });
   });
 
   test.describe('ClearList (S6_ListCleared)', () => {
     test('clear empties the list and prints cleared message', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll6 = new CLLPage(page);
       await cll.goto();
 
       // Add a few nodes
@@ -234,7 +234,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
       await expect(cll.output).toHaveText('List cleared.');
 
       // Visual should indicate empty list
-      const visualText = await cll.getVisualText();
+      const visualText2 = await cll.getVisualText();
       expect(visualText).toMatch(/List is empty\./);
       expect(await cll.getNodeValues()).toEqual([]);
     });
@@ -242,7 +242,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
 
   test.describe('Edge cases and UI dialogs', () => {
     test('attempting append with empty input triggers alert dialog', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll7 = new CLLPage(page);
       await cll.goto();
 
       // Capture dialog message
@@ -261,10 +261,10 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
     });
 
     test('attempting prepend with empty input triggers alert dialog', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll8 = new CLLPage(page);
       await cll.goto();
 
-      let dialogMessage = null;
+      let dialogMessage1 = null;
       page.once('dialog', async (dialog) => {
         dialogMessage = dialog.message();
         await dialog.accept();
@@ -277,10 +277,10 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
     });
 
     test('attempting remove with empty input triggers alert dialog', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll9 = new CLLPage(page);
       await cll.goto();
 
-      let dialogMessage = null;
+      let dialogMessage2 = null;
       page.once('dialog', async (dialog) => {
         dialogMessage = dialog.message();
         await dialog.accept();
@@ -295,7 +295,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
 
   test.describe('Runtime and console hygiene checks', () => {
     test('no unhandled runtime page errors or console.error messages during typical usage', async ({ page }) => {
-      const cll = new CLLPage(page);
+      const cll10 = new CLLPage(page);
       await cll.goto();
 
       // Perform a sequence of typical operations
@@ -312,7 +312,7 @@ test.describe('Circular Linked List Demo - FSM states & transitions', () => {
       expect(pageErrors.length, `Unexpected page errors: ${pageErrors.map(e => String(e)).join('; ')}`).toBe(0);
 
       // Assert that there are no console.error messages
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length, `Console errors: ${JSON.stringify(consoleErrors)}`).toBe(0);
     });
   });

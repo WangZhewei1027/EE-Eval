@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Garbage Collection Interactive Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { display: flex; flex-direction: column; gap: 20px; }
+        .panel { border: 1px solid #000; padding: 10px; }
+        .memory-visualization { height: 300px; border: 1px solid #000; position: relative; }
+        .memory-block { position: absolute; border: 1px solid #000; text-align: center; }
+        hidden { display: none; }
+        button, input, select { margin: 5px; }
+        .controls { display: flex; flex-wrap: wrap; gap: 10px; }
+        .control-group { border: 1px solid #000; padding: 10px; margin-bottom: 10px; }
+        .log { height: 150px; overflow-y: scroll; border: 1px solid #000; padding: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Garbage Collection Interactive Demo</h1>
+        
+        <div class="panel">
+            <h2>Memory Visualization</h2>
+            <div id="memory" class="memory-visualization"></div>
+            <div>
+                Memory Usage: <span id="memory-usage">0</span>% 
+                <input type="range" id="memory-limit" min="10" max="100" value="80"> 
+                (Limit: <span id="limit-value">80</span>%)
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Controls</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <h3>Object Creation</h3>
+                    <div>
+                        <button id="create-small">Create Small Object (1%)</button>
+                        <button id="create-medium">Create Medium Object (5%)</button>
+                        <button id="create-large">Create Large Object (10%)</button>
+                    </div>
+                    <div>
+                        <input type="number" id="custom-size" min="1" max="20" value="5">
+                        <button id="create-custom">Create Custom Size Object</button>
+                    </div>
+                    <div>
+                        <button id="create-reachable">Create Reachable Object</button>
+                        <button id="create-unreachable">Create Unreachable Object</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>References</h3>
+                    <div>
+                        <select id="from-object"></select> → 
+                        <select id="to-object"></select>
+                        <button id="add-reference">Add Reference</button>
+                    </div>
+                    <div>
+                        <select id="remove-ref-select"></select>
+                        <button id="remove-reference">Remove Reference</button>
+                    </div>
+                    <div>
+                        <button id="clear-references">Clear All References</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Garbage Collection</h3>
+                    <div>
+                        <select id="gc-type">
+                            <option value="mark-sweep">Mark and Sweep</option>
+                            <option value="reference-counting">Reference Counting</option>
+                            <option value="generational">Generational</option>
+                        </select>
+                        <button id="run-gc">Run Garbage Collector</button>
+                    </div>
+                    <div>
+                        <button id="auto-gc">Toggle Auto GC</button>
+                        <span id="auto-gc-status">(OFF)</span>
+                    </div>
+                    <div>
+                        GC Interval (ms): <input type="number" id="gc-interval" min="100" max="10000" value="2000">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Simulation</h3>
+                    <div>
+                        <button id="reset">Reset Memory</button>
+                    </div>
+                    <div>
+                        <button id="fill-memory">Fill Memory to Limit</button>
+                    </div>
+                    <div>
+                        <button id="create-cycle">Create Reference Cycle</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Object Graph</h2>
+            <div id="object-graph" style="height: 200px; overflow: auto; border: 1px solid #000;"></div>
+        </div>
+        
+        <div class="panel">
+            <h2>Event Log</h2>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        const state = {
+            objects: [],
+            references: [],
+            nextId: 1,
+            memoryLimit: 80,
+            autoGC: false,
+            gcInterval: 2000,
+            intervalId: null,
+            gcTypes: {
+                'mark-sweep': {
+                    name: 'Mark and Sweep',
+                    description: 'Traverses all reachable objects from roots, then sweeps unreachable ones'
+                },
+                'reference-counting': {
+                    name: 'Reference Counting',
+                    description: 'Counts references to each object and collects when count reaches zero'
+                },
+                'generational': {
+                    name: 'Generational',
+                    description: 'Divides objects by age and collects younger generations more frequently'
+                }
+            }
+        };
+
+        // DOM elements
+        const elements = {
+            memory: document.getElementById('memory'),
+            memoryUsage: document.getElementById('memory-usage'),
+            memoryLimit: document.getElementById('memory-limit'),
+            limitValue: document.getElementById('limit-value'),
+            createSmall: document.getElementById('create-small'),
+            createMedium: document.getElementById('create-medium'),
+            createLarge: document.getElementById('create-large'),
+            createCustom: document.getElementById('create-custom'),
+            customSize: document.getElementById('custom-size'),
+            createReachable: document.getElementById('create-reachable'),
+            createUnreachable: document.getElementById('create-unreachable'),
+            fromObject: document.getElementById('from-object'),
+            toObject: document.getElementById('to-object'),
+            addReference: document.getElementById('add-reference'),
+            removeRefSelect: document.getElementById('remove-ref-select'),
+            removeReference: document.getElementById('remove-reference'),
+            clearReferences: document.getElementById('clear-references'),
+            gcType: document.getElementById('gc-type'),
+            runGc: document.getElementById('run-gc'),
+            autoGc: document.getElementById('auto-gc'),
+            autoGcStatus: document.getElementById('auto-gc-status'),
+            gcInterval: document.getElementById('gc-interval'),
+            reset: document.getElementById('reset'),
+            fillMemory: document.getElementById('fill-memory'),
+            createCycle: document.getElementById('create-cycle'),
+            objectGraph: document.getElementById('object-graph'),
+            log: document.getElementById('log')
+        };
+
+        // Helper functions
+        function log(message) {
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            elements.log.appendChild(entry);
+            elements.log.scrollTop = elements.log.scrollHeight;
+        }
+
+        function getMemoryUsage() {
+            return state.objects.reduce((sum, obj) => sum + obj.size, 0);
+        }
+
+        function updateMemoryUsage() {
+            const usage = getMemoryUsage();
+            elements.memoryUsage.textContent = usage;
+            elements.limitValue.textContent = state.memoryLimit;
+            
+            // Update memory visualization
+            elements.memory.innerHTML = '';
+            state.objects.forEach(obj => {
+                const block = document.createElement('div');
+                block.className = 'memory-block';
+                block.id = `obj-${obj.id}`;
+                block.style.width = '50px';
+                block.style.height = `${obj.size * 2}px`;
+                block.style.left = `${Math.random() * 80}%`;
+                block.style.top = `${Math.random() * 80}%`;
+                block.textContent = `Obj ${obj.id}`;
+                block.title = `Size: ${obj.size}% | Refs: ${state.references.filter(r => r.from === obj.id).length}`;
+                
+                if (obj.reachable) {
+                    block.style.backgroundColor = '#e0e0e0';
+                } else {
+                    block.style.backgroundColor = '#f0f0f0';
+                    block.style.border = '1px dashed #999';
+                }
+                
+                elements.memory.appendChild(block);
+            });
+        }
+
+        function updateObjectSelects() {
+            elements.fromObject.innerHTML = '';
+            elements.toObject.innerHTML = '';
+            elements.removeRefSelect.innerHTML = '<option value="">Select reference to remove</option>';
+            
+            state.objects.forEach(obj => {
+                const option1 = document.createElement('option');
+                option1.value = obj.id;
+                option1.textContent = `Object ${obj.id}`;
+                elements.fromObject.appendChild(option1);
+                
+                const option2 = document.createElement('option');
+                option2.value = obj.id;
+                option2.textContent = `Object ${obj.id}`;
+                elements.toObject.appendChild(option2);
+            });
+            
+            state.references.forEach(ref => {
+                const option = document.createElement('option');
+                option.value = ref.id;
+                option.textContent = `Object ${ref.from} → Object ${ref.to}`;
+                elements.removeRefSelect.appendChild(option);
+            });
+        }
+
+        function updateObjectGraph() {
+            elements.objectGraph.innerHTML = '';
+            
+            if (state.objects.length === 0) {
+                elements.objectGraph.textContent = 'No objects in memory';
+                return;
+            }
+            
+            const roots = state.objects.filter(obj => 
+                !state.references.some(ref => ref.to === obj.id)
+            );
+            
+            const graph = document.createElement('div');
+            
+            if (roots.length > 0) {
+                const rootsTitle = document.createElement('div');
+                rootsTitle.textContent = 'Roots:';
+                graph.appendChild(rootsTitle);
+                
+                const rootsList = document.createElement('div');
+                rootsList.style.marginLeft = '20px';
+                roots.forEach(root => {
+                    const rootItem = document.createElement('div');
+                    rootItem.textContent = `Object ${root.id}`;
+                    rootsList.appendChild(rootItem);
+                    buildReferenceTree(root.id, rootsList, 40);
+                });
+                graph.appendChild(rootsList);
+            } else {
+                graph.textContent = 'No root objects (everything is garbage)';
+            }
+            
+            elements.objectGraph.appendChild(graph);
+        }
+        
+        function buildReferenceTree(objectId, parentElement, indent) {
+            const references = state.references.filter(ref => ref.from === objectId);
+            
+            if (references.length === 0) return;
+            
+            references.forEach(ref => {
+                const refItem = document.createElement('div');
+                refItem.style.marginLeft = `${indent}px`;
+                refItem.textContent = `→ Object ${ref.to}`;
+                parentElement.appendChild(refItem);
+                buildReferenceTree(ref.to, parentElement, indent + 20);
+            });
+        }
+
+        function markReachableObjects() {
+            // Reset reachability
+            state.objects.forEach(obj => obj.reachable = false);
+            
+            // Find roots (objects not referenced by any other object)
+            const roots = state.objects.filter(obj => 
+                !state.references.some(ref => ref.to === obj.id)
+            );
+            
+            // Mark all reachable objects from roots
+            function markFromObject(id) {
+                const obj = state.objects.find(o => o.id === id);
+                if (!obj || obj.reachable) return;
+                
+                obj.reachable = true;
+                state.references
+                    .filter(ref => ref.from === id)
+                    .forEach(ref => markFromObject(ref.to));
+            }
+            
+            roots.forEach(root => markFromObject(root.id));
+        }
+
+        // Core functionality
+        function createObject(size, reachable = true) {
+            if (getMemoryUsage() + size > state.memoryLimit) {
+                log(`Cannot create object: memory limit would be exceeded (${getMemoryUsage()} + ${size} > ${state.memoryLimit})`);
+                if (state.autoGC) {
+                    runGarbageCollection();
+                    if (getMemoryUsage() + size <= state.memoryLimit) {
+                        return createObject(size, reachable);
+                    }
+                }
+                return null;
+            }
+            
+            const obj = {
+                id: state.nextId++,
+                size: size,
+                reachable: reachable
+            };
+            
+            state.objects.push(obj);
+            log(`Created Object ${obj.id} (size: ${size}%, reachable: ${reachable})`);
+            updateMemoryUsage();
+            updateObjectSelects();
+            updateObjectGraph();
+            
+            return obj;
+        }
+
+        function addReference(fromId, toId) {
+            if (fromId === toId) {
+                log('Cannot create self-reference (this would create a cycle)');
+                return;
+            }
+            
+            const fromObj = state.objects.find(o => o.id === parseInt(fromId));
+            const toObj = state.objects.find(o => o.id === parseInt(toId));
+            
+            if (!fromObj || !toObj) {
+                log('Invalid object reference');
+                return;
+            }
+            
+            if (state.references.some(ref => ref.from === fromId && ref.to === toId)) {
+                log(`Reference from Object ${fromId} to Object ${toId} already exists`);
+                return;
+            }
+            
+            const ref = {
+                id: state.nextId++,
+                from: parseInt(fromId),
+                to: parseInt(toId)
+            };
+            
+            state.references.push(ref);
+            log(`Added reference: Object ${fromId} → Object ${toId}`);
+            updateObjectSelects();
+            updateObjectGraph();
+        }
+
+        function removeReference(refId) {
+            const index = state.references.findIndex(ref => ref.id === parseInt(refId));
+            if (index === -1) {
+                log('Invalid reference ID');
+                return;
+            }
+            
+            const ref = state.references[index];
+            state.references.splice(index, 1);
+            log(`Removed reference: Object ${ref.from} → Object ${ref.to}`);
+            updateObjectSelects();
+            updateObjectGraph();
+        }
+
+        function runGarbageCollection() {
+            const gcType = state.gcTypes[elements.gcType.value];
+            log(`Running ${gcType.name} garbage collection...`);
+            log(`Description: ${gcType.description}`);
+            
+            // Mark phase (for mark-sweep and generational)
+            if (elements.gcType.value === 'mark-sweep' || elements.gcType.value === 'generational') {
+                markReachableObjects();
+            }
+            
+            // Reference counting (for reference-counting GC)
+            if (elements.gcType.value === 'reference-counting') {
+                // In a real ref-counting system, we'd decrement counts when references are removed
+                // Here we'll just simulate it by checking for objects with no references
+                state.objects.forEach(obj => {
+                    obj.reachable = state.references.some(ref => ref.to === obj.id);
+                });
+            }
+            
+            // Sweep phase - remove unreachable objects
+            const beforeCount = state.objects.length;
+            state.objects = state.objects.filter(obj => {
+                if (!obj.reachable) {
+                    log(`Collected Object ${obj.id} (size: ${obj.size}%)`);
+                    // Remove all references to/from this object
+                    state.references = state.references.filter(ref => 
+                        ref.from !== obj.id && ref.to !== obj.id
+                    );
+                    return false;
+                }
+                return true;
+            });
+            
+            const collected = beforeCount - state.objects.length;
+            log(`Garbage collection complete. Collected ${collected} objects.`);
+            
+            updateMemoryUsage();
+            updateObjectSelects();
+            updateObjectGraph();
+        }
+
+        function toggleAutoGC() {
+            state.autoGC = !state.autoGC;
+            elements.autoGcStatus.textContent = state.autoGC ? '(ON)' : '(OFF)';
+            
+            if (state.autoGC) {
+                state.intervalId = setInterval(() => {
+                    if (getMemoryUsage() > state.memoryLimit * 0.8) {
+                        runGarbageCollection();
+                    }
+                }, state.gcInterval);
+                log(`Auto GC enabled (interval: ${state.gcInterval}ms)`);
+            } else {
+                clearInterval(state.intervalId);
+                log('Auto GC disabled');
+            }
+        }
+
+        function resetMemory() {
+            state.objects = [];
+            state.references = [];
+            state.nextId = 1;
+            log('Memory reset');
+            updateMemoryUsage();
+            updateObjectSelects();
+            updateObjectGraph();
+        }
+
+        function fillMemory() {
+            const remaining = state.memoryLimit - getMemoryUsage();
+            if (remaining <= 0) {
+                log('Memory is already full');
+                return;
+            }
+            
+            const size = Math.min(5, remaining);
+            createObject(size);
+            
+            if (getMemoryUsage() < state.memoryLimit) {
+                setTimeout(fillMemory, 100);
+            }
+        }
+
+        function createReferenceCycle() {
+            if (state.objects.length < 2) {
+                log('Need at least 2 objects to create a cycle');
+                return;
+            }
+            
+            // Create a cycle between the first and last objects
+            const first = state.objects[0].id;
+            const last = state.objects[state.objects.length - 1].id;
+            
+            addReference(first, last);
+            addReference(last, first);
+            
+            log(`Created reference cycle between Object ${first} and Object ${last}`);
+        }
+
+        // Event listeners
+        elements.createSmall.addEventListener('click', () => createObject(1));
+        elements.createMedium.addEventListener('click', () => createObject(5));
+        elements.createLarge.addEventListener('click', () => createObject(10));
+        elements.createCustom.addEventListener('click', () => {
+            const size = parseInt(elements.customSize.value);
+            if (size >= 1 && size <= 20) {
+                createObject(size);
+            }
+        });
+        elements.createReachable.addEventListener('click', () => createObject(5, true));
+        elements.createUnreachable.addEventListener('click', () => createObject(5, false));
+        
+        elements.addReference.addEventListener('click', () => {
+            addReference(elements.fromObject.value, elements.toObject.value);
+        });
+        
+        elements.removeReference.addEventListener('click', () => {
+            removeReference(elements.removeRefSelect.value);
+        });
+        
+        elements.clearReferences.addEventListener('click', () => {
+            state.references = [];
+            log('Cleared all references');
+            updateObjectSelects();
+            updateObjectGraph();
+        });
+        
+        elements.runGc.addEventListener('click', runGarbageCollection);
+        elements.autoGc.addEventListener('click', toggleAutoGC);
+        elements.gcInterval.addEventListener('change', () => {
+            state.gcInterval = parseInt(elements.gcInterval.value);
+            if (state.autoGC) {
+                clearInterval(state.intervalId);
+                state.intervalId = setInterval(() => {
+                    if (getMemoryUsage() > state.memoryLimit * 0.8) {
+                        runGarbageCollection();
+                    }
+                }, state.gcInterval);
+                log(`Auto GC interval updated to ${state.gcInterval}ms`);
+            }
+        });
+        
+        elements.reset.addEventListener('click', resetMemory);
+        elements.fillMemory.addEventListener('click', fillMemory);
+        elements.createCycle.addEventListener('click', createReferenceCycle);
+        
+        elements.memoryLimit.addEventListener('input', () => {
+            state.memoryLimit = parseInt(elements.memoryLimit.value);
+            elements.limitValue.textContent = state.memoryLimit;
+        });
+
+        // Initialize
+        log('Garbage Collection Interactive Demo initialized');
+        updateMemoryUsage();
+    </script>
+</body>
+</html>

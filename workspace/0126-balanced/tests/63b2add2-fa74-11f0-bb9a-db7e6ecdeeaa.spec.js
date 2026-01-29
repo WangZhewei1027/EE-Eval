@@ -48,7 +48,7 @@ class MutexPage {
   async waitForLogEmpty(timeout = 5000) {
     await this.page.waitForFunction(
       sel => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         return el && (!el.textContent || el.textContent.length === 0);
       },
       '#log',
@@ -129,7 +129,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
   // Test: Clicking Start Tasks transitions to Tasks Started and emits "Starting tasks..."
   test('Transition S0_Idle -> S1_Tasks_Started: clicking Start initializes sharedCounter and logs start', async ({ page }) => {
     const { pageErrors, consoleErrors } = setupErrorCollectors(page);
-    const mutexPage = new MutexPage(page);
+    const mutexPage1 = new MutexPage(page);
 
     await mutexPage.goto();
 
@@ -155,7 +155,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
   // Test: Tasks acquire mutex, enter critical section, update sharedCounter sequentially, and release
   test('Transitions S1_Tasks_Started <-> S2_Critical_Section: tasks enter, update sharedCounter, leave, and release mutex', async ({ page }) => {
     const { pageErrors, consoleErrors } = setupErrorCollectors(page);
-    const mutexPage = new MutexPage(page);
+    const mutexPage2 = new MutexPage(page);
 
     await mutexPage.goto();
 
@@ -207,7 +207,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
   // Test: Clicking Clear Log transitions to Log Cleared and empties the log
   test('Transition S1_Tasks_Started -> S3_Log_Cleared: clicking Clear Log empties the log', async ({ page }) => {
     const { pageErrors, consoleErrors } = setupErrorCollectors(page);
-    const mutexPage = new MutexPage(page);
+    const mutexPage3 = new MutexPage(page);
 
     await mutexPage.goto();
 
@@ -227,7 +227,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
     // Even after clearing, the sharedCounter global should remain and eventually be incremented as tasks continue.
     // Wait for tasks to complete and verify sharedCounter increments to 5 (they continue running in background).
     await page.waitForFunction(() => window.sharedCounter === 5, {}, { timeout: 10000 }).catch(() => null);
-    const finalCounter = await mutexPage.getSharedCounter();
+    const finalCounter1 = await mutexPage.getSharedCounter();
     expect(finalCounter).toBe(5);
 
     expect(pageErrors.length, 'No page errors during clear action').toBe(0);
@@ -237,7 +237,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
   // Edge case: clicking Clear while tasks are running should clear existing log and allow later logs to appear
   test('Edge case: Clear log during active tasks clears current log and subsequent logs continue to appear', async ({ page }) => {
     const { pageErrors, consoleErrors } = setupErrorCollectors(page);
-    const mutexPage = new MutexPage(page);
+    const mutexPage4 = new MutexPage(page);
 
     await mutexPage.goto();
 
@@ -263,7 +263,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
 
     // Eventually, sharedCounter should become 5
     await page.waitForFunction(() => window.sharedCounter === 5, {}, { timeout: 10000 }).catch(() => null);
-    const finalCounter = await mutexPage.getSharedCounter();
+    const finalCounter2 = await mutexPage.getSharedCounter();
     expect(finalCounter).toBe(5);
 
     expect(pageErrors.length, 'No page errors during clear-while-running scenario').toBe(0);
@@ -274,7 +274,7 @@ test.describe('Mutex Demonstration - FSM and UI behavior', () => {
   test('No uncaught exceptions or console.error messages during full scenario', async ({ page }) => {
     const collectors = setupErrorCollectors(page);
     const { pageErrors, consoleErrors } = collectors;
-    const mutexPage = new MutexPage(page);
+    const mutexPage5 = new MutexPage(page);
 
     await mutexPage.goto();
 

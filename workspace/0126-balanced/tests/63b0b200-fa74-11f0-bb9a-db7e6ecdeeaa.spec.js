@@ -150,7 +150,7 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       expect(color).toBe('rgb(41, 128, 185)');
 
       // Heap array text should reflect the single item
-      const heapText = await heapPage.getHeapArrayText();
+      const heapText1 = await heapPage.getHeapArrayText();
       expect(heapText).toBe('[ 42 ]');
 
       // SVG should have one circle and node text "42"
@@ -175,7 +175,7 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       }
 
       // After inserts, heap array should contain 5 numbers
-      const heapText = await heapPage.getHeapArrayText();
+      const heapText2 = await heapPage.getHeapArrayText();
       // We'll check that it contains the numbers inserted and is formatted correctly
       expect(heapText.startsWith('[')).toBe(true);
       expect(heapText.endsWith(']')).toBe(true);
@@ -185,7 +185,7 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       }
 
       // SVG should have 5 node circles
-      const circles = await heapPage.getSvgCircleCount();
+      const circles1 = await heapPage.getSvgCircleCount();
       expect(circles).toBe(5);
 
       // The min element should be present in the svg text elements and also match heap.peek()
@@ -203,11 +203,11 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       await heapPage.fillInsertValue('');
       await heapPage.clickInsert();
 
-      const msg = await heapPage.getMessageText();
+      const msg1 = await heapPage.getMessageText();
       expect(msg).toBe('Please enter a number to insert');
 
       // Error color should be red: #c0392b -> rgb(192, 57, 43)
-      const color = await heapPage.getMessageColor();
+      const color1 = await heapPage.getMessageColor();
       expect(color).toBe('rgb(192, 57, 43)');
     });
 
@@ -216,10 +216,10 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       await heapPage.fillInsertValue('not-a-number');
       await heapPage.clickInsert();
 
-      const msg = await heapPage.getMessageText();
+      const msg2 = await heapPage.getMessageText();
       expect(msg).toBe('Invalid input. Enter a valid number.');
 
-      const color = await heapPage.getMessageColor();
+      const color2 = await heapPage.getMessageColor();
       expect(color).toBe('rgb(192, 57, 43)');
     });
   });
@@ -232,10 +232,10 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
 
       await heapPage.clickExtract();
 
-      const msg = await heapPage.getMessageText();
+      const msg3 = await heapPage.getMessageText();
       expect(msg).toBe('Heap is empty. Cannot extract min.');
 
-      const color = await heapPage.getMessageColor();
+      const color3 = await heapPage.getMessageColor();
       expect(color).toBe('rgb(192, 57, 43)');
     });
 
@@ -259,11 +259,11 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       expect(await heapPage.getMessageText()).toBe('Extracted minimum value: 3');
 
       // Heap array should no longer contain 3
-      const heapText = await heapPage.getHeapArrayText();
+      const heapText3 = await heapPage.getHeapArrayText();
       expect(heapText).not.toContain('3');
 
       // SVG node count should be reduced to 2
-      const circles = await heapPage.getSvgCircleCount();
+      const circles2 = await heapPage.getSvgCircleCount();
       expect(circles).toBe(2);
     });
   });
@@ -271,16 +271,16 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
   test.describe('PeekMin and ClearHeap transitions', () => {
     test('Peek on empty shows "Heap is empty."', async () => {
       // Ensure heap empty
-      const before = await heapPage.getHeapArrayText();
+      const before1 = await heapPage.getHeapArrayText();
       expect(before).toBe('[ ]');
 
       await heapPage.clickPeek();
 
-      const msg = await heapPage.getMessageText();
+      const msg4 = await heapPage.getMessageText();
       expect(msg).toBe('Heap is empty.');
 
       // Message color for this non-error is the default blue
-      const color = await heapPage.getMessageColor();
+      const color4 = await heapPage.getMessageColor();
       expect(color).toBe('rgb(41, 128, 185)');
     });
 
@@ -292,7 +292,7 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       await heapPage.clickInsert();
 
       // Confirm not empty
-      const before = await heapPage.getHeapArrayText();
+      const before2 = await heapPage.getHeapArrayText();
       expect(before).toContain('1');
       expect(before).toContain('4');
 
@@ -303,14 +303,14 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
       expect(await heapPage.getMessageText()).toBe('Heap cleared.');
 
       // Heap array should show empty representation
-      const heapText = await heapPage.getHeapArrayText();
+      const heapText4 = await heapPage.getHeapArrayText();
       expect(heapText).toBe('[ ]');
 
       // SVG should show the "Heap is empty" text again
-      const hasEmptyText = await heapPage.svgHasEmptyText();
+      const hasEmptyText1 = await heapPage.svgHasEmptyText();
       expect(hasEmptyText).toBe(true);
       // No node circles present
-      const circles = await heapPage.getSvgCircleCount();
+      const circles3 = await heapPage.getSvgCircleCount();
       expect(circles).toBe(0);
     });
   });
@@ -333,7 +333,7 @@ test.describe('Min Heap (Binary Heap) Demo - FSM and UI validation', () => {
 
     // Next peek should show the new minimum (15 or 20 depending on heap)
     await heapPage.clickPeek();
-    const peekMsg = await heapPage.getMessageText();
+    const peekMsg1 = await heapPage.getMessageText();
     // The minimum after removing 5 from [20,15,30,5] is 15
     expect(peekMsg).toBe('Minimum value (peek): 15');
 

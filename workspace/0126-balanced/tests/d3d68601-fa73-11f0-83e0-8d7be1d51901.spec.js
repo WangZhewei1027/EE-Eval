@@ -182,7 +182,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
 
   test.describe('Generate Array (S1_ArrayGenerated event)', () => {
     test('clicking Generate produces a new array and updates UI', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p1 = new BucketSortPage(page);
       await p.goto();
 
       // Change size to a smaller value to keep test deterministic & fast
@@ -198,7 +198,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
       expect(await p.getBarsCount()).toBe(8);
 
       // Stats should reflect numeric min/max
-      const stats = await p.getStatsText();
+      const stats1 = await p.getStatsText();
       expect(stats).toMatch(/Min:\s*\d+\s*Max:\s*\d+/);
 
       // No uncaught page errors or console errors
@@ -209,7 +209,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
 
   test.describe('Start Sort (S2_Sorting) and Stop (S4_Stopped) transitions', () => {
     test('start begins sorting (StartSort) and stop interrupts it (StopSort)', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p2 = new BucketSortPage(page);
       await p.goto();
 
       // Speed up animation to make test fast
@@ -231,7 +231,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
       await expect(p.stopBtn).toBeDisabled();
 
       // The log should indicate stopping message (Stopping... will halt at next safe point.)
-      const log = await p.getLogText();
+      const log1 = await p.getLogText();
       expect(log).toContain('Stopping... will halt at next safe point.');
 
       // Cleanup should re-enable Start eventually — wait up to a short timeout
@@ -243,7 +243,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
     });
 
     test('clicking Stop when not running does nothing harmful (edge case)', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p3 = new BucketSortPage(page);
       await p.goto();
 
       // Ensure stop is disabled initially
@@ -259,7 +259,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
 
   test.describe('Full sorting to completion (S2_Sorting -> S3_Sorted)', () => {
     test('sorting completes and final array is non-decreasing (Sorted state)', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p4 = new BucketSortPage(page);
       await p.goto();
 
       // Reduce size and speed to complete quickly and deterministically
@@ -288,7 +288,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
       }
 
       // Log should contain the finishing message
-      const log = await p.getLogText();
+      const log2 = await p.getLogText();
       expect(log).toContain('Sorting finished! Array is now sorted');
 
       // No uncaught page errors during a full sort
@@ -299,7 +299,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
 
   test.describe('Reset transition (S4_Stopped -> S1_ArrayGenerated)', () => {
     test('reset generates a new array and clears buckets', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p5 = new BucketSortPage(page);
       await p.goto();
 
       // Start then stop to simulate we are in stopped state
@@ -316,7 +316,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
       await p.clickReset();
 
       // Log should indicate reset
-      const log = await p.getLogText();
+      const log3 = await p.getLogText();
       expect(log).toContain('Reset to newly generated data.');
 
       // Buckets area should be cleared after reset
@@ -325,7 +325,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
       expect(bucketsHTML.trim()).toBe('');
 
       // The main array should have bars equal to the current size input
-      const expectedSize = Number(await p.sizeInput.evaluate(el => el.value));
+      const expectedSize1 = Number(await p.sizeInput.evaluate(el => el.value));
       expect(await p.getBarsCount()).toBe(expectedSize);
 
       // No uncaught errors
@@ -336,7 +336,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
 
   test.describe('Window resize and keyboard (WindowResize, SpaceKeyPress)', () => {
     test('window resize triggers re-render of heights (WindowResize)', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p6 = new BucketSortPage(page);
       await p.goto();
 
       // Ensure there are bars to measure
@@ -371,7 +371,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
     });
 
     test('pressing Space toggles sorting: Space starts and then stops (SpaceKeyPress)', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p7 = new BucketSortPage(page);
       await p.goto();
 
       // Prepare small and fast run
@@ -393,7 +393,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
       await expect(p.stopBtn).toBeDisabled();
 
       // Confirm log mentions stopping / that cleanup completed
-      const log = await p.getLogText();
+      const log4 = await p.getLogText();
       // Either stopping message or that sorting finished depending on timing; ensure no crashes
       expect(log.length).toBeGreaterThan(0);
 
@@ -405,7 +405,7 @@ test.describe('Bucket Sort Demonstration - FSM & UI tests', () => {
 
   test.describe('Edge cases and resilience', () => {
     test('starting when array is empty would be handled gracefully (edge scenario simulation)', async ({ page }) => {
-      const p = new BucketSortPage(page);
+      const p8 = new BucketSortPage(page);
       await p.goto();
 
       // Remove all items from the main array area via DOM evaluation to simulate empty array state.

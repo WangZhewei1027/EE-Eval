@@ -98,7 +98,7 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
     test('S1_Sorting: clicking Sort triggers attempt to run runMergeSort (expected ReferenceError due to broken script)', async ({ page }) => {
       // Validate transition from Idle -> Sorting when Sort button is clicked.
       // Because the page script is malformed, clicking should result in a runtime error (ReferenceError or similar).
-      const ms = new MergeSortPage(page);
+      const ms1 = new MergeSortPage(page);
 
       // Attach a pageerror listener before navigation to ensure we capture load-time syntax errors if any
       const pageErrors = [];
@@ -141,10 +141,10 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
   test.describe('Events and Transitions (SortButtonClick and observables)', () => {
     test('SortButtonClick event exists and clicking produces a runtime error instead of expected sorting output', async ({ page }) => {
       // Validate that the Sort button element with onclick exists and that clicking it leads to a runtime error.
-      const ms = new MergeSortPage(page);
+      const ms2 = new MergeSortPage(page);
 
       // Listen for both console messages and pageerrors to capture anything that happens
-      const pageErrors = [];
+      const pageErrors1 = [];
       const consoleMessages = [];
       page.on('pageerror', (err) => pageErrors.push(err));
       page.on('console', (msg) => consoleMessages.push(`${msg.type()}: ${msg.text()}`));
@@ -164,7 +164,7 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
       // At least one of these conditions should hold: a pageerror happened, or no sorted output is produced.
       if (err) {
         // Confirm it's a parse/Reference/Syntax error related to the sorting code
-        const msg = String(err.message ?? err);
+        const msg1 = String(err.message ?? err);
         expect(/runMergeSort|SyntaxError|ReferenceError|Unexpected end/i.test(msg)).toBeTruthy();
       } else {
         // No error event: ensure the observable (sorted output) was not produced due to broken implementation
@@ -178,7 +178,7 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
 
     test('Transition expected_observables: sorted array and steps are NOT present when the script is malformed', async ({ page }) => {
       // Confirm that the page does not produce the expected sorted output and steps because the JS is incomplete.
-      const ms = new MergeSortPage(page);
+      const ms3 = new MergeSortPage(page);
       await ms.goto();
 
       // Click and swallow the error
@@ -217,7 +217,7 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
     });
 
     test('Edge case: changing input to non-numeric values still does not execute sorting due to missing runtime function', async ({ page }) => {
-      const ms = new MergeSortPage(page);
+      const ms4 = new MergeSortPage(page);
       await ms.goto();
 
       // Change input to an edge-case value
@@ -233,17 +233,17 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
       ]).then(([err]) => err);
 
       if (error) {
-        const msg = String(error.message ?? error);
+        const msg2 = String(error.message ?? error);
         expect(/runMergeSort|ReferenceError|is not defined/i.test(msg)).toBeTruthy();
       } else {
         // If no error surfaced, ensure output was not produced
-        const out = await ms.getOutputText();
+        const out1 = await ms.getOutputText();
         expect(out).not.toContain('Sorted array');
       }
     });
 
     test('Edge case: empty input value before clicking Sort still results in runtime error, and no output is produced', async ({ page }) => {
-      const ms = new MergeSortPage(page);
+      const ms5 = new MergeSortPage(page);
       await ms.goto();
 
       // Set empty input
@@ -251,17 +251,17 @@ test.describe('Merge Sort interactive demo - FSM and runtime validation', () => 
       expect(await ms.getInputValue()).toBe('');
 
       // Click and expect pageerror or no output
-      const err = await Promise.all([
+      const err1 = await Promise.all([
         page.waitForEvent('pageerror', { timeout: 3000 }).catch(() => null),
         page.click(ms.buttonSelector).catch(() => {})
       ]).then(([e]) => e);
 
       if (err) {
-        const msg = String(err.message ?? err);
+        const msg3 = String(err.message ?? err);
         expect(/runMergeSort|ReferenceError|is not defined/i.test(msg)).toBeTruthy();
       } else {
         // No error: verify no sorted output rendered
-        const out = await ms.getOutputText();
+        const out2 = await ms.getOutputText();
         expect(out).not.toContain('Sorted array');
       }
     });

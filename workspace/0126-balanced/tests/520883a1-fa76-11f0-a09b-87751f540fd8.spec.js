@@ -64,11 +64,11 @@ test.describe('Heap (Min) - FSM: S0_Idle (static render + runtime behavior)', ()
 
   test('Runtime: script throws during heap operations -> pageerror(s) and no final heap print', async ({ page }) => {
     // Capture console and page errors. Important: attach BEFORE navigation to catch early failures.
-    const consoleMessages = [];
+    const consoleMessages1 = [];
     page.on('console', msg => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', err => {
       pageErrors.push(err);
     });
@@ -111,11 +111,11 @@ test.describe('Heap (Min) - FSM: S0_Idle (static render + runtime behavior)', ()
 
   test('Edge case: clicking the static #heap region does not trigger interactive transitions or new console output', async ({ page }) => {
     // Capture console messages and page errors
-    const consoleMessages = [];
+    const consoleMessages2 = [];
     page.on('console', msg => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', err => {
       pageErrors.push(err);
     });
@@ -123,7 +123,7 @@ test.describe('Heap (Min) - FSM: S0_Idle (static render + runtime behavior)', ()
     // Navigate and wait for load
     await page.goto(APP_URL, { waitUntil: 'load' });
 
-    const heapDiv = page.locator('#heap');
+    const heapDiv1 = page.locator('#heap');
     await expect(heapDiv).toBeVisible();
 
     // Record counts before interaction

@@ -102,7 +102,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Test Atomicity transition: clicking the Atomicity button should show start/process logs and a failure message
   test('Atomicity Demonstrated: logs transaction steps and failure message', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app1 = new AcidPage(page);
     await app.goto();
 
     // Click the Atomicity button to trigger the demonstration
@@ -111,7 +111,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
     // Wait a brief moment for DOM updates
     await page.waitForTimeout(50);
 
-    const logs = await app.getLogsArray();
+    const logs1 = await app.getLogsArray();
 
     // Validate expected sequence fragments appear in logs
     expect(logs.length).toBeGreaterThanOrEqual(4);
@@ -131,14 +131,14 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Test Consistency transition: clicking should log before and after balance messages and show correct final balance
   test('Consistency Demonstrated: shows before and after balance with expected final value', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app2 = new AcidPage(page);
     await app.goto();
 
     await app.clickConsistency();
     // Wait briefly for DOM updates
     await page.waitForTimeout(50);
 
-    const logs = await app.getLogsArray();
+    const logs2 = await app.getLogsArray();
 
     // Expect two messages: before and after
     // The demo logs "Before Transaction: Balance = $100" then "After Transaction: Balance = $150"
@@ -155,7 +155,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Test Isolation transition: ensure isolation messages and delayed completions appear in expected order
   test('Isolation Demonstrated: transactions run in isolation with delayed completion logs', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app3 = new AcidPage(page);
     await app.goto();
 
     // Start the isolation demonstration which schedules delayed messages
@@ -164,7 +164,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
     // Immediately after clicking, three immediate logs are expected (two "Transaction X: Adding..." and "Transactions running in isolation...")
     // Wait a small amount to allow immediate logs to be appended
     await page.waitForTimeout(50);
-    let logs = await app.getLogsArray();
+    let logs3 = await app.getLogsArray();
 
     // Check initial immediate entries
     const t1AddingIdx = logs.findIndex(l => l.includes('Transaction 1: Adding $50 to Balance'));
@@ -205,14 +205,14 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Test Durability: clicking should log started, transaction log and committed/permanent message
   test('Durability Demonstrated: transaction committed message appears with permanence note', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app4 = new AcidPage(page);
     await app.goto();
 
     await app.clickDurability();
     // Wait for DOM updates
     await page.waitForTimeout(50);
 
-    const logs = await app.getLogsArray();
+    const logs4 = await app.getLogsArray();
 
     // Expected messages in the demo:
     // "Transaction Started...", "Transaction: Added $50", "Transaction Committed. Changes are permanent."
@@ -229,7 +229,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Edge case: multiple clicks cause repeated logs and the application handles repeated interactions gracefully
   test('Edge Case: repeated Atomicity clicks append multiple failure logs without uncaught errors', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app5 = new AcidPage(page);
     await app.goto();
 
     // Click atomicity twice in quick succession
@@ -239,7 +239,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
     // Wait for DOM updates
     await page.waitForTimeout(100);
 
-    const logs = await app.getLogsArray();
+    const logs5 = await app.getLogsArray();
     // Count occurrences of the failure message
     const failureCount = logs.filter(l => l.includes('Transaction Failed: An error occurred!')).length;
     expect(failureCount).toBeGreaterThanOrEqual(2);
@@ -250,7 +250,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Edge case: concurrency - trigger isolation and atomicity close together and ensure both sets of logs are present
   test('Edge Case: concurrent interactions interleave logs as expected', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app6 = new AcidPage(page);
     await app.goto();
 
     // Trigger isolation (with delayed completions) then immediately trigger atomicity
@@ -260,7 +260,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
     // Allow immediate logs to be appended
     await page.waitForTimeout(50);
 
-    let logs = await app.getLogsArray();
+    let logs6 = await app.getLogsArray();
     // Ensure we see atomicity start and failure logs among the overall logs
     const atomicStart = logs.find(l => l.includes('Starting Transaction'));
     const atomicFailure = logs.find(l => l.includes('Transaction Failed: An error occurred!'));
@@ -283,7 +283,7 @@ test.describe('ACID Properties Application - FSM Validation', () => {
 
   // Final check to ensure no unexpected console errors or page errors were produced during interactions
   test('Diagnostics: no uncaught page errors and no console errors emitted during tests', async ({ page }) => {
-    const app = new AcidPage(page);
+    const app7 = new AcidPage(page);
     await app.goto();
 
     // Perform a sequence of actions exercising all transitions

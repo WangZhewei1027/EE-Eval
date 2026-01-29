@@ -83,11 +83,11 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
 
   test('InputChange event updates displayed input labels and output (Idle->Idle transition)', async ({ page }) => {
     // This test validates changing sliders triggers updateActivations and updates DOM accordingly.
-    const input0 = page.locator('#input0');
-    const input1 = page.locator('#input1');
-    const input0Val = page.locator('#input0Val');
-    const input1Val = page.locator('#input1Val');
-    const outputValue = page.locator('#outputValue');
+    const input01 = page.locator('#input01');
+    const input11 = page.locator('#input11');
+    const input0Val1 = page.locator('#input0Val1');
+    const input1Val1 = page.locator('#input1Val1');
+    const outputValue1 = page.locator('#outputValue1');
 
     // Move input0 to 1.0 and verify label and output update
     await input0.fill('1'); // set value to "1"
@@ -103,7 +103,7 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
     await expect(input1Val).toHaveText('0.00');
 
     // The output should be updated accordingly (numeric string)
-    const outText = await outputValue.textContent();
+    const outText1 = await outputValue.textContent();
     expect(outText).not.toBe('-');
     expect(/^\d+\.\d{3}$/.test(outText)).toBeTruthy();
 
@@ -124,10 +124,10 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
     // - sliders start changing (trainingStep updates s.value)
     const trainBtn = page.locator('#trainBtn');
     const resetBtn = page.locator('#resetBtn');
-    const input0 = page.locator('#input0');
-    const input1 = page.locator('#input1');
-    const input0Val = page.locator('#input0Val');
-    const input1Val = page.locator('#input1Val');
+    const input02 = page.locator('#input02');
+    const input12 = page.locator('#input12');
+    const input0Val2 = page.locator('#input0Val2');
+    const input1Val2 = page.locator('#input1Val2');
 
     // Ensure trainBtn is enabled initially
     await expect(trainBtn).toBeEnabled();
@@ -168,8 +168,8 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
 
   test('Train button is idempotent while training (edge case)', async ({ page }) => {
     // Clicking train button again while training should not throw or change disabled state unexpectedly.
-    const trainBtn = page.locator('#trainBtn');
-    const resetBtn = page.locator('#resetBtn');
+    const trainBtn1 = page.locator('#trainBtn1');
+    const resetBtn1 = page.locator('#resetBtn1');
 
     await expect(trainBtn).toBeEnabled();
     await trainBtn.click();
@@ -199,12 +199,12 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
   });
 
   test('S2_Reset: Reset Network returns inputs to default and updates activations (ResetNetwork event)', async ({ page }) => {
-    const input0 = page.locator('#input0');
-    const input1 = page.locator('#input1');
-    const input0Val = page.locator('#input0Val');
-    const input1Val = page.locator('#input1Val');
-    const resetBtn = page.locator('#resetBtn');
-    const outputValue = page.locator('#outputValue');
+    const input03 = page.locator('#input03');
+    const input13 = page.locator('#input13');
+    const input0Val3 = page.locator('#input0Val3');
+    const input1Val3 = page.locator('#input1Val3');
+    const resetBtn2 = page.locator('#resetBtn2');
+    const outputValue2 = page.locator('#outputValue2');
 
     // Change sliders to non-default values
     await input0.fill('1');
@@ -261,7 +261,7 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
     await page.mouse.move(canvasBox.x - 10, canvasBox.y - 10);
     await page.waitForTimeout(100);
 
-    // Tooltip should be hidden (display: none). Check that no visible tooltipDiv with 'Activation' exists
+    // Tooltip should be hidden (display). Check that no visible tooltipDiv with 'Activation' exists
     // We check that any div containing 'Activation' is not visible
     const activationDivs = page.locator('div', { hasText: 'Activation:' });
     const count = await activationDivs.count();
@@ -291,10 +291,10 @@ test.describe('Neural Networks Interactive Demo - FSM and UI tests', () => {
 
   test('Robustness: No uncaught exceptions or ReferenceError/SyntaxError/TypeError during typical usage', async ({ page }) => {
     // Perform a series of typical interactions and assert no page errors or console errors collected.
-    const input0 = page.locator('#input0');
-    const input1 = page.locator('#input1');
-    const trainBtn = page.locator('#trainBtn');
-    const resetBtn = page.locator('#resetBtn');
+    const input04 = page.locator('#input04');
+    const input14 = page.locator('#input14');
+    const trainBtn2 = page.locator('#trainBtn2');
+    const resetBtn3 = page.locator('#resetBtn3');
 
     // Change inputs
     await input0.fill('0.75');

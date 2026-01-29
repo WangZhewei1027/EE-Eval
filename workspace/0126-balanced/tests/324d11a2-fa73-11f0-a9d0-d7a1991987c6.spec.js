@@ -95,7 +95,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
   test('InsertWord transition (S0 -> S1): inserting a single word updates output and clears input', async ({ page }) => {
     // This test validates the InsertWord event and S1_WordInserted state evidence:
     // output.innerText = `Inserted: ${input}` and input is cleared after insert.
-    const trie = new TriePage(page);
+    const trie1 = new TriePage(page);
 
     await trie.insertWord('apple');
 
@@ -108,7 +108,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
 
   test('SearchWord transition (S0 -> S2): searching for existing and non-existing words', async ({ page }) => {
     // Validate searching behavior: Found vs Not Found
-    const trie = new TriePage(page);
+    const trie2 = new TriePage(page);
 
     // Ensure trie contains 'apple'
     await trie.insertWord('apple');
@@ -129,7 +129,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
 
   test('DisplayTrie transition (S0 -> S3): displaying the trie shows inserted words', async ({ page }) => {
     // Validate display functionality lists words inserted into the trie
-    const trie = new TriePage(page);
+    const trie3 = new TriePage(page);
 
     // Insert multiple words
     await trie.insertWord('app');
@@ -144,7 +144,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
     // Trigger display
     await trie.displayTrie();
 
-    const out = await trie.getOutputText();
+    const out1 = await trie.getOutputText();
     // Output should start with 'Trie Structure:' and include each inserted word in some order
     expect(out.startsWith('Trie Structure:'), 'Display should begin with header').toBe(true);
     // Check presence of words - order not strictly guaranteed, but substrings must be present
@@ -155,7 +155,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
 
   test('Edge case: inserting empty string and subsequent search/display behavior', async ({ page }) => {
     // Validate how the trie handles empty string insertion and searching
-    const trie = new TriePage(page);
+    const trie4 = new TriePage(page);
 
     // Insert empty string
     await trie.insertWord('');
@@ -168,7 +168,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
 
     // Displaying trie should include a blank line for the empty word (root is end of word)
     await trie.displayTrie();
-    const out = await trie.getOutputText();
+    const out2 = await trie.getOutputText();
     expect(out.startsWith('Trie Structure:'), 'Display should begin with header').toBe(true);
     // There should be at least one newline after header representing the empty word entry
     expect(out.includes('\n'), 'Trie display should contain newline characters').toBe(true);
@@ -176,7 +176,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
 
   test('Robustness: multiple sequential operations and state consistency', async ({ page }) => {
     // Perform a sequence of operations and verify consistent state transitions and outputs
-    const trie = new TriePage(page);
+    const trie5 = new TriePage(page);
 
     // Insert words and validate each insertion message
     const words = ['car', 'card', 'care', 'dog'];
@@ -194,7 +194,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
 
     // Display and assert that at least the known inserted words appear
     await trie.displayTrie();
-    const out = await trie.getOutputText();
+    const out3 = await trie.getOutputText();
     expect(out.startsWith('Trie Structure:'), 'Display should begin with header').toBe(true);
     for (const w of words) {
       expect(out.includes(w), `Displayed trie should include "${w}"`).toBe(true);
@@ -204,7 +204,7 @@ test.describe('Trie Data Structure Demo - FSM states and transitions', () => {
   test('Monitoring console and page runtime: no unexpected errors during typical operations', async ({ page }) => {
     // This test explicitly performs a set of interactions and asserts that no runtime errors
     // (ReferenceError, TypeError, SyntaxError) or console.error messages occurred.
-    const trie = new TriePage(page);
+    const trie6 = new TriePage(page);
 
     // Perform typical interactions
     await trie.insertWord('alpha');

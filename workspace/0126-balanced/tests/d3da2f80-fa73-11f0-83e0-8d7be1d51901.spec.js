@@ -151,7 +151,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
   test.describe('Static routes and navigation (S0 -> S1, S0 -> S2)', () => {
     test('navigates to About page (S1_About) via nav link and renders expected content', async ({ page }) => {
       // Validates NAVIGATE_TO_ABOUT transition and About content
-      const rp = new RouterPage(page);
+      const rp1 = new RouterPage(page);
       await rp.goto();
 
       // Click About in sidebar
@@ -170,7 +170,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
 
     test('navigates to Users page (S2_Users) via nav link and shows loading then users list', async ({ page }) => {
       // Validates NAVIGATE_TO_USERS transition, loading state, and async rendering
-      const rp = new RouterPage(page);
+      const rp2 = new RouterPage(page);
       await rp.goto();
 
       // Click Users
@@ -198,7 +198,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
   test.describe('Parameterized routes and nested views (S2_Users -> S3_UserProfile -> S4_UserPosts)', () => {
     test('navigates to User Profile (S3_UserProfile) and shows nested Profile content', async ({ page }) => {
       // Validates NAVIGATE_TO_USER_PROFILE transition and nested profile rendering
-      const rp = new RouterPage(page);
+      const rp3 = new RouterPage(page);
       await rp.goto();
 
       // Ensure we are on Users first so history/back works predictably
@@ -230,7 +230,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
 
     test('from User Profile navigates to Posts tab (S4_UserPosts) and renders posts list', async ({ page }) => {
       // Validates NAVIGATE_TO_USER_POSTS transition and query parsing
-      const rp = new RouterPage(page);
+      const rp4 = new RouterPage(page);
       await rp.goto();
 
       // Navigate directly to the user posts nav link
@@ -258,7 +258,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
 
     test('Back button inside User Profile uses history.back() to return to Users list', async ({ page }) => {
       // Validates GO_BACK behavior using history.back()
-      const rp = new RouterPage(page);
+      const rp5 = new RouterPage(page);
       await rp.goto();
 
       // Navigate: Home -> Users -> User 1
@@ -284,7 +284,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
   test.describe('404 fallback and error scenarios (S5_NotFound and user-not-found handling)', () => {
     test('renders 404 Not Found for unknown route (S5_NotFound) and Go Home works', async ({ page }) => {
       // Validates transition to 404 via nav link and GO_HOME action
-      const rp = new RouterPage(page);
+      const rp6 = new RouterPage(page);
       await rp.goto();
 
       // Click the 404 example link
@@ -312,7 +312,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
 
     test('navigating to a non-existent user shows "User not found" message instead of uncaught error', async ({ page }) => {
       // Validates user-not-found path handling (the route resolves to a "User not found" HTML fragment)
-      const rp = new RouterPage(page);
+      const rp7 = new RouterPage(page);
       await rp.goto();
 
       // Programmatic navigation to a user id that does not exist
@@ -333,7 +333,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
 
     test('Clicking Go Back on the 404 uses history.back() and returns to prior page when history exists', async ({ page }) => {
       // Validates GO_BACK from 404; ensures history.back() is invoked and returns to previous route
-      const rp = new RouterPage(page);
+      const rp8 = new RouterPage(page);
       await rp.goto();
 
       // Navigate Home -> About -> 404
@@ -343,7 +343,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
       await rp.waitForHeading('404 — Not Found');
 
       // Click the Go Back button in the 404 UI (onclick="history.back()")
-      const goBackBtn = page.locator('button[onclick="history.back()"]');
+      const goBackBtn1 = page.locator('button[onclick="history.back()"]');
       await expect(goBackBtn).toBeVisible();
       await goBackBtn.click();
 
@@ -359,7 +359,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
   test.describe('Edge cases and robustness', () => {
     test('router does not emit uncaught errors on repeated rapid navigation', async ({ page }) => {
       // Stress test: rapidly click multiple nav links and ensure no uncaught JS errors
-      const rp = new RouterPage(page);
+      const rp9 = new RouterPage(page);
       await rp.goto();
 
       // Rapidly navigate: About -> Users -> User 1 -> User 2 posts -> Home
@@ -393,7 +393,7 @@ test.describe('Routing Demo (Hash-based SPA Router) - end-to-end', () => {
     test('there are no unexpected console.error or uncaught exceptions on initial load', async ({ page }) => {
       // This test explicitly verifies that no errors were emitted on page load.
       // It collects console.error and pageerror events in beforeEach and asserts none occurred.
-      const rp = new RouterPage(page);
+      const rp10 = new RouterPage(page);
       await rp.goto();
 
       // Additional sanity check: app container should contain at least one heading after load

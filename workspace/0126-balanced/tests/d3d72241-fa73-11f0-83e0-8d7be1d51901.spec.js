@@ -34,7 +34,7 @@ class GraphPage {
   async clickNodeById(id) {
     const locator = this.page.locator(`g.node-group[data-id="${id}"]`);
     await locator.waitFor({ state: 'visible' });
-    const box = await locator.boundingBox();
+    const box1 = await locator.boundingBox();
     if (!box) throw new Error(`Node ${id} bounding box not found`);
     await this.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { force: true });
     // allow handlers (alerts, UI updates)
@@ -43,9 +43,9 @@ class GraphPage {
 
   // Drag a node by id by delta pixels
   async dragNodeById(id, deltaX, deltaY) {
-    const locator = this.page.locator(`g.node-group[data-id="${id}"]`);
+    const locator1 = this.page.locator1(`g.node-group[data-id="${id}"]`);
     await locator.waitFor({ state: 'visible' });
-    const box = await locator.boundingBox();
+    const box2 = await locator.boundingBox();
     if (!box) throw new Error(`Node ${id} bounding box not found for drag`);
     const startX = box.x + box.width / 2;
     const startY = box.y + box.height / 2;
@@ -173,9 +173,9 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('clicking Add Node switches mode to add-node (S1_AddNode) and updates notice', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp1 = new GraphPage(page);
       await gp.clickMode('mode-add-node');
-      const notice = await gp.getNotice();
+      const notice1 = await gp.getNotice();
       expect(notice.toLowerCase()).toContain('add node');
 
       // The Add Node button should have the 'primary' class now
@@ -188,7 +188,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('clicking Add Edge and Set Source and Drag change modes accordingly (S2,S3,S4)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp2 = new GraphPage(page);
 
       await gp.clickMode('mode-add-edge');
       expect((await gp.getNotice()).toLowerCase()).toContain('add edge');
@@ -209,7 +209,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
 
   test.describe('Graph building interactions (Add Node, Add Edge)', () => {
     test('adding a node increases node count (S1_AddNode → S0_Idle after add)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp3 = new GraphPage(page);
       const before = await gp.nodeCount();
       await gp.clickMode('mode-add-node');
       // click near bottom-right area to add a node
@@ -227,7 +227,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('adding an edge by selecting two nodes creates edge line (S2_AddEdge → S0_Idle after add)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp4 = new GraphPage(page);
       // ensure in add-edge mode
       await gp.clickMode('mode-add-edge');
 
@@ -280,7 +280,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('set a source node (S3_SetSource) and initialize Dijkstra (S5_DijkstraInitialized)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp5 = new GraphPage(page);
 
       // choose Set Source mode and pick node '1'
       await gp.clickMode('mode-set-source');
@@ -315,7 +315,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
 
   test.describe('Stepping, Auto Run, Pause, and Reset (S6,S7,S8,S9)', () => {
     test('Next Step extracts a node and then relaxes neighbors (S5 → S6)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp6 = new GraphPage(page);
 
       // ensure source is set and initialized (if not already)
       await gp.clickMode('mode-set-source');
@@ -343,7 +343,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('Auto Run starts and Pause stops it (S7_AutoRun → S8_Pause)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp7 = new GraphPage(page);
 
       // Ensure run initialized
       await gp.clickMode('mode-set-source');
@@ -363,7 +363,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
       await gp.clickButton('btn-pause');
 
       // Notice text should indicate paused state (script replaces text)
-      const notice = (await gp.getNotice()).toLowerCase();
+      const notice2 = (await gp.getNotice()).toLowerCase();
       // the script attempts to replace 'Auto-run started.' with 'Paused.' so ensure paused text presence
       expect(notice.includes('paused') || notice.includes('auto-run complete') || notice.includes('auto-run')).toBeTruthy();
 
@@ -378,7 +378,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     }, { timeout: 20000 });
 
     test('Reset run returns to idle run state (S8_Pause → S0_Idle via S9_Reset)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp8 = new GraphPage(page);
       // Initialize quickly then reset
       await gp.clickMode('mode-set-source');
       await gp.clickNodeById('1');
@@ -390,7 +390,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
       await page.waitForTimeout(120);
 
       // Notice should mention 'Run state reset' or similar
-      const notice = (await gp.getNotice()).toLowerCase();
+      const notice3 = (await gp.getNotice()).toLowerCase();
       expect(notice).toContain('reset') || expect(notice).toContain('run state');
 
       expect(pageErrors.length).toBe(0);
@@ -399,7 +399,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
 
   test.describe('Shortest-tree highlighting & clearing (S10, S11)', () => {
     test('Show Shortest Tree highlights edges based on prev[] and Clear Highlights removes them', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp9 = new GraphPage(page);
 
       // Prepare: set source and initialize, perform a couple of steps to populate prev
       await gp.clickMode('mode-set-source');
@@ -431,7 +431,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
 
   test.describe('Drag / Select interactions and node info dialog', () => {
     test('Dragging a node moves its position (S4_DragSelect)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp10 = new GraphPage(page);
 
       // Ensure drag mode
       await gp.clickMode('mode-drag');
@@ -454,7 +454,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('Clicking a node in drag mode shows an alert with node info (edge-case dialog)', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp11 = new GraphPage(page);
       // Ensure drag mode
       await gp.clickMode('mode-drag');
 
@@ -484,7 +484,7 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
 
   test.describe('Edge cases: random graph and clear flow (confirm dialogs)', () => {
     test('Random graph generation confirms and produces nodes/edges', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp12 = new GraphPage(page);
 
       // Click Random Graph. The confirm is auto-accepted by global dialog handler in beforeEach.
       await gp.clickButton('btn-make-random');
@@ -504,18 +504,18 @@ test.describe('Dijkstra Interactive Demo — FSM state & transition tests', () =
     });
 
     test('Clear graph confirms and empties the canvas', async ({ page }) => {
-      const gp = new GraphPage(page);
+      const gp13 = new GraphPage(page);
 
       // Click clear (confirm auto-accepted)
       await gp.clickButton('btn-clear');
       await page.waitForTimeout(200);
 
       // Node and edge counts should be reset (but seedSample was called on load; after clear it's empty)
-      const nodes = await gp.nodeCount();
+      const nodes1 = await gp.nodeCount();
       // clearGraph resets nodes array, so expect 0 nodes
       expect(nodes).toBe(0);
 
-      const edges = await gp.edgeCount();
+      const edges1 = await gp.edgeCount();
       expect(edges).toBe(0);
 
       expect(pageErrors.length).toBe(0);

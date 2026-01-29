@@ -122,7 +122,7 @@ test.describe('Static Typing Example - FSM states and transitions', () => {
     // This test validates the transition triggered by the RunStaticTyping event:
     // - Clicking the button runs demonstrateStaticTyping() and updates #result with the expected greeting
     // - The DOM update is verified, and no runtime errors are thrown during the transition
-    const app = new StaticTypingPage(page);
+    const app1 = new StaticTypingPage(page);
     await app.goto();
 
     // Precondition: result is empty
@@ -146,7 +146,7 @@ test.describe('Static Typing Example - FSM states and transitions', () => {
     expect(pageErrors).toEqual([]);
 
     // Verify no console error messages were produced during the action
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 
@@ -154,7 +154,7 @@ test.describe('Static Typing Example - FSM states and transitions', () => {
     // This test validates repeated triggering of the same transition:
     // - Clicking the Run button multiple times should result in the same result text
     // - No additional errors should be emitted on repeated execution
-    const app = new StaticTypingPage(page);
+    const app2 = new StaticTypingPage(page);
     await app.goto();
 
     // Click first time
@@ -172,14 +172,14 @@ test.describe('Static Typing Example - FSM states and transitions', () => {
 
     // No page errors across the repeated interactions
     expect(pageErrors).toEqual([]);
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 
   test('Edge case / Negative test: clicking non-trigger elements does not change result or cause errors', async ({ page }) => {
     // This test validates that only the configured event (button click with onclick handler)
     // triggers the transition. Clicking an arbitrary element (the body) should not change state.
-    const app = new StaticTypingPage(page);
+    const app3 = new StaticTypingPage(page);
     await app.goto();
 
     // Ensure result is empty at the start
@@ -204,7 +204,7 @@ test.describe('Static Typing Example - FSM states and transitions', () => {
     // - greetUser should exist and be a function
     // - When called with the expected shape it returns the correct string
     // We will call greetUser with a correctly shaped object via page.evaluate to observe normal behavior.
-    const app = new StaticTypingPage(page);
+    const app4 = new StaticTypingPage(page);
     await app.goto();
 
     // Confirm greetUser exists and behaves as expected when called with correct types

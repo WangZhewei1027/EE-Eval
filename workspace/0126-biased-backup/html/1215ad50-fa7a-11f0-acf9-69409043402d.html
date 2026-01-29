@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Semaphore - Interactive Exploration</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 5em;
+    font-family: monospace, monospace;
+  }
+  input[type=number] {
+    width: 4em;
+  }
+  fieldset {
+    margin-top: 1em;
+  }
+  label {
+    display: inline-block;
+    margin-right: 0.5em;
+  }
+  button {
+    margin: 0.2em 0.5em 0.2em 0;
+  }
+  #log {
+    width: 100%;
+    height: 12em;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    border: 1px solid #000;
+    margin-top: 1em;
+    padding: 0.25em 0.5em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Semaphore - Interactive Exploration</h1>
+
+<p><strong>Concept:</strong> A semaphore is a synchronization tool used in concurrent programming to control access to a shared resource by multiple processes/threads. It maintains a count representing available "permits". Processes wait to acquire permits before proceeding and release permits when done.</p>
+
+<hr/>
+
+<fieldset>
+  <legend>Configure Semaphore</legend>
+  <label>Initial Count (permits): <input type="number" id="initialCount" min="0" max="10" value="3" /></label>
+  <button id="createSemaphore">Create Semaphore</button>
+  <p id="semaphoreStatus">Semaphore not created yet.</p>
+</fieldset>
+
+<fieldset id="processControls" disabled>
+  <legend>Processes Management</legend>
+  <label>Process Name: <input type="text" id="procName" maxlength="20" /></label>
+  <button id="createProcess">Create Process</button>
+  <p><strong>Processes:</strong> <span id="processList">(none)</span></p>
+
+  <label for="procSelect">Select Process:</label>
+  <select id="procSelect" size="6" style="width: 20em;"></select>
+  <br/>
+
+  <button id="procWait">Wait (P)</button>
+  <button id="procSignal">Signal (V)</button>
+  <button id="procBlock">Block Process</button>
+  <button id="procUnblock">Unblock Process</button>
+  <button id="procKill">Kill Process</button>
+</fieldset>
+
+<fieldset id="advancedControls" disabled>
+  <legend>Advanced & Exploration Controls</legend>
+  <button id="stepLog">Step Log (Show last steps)</button>
+  <button id="resetAll">Reset All</button>
+  <label><input type="checkbox" id="autoUnblock" /> Auto-unblock waiting processes when permits released</label>
+  <br/>
+  <label>Throttle (ms delay per operation): <input type="number" id="throttle" min="0" max="5000" step="100" value="0" /></label>
+</fieldset>
+
+<fieldset>
+  <legend>Semaphore State</legend>
+  <p>Current Permits Available: <span id="permitsAvailable">-</span></p>
+  <p>Queue (Waiting Processes): <span id="waitingQueue">empty</span></p>
+</fieldset>
+
+<fieldset>
+  <legend>Log / Trace</legend>
+  <textarea id="log" readonly></textarea>
+</fieldset>
+
+<script>
+(function(){
+  // STATE
+  let semaphore = null;
+  let processes = new Map(); // key: procID, value: process object
+  let processCounter = 0;
+  let stepLog = [];
+  let throttle = 0;
+  let autoUnblock = false;
+
+  // Process states: 'ready', 'waiting', 'blocked', 'terminated'
+  class Process {
+    constructor(name,id){
+      this.name = name;
+      this.id = id;
+      this.state = 'ready';
+      this.waitSemaphoreTime = null;
+    }
+    toString() {
+      return `${this.name} [${this.state}]`;
+    }
+  }
+
+  class Semaphore {
+    constructor(initial){
+      this.count = initial;
+      this.waitingQueue = [];
+    }
+    async wait(proc){
+      if(proc.state === 'terminated') throw new Error("Process terminated cannot wait.");
+      if(proc.state === 'blocked') throw new Error("Blocked process cannot wait.");
+
+      if(this.count > 0){
+        this.count--;
+        log(`Process "${proc.name}" acquired a permit. Permits left: ${this.count}`);
+        proc.state = 'ready';
+        return true;
+      } else {
+        proc.state = 'waiting';
+        this.waitingQueue.push(proc);
+        proc.waitSemaphoreTime = Date.now();
+        log(`Process "${proc.name}" is waiting (blocked) for a permit. Queue length: ${this.waitingQueue.length}`);
+        updateUI();
+        // Return Promise that resolves when process is unblocked (signal)
+        return new Promise((resolve,reject) => {
+          proc._resolveWait = resolve;
+          proc._rejectWait = reject;
+        });
+      }
+    }
+    signal(proc){
+      if(proc.state === 'terminated') {
+        log(`Process "${proc.name}" is terminated, cannot signal.`);
+        return;
+      }
+      if(proc.state === 'waiting'){
+        log(`Process "${proc.name}" is waiting and cannot signal until it acquires a permit.`);
+        return;
+      }
+      this.count++;
+      log(`Process "${proc.name}" released a permit. Permits available: ${this.count}`);
+      // Unblock waiting process if any
+      if(autoUnblock && this.waitingQueue.length > 0){
+        let nextProc = this.waitingQueue.shift();
+        if(nextProc.state === 'waiting'){
+          nextProc.state = 'ready';
+          log(`Auto-unblocking waiting process "${nextProc.name}".`);
+          this.count--;
+          if(nextProc._resolveWait) {
+            nextProc._resolveWait(true);
+            delete nextProc._resolveWait;
+            delete nextProc._rejectWait;
+          }
+          updateUI();
+        }
+      }
+    }
+    unblockProcess(proc){
+      // called to manually unblock a waiting process. Remove from queue and resolve.
+      let idx = this.waitingQueue.indexOf(proc);
+      if(idx !== -1){
+        this.waitingQueue.splice(idx,1);
+        proc.state = 'ready';
+        log(`Process "${proc.name}" manually unblocked.`);
+        this.count--;
+        if(proc._resolveWait) {
+          proc._resolveWait(true);
+          delete proc._resolveWait;
+          delete proc._rejectWait;
+        }
+        updateUI();
+        return true;
+      }
+      return false;
+    }
+    removeProcess(proc){
+      // Remove from waiting queue if present
+      let idx = this.waitingQueue.indexOf(proc);
+      if(idx !== -1){
+        this.waitingQueue.splice(idx,1);
+      }
+      // If process was holding a permit before terminating, do not change count here (since we don't track permit ownership)
+      proc.state = 'terminated';
+      // Clear any blocked promises
+      if(proc._resolveWait) {
+        proc._rejectWait && proc._rejectWait(new Error("Process terminated during wait."));
+        delete proc._resolveWait;
+        delete proc._rejectWait;
+      }
+    }
+  }
+
+  // UI References
+  const initialCountInput = document.getElementById('initialCount');
+  const createSemaphoreBtn = document.getElementById('createSemaphore');
+  const semaphoreStatusP = document.getElementById('semaphoreStatus');
+
+  const processControls = document.getElementById('processControls');
+  const procNameInput = document.getElementById('procName');
+  const createProcessBtn = document.getElementById('createProcess');
+  const processListSpan = document.getElementById('processList');
+  const procSelect = document.getElementById('procSelect');
+  const procWaitBtn = document.getElementById('procWait');
+  const procSignalBtn = document.getElementById('procSignal');
+  const procBlockBtn = document.getElementById('procBlock');
+  const procUnblockBtn = document.getElementById('procUnblock');
+  const procKillBtn = document.getElementById('procKill');
+
+  const permitsAvailableSpan = document.getElementById('permitsAvailable');
+  const waitingQueueSpan = document.getElementById('waitingQueue');
+
+  const logArea = document.getElementById('log');
+  const stepLogBtn = document.getElementById('stepLog');
+  const resetAllBtn = document.getElementById('resetAll');
+  const autoUnblockCb = document.getElementById('autoUnblock');
+  const throttleInput = document.getElementById('throttle');
+
+  // FUNCTIONS
+
+  function log(msg){
+    let time = new Date().toLocaleTimeString();
+    const line = `[${time}] ${msg}`;
+    stepLog.push(line);
+    while(stepLog.length > 1000) stepLog.shift();
+    logArea.value += line + '\n';
+    logArea.scrollTop = logArea.scrollHeight;
+  }
+
+  function updateSemaphoreStatus(){
+    if(semaphore) {
+      semaphoreStatusP.textContent = `Semaphore created with ${semaphore.count} permit(s) available.`;
+      permitsAvailableSpan.textContent = semaphore.count;
+      let qnames = semaphore.waitingQueue.map(p => p.name).join(', ');
+      waitingQueueSpan.textContent = qnames || 'empty';
+    } else {
+      semaphoreStatusP.textContent = 'Semaphore not created yet.';
+      permitsAvailableSpan.textContent = '-';
+      waitingQueueSpan.textContent = 'empty';
+    }
+  }
+
+  function updateProcessList(){
+    if(processes.size===0){
+      processListSpan.textContent = '(none)';
+      procSelect.innerHTML = '';
+      disableProcessButtons(true);
+      return;
+    }
+    processListSpan.textContent = [...processes.values()].map(p=>`${p.name}[${p.state}]`).join(', ');
+    // Update process select options
+    let oldSelectedId = procSelect.value;
+    procSelect.innerHTML = '';
+    for(let p of processes.values()){
+      let option = document.createElement('option');
+      option.value = p.id;
+      option.textContent = `${p.name} [${p.state}]`;
+      procSelect.appendChild(option);
+    }
+    if([...procSelect.options].some(o=>o.value===oldSelectedId)){
+      procSelect.value = oldSelectedId;
+    }
+    updateProcessButtonsDisabledState();
+  }
+  function disableProcessButtons(disabled){
+    procWaitBtn.disabled = disabled;
+    procSignalBtn.disabled = disabled;
+    procBlockBtn.disabled = disabled;
+    procUnblockBtn.disabled = disabled;
+    procKillBtn.disabled = disabled;
+  }
+
+  function updateProcessButtonsDisabledState(){
+    let proc = getSelectedProcess();
+    if(!proc){
+      disableProcessButtons(true);
+      return;
+    }
+    disableProcessButtons(false);
+    // Disable wait if process terminated or blocked
+    if(proc.state === 'terminated' || proc.state === 'blocked'){
+      procWaitBtn.disabled = true;
+      procSignalBtn.disabled = true;
+    } else if(proc.state === 'waiting') {
+      procWaitBtn.disabled = true;
+      procSignalBtn.disabled = false;
+    } else if(proc.state === 'ready'){
+      procWaitBtn.disabled = false;
+      procSignalBtn.disabled = false;
+    }
+    // Disable block if terminated or waiting
+    procBlockBtn.disabled = (proc.state === 'terminated' || proc.state === 'waiting' || proc.state === 'blocked');
+    // Disable unblock if not blocked
+    procUnblockBtn.disabled = proc.state !== 'blocked';
+    // Disable kill if terminated
+    procKillBtn.disabled = proc.state === 'terminated';
+  }
+
+  function getSelectedProcess(){
+    let val = procSelect.value;
+    if(!val) return null;
+    return processes.get(val) || null;
+  }
+
+  function delay(ms){
+    return new Promise(res=>setTimeout(res, ms));
+  }
+
+  async function doWait(proc){
+    if(!semaphore) {
+      log(`Semaphore not created. Cannot wait.`);
+      return;
+    }
+    if(proc.state === 'terminated') {
+      log(`Process "${proc.name}" already terminated - cannot wait.`);
+      return;
+    }
+    if(proc.state === 'blocked') {
+      log(`Process "${proc.name}" is blocked - cannot wait.`);
+      return;
+    }
+    log(`Process "${proc.name}" attempts WAIT (P) operation...`);
+    if (throttle > 0) await delay(throttle);
+
+    try {
+      let res = await semaphore.wait(proc);
+      if(res === true){
+        log(`Process "${proc.name}" successfully acquired a permit.`);
+      }
+    } catch(e) {
+      log(`Process "${proc.name}" wait error: ${e.message}`);
+    }
+    updateUI();
+  }
+
+  function doSignal(proc){
+    if(!semaphore) {
+      log(`Semaphore not created. Cannot signal.`);
+      return;
+    }
+    if(proc.state === 'terminated'){
+      log(`Process "${proc.name}" already terminated - cannot signal.`);
+      return;
+    }
+    if(throttle > 0) {
+      delay(throttle).then(() => {
+        semaphore.signal(proc);
+        updateUI();
+      });
+    } else {
+      semaphore.signal(proc);
+      updateUI();
+    }
+  }
+
+  function doBlockProcess(proc){
+    if(proc.state === 'terminated'){
+      log(`Process "${proc.name}" is terminated, cannot block.`);
+      return;
+    }
+    if(proc.state === 'waiting'){
+      log(`Process "${proc.name}" is currently waiting on semaphore - cannot block.`);
+      return;
+    }
+    if(proc.state === 'blocked'){
+      log(`Process "${proc.name}" is already blocked.`);
+      return;
+    }
+    proc.state = 'blocked';
+    log(`Process "${proc.name}" has been BLOCKED.`);
+    updateUI();
+  }
+
+  function doUnblockProcess(proc){
+    if(proc.state !== 'blocked'){
+      log(`Process "${proc.name}" is not blocked - cannot unblock.`);
+      return;
+    }
+    proc.state = 'ready';
+    log(`Process "${proc.name}" has been UNBLOCKED.`);
+    updateUI();
+  }
+
+  function doKillProcess(proc){
+    if(proc.state === 'terminated'){
+      log(`Process "${proc.name}" is already terminated.`);
+      return;
+    }
+    semaphore && semaphore.removeProcess(proc);
+    processes.delete(proc.id);
+    log(`Process "${proc.name}" has been KILLED (terminated).`);
+    updateUI();
+  }
+
+  function updateUI(){
+    updateSemaphoreStatus();
+    updateProcessList();
+  }
+
+  // EVENT LISTENERS
+  createSemaphoreBtn.addEventListener('click', ()=>{
+    const val = Number(initialCountInput.value);
+    if(isNaN(val) || val <0 || val >10){
+      alert('Initial count must be between 0 and 10');
+      return;
+    }
+    semaphore = new Semaphore(val);
+    log(`Semaphore created with initial count ${val}.`);
+    processControls.disabled = false;
+    advancedControls.disabled = false;
+    updateUI();
+  });
+
+  createProcessBtn.addEventListener('click', ()=>{
+    if(!semaphore){
+      alert('Create a semaphore first.');
+      return;
+    }
+    const name = procNameInput.value.trim();
+    if(name.length === 0){
+      alert('Process name cannot be empty.');
+      return;
+    }
+    // Prevent duplicate process names:
+    for(let p of processes.values()){
+      if(p.name === name && p.state !== 'terminated'){
+        alert('Process with this name already exists.');
+        return;
+      }
+    }
+    processCounter++;
+    let p = new Process(name, 'proc' + processCounter);
+    processes.set(p.id, p);
+    log(`Created process "${p.name}".`);
+    updateUI();
+    procNameInput.value = '';
+  });
+
+  procWaitBtn.addEventListener('click', ()=>{
+    let proc = getSelectedProcess();
+    if(!proc) {
+      alert('Select a process first.');
+      return;
+    }
+    doWait(proc);
+  });
+
+  procSignalBtn.addEventListener('click', ()=>{
+    let proc = getSelectedProcess();
+    if(!proc) {
+      alert('Select a process first.');
+      return;
+    }
+    doSignal(proc);
+  });
+
+  procBlockBtn.addEventListener('click', ()=>{
+    let proc = getSelectedProcess();
+    if(!proc){
+      alert('Select a process first.');
+      return;
+    }
+    doBlockProcess(proc);
+  });
+
+  procUnblockBtn.addEventListener('click', ()=>{
+    let proc = getSelectedProcess();
+    if(!proc){
+      alert('Select a process first.');
+      return;
+    }
+    doUnblockProcess(proc);
+  });
+
+  procKillBtn.addEventListener('click', ()=>{
+    let proc = getSelectedProcess();
+    if(!proc){
+      alert('Select a process first.');
+      return;
+    }
+    if(!confirm(`Are you sure you want to kill process "${proc.name}"? This cannot be undone.`)){
+      return;
+    }
+    doKillProcess(proc);
+  });
+
+  procSelect.addEventListener('change', ()=>{
+    updateProcessButtonsDisabledState();
+  });
+
+  stepLogBtn.addEventListener('click', ()=>{
+    alert(stepLog.slice(-20).join('\n'));
+  });
+
+  resetAllBtn.addEventListener('click', ()=>{
+    if(!confirm('Reset everything including semaphore and all processes?')){
+      return;
+    }
+    semaphore = null;
+    processes.clear();
+    processCounter = 0;
+    stepLog.length=0;
+    logArea.value = '';
+    processControls.disabled = true;
+    advancedControls.disabled = true;
+    updateUI();
+  });
+
+  autoUnblockCb.addEventListener('change', ()=>{
+    autoUnblock = autoUnblockCb.checked;
+    log(`Auto-unblock waiting processes when permits released: ${autoUnblock ? 'Enabled' : 'Disabled'}`);
+  });
+
+  throttleInput.addEventListener('change', ()=>{
+    throttle = Number(throttleInput.value);
+    if(isNaN(throttle) || throttle < 0) throttle = 0;
+    log(`Throttle delay per operation set to ${throttle} ms.`);
+  });
+
+  // Initialize UI as disabled
+  processControls.disabled = true;
+  const advancedControls = document.getElementById('advancedControls');
+  advancedControls.disabled = true;
+  updateUI();
+
+  // Insert initial instructions log
+  log('Welcome! Configure semaphore and create processes to explore the WAIT (P) and SIGNAL (V) operations. You can also block/unblock processes and kill them. Use auto-unblock feature to see automatic permit granting to waiting processes.');
+})();
+</script>
+
+</body>
+</html>

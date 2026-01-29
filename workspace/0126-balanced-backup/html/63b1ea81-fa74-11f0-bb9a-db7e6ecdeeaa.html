@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PageRank Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f0f4f8;
+    color: #222;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 5px;
+  }
+  #container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    justify-content: center;
+  }
+  #graph, #pagerank {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 0 12px #ccc;
+  }
+  #graph {
+    flex: 1 1 520px;
+    max-width: 600px;
+  }
+  #pagerank {
+    flex: 1 1 280px;
+    max-width: 350px;
+  }
+  #iterations {
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+  }
+  button {
+    border: none;
+    background-color: #007acc;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1rem;
+  }
+  button:disabled {
+    background-color: #aaa;
+    cursor: default;
+  }
+  svg {
+    background: #e9eff5;
+    border-radius: 8px;
+  }
+  .node circle {
+    fill: #4285f4;
+    stroke: #1a73e8;
+    stroke-width: 2px;
+  }
+  .node text {
+    font-weight: bold;
+    fill: white;
+    user-select:none;
+    pointer-events:none;
+  }
+  .edge path {
+    stroke: #555;
+    stroke-width: 2px;
+    fill: none;
+    marker-end: url(#arrowhead);
+  }
+  .edge text {
+    font-size: 12px;
+    fill: #333;
+    pointer-events:none;
+  }
+  #explanation {
+    max-width: 900px;
+    margin: 20px auto 40px auto;
+    line-height: 1.4;
+  }
+  #dampingControl {
+    margin-bottom: 15px;
+    text-align: center;
+  }
+  label {
+    font-weight: bold;
+  }
+  #iterationsCount {
+    font-weight: bold;
+    min-width: 30px;
+    text-align: center;
+  }
+  @media (max-width: 900px) {
+    #container {
+      flex-direction: column;
+      align-items: center;
+    }
+    #graph, #pagerank {
+      max-width: 100%;
+      flex: none;
+    }
+  }
+</style>
+</head>
+<body>
+<h1>PageRank Algorithm Demo</h1>
+
+<div id="explanation">
+  <p>
+    PageRank is an algorithm used by search engines to rank web pages in their search results.
+    It works by counting the number and quality of links to a page to estimate how important
+    the page is. The underlying assumption is that more important pages are likely to receive 
+    more links from other pages.
+  </p>
+  <p>
+    This demo shows a simplified network of 5 pages (A, B, C, D, E). Each page links to some others,
+    and we iteratively calculate PageRank values for each page using the formula:
+  </p>
+  <pre>
+    PR(A) = (1 - d)/N + d * ∑ [ PR(page_i) / L(page_i) ]
+  </pre>
+  <p>
+    where:
+    <ul>
+      <li><code>d</code> is the damping factor (usually ≈ 0.85)</li>
+      <li><code>N</code> is total number of pages</li>
+      <li><code>L(page_i)</code> is number of outbound links from <code>page_i</code></li>
+      <li>The sum is over all pages linking to A</li>
+    </ul>
+  </p>
+  <p>
+    Use the buttons below to run iterations and watch how PageRank values stabilize.
+  </p>
+  <div id="dampingControl">
+    <label for="damping">Damping factor (d): </label>
+    <input type="range" id="damping" min="0.5" max="0.95" step="0.01" value="0.85" />
+    <span id="dampingValue">0.85</span>
+  </div>
+</div>
+
+<div id="container">
+  <div id="graph">
+    <svg id="svgGraph" width="580" height="420" aria-label="Graph showing pages and links" role="img" >
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7"
+          refX="10" refY="3.5" orient="auto" fill="#555">
+          <polygon points="0 0, 10 3.5, 0 7" />
+        </marker>
+      </defs>
+    </svg>
+  </div>
+  <div id="pagerank">
+    <h2>PageRank Values</h2>
+    <table id="rankTable" border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width:100%;">
+      <thead style="background:#007acc; color: white;">
+        <tr>
+          <th>Page</th>
+          <th>Rank</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- dynamically filled -->
+      </tbody>
+    </table>
+    <div id="iterations">
+      <button id="stepBtn" title="Do one iteration">Iterate ▶️</button>
+      <button id="autoBtn" title="Start/stop auto iterations">Auto ►</button>
+      <button id="resetBtn" title="Reset ranks">Reset ⟲</button>
+      <span style="margin-left:1em;">Iteration: <span id="iterationsCount">0</span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // Graph definition: pages and their outbound links
+  // Represented as adjacency list where key is page, value is array of pages it links to
+  const graph = {
+    A: ["B", "C"],
+    B: ["C", "D"],
+    C: ["A", "D", "E"],
+    D: ["E"],
+    E: ["A"],
+  };
+
+  const pages = Object.keys(graph);
+  const N = pages.length;
+
+  // Positions of nodes for visualization (x,y in SVG coords)
+  const nodePositions = {
+    A: { x: 130, y: 60 },
+    B: { x: 450, y: 60 },
+    C: { x: 290, y: 180 },
+    D: { x: 450, y: 320 },
+    E: { x: 130, y: 320 },
+  };
+
+  // Initialize page ranks equally
+  let ranks = {};
+  let iteration = 0;
+  let damping = 0.85;
+
+  // Elements
+  const svg = document.getElementById("svgGraph");
+  const tbody = document.querySelector("#rankTable tbody");
+  const stepBtn = document.getElementById("stepBtn");
+  const autoBtn = document.getElementById("autoBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const iterCountSpan = document.getElementById("iterationsCount");
+  const dampingSlider = document.getElementById("damping");
+  const dampingValueSpan = document.getElementById("dampingValue");
+
+  // For auto iteration
+  let autoInterval = null;
+  const AUTO_INTERVAL_MS = 1500;
+
+  // Helper: create SVG element with attrs
+  function SVG(tag, attrs = {}) {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
+  }
+
+  // Compute inbound links map (which pages link to each page)
+  // Example: inboundLinks["A"] = [ "C", ... ]
+  const inboundLinks = {};
+  for (let p of pages) inboundLinks[p] = [];
+  for (let from of pages) {
+    for (let to of graph[from]) {
+      inboundLinks[to].push(from);
+    }
+  }
+
+  // Draw the graph with nodes and edges
+  function drawGraph() {
+    // Clear previous
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // Re-add defs (arrow heads)
+    const defs = SVG("defs");
+    defs.innerHTML = `
+    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+      refX="10" refY="3.5" orient="auto" fill="#555">
+      <polygon points="0 0, 10 3.5, 0 7" />
+    </marker>`;
+    svg.appendChild(defs);
+
+    // Draw edges
+    for (let from of pages) {
+      for (let to of graph[from]) {
+        drawEdge(from, to);
+      }
+    }
+
+    // Draw nodes on top
+    for (let p of pages) {
+      drawNode(p);
+    }
+  }
+
+  // Draw a curved edge with arrow from 'from' to 'to'
+  function drawEdge(from, to) {
+    const posFrom = nodePositions[from];
+    const posTo = nodePositions[to];
+
+    // Calculate a simple quadratic curve path
+    // If from === to, draw a loop
+    let path;
+    if (from === to) {
+      // Self loop as a small circle to the right
+      const r = 20;
+      const x = posFrom.x;
+      const y = posFrom.y;
+      path = `M${x} ${y} 
+              q${r} -${r} ${r * 2} 0
+              q-${r * 2} ${r} -${r * 2} 0`;
+    } else {
+      // Offset control point for curve
+      const dx = posTo.x - posFrom.x;
+      const dy = posTo.y - posFrom.y;
+      const mx = (posFrom.x + posTo.x) / 2;
+      const my = (posFrom.y + posTo.y) / 2;
+      const norm = Math.sqrt(dx * dx + dy * dy);
+      const offset = 40;
+      // Perpendicular vector for control point
+      const nx = -dy / norm;
+      const ny = dx / norm;
+
+      const cx = mx + nx * offset;
+      const cy = my + ny * offset;
+
+      path = `M${posFrom.x} ${posFrom.y} Q${cx} ${cy} ${posTo.x} ${posTo.y}`;
+    }
+
+    const edgePath = SVG("path", {
+      d: path,
+      class: "edge",
+      "marker-end": "url(#arrowhead)",
+      "stroke-linejoin": "round",
+    });
+    edgePath.classList.add("edge");
+    svg.appendChild(edgePath);
+  }
+
+  // Draw a node circle with text inside
+  function drawNode(p) {
+    const pos = nodePositions[p];
+    const g = SVG("g", { class: "node", tabindex: "0", role: "button", "aria-label": `Page ${p}` });
+
+    const circle = SVG("circle", { cx: pos.x, cy: pos.y, r: 30, "aria-hidden": "true" });
+    g.appendChild(circle);
+
+    const text = SVG("text", {
+      x: pos.x,
+      y: pos.y + 6,
+      "text-anchor": "middle",
+      "font-size": "20",
+      "pointer-events": "none",
+      "user-select": "none",
+      fill: "white",
+      "aria-hidden": "true",
+    });
+    text.textContent = p;
+    g.appendChild(text);
+
+    svg.appendChild(g);
+  }
+
+  // Update the rank table with current ranks
+  function updateRankTable() {
+    tbody.innerHTML = "";
+    // Sort by descending rank
+    const sorted = pages.slice().sort((a, b) => ranks[b] - ranks[a]);
+    for (let p of sorted) {
+      const tr = document.createElement("tr");
+      const tdName = document.createElement("td");
+      tdName.textContent = p;
+      const tdRank = document.createElement("td");
+      tdRank.textContent = ranks[p].toFixed(4);
+      tr.appendChild(tdName);
+      tr.appendChild(tdRank);
+      tbody.appendChild(tr);
+    }
+  }
+
+  // Run one PageRank iteration calculation
+  function iterateRank() {
+    const newRanks = {};
+    for (let p of pages) {
+      let inboundSum = 0;
+      for (let q of inboundLinks[p]) {
+        const Lq = graph[q].length || N; // if no outbound links, treat as linking to all (dead end)
+        inboundSum += ranks[q] / Lq;
+      }
+      // Take care of dangling nodes (pages with no outbound links)
+      // Pages with no outbound links contribute rank equally to all nodes
+      let danglingSum = 0;
+      for (let q of pages) {
+        if (graph[q].length === 0) {
+          danglingSum += ranks[q] / N;
+        }
+      }
+      inboundSum += danglingSum;
+
+      newRanks[p] = (1 - damping) / N + damping * inboundSum;
+    }
+
+    ranks = newRanks;
+    iteration++;
+    iterCountSpan.textContent = iteration;
+    updateRankTable();
+  }
+
+  // Reset ranks and iteration count
+  function resetRanks() {
+    iteration = 0;
+    ranks = {};
+    for (let p of pages) {
+      ranks[p] = 1 / N;
+    }
+    iterCountSpan.textContent = iteration;
+    updateRankTable();
+  }
+
+  // Initialize damping slider
+  function initDampingControl() {
+    dampingSlider.addEventListener("input", () => {
+      damping = parseFloat(dampingSlider.value);
+      dampingValueSpan.textContent = damping.toFixed(2);
+      resetRanks();
+    });
+  }
+
+  // Setup buttons behavior
+  function setupButtons() {
+    stepBtn.addEventListener("click", () => {
+      iterateRank();
+    });
+
+    autoBtn.addEventListener("click", () => {
+      if (autoInterval) {
+        // Stop
+        clearInterval(autoInterval);
+        autoInterval = null;
+        autoBtn.textContent = "Auto ►";
+        stepBtn.disabled = false;
+      } else {
+        // Start
+        autoInterval = setInterval(iterateRank, AUTO_INTERVAL_MS);
+        autoBtn.textContent = "Stop ■";
+        stepBtn.disabled = true;
+      }
+    });
+
+    resetBtn.addEventListener("click", () => {
+      if (autoInterval) {
+        clearInterval(autoInterval);
+        autoInterval = null;
+        autoBtn.textContent = "Auto ►";
+        stepBtn.disabled = false;
+      }
+      resetRanks();
+    });
+  }
+
+  // Initialization
+  function init() {
+    drawGraph();
+    initDampingControl();
+    setupButtons();
+    dampingValueSpan.textContent = damping.toFixed(2);
+    resetRanks();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

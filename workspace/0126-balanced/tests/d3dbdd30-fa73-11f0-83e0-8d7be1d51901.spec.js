@@ -89,7 +89,7 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
       expect((await page.locator('#speedVal').textContent()).trim()).toBe('1000ms');
 
       // Legend should reflect new K after changing slider (5 legend items)
-      const legendCount = await page.locator('#legend .legendItem').count();
+      const legendCount1 = await page.locator('#legend .legendItem').count();
       expect(legendCount).toBe(5);
     });
 
@@ -150,8 +150,8 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
 
       // Iteration should remain numeric and legend should reflect current K
       expect(Number.parseInt((await page.locator('#iter').textContent()).trim())).toBeGreaterThanOrEqual(0);
-      const kVal = parseInt((await page.locator('#kVal').textContent()).trim());
-      const legendCount = await page.locator('#legend .legendItem').count();
+      const kVal1 = parseInt((await page.locator('#kVal1').textContent()).trim());
+      const legendCount2 = await page.locator('#legend .legendItem').count();
       expect(legendCount).toBe(kVal);
     });
   });
@@ -194,7 +194,7 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
       await page.waitForTimeout(80);
 
       // Run button should be enabled after pause
-      const runDisabled = await page.locator('#runBtn').getAttribute('disabled');
+      const runDisabled1 = await page.locator('#runBtn').getAttribute('disabled');
       expect(runDisabled).toBeNull();
 
       // Record iter value
@@ -220,10 +220,10 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
       await expect(page.locator('#runBtn')).toHaveAttribute('disabled', '');
 
       // Confirm iterations resume by waiting for iter to increase
-      const iterLocator = page.locator('#iter');
+      const iterLocator1 = page.locator('#iter');
       const startIter = parseInt((await iterLocator.textContent()).trim());
       await test.poll(async () => {
-        const v = parseInt((await iterLocator.textContent()).trim());
+        const v1 = parseInt((await iterLocator.textContent()).trim());
         return v > startIter ? 'ok' : null;
       }, { timeout: 2000 });
 
@@ -248,12 +248,12 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
       expect((await page.locator('#changed').textContent()).trim()).toBe('0');
 
       // Run button should be enabled (not running)
-      const runDisabled = await page.locator('#runBtn').getAttribute('disabled');
+      const runDisabled2 = await page.locator('#runBtn').getAttribute('disabled');
       expect(runDisabled).toBeNull();
 
       // Legend should still exist and reflect current K (reset does not change K)
-      const kVal = parseInt((await page.locator('#kVal').textContent()).trim());
-      const legendCount = await page.locator('#legend .legendItem').count();
+      const kVal2 = parseInt((await page.locator('#kVal2').textContent()).trim());
+      const legendCount3 = await page.locator('#legend .legendItem').count();
       expect(legendCount).toBe(kVal);
     });
 
@@ -265,7 +265,7 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
       await page.waitForTimeout(80);
 
       // Record iter, then click Step to advance exactly once
-      const iterLocator = page.locator('#iter');
+      const iterLocator2 = page.locator('#iter');
       const before = parseInt((await iterLocator.textContent()).trim());
       await page.click('#stepBtn');
       await page.waitForTimeout(120);
@@ -308,7 +308,7 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
 
       // SSE should be 0 because computeSSE returns 0 when centroids.length === 0
       const sseText = (await page.locator('#sse').textContent()).trim();
-      const sse = parseFloat(sseText);
+      const sse1 = parseFloat(sseText);
       expect(sse).toBeGreaterThanOrEqual(0);
     });
 
@@ -342,9 +342,9 @@ test.describe('K-Means Clustering — Interactive Demo (FSM validation)', () => 
       await expect(page.locator('#runBtn')).toHaveAttribute('disabled', '');
 
       // Wait for at least one iteration to occur
-      const iterLocator = page.locator('#iter');
+      const iterLocator3 = page.locator('#iter');
       await test.poll(async () => {
-        const v = parseInt((await iterLocator.textContent()).trim());
+        const v2 = parseInt((await iterLocator.textContent()).trim());
         return v > 0 ? 'ok' : null;
       }, { timeout: 3000 });
 

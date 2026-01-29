@@ -113,7 +113,7 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
     // Perform handshake to establish connection first
     await page.click("button[onclick='startHandshake()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el1 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection established!');
     }, { timeout: 5000 });
 
@@ -130,12 +130,12 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
 
     // Wait for server to receive data and for ACK roundtrip
     await page.waitForFunction((msg) => {
-      const el = document.getElementById('log');
+      const el2 = document.getElementById('log');
       const text = el ? el.innerText : '';
       return text.includes(`Received data: "${msg}"`) && text.includes('Sending ACK for data') && text.includes('Received ACK for data');
     }, testMessage, { timeout: 4000 });
 
-    const logText = await getLogText(page);
+    const logText1 = await getLogText(page);
     expect(logText).toContain(`Received data: "${testMessage}"`);
     expect(logText).toContain('Sending ACK for data');
     expect(logText).toContain('Received ACK for data');
@@ -154,7 +154,7 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
     // Establish connection first
     await page.click("button[onclick='startHandshake()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el3 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection established!');
     }, { timeout: 5000 });
 
@@ -168,7 +168,7 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
 
     // Wait for the entire close sequence to complete and for the 'TCP connection closed gracefully' message
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el4 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection closed gracefully');
     }, { timeout: 5000 });
 
@@ -198,14 +198,14 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
     // Establish connection
     await page.click("button[onclick='startHandshake()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el5 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection established!');
     }, { timeout: 5000 });
 
     // Attempt to start handshake again while established; implementation should log "Connection already established!"
     await page.click("button[onclick='startHandshake()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el6 = document.getElementById('log');
       return el && el.innerText.includes('Connection already established!');
     }, { timeout: 2000 });
 
@@ -214,14 +214,14 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
     // Close connection to return to Idle
     await page.click("button[onclick='closeConnection()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el7 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection closed gracefully');
     }, { timeout: 5000 });
 
     // Now attempt to close again when idle — should log 'No active connection to close!'
     await page.click("button[onclick='closeConnection()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el8 = document.getElementById('log');
       return el && el.innerText.includes('No active connection to close!');
     }, { timeout: 2000 });
 
@@ -236,13 +236,13 @@ test.describe('TCP/IP Demonstration (de3d1225-fa74-11f0-a1b6-4b9b8151441a) - FSM
     // Perform a quick handshake and close to generate runtime activity
     await page.click("button[onclick='startHandshake()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el9 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection established!');
     }, { timeout: 5000 });
 
     await page.click("button[onclick='closeConnection()']");
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el10 = document.getElementById('log');
       return el && el.innerText.includes('TCP connection closed gracefully');
     }, { timeout: 5000 });
 

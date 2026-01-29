@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Context Switching Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{
+      --bg:#0f1724;
+      --panel:#0b1220;
+      --accent:#7dd3fc;
+      --accent2:#60a5fa;
+      --muted:#9aa7bb;
+      --good:#22c55e;
+      --bad:#fb7185;
+      --glass: rgba(255,255,255,0.03);
+    }
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;}
+    body{background:linear-gradient(180deg,#071028 0%, #0f1724 60%); color:#e6eef8; padding:18px; box-sizing:border-box;}
+    header{display:flex;gap:12px;align-items:center;margin-bottom:12px;}
+    header h1{font-size:18px;margin:0;}
+    .container{display:grid;grid-template-columns:300px 1fr 320px;gap:14px;align-items:start;}
+    .panel{background:var(--panel); padding:14px;border-radius:10px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); }
+    .controls h3{margin:0 0 8px 0;font-size:13px;color:var(--accent);}
+    .controls label{display:block;margin:8px 0;font-size:13px;color:var(--muted);}
+    .row{display:flex;gap:8px;align-items:center;}
+    button{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04);color:var(--accent);padding:8px 10px;border-radius:8px;cursor:pointer;}
+    button.secondary{color:var(--muted);background:transparent;border:1px dashed rgba(255,255,255,0.03);}
+    button.danger{color:var(--bad);border-color:rgba(251,113,133,0.15);}
+    input[type=range]{width:100%;}
+    .cpu-area{display:flex;flex-direction:column;gap:12px;}
+    .cpu{display:flex;gap:12px;align-items:flex-start;}
+    .cpu-visual{flex:1;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:18px;border-radius:10px;min-height:240px; }
+    .status-bar{display:flex;gap:12px;align-items:center;margin-bottom:8px;}
+    .chip{background:var(--glass);padding:8px 10px;border-radius:8px;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;}
+    .big{font-size:18px;color:var(--accent); font-weight:600;}
+    .task-list{display:flex;flex-direction:column;gap:10px;}
+    .task{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));border:1px solid rgba(255,255,255,0.02);}
+    .task .meta{display:flex;gap:12px;align-items:center;}
+    .badge{width:28px;height:28px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:#04263b;}
+    .task small{color:var(--muted);display:block;font-size:12px;}
+    .registers{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+    .reg{background:rgba(255,255,255,0.02);padding:8px;border-radius:6px;font-size:13px;min-width:72px;}
+    .timeline{height:80px;background:rgba(255,255,255,0.02);border-radius:8px;padding:8px;overflow:auto;}
+    .timeline-bar{height:28px;border-radius:6px;display:flex;align-items:center;gap:2px;padding:2px;}
+    .segment{height:24px;border-radius:4px;padding:2px 6px;color:#04263b;font-weight:700;font-size:12px;display:inline-flex;align-items:center;justify-content:center;}
+    footer{margin-top:12px;font-size:12px;color:var(--muted);}
+    .toggle{display:inline-flex;align-items:center;gap:8px;}
+    .legend{display:flex;gap:8px;align-items:center;margin-top:8px;}
+    .legend .dot{width:12px;height:12px;border-radius:3px;}
+    .note{font-size:13px;color:var(--muted);margin-top:8px;}
+    .controls .mini{font-size:13px;color:var(--muted);margin-top:6px;}
+    .task-actions button{margin-left:6px;}
+    .instructions{font-family:monospace;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;margin-top:8px;white-space:pre-wrap;font-size:13px;color:var(--muted);}
+    .center{display:flex;align-items:center;justify-content:center;}
+    .cpu-screen{background:linear-gradient(180deg,#021025,#052033);border-radius:8px;padding:12px;color:#bfe9ff;min-height:120px;display:flex;flex-direction:column;gap:8px;}
+    .current-task{font-weight:700;color:var(--accent);}
+    .small-muted{font-size:12px;color:var(--muted);}
+    input[type=number]{width:80px;padding:6px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--accent);}
+    .controls-row{display:flex;gap:8px;flex-wrap:wrap;}
+    .mode{display:inline-flex;gap:6px;align-items:center;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Context Switching — Interactive Demonstration</h1>
+    <div style="margin-left:auto;" class="small-muted">Simulates tasks, CPU, and switching overhead</div>
+  </header>
+
+  <div class="container">
+    <!-- Left: Controls -->
+    <div class="panel controls">
+      <h3>Simulation Controls</h3>
+
+      <label>Mode</label>
+      <div class="row">
+        <div class="mode">
+          <label><input type="radio" name="mode" value="preemptive" checked> Preemptive</label>
+          <label style="margin-left:8px;"><input type="radio" name="mode" value="cooperative"> Cooperative</label>
+        </div>
+      </div>
+
+      <label>Quantum (instructions per slice)</label>
+      <input id="quantum" type="range" min="1" max="8" value="3">
+      <div class="row mini small-muted"><div>Quantum = <span id="quantumVal">3</span> instruction(s)</div></div>
+
+      <label>Context Switch Overhead (simulated instructions)</label>
+      <input id="overhead" type="range" min="0" max="6" value="2">
+      <div class="row mini small-muted">Overhead = <span id="overheadVal">2</span> instruction(s)</div>
+
+      <div style="margin-top:10px;">
+        <button id="runBtn">Run</button>
+        <button id="stepBtn" class="secondary">Step</button>
+        <button id="stopBtn" class="secondary">Stop</button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Add Task</label>
+        <div class="row">
+          <select id="preset">
+            <option value="counter">Counter (increment)</option>
+            <option value="sum">Sum & yield</option>
+            <option value="busy">Busy computation</option>
+            <option value="io">I/O-like (frequent yield)</option>
+          </select>
+          <button id="addTask">Add</button>
+        </div>
+        <div class="mini small-muted">Tasks have short instruction sequences that read/update registers and yield.</div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Statistics</label>
+        <div class="row">
+          <div class="chip">Context switches: <span id="switchCount" class="big">0</span></div>
+          <div class="chip">Cycles executed: <span id="cycleCount" class="big">0</span></div>
+        </div>
+        <div class="note">Switch overhead subtracts from usable cycles and is counted in cycles executed.</div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Timeline</label>
+        <div class="timeline" id="timeline"></div>
+      </div>
+
+      <footer class="small-muted">Use "Step" to observe saving/restoring of register state. Try changing quantum or overhead to see impact.</footer>
+    </div>
+
+    <!-- Middle: CPU Visual -->
+    <div class="panel cpu-area">
+      <div class="status-bar">
+        <div class="chip">Scheduler: <span id="modeLabel" style="color:var(--accent);font-weight:700">Preemptive</span></div>
+        <div class="chip">Active tasks: <span id="taskCount">0</span></div>
+        <div class="chip">Ready queue length: <span id="queueLen">0</span></div>
+        <div style="margin-left:auto;" class="chip">Tick speed: <span id="tickSpeed">Auto</span></div>
+      </div>
+
+      <div class="cpu">
+        <div class="cpu-visual">
+          <div class="cpu-screen">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div class="small-muted">CPU</div>
+                <div style="font-size:16px;margin-top:6px">Instruction execution & context switching</div>
+              </div>
+              <div style="text-align:right">
+                <div class="small-muted">Currently running</div>
+                <div id="currentTask" class="current-task">—</div>
+                <div class="small-muted" style="margin-top:6px">PC: <span id="pc">—</span></div>
+              </div>
+            </div>
+
+            <div class="registers" id="registersArea">
+              <!-- register cards -->
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:6px;align-items:center;">
+              <div class="small-muted">Instruction:</div>
+              <div id="currentInstr" style="font-family:monospace;color:var(--accent2)"></div>
+              <div style="margin-left:auto" class="small-muted">Context save/restore highlighted during switch</div>
+            </div>
+
+            <div style="margin-top:8px;">
+              <div class="small-muted">Last actions</div>
+              <div id="log" style="max-height:90px;overflow:auto;font-size:13px;color:var(--muted);"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="width:320px;">
+          <h3 style="margin:0 0 8px 0;color:var(--accent);">Ready Queue</h3>
+          <div class="task-list" id="taskList"></div>
+
+          <div style="margin-top:10px;">
+            <div class="small-muted">Selected Task Instructions</div>
+            <div id="instructionsView" class="instructions">No task selected</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Task details & legend -->
+    <div class="panel">
+      <h3>Task Inspector</h3>
+      <div id="inspector">
+        <div class="small-muted">Select a task from the ready queue to inspect its registers and context snapshot.</div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <h3 style="margin:6px 0;color:var(--accent);">Legend</h3>
+        <div class="legend">
+          <div style="display:flex;flex-direction:column;">
+            <div style="width:48px;height:24px;background:#8bd5ff;border-radius:6px;" class="mini"></div>
+            <small class="small-muted">Task A color</small>
+          </div>
+          <div style="display:flex;flex-direction:column;">
+            <div style="width:48px;height:24px;background:#7ee7b8;border-radius:6px;"></div>
+            <small class="small-muted">Task B color</small>
+          </div>
+          <div style="display:flex;flex-direction:column;">
+            <div style="width:48px;height:24px;background:#ffd29e;border-radius:6px;"></div>
+            <small class="small-muted">Task C color</small>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <h3 style="margin:6px 0;color:var(--accent);">How it works</h3>
+        <div class="small-muted">
+          - Each task has simple instructions (INC, ADD, PRINT, YIELD, JUMP)<br>
+          - CPU executes up to "Quantum" instructions then performs a context switch (preemptive), or only on YIELD (cooperative)<br>
+          - Context switch saves task registers (PC, A, B) and simulates overhead cycles<br>
+          - Try different overhead and quantum to see throughput and switching frequency
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Simple interactive simulation of context switching
+    (function(){
+      // Utilities
+      const randColor = (i)=> ['#8bd5ff','#7ee7b8','#ffd29e','#f6a6ff','#cbd5ff'][i%5];
+
+      // UI elements
+      const runBtn = document.getElementById('runBtn');
+      const stepBtn = document.getElementById('stepBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const addTaskBtn = document.getElementById('addTask');
+      const preset = document.getElementById('preset');
+      const taskListEl = document.getElementById('taskList');
+      const taskCountEl = document.getElementById('taskCount');
+      const queueLenEl = document.getElementById('queueLen');
+      const currentTaskEl = document.getElementById('currentTask');
+      const pcEl = document.getElementById('pc');
+      const registersArea = document.getElementById('registersArea');
+      const currentInstrEl = document.getElementById('currentInstr');
+      const switchCountEl = document.getElementById('switchCount');
+      const cycleCountEl = document.getElementById('cycleCount');
+      const timelineEl = document.getElementById('timeline');
+      const instructionsView = document.getElementById('instructionsView');
+      const inspector = document.getElementById('inspector');
+      const quantumEl = document.getElementById('quantum');
+      const quantumVal = document.getElementById('quantumVal');
+      const overheadEl = document.getElementById('overhead');
+      const overheadVal = document.getElementById('overheadVal');
+      const modeRadios = document.getElementsByName('mode');
+      const modeLabel = document.getElementById('modeLabel');
+      const logEl = document.getElementById('log');
+
+      // Simulation state
+      let nextTaskId = 1;
+      let tasks = []; // ready queue (simple FIFO)
+      let allTasks = {}; // id->task
+      let currentTask = null;
+      let running = false;
+      let autoInterval = null;
+      let tickDelay = 300; // ms per instruction when running auto
+      let cycleCount = 0;
+      let switchCount = 0;
+
+      // Config
+      function getMode(){ return Array.from(modeRadios).find(r=>r.checked).value; }
+      function getQuantum(){ return parseInt(quantumEl.value,10); }
+      function getOverhead(){ return parseInt(overheadEl.value,10); }
+
+      // Instruction set (simple)
+      // INC reg
+      // DEC reg
+      // ADD reg value
+      // YIELD
+      // JUMP offset
+      // PRINT reg
+      // COMPUTE n  (simulate busy work, consumes n cycles)
+      // Note: We'll treat each instruction as cost 1 cycle (except COMPUTE cost)
+      function createTask(presetType){
+        const id = nextTaskId++;
+        const color = randColor(id);
+        let code = [];
+        let name = 'Task '+id;
+        if(presetType==='counter'){
+          name = 'Counter '+id;
+          code = [
+            'INC A',
+            'PRINT A',
+            'INC A',
+            'PRINT A',
+            'YIELD',
+            'INC A',
+            'PRINT A',
+            'YIELD',
+            'INC A',
+            'PRINT A',
+          ];
+        } else if(presetType==='sum'){
+          name='Summer '+id;
+          code=[
+            'INC A',
+            'ADD B 3',
+            'PRINT A',
+            'YIELD',
+            'ADD A B',
+            'PRINT A',
+            'YIELD',
+            'JUMP -3' // loop back
+          ];
+        } else if(presetType==='busy'){
+          name='Busy '+id;
+          code=[
+            'COMPUTE 4',
+            'INC A',
+            'COMPUTE 3',
+            'PRINT A',
+            'YIELD',
+            'JUMP -5'
+          ];
+        } else if(presetType==='io'){
+          name='IO-like '+id;
+          code=[
+            'INC A',
+            'PRINT A',
+            'YIELD',
+            'YIELD',
+            'INC A',
+            'PRINT A',
+            'YIELD',
+            'JUMP -5'
+          ];
+        } else {
+          code=['INC A','PRINT A','YIELD'];
+        }
+
+        const task = {
+          id, name, color, code,
+          pc:0,
+          regs: {A:0,B:0},
+          alive:true,
+          // Snapshot history (for inspector)
+          snapshots: [],
+        };
+        tasks.push(task);
+        allTasks[id]=task;
+        updateUI();
+      }
+
+      // CPU functions
+      function saveContext(task){
+        // Simulate saving registers & pc
+        task.snapshots.push({pc:task.pc, regs:{...task.regs}});
+      }
+
+      function restoreContext(task){
+        // No-op here because regs are in task, but we highlight snapshot
+      }
+
+      function stepInstruction(task){
+        if(!task || !task.alive) return {consumed:0, switched:false, log:''};
+        if(task.pc<0 || task.pc>=task.code.length){
+          // terminate
+          task.alive=false;
+          return {consumed:0, switched:true, log:`${task.name} finished`};
+        }
+        const instr = task.code[task.pc].trim();
+        let parts = instr.split(/\s+/);
+        const op = parts[0].toUpperCase();
+        let logMsg = `${task.name}: ${instr}`;
+        let consumed = 1;
+        switch(op){
+          case 'INC':
+            task.regs[parts[1]] = (task.regs[parts[1]]||0)+1;
+            task.pc++;
+            break;
+          case 'DEC':
+            task.regs[parts[1]] = (task.regs[parts[1]]||0)-1;
+            task.pc++;
+            break;
+          case 'ADD':
+            const val = parseInt(parts[2],10)||0;
+            task.regs[parts[1]] = (task.regs[parts[1]]||0)+val;
+            task.pc++;
+            break;
+          case 'PRINT':
+            // For demo, print to log
+            log(`${task.name} -> ${parts[1]} = ${task.regs[parts[1]]||0}`);
+            task.pc++;
+            break;
+          case 'YIELD':
+            task.pc++;
+            return {consumed:1, switched:true, log:logMsg};
+          case 'JUMP':
+            const offset = parseInt(parts[1],10)||0;
+            task.pc = task.pc + offset;
+            break;
+          case 'COMPUTE':
+            consumed = Math.max(1, parseInt(parts[1],10)||1);
+            // stay at the same instruction to simulate multi-cycle compute,
+            // reduce "remaining" by counting cycles using a hidden field
+            if(!task._computeRemaining || task._computeRemaining<=0){
+              task._computeRemaining = consumed;
+            }
+            task._computeRemaining--;
+            if(task._computeRemaining<=0){
+              task.pc++;
+              delete task._computeRemaining;
+            }
+            break;
+          default:
+            task.pc++;
+            break;
+        }
+        return {consumed, switched:false, instr, log:logMsg};
+      }
+
+      function log(msg){
+        const el = document.createElement('div');
+        el.textContent = `[${timestamp()}] ${msg}`;
+        logEl.prepend(el);
+        if(logEl.childElementCount>80) logEl.removeChild(logEl.lastChild);
+      }
+      function timestamp(){ return new Date().toLocaleTimeString(); }
+
+      // Scheduler
+      function pickNext(){
+        // simple FIFO: rotate queue
+        if(tasks.length===0) return null;
+        // Remove completed tasks
+        tasks = tasks.filter(t=>t.alive);
+        if(tasks.length===0) return null;
+        // Next is tasks.shift()
+        const next = tasks.shift();
+        tasks.push(next); // put it at end (round-robin)
+        return next;
+      }
+
+      function performContextSwitch(oldTask, newTask){
+        // Save old, restore new; simulate overhead cycles
+        if(oldTask){
+          saveContext(oldTask);
+          highlightSave(oldTask);
+        }
+        if(newTask){
+          restoreContext(newTask);
+          highlightRestore(newTask);
+        }
+        // count overhead cycles
+        const overhead = getOverhead();
+        cycleCount += overhead;
+        switchCount++;
+        switchCountEl.textContent = switchCount;
+        cycleCountEl.textContent = cycleCount;
+        // timeline: add a special marker for context switch
+        addTimelineSegment('ctx', overhead);
+      }
+
+      function addTimelineSegment(taskName, length){
+        // length = number of cycles represented
+        const seg = document.createElement('div');
+        seg.className = 'segment';
+        seg.style.background = taskName==='ctx' ? '#394a5a' : findTaskColorByName(taskName);
+        seg.style.color = '#00171a';
+        seg.textContent = taskName==='ctx' ? 'CS' : taskName;
+        seg.title = `${taskName} (${length} cycles)`;
+        timelineEl.appendChild(seg);
+        // maintain width: size proportional to cycles
+        seg.style.flex = `0 0 ${Math.min(160,8+length*12)}px`;
+        if(timelineEl.childElementCount>40) timelineEl.removeChild(timelineEl.firstChild);
+      }
+
+      function findTaskColorByName(name){
+        for(const k in allTasks){
+          if(allTasks[k].name===name) return allTasks[k].color;
+        }
+        return '#9aa7bb';
+      }
+
+      // UI update
+      function updateUI(){
+        // Ready list
+        taskListEl.innerHTML='';
+        tasks.forEach((t,idx)=>{
+          const el = document.createElement('div');
+          el.className='task';
+          el.style.borderLeft = `4px solid ${t.color}`;
+          el.innerHTML = `<div class="meta">
+            <div style="display:flex;flex-direction:column;">
+              <div style="font-weight:700">${t.name}</div>
+              <small>PC: ${t.pc} • A:${t.regs.A} B:${t.regs.B}</small>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button data-id="${t.id}" class="inspect secondary">Inspect</button>
+            <button data-id="${t.id}" class="kill danger">Kill</button>
+          </div>`;
+          taskListEl.appendChild(el);
+        });
+        taskCountEl.textContent = Object.keys(allTasks).length;
+        queueLenEl.textContent = tasks.length;
+      }
+
+      // Inspector
+      function showInspector(taskId){
+        const t = allTasks[taskId];
+        if(!t){ inspector.innerHTML = '<div class="small-muted">Task not found</div>'; return; }
+        inspector.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:700">${t.name}</div>
+            <div style="background:${t.color};padding:6px 8px;border-radius:6px;color:#00171a">ID ${t.id}</div>
+          </div>
+          <div class="note" style="margin-top:8px">PC: ${t.pc} &nbsp; | &nbsp; A: ${t.regs.A} &nbsp; B: ${t.regs.B}</div>
+          <div style="margin-top:8px"><strong>Code:</strong></div>
+          <pre class="instructions">${t.code.map((c,i)=> (i===t.pc? '→ ':'   ') + i + ': ' + c).join('\\n')}</pre>
+          <div style="margin-top:8px"><strong>Last snapshot(s):</strong>
+            <div class="small-muted">${t.snapshots.slice(-3).map(s=>`PC=${s.pc}, A=${s.regs.A}, B=${s.regs.B}`).join('<br>') || '—'}</div>
+          </div>
+        `;
+      }
+
+      // Highlight save/restore (visual cue)
+      function highlightSave(task){
+        // flash the task element border to indicate saving
+        const nodes = taskListEl.querySelectorAll('.task');
+        nodes.forEach(node=>{
+          if(node.querySelector('.task-actions .inspect') && node.querySelector('.task-actions .inspect').dataset.id==task.id){
+            node.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.02)';
+            setTimeout(()=>node.style.boxShadow='', 350);
+          }
+        });
+      }
+      function highlightRestore(task){
+        const nodes = taskListEl.querySelectorAll('.task');
+        nodes.forEach(node=>{
+          if(node.querySelector('.task-actions .inspect') && node.querySelector('.task-actions .inspect').dataset.id==task.id){
+            node.style.transform = 'scale(1.01)';
+            setTimeout(()=>node.style.transform='', 280);
+          }
+        });
+      }
+
+      // Controllers: run/stop/step
+      function runAuto(){
+        if(running) return;
+        running=true;
+        runBtn.textContent='Running...';
+        autoInterval = setInterval(()=> {
+          // Execute a quantum or step-by-step with small delay
+          for(let q=0;q<getQuantum();q++){
+            executeCycle();
+          }
+        }, Math.max(80, tickDelay));
+      }
+
+      function stopAuto(){
+        running=false;
+        runBtn.textContent='Run';
+        if(autoInterval) clearInterval(autoInterval);
+        autoInterval=null;
+      }
+
+      function stepOnce(){
+        executeCycle();
+      }
+
+      function executeCycle(){
+        // If no tasks, nothing to do
+        if(tasks.length===0){
+          currentTask = null;
+          currentTaskEl.textContent = '—';
+          pcEl.textContent = '—';
+          currentInstrEl.textContent = '';
+          return;
+        }
+
+        // On first run start with currentTask = pickNext()
+        if(!currentTask || !currentTask.alive){
+          const next = pickNext();
+          const old = currentTask;
+          currentTask = next;
+          performContextSwitch(old, currentTask);
+        }
+
+        // Determine if preemptive switch should occur after quantum
+        const mode = getMode();
+        // We'll execute one instruction for the current task per call,
+        // but manage quantum via internal counter
+        if(!currentTask._sliceRemaining || currentTask._sliceRemaining<=0){
+          currentTask._sliceRemaining = getQuantum();
+        }
+
+        // Execute single instruction from currentTask
+        updateCPUView(currentTask);
+        const res = stepInstruction(currentTask);
+        cycleCount += res.consumed;
+        cycleCountEl.textContent = cycleCount;
+        pcEl.textContent = currentTask.pc;
+        currentInstrEl.textContent = res.instr || (res.log || '');
+        if(res.log && res.log.startsWith('Task')) {
+          // additional log handled by stepInstruction
+        }
+
+        // If instruction requested yielding or we ran out of quantum (preemptive), switch
+        currentTask._sliceRemaining -= 1;
+        // If the task finished, remove it
+        if(!currentTask.alive){
+          // Remove from queue and record
+          log(`${currentTask.name} terminated`);
+          delete allTasks[currentTask.id];
+          tasks = tasks.filter(t=>t.alive);
+          currentTask = null;
+          updateUI();
+          return;
+        }
+
+        let needSwitch = false;
+        if(res.switched) needSwitch = true;
+        else if(mode==='preemptive' && currentTask._sliceRemaining<=0) needSwitch = true;
+
+        if(needSwitch){
+          const old = currentTask;
+          const next = pickNext();
+          currentTask = next;
+          performContextSwitch(old, currentTask);
+          // timeline: mark the actual task that ran next
+          addTimelineSegment(old.name, 1);
+          if(currentTask) addTimelineSegment(currentTask.name, 1);
+        } else {
+          // no switch: timeline extend
+          addTimelineSegment(currentTask.name, 1);
+        }
+
+        updateUI();
+      }
+
+      // Update the CPU panel with current task status
+      function updateCPUView(task){
+        currentTaskEl.textContent = task ? task.name : '—';
+        pcEl.textContent = task ? task.pc : '—';
+        // show registers
+        registersArea.innerHTML = '';
+        if(task){
+          ['A','B'].forEach(r=>{
+            const el = document.createElement('div');
+            el.className='reg';
+            el.innerHTML = `<div style="font-size:12px;color:var(--muted)">${r}</div><div style="font-weight:700;color:var(--accent)">${task.regs[r]||0}</div>`;
+            registersArea.appendChild(el);
+          });
+        }
+      }
+
+      // Event listeners
+      runBtn.addEventListener('click', ()=>{
+        if(running) { stopAuto(); } else { runAuto(); }
+      });
+      stopBtn.addEventListener('click', ()=> stopAuto());
+      stepBtn.addEventListener('click', ()=> {
+        stopAuto();
+        stepOnce();
+      });
+
+      addTaskBtn.addEventListener('click', ()=>{
+        createTask(preset.value);
+      });
+
+      taskListEl.addEventListener('click', (e)=>{
+        const btn = e.target;
+        if(btn.classList.contains('inspect')){
+          const id = parseInt(btn.dataset.id,10);
+          showInspector(id);
+          const t = allTasks[id];
+          if(t) instructionsView.textContent = t.code.map((c,i)=> (i===t.pc? '→ ' : '   ')+ i + ': ' + c).join('\\n');
+        } else if(btn.classList.contains('kill')){
+          const id = parseInt(btn.dataset.id,10);
+          const t = allTasks[id];
+          if(t){
+            t.alive=false;
+            delete allTasks[id];
+            tasks = tasks.filter(ts=>ts.id!==id);
+            updateUI();
+          }
+        }
+      });
+
+      quantumEl.addEventListener('input', ()=>{
+        quantumVal.textContent = quantumEl.value;
+      });
+      overheadEl.addEventListener('input', ()=>{
+        overheadVal.textContent = overheadEl.value;
+      });
+      Array.from(modeRadios).forEach(r=>{
+        r.addEventListener('change', ()=>{
+          modeLabel.textContent = getMode().charAt(0).toUpperCase() + getMode().slice(1);
+        });
+      });
+
+      // Initial seeds
+      createTask('counter');
+      createTask('sum');
+      createTask('busy');
+
+      // some helper initial update
+      updateUI();
+      quantumVal.textContent = quantumEl.value;
+      overheadVal.textContent = overheadEl.value;
+      modeLabel.textContent = getMode().charAt(0).toUpperCase() + getMode().slice(1);
+
+      // Small demonstration: step every 600ms if the user hasn't pressed run (visual animation)
+      // but don't auto-run; keep interactive.
+      // Provide keyboard: Space step, R toggle run
+      document.addEventListener('keydown', (e)=>{
+        if(e.code==='Space'){ e.preventDefault(); stepOnce(); }
+        if(e.key.toLowerCase()==='r'){ if(running) stopAuto(); else runAuto(); }
+      });
+
+      // Expose for debugging in console (optional)
+      window._ctxSim = {
+        createTask, tasks, allTasks, executeCycle, runAuto, stopAuto, stepOnce
+      };
+    })();
+  </script>
+</body>
+</html>

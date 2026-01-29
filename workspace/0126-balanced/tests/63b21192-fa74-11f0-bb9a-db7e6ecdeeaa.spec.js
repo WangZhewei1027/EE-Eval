@@ -55,7 +55,7 @@ class KnapsackPage {
   async waitForCompletion(timeout = 120_000) {
     // Wait for the final marker of completion
     await this.page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out1 = document.getElementById('output');
       return out && out.textContent && out.textContent.includes('=== Optimal Solution ===');
     }, null, { timeout });
   }
@@ -104,7 +104,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
 
   test('StartBranchAndBound event triggers Branching state (S1_Branching) and disables button', async ({ page }) => {
     // This test validates the transition from Idle -> Branching on click
-    const knap = new KnapsackPage(page);
+    const knap1 = new KnapsackPage(page);
     await knap.goto();
 
     // Capture console and page errors while the algorithm runs
@@ -128,7 +128,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
 
   test('Branching completes and transition to Completed (S2_Completed) shows optimal solution and re-enables button', async ({ page }) => {
     // Validate that the branching finishes, prints the optimal solution, and exit action re-enables button
-    const knap = new KnapsackPage(page);
+    const knap2 = new KnapsackPage(page);
     await knap.goto();
 
     // Start the algorithm
@@ -146,7 +146,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
     expect(await knap.isStartDisabled()).toBe(false);
 
     // Validate final output contains expected final evidence
-    const out = await knap.getOutputText();
+    const out2 = await knap.getOutputText();
     expect(out).toContain('=== Optimal Solution ===');
 
     // There should be an entry for every original item (included or excluded)
@@ -161,7 +161,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
 
   test('Edge case: clicking start multiple times quickly does not produce duplicate final sections', async ({ page }) => {
     // This test checks robustness: clicking start rapidly should not create multiple final solution blocks
-    const knap = new KnapsackPage(page);
+    const knap3 = new KnapsackPage(page);
     await knap.goto();
 
     // Click twice quickly
@@ -177,7 +177,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
     await knap.waitForCompletion(120_000);
 
     // Check output: ensure the final marker appears only once
-    const out = await knap.getOutputText();
+    const out3 = await knap.getOutputText();
     const firstIndex = out.indexOf('=== Optimal Solution ===');
     const lastIndex = out.lastIndexOf('=== Optimal Solution ===');
     expect(firstIndex).toBeGreaterThanOrEqual(0);
@@ -191,7 +191,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
 
   test('Runtime verification: no uncaught JavaScript errors or console.error logs during typical run', async ({ page }) => {
     // This test focuses on observing console logs and page errors and asserting none occurred
-    const knap = new KnapsackPage(page);
+    const knap4 = new KnapsackPage(page);
     await knap.goto();
 
     // Start algorithm and wait for completion
@@ -202,7 +202,7 @@ test.describe('Branch and Bound Demo - Knapsack (FSM validation)', () => {
     expect(knap.pageErrors.length).toBe(0);
 
     // Assert console did not emit error-level messages
-    const errorConsoleMessages = knap.consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages1 = knap.consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
 
     // (If there were TypeError/ReferenceError/SyntaxError they'd appear in pageErrors or as console.error)

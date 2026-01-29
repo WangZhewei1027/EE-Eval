@@ -116,7 +116,7 @@ test.describe('Directed Graph Demonstration (Application ID: 324d11a4-fa73-11f0-
     expect(threw).toBe(true);
 
     // Ensure a pageerror was captured by the listener, and it is a ReferenceError
-    const errs = page.context()._collectedPageErrors || [];
+    const errs1 = page.context()._collectedPageErrors || [];
     expect(errs.length).toBeGreaterThanOrEqual(1);
     // Look for a ReferenceError among captured errors
     const refErr = errs.find(e => e.name === 'ReferenceError');
@@ -144,7 +144,7 @@ test.describe('Directed Graph Demonstration (Application ID: 324d11a4-fa73-11f0-
     expect(rejected).toBe(true);
 
     // Ensure the pageerror listener captured a TypeError
-    const errs = page.context()._collectedPageErrors || [];
+    const errs2 = page.context()._collectedPageErrors || [];
     expect(errs.length).toBeGreaterThanOrEqual(1);
 
     const typeErr = errs.find(e => e.name === 'TypeError' || e.message.includes('getBoundingClientRect'));
@@ -154,8 +154,8 @@ test.describe('Directed Graph Demonstration (Application ID: 324d11a4-fa73-11f0-
   test('User interactions (clicks) on nodes do not change DOM structure or produce unexpected errors', async ({ page }) => {
     // This page had "No interactive elements or event handlers" in the FSM extraction notes.
     // Validate that clicking nodes does not alter the number of nodes or edges and does not produce new page errors.
-    const nodes = page.locator('.node');
-    const edges = page.locator('.edge');
+    const nodes1 = page.locator('.node');
+    const edges1 = page.locator('.edge');
 
     const initialNodeCount = await nodes.count();
     const initialEdgeCount = await edges.count();
@@ -176,7 +176,7 @@ test.describe('Directed Graph Demonstration (Application ID: 324d11a4-fa73-11f0-
     await expect(edges).toHaveCount(initialEdgeCount);
 
     // Verify no new page errors were produced by clicking nodes
-    const errs = page.context()._collectedPageErrors || [];
+    const errs3 = page.context()._collectedPageErrors || [];
     expect(errs.length).toBe(0);
 
     // Also ensure console didn't emit unexpected error-level messages
@@ -189,7 +189,7 @@ test.describe('Directed Graph Demonstration (Application ID: 324d11a4-fa73-11f0-
     // Another explicit edge-case: call a non-existent global to ensure ReferenceError is produced and captured.
     page.context()._collectedPageErrors = [];
 
-    let threw = false;
+    let threw1 = false;
     try {
       await page.evaluate(() => {
         // eslint-disable-next-line no-undef
@@ -201,9 +201,9 @@ test.describe('Directed Graph Demonstration (Application ID: 324d11a4-fa73-11f0-
 
     expect(threw).toBe(true);
 
-    const errs = page.context()._collectedPageErrors || [];
+    const errs4 = page.context()._collectedPageErrors || [];
     expect(errs.length).toBeGreaterThanOrEqual(1);
-    const refErr = errs.find(e => e.name === 'ReferenceError');
+    const refErr1 = errs.find(e => e.name === 'ReferenceError');
     expect(refErr).toBeTruthy();
   });
 });

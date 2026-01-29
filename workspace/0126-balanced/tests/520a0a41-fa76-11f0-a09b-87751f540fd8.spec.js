@@ -107,10 +107,10 @@ test.describe('Amortized Analysis Application (FSM: S0_Idle)', () => {
     const resultDefault = await page.evaluate(() => amortizedAnalysis(10000, 2, 5));
     // Compute expected in the test to assert correctness
     const expectedDefault = (() => {
-      const initialInvestment = 10000;
-      const annualInterestRate = 2;
-      const years = 5;
-      let totalInterest = 0;
+      const initialInvestment1 = 10000;
+      const annualInterestRate1 = 2;
+      const years1 = 5;
+      let totalInterest1 = 0;
       for (let i = 0; i < years; i++) {
         totalInterest += initialInvestment * Math.pow(1 + annualInterestRate / 100, years - i - 1);
       }

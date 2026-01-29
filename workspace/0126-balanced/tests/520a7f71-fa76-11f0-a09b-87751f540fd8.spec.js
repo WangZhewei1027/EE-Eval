@@ -95,7 +95,7 @@ test.describe('Application 520a7f71-fa76-11f0-a09b-87751f540fd8 - NoSQL (FSM S0_
     // The data object contains name, age, occupation. At minimum these substrings should appear in some console message.
     expect(joined).toContain('John');
     expect(joined).toContain('Doe');
-    // Age might be printed as number '30' or part of object; assert presence of '30'
+    // Age might be printed '30' or part of object; assert presence of '30'
     expect(joined).toContain('30');
     expect(joined).toContain('Software Engineer');
 

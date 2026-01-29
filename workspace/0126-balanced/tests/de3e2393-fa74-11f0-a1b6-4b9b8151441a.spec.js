@@ -165,7 +165,7 @@ test.describe('Overfitting Demonstration - FSM Tests (de3e2393-fa74-11f0-a1b6-4b
     test('Fit a cubic model (degree 3) updates model dataset (FitModelDegree3)', async ({ page }) => {
       await clickAndWaitForModel(page, 3);
 
-      const modelState = await page.evaluate(() => {
+      const modelState1 = await page.evaluate(() => {
         return {
           modelLength: chart.data.datasets[2].data.length,
           modelLabel: chart.data.datasets[2].label,
@@ -183,7 +183,7 @@ test.describe('Overfitting Demonstration - FSM Tests (de3e2393-fa74-11f0-a1b6-4b
     test('Fit a high degree model (degree 10) updates model dataset (FitModelDegree10)', async ({ page }) => {
       await clickAndWaitForModel(page, 10);
 
-      const modelState = await page.evaluate(() => {
+      const modelState2 = await page.evaluate(() => {
         return {
           modelLength: chart.data.datasets[2].data.length,
           modelLabel: chart.data.datasets[2].label,
@@ -207,7 +207,7 @@ test.describe('Overfitting Demonstration - FSM Tests (de3e2393-fa74-11f0-a1b6-4b
     test('Fit a very high degree model (degree 20) updates model dataset (FitModelDegree20) and observe numerical stability', async ({ page }) => {
       await clickAndWaitForModel(page, 20);
 
-      const modelState = await page.evaluate(() => {
+      const modelState3 = await page.evaluate(() => {
         // Return stats about the generated polynomial prediction line
         const arr = chart.data.datasets[2].data || [];
         const count = arr.length;
@@ -268,7 +268,7 @@ test.describe('Overfitting Demonstration - FSM Tests (de3e2393-fa74-11f0-a1b6-4b
       });
 
       // Verify training data repopulated and model dataset generated
-      const after = await page.evaluate(() => {
+      const after1 = await page.evaluate(() => {
         return {
           trainingLength: trainingData.length,
           testLength: testData.length,

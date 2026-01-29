@@ -77,7 +77,7 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
     test('Verify assignment shows incomplete message when assignment is partial (S2_SAT_Verified)', async ({ page }) => {
       // Ensure example is loaded (the page auto-clicks show-example on load, but click again to be explicit)
       await page.locator('#show-example').click();
-      const cnfTA = page.locator('#cnf');
+      const cnfTA1 = page.locator('#cnf');
       await expect(cnfTA).not.toHaveText('', { timeout: 1000 });
 
       // Provide an incomplete assignment and verify the verifier reports 'assignment is incomplete'
@@ -96,8 +96,8 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
     test('Brute-force SAT finds or exhausts search; respects empty formula edge case (S3_SAT_BruteForce_Solving)', async ({ page }) => {
       const bruteforceBtn = page.locator('#bruteforce-solve');
-      const cnfTA = page.locator('#cnf');
-      const satOutput = page.locator('#sat-output');
+      const cnfTA2 = page.locator('#cnf');
+      const satOutput1 = page.locator('#sat-output');
       const satProgress = page.locator('#sat-progress');
 
       // 1) Edge case: empty CNF should result in "No clauses found."
@@ -132,9 +132,9 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
     test('Backtracking (DPLL-like) solver runs and produces a result (S4_SAT_Backtracking_Solving)', async ({ page }) => {
       const dpllBtn = page.locator('#dpll-solve');
-      const cnfTA = page.locator('#cnf');
-      const satOutput = page.locator('#sat-output');
-      const satProgress = page.locator('#sat-progress');
+      const cnfTA3 = page.locator('#cnf');
+      const satOutput2 = page.locator('#sat-output');
+      const satProgress1 = page.locator('#sat-progress');
 
       // Ensure example CNF is present
       await page.locator('#show-example').click();
@@ -145,9 +145,9 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
       // Wait for outcome: solution found or proved UNSAT
       await page.waitForFunction(() => {
-        const out = document.getElementById('sat-output');
+        const out1 = document.getElementById('sat-output');
         if (!out) return false;
-        const txt = out.textContent || '';
+        const txt1 = out.textContent || '';
         return txt.includes('Solution found') || txt.includes('Proved UNSAT') || txt.includes('Proved UNSAT'.toLowerCase()) || txt.includes('UNSAT') || txt.includes('Solution found') || txt.includes('Cancelled');
       }, { timeout: 5000 });
 
@@ -163,10 +163,10 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
     test('Verify assignment after finding solution: copy from solver output into verifier (transition S1->S2)', async ({ page }) => {
       // Run brute-force to find an assignment, then verify using the assignment verifier
-      const bruteforceBtn = page.locator('#bruteforce-solve');
-      const verifyBtn = page.locator('#verify-assignment');
-      const satOutput = page.locator('#sat-output');
-      const assignmentInput = page.locator('#assignment');
+      const bruteforceBtn1 = page.locator('#bruteforce-solve');
+      const verifyBtn1 = page.locator('#verify-assignment');
+      const satOutput3 = page.locator('#sat-output');
+      const assignmentInput1 = page.locator('#assignment');
 
       // Ensure example is present
       await page.locator('#show-example').click();
@@ -176,7 +176,7 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
       // Wait until a satisfying assignment is found
       await page.waitForFunction(() => {
-        const out = document.getElementById('sat-output');
+        const out2 = document.getElementById('sat-output');
         if (!out) return false;
         return out.textContent && out.textContent.includes('Satisfying assignment found');
       }, { timeout: 5000 });
@@ -219,8 +219,8 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
     test('Subset brute-force solver finds subset when present and handles empty input gracefully (S6_SubsetSum_BruteForce_Solving)', async ({ page }) => {
       const bruteBtn = page.locator('#solve-sub-brute');
-      const subArr = page.locator('#sub-arr');
-      const subTarget = page.locator('#sub-target');
+      const subArr1 = page.locator('#sub-arr');
+      const subTarget1 = page.locator('#sub-target');
       const subOut = page.locator('#sub-output');
       const subProgress = page.locator('#sub-progress');
 
@@ -242,7 +242,7 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
         return t.includes('Subset found') || t.includes('No subset') || t.includes('Cancelled');
       }, { timeout: 5000 });
 
-      const outText = await subOut.textContent();
+      const outText1 = await subOut.textContent();
       expect(outText).toMatch(/Subset found|No subset|Cancelled/);
 
       // Progress bar should have been updated (non-empty)
@@ -254,10 +254,10 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
     test('Subset DP solver finds or reports no subset (S7_SubsetSum_DP_Solving)', async ({ page }) => {
       const dpBtn = page.locator('#solve-sub-dp');
-      const subArr = page.locator('#sub-arr');
-      const subTarget = page.locator('#sub-target');
-      const subOut = page.locator('#sub-output');
-      const subProgress = page.locator('#sub-progress');
+      const subArr2 = page.locator('#sub-arr');
+      const subTarget2 = page.locator('#sub-target');
+      const subOut1 = page.locator('#sub-output');
+      const subProgress1 = page.locator('#sub-progress');
 
       // Provide a small instance where DP can find subset: [2,4,6], T=6
       await subArr.fill('2,4,6');
@@ -265,17 +265,17 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
       await dpBtn.click();
 
       await page.waitForFunction(() => {
-        const o = document.getElementById('sub-output');
+        const o1 = document.getElementById('sub-output');
         if (!o) return false;
-        const t = o.textContent || '';
+        const t1 = o.textContent || '';
         return t.includes('DP found subset') || t.includes('No subset sums to target');
       }, { timeout: 2000 });
 
-      const outText = await subOut.textContent();
+      const outText2 = await subOut.textContent();
       expect(outText).toMatch(/DP found subset|No subset sums to target/);
 
       // DP always sets progress to 100% visually in this implementation
-      const prog = await subProgress.evaluate(el => el.style.width || '');
+      const prog1 = await subProgress.evaluate(el => el.style.width || '');
       expect(prog).toBeTruthy();
 
       expect(pageErrors.length).toBe(0);
@@ -301,13 +301,13 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
       await runBfs.click();
 
       await page.waitForFunction(() => {
-        const out = document.getElementById('graph-output');
+        const out3 = document.getElementById('graph-output');
         if (!out) return false;
-        const t = out.textContent || '';
+        const t2 = out.textContent || '';
         return t.includes('Path found') || t.includes('No path from') || t.includes('No path');
       }, { timeout: 2000 });
 
-      const outText = await graphOutput.textContent();
+      const outText3 = await graphOutput.textContent();
       expect(outText).toMatch(/Path found|No path from|No path/);
 
       expect(pageErrors.length).toBe(0);
@@ -322,13 +322,13 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
       // Instead, we assert that clicking run-bfs produces a deterministic message or path and no runtime errors.
       await page.locator('#run-bfs').click();
 
-      const graphOutput = page.locator('#graph-output');
+      const graphOutput1 = page.locator('#graph-output');
       await page.waitForFunction(() => {
-        const out = document.getElementById('graph-output');
+        const out4 = document.getElementById('graph-output');
         return out && (out.textContent || '').length > 0;
       }, { timeout: 2000 });
 
-      const outText = await graphOutput.textContent();
+      const outText4 = await graphOutput.textContent();
       expect(outText.length).toBeGreaterThan(0);
 
       expect(pageErrors.length).toBe(0);
@@ -337,8 +337,8 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
   test('Misc edge cases: clicking action buttons with invalid/empty inputs produces user-facing messages not runtime exceptions', async ({ page }) => {
     // Clear CNF and click DPLL; should show 'No clauses found.' and not throw
-    const dpllBtn = page.locator('#dpll-solve');
-    const cnfTA = page.locator('#cnf');
+    const dpllBtn1 = page.locator('#dpll-solve');
+    const cnfTA4 = page.locator('#cnf');
     const satOut = page.locator('#sat-output');
 
     await cnfTA.fill('');
@@ -347,9 +347,9 @@ test.describe('P vs NP — Interactive Demonstration (d3d8a8e1-fa73-11f0-83e0-8d
 
     // Clear subset arr and click DP; should show 'No numbers provided.' only for brute-force,
     // DP expects numbers and will show 'No numbers provided.' by checking length==0 before running.
-    const subArr = page.locator('#sub-arr');
-    const dpBtn = page.locator('#solve-sub-dp');
-    const subOut = page.locator('#sub-output');
+    const subArr3 = page.locator('#sub-arr');
+    const dpBtn1 = page.locator('#solve-sub-dp');
+    const subOut2 = page.locator('#sub-output');
 
     await subArr.fill('');
     await dpBtn.click();

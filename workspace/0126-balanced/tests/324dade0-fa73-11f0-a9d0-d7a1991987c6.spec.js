@@ -90,7 +90,7 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       testInfo.attach('console-messages', { body: summary, contentType: 'text/plain' });
     }
     if (pageErrors.length > 0) {
-      const summary = pageErrors.map(e => `${e.name}: ${e.message}`).join('\n');
+      const summary1 = pageErrors.map(e => `${e.name}: ${e.message}`).join('\n');
       testInfo.attach('page-errors', { body: summary, contentType: 'text/plain' });
     }
   });
@@ -123,7 +123,7 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
 
   test.describe('S1_Searching -> S2_ResultFound transitions', () => {
     test('searching a present value displays Found message and populates steps (Found state)', async ({ page }) => {
-      const app = new InterpolationSearchPage(page);
+      const app1 = new InterpolationSearchPage(page);
       await app.goto();
 
       // Provide a sorted array and search for a value that exists
@@ -137,7 +137,7 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       expect(resultText).toBe('Found 7 at index: 3');
 
       // Step table should have at least one row (search steps were recorded)
-      const rows = await app.getStepRowsCount();
+      const rows1 = await app.getStepRowsCount();
       expect(rows).toBeGreaterThan(0);
 
       // The last step's currentValue should equal the searched value (7) for a successful find.
@@ -153,13 +153,13 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       expect(foundRow).toBeGreaterThanOrEqual(0);
 
       // Confirm no uncaught runtime errors occurred during the search
-      const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type() === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
 
     test('searching among duplicates finds one matching index and shows steps', async ({ page }) => {
-      const app = new InterpolationSearchPage(page);
+      const app2 = new InterpolationSearchPage(page);
       await app.goto();
 
       // Duplicate values: searching for 5 should find some index where value === 5
@@ -167,18 +167,18 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       await app.setSearchValue(5);
       await app.clickSearch();
 
-      const resultText = await app.getResultText();
+      const resultText1 = await app.getResultText();
       // We expect Found 5 at index: <some index between 1 and 3>
       expect(resultText).toMatch(/^Found 5 at index: [123]$/);
 
       // Ensure steps were recorded
-      const rows = await app.getStepRowsCount();
+      const rows2 = await app.getStepRowsCount();
       expect(rows).toBeGreaterThan(0);
 
       // Ensure one of the step 'Current Value' cells equals '5'
       let sawFive = false;
       for (let i = 0; i < rows; i++) {
-        const rowData = await app.getStepRowData(i);
+        const rowData1 = await app.getStepRowData(i);
         if (rowData[4] === '5') {
           sawFive = true;
           break;
@@ -187,7 +187,7 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       expect(sawFive).toBeTruthy();
 
       // No critical console/page errors expected
-      const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type() === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -195,7 +195,7 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
 
   test.describe('S1_Searching -> S3_ResultNotFound transitions', () => {
     test('searching a non-present value displays Not Found and records steps (Not Found state)', async ({ page }) => {
-      const app = new InterpolationSearchPage(page);
+      const app3 = new InterpolationSearchPage(page);
       await app.goto();
 
       // Provide inputs where the value is absent
@@ -203,25 +203,25 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       await app.setSearchValue(5);
       await app.clickSearch();
 
-      const resultText = await app.getResultText();
+      const resultText2 = await app.getResultText();
       expect(resultText).toBe('5 not found.');
 
       // Steps should still be recorded showing the probes attempted
-      const rows = await app.getStepRowsCount();
+      const rows3 = await app.getStepRowsCount();
       expect(rows).toBeGreaterThan(0);
 
       // Validate step rows have 5 columns each (Step, Low, High, Probe Index, Current Value)
-      const rowData = await app.getStepRowData(0);
+      const rowData2 = await app.getStepRowData(0);
       expect(rowData.length).toBe(5);
 
       // No uncaught errors expected
-      const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type() === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
 
     test('empty inputs and NaN search behavior (edge case) - should indicate NaN not found', async ({ page }) => {
-      const app = new InterpolationSearchPage(page);
+      const app4 = new InterpolationSearchPage(page);
       await app.goto();
 
       // Leave textarea empty and leave search input empty (searchValue will parse to NaN)
@@ -230,16 +230,16 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       await app.clickSearch();
 
       // Implementation uses parseInt('') -> NaN and will render "NaN not found."
-      const resultText = await app.getResultText();
+      const resultText3 = await app.getResultText();
       expect(resultText).toBe('NaN not found.');
 
       // Steps are recorded by interpolationSearch even when not found; confirm table rows exist (may be 0 if loop never runs)
-      const rows = await app.getStepRowsCount();
+      const rows4 = await app.getStepRowsCount();
       // It's acceptable for steps to be 0 or more depending on condition checks with NaN, assert non-negative
       expect(rows).toBeGreaterThanOrEqual(0);
 
       // No uncaught runtime errors expected (the code handles these inputs without throwing)
-      const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type() === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -247,7 +247,7 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
 
   test.describe('Additional validations and transition evidence', () => {
     test('performSearch() is triggered by clicking the Search button (event wiring)', async ({ page }) => {
-      const app = new InterpolationSearchPage(page);
+      const app5 = new InterpolationSearchPage(page);
       await app.goto();
 
       // Spy: we cannot redefine or patch performSearch, but we can click the button and assert observable behavior occurs.
@@ -260,21 +260,21 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
 
       await app.clickSearch();
 
-      const resultText = await app.getResultText();
+      const resultText4 = await app.getResultText();
       expect(resultText).toBe('Found 2 at index: 1');
 
       // Confirm steps were logged to the table => evidence that performSearch() ran and called interpolationSearch
-      const rows = await app.getStepRowsCount();
+      const rows5 = await app.getStepRowsCount();
       expect(rows).toBeGreaterThan(0);
 
       // No uncaught runtime errors expected
-      const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type() === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
 
     test('search uses numeric sorting of the array before searching (implementation detail)', async ({ page }) => {
-      const app = new InterpolationSearchPage(page);
+      const app6 = new InterpolationSearchPage(page);
       await app.goto();
 
       // Provide input that if sorted lexicographically would break numeric order (e.g., '10' vs '2')
@@ -283,15 +283,15 @@ test.describe('Interpolation Search Demo - FSM states and transitions (324dade0-
       await app.clickSearch();
 
       // The implementation sorts numerically; 2 should be found at index 1 in [1,2,10,20]
-      const resultText = await app.getResultText();
+      const resultText5 = await app.getResultText();
       expect(resultText).toBe('Found 2 at index: 1');
 
       // Confirm table has steps showing probe indices and current values (sanity check)
-      const rows = await app.getStepRowsCount();
+      const rows6 = await app.getStepRowsCount();
       expect(rows).toBeGreaterThan(0);
 
       // No uncaught runtime errors expected
-      const consoleErrors = consoleMessages.filter(m => m.type() === 'error');
+      const consoleErrors6 = consoleMessages.filter(m => m.type() === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });

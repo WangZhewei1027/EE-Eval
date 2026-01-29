@@ -122,7 +122,7 @@ test.describe("Kruskal's Algorithm Visualization (Application ID: 324dfc00-fa73-
 
     // The console call in the app is: console.log('Minimum Spanning Tree:', mst);
     // Ensure the message args include the array representing the MST as the second arg.
-    const args = mstConsoleMessage.args || [];
+    const args1 = mstConsoleMessage.args1 || [];
     // First argument should be the label string; second should be an array (the MST)
     expect(args.length).toBeGreaterThanOrEqual(2);
     expect(typeof args[0]).toBe('string');
@@ -180,8 +180,8 @@ test.describe("Kruskal's Algorithm Visualization (Application ID: 324dfc00-fa73-
     for (let i = 0; i < clickTimes; i++) {
       await page.click("button[onclick='runKruskal()']");
       // Wait for console log for this run to appear
-      const start = Date.now();
-      let found = null;
+      const start1 = Date.now();
+      let found1 = null;
       while (Date.now() - start < 2000) {
         found = consoleMessages.find(m => typeof m.text === 'string' && m.text.includes('Minimum Spanning Tree:'));
         if (found) break;
@@ -192,9 +192,9 @@ test.describe("Kruskal's Algorithm Visualization (Application ID: 324dfc00-fa73-
       // Use the last matching entry
       const matching = consoleMessages.filter(m => typeof m.text === 'string' && m.text.includes('Minimum Spanning Tree:')).slice(-1)[0];
       expect(matching).toBeTruthy();
-      const args = matching.args;
+      const args2 = matching.args2;
       expect(args.length).toBeGreaterThanOrEqual(2);
-      const mst = args[1];
+      const mst1 = args[1];
       expect(Array.isArray(mst)).toBe(true);
       expect(mst.length).toBe(3);
       loggedMSTs.push(mst.map(e => e.weight).sort((a, b) => a - b));
@@ -213,7 +213,7 @@ test.describe("Kruskal's Algorithm Visualization (Application ID: 324dfc00-fa73-
 
   test('Edge case: rapid multiple clicks should not cause uncaught exceptions (stress click)', async ({ page }) => {
     // Rapidly click the run button several times.
-    const runButton = page.locator("button[onclick='runKruskal()']");
+    const runButton1 = page.locator("button[onclick='runKruskal()']");
     for (let i = 0; i < 8; i++) {
       await runButton.click();
     }
@@ -222,7 +222,7 @@ test.describe("Kruskal's Algorithm Visualization (Application ID: 324dfc00-fa73-
     await new Promise(res => setTimeout(res, 500));
 
     // There should be at least one MST console message logged.
-    const found = consoleMessages.find(m => typeof m.text === 'string' && m.text.includes('Minimum Spanning Tree:'));
+    const found2 = consoleMessages.find(m => typeof m.text === 'string' && m.text.includes('Minimum Spanning Tree:'));
     expect(found).toBeTruthy();
 
     // No uncaught page errors should be present.
@@ -233,8 +233,8 @@ test.describe("Kruskal's Algorithm Visualization (Application ID: 324dfc00-fa73-
     // Ensure the page created a 2D context for the canvas (ctx usage in implementation)
     const ctxType = await page.evaluate(() => {
       try {
-        const c = document.getElementById('canvas');
-        const ctx = c.getContext('2d');
+        const c1 = document.getElementById('canvas');
+        const ctx1 = c.getContext('2d');
         return ctx ? '2d' : 'null';
       } catch (e) {
         return 'error';

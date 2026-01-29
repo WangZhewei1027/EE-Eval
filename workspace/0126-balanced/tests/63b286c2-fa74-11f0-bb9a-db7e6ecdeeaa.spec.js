@@ -32,7 +32,7 @@ class ProcessPage {
   async waitForActiveStep(index, timeout = 3000) {
     await this.page.waitForFunction(
       (idx) => {
-        const steps = Array.from(document.querySelectorAll('.step'));
+        const steps1 = Array.from(document.querySelectorAll('.step'));
         return steps[idx] && steps[idx].classList.contains('active');
       },
       index,
@@ -111,7 +111,7 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
     // - resetSteps() is called (no previous active)
     // - startBtn.disabled becomes true
     // - Step 1 becomes highlighted (active)
-    const app = new ProcessPage(page);
+    const app1 = new ProcessPage(page);
 
     // Listen for any dialog that might appear (there should be none immediately)
     let dialogCaught = false;
@@ -134,7 +134,7 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
     expect(dialogCaught).toBe(false);
 
     // Ensure no console/page errors happened
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -142,7 +142,7 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
   test('Complete timed transitions through S2-S5 and final alert, then return to Idle-like state', async ({ page }) => {
     // This test runs the full process and validates each timed transition (Timer event),
     // the final alert on completion, and the exit actions: clearInterval, startBtn.disabled = false.
-    const app = new ProcessPage(page);
+    const app2 = new ProcessPage(page);
 
     // Start the process
     await app.startBtn.click();
@@ -194,14 +194,14 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
     expect(await app.getActiveStepIndex()).toBe(4);
 
     // Ensure no console/page errors occurred during the full flow
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   }, { timeout: 20000 }); // extended timeout for full run
 
   test('Edge case: clicking Start while process running should not be allowed (button disabled)', async ({ page }) => {
     // This test verifies the UI prevents re-start while a process is running by disabling the Start button.
-    const app = new ProcessPage(page);
+    const app3 = new ProcessPage(page);
 
     // Start the process
     await app.startBtn.click();
@@ -220,11 +220,11 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
     await expect(tryClick()).rejects.toThrow();
 
     // Clean up: wait for completion and accept dialog to avoid affecting other tests
-    const dialog = await page.waitForEvent('dialog', { timeout: 10000 });
+    const dialog1 = await page.waitForEvent('dialog1', { timeout: 10000 });
     await dialog.accept();
 
     // Assert no page errors occurred
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   }, { timeout: 20000 });
@@ -232,7 +232,7 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
   test('Restarting after completion starts process again (resetSteps invoked on new Start)', async ({ page }) => {
     // This test verifies that after the process completes and the Start button is re-enabled,
     // clicking Start again resets state and begins from Step 1 again.
-    const app = new ProcessPage(page);
+    const app4 = new ProcessPage(page);
 
     // Start first run
     await app.startBtn.click();
@@ -262,7 +262,7 @@ test.describe('Demonstration of Process Concept - FSM end-to-end', () => {
     await expect(app.startBtn).toBeEnabled();
 
     // Confirm no page errors or console errors occurred throughout
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   }, { timeout: 30000 });

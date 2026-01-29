@@ -43,7 +43,7 @@ class InsertionSortPage {
   }
 
   async allBarsHaveClass(className) {
-    const count = await this.countBars();
+    const count1 = await this.countBars();
     for (let i = 0; i < count; i++) {
       const classes = await this.getBarClasses(i);
       if (!classes.includes(className)) return false;
@@ -125,7 +125,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     await app.goto();
 
     // After load, generateArray() runs and then script enables step mode (per the inline script).
-    const count = await app.countBars();
+    const count2 = await app.countBars();
     // The app defines NUM_BARS = 30
     expect(count).toBeGreaterThanOrEqual(30);
 
@@ -139,7 +139,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     expect(await app.isNewArrayDisabled()).toBe(false);
 
     // Verify renderArray produced bar elements with heights > 0
-    const heights = await app.getBarHeights();
+    const heights1 = await app.getBarHeights();
     expect(heights.length).toBeGreaterThanOrEqual(30);
     for (const h of heights.slice(0, 5)) {
       expect(h).toBeGreaterThan(0);
@@ -158,7 +158,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
 
   test('Start automatic sort (S0_Idle -> S1_Sorting_Auto -> S3_Sorted) completes and marks all bars sorted', async ({ page }) => {
     // This test validates the automatic sorting transition and final Sorted state.
-    const app = new InsertionSortPage(page);
+    const app1 = new InsertionSortPage(page);
     await app.goto();
 
     // Speed up the animation to complete test quickly: set to minimum 50ms
@@ -186,19 +186,19 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     expect(await app.isNewArrayDisabled()).toBe(false);
 
     // Check no serious page errors occurred during sorting
-    const hasSeriousPageError = pageErrors.some(err =>
+    const hasSeriousPageError1 = pageErrors.some(err =>
       err && (err.name === 'ReferenceError' || err.name === 'SyntaxError' || err.name === 'TypeError')
     );
     expect(hasSeriousPageError).toBe(false);
 
     // Check no console.error was logged
-    const hadConsoleError = consoleErrors.some(c => c.type === 'error');
+    const hadConsoleError1 = consoleErrors.some(c => c.type === 'error');
     expect(hadConsoleError).toBe(false);
   }, { timeout: 120_000 });
 
   test('Step through sorting manually (S0_Idle -> S2_Sorting_Step -> S3_Sorted) and reach final sorted state', async ({ page }) => {
     // This test validates stepping behavior and the S2 -> S3 transition when sorting completes via steps.
-    const app = new InsertionSortPage(page);
+    const app2 = new InsertionSortPage(page);
     await app.goto();
 
     // Ensure we are in a known state: initial load has step enabled (script sets it)
@@ -221,7 +221,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     }
 
     // After stepping, we expect the sort to finish and all bars to be marked sorted
-    const allSorted = await app.allBarsHaveClass('sorted');
+    const allSorted1 = await app.allBarsHaveClass('sorted');
     expect(allSorted).toBe(true);
 
     // Assert reset button enabled and step disabled in final state
@@ -229,17 +229,17 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     expect(await app.isStepDisabled()).toBe(true);
 
     // Ensure no page errors or console errors occurred during stepping
-    const hasSeriousPageError = pageErrors.some(err =>
+    const hasSeriousPageError2 = pageErrors.some(err =>
       err && (err.name === 'ReferenceError' || err.name === 'SyntaxError' || err.name === 'TypeError')
     );
     expect(hasSeriousPageError).toBe(false);
-    const hadConsoleError = consoleErrors.some(c => c.type === 'error');
+    const hadConsoleError2 = consoleErrors.some(c => c.type === 'error');
     expect(hadConsoleError).toBe(false);
   }, { timeout: 120_000 });
 
   test('Reset during automatic sorting stops sorting and returns to Idle (S1_Sorting_Auto -> S0_Idle)', async ({ page }) => {
     // This test ensures that clicking Reset while auto-sorting invokes generateArray() and returns to Idle.
-    const app = new InsertionSortPage(page);
+    const app3 = new InsertionSortPage(page);
     await app.goto();
 
     // Slow the animation so we can interact while sorting is in progress
@@ -250,7 +250,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
 
     // Wait until the UI indicates sorting has started: resetBtn becomes enabled quickly in code after setting sorting=true
     await page.waitForFunction(() => {
-      const reset = document.getElementById('resetBtn');
+      const reset1 = document.getElementById('resetBtn');
       return reset && reset.disabled === false;
     }, {}, { timeout: 10_000 });
 
@@ -259,9 +259,9 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
 
     // After reset (generateArray), startBtn should be enabled again, stepBtn is set disabled by generateArray()
     await page.waitForFunction(() => {
-      const start = document.getElementById('startBtn');
+      const start1 = document.getElementById('startBtn');
       const step = document.getElementById('stepBtn');
-      const reset = document.getElementById('resetBtn');
+      const reset2 = document.getElementById('resetBtn');
       return start && step && reset && start.disabled === false && step.disabled === true && reset.disabled === true;
     }, {}, { timeout: 10_000 });
 
@@ -271,17 +271,17 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     expect(await app.isResetDisabled()).toBe(true);
 
     // Validate no critical runtime errors occurred during reset
-    const hasSeriousPageError = pageErrors.some(err =>
+    const hasSeriousPageError3 = pageErrors.some(err =>
       err && (err.name === 'ReferenceError' || err.name === 'SyntaxError' || err.name === 'TypeError')
     );
     expect(hasSeriousPageError).toBe(false);
-    const hadConsoleError = consoleErrors.some(c => c.type === 'error');
+    const hadConsoleError3 = consoleErrors.some(c => c.type === 'error');
     expect(hadConsoleError).toBe(false);
   });
 
   test('Generate New Array produces a different array (UI changes observed)', async ({ page }) => {
     // This test ensures clicking Generate New Array changes the DOM bar heights (i.e., a new random array)
-    const app = new InsertionSortPage(page);
+    const app4 = new InsertionSortPage(page);
     await app.goto();
 
     const beforeHeights = await app.getBarHeights();
@@ -299,7 +299,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     expect(arraysEqual).toBe(false);
 
     // No critical page errors
-    const hasSeriousPageError = pageErrors.some(err =>
+    const hasSeriousPageError4 = pageErrors.some(err =>
       err && (err.name === 'ReferenceError' || err.name === 'SyntaxError' || err.name === 'TypeError')
     );
     expect(hasSeriousPageError).toBe(false);
@@ -307,7 +307,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
 
   test('Speed input updates value and does not cause runtime errors (ChangeSpeed event)', async ({ page }) => {
     // Validate the speedRange input change handler executes without throwing.
-    const app = new InsertionSortPage(page);
+    const app5 = new InsertionSortPage(page);
     await app.goto();
 
     // Change to low speed
@@ -321,7 +321,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     expect(Number(highValue)).toBe(1000);
 
     // Ensure no page errors caused by changing speed
-    const hasSeriousPageError = pageErrors.some(err =>
+    const hasSeriousPageError5 = pageErrors.some(err =>
       err && (err.name === 'ReferenceError' || err.name === 'SyntaxError' || err.name === 'TypeError')
     );
     expect(hasSeriousPageError).toBe(false);
@@ -329,7 +329,7 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
 
   test('Edge case: clicking Start twice quickly does not throw and does not start duplicate sorting loops', async ({ page }) => {
     // This test checks robustness against repeated Start clicks.
-    const app = new InsertionSortPage(page);
+    const app6 = new InsertionSortPage(page);
     await app.goto();
 
     // Speed up a bit and then click start twice quickly
@@ -344,11 +344,11 @@ test.describe('Insertion Sort Visualization - FSM state and transitions', () => 
     }, {}, { timeout: 60_000 });
 
     // Assert no console.error messages were logged as a result
-    const hadConsoleError = consoleErrors.some(c => c.type === 'error');
+    const hadConsoleError4 = consoleErrors.some(c => c.type === 'error');
     expect(hadConsoleError).toBe(false);
 
     // Assert no uncaught page errors
-    const hasSeriousPageError = pageErrors.some(err =>
+    const hasSeriousPageError6 = pageErrors.some(err =>
       err && (err.name === 'ReferenceError' || err.name === 'SyntaxError' || err.name === 'TypeError')
     );
     expect(hasSeriousPageError).toBe(false);

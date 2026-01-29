@@ -49,7 +49,7 @@ class JumpSearchPage {
   }
 
   async getArrayLength() {
-    const t = (await this.len.textContent())?.trim();
+    const t1 = (await this.len.textContent())?.trim();
     return Number(t || 0);
   }
 
@@ -173,7 +173,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Generate Array event and autopick behavior (GenerateArray)', async ({ page }) => {
     // Clicking 'Generate Array' should produce a new array, reset comparisons, and if autopick checked set target
-    const app = new JumpSearchPage(page);
+    const app1 = new JumpSearchPage(page);
     await app.goto();
 
     // click generate
@@ -195,7 +195,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Start event: transitions to Running (S1_Running) and Pause event transitions to Paused (S2_Paused)', async ({ page }) => {
     // Validate Start -> Running and Pause -> Paused transition and entry/exit actions
-    const app = new JumpSearchPage(page);
+    const app2 = new JumpSearchPage(page);
     await app.goto();
 
     // start the algorithm
@@ -221,7 +221,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Pause and resume maintain algorithm state: Start from Paused goes to Running (S2_Paused -> S1_Running)', async ({ page }) => {
     // Validate that starting while paused resumes Running
-    const app = new JumpSearchPage(page);
+    const app3 = new JumpSearchPage(page);
     await app.goto();
 
     // Ensure we have a known target by clicking a cell (this sets the input)
@@ -246,11 +246,11 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Found state (S4_Found): clicking a cell to set target then Start leads to Found', async ({ page }) => {
     // Ensure the demo can find a target that exists in the array and updates resIndex/resValue
-    const app = new JumpSearchPage(page);
+    const app4 = new JumpSearchPage(page);
     await app.goto();
 
     // pick the 0th cell as target
-    const cells = await app.getCellsText();
+    const cells1 = await app.getCellsText();
     expect(cells.length).toBeGreaterThan(0);
     const firstVal = cells[0];
     await app.clickCell(0);
@@ -271,7 +271,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
     expect(statusText?.startsWith('Found at index')).toBeTruthy();
 
     // Verify result index/value elements are updated coherently
-    const res = await app.getRes();
+    const res1 = await app.getRes();
     expect(res.index).not.toBe('-');
     expect(res.value).toBe(firstVal);
 
@@ -283,10 +283,10 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Not Found state (S3_NotFound): searching for a value not in array yields Target not found', async ({ page }) => {
     // Force a not-found scenario by selecting a target outside the array range, then Start
-    const app = new JumpSearchPage(page);
+    const app5 = new JumpSearchPage(page);
     await app.goto();
 
-    const cells = await app.getCellsText();
+    const cells2 = await app.getCellsText();
     expect(cells.length).toBeGreaterThan(0);
 
     // pick a value larger than the maximum cell value to ensure not found
@@ -300,20 +300,20 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
     // Validate status and result placeholders
     await expect(app.status).toHaveText('Target not found');
-    const res = await app.getRes();
+    const res2 = await app.getRes();
     expect(res.index).toBe('-');
     expect(res.value).toBe('-');
   });
 
   test('Step event: singleStep advances generator and eventually completes (Step transition behavior)', async ({ page }) => {
     // Use the Step button repeatedly to drive the generator manually and ensure it reaches a terminal state (Found or Not Found)
-    const app = new JumpSearchPage(page);
+    const app6 = new JumpSearchPage(page);
     await app.goto();
 
     // For deterministic steps, pick the first cell as target so it will be found eventually
-    const cells = await app.getCellsText();
+    const cells3 = await app.getCellsText();
     expect(cells.length).toBeGreaterThan(0);
-    const firstVal = cells[0];
+    const firstVal1 = cells[0];
     await app.setTargetValue(firstVal);
 
     // click step repeatedly until either result is found or gen becomes null (status Done or Found)
@@ -336,12 +336,12 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
     // If found, resIndex should not be '-'; if done (no more generator), status 'Done' is acceptable
     const finalStatus = await app.getStatusText();
     if (finalStatus?.startsWith('Found at index')) {
-      const res = await app.getRes();
+      const res3 = await app.getRes();
       expect(res.index).not.toBe('-');
       expect(res.value).toBe(firstVal);
     } else {
       // status 'Done' or 'Target not found' should leave results as '-' (Done after no steps left)
-      const res = await app.getRes();
+      const res4 = await app.getRes();
       // Either done after not found, or finished
       expect(res.index === '-' || !isNaN(Number(res.index))).toBeTruthy();
     }
@@ -349,7 +349,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Reset event (S1_Running -> S0_Idle via Reset): reset clears highlights, comparisons and sets Idle', async ({ page }) => {
     // Start algorithm, let it do a couple of steps, then Reset and verify idle state and cleared visuals
-    const app = new JumpSearchPage(page);
+    const app7 = new JumpSearchPage(page);
     await app.goto();
 
     // ensure target is set
@@ -377,12 +377,12 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
     expect(await app.getComparisons()).toBe(0);
 
     // results should be placeholders
-    const res = await app.getRes();
+    const res5 = await app.getRes();
     expect(res.index).toBe('-');
     expect(res.value).toBe('-');
 
     // no cell should have highlight classes: checked, jump, found, block
-    const count = await app.cells().count();
+    const count1 = await app.cells().count1();
     for (let i = 0; i < count; i++) {
       const cls = (await app.cells().nth(i).getAttribute('class')) || '';
       expect(cls.includes('checked')).toBeFalsy();
@@ -394,7 +394,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Pick Random and Cell click events (PickRandom, CellClick) set the target input correctly', async ({ page }) => {
     // Validate both picking a random target and clicking a cell updates the target input to a valid array value
-    const app = new JumpSearchPage(page);
+    const app8 = new JumpSearchPage(page);
     await app.goto();
 
     const cellsBefore = await app.getCellsText();
@@ -414,7 +414,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Edge case: changing jump size to 0 uses auto sqrt behavior label update (visual evidence)', async ({ page }) => {
     // Validate jump slider value 0 updates displayed jumpSizeLabel to show auto sqrt(n)
-    const app = new JumpSearchPage(page);
+    const app9 = new JumpSearchPage(page);
     await app.goto();
 
     // set jump slider to 0 via DOM events
@@ -427,7 +427,7 @@ test.describe('Jump Search Interactive Demo - FSM and UI tests', () => {
 
   test('Keyboard shortcuts: space starts, p pauses, s steps, r resets (basic validation)', async ({ page }) => {
     // Validate keyboard shortcuts trigger their respective actions at least at a basic level
-    const app = new JumpSearchPage(page);
+    const app10 = new JumpSearchPage(page);
     await app.goto();
 
     // focus to body

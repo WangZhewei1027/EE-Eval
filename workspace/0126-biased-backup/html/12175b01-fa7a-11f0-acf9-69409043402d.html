@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Random Forest Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    line-height: 1.4;
+  }
+  label, button {
+    display: inline-block;
+    margin: 0.3em 0.5em 0.3em 0;
+  }
+  input[type=number], input[type=text] {
+    width: 4em;
+  }
+  textarea {
+    width: 100%;
+    height: 12em;
+    margin: 0.5em 0;
+  }
+  pre {
+    background: #f0f0f0;
+    padding: 0.3em 0.5em;
+    overflow-x: auto;
+  }
+  fieldset {
+    margin-bottom: 1em;
+    padding: 0.7em 1em 0.7em 1em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Random Forest Interactive Explorer</h1>
+
+<p>This tool lets you build, train, visualize, and explore Random Forests step-by-step with maximum interactive user control.</p>
+
+<fieldset>
+  <legend>1. Data Input & Configuration</legend>
+
+  <label for="datasetSelect">Select Dataset:</label>
+  <select id="datasetSelect" aria-label="Select Dataset">
+    <option value="custom">Custom CSV input</option>
+    <option value="iris">Iris (Classic classification)</option>
+    <option value="synthetic">Synthetic binary classification</option>
+  </select>
+  <button id="loadDatasetBtn">Load Dataset</button>
+  <br />
+
+  <label for="dataTextarea">Dataset (CSV format):</label><br />
+  <textarea id="dataTextarea" aria-label="Dataset CSV input" placeholder="Paste CSV data here, first line is header"></textarea>
+  <small>Note: last column is treated as target label (classification). Features must be numeric.</small>
+  <br />
+
+  <label for="maxDepthInput">Max Tree Depth:</label>
+  <input type="number" id="maxDepthInput" min="1" max="20" value="5" aria-label="Max Tree Depth" />
+  <label for="nTreesInput">Number of Trees:</label>
+  <input type="number" id="nTreesInput" min="1" max="100" value="10" aria-label="Number of Trees" />
+  <label for="minSamplesSplitInput">Min Samples Split:</label>
+  <input type="number" id="minSamplesSplitInput" min="2" max="20" value="2" aria-label="Minimum Samples Split" />
+  <button id="buildForestBtn">Build and Train Forest</button>
+</fieldset>
+
+<fieldset>
+  <legend>2. Random Forest State and Interaction</legend>
+
+  <button id="showForestSummaryBtn">Show Forest Summary</button>
+  <button id="listTreesBtn">List All Trees</button>
+  <button id="resetForestBtn">Reset Forest</button>
+  <p id="statusArea" aria-live="polite"></p>
+  <pre id="outputArea" tabindex="0" aria-label="Output Area"></pre>
+</fieldset>
+
+<fieldset>
+  <legend>3. Detailed Tree Exploration</legend>
+  <label for="treeIndexInput">Choose Tree Index (0-based):</label>
+  <input type="number" id="treeIndexInput" min="0" value="0" aria-label="Tree Index" />
+  <button id="showTreeBtn">Show Tree Structure</button>
+  <br />
+  <label for="nodePathInput">Navigate Node (path sequence, e.g. "L,R,L"):</label>
+  <input type="text" id="nodePathInput" placeholder="e.g. L,R,L" aria-label="Node Path" />
+  <button id="showNodeBtn">Show Node Info</button>
+  <button id="goToParentBtn">Go To Parent Node</button>
+  <button id="goToRootBtn">Go To Root Node</button>
+  <p>Current Node Path: <span id="currentNodePath">(root)</span></p>
+  <pre id="nodeOutputArea" tabindex="0" aria-label="Node Output Area"></pre>
+</fieldset>
+
+<fieldset>
+  <legend>4. Prediction Interface</legend>
+  <p>Enter feature values for prediction using trained forest:</p>
+  <div id="predictionInputsArea" aria-label="Feature inputs area for prediction"></div>
+  <button id="predictBtn">Predict</button>
+  <p>Prediction Result: <strong id="predictionResult"></strong></p>
+</fieldset>
+
+<script>
+// Core data structures and functions for Random Forest from scratch
+
+/*
+We implement:
+
+- Decision tree nodes (binary trees)
+- Tree training with feature subsampling and bootstrap sample
+- Random Forest training as ensemble of trees
+- Prediction by majority vote
+- Dataset parsing and validation
+- Interactive state and navigation of trees and nodes
+
+*/
+
+// Utility functions
+
+function parseCSV(str) {
+  // Very simple CSV parse, comma separated, quote ignored, split by lines.
+  const lines = str.trim().split(/\r?\n/);
+  if(lines.length < 2) throw 'Dataset must have at least one data line and a header line.';
+  const headers = lines[0].split(',').map(h=>h.trim());
+  const data = [];
+  for(let i=1; i<lines.length; i++){
+    if(!lines[i].trim()) continue;
+    const row = lines[i].split(',').map(s=>s.trim());
+    if(row.length !== headers.length) throw `Line ${i+1} length mismatch with header`;
+    data.push(row);
+  }
+  return {headers, data};
+}
+
+function isNumeric(str) {
+  if(str === '') return false;
+  return !isNaN(str);
+}
+
+// Split dataset into features matrix X and label vector y
+// Converts features to numbers, leaves y as string label
+function datasetToXY(parsed) {
+  const X = [];
+  const y = [];
+  for(let row of parsed.data){
+    let features = row.slice(0, row.length-1);
+    let target = row[row.length-1];
+    // Ensure all feature numeric
+    let fnums = features.map(f=>{
+      if(!isNumeric(f)) throw 'Feature non-numeric value: ' + f;
+      return Number(f);
+    });
+    X.push(fnums);
+    y.push(target);
+  }
+  return {X, y, featureNames: parsed.headers.slice(0, parsed.headers.length-1), targetName: parsed.headers[parsed.headers.length-1]};
+}
+
+// Unique values array
+function unique(arr) {
+  return Array.from(new Set(arr));
+}
+
+// Count occurrences per class label
+function countLabels(labels) {
+  let counts = {};
+  for(const l of labels) {
+    counts[l] = (counts[l] || 0) + 1;
+  }
+  return counts;
+}
+
+// Majority class label
+function majorityLabel(labels) {
+  let counts = countLabels(labels);
+  let maxCount = -1;
+  let majority = null;
+  for(let lbl in counts) {
+    if(counts[lbl] > maxCount){
+      maxCount = counts[lbl];
+      majority = lbl;
+    }
+  }
+  return majority;
+}
+
+// Entropy
+function entropy(labels) {
+  let counts = countLabels(labels);
+  let total = labels.length;
+  let ent = 0;
+  for(let lbl in counts) {
+    let p = counts[lbl]/total;
+    ent -= p * Math.log2(p);
+  }
+  return ent;
+}
+
+// Gini impurity
+function gini(labels) {
+  let counts = countLabels(labels);
+  let total = labels.length;
+  let impurity = 1;
+  for(let lbl in counts) {
+    let p = counts[lbl]/total;
+    impurity -= p*p;
+  }
+  return impurity;
+}
+
+// Check if all labels identical
+function allSame(labels) {
+  if(labels.length === 0) return true;
+  let first = labels[0];
+  for(let l of labels) if(l !== first) return false;
+  return true;
+}
+
+// Bootstrap sample indices from dataset size N
+function bootstrapSampleIndices(N) {
+  let sample = [];
+  for(let i=0; i<N; i++){
+    sample.push(Math.floor(Math.random()*N));
+  }
+  return sample;
+}
+
+// Random subset of features
+function randomFeaturesIndices(nFeatures, maxFeatures) {
+  let indices = [];
+  for(let i=0; i<nFeatures; i++) indices.push(i);
+  for(let i = indices.length - 1; i>0; i--){
+    let j = Math.floor(Math.random()*(i+1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices.slice(0, maxFeatures);
+}
+
+// Tree structure
+
+class TreeNode {
+  constructor() {
+    this.isLeaf = false;
+    this.prediction = null;  // for leaf
+    this.featureIndex = null; // for split
+    this.threshold = null;
+    this.left = null;
+    this.right = null;
+    this.samplesIndices = []; // indices of samples in this node (optional for debug)
+    this.depth = 0;
+    this.parent = null; // usable for navigation
+  }
+}
+
+class DecisionTree {
+  constructor(options) {
+    this.maxDepth = options.maxDepth || 5;
+    this.minSamplesSplit = options.minSamplesSplit || 2;
+    this.nFeatures = options.nFeatures || null; // total number of features in dataset
+    this.maxFeatures = options.maxFeatures || null; // number of features to consider at splits
+    this.X = null;
+    this.y = null;
+    this.root = null;
+    this.featureNames = options.featureNames || [];
+  }
+
+  fit(X, y, sampleIndices=null) {
+    // Save dataset reference
+    this.X = X;
+    this.y = y;
+    this.sampleIndices = sampleIndices || X.map((_,i)=>i);
+    this.nFeatures = X[0].length;
+    if(!this.maxFeatures) {
+      this.maxFeatures = Math.floor(Math.sqrt(this.nFeatures)) || 1;
+    }
+    this.root = new TreeNode();
+    this.root.samplesIndices = this.sampleIndices;
+    this.root.depth = 0;
+    this.root.parent = null;
+    this._buildTree(this.root);
+  }
+
+  _buildTree(node) {
+    let indices = node.samplesIndices;
+    let labels = indices.map(i=>this.y[i]);
+    if(allSame(labels) || node.depth >= this.maxDepth || indices.length < this.minSamplesSplit) {
+      node.isLeaf = true;
+      node.prediction = majorityLabel(labels);
+      return;
+    }
+
+    // Select random subset of features to consider
+    let featuresConsidered = randomFeaturesIndices(this.nFeatures, this.maxFeatures);
+    let bestFeature = null;
+    let bestThreshold = null;
+    let bestInfoGain = -Infinity;
+    let bestSplits = null;
+
+    // Calculate impurity of current node
+    let baseGini = gini(labels);
+
+    for (let fIdx of featuresConsidered) {
+      // Get sorted unique values on this feature in current samples
+      let featVals = indices.map(i=>this.X[i][fIdx]);
+      let uniqueVals = unique(featVals).sort((a,b)=>a-b);
+      if(uniqueVals.length <= 1) continue; // no split possible
+
+      // Candidate thresholds are midpoints between sorted unique feature values
+      let thresholds = [];
+      for(let i=0; i<uniqueVals.length-1; i++){
+        thresholds.push((uniqueVals[i]+uniqueVals[i+1])/2);
+      }
+
+      for(let thresh of thresholds) {
+        // Split samples left/right
+        let leftIndices = indices.filter(i=>this.X[i][fIdx] <= thresh);
+        let rightIndices = indices.filter(i=>this.X[i][fIdx] > thresh);
+        if(leftIndices.length === 0 || rightIndices.length === 0) continue;
+        let leftLabels = leftIndices.map(i=>this.y[i]);
+        let rightLabels = rightIndices.map(i=>this.y[i]);
+
+        // Weighted impurity
+        let pLeft = leftIndices.length / indices.length;
+        let pRight = rightIndices.length / indices.length;
+        let infoGain = baseGini - (pLeft*gini(leftLabels) + pRight*gini(rightLabels));
+        if(infoGain > bestInfoGain) {
+          bestFeature = fIdx;
+          bestThreshold = thresh;
+          bestInfoGain = infoGain;
+          bestSplits = {left: leftIndices, right: rightIndices};
+        }
+      }
+    }
+
+    if(bestInfoGain === -Infinity || bestFeature === null) {
+      // No valid split found, make leaf
+      node.isLeaf = true;
+      node.prediction = majorityLabel(labels);
+      return;
+    }
+
+    // Create left and right nodes
+    node.featureIndex = bestFeature;
+    node.threshold = bestThreshold;
+
+    node.left = new TreeNode();
+    node.left.samplesIndices = bestSplits.left;
+    node.left.depth = node.depth + 1;
+    node.left.parent = node;
+
+    node.right = new TreeNode();
+    node.right.samplesIndices = bestSplits.right;
+    node.right.depth = node.depth + 1;
+    node.right.parent = node;
+
+    // Recursive build
+    this._buildTree(node.left);
+    this._buildTree(node.right);
+  }
+
+  predictSingle(x) {
+    let node = this.root;
+    while(!node.isLeaf) {
+      if(x[node.featureIndex] <= node.threshold){
+        node = node.left;
+      } else {
+        node = node.right;
+      }
+    }
+    return node.prediction;
+  }
+
+  toJSON() {
+    function nodeToJson(node) {
+      if(!node) return null;
+      if(node.isLeaf) {
+        return {leaf:true, prediction: node.prediction, samples: node.samplesIndices.length};
+      }
+      return {
+        leaf:false,
+        featureIndex: node.featureIndex,
+        featureName: this.featureNames[node.featureIndex] || ('f'+node.featureIndex),
+        threshold: node.threshold,
+        samples: node.samplesIndices.length,
+        left: nodeToJson.call(this, node.left),
+        right: nodeToJson.call(this, node.right)
+      }
+    }
+    return nodeToJson.call(this, this.root);
+  }
+}
+
+class RandomForest {
+  constructor(options) {
+    this.nTrees = options.nTrees || 10;
+    this.maxDepth = options.maxDepth || 5;
+    this.minSamplesSplit = options.minSamplesSplit || 2;
+    this.trees = [];
+    this.X = null;
+    this.y = null;
+    this.featureNames = options.featureNames || [];
+  }
+
+  fit(X, y) {
+    this.X = X;
+    this.y = y;
+    this.trees = [];
+    let nSamples = X.length;
+    let nFeatures = X[0].length;
+    for(let i=0; i<this.nTrees; i++){
+      let sampleIndices = bootstrapSampleIndices(nSamples);
+      let tree = new DecisionTree({
+        maxDepth: this.maxDepth,
+        minSamplesSplit: this.minSamplesSplit,
+        nFeatures: nFeatures,
+        maxFeatures: Math.floor(Math.sqrt(nFeatures)) || 1,
+        featureNames: this.featureNames
+      });
+      tree.fit(X, y, sampleIndices);
+      this.trees.push(tree);
+    }
+  }
+
+  predictSingle(x) {
+    let votes = {};
+    for(const tree of this.trees){
+      let p = tree.predictSingle(x);
+      votes[p] = (votes[p] || 0) + 1;
+    }
+    let majority = null;
+    let maxVotes = -1;
+    for(let c in votes){
+      if(votes[c] > maxVotes){
+        maxVotes = votes[c];
+        majority = c;
+      }
+    }
+    return majority;
+  }
+
+  summary() {
+    if(this.trees.length === 0) return 'No trees trained.';
+    let lines = [];
+    lines.push(`Random Forest with ${this.trees.length} trees:`);
+    for(let i=0; i<this.trees.length; i++){
+      let tree = this.trees[i];
+      let leaves = countLeaves(tree.root);
+      lines.push(`Tree ${i}: max depth ${tree.maxDepth}, leaves ${leaves}`);
+    }
+    return lines.join('\n');
+  }
+}
+
+function countLeaves(node) {
+  if(!node) return 0;
+  if(node.isLeaf) return 1;
+  return countLeaves(node.left) + countLeaves(node.right);
+}
+
+// GLOBAL STATE
+const RandomForestState = {
+  forest: null,
+  trained: false,
+  dataset: null,
+  X: null,
+  y: null,
+  featureNames: [],
+  targetName: null,
+  // Current tree and current node navigation for exploration
+  currentTreeIndex: 0,
+  currentNodePath: [], // e.g. ['L', 'R', 'L']
+  // Cached reference to current node object
+  currentNodeRef: null,
+  treeNodeCache: null // {treeIndex: rootNode}
+};
+
+// UI elements
+const elements = {
+  datasetSelect: document.getElementById('datasetSelect'),
+  loadDatasetBtn: document.getElementById('loadDatasetBtn'),
+  dataTextarea: document.getElementById('dataTextarea'),
+  maxDepthInput: document.getElementById('maxDepthInput'),
+  nTreesInput: document.getElementById('nTreesInput'),
+  minSamplesSplitInput: document.getElementById('minSamplesSplitInput'),
+  buildForestBtn: document.getElementById('buildForestBtn'),
+  showForestSummaryBtn: document.getElementById('showForestSummaryBtn'),
+  listTreesBtn: document.getElementById('listTreesBtn'),
+  resetForestBtn: document.getElementById('resetForestBtn'),
+  statusArea: document.getElementById('statusArea'),
+  outputArea: document.getElementById('outputArea'),
+
+  treeIndexInput: document.getElementById('treeIndexInput'),
+  showTreeBtn: document.getElementById('showTreeBtn'),
+  nodePathInput: document.getElementById('nodePathInput'),
+  showNodeBtn: document.getElementById('showNodeBtn'),
+  goToParentBtn: document.getElementById('goToParentBtn'),
+  goToRootBtn: document.getElementById('goToRootBtn'),
+  currentNodePathSpan: document.getElementById('currentNodePath'),
+  nodeOutputArea: document.getElementById('nodeOutputArea'),
+
+  predictionInputsArea: document.getElementById('predictionInputsArea'),
+  predictBtn: document.getElementById('predictBtn'),
+  predictionResult: document.getElementById('predictionResult')
+};
+
+// Handling dataset loading
+
+const predefinedDatasets = {
+  iris: `sepal_length,sepal_width,petal_length,petal_width,species
+5.1,3.5,1.4,0.2,setosa
+4.9,3.0,1.4,0.2,setosa
+4.7,3.2,1.3,0.2,setosa
+4.6,3.1,1.5,0.2,setosa
+5.0,3.6,1.4,0.2,setosa
+5.4,3.9,1.7,0.4,setosa
+4.6,3.4,1.4,0.3,setosa
+5.0,3.4,1.5,0.2,setosa
+4.4,2.9,1.4,0.2,setosa
+4.9,3.1,1.5,0.1,setosa
+5.4,3.7,1.5,0.2,setosa
+4.8,3.4,1.6,0.2,setosa
+4.8,3.0,1.4,0.1,setosa
+4.3,3.0,1.1,0.1,setosa
+5.8,4.0,1.2,0.2,setosa
+5.7,4.4,1.5,0.4,setosa
+5.4,3.9,1.3,0.4,setosa
+5.1,3.5,1.4,0.3,setosa
+5.7,3.8,1.7,0.3,setosa
+5.1,3.8,1.5,0.3,setosa
+6.7,3.1,4.7,1.5,versicolor
+6.3,2.3,4.4,1.3,versicolor
+5.8,2.7,4.1,1.0,versicolor
+6.1,2.8,4.7,1.2,versicolor
+6.4,2.9,4.3,1.3,versicolor
+6.6,3.0,4.4,1.4,versicolor
+6.8,2.8,4.8,1.4,versicolor
+6.7,3.0,5.0,1.7,versicolor
+6.0,2.9,4.5,1.5,versicolor
+5.7,2.6,3.5,1.0,versicolor
+5.5,2.4,3.8,1.1,versicolor
+5.5,2.4,3.7,1.0,versicolor
+5.8,2.7,3.9,1.2,versicolor
+6.0,2.7,5.1,1.6,versicolor
+5.4,3.0,4.5,1.5,versicolor
+6.0,3.4,4.5,1.6,versicolor
+6.7,3.1,4.7,1.5,versicolor
+6.3,2.3,4.4,1.3,versicolor
+5.6,3.0,4.1,1.3,versicolor
+5.5,2.5,4.0,1.3,versicolor
+6.0,3.0,4.8,1.4,versicolor
+6.1,2.8,4.0,1.3,versicolor
+6.1,2.6,5.6,1.4,virginica
+7.7,3.0,6.1,2.3,virginica
+6.3,3.3,6.0,2.5,virginica
+7.2,3.6,6.1,2.5,virginica
+6.7,3.0,5.2,2.3,virginica
+6.5,3.0,5.5,1.8,virginica
+6.2,3.4,5.4,2.3,virginica
+5.9,3.0,5.1,1.8,virginica
+6.7,3.1,5.6,2.4,virginica
+6.9,3.1,5.1,2.3,virginica
+5.8,2.7,5.1,1.9,virginica
+6.8,3.2,5.9,2.3,virginica
+6.7,3.3,5.7,2.5,virginica
+6.7,3.0,5.2,2.3,virginica
+6.3,2.5,5.0,1.9,virginica
+6.5,3.0,5.2,2.0,virginica
+6.2,3.4,5.4,2.3,virginica
+5.9,3.0,5.1,1.8,virginica
+`,
+  synthetic: `feature1,feature2,target
+0.1,0.2,A
+0.3,0.1,A
+0.25,0.5,A
+0.4,0.6,B
+0.45,0.7,B
+0.6,0.4,B
+0.7,0.5,B
+0.8,0.7,B
+0.6,0.2,A
+0.5,0.4,A
+0.55,0.8,B
+`
+};
+
+function loadSelectedDataset() {
+  const sel = elements.datasetSelect.value;
+  if(sel === 'custom'){
+    // Just clear textarea for user's paste
+    elements.dataTextarea.value = '';
+  } else {
+    elements.dataTextarea.value = predefinedDatasets[sel] || '';
+  }
+  setStatus(`Dataset "${sel}" loaded. Paste or modify data as needed.`);
+}
+
+// Status and output helper functions
+
+function setStatus(msg) {
+  elements.statusArea.textContent = msg;
+}
+
+function appendOutput(text) {
+  elements.outputArea.textContent += text + '\n';
+  elements.outputArea.scrollTop = elements.outputArea.scrollHeight;
+}
+
+function clearOutput() {
+  elements.outputArea.textContent = '';
+}
+
+function clearNodeOutput() {
+  elements.nodeOutputArea.textContent = '';
+}
+
+function updatePredictionInputs() {
+  // Rebuild feature input fields based on current dataset features
+  const area = elements.predictionInputsArea;
+  area.innerHTML = '';
+  if(!RandomForestState.featureNames || RandomForestState.featureNames.length === 0) {
+    area.textContent = '(No features to predict. Load dataset and train forest first.)';
+    return;
+  }
+  RandomForestState.featureNames.forEach((fname, idx)=>{
+    let lbl = document.createElement('label');
+    lbl.textContent = fname + ':';
+    lbl.htmlFor = 'predict_feature_' + idx;
+    let inp = document.createElement('input');
+    inp.type = 'number';
+    inp.id = 'predict_feature_' + idx;
+    inp.setAttribute('aria-label', 'Input feature ' + fname);
+    inp.step = 'any';
+    inp.value = '';
+    area.appendChild(lbl);
+    area.appendChild(inp);
+    area.appendChild(document.createElement('br'));
+  });
+}
+
+function getPredictionFeatures() {
+  let features = [];
+  const fcount = RandomForestState.featureNames.length;
+  for(let i=0; i<fcount; i++){
+    let inp = document.getElementById('predict_feature_' + i);
+    let val = inp.value.trim();
+    if(val === '') return {error: `Feature "${RandomForestState.featureNames[i]}" input is empty.`};
+    let num = Number(val);
+    if(isNaN(num)) return {error: `Feature "${RandomForestState.featureNames[i]}" input is not numeric.`};
+    features.push(num);
+  }
+  return {features};
+}
+
+
+// Navigation: from root node of a tree, follow path string: array of 'L' or 'R'
+function getNodeByPath(root, pathArray) {
+  let node = root;
+  for(let dir of pathArray){
+    if(!node) return null;
+    if(node.isLeaf) return null;
+    if(dir === 'L') node = node.left;
+    else if(dir === 'R') node = node.right;
+    else return null;
+  }
+  return node;
+}
+
+function pathArrayToString(pathArray) {
+  if(pathArray.length === 0) return '(root)';
+  return pathArray.join(',');
+}
+
+function displayNodeInfo(node) {
+  if(!node) return 'Node not found.';
+  let lines = [];
+  lines.push(`Depth: ${node.depth}`);
+  lines.push(`Samples in node: ${node.samplesIndices.length}`);
+  if(node.isLeaf) {
+    lines.push(`Node type: Leaf`);
+    lines.push(`Prediction: ${node.prediction}`);
+  } else {
+    lines.push(`Node type: Internal`);
+    let fName = RandomForestState.featureNames[node.featureIndex] || `f${node.featureIndex}`;
+    lines.push(`Split feature: ${fName} (index ${node.featureIndex})`);
+    lines.push(`Threshold: <= ${node.threshold.toFixed(6)}`);
+  }
+  return lines.join('\n');
+}
+
+function displayTreeStructure(treeIndex) {
+  function recurse(node, indent) {
+    if(!node) return '';
+    let prefix = ' '.repeat(indent);
+    if(node.isLeaf) {
+      return prefix + `Leaf: predict=${node.prediction} (samples=${node.samplesIndices.length})\n`;
+    }
+    let fName = RandomForestState.featureNames[node.featureIndex] || `f${node.featureIndex}`;
+    let s = prefix + `Node: [${fName} <= ${node.threshold.toFixed(4)}] (samples=${node.samplesIndices.length})\n`;
+    s += recurse(node.left, indent+2);
+    s += recurse(node.right, indent+2);
+    return s;
+  }
+  if(!RandomForestState.trained) return 'Forest is not trained.';
+  if(treeIndex < 0 || treeIndex >= RandomForestState.forest.trees.length) return 'Tree index out of range.';
+  let tree = RandomForestState.forest.trees[treeIndex];
+  return recurse(tree.root, 0);
+}
+
+// HANDLERS
+
+elements.loadDatasetBtn.addEventListener('click', ()=>{
+  try {
+    loadSelectedDataset();
+    RandomForestState.trained = false;
+    clearOutput();
+    clearNodeOutput();
+    setStatus('Dataset loaded. You can build and train the forest now.');
+  } catch(e) {
+    setStatus('Error loading dataset: ' + e);
+  }
+});
+
+elements.buildForestBtn.addEventListener('click', ()=> {
+  try {
+    clearOutput();
+    clearNodeOutput();
+    setStatus('Parsing dataset...');
+    let csvText = elements.dataTextarea.value;
+    let parsed = parseCSV(csvText);
+    let prepared = datasetToXY(parsed);
+    RandomForestState.X = prepared.X;
+    RandomForestState.y = prepared.y;
+    RandomForestState.featureNames = prepared.featureNames;
+    RandomForestState.targetName = prepared.targetName;
+    setStatus('Dataset parsed. Training Random Forest...');
+    let maxDepth = parseInt(elements.maxDepthInput.value);
+    let nTrees = parseInt(elements.nTreesInput.value);
+    let minSamplesSplit = parseInt(elements.minSamplesSplitInput.value);
+    if(isNaN(maxDepth) || maxDepth < 1 || maxDepth > 20) {
+      setStatus('Invalid max depth. Between 1 and 20.');
+      return;
+    }
+    if(isNaN(nTrees) || nTrees < 1 || nTrees > 100) {
+      setStatus('Invalid number of trees. Between 1 and 100.');
+      return;
+    }
+    if(isNaN(minSamplesSplit) || minSamplesSplit < 2 || minSamplesSplit > 20) {
+      setStatus('Invalid minimum samples split. Between 2 and 20.');
+      return;
+    }
+    RandomForestState.forest = new RandomForest({
+      nTrees,
+      maxDepth,
+      minSamplesSplit,
+      featureNames: prepared.featureNames
+    });
+    RandomForestState.forest.fit(prepared.X, prepared.y);
+    RandomForestState.trained = true;
+    RandomForestState.currentTreeIndex = 0;
+    RandomForestState.currentNodePath = [];
+    setStatus(`Random Forest trained with ${nTrees} trees, max depth ${maxDepth}.`);
+    clearOutput();
+    clearNodeOutput();
+    updatePredictionInputs();
+    elements.treeIndexInput.max = nTrees-1;
+    elements.treeIndexInput.value = 0;
+  } catch(e) {
+    setStatus('Error training forest: ' + e);
+  }
+});
+
+elements.showForestSummaryBtn.addEventListener('click', ()=> {
+  clearOutput();
+  clearNodeOutput();
+  if(!RandomForestState.trained) {
+    setStatus('No forest trained yet.');
+    return;
+  }
+  let summary = RandomForestState.forest.summary();
+  elements.outputArea.textContent = summary;
+  setStatus('Forest summary displayed.');
+});
+
+elements.listTreesBtn.addEventListener('click', ()=> {
+  clearOutput();
+  clearNodeOutput();
+  if(!RandomForestState.trained) {
+    setStatus('No forest trained yet.');
+    return;
+  }
+  let lines = [];
+  lines.push(`Forest has ${RandomForestState.forest.trees.length} trees.`);
+  for(let i=0; i<RandomForestState.forest.trees.length; i++){
+    lines.push(`- Tree ${i}`);
+  }
+  elements.outputArea.textContent = lines.join('\n');
+  setStatus('Listed all trees by index.');
+});
+
+elements.resetForestBtn.addEventListener('click', ()=> {
+  RandomForestState.forest = null;
+  RandomForestState.trained = false;
+  RandomForestState.dataset = null;
+  RandomForestState.X = null;
+  RandomForestState.y = null;
+  RandomForestState.featureNames = [];
+  RandomForestState.targetName = null;
+  RandomForestState.currentNodePath = [];
+  RandomForestState.currentTreeIndex = 0;
+  clearOutput();
+  clearNodeOutput();
+  setStatus('Random Forest state reset. Load or input dataset to start again.');
+  updatePredictionInputs();
+});
+
+elements.showTreeBtn.addEventListener('click', ()=> {
+  clearOutput();
+  clearNodeOutput();
+  if(!RandomForestState.trained){
+    setStatus('Train a forest first.');
+    return;
+  }
+  let idx = parseInt(elements.treeIndexInput.value);
+  if(isNaN(idx) || idx < 0 || idx >= RandomForestState.forest.trees.length) {
+    setStatus('Invalid tree index.');
+    return;
+  }
+  RandomForestState.currentTreeIndex = idx;
+  RandomForestState.currentNodePath = [];
+  let text = displayTreeStructure(idx);
+  elements.outputArea.textContent = text;
+  elements.currentNodePathSpan.textContent = pathArrayToString(RandomForestState.currentNodePath);
+  clearNodeOutput();
+  setStatus(`Displayed tree ${idx} structure.`);
+});
+
+elements.showNodeBtn.addEventListener('click', ()=> {
+  clearNodeOutput();
+  if(!RandomForestState.trained){
+    setStatus('Train a forest first.');
+    return;
+  }
+  let idx = RandomForestState.currentTreeIndex;
+  if(idx < 0 || idx >= RandomForestState.forest.trees.length){
+    setStatus('Current tree index invalid.');
+    return;
+  }
+  let root = RandomForestState.forest.trees[idx].root;
+  let pathInputRaw = elements.nodePathInput.value.trim();
+  let pathArray;
+  if(pathInputRaw === '') {
+    // If empty, use current node path state
+    pathArray = RandomForestState.currentNodePath;
+  } else {
+    // Parse path string, allow commas or spaces, uppercase L/R only
+    pathArray = pathInputRaw.toUpperCase().split(/[,\s]+/).filter(s=>s==='L' || s==='R');
+    if(pathArray.length === 0 && pathInputRaw !== '') {
+      setStatus('Invalid node path input. Use L and R separated by commas or spaces.');
+      return;
+    }
+  }
+  let node = getNodeByPath(root, pathArray);
+  if(!node){
+    setStatus('Node not found at path: ' + pathArray.join(','));
+    return;
+  }
+  RandomForestState.currentNodePath = pathArray;
+  elements.currentNodePathSpan.textContent = pathArrayToString(pathArray);
+  let info = displayNodeInfo(node);
+  elements.nodeOutputArea.textContent = info;
+  setStatus('Displayed node info.');
+});
+
+elements.goToParentBtn.addEventListener('click', () => {
+  let path = RandomForestState.currentNodePath;
+  if(path.length === 0) {
+    setStatus('Already at root node, no parent.');
+    return;
+  }
+  let newPath = path.slice(0, path.length-1);
+  RandomForestState.currentNodePath = newPath;
+  elements.currentNodePathSpan.textContent = pathArrayToString(newPath);
+  elements.nodePathInput.value = newPath.join(',');
+  // Refresh node info for new path
+  elements.showNodeBtn.click();
+});
+
+elements.goToRootBtn.addEventListener('click', () => {
+  RandomForestState.currentNodePath = [];
+  elements.currentNodePathSpan.textContent = '(root)';
+  elements.nodePathInput.value = '';
+  elements.showNodeBtn.click();
+});
+
+elements.predictBtn.addEventListener('click', () => {
+  elements.predictionResult.textContent = '';
+  if(!RandomForestState.trained){
+    setStatus('Train a forest first.');
+    return;
+  }
+  let {features, error} = getPredictionFeatures();
+  if(error){
+    setStatus(error);
+    return;
+  }
+  try {
+    let pred = RandomForestState.forest.predictSingle(features);
+    elements.predictionResult.textContent = pred;
+    setStatus('Prediction completed.');
+  } catch(e){
+    setStatus('Error during prediction: ' + e);
+  }
+});
+
+// On dataset select change, load default dataset text automatically
+elements.datasetSelect.addEventListener('change', loadSelectedDataset);
+
+// On page load initialize
+loadSelectedDataset();
+updatePredictionInputs();
+
+</script>
+
+</body>
+</html>

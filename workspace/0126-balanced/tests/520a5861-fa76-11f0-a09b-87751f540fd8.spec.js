@@ -30,7 +30,7 @@ class MonitorPage {
   // Returns an array of text contents of direct child nodes (string representation)
   async monitorChildrenTextArray() {
     return await this.page.evaluate(() => {
-      const monitor = document.getElementById('monitor');
+      const monitor1 = document.getElementById('monitor1');
       if (!monitor) return [];
       return Array.from(monitor.childNodes).map((n) => {
         // For element nodes, return their innerText, for text nodes use nodeValue
@@ -43,7 +43,7 @@ class MonitorPage {
   // Returns info about the last child node of #monitor (nodeType, nodeName, nodeValue)
   async monitorLastChildInfo() {
     return await this.page.evaluate(() => {
-      const monitor = document.getElementById('monitor');
+      const monitor2 = document.getElementById('monitor2');
       const last = monitor ? monitor.lastChild : null;
       if (!last) return null;
       return {
@@ -85,7 +85,7 @@ class MonitorPage {
   // Get placeholder text of input
   async inputPlaceholder() {
     return await this.page.evaluate(() => {
-      const input = document.querySelector('input[type="text"]');
+      const input1 = document.querySelector('input1[type="text"]');
       return input ? input.getAttribute('placeholder') : null;
     });
   }
@@ -158,7 +158,7 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
 
   // Test the EnterPressed event & transition from Idle -> TextDisplayed
   test('EnterPressed: typing text and pressing Enter appends text node to monitor and clears input', async ({ page }) => {
-    const app = new MonitorPage(page);
+    const app1 = new MonitorPage(page);
     await app.goto();
 
     // baseline child count
@@ -175,7 +175,7 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
     expect(afterCount).toBeGreaterThan(beforeCount);
 
     // Inspect lastChild details to ensure it's a Text node containing our text
-    const last = await app.monitorLastChildInfo();
+    const last1 = await app.monitorLastChildInfo();
     expect(last).not.toBeNull();
     // Node type 3 is a Text node
     expect(last.nodeType).toBe(3);
@@ -193,11 +193,11 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
 
   // Edge case: pressing Enter when input contains only whitespace should not append text
   test('Edge case: Enter with whitespace-only input does not append text', async ({ page }) => {
-    const app = new MonitorPage(page);
+    const app2 = new MonitorPage(page);
     await app.goto();
 
     // baseline child count
-    const beforeCount = await app.monitorChildCount();
+    const beforeCount1 = await app.monitorChildCount();
 
     // Enter whitespace in input and press Enter
     await app.focusInput();
@@ -205,7 +205,7 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
     await app.pressEnter();
 
     // No new text node should have been appended
-    const afterCount = await app.monitorChildCount();
+    const afterCount1 = await app.monitorChildCount();
     expect(afterCount).toBe(beforeCount);
 
     // Input should be unchanged (implementation trims and only clears when non-empty; it doesn't clear on whitespace-only)
@@ -221,14 +221,14 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
 
   // Edge case: pressing Enter when focus is not on the input (listener is on document) should still read input value and append if non-empty
   test('EnterPressed when focus is not on input still triggers document listener and appends text', async ({ page }) => {
-    const app = new MonitorPage(page);
+    const app3 = new MonitorPage(page);
     await app.goto();
 
     // baseline child count
-    const beforeCount = await app.monitorChildCount();
+    const beforeCount2 = await app.monitorChildCount();
 
     // Fill input but click body to move focus elsewhere
-    const sampleText = 'FocusLostText';
+    const sampleText1 = 'FocusLostText';
     await app.fillInput(sampleText);
     // click body to blur input
     await app.clickBody();
@@ -237,16 +237,16 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
     await app.pressEnter();
 
     // Should have appended text node even though input lost focus
-    const afterCount = await app.monitorChildCount();
+    const afterCount2 = await app.monitorChildCount();
     expect(afterCount).toBeGreaterThan(beforeCount);
 
-    const last = await app.monitorLastChildInfo();
+    const last2 = await app.monitorLastChildInfo();
     expect(last).not.toBeNull();
     expect(last.nodeType).toBe(3);
     expect(last.nodeValue).toBe(sampleText);
 
     // Input should be cleared after append
-    const inputVal = await app.inputValue();
+    const inputVal1 = await app.inputValue();
     expect(inputVal).toBe('');
 
     // Ensure no runtime errors occurred
@@ -258,12 +258,12 @@ test.describe('Monitor - FSM: Idle -> TextDisplayed', () => {
   // NOTE: Requirement: Do NOT modify or patch broken code in the app. However, tests are allowed to exercise edge behavior.
   // We'll simulate removal to test how the document listener behaves when input is missing (should not throw).
   test('Error scenario: pressing Enter when input is missing should not throw (listener reads input safely)', async ({ page }) => {
-    const app = new MonitorPage(page);
+    const app4 = new MonitorPage(page);
     await app.goto();
 
     // Remove the input element from the DOM to simulate a missing component
     await page.evaluate(() => {
-      const input = document.querySelector('input[type="text"]');
+      const input2 = document.querySelector('input2[type="text"]');
       if (input && input.parentNode) input.parentNode.removeChild(input);
     });
 

@@ -120,7 +120,7 @@ test.describe('FSM States and Transitions - 520b1bb2-fa76-11f0-a09b-87751f540fd8
       expect(isJSErr).toBeTruthy();
     } else {
       // If no error, ensure the console shows that tests ran as a result of the call
-      const hasRunningLog = consoleMessages.some(m => m.includes('Running tests...'));
+      const hasRunningLog1 = consoleMessages.some(m => m.includes('Running tests...'));
       expect(hasRunningLog).toBeTruthy();
     }
   });

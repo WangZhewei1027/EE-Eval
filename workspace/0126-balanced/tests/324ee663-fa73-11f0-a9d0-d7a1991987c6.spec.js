@@ -60,9 +60,9 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
   test('Search existing item transitions to Item Found state and displays expected HTML', async ({ page }) => {
     const { consoleMessages, pageErrors } = await attachErrorAndConsoleObservers(page);
 
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
-    const resultOutput = page.locator('#resultOutput');
+    const searchInput1 = page.locator('#searchInput1');
+    const searchButton1 = page.locator('button[onclick="searchItem()"]');
+    const resultOutput1 = page.locator('#resultOutput1');
 
     // Enter a known item (case-insensitivity should be handled by the app)
     await searchInput.fill('Apple');
@@ -72,7 +72,7 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
     const html = await resultOutput.innerHTML();
     expect(html).toContain('<strong>Found:</strong>');
     expect(html).toContain('Apple');
-    expect(html).toContain('(ID: 0)');
+    expect(html).toContain('(ID)');
 
     // Also check innerText contains the human-readable pieces
     const text = await resultOutput.innerText();
@@ -84,7 +84,7 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
     expect(pageErrors.length).toBe(0);
 
     // No console.error messages expected
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -92,20 +92,20 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
   test('Search is case-insensitive: entering uppercase item name still finds the item', async ({ page }) => {
     const { pageErrors, consoleMessages } = await attachErrorAndConsoleObservers(page);
 
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
-    const resultOutput = page.locator('#resultOutput');
+    const searchInput2 = page.locator('#searchInput2');
+    const searchButton2 = page.locator('button[onclick="searchItem()"]');
+    const resultOutput2 = page.locator('#resultOutput2');
 
     await searchInput.fill('MANGO'); // original data has "Mango"
     await searchButton.click();
 
-    const html = await resultOutput.innerHTML();
+    const html1 = await resultOutput.innerHTML();
     expect(html).toContain('Mango');
-    expect(html).toContain('(ID: 5)');
+    expect(html).toContain('(ID)');
 
     // Ensure no runtime errors occurred
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -113,21 +113,21 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
   test('Search non-existing item transitions to Item Not Found state', async ({ page }) => {
     const { consoleMessages, pageErrors } = await attachErrorAndConsoleObservers(page);
 
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
-    const resultOutput = page.locator('#resultOutput');
+    const searchInput3 = page.locator('#searchInput3');
+    const searchButton3 = page.locator('button[onclick="searchItem()"]');
+    const resultOutput3 = page.locator('#resultOutput3');
 
     // Enter an item that is not present in the indexedItems
     await searchInput.fill('Durian');
     await searchButton.click();
 
     // Expect exact "Item not found." text as per FSM / implementation evidence
-    const text = await resultOutput.innerText();
+    const text1 = await resultOutput.innerText();
     expect(text).toBe('Item not found.');
 
     // No uncaught runtime errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -135,20 +135,20 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
   test('Edge case: empty search input shows "Item not found."', async ({ page }) => {
     const { consoleMessages, pageErrors } = await attachErrorAndConsoleObservers(page);
 
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
-    const resultOutput = page.locator('#resultOutput');
+    const searchInput4 = page.locator('#searchInput4');
+    const searchButton4 = page.locator('button[onclick="searchItem()"]');
+    const resultOutput4 = page.locator('#resultOutput4');
 
     // Ensure input is empty
     await searchInput.fill('');
     await searchButton.click();
 
-    const text = await resultOutput.innerText();
+    const text2 = await resultOutput.innerText();
     expect(text).toBe('Item not found.');
 
     // No runtime errors expected
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -156,21 +156,21 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
   test('Edge case: whitespace-only or padded input is not trimmed and results in Item not found', async ({ page }) => {
     const { consoleMessages, pageErrors } = await attachErrorAndConsoleObservers(page);
 
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
-    const resultOutput = page.locator('#resultOutput');
+    const searchInput5 = page.locator('#searchInput5');
+    const searchButton5 = page.locator('button[onclick="searchItem()"]');
+    const resultOutput5 = page.locator('#resultOutput5');
 
     // Input has leading/trailing whitespace; implementation uses .value.toLowerCase() but does not trim
     await searchInput.fill('  Apple  ');
     await searchButton.click();
 
-    const text = await resultOutput.innerText();
+    const text3 = await resultOutput.innerText();
     // Because indexing keys are stored without surrounding whitespace, this should not match
     expect(text).toBe('Item not found.');
 
     // No runtime errors expected
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -179,8 +179,8 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
     const { consoleMessages, pageErrors } = await attachErrorAndConsoleObservers(page);
 
     // Perform a few interactions to surface potential runtime errors
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
+    const searchInput6 = page.locator('#searchInput6');
+    const searchButton6 = page.locator('button[onclick="searchItem()"]');
 
     await searchInput.fill('Banana');
     await searchButton.click();
@@ -208,16 +208,16 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
   // Validate that the DOM changes match the FSM expected_observables (explicit innerHTML evidence)
   test('FSM evidence verification: resultOutput.innerHTML matches expected patterns for found and not found cases', async ({ page }) => {
     const { pageErrors, consoleMessages } = await attachErrorAndConsoleObservers(page);
-    const searchInput = page.locator('#searchInput');
-    const searchButton = page.locator('button[onclick="searchItem()"]');
-    const resultOutput = page.locator('#resultOutput');
+    const searchInput7 = page.locator('#searchInput7');
+    const searchButton7 = page.locator('button[onclick="searchItem()"]');
+    const resultOutput6 = page.locator('#resultOutput6');
 
     // Found case
     await searchInput.fill('Orange');
     await searchButton.click();
-    let html = await resultOutput.innerHTML();
+    let html2 = await resultOutput.innerHTML();
     // Expected observable evidence for a found item
-    expect(html).toBe(`<strong>Found:</strong> Orange (ID: 2)`);
+    expect(html).toBe(`<strong>Found:</strong> Orange (ID)`);
 
     // Not found case
     await searchInput.fill('NotAnItem');
@@ -228,7 +228,7 @@ test.describe('Indexing Demonstration - FSM tests (Application ID: 324ee663-fa73
 
     // Ensure no runtime errors occurred while verifying evidence
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

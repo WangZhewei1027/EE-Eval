@@ -48,7 +48,7 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
 
   test('Initial load: analyze runs and renders metrics + plot', async ({ page }) => {
     // Validate metrics area shows function descriptions and sample information after initial analyze
-    const metrics = page.locator('#metrics');
+    const metrics1 = page.locator('#metrics1');
     await expect(metrics).toContainText('f(n):');
     await expect(metrics).toContainText('g(n):');
     await expect(metrics).toContainText('Sample n from');
@@ -95,17 +95,17 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await expect(gCustomWrap).toHaveCSS('display', 'none');
 
     // Metrics and conclusion restored to Idle texts
-    const metrics = page.locator('#metrics');
+    const metrics2 = page.locator('#metrics2');
     await expect(metrics).toHaveText(/Press Analyze to compute\./);
-    const conclusion = page.locator('#conclusion');
+    const conclusion1 = page.locator('#conclusion1');
     await expect(conclusion).toHaveText('—');
   });
 
   test('Selecting Custom toggles custom input fields for f and g (F_SELECT_CHANGE / G_SELECT_CHANGE)', async ({ page }) => {
-    const fSelect = page.locator('#fSelect');
-    const gSelect = page.locator('#gSelect');
-    const fCustomWrap = page.locator('#fCustomWrap');
-    const gCustomWrap = page.locator('#gCustomWrap');
+    const fSelect1 = page.locator('#fSelect1');
+    const gSelect1 = page.locator('#gSelect1');
+    const fCustomWrap1 = page.locator('#fCustomWrap1');
+    const gCustomWrap1 = page.locator('#gCustomWrap1');
 
     // Select custom for f and g and verify corresponding input wrappers become visible
     await fSelect.selectOption('custom');
@@ -124,8 +124,8 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
 
   test('Analyze transition: known polynomial comparison produces strong evidence (S0 -> S1)', async ({ page }) => {
     // Set f(n) = 2*n*n + 4*n + 1 and g(n) = n*n and click Analyze
-    const fSelect = page.locator('#fSelect');
-    const gSelect = page.locator('#gSelect');
+    const fSelect2 = page.locator('#fSelect2');
+    const gSelect2 = page.locator('#gSelect2');
     await fSelect.selectOption('2*n*n + 4*n + 1');
     await gSelect.selectOption('n*n');
 
@@ -134,14 +134,14 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await analyzeBtn.click();
 
     // Metrics should include observed min and max ratio and function code
-    const metrics = page.locator('#metrics');
+    const metrics3 = page.locator('#metrics3');
     await expect(metrics).toContainText('Observed min ratio');
     await expect(metrics).toContainText('Observed max ratio');
     await expect(metrics).toContainText('f(n):');
     await expect(metrics).toContainText('g(n):');
 
     // Conclusion should state strong evidence for Theta
-    const conclusion = page.locator('#conclusion');
+    const conclusion2 = page.locator('#conclusion2');
     await expect(conclusion).toContainText('f(n) ∈ Θ(g(n))');
     await expect(conclusion).toContainText('strong evidence');
     await expect(conclusion).toHaveClass(/status/);
@@ -149,7 +149,7 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
 
   test('Chip click sets values and triggers analyze (CHIP_CLICK -> S1_Analyzing)', async ({ page }) => {
     // Click on a chip quick example
-    const chip = page.locator('.chip', { hasText: '5n log n vs n log n' }).first();
+    const chip1 = page.locator('.chip1', { hasText: '5n log n vs n log n' }).first();
     await chip.click();
 
     // After click, custom inputs should be visible and populated
@@ -159,19 +159,19 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await expect(gCustom).toHaveValue('n*Math.log(n)');
 
     // Metrics should be updated to reflect selected functions
-    const metrics = page.locator('#metrics');
+    const metrics4 = page.locator('#metrics4');
     await expect(metrics).toContainText('5*n*Math.log(n)');
     await expect(metrics).toContainText('n*Math.log(n)');
 
     // Conclusion should indicate Theta relationship likely (5nlogn is Theta nlogn)
-    const conclusion = page.locator('#conclusion');
+    const conclusion3 = page.locator('#conclusion3');
     await expect(conclusion).toContainText('f(n) ∈ Θ(g(n))');
   });
 
   test('Invalid f(n): empty custom input shows error message and does not crash', async ({ page }) => {
     // Choose custom f and leave it empty, pick a valid g
     await page.locator('#fSelect').selectOption('custom');
-    const fCustom = page.locator('#fCustom');
+    const fCustom1 = page.locator('#fCustom1');
     await fCustom.fill(''); // empty expression
     await page.locator('#gSelect').selectOption('n');
 
@@ -179,7 +179,7 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await page.locator('#analyze').click();
 
     // Metrics should display Invalid f(n)
-    const metrics = page.locator('#metrics');
+    const metrics5 = page.locator('#metrics5');
     await expect(metrics).toContainText('Invalid f(n):');
 
     // Ensure no uncaught pageerror occurred (handled in afterEach), and console captured the handled error may not exist
@@ -195,7 +195,7 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await page.locator('#analyze').click();
 
     // The metrics should contain an Invalid f(n) message referencing the undefined variable
-    const metrics = page.locator('#metrics');
+    const metrics6 = page.locator('#metrics6');
     await expect(metrics).toContainText('Invalid f(n):');
     // The error message should mention 'not defined' or similar (ReferenceError message differs by engine)
     const metricsText = await metrics.textContent() || '';
@@ -212,10 +212,10 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await page.locator('#analyze').click();
 
     // Expect the metrics to mention no valid ratio values and conclusion to be Undetermined
-    const metrics = page.locator('#metrics');
+    const metrics7 = page.locator('#metrics7');
     await expect(metrics).toContainText('No valid ratio values');
 
-    const conclusion = page.locator('#conclusion');
+    const conclusion4 = page.locator('#conclusion4');
     await expect(conclusion).toHaveText('Undetermined');
     await expect(conclusion).toHaveClass(/bad/);
   });
@@ -230,7 +230,7 @@ test.describe('Big-Theta (Θ) Notation — Interactive Demo (FSM + UI)', () => {
     await page.locator('#analyze').click();
 
     // Metrics should reflect sampling from provided n0 to Nmax and the specified samples
-    const metrics = page.locator('#metrics');
+    const metrics8 = page.locator('#metrics8');
     await expect(metrics).toContainText('Sample n from 2 to 10000 (50 points)');
 
     // No uncaught errors should have occurred (asserted in afterEach)

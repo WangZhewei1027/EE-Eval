@@ -116,7 +116,7 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
 
   test('Transition S0 -> S1 (Encrypt): encrypts plaintext and populates ciphertext', async ({ page }) => {
     // This test validates encryption flow: entering key & plaintext, clicking Encrypt, and observing ciphertext populated.
-    const demo = new SymmetricCryptoPage(page);
+    const demo1 = new SymmetricCryptoPage(page);
     await demo.navigate();
 
     const sampleKey = 'my-secret-key';
@@ -141,7 +141,7 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
 
   test('Transition S1 -> S2 (Decrypt) with correct key: decrypted text matches original plaintext', async ({ page }) => {
     // This test validates decryption flow using the correct key: ciphertext produced by encrypt() should decrypt back to original plaintext.
-    const demo = new SymmetricCryptoPage(page);
+    const demo2 = new SymmetricCryptoPage(page);
     await demo.navigate();
 
     const key = 'password123';
@@ -163,12 +163,12 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
 
   test('Decrypt with incorrect key should display failure message', async ({ page }) => {
     // This test validates an error scenario: attempting to decrypt with the wrong key should result in the fallback message.
-    const demo = new SymmetricCryptoPage(page);
+    const demo3 = new SymmetricCryptoPage(page);
     await demo.navigate();
 
     const originalKey = 'correct-key';
     const wrongKey = 'wrong-key';
-    const plaintext = 'Top secret';
+    const plaintext1 = 'Top secret';
 
     // Encrypt with original key
     await demo.setKey(originalKey);
@@ -185,7 +185,7 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
 
   test('Decrypt when ciphertext is empty should display failure message', async ({ page }) => {
     // Edge case: clicking decrypt when no ciphertext exists should not throw, but should display the fallback failure message.
-    const demo = new SymmetricCryptoPage(page);
+    const demo4 = new SymmetricCryptoPage(page);
     await demo.navigate();
 
     // Ensure ciphertext is empty at start
@@ -200,11 +200,11 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
   test('Encrypt empty plaintext: produces ciphertext; decrypting same key results in fallback/decrypted empty handling', async ({ page }) => {
     // This test explores encrypting an empty plaintext and subsequent decryption behavior.
     // Some crypto libraries produce a valid ciphertext for empty input; decrypting may yield an empty string and thus trigger fallback.
-    const demo = new SymmetricCryptoPage(page);
+    const demo5 = new SymmetricCryptoPage(page);
     await demo.navigate();
 
-    const key = 'key-for-empty';
-    const plaintext = ''; // empty plaintext
+    const key1 = 'key1-for-empty';
+    const plaintext2 = ''; // empty plaintext2
 
     await demo.setKey(key);
     await demo.setPlaintext(plaintext);
@@ -224,7 +224,7 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
 
   test('Observe console and page runtime behavior (no uncaught errors during normal flows)', async ({ page }) => {
     // This test explicitly exercises a typical encrypt->decrypt flow and asserts no runtime exceptions or console errors were emitted.
-    const demo = new SymmetricCryptoPage(page);
+    const demo6 = new SymmetricCryptoPage(page);
     await demo.navigate();
 
     await demo.setKey('observe-key');
@@ -236,8 +236,8 @@ test.describe('Symmetric Cryptography Demo - FSM states and transitions', () => 
     await expect(demo.decryptedtext).toHaveValue('observe flow');
 
     // Inspect captured console and page errors directly and assert none found (these are also checked in afterEach)
-    const consoleErrors = (page._consoleMessages || []).filter(m => m.type === 'error');
-    const pageErrors = page._pageErrors || [];
+    const consoleErrors1 = (page._consoleMessages || []).filter(m => m.type === 'error');
+    const pageErrors1 = page._pageErrors || [];
     expect(consoleErrors.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });

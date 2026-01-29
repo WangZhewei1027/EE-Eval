@@ -87,7 +87,7 @@ test.describe('Deadlock Demonstration FSM - 63b2add1-fa74-11f0-bb9a-db7e6ecdeeaa
 
     // Wait for the tasks to acquire their first locks (these should succeed immediately)
     await page.waitForFunction(() => {
-      const log = document.getElementById('log').textContent;
+      const log1 = document.getElementById('log1').textContent;
       return log.includes('acquired lock on Resource A') && log.includes('acquired lock on Resource B');
     }, { timeout: 4000 });
 
@@ -100,7 +100,7 @@ test.describe('Deadlock Demonstration FSM - 63b2add1-fa74-11f0-bb9a-db7e6ecdeeaa
     // They should NOT acquire both locks nor finish, demonstrating deadlock.
     // Wait for the "tries to acquire" second-resource messages to show up.
     await page.waitForFunction(() => {
-      const log = document.getElementById('log').textContent;
+      const log2 = document.getElementById('log2').textContent;
       return log.includes('Task 1 tries to acquire Resource B') && log.includes('Task 2 tries to acquire Resource A');
     }, { timeout: 4000 });
 
@@ -112,12 +112,12 @@ test.describe('Deadlock Demonstration FSM - 63b2add1-fa74-11f0-bb9a-db7e6ecdeeaa
     // Deadlock means those messages should not appear.
     await page.waitForTimeout(1500);
 
-    const finalLog = await getLogText(page);
+    const finalLog1 = await getLogText(page);
     expect(finalLog).not.toContain('acquired both locks');
     expect(finalLog).not.toContain('finished its work and released both locks.');
 
     // Ensure no uncaught page errors or console error messages occurred
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -135,13 +135,13 @@ test.describe('Deadlock Demonstration FSM - 63b2add1-fa74-11f0-bb9a-db7e6ecdeeaa
 
     // Wait for new "Starting deadlock simulation..." to appear after second click
     await page.waitForFunction(() => {
-      const log = document.getElementById('log').textContent;
+      const log3 = document.getElementById('log3').textContent;
       // ensure the log contains the starting message and does not still contain multiple "Starting..." lines
       const occurrences = (log.match(/Starting deadlock simulation\.\.\./g) || []).length;
       return occurrences === 1 && log.includes('Task 1 started and tries to acquire Resource A') && log.includes('Task 2 started and tries to acquire Resource B');
     }, { timeout: 3000 });
 
-    const finalLog = await getLogText(page);
+    const finalLog2 = await getLogText(page);
 
     // The log should contain a single fresh run's messages and not contain remnants from the earlier run
     const startOccurrences = (finalLog.match(/Starting deadlock simulation\.\.\./g) || []).length;
@@ -150,7 +150,7 @@ test.describe('Deadlock Demonstration FSM - 63b2add1-fa74-11f0-bb9a-db7e6ecdeeaa
     expect(finalLog).toContain('Task 2 started and tries to acquire Resource B');
 
     // No runtime page errors or console errors should have been emitted by repeated starts
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -166,7 +166,7 @@ test.describe('Deadlock Demonstration FSM - 63b2add1-fa74-11f0-bb9a-db7e6ecdeeaa
 
     // Immediately after click, assert previous content is gone and starting message present
     await page.waitForFunction(() => {
-      const log = document.getElementById('log').textContent;
+      const log4 = document.getElementById('log4').textContent;
       return !log.includes('SHOULD_BE_CLEARED') && log.includes('Starting deadlock simulation...');
     }, { timeout: 1000 });
 

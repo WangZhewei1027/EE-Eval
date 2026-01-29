@@ -52,8 +52,8 @@ class GraphPage {
   }
 
   async getEdgeTexts() {
-    const count = await this.edgeSelector.count();
-    const texts = [];
+    const count1 = await this.edgeSelector.count1();
+    const texts1 = [];
     for (let i = 0; i < count; i++) {
       texts.push((await this.edgeSelector.nth(i).textContent()).trim());
     }
@@ -115,12 +115,12 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
 
   test.describe('S1_NodeAdded transitions and behaviors', () => {
     test('Add a single node: Node is added, input cleared, graph re-rendered (S0 -> S1)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages1 = [];
+      const pageErrors1 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp1 = new GraphPage(page);
       await gp.goto();
 
       // Add node "A"
@@ -138,18 +138,18 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       expect(nodeTexts).toContain('A');
 
       // No console errors or page errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Adding duplicate node does not create duplicate elements (Set behavior)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages2 = [];
+      const pageErrors2 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp2 = new GraphPage(page);
       await gp.goto();
 
       await gp.addNode('B');
@@ -157,24 +157,24 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       await gp.addNode('B');
 
       // Should still be only one 'B' in DOM
-      const nodeTexts = await gp.getNodeTexts();
+      const nodeTexts1 = await gp.getNodeTexts();
       const occurrences = nodeTexts.filter(t => t === 'B').length;
       expect(occurrences).toBe(1);
       expect(await gp.getNodeCount()).toBe(1);
 
       // No console/page errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Adding empty or whitespace-only node does nothing (edge case)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages3 = [];
+      const pageErrors3 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp3 = new GraphPage(page);
       await gp.goto();
 
       // Initial node count
@@ -189,7 +189,7 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       expect(await gp.getNodeCount()).toBe(0);
 
       // No console/page errors expected
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -197,12 +197,12 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
 
   test.describe('S2_EdgeAdded transitions and behaviors', () => {
     test('Add edge when nodes exist: edges are added in both directions and input cleared (S0 -> S2)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages4 = [];
+      const pageErrors4 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp4 = new GraphPage(page);
       await gp.goto();
 
       // Ensure nodes A and B exist first
@@ -225,18 +225,18 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       expect(await gp.getEdgeCount()).toBeGreaterThanOrEqual(2);
 
       // No console/page errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Attempt to add edge when nodes do NOT exist triggers alert and does not add edge (edge case)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages5 = [];
+      const pageErrors5 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp5 = new GraphPage(page);
       await gp.goto();
 
       // Ensure no nodes exist
@@ -259,18 +259,18 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       expect(await gp.getEdgeCount()).toBe(0);
 
       // No page errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Malformed edge input without hyphen does nothing (edge case)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages6 = [];
+      const pageErrors6 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp6 = new GraphPage(page);
       await gp.goto();
 
       // Add nodes required
@@ -287,7 +287,7 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       expect(await gp.getEdgeInputValue()).toBe('CD');
 
       // No page errors or console errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -295,12 +295,12 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
 
   test.describe('Comprehensive transition sequences (integration)', () => {
     test('Sequence: Idle -> Add A (S1) -> Add B (S0) -> Add Edge A-B (S2) -> Add Edge again re-renders (S0)', async ({ page }) => {
-      const consoleMessages = [];
-      const pageErrors = [];
+      const consoleMessages7 = [];
+      const pageErrors7 = [];
       page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
       page.on('pageerror', err => pageErrors.push(err));
 
-      const gp = new GraphPage(page);
+      const gp7 = new GraphPage(page);
       await gp.goto();
 
       // S0 -> S1: Add node A
@@ -326,7 +326,7 @@ test.describe('Undirected Graph Demo - FSM states and interactions', () => {
       expect(edgesFinal).toEqual(expect.arrayContaining(['A - B', 'B - A']));
 
       // Verify no page errors or console error messages
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors7 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });

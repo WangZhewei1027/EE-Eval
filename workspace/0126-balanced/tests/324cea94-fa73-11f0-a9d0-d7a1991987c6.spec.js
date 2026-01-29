@@ -110,7 +110,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
     expect(heapArrayText).toBe('', 'Expected no heap array text on initial load');
 
     // No heap nodes present
-    const nodes = await heapPage.getHeapNodesTexts();
+    const nodes1 = await heapPage.getHeapNodesTexts();
     expect(nodes.length).toBe(0);
 
     // Assert no uncaught page errors occurred during load
@@ -124,18 +124,18 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
 
   test('DisplayHeapEvent: clicking Display Heap on empty heap should show "Heap Array: []"', async ({ page }) => {
     // Validate transition S0_Idle -> S1_HeapUpdated via DisplayHeapEvent
-    const heapPage = new HeapPage(page);
+    const heapPage1 = new HeapPage(page);
     await heapPage.goto();
 
     // Click display without inserting anything
     await heapPage.clickDisplayHeap();
 
     // After display(), expect the heap array to show an empty array format
-    const heapArrayText = await heapPage.getHeapArrayText();
+    const heapArrayText1 = await heapPage.getHeapArrayText();
     expect(heapArrayText).toBe('Heap Array: []', 'DisplayHeap should show empty heap as []');
 
     // No nodes in container
-    const nodes = await heapPage.getHeapNodesTexts();
+    const nodes2 = await heapPage.getHeapNodesTexts();
     expect(nodes.length).toBe(0);
 
     // Check no page errors from display action
@@ -144,7 +144,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
 
   test('InsertEvent: inserting numbers updates heap and displays nodes in min-heap order', async ({ page }) => {
     // Validate S0_Idle -> S1_HeapUpdated via InsertEvent multiple times and DOM updates
-    const heapPage = new HeapPage(page);
+    const heapPage2 = new HeapPage(page);
     await heapPage.goto();
 
     // Insert 5
@@ -154,7 +154,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
     // After first insert
     let heapText = await heapPage.getHeapArrayText();
     expect(heapText).toBe('Heap Array: [5]');
-    let nodes = await heapPage.getHeapNodesTexts();
+    let nodes3 = await heapPage.getHeapNodesTexts();
     expect(nodes).toEqual(['5']);
 
     // Insert 3
@@ -187,7 +187,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
 
   test('RemoveMinEvent: removing min shows alert and updates heap accordingly', async ({ page }) => {
     // Validate S0_Idle -> S1_HeapUpdated via RemoveMinEvent and that onEnter minHeap.display() updated DOM
-    const heapPage = new HeapPage(page);
+    const heapPage3 = new HeapPage(page);
     await heapPage.goto();
 
     // Setup heap by inserting numbers 10, 4, 7
@@ -199,9 +199,9 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
     await heapPage.clickInsert();
 
     // Confirm heap state before removal: bubble results => [4,10,7]
-    let heapText = await heapPage.getHeapArrayText();
+    let heapText1 = await heapPage.getHeapArrayText();
     expect(heapText).toBe('Heap Array: [4, 10, 7]');
-    let nodes = await heapPage.getHeapNodesTexts();
+    let nodes4 = await heapPage.getHeapNodesTexts();
     expect(nodes).toEqual(['4', '10', '7']);
 
     // Click removeMin and capture alert message
@@ -220,13 +220,13 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
 
   test('Edge case: inserting non-numeric value should not change heap and input should remain', async ({ page }) => {
     // Validate that invalid input is ignored (no insertion) and heap remains unchanged
-    const heapPage = new HeapPage(page);
+    const heapPage4 = new HeapPage(page);
     await heapPage.goto();
 
     // Insert initial valid number to have baseline state
     await heapPage.setInput(2);
     await heapPage.clickInsert();
-    let heapText = await heapPage.getHeapArrayText();
+    let heapText2 = await heapPage.getHeapArrayText();
     expect(heapText).toBe('Heap Array: [2]');
 
     // Try to insert an invalid string
@@ -247,11 +247,11 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
 
   test('Edge case: RemoveMinEvent on empty heap yields undefined removal and appropriate alert', async ({ page }) => {
     // Validate behavior when removing from empty heap - should notify Removed Min: undefined
-    const heapPage = new HeapPage(page);
+    const heapPage5 = new HeapPage(page);
     await heapPage.goto();
 
     // Ensure heap is empty initially
-    let heapText = await heapPage.getHeapArrayText();
+    let heapText3 = await heapPage.getHeapArrayText();
     // Could be empty string if display hasn't been called; call display to normalize
     if (!heapText || heapText.trim() === '') {
       await heapPage.clickDisplayHeap();
@@ -260,7 +260,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
     expect(heapText).toBe('Heap Array: []');
 
     // Click removeMin on empty heap
-    const dialogMsg = await heapPage.clickRemoveMin();
+    const dialogMsg1 = await heapPage.clickRemoveMin();
     expect(dialogMsg).toBe('Removed Min: undefined');
 
     // After attempted removal heap remains empty and display called
@@ -273,7 +273,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
 
   test('Observability: monitor console and page errors during several interactions', async ({ page }) => {
     // This test performs several interactions and asserts that no JS runtime errors (pageerror) occurred.
-    const heapPage = new HeapPage(page);
+    const heapPage6 = new HeapPage(page);
     await heapPage.goto();
 
     // Perform a sequence of interactions
@@ -297,7 +297,7 @@ test.describe('Min Heap Visualization - FSM driven tests', () => {
     expect(errors.length).toBe(0, `Expected no uncaught page errors, but found: ${errors.map(e => String(e)).join('; ')}`);
 
     // Check console for error-level messages and fail if any are present
-    const consoleErrors = heapPage.getConsoleMessages().filter(m => m.type === 'error');
+    const consoleErrors1 = heapPage.getConsoleMessages().filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0, `Expected no console.error messages, but found: ${JSON.stringify(consoleErrors)}`);
   });
 });

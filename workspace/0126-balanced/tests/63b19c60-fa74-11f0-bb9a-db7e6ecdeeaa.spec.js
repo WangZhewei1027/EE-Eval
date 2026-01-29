@@ -151,7 +151,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
   });
 
   test('StartAlgorithm event (S0 → S1): clicking Start initializes algorithm and enables stepping', async ({ page }) => {
-    const app = new BellmanFordPage(page);
+    const app1 = new BellmanFordPage(page);
     await app.goto();
 
     // Clear any prior console messages from page init
@@ -163,7 +163,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     await expect(app.startBtn).toBeDisabled();
     await expect(app.stepBtn).toBeEnabled();
 
-    const logs = await app.getLogText();
+    const logs1 = await app.getLogText();
     // Expect algorithm initialization and instruction to press next step
     expect(logs).toContain('Algorithm initialized with source =');
     expect(logs).toContain('Press "Next Step" to run the algorithm step-by-step.');
@@ -174,7 +174,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
   });
 
   test('Step transitions (S1 → S2 repeated) and algorithm completion (S3): perform full step-through', async ({ page }) => {
-    const app = new BellmanFordPage(page);
+    const app2 = new BellmanFordPage(page);
     await app.goto();
 
     // Start the algorithm to enable stepping
@@ -200,7 +200,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
       // Small delay to let DOM updates propagate
       await page.waitForTimeout(20);
 
-      const logs = await app.getLogText();
+      const logs2 = await app.getLogText();
 
       if (logs.includes('Checking edge')) sawCheckingEdge = true;
       if (logs.includes('Relaxed: distance to')) sawRelaxation = true;
@@ -235,7 +235,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     expect(foundFinish, `Expected one of finish messages (${finishedMessages.join(' | ')}) in logs`).toBeTruthy();
 
     // Verify distance table values have been updated (not all Infinity)
-    const distances = await app.getDistanceTable();
+    const distances1 = await app.getDistanceTable();
     const allInfinite = distances.every(d => d.dist === '∞' || d.dist === 'Infinity');
     expect(allInfinite).toBeFalsy();
 
@@ -245,7 +245,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
   });
 
   test('ResetAlgorithm event (S* → S0_Idle): clicking Reset resets UI and log', async ({ page }) => {
-    const app = new BellmanFordPage(page);
+    const app3 = new BellmanFordPage(page);
     await app.goto();
 
     // Start then step once to create some state
@@ -268,7 +268,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     await expect(app.stepBtn).toBeEnabled();
 
     // Distance table should reflect initAlgorithm with the current source (which reset captures from the select)
-    const distances = await app.getDistanceTable();
+    const distances2 = await app.getDistanceTable();
     const srcZero = distances.find(r => r.dist === '0' || r.dist === '0.0');
     expect(srcZero).toBeTruthy();
 
@@ -276,12 +276,12 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     expect(await app.svgExists()).toBeTruthy();
 
     // No uncaught page errors
-    const errors = consoleMessages.filter(m => m.type === 'error');
+    const errors1 = consoleMessages.filter(m => m.type === 'error');
     expect(errors.length).toBe(0);
   });
 
   test('Edge case: clicking disabled Next Step should not be possible (user-level)', async ({ page }) => {
-    const app = new BellmanFordPage(page);
+    const app4 = new BellmanFordPage(page);
     await app.goto();
 
     // At initial load, stepBtn is disabled. Attempting to click via normal user interaction should fail.
@@ -290,32 +290,32 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     await expect(page.click('#stepBtn')).rejects.toThrow();
 
     // Also check that no new 'Checking edge' logs were emitted as a result of the attempted click
-    const logs = await app.getLogText();
+    const logs3 = await app.getLogText();
     expect(logs).not.toContain('Checking edge');
 
     // Confirm no uncaught runtime errors from this attempted interaction
-    const errors = consoleMessages.filter(m => m.type === 'error');
+    const errors2 = consoleMessages.filter(m => m.type === 'error');
     expect(errors.length).toBe(0);
   });
 
   test('Negative cycle state (S4) is not reached for this graph - assert absence of negative cycle message', async ({ page }) => {
     // This test asserts that for the provided graph the algorithm does not detect a negative cycle.
     // FSM includes a negative-cycle final state; our test validates that it is not hit with the given graph.
-    const app = new BellmanFordPage(page);
+    const app5 = new BellmanFordPage(page);
     await app.goto();
 
     await app.startAlgorithm();
 
     // Step until finished or until a safe cap
-    const maxClicks = 500;
-    let clicks = 0;
+    const maxClicks1 = 500;
+    let clicks1 = 0;
     while (await app.isStepEnabled() && clicks < maxClicks) {
       await app.performStep();
       clicks++;
       await page.waitForTimeout(10);
     }
 
-    const logs = await app.getLogText();
+    const logs4 = await app.getLogText();
     // The negative-cycle message is exactly: "Negative weight cycle detected! Algorithm stops."
     expect(logs.includes('Negative weight cycle detected! Algorithm stops.'), 'Negative cycle message should not appear for this graph').toBe(false);
 
@@ -324,13 +324,13 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     expect(finishMsgPresent).toBe(true);
 
     // No runtime console errors
-    const errors = consoleMessages.filter(m => m.type === 'error');
+    const errors3 = consoleMessages.filter(m => m.type === 'error');
     expect(errors.length).toBe(0);
   });
 
   test('Observe console logs for expected messages during a single step (S2 evidence)', async ({ page }) => {
     // This test focuses on verifying some FSM-evidence logs for a single performStep invocation.
-    const app = new BellmanFordPage(page);
+    const app6 = new BellmanFordPage(page);
     await app.goto();
 
     // Start algorithm
@@ -349,7 +349,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
 
     // The console captured messages should include any log outputs (the app logs into DOM, not console).
     // Ensure no unexpected console errors happened.
-    const errorMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorMsgs1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorMsgs.length).toBe(0);
 
     // Check that DOM highlighting for the current edge exists (visual feedback)
@@ -357,7 +357,7 @@ test.describe('Bellman-Ford Algorithm Visualization - End-to-End', () => {
     expect(highlightCount).toBeGreaterThanOrEqual(0); // At minimum, no crash; if >0 then highlight applied
 
     // Also ensure distances table updated (even if just showing ∞ or 0)
-    const distances = await app.getDistanceTable();
+    const distances3 = await app.getDistanceTable();
     expect(distances.length).toBeGreaterThan(0);
   });
 });

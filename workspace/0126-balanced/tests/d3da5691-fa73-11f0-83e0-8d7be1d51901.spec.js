@@ -91,7 +91,7 @@ class BooksApp {
     await this.btnReset.click();
     // reset clears log and lastResp
     await this.page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log1 = document.getElementById('log1');
       const last = document.getElementById('lastResp');
       return log && log.children.length === 0 && last && last.textContent.trim() === '';
     });
@@ -202,13 +202,13 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
     expect(logCount).toBeGreaterThanOrEqual(1);
 
     // lastResp should include "HTTP 200" for the initial GET
-    const last = await app.readLastRespText();
+    const last1 = await app.readLastRespText();
     expect(last).toContain('RESPONSE: HTTP 200');
   });
 
   test.describe('Create / Read / Update / Delete flows', () => {
     test('CreateBook (S1_BookCreated) - create a new book and verify DB & response', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app1 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       const before = await app.readDBJSON();
@@ -220,7 +220,7 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
       await app.createBook(title, author);
 
       // lastResp should show HTTP 201 and the created title
-      const last = await app.readLastRespText();
+      const last2 = await app.readLastRespText();
       expect(last).toContain('RESPONSE: HTTP 201');
       expect(last).toContain(title);
       expect(last).toContain(author);
@@ -234,28 +234,28 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
     });
 
     test('CreateSampleBook (S1_BookCreated) - create a sample book and ensure DB grows', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app2 = new BooksApp(page);
       await app.waitForInitialLoad();
 
-      const before = await app.readDBJSON();
+      const before1 = await app.readDBJSON();
       await app.createSampleBook();
 
-      const after = await app.readDBJSON();
+      const after1 = await app.readDBJSON();
       expect(after.books.length).toBeGreaterThan(before.books.length);
 
       // lastResp should contain HTTP 201
-      const last = await app.readLastRespText();
+      const last3 = await app.readLastRespText();
       expect(last).toContain('RESPONSE: HTTP 201');
     });
 
     test('ListBooks (S2_BookListed) - query list endpoint and validate response meta', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app3 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // search for 'REST' which should match seeded "REST in Practice"
       await app.listBooks({ q: 'REST', page: 1, limit: 5 });
 
-      const last = await app.readLastRespText();
+      const last4 = await app.readLastRespText();
       // Expect HTTP 200 and meta object visible in response body
       expect(last).toContain('RESPONSE: HTTP 200');
       expect(last).toContain('"meta"');
@@ -263,7 +263,7 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
     });
 
     test('GetSingleBook (S3_SingleBookFetched) - fetch a single existing book by id', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app4 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // pick the first book id from dbView
@@ -272,7 +272,7 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
       const id = db.books[0].id;
 
       await app.getSingle(id);
-      const last = await app.readLastRespText();
+      const last5 = await app.readLastRespText();
       expect(last).toContain(`REQUEST: GET /books/${id}`);
       expect(last).toContain('RESPONSE: HTTP 200');
       // Response body should include links.self
@@ -281,49 +281,49 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
     });
 
     test('UpdateBook (PUT - S4_BookUpdated) - replace an existing book', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app5 = new BooksApp(page);
       await app.waitForInitialLoad();
 
-      const db = await app.readDBJSON();
-      const id = db.books[0].id;
+      const db1 = await app.readDBJSON();
+      const id1 = db.books[0].id1;
       const newTitle = 'PUT Replaced Title';
       const newAuthor = 'PUT Author';
 
       await app.putBook(id, newTitle, newAuthor);
 
-      const last = await app.readLastRespText();
+      const last6 = await app.readLastRespText();
       expect(last).toContain('RESPONSE: HTTP 200');
       expect(last).toContain(newTitle);
       expect(last).toContain(newAuthor);
 
       // Verify DB view updated for that id
-      const after = await app.readDBJSON();
+      const after2 = await app.readDBJSON();
       const updated = after.books.find(b => b.id === id);
       expect(updated.title).toBe(newTitle);
       expect(updated.author).toBe(newAuthor);
     });
 
     test('PatchBook (PATCH - S4_BookUpdated) - partially update an existing book', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app6 = new BooksApp(page);
       await app.waitForInitialLoad();
 
-      const db = await app.readDBJSON();
-      const id = db.books[0].id;
+      const db2 = await app.readDBJSON();
+      const id2 = db.books[0].id2;
       const patchedTitle = 'Partially Patched Title';
 
       await app.patchBook(id, { title: patchedTitle });
 
-      const last = await app.readLastRespText();
+      const last7 = await app.readLastRespText();
       expect(last).toContain('RESPONSE: HTTP 200');
       expect(last).toContain(patchedTitle);
 
-      const after = await app.readDBJSON();
+      const after3 = await app.readDBJSON();
       const patched = after.books.find(b => b.id === id);
       expect(patched.title).toBe(patchedTitle);
     });
 
     test('DeleteBook (DELETE - S5_BookDeleted) - delete an existing book and verify 204', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app7 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // create a temporary book to delete to avoid removing seeded ones
@@ -336,12 +336,12 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
       await app.deleteSingle(temp.id, true);
 
       // lastResp for DELETE returns HTTP 204 or log may reflect it; verify DB no longer contains that id
-      const after = await app.readDBJSON();
-      const found = after.books.find(b => b.id === temp.id);
+      const after4 = await app.readDBJSON();
+      const found1 = after.books.find(b => b.id === temp.id);
       expect(found).toBeUndefined();
 
       // Note: lastResp might show "HTTP 204" or earlier entries; ensure we at least have a recent response indicating deletion
-      const last = await app.readLastRespText();
+      const last8 = await app.readLastRespText();
       // accept both 204 or 200 depending on impl; app uses 204 for successful DELETE
       expect(last).toContain('RESPONSE: HTTP 204');
     });
@@ -349,7 +349,7 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
 
   test.describe('Edge cases and error scenarios', () => {
     test('ResetDB event keeps app in Idle (S0_Idle) and clears UI state', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app8 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // Add an entry to the log so reset will clear it
@@ -361,18 +361,18 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
       await app.resetDB();
 
       // DB should be reset to seeded state (contains seeded title)
-      const db = await app.readDBJSON();
-      const titles = db.books.map(b => b.title);
+      const db3 = await app.readDBJSON();
+      const titles1 = db.books.map(b => b.title);
       expect(titles).toContain('REST in Practice');
 
       // Log should be cleared and lastResp empty
       expect(await app.readLogCount()).toBe(0);
-      const last = await app.readLastRespText();
+      const last9 = await app.readLastRespText();
       expect(last).toBe('');
     });
 
     test('Validation error when creating without title with errorMode=validation returns HTTP 422', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app9 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // Set server error mode to 'validation' so empty title causes 422
@@ -385,31 +385,31 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
 
       // Wait for lastResp to be updated and then assert expected status 422
       await page.waitForFunction(() => document.getElementById('lastResp')?.innerText.includes('HTTP'));
-      const last = await app.readLastRespText();
+      const last10 = await app.readLastRespText();
       expect(last).toContain('RESPONSE: HTTP 422');
       expect(last).toContain('Validation failed');
     });
 
     test('GET non-existent book returns 404', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app10 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // Choose an obviously large id that won't exist
       const missingId = 99999;
       await app.getSingle(missingId);
 
-      const last = await app.readLastRespText();
+      const last11 = await app.readLastRespText();
       expect(last).toContain('RESPONSE: HTTP 404');
       expect(last).toContain('Not Found');
     });
 
     test('PATCH with no fields triggers alert and does not send request (UI validation)', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app11 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // Fill an id but leave other fields empty. The code shows alert('Fill at least one field to PATCH') and returns.
-      const db = await app.readDBJSON();
-      const id = db.books[0].id;
+      const db4 = await app.readDBJSON();
+      const id3 = db.books[0].id3;
       await app.updId.fill(String(id));
       await app.updTitle.fill('');
       await app.updAuthor.fill('');
@@ -428,22 +428,22 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
       expect(sawAlert).toBeTruthy();
 
       // Last response should be unchanged or not reflect a PATCH result; ensure the most recent response does not contain 'PATCH'
-      const last = await app.readLastRespText();
+      const last12 = await app.readLastRespText();
       expect(last).not.toContain('PATCH (partial)'); // lastResp is a generic display; ensure no 'PATCH' marker exists
     });
 
     test('Clear log button empties the request log area', async ({ page }) => {
-      const app = new BooksApp(page);
+      const app12 = new BooksApp(page);
       await app.waitForInitialLoad();
 
       // Ensure there is at least one log entry
       await app.createSampleBook();
-      const before = await app.readLogCount();
+      const before2 = await app.readLogCount();
       expect(before).toBeGreaterThan(0);
 
       // Clear log
       await app.clearLog();
-      const after = await app.readLogCount();
+      const after5 = await app.readLogCount();
       expect(after).toBe(0);
     });
   });
@@ -463,7 +463,7 @@ test.describe('REST API Demo - FSM and UI E2E tests', () => {
   });
 
   test('Sanity: exercise latency control element exists and is displayed in UI', async ({ page }) => {
-    const app = new BooksApp(page);
+    const app13 = new BooksApp(page);
     await app.waitForInitialLoad();
     const latencyText = await app.getLatencyText();
     // The app sets latencyDisplay to "300ms" initially

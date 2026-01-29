@@ -148,7 +148,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
 
   test('Idle state (S0_Idle) when generating with empty array: shows "No steps to display."', async ({ page }) => {
     // This test forces the app into a "no steps" state by providing an empty array and clicking Reset.
-    const app = new TwoPointersPage(page);
+    const app1 = new TwoPointersPage(page);
     await app.goto();
 
     // Clear array input and click reset; app will alert and not generate steps
@@ -160,11 +160,11 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
     expect(visualHtml).toContain('No steps to display.');
 
     // Step status should be 0 / 0 indicating Idle-like state
-    const status = await app.getStepStatusText();
+    const status1 = await app.getStepStatusText();
     expect(status).toMatch(/Step 0 \/ 0/);
 
     // code box should be empty and explanation says to generate steps
-    const code = await app.getCodeText();
+    const code1 = await app.getCodeText();
     expect(code.trim()).toBe('');
 
     const explain = await app.explainBox.textContent();
@@ -176,7 +176,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
 
   test('Generate steps and navigate Next/Prev (S1_StepsGenerated transitions)', async ({ page }) => {
     // Validate generateSteps transition and Next/Prev transitions while paused
-    const app = new TwoPointersPage(page);
+    const app2 = new TwoPointersPage(page);
     await app.goto();
 
     // Ensure we start from a known state; set to twoSum example and regenerate
@@ -187,7 +187,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
     await app.clickReset();
 
     // After generation, step status should show > 0 total steps
-    let status = await app.getStepStatusText();
+    let status2 = await app.getStepStatusText();
     expect(status).toMatch(/Step \d+ \/ \d+/);
     const match = status.match(/Step (\d+) \/ (\d+)/);
     expect(match).not.toBeNull();
@@ -219,7 +219,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
 
   test('Play / Pause transitions (S1 -> S2_Playing -> S3_Paused and back)', async ({ page }) => {
     // Validate play starts animation and advances step index, pause stops it, and play resumes
-    const app = new TwoPointersPage(page);
+    const app3 = new TwoPointersPage(page);
     await app.goto();
 
     // Make the animation faster to keep tests quick
@@ -266,7 +266,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
 
   test('Problem selection changes (PROBLEM_SELECT_CHANGE) and rendering differences', async ({ page }) => {
     // Validate selecting different problems updates UI (targetBox visibility), example arrays, and rendering mode
-    const app = new TwoPointersPage(page);
+    const app4 = new TwoPointersPage(page);
     await app.goto();
 
     // Select containerWater: target box should be hidden and visual should render bars after generating
@@ -281,7 +281,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
     expect(await app.visualHasBars()).toBe(true);
 
     // Code box should contain "maxArea" pseudocode for containerWater
-    const code = await app.getCodeText();
+    const code2 = await app.getCodeText();
     expect(code).toContain('maxArea');
 
     // Select removeDup and generate steps, then verify result text contains Unique count at done
@@ -291,9 +291,9 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
     await app.clickReset();
 
     // Navigate to the final step by clicking Next until status shows last step
-    let status = await app.getStepStatusText();
+    let status3 = await app.getStepStatusText();
     const totalMatch = status.match(/Step \d+ \/ (\d+)/);
-    let total = totalMatch ? Number(totalMatch[1]) : 0;
+    let total1 = totalMatch ? Number(totalMatch[1]) : 0;
     // Click Next (total-1) times to reach the last step (already on 1)
     for (let i = 0; i < total + 2; i++) {
       // safeguard: click Next repeatedly; the app clamps stepIndex inside renderStep
@@ -310,7 +310,7 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
 
   test('Edge cases: non-numeric input produces alert and prevents generation (invalid inputs)', async ({ page }) => {
     // Test alerts for invalid inputs for numeric-only problems (twoSum & removeDup)
-    const app = new TwoPointersPage(page);
+    const app5 = new TwoPointersPage(page);
     await app.goto();
 
     // Spy on dialogs: beforeEach already auto-accepts, but we can track console messages for robustness.
@@ -333,17 +333,17 @@ test.describe('Two Pointers — Interactive Demo (FSM tests)', () => {
 
   test('Keyboard shortcuts: Space toggles play/pause, ArrowRight / ArrowLeft navigate steps', async ({ page }) => {
     // Validate that keyboard shortcuts wired by the app behave as expected
-    const app = new TwoPointersPage(page);
+    const app6 = new TwoPointersPage(page);
     await app.goto();
 
     // Ensure there are generated steps
     await app.clickReset();
-    const initialStatus = await app.getStepStatusText();
+    const initialStatus1 = await app.getStepStatusText();
 
     // Press Space to toggle play; should switch to Pause label
     await page.keyboard.press('Space');
     await page.waitForTimeout(100); // allow handler to run
-    let playText = await app.getPlayButtonText();
+    let playText1 = await app.getPlayButtonText();
     // After pressing space, playback toggles; ensure label changed
     expect(['Pause', 'Play']).toContain(playText);
 

@@ -94,7 +94,7 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
   test('Transition: TestLinear -> S1_LinearTest produces expected result text', async ({ page }) => {
     // This test validates transition from Idle to Linear Test (S0_Idle -> S1_LinearTest)
     // It also verifies the entry action testLinear() produced the expected DOM update.
-    const demo = new BigODemoPage(page);
+    const demo1 = new BigODemoPage(page);
     await demo.goto();
 
     // Click the linear button to trigger testLinear()
@@ -104,20 +104,20 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
     await expect(page.locator(demo.selectors.result)).toHaveText('O(n): Processed 1000 elements. Sum = 499500');
 
     // Verify final text via page object getter as well
-    const resultText = await demo.getResultText();
+    const resultText1 = await demo.getResultText();
     expect(resultText).toBe('O(n): Processed 1000 elements. Sum = 499500');
 
     // No runtime page errors should have happened during the linear computation
     expect(pageErrors).toHaveLength(0);
 
     // No console error logs produced by the page while computing linear
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMsgs.length).toBe(0);
   });
 
   test('Transition: TestQuadratic -> S2_QuadraticTest produces expected result text', async ({ page }) => {
     // Validate the quadratic transition and associated entry action testQuadratic()
-    const demo = new BigODemoPage(page);
+    const demo2 = new BigODemoPage(page);
     await demo.goto();
 
     // Click the quadratic button to trigger testQuadratic()
@@ -126,18 +126,18 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
     // Assert expected result string per FSM
     await expect(page.locator(demo.selectors.result)).toHaveText('O(n^2): Processed 100 * 100 elements. Count = 10000');
 
-    const resultText = await demo.getResultText();
+    const resultText2 = await demo.getResultText();
     expect(resultText).toBe('O(n^2): Processed 100 * 100 elements. Count = 10000');
 
     // Ensure no uncaught errors on the page during the quadratic run
     expect(pageErrors).toHaveLength(0);
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMsgs.length).toBe(0);
   });
 
   test('Transition: TestConstant -> S3_ConstantTest produces expected result text', async ({ page }) => {
     // Validate the constant time transition and associated entry action testConstant()
-    const demo = new BigODemoPage(page);
+    const demo3 = new BigODemoPage(page);
     await demo.goto();
 
     // Click the constant button to trigger testConstant()
@@ -146,18 +146,18 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
     // Assert the exact expected output per FSM
     await expect(page.locator(demo.selectors.result)).toHaveText('O(1): Processed 1000 elements. Result = 42');
 
-    const resultText = await demo.getResultText();
+    const resultText3 = await demo.getResultText();
     expect(resultText).toBe('O(1): Processed 1000 elements. Result = 42');
 
     // Ensure no uncaught errors on the page during the constant run
     expect(pageErrors).toHaveLength(0);
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMsgs.length).toBe(0);
   });
 
   test('Edge case: rapid repeated clicks update result consistently (idempotency / repeated entry actions)', async ({ page }) => {
     // This edge case ensures repeated triggers of the same transition produce consistent results.
-    const demo = new BigODemoPage(page);
+    const demo4 = new BigODemoPage(page);
     await demo.goto();
 
     // Rapidly click linear button multiple times
@@ -168,7 +168,7 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
     ]);
 
     // The result should be the same as single click (deterministic)
-    const resultText = await demo.getResultText();
+    const resultText4 = await demo.getResultText();
     expect(resultText).toBe('O(n): Processed 1000 elements. Sum = 499500');
 
     // Now rapidly click constant button multiple times
@@ -192,7 +192,7 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
   test('Error scenario: calling a non-existent function in page context yields a ReferenceError (natural error observation)', async ({ page }) => {
     // This test intentionally attempts to call a non-existent function in the page's global scope.
     // We let the error occur naturally and assert that the evaluation rejects with an appropriate ReferenceError.
-    const demo = new BigODemoPage(page);
+    const demo5 = new BigODemoPage(page);
     await demo.goto();
 
     let caughtError = null;
@@ -224,7 +224,7 @@ test.describe('Big-O Notation Demo - FSM state and transition tests', () => {
 
   test('Sanity check: no unexpected console.error logs produced during normal operation', async ({ page }) => {
     // This test loads the page, interacts with it, and ensures there are no console.error logs.
-    const demo = new BigODemoPage(page);
+    const demo6 = new BigODemoPage(page);
     await demo.goto();
 
     // Perform a normal sequence of interactions

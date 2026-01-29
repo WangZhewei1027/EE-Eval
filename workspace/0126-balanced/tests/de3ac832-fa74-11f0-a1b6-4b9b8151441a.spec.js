@@ -118,12 +118,12 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
       expect(output).toMatch(/Operation results will appear here/i);
 
       // Ensure there are no stack items
-      const items = await stack.getStackItemsText();
+      const items1 = await stack.getStackItemsText();
       expect(items.length).toBe(0);
     });
 
     test('After pushing an item: S1_NonEmpty - visualization contains stack-item element', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack1 = new StackPage(page);
       await stack.goto();
 
       // Push a single item to move from S0_Empty -> S1_NonEmpty
@@ -132,15 +132,15 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
       await stack.waitForVisualizationUpdate();
 
       // Output should reflect the push action
-      const output = await stack.getOutputText();
+      const output1 = await stack.getOutputText();
       expect(output).toBe('Pushed: alpha');
 
       // Visualization should now contain one stack-item (entry action updateVisualization)
-      const items = await stack.getStackItemsText();
+      const items2 = await stack.getStackItemsText();
       expect(items).toEqual(['alpha']);
 
       // The empty visual should be gone
-      const hasEmpty = await stack.hasEmptyVisual();
+      const hasEmpty1 = await stack.hasEmptyVisual();
       expect(hasEmpty).toBe(false);
 
       // Input should be cleared after push
@@ -151,7 +151,7 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
 
   test.describe('Operations & Transitions (Push, Pop, Peek, CheckEmpty, ClearStack)', () => {
     test('Push multiple items, Peek shows top without modifying stack, Pop removes top (S1_NonEmpty transitions)', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack2 = new StackPage(page);
       await stack.goto();
 
       // Push first item
@@ -198,14 +198,14 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
       expect(await stack.getOutputText()).toBe('Popped: first');
 
       // Visualization should show empty state again
-      const hasEmpty = await stack.hasEmptyVisual();
+      const hasEmpty2 = await stack.hasEmptyVisual();
       expect(hasEmpty).toBe(true);
       const itemsFinally = await stack.getStackItemsText();
       expect(itemsFinally.length).toBe(0);
     });
 
     test('CheckEmpty behaves correctly for empty and non-empty stacks', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack3 = new StackPage(page);
       await stack.goto();
 
       // Ensure empty -> CheckEmpty should indicate empty
@@ -229,7 +229,7 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
     });
 
     test('ClearStack empties the stack and updates visualization/output (S1_NonEmpty -> S0_Empty)', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack4 = new StackPage(page);
       await stack.goto();
 
       // Push items to ensure non-empty
@@ -255,7 +255,7 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
 
   test.describe('Edge Cases & Error Scenarios', () => {
     test('Trying to push with empty input yields an informative message and does not change visualization', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack5 = new StackPage(page);
       await stack.goto();
 
       // Ensure empty initial state
@@ -275,7 +275,7 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
     });
 
     test('Popping from an empty stack yields proper error message and remains empty', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack6 = new StackPage(page);
       await stack.goto();
 
       // Ensure stack is empty
@@ -290,7 +290,7 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
     });
 
     test('Peeking into an empty stack yields proper message and does not modify visualization', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack7 = new StackPage(page);
       await stack.goto();
 
       // Ensure stack is empty
@@ -307,7 +307,7 @@ test.describe('Stack Data Structure Demo - de3ac832-fa74-11f0-a1b6-4b9b8151441a'
 
   test.describe('Console and Runtime Error Observability', () => {
     test('No uncaught runtime exceptions or console.error logs should occur during normal use', async ({ page }) => {
-      const stack = new StackPage(page);
+      const stack8 = new StackPage(page);
       await stack.goto();
 
       // Perform a sequence of normal operations

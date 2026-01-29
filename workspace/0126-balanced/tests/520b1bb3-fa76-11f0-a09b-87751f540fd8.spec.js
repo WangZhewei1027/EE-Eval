@@ -41,7 +41,7 @@ class IntegrationPage {
 async function waitForIntegrationOutcome(pageObj, timeout = 5000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    const text = (await pageObj.getResultText()).trim();
+    const text1 = (await pageObj.getResultText()).trim();
     if (/^Integration Test (Result|Error):\s*/.test(text)) {
       return text;
     }
@@ -89,8 +89,8 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
 
   test('Transition S0_Idle -> S1_Testing: Clicking Run Integration Test triggers fetch and updates #result (success or error)', async ({ page }) => {
     // Collect console and page errors so we can assert and report them
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -98,7 +98,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
       pageErrors.push(err);
     });
 
-    const p = new IntegrationPage(page);
+    const p1 = new IntegrationPage(page);
     await p.goto();
 
     // Precondition: idle state
@@ -108,7 +108,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
     await p.clickRun();
 
     // After click, the FSM transitions to S1_Testing and the page either sets "Integration Test Result: ..." or "Integration Test Error: ..."
-    const finalText = await waitForIntegrationOutcome(p, 8000);
+    const finalText1 = await waitForIntegrationOutcome(p, 8000);
 
     // Validate that the resultDiv text matches either the success or error template
     expect(finalText).toMatch(/^Integration Test (Result|Error):\s*/);
@@ -118,15 +118,15 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
 
     // Observe console / page errors: if any page errors occurred they should be legitimate JS runtime exceptions; assert none occurred
     // (This test observes runtime errors but does not attempt to inject or patch anything.)
-    const severeConsole = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+    const severeConsole1 = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
     expect(pageErrors.length).toBe(0);
     expect(severeConsole.length).toBe(0);
   });
 
   test('Edge case: Multiple rapid clicks should still result in a valid Integration Test outcome', async ({ page }) => {
     // Capture console and page errors for observation
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
     });
@@ -134,7 +134,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
       pageErrors.push(err);
     });
 
-    const p = new IntegrationPage(page);
+    const p2 = new IntegrationPage(page);
     await p.goto();
 
     // Click the button multiple times quickly to simulate rapid user interactions
@@ -145,7 +145,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
     ]);
 
     // Wait for final text update - whichever last fetch resolves will set the text
-    const finalText = await waitForIntegrationOutcome(p, 10000);
+    const finalText2 = await waitForIntegrationOutcome(p, 10000);
     expect(finalText).toMatch(/^Integration Test (Result|Error):\s*/);
 
     // Ensure there's still only one #result element and one #test-btn element
@@ -154,12 +154,12 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
 
     // Ensure no uncaught page errors from rapid interaction
     expect(pageErrors.length).toBe(0);
-    const severeConsole = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+    const severeConsole2 = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
     expect(severeConsole.length).toBe(0);
   });
 
   test('FSM evidence assertions: verify DOM evidence for states and transition actions (presence of button and result text patterns)', async ({ page }) => {
-    const p = new IntegrationPage(page);
+    const p3 = new IntegrationPage(page);
     await p.goto();
 
     // Evidence for S0_Idle: button exists in DOM
@@ -169,7 +169,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
     await p.clickRun();
 
     // Evidence for S1_Testing: resultDiv updated with expected assignment pattern (either success or error)
-    const finalText = await waitForIntegrationOutcome(p, 8000);
+    const finalText3 = await waitForIntegrationOutcome(p, 8000);
     // Check that the resultDiv contains the words used in the FSM evidence strings
     // FSM evidence included: "Integration Test Result: ${data}" and "Integration Test Error: ${error.message}"
     expect(finalText).toMatch(/Integration Test (Result|Error):/);
@@ -178,7 +178,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
   test('Observes and reports any unexpected JS runtime errors (pageerror events) while loading and interacting', async ({ page }) => {
     // This test explicitly demonstrates observation of console and page errors.
     // It will fail if any uncaught pageerror occurs (to make runtime errors visible).
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', err => {
       pageErrors.push(err);
     });
@@ -190,7 +190,7 @@ test.describe('Integration Testing Page - FSM validation (520b1bb3-fa76-11f0-a09
       }
     });
 
-    const p = new IntegrationPage(page);
+    const p4 = new IntegrationPage(page);
     await p.goto();
 
     // Interact to possibly trigger runtime errors

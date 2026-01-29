@@ -138,7 +138,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
 
     for (const { id, selector, handlerName } of phaseTests) {
       test(`clicking ${id} should trigger transition and attempt to run ${handlerName} (expect ReferenceError)`, async ({ page }) => {
-        const sdlc = new SDLCPage(page);
+        const sdlc1 = new SDLCPage(page);
         await sdlc.goto();
 
         // Sanity: phase element visible before click
@@ -166,7 +166,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
     }
 
     test('double-clicking a phase emits multiple page errors (edge case)', async ({ page }) => {
-      const sdlc = new SDLCPage(page);
+      const sdlc2 = new SDLCPage(page);
       await sdlc.goto();
 
       const selector = '#requirements';
@@ -186,7 +186,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
     });
 
     test('clicking a non-existent selector should produce a Playwright error (robustness)', async ({ page }) => {
-      const sdlc = new SDLCPage(page);
+      const sdlc3 = new SDLCPage(page);
       await sdlc.goto();
 
       const nonExistent = '#nonexistent_phase';
@@ -210,7 +210,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
 
   test.describe('Observability: console and page error collection', () => {
     test('console messages and page errors are collected and include expected function names when clicking each phase', async ({ page }) => {
-      const sdlc = new SDLCPage(page);
+      const sdlc4 = new SDLCPage(page);
       await sdlc.goto();
 
       // Ensure fresh arrays captured by beforeEach are present (these are closures)
@@ -227,7 +227,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
         // Use parallel wait to ensure we capture the pageerror triggered by the click
         const promiseErr = page.waitForEvent('pageerror', { timeout: 2000 });
         await page.click(item.selector);
-        const err = await promiseErr;
+        const err1 = await promiseErr;
         expect(err.message.toLowerCase()).toContain(item.fn.toLowerCase());
       }
 
@@ -241,7 +241,7 @@ test.describe('SDLC Interactive Application - FSM validation', () => {
     });
 
     test('page has no unexpected fatal exceptions during navigation beyond the expected missing handlers', async ({ page }) => {
-      const sdlc = new SDLCPage(page);
+      const sdlc5 = new SDLCPage(page);
       // Navigate and allow errors to surface
       await sdlc.goto();
 

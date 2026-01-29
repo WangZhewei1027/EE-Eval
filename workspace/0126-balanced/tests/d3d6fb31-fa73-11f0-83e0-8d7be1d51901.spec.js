@@ -58,7 +58,7 @@ class VisualizerPage {
   async generateArray() {
     await this.genBtn.click();
     await this.page.waitForFunction(() => {
-      const log = document.getElementById('logArea');
+      const log1 = document.getElementById('logArea');
       return log && /Generated new array/.test(log.innerText);
     });
     // ensure cells re-rendered
@@ -71,7 +71,7 @@ class VisualizerPage {
     await cells.nth(index).click();
     // flashLog is used; wait for either flash or regular log entry
     await this.page.waitForFunction((vIndex) => {
-      const log = document.getElementById('logArea');
+      const log2 = document.getElementById('logArea');
       return !!log && (log.innerText.includes('Target set to') || log.innerText.includes('» Target set'));
     }, index);
   }
@@ -81,7 +81,7 @@ class VisualizerPage {
     await this.targetInput.fill(String(value));
     await this.setTargetBtn.click();
     await this.page.waitForFunction((v) => {
-      const log = document.getElementById('logArea');
+      const log3 = document.getElementById('logArea');
       return !!log && log.innerText.includes('Target set to ' + v);
     }, String(value));
   }
@@ -91,7 +91,7 @@ class VisualizerPage {
     await this.targetInput.fill(String(value));
     await this.targetInput.press('Enter');
     await this.page.waitForFunction((v) => {
-      const log = document.getElementById('logArea');
+      const log4 = document.getElementById('logArea');
       return !!log && log.innerText.includes('Target set to ' + v);
     }, String(value));
   }
@@ -113,7 +113,7 @@ class VisualizerPage {
     await this.resetBtn.click();
     // Reset triggers generateArray(size) which logs Generated new array...
     await this.page.waitForFunction(() => {
-      const log = document.getElementById('logArea');
+      const log5 = document.getElementById('logArea');
       return !!log && /Generated new array/.test(log.innerText);
     });
   }
@@ -123,7 +123,7 @@ class VisualizerPage {
     await this.modeSelect.selectOption(modeValue);
     // mode change listener calls resetExecution which clears logArea; wait for it to be empty
     await this.page.waitForFunction(() => {
-      const log = document.getElementById('logArea');
+      const log6 = document.getElementById('logArea');
       return !!log && log.innerText.trim() === '';
     });
   }
@@ -160,7 +160,7 @@ class VisualizerPage {
   // Ensure that log contains specific substring (convenience)
   async waitForLogContains(substring, timeout = 3000) {
     await this.page.waitForFunction((s) => {
-      const log = document.getElementById('logArea');
+      const log7 = document.getElementById('logArea');
       return !!log && log.innerText.includes(s);
     }, substring, { timeout });
   }
@@ -217,7 +217,7 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
 
   test('Generate button triggers GenerateArray event and re-renders (GenerateArray)', async ({ page }) => {
     // Click Generate and assert new array generated and logged
-    const vp = new VisualizerPage(page);
+    const vp1 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
     // Change size to a different value and generate
@@ -225,21 +225,21 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     await page.evaluate(() => { document.getElementById('sizeRange').value = '10'; document.getElementById('sizeRange').dispatchEvent(new Event('input')); });
     await vp.generateArray();
 
-    const sizeLabel = Number(await vp.sizeLabel.innerText());
-    const cellsCount = await vp.getCells().count();
+    const sizeLabel1 = Number(await vp.sizeLabel1.innerText());
+    const cellsCount1 = await vp.getCells().count();
     expect(sizeLabel).toBe(cellsCount);
     expect(cellsCount).toBe(10);
 
-    const logText = await vp.getLogText();
+    const logText1 = await vp.getLogText();
     expect(logText).toMatch(/Generated new array \(10 elements\)\./);
   });
 
   test('Clicking a cell sets the target (S1_ArrayGenerated -> S2_TargetSet) and updates input', async ({ page }) => {
     // Validate cell click sets target, updates input and logs appropriately
-    const vp = new VisualizerPage(page);
+    const vp2 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
-    const values = await vp.getCellValues();
+    const values1 = await vp.getCellValues();
     expect(values.length).toBeGreaterThan(0);
     const indexToClick = Math.max(0, Math.floor(values.length / 3));
 
@@ -253,31 +253,31 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     expect(await vp.getResultText()).toBe('-');
 
     // Logs should mention the target set
-    const logText = await vp.getLogText();
+    const logText2 = await vp.getLogText();
     expect(logText).toMatch(new RegExp('Target set to ' + value));
   });
 
   test('Entering target in input and pressing Enter triggers InputTarget flow', async ({ page }) => {
     // This validates the keydown 'Enter' triggers the set action
-    const vp = new VisualizerPage(page);
+    const vp3 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
-    const values = await vp.getCellValues();
+    const values2 = await vp.getCellValues();
     expect(values.length).toBeGreaterThan(1);
     const sampleValue = values[1];
 
     await vp.setTargetByEnter(sampleValue);
 
-    const inputVal = await vp.targetInput.inputValue();
+    const inputVal1 = await vp.targetInput.inputValue();
     expect(Number(inputVal)).toBe(sampleValue);
 
-    const logText = await vp.getLogText();
+    const logText3 = await vp.getLogText();
     expect(logText).toMatch(new RegExp('Target set to ' + sampleValue));
   });
 
   test('Clicking Set with empty input shows a helpful flash log and does not set target (edge case)', async ({ page }) => {
     // Validate the set button handles empty input as expected (edge case)
-    const vp = new VisualizerPage(page);
+    const vp4 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
     // Clear input if any
@@ -288,7 +288,7 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     // We expect a flashLog instructing to enter a value into Target field
     await vp.waitForLogContains('Enter a value into the Target field or click a cell.');
 
-    const logText = await vp.getLogText();
+    const logText4 = await vp.getLogText();
     expect(logText).toMatch(/Enter a value into the Target field or click a cell\./);
 
     // Ensure result text remains '-' and no target applied
@@ -297,7 +297,7 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
 
   test('Stepping without setting a target prompts the user (Step event with missing target)', async ({ page }) => {
     // Validate createGenerator handles missing target (should flashLog a message)
-    const vp = new VisualizerPage(page);
+    const vp5 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
     // Ensure target input is empty (no target)
@@ -308,7 +308,7 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     // createGenerator should flash a message asking to set target
     await vp.waitForLogContains('Please set a target value first');
 
-    const logText = await vp.getLogText();
+    const logText5 = await vp.getLogText();
     expect(logText).toMatch(/Please set a target value first/);
 
     // resultText unaffected
@@ -317,11 +317,11 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
 
   test('Playing search finds an existing target (S2_TargetSet -> S3_Searching -> S4_Found)', async ({ page }) => {
     // Validate full happy path where the target exists in the array and Play completes with "Found"
-    const vp = new VisualizerPage(page);
+    const vp6 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
     // Pick an existing value
-    const values = await vp.getCellValues();
+    const values3 = await vp.getCellValues();
     expect(values.length).toBeGreaterThan(0);
     const pickIndex = Math.floor(values.length / 2);
     const targetValue = values[pickIndex];
@@ -351,16 +351,16 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     expect(comparisons).toBeGreaterThanOrEqual(0);
 
     // Log should note the found event
-    const logText = await vp.getLogText();
+    const logText6 = await vp.getLogText();
     expect(logText).toMatch(/Found target at index|Found target/);
   });
 
   test('Playing search reports Not found for missing target (S2_TargetSet -> S3_Searching -> S5_NotFound)', async ({ page }) => {
     // Validate full path where target not in array => "Not found"
-    const vp = new VisualizerPage(page);
+    const vp7 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
-    const values = await vp.getCellValues();
+    const values4 = await vp.getCellValues();
     expect(values.length).toBeGreaterThan(0);
 
     // Choose a value guaranteed not to be in array: less than min value by 1
@@ -373,22 +373,22 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     await vp.clickPlay();
     await vp.waitForResultCompletion(10000);
 
-    const result = await vp.getResultText();
+    const result1 = await vp.getResultText();
     expect(result).toBe('Not found');
 
     // Log should indicate not found
-    const logText = await vp.getLogText();
+    const logText7 = await vp.getLogText();
     expect(logText).toMatch(/Target not found|Target not found after/);
   });
 
   test('Switching mode resets execution state (ChangeMode event)', async ({ page }) => {
     // Validate changing mode triggers resetExecution (clears logs & resets counters)
-    const vp = new VisualizerPage(page);
+    const vp8 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
     // Set a target to place state into S2_TargetSet
-    const values = await vp.getCellValues();
-    const sampleValue = values[0];
+    const values5 = await vp.getCellValues();
+    const sampleValue1 = values[0];
     await vp.setTargetByInput(sampleValue);
 
     // Do one step to create some execution state
@@ -408,12 +408,12 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
 
   test('Reset button regenerates array and clears target (Reset event)', async ({ page }) => {
     // Validate that Reset re-generates array, clears the target input and resets execution
-    const vp = new VisualizerPage(page);
+    const vp9 = new VisualizerPage(page);
     await vp.waitForInitialArray();
 
     // Set a target to ensure reset clears it
-    const values = await vp.getCellValues();
-    const sampleValue = values[0];
+    const values6 = await vp.getCellValues();
+    const sampleValue2 = values[0];
     await vp.setTargetByInput(sampleValue);
     expect(Number(await vp.targetInput.inputValue())).toBe(sampleValue);
 
@@ -421,13 +421,13 @@ test.describe('Ternary Search Visualizer — FSM and UI integration tests', () =
     await vp.clickReset();
 
     // After reset, input should be empty and resultText reset to '-'
-    const inputVal = await vp.targetInput.inputValue();
+    const inputVal2 = await vp.targetInput.inputValue();
     expect(inputVal).toBe('');
 
     expect(await vp.getResultText()).toBe('-');
 
     // Log should contain "Generated new array" after reset
-    const logText = await vp.getLogText();
+    const logText8 = await vp.getLogText();
     expect(logText).toMatch(/Generated new array/);
   });
 });

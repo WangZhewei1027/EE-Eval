@@ -88,12 +88,12 @@ test.describe('Binary Tree Visualization FSM tests', () => {
     // This test validates the event and transition: clicking the button calls createBinaryTree()
     // which should result in drawTree(tree) populating the #tree div with nodes and lines.
 
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', err => pageErrors.push(err));
 
-    const treePage = new BinaryTreePage(page);
+    const treePage1 = new BinaryTreePage(page);
     await treePage.goto();
 
     // Ensure function createBinaryTree exists on the page (sanity check)
@@ -132,11 +132,11 @@ test.describe('Binary Tree Visualization FSM tests', () => {
     expect(pageErrors.length).toBe(0);
 
     // Ensure no console.error messages occurred during the generation step
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
     expect(consoleErrors.length).toBe(0);
 
     // Additional check: subsequent DOM structure count equals nodes + lines
-    const childCount = await treePage.treeChildCount();
+    const childCount1 = await treePage.treeChildCount();
     expect(childCount).toBe(15 + 14);
   });
 
@@ -145,10 +145,10 @@ test.describe('Binary Tree Visualization FSM tests', () => {
     // (drawTree starts with treeDiv.innerHTML = ''), so multiple clicks should re-render same number,
     // not accumulate.
 
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const treePage = new BinaryTreePage(page);
+    const treePage2 = new BinaryTreePage(page);
     await treePage.goto();
 
     // First generation
@@ -176,10 +176,10 @@ test.describe('Binary Tree Visualization FSM tests', () => {
     // access properties on null. We do not patch or redefine any functions; we only manipulate
     // the DOM to create an error scenario and assert that an error is thrown naturally.
 
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const treePage = new BinaryTreePage(page);
+    const treePage3 = new BinaryTreePage(page);
     await treePage.goto();
 
     // Remove the #tree element from the DOM to simulate a missing target container.

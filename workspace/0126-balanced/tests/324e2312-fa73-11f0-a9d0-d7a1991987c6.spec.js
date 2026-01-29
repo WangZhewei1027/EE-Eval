@@ -85,7 +85,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
     // This test validates the Idle state: input, button and empty result area are present.
     // It also verifies FSM entry action "renderPage()" is not present on window (the HTML does not define it),
     // therefore we assert window.renderPage is undefined rather than attempting to call/patch it.
-    const app = new RecursionDemoPage(page);
+    const app1 = new RecursionDemoPage(page);
 
     await expect(app.input).toBeVisible();
     await expect(app.button).toBeVisible();
@@ -104,7 +104,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
 
   test('Transition S0 -> S1_Error: clicking calculate with empty input shows validation message', async ({ page }) => {
     // Validate error transition when no input is provided.
-    const app = new RecursionDemoPage(page);
+    const app2 = new RecursionDemoPage(page);
 
     // Ensure input is empty then click calculate
     await app.clearNumber();
@@ -116,7 +116,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
 
   test('Transition S0 -> S1_Error: clicking calculate with negative number shows validation message', async ({ page }) => {
     // Validate error transition for negative numbers
-    const app = new RecursionDemoPage(page);
+    const app3 = new RecursionDemoPage(page);
 
     await app.setNumber(-1);
     await app.clickCalculate();
@@ -126,7 +126,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
 
   test('Transition S0 -> S2_Result: valid positive integer computes factorial (5 -> 120)', async ({ page }) => {
     // Validate successful factorial calculation for a typical case
-    const app = new RecursionDemoPage(page);
+    const app4 = new RecursionDemoPage(page);
 
     await app.setNumber(5);
     await app.clickCalculate();
@@ -136,7 +136,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
 
   test('Edge cases: factorial of 0 and 1 should both be 1 (S2_Result)', async ({ page }) => {
     // Verify the base cases of recursion
-    const app = new RecursionDemoPage(page);
+    const app5 = new RecursionDemoPage(page);
 
     await app.setNumber(0);
     await app.clickCalculate();
@@ -150,7 +150,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
 
   test('Edge case: decimal input is parsed using parseInt (3.7 -> treated as 3)', async ({ page }) => {
     // The implementation uses parseInt; this verifies that decimals are truncated to integer.
-    const app = new RecursionDemoPage(page);
+    const app6 = new RecursionDemoPage(page);
 
     // Use a decimal value; parseInt should convert "3.7" -> 3, factorial(3) = 6
     await app.setNumber('3.7');
@@ -180,7 +180,7 @@ test.describe('Recursion Demo (FSM) - Comprehensive E2E tests', () => {
 
   test('Repeated interactions: alternating valid and invalid inputs produce correct transitions', async ({ page }) => {
     // This test exercises rapid consecutive transitions to verify state handling and DOM updates remain correct.
-    const app = new RecursionDemoPage(page);
+    const app7 = new RecursionDemoPage(page);
 
     // 1) invalid empty -> Error
     await app.clearNumber();

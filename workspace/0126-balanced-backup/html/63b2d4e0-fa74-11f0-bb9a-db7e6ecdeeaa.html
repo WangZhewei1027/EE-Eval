@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Virtual Memory Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f5f7fa;
+    color: #333;
+  }
+  h1, h2 {
+    text-align: center;
+  }
+  #memory-container {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    margin: 30px 0 40px;
+  }
+  .memory-section {
+    border: 2px solid #666;
+    border-radius: 8px;
+    padding: 20px;
+    width: 320px;
+    background: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  }
+  .memory-section h3 {
+    text-align: center;
+    margin-bottom: 15px;
+  }
+  .memory-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 30px);
+    grid-gap: 3px;
+    justify-content: center;
+  }
+  .memory-cell {
+    border: 1px solid #aaa;
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+    line-height: 30px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+    transition: background-color 0.3s, color 0.3s;
+  }
+  .memory-cell.frame {
+    background-color: #e3f2fd;
+  }
+  .memory-cell.page {
+    background-color: #fffde7;
+  }
+  .memory-cell.used {
+    background-color: #c8e6c9;
+  }
+  .memory-cell.swap {
+    background-color: #ffcdd2;
+  }
+  .memory-cell.highlighted {
+    outline: 2px solid #f57c00;
+  }
+  #controls {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  #controls input[type="number"] {
+    width: 60px;
+    padding: 6px;
+    font-size: 16px;
+  }
+  #controls button {
+    font-size: 16px;
+    padding: 7px 14px;
+    margin-left: 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    border: none;
+    background-color: #1976d2;
+    color: white;
+    transition: background-color 0.3s;
+  }
+  #controls button:hover:not(:disabled) {
+    background-color: #1565c0;
+  }
+  #message {
+    max-width: 680px;
+    margin: 0 auto 20px;
+    padding: 12px 15px;
+    border-radius: 6px;
+    font-size: 16px;
+    min-height: 40px;
+    text-align: center;
+  }
+  #message.info {
+    background-color: #bbdefb;
+    color: #0d47a1;
+  }
+  #message.error {
+    background-color: #ffcdd2;
+    color: #b71c1c;
+  }
+  #legend {
+    max-width: 680px;
+    margin: 20px auto 0;
+    display: flex;
+    justify-content: center;
+    gap: 25px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+  .legend-color {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid #999;
+  }
+  .frame-color { background-color: #e3f2fd; }
+  .page-color { background-color: #fffde7; }
+  .used-color { background-color: #c8e6c9; }
+  .swap-color { background-color: #ffcdd2; }
+</style>
+</head>
+<body>
+<h1>Virtual Memory Demonstration</h1>
+<p style="max-width:680px; margin:0 auto; text-align:center;">
+Virtual Memory allows a computer to use more memory than physically available by swapping pages between RAM (physical memory) and disk (swap space). 
+This demo simulates how pages are mapped to frames and swapped in or out.
+</p>
+
+<div id="memory-container">
+  <div class="memory-section" aria-label="Physical Memory (RAM)">
+    <h3>Physical Memory (RAM)</h3>
+    <div class="memory-grid" id="physical-memory" role="grid" aria-readonly="true" aria-label="Physical Memory frames"></div>
+  </div>
+  <div class="memory-section" aria-label="Virtual Memory (Pages)">
+    <h3>Virtual Memory (Pages)</h3>
+    <div class="memory-grid" id="virtual-memory" role="grid" aria-readonly="true" aria-label="Virtual memory pages"></div>
+  </div>
+  <div class="memory-section" aria-label="Swap Space (Disk)">
+    <h3>Swap Space (Disk)</h3>
+    <div class="memory-grid" id="swap-space" role="grid" aria-readonly="true" aria-label="Swap space frames"></div>
+  </div>
+</div>
+
+<div id="controls" aria-label="Controls for addressing virtual pages">
+  <label for="page-input">Access Virtual Page #: </label>
+  <input type="number" id="page-input" min="0" max="15" value="0" aria-describedby="page-info" />
+  <button id="access-btn">Access Page</button>
+</div>
+<div id="message" role="alert" aria-live="polite" class="info">Access virtual page 0 using the input above.</div>
+
+<div id="legend" aria-label="Color legend">
+  <div class="legend-item"><div class="legend-color frame-color"></div>Free Frame</div>
+  <div class="legend-item"><div class="legend-color used-color"></div>Used Frame (Page Loaded)</div>
+  <div class="legend-item"><div class="legend-color page-color"></div>Page in Virtual Memory (address space)</div>
+  <div class="legend-item"><div class="legend-color swap-color"></div>Page in Swap Space</div>
+</div>
+
+<script>
+(() => {
+  const PHYSICAL_FRAMES = 8; // number of physical memory frames
+  const VIRTUAL_PAGES = 16;  // number of virtual pages per process
+  const SWAP_PAGES = 16;     // swap space frames (can hold pages swapped out)
+
+  // Structures:
+  // pageTable: Maps virtual page number -> { frame: number|null, inSwap: boolean, swapFrame: number|null }
+  // physicalMemory: array of frames, each can hold one page or null if free
+  // swapSpace: array of frames, each can hold one page or null if free
+
+  // We simulate demand paging with a FIFO page replacement policy.
+
+  let pageTable = []; // size VIRTUAL_PAGES
+  let physicalMemory = new Array(PHYSICAL_FRAMES).fill(null); // indexes hold virtual page number or null
+  let swapSpace = new Array(SWAP_PAGES).fill(null); // indexes hold virtual page number or null
+
+  // To implement FIFO replacement, keep queue of pages loaded in physical memory
+  let fifoQueue = [];
+
+  // DOM Elements
+  const physicalMemoryEl = document.getElementById('physical-memory');
+  const virtualMemoryEl = document.getElementById('virtual-memory');
+  const swapSpaceEl = document.getElementById('swap-space');
+  const pageInput = document.getElementById('page-input');
+  const accessBtn = document.getElementById('access-btn');
+  const messageEl = document.getElementById('message');
+
+  // Initialize pageTable
+  function initPageTable() {
+    pageTable = [];
+    for (let i = 0; i < VIRTUAL_PAGES; i++) {
+      pageTable.push({
+        frame: null,       // frame number if loaded in physical memory
+        inSwap: false,     // is the page in swap?
+        swapFrame: null    // swap frame number if in swap
+      });
+    }
+  }
+
+  // Free all memory spaces and initialize the system
+  function initMemory() {
+    physicalMemory = new Array(PHYSICAL_FRAMES).fill(null);
+    swapSpace = new Array(SWAP_PAGES).fill(null);
+    fifoQueue = [];
+  }
+
+  // Render physical memory cells
+  function renderPhysicalMemory() {
+    physicalMemoryEl.innerHTML = '';
+    for (let i = 0; i < PHYSICAL_FRAMES; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'memory-cell frame';
+      cell.title = `Frame ${i}: ` + (physicalMemory[i] === null ? 'Free' : `Virtual Page ${physicalMemory[i]}`);
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `Physical frame ${i} - ${physicalMemory[i] === null ? 'free' : 'holds virtual page ' + physicalMemory[i]}`);
+      if (physicalMemory[i] !== null) {
+        cell.textContent = physicalMemory[i];
+        cell.classList.add('used');
+      } else {
+        cell.textContent = '';
+      }
+      physicalMemoryEl.appendChild(cell);
+    }
+  }
+
+  // Render virtual memory pages cells
+  function renderVirtualMemory() {
+    virtualMemoryEl.innerHTML = '';
+    for (let i = 0; i < VIRTUAL_PAGES; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'memory-cell page';
+      const ptEntry = pageTable[i];
+      let status = 'Not loaded';
+      if (ptEntry.frame !== null) status = `Loaded in Frame ${ptEntry.frame}`;
+      else if (ptEntry.inSwap) status = `In Swap Frame ${ptEntry.swapFrame}`;
+      else status = 'Not loaded';
+      cell.title = `Virtual Page ${i}: ${status}`;
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `Virtual page ${i} - ${status}`);
+      cell.textContent = i;
+      virtualMemoryEl.appendChild(cell);
+    }
+  }
+
+  // Render swap space cells
+  function renderSwapSpace() {
+    swapSpaceEl.innerHTML = '';
+    for (let i = 0; i < SWAP_PAGES; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'memory-cell swap';
+      cell.title = `Swap Frame ${i}: ` + (swapSpace[i] === null ? 'Free' : `Virtual Page ${swapSpace[i]}`);
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `Swap frame ${i} - ${swapSpace[i] === null ? 'free' : 'holds virtual page ' + swapSpace[i]}`);
+      if (swapSpace[i] !== null) {
+        cell.textContent = swapSpace[i];
+      } else {
+        cell.textContent = '';
+      }
+      swapSpaceEl.appendChild(cell);
+    }
+  }
+
+  // Find a free physical frame or return -1
+  function findFreePhysicalFrame() {
+    return physicalMemory.indexOf(null);
+  }
+
+  // Find a free swap frame or return -1
+  function findFreeSwapFrame() {
+    return swapSpace.indexOf(null);
+  }
+
+  // Swap out the oldest page (FIFO)
+  function swapOutPage() {
+    if (fifoQueue.length === 0) return -1;
+    const victimPage = fifoQueue.shift();
+    const victimFrame = pageTable[victimPage].frame;
+    // Find free swap frame
+    const swapFrame = findFreeSwapFrame();
+    if (swapFrame === -1) {
+      // No free swap space => simulation can't swap out, treat this as an error for demo
+      return -1;
+    }
+    // Move victim page to swap
+    swapSpace[swapFrame] = victimPage;
+    pageTable[victimPage].inSwap = true;
+    pageTable[victimPage].swapFrame = swapFrame;
+    pageTable[victimPage].frame = null;
+    physicalMemory[victimFrame] = null;
+    return victimFrame;
+  }
+
+  // Access a virtual page - load it if needed
+  function accessVirtualPage(pageNumber) {
+    if (pageNumber < 0 || pageNumber >= VIRTUAL_PAGES) {
+      setMessage(`Error: Page number ${pageNumber} is out of bounds.`, true);
+      return;
+    }
+    const ptEntry = pageTable[pageNumber];
+    if (ptEntry.frame !== null) {
+      // Page already in physical memory - no page fault
+      setMessage(`Virtual page ${pageNumber} is already in physical memory at frame ${ptEntry.frame}. No page fault.`);
+      highlightPage(pageNumber);
+      return;
+    }
+
+    // Page fault - must load page in physical memory
+    setMessage(`Page fault! Virtual page ${pageNumber} is not in physical memory.`);
+
+    // 1. Check for free physical frame
+    let freeFrame = findFreePhysicalFrame();
+
+    if (freeFrame === -1) {
+      // No free frame - need to swap out a page
+      const swappedOutFrame = swapOutPage();
+      if(swappedOutFrame === -1) {
+        setMessage(`Swap space is full! Cannot swap out any page. Simulation halted.`, true);
+        return;
+      }
+      freeFrame = swappedOutFrame;
+      setTimeout(() => {
+        setMessage(`Swapped out an old page to swap space. Loading virtual page ${pageNumber} into freed frame ${freeFrame}...`);
+        loadPageToFrame(pageNumber, freeFrame);
+      }, 1300);
+      return;
+    }
+
+    // 2. If page in swap, remove from swap
+    if (ptEntry.inSwap) {
+      swapSpace[ptEntry.swapFrame] = null;
+      ptEntry.inSwap = false;
+      ptEntry.swapFrame = null;
+    }
+
+    loadPageToFrame(pageNumber, freeFrame);
+  }
+
+  // Load virtual page into physical frame
+  function loadPageToFrame(pageNumber, frameNumber) {
+    physicalMemory[frameNumber] = pageNumber;
+    pageTable[pageNumber].frame = frameNumber;
+    // Add to FIFO queue
+    fifoQueue.push(pageNumber);
+    setMessage(`Loaded virtual page ${pageNumber} into physical frame ${frameNumber}.`);
+    updateDisplays();
+    highlightPage(pageNumber);
+  }
+
+  // Update all displays
+  function updateDisplays() {
+    renderPhysicalMemory();
+    renderVirtualMemory();
+    renderSwapSpace();
+  }
+
+  // Set message text
+  function setMessage(text, isError = false) {
+    messageEl.textContent = text;
+    messageEl.className = isError ? 'error' : 'info';
+  }
+
+  // Highlight a virtual page and associated physical/swap frames
+  function highlightPage(pageNumber) {
+    clearHighlights();
+
+    // Highlight virtual page cell
+    const virtualCells = virtualMemoryEl.children;
+    if (virtualCells[pageNumber]) {
+      virtualCells[pageNumber].classList.add('highlighted');
+    }
+
+    const ptEntry = pageTable[pageNumber];
+    if (ptEntry.frame !== null) {
+      // Highlight physical frame cell
+      const physCells = physicalMemoryEl.children;
+      if (physCells[ptEntry.frame]) {
+        physCells[ptEntry.frame].classList.add('highlighted');
+      }
+    } else if (ptEntry.inSwap) {
+      // Highlight swap frame cell
+      const swapCells = swapSpaceEl.children;
+      if (swapCells[ptEntry.swapFrame]) {
+        swapCells[ptEntry.swapFrame].classList.add('highlighted');
+      }
+    }
+  }
+
+  // Clear all highlights
+  function clearHighlights() {
+    [physicalMemoryEl, virtualMemoryEl, swapSpaceEl].forEach(container => {
+      for(let cell of container.children) {
+        cell.classList.remove('highlighted');
+      }
+    });
+  }
+
+  // Initialize all
+  function init() {
+    initPageTable();
+    initMemory();
+    updateDisplays();
+    setMessage('Access virtual page 0 using the input above.');
+  }
+
+  accessBtn.addEventListener('click', () => {
+    const pageNum = parseInt(pageInput.value, 10);
+    if (isNaN(pageNum)) {
+      setMessage('Please enter a valid page number (0 - 15).', true);
+      return;
+    }
+    clearHighlights();
+    accessVirtualPage(pageNum);
+  });
+
+  pageInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') accessBtn.click();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

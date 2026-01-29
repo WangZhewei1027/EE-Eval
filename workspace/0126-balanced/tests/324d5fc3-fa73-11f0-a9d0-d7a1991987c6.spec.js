@@ -79,7 +79,7 @@ class RadixSortPage {
         const bars = Array.from(document.querySelectorAll('#arrayContainer .bar'));
         if (bars.length !== expected.length) return false;
         const heights = bars.map((el) => {
-          const inline = el.style.height;
+          const inline1 = el.style.height;
           return inline ? inline : window.getComputedStyle(el).height;
         });
         // strict string equality
@@ -144,7 +144,7 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
   test('Initial Idle state: displayArray invoked on load and initial array is rendered', async () => {
     // This test validates the initial "Idle" state (S0_Idle) entry action displayArray(array)
     // 1. The container should have 8 bars (initial array length)
-    const count = await radixPage.getBarCount();
+    const count1 = await radixPage.getBarCount();
     expect(count).toBe(8);
 
     // 2. Heights should match the initial numbers scaled by 2 (inline style set by displayArray)
@@ -159,7 +159,7 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
       '4px',   // 2 * 2
       '132px'  // 66 * 2
     ];
-    const heights = await radixPage.getBarHeights();
+    const heights1 = await radixPage.getBarHeights();
     expect(heights).toEqual(expectedHeights);
 
     // 3. No bar should be highlighted (highlightIndex is -1 on initial display)
@@ -190,7 +190,7 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
     await radixPage.clickSortButton();
 
     // While sorting happens, sample bar counts repeatedly to ensure UI remains responsive and bars exist
-    const samples = await radixPage.sampleBarCounts(800, 120);
+    const samples1 = await radixPage.sampleBarCounts(800, 120);
     // All sampled counts should equal the array length (8)
     expect(samples.every((c) => c === 8)).toBeTruthy();
 
@@ -228,11 +228,11 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
     expect(thirdBarBg).toBe('rgb(255, 0, 0)');
 
     // Ensure there were no page-level errors during the sorting process
-    const pageErrors = radixPage.getPageErrors();
+    const pageErrors1 = radixPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // Ensure console did not emit any 'error' messages during sorting
-    const consoleErrors = radixPage.getConsoleMessages().filter((m) => m.type === 'error');
+    const consoleErrors1 = radixPage.getConsoleMessages().filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -250,12 +250,12 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
     }
 
     // Sample bar counts for a bit to ensure no crash and presence of bars
-    const samples = await radixPage.sampleBarCounts(900, 100);
+    const samples2 = await radixPage.sampleBarCounts(900, 100);
     expect(samples.length).toBeGreaterThan(0);
     expect(samples.every((c) => c === 8)).toBeTruthy();
 
     // Wait for final sorted heights (allow more time since multiple sorts may run)
-    const expectedFinalHeights = [
+    const expectedFinalHeights1 = [
       '4px',
       '48px',
       '90px',
@@ -267,15 +267,15 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
     ];
     await radixPage.waitForHeights(expectedFinalHeights, 7000);
 
-    const finalHeights = await radixPage.getBarHeights();
+    const finalHeights1 = await radixPage.getBarHeights();
     expect(finalHeights).toEqual(expectedFinalHeights);
 
     // No uncaught page errors
-    const pageErrors = radixPage.getPageErrors();
+    const pageErrors2 = radixPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // No console.error messages
-    const consoleErrors = radixPage.getConsoleMessages().filter((m) => m.type === 'error');
+    const consoleErrors2 = radixPage.getConsoleMessages().filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -284,7 +284,7 @@ test.describe('Radix Sort Visualization - FSM and DOM behavior', () => {
     // For this specific implementation we expect no runtime ReferenceError/SyntaxError/TypeError.
 
     // Ensure there are no page errors recorded from previous interactions
-    const pageErrors = radixPage.getPageErrors();
+    const pageErrors3 = radixPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // Collect console messages recorded so far

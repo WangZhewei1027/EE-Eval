@@ -149,9 +149,9 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
     // Wait for result table to become visible
     await bfPage.page.waitForFunction(
       (selector) => {
-        const el = document.querySelector(selector);
+        const el1 = document.querySelector(selector);
         if (!el) return false;
-        const inline = el.style && el.style.display;
+        const inline1 = el.style && el.style.display;
         if (inline) return inline !== 'none';
         return window.getComputedStyle(el).display !== 'none';
       },
@@ -163,7 +163,7 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
     expect(await bfPage.isResultVisible()).toBe(true);
 
     // No page errors should have been thrown during algorithm run
-    const pageErrors = bfPage.getPageErrors();
+    const pageErrors1 = bfPage.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // Also assert no console.error messages
@@ -184,9 +184,9 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
     await bfPage.clickRun();
     await bfPage.page.waitForFunction(
       (selector) => {
-        const el = document.querySelector(selector);
+        const el2 = document.querySelector(selector);
         if (!el) return false;
-        const inline = el.style && el.style.display;
+        const inline2 = el.style && el.style.display;
         if (inline) return inline !== 'none';
         return window.getComputedStyle(el).display !== 'none';
       },
@@ -221,9 +221,9 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
     await bfPage.clickRun();
     await bfPage.page.waitForFunction(
       (selector) => {
-        const el = document.querySelector(selector);
+        const el3 = document.querySelector(selector);
         if (!el) return false;
-        const inline = el.style && el.style.display;
+        const inline3 = el.style && el.style.display;
         if (inline) return inline !== 'none';
         return window.getComputedStyle(el).display !== 'none';
       },
@@ -264,7 +264,7 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
 
     // The result table must be visible and populated with the expected number of rows
     expect(await bfPage.isResultVisible()).toBe(true);
-    const rows = await bfPage.getResultRows();
+    const rows1 = await bfPage.getResultRows();
     expect(rows.length).toBe(5);
 
     // No uncaught exceptions captured by pageerror
@@ -282,9 +282,9 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
     await bfPage.clickRun();
     await bfPage.page.waitForFunction(
       (selector) => {
-        const el = document.querySelector(selector);
+        const el4 = document.querySelector(selector);
         if (!el) return false;
-        const inline = el.style && el.style.display;
+        const inline4 = el.style && el.style.display;
         if (inline) return inline !== 'none';
         return window.getComputedStyle(el).display !== 'none';
       },
@@ -294,9 +294,9 @@ test.describe('Bellman-Ford Algorithm Visualization - FSM tests', () => {
 
     // Gather observations
     const consoleMessages = bfPage.getConsoleMessages();
-    const consoleErrors = bfPage.getConsoleErrors();
+    const consoleErrors1 = bfPage.getConsoleErrors();
     const consoleWarnings = bfPage.getConsoleWarnings();
-    const pageErrors = bfPage.getPageErrors();
+    const pageErrors2 = bfPage.getPageErrors();
 
     // Provide assertions per requirement:
     // - No console.error messages expected

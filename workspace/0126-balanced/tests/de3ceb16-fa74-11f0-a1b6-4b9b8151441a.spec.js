@@ -113,7 +113,7 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
   test('S1_Array_Indexing_Demonstrated: Demonstrate Array Indexing button updates arrayOutput', async ({ page }) => {
     // This validates transition: S0 -> S1 via DemonstrateArrayIndexing
-    const idx = new IndexingPage(page);
+    const idx1 = new IndexingPage(page);
 
     // Ensure the demo function exists on the page
     const hasFunction = await page.evaluate(() => typeof demoArrayIndexing === 'function');
@@ -139,22 +139,22 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
     // No runtime exceptions should have been thrown during button action
     expect(pageErrors.length).toBe(0);
-    const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+    const consoleErrorCount1 = consoleMessages.filter(m => m.type === 'error').length;
     expect(consoleErrorCount).toBe(0);
   });
 
   test('S2_String_Indexing_Demonstrated: Demonstrate String Indexing button updates stringOutput', async ({ page }) => {
     // Validates transition: S0 -> S2 via DemonstrateStringIndexing
-    const idx = new IndexingPage(page);
+    const idx2 = new IndexingPage(page);
 
-    const hasFunction = await page.evaluate(() => typeof demoStringIndexing === 'function');
+    const hasFunction1 = await page.evaluate(() => typeof demoStringIndexing === 'function');
     expect(hasFunction).toBe(true);
 
     await idx.clickString();
 
     await expect(idx.stringOutput).not.toBeEmpty();
 
-    const text = await idx.stringOutput.innerHTML();
+    const text1 = await idx.stringOutput.innerHTML();
     expect(text).toContain("message[0]: H");
     expect(text).toContain("message[6]: W");
     expect(text).toContain("message.charAt(4): o");
@@ -162,70 +162,70 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
     // Ensure no page errors were emitted during the interaction
     expect(pageErrors.length).toBe(0);
-    const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+    const consoleErrorCount2 = consoleMessages.filter(m => m.type === 'error').length;
     expect(consoleErrorCount).toBe(0);
   });
 
   test('S3_Object_Indexing_Demonstrated: Demonstrate Object Indexing button updates objectOutput', async ({ page }) => {
     // Validates transition: S0 -> S3 via DemonstrateObjectIndexing
-    const idx = new IndexingPage(page);
+    const idx3 = new IndexingPage(page);
 
-    const hasFunction = await page.evaluate(() => typeof demoObjectIndexing === 'function');
+    const hasFunction2 = await page.evaluate(() => typeof demoObjectIndexing === 'function');
     expect(hasFunction).toBe(true);
 
     await idx.clickObject();
 
     await expect(idx.objectOutput).not.toBeEmpty();
 
-    const text = await idx.objectOutput.innerHTML();
+    const text2 = await idx.objectOutput.innerHTML();
     expect(text).toContain('user.name: Alice');
     expect(text).toContain('user["age"]: 30');
     expect(text).toContain('Using variable for index (user[prop]): alice@example.com');
 
     // Ensure no page errors were emitted during the interaction
     expect(pageErrors.length).toBe(0);
-    const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+    const consoleErrorCount3 = consoleMessages.filter(m => m.type === 'error').length;
     expect(consoleErrorCount).toBe(0);
   });
 
   test('S4_Index_Found: Find Index of \'Blue\' updates findIndexOutput', async ({ page }) => {
     // Validates transition: S0 -> S4 via FindIndexOfBlue
-    const idx = new IndexingPage(page);
+    const idx4 = new IndexingPage(page);
 
-    const hasFunction = await page.evaluate(() => typeof demoFindingIndex === 'function');
+    const hasFunction3 = await page.evaluate(() => typeof demoFindingIndex === 'function');
     expect(hasFunction).toBe(true);
 
     await idx.clickFindBlue();
 
     await expect(idx.findIndexOutput).not.toBeEmpty();
 
-    const text = await idx.findIndexOutput.innerHTML();
+    const text3 = await idx.findIndexOutput.innerHTML();
     // Exact expected output per implementation
     expect(text).toContain("Index of 'Blue': 2 (Found)");
 
     // Check idempotency (click again)
     await idx.clickFindBlue();
-    const text2 = await idx.findIndexOutput.innerHTML();
+    const text21 = await idx.findIndexOutput.innerHTML();
     expect(text2).toContain("Index of 'Blue': 2 (Found)");
 
     // Ensure no page errors were emitted during the interaction
     expect(pageErrors.length).toBe(0);
-    const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+    const consoleErrorCount4 = consoleMessages.filter(m => m.type === 'error').length;
     expect(consoleErrorCount).toBe(0);
   });
 
   test('S5_Last_Index_Found: Find Last Index of \'Green\' updates findIndexOutput', async ({ page }) => {
     // Validates transition: S0 -> S5 via FindLastIndexOfGreen
-    const idx = new IndexingPage(page);
+    const idx5 = new IndexingPage(page);
 
-    const hasFunction = await page.evaluate(() => typeof demoLastIndex === 'function');
+    const hasFunction4 = await page.evaluate(() => typeof demoLastIndex === 'function');
     expect(hasFunction).toBe(true);
 
     await idx.clickFindLastGreen();
 
     await expect(idx.findIndexOutput).not.toBeEmpty();
 
-    const text = await idx.findIndexOutput.innerHTML();
+    const text4 = await idx.findIndexOutput.innerHTML();
     // Expect lastIndexOf 'Green' to be 3
     expect(text).toContain("Last index of 'Green': 3 (Found)");
 
@@ -235,13 +235,13 @@ test.describe('JavaScript Indexing Demonstration - FSM states and transitions', 
 
     // Ensure no page errors were emitted during the interactions
     expect(pageErrors.length).toBe(0);
-    const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
+    const consoleErrorCount5 = consoleMessages.filter(m => m.type === 'error').length;
     expect(consoleErrorCount).toBe(0);
   });
 
   test('Edge cases and error scenarios: multiple sequential interactions and absence of runtime errors', async ({ page }) => {
     // This test performs a sequence of interactions, verifying stability and that no runtime exceptions (ReferenceError, SyntaxError, TypeError) are raised.
-    const idx = new IndexingPage(page);
+    const idx6 = new IndexingPage(page);
 
     // Perform sequence
     await idx.clickArray();

@@ -116,7 +116,7 @@ test.describe('PageRank Demonstration - FSM and UI integration tests', () => {
 
     // iteration count should be 1
     await page.waitForFunction(() => document.getElementById('iterationsCount').textContent.trim() === '1', null, { timeout: 2000 });
-    const iterCount = await page.$eval('#iterationsCount', (el) => el.textContent.trim());
+    const iterCount1 = await page.$eval('#iterationsCount', (el) => el.textContent.trim());
     expect(iterCount).toBe('1');
 
     // Ranks should be updated (not all equal to initial uniform distribution)
@@ -185,7 +185,7 @@ test.describe('PageRank Demonstration - FSM and UI integration tests', () => {
     expect(iterAfterReset).toBe('0');
 
     // Ranks should be reset to uniform distribution again
-    const ranks = await getRanksFromTable(page);
+    const ranks1 = await getRanksFromTable(page);
     expect(allValuesEqual(ranks, 1e-9)).toBeTruthy();
     for (const v of Object.values(ranks)) {
       expect(v).toBeCloseTo(1 / 5, 4);
@@ -202,15 +202,15 @@ test.describe('PageRank Demonstration - FSM and UI integration tests', () => {
 
     // dampingValue should update to 0.60
     await page.waitForFunction(() => document.getElementById('dampingValue').textContent.trim() === '0.60', null, { timeout: 1000 });
-    const dampingText = await page.$eval('#dampingValue', (el) => el.textContent.trim());
+    const dampingText1 = await page.$eval('#dampingValue', (el) => el.textContent.trim());
     expect(dampingText).toBe('0.60');
 
     // iteration should be reset to 0
-    const iterCount = await page.$eval('#iterationsCount', (el) => el.textContent.trim());
+    const iterCount2 = await page.$eval('#iterationsCount', (el) => el.textContent.trim());
     expect(iterCount).toBe('0');
 
     // ranks reset to uniform
-    const ranks = await getRanksFromTable(page);
+    const ranks2 = await getRanksFromTable(page);
     expect(allValuesEqual(ranks, 1e-9)).toBeTruthy();
   });
 
@@ -220,7 +220,7 @@ test.describe('PageRank Demonstration - FSM and UI integration tests', () => {
 
     // Set damping to an invalid string and dispatch input
     await page.evaluate(() => {
-      const slider = document.getElementById('damping');
+      const slider1 = document.getElementById('damping');
       // Force an invalid value not normally available via UI
       slider.value = 'not-a-number';
       slider.dispatchEvent(new Event('input', { bubbles: true }));
@@ -230,7 +230,7 @@ test.describe('PageRank Demonstration - FSM and UI integration tests', () => {
     // Wait briefly for update
     await page.waitForTimeout(200);
 
-    const dampingText = await page.$eval('#dampingValue', (el) => el.textContent.trim());
+    const dampingText2 = await page.$eval('#dampingValue', (el) => el.textContent.trim());
     // toFixed on NaN results in "NaN" string; assert that page handled it without throwing
     expect(['NaN', 'NaN']).toContain(dampingText);
 
@@ -246,20 +246,20 @@ test.describe('PageRank Demonstration - FSM and UI integration tests', () => {
 
     // Wait for the iteration count to reach 3
     await page.waitForFunction(() => parseInt(document.getElementById('iterationsCount').textContent.trim(), 10) >= 3, null, { timeout: 2000 });
-    const iterCount = await page.$eval('#iterationsCount', (el) => parseInt(el.textContent.trim(), 10));
+    const iterCount3 = await page.$eval('#iterationsCount', (el) => parseInt(el.textContent.trim(), 10));
     expect(iterCount).toBeGreaterThanOrEqual(3);
 
     // Verify ranks table still has 5 rows and valid numbers
-    const rows = await page.$$eval('#rankTable tbody tr', (r) => r.length);
+    const rows1 = await page.$$eval('#rankTable tbody tr', (r) => r.length);
     expect(rows).toBe(5);
-    const ranks = await getRanksFromTable(page);
+    const ranks3 = await getRanksFromTable(page);
     for (const v of Object.values(ranks)) {
       expect(typeof v).toBe('number');
       expect(Number.isFinite(v)).toBeTruthy();
     }
 
     // Ensure no console error messages occurred during rapid interactions
-    const errorConsoleMessages = consoleMessages.filter((m) => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter((m) => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
   });
 

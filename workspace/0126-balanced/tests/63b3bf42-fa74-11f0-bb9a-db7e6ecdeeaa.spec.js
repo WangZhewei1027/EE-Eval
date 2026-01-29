@@ -57,7 +57,7 @@ class IntegrationTestPage {
   async waitForResultsRendered(timeout = 5000) {
     await this.page.waitForFunction(
       () => {
-        const el = document.getElementById('testResults');
+        const el1 = document.getElementById('testResults');
         return el && el.querySelectorAll('strong').length >= 1;
       },
       null,
@@ -123,7 +123,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
   });
 
   test('S0_Idle: initial Idle state - button visible and enabled, no results shown', async ({ page }) => {
-    const model = new IntegrationTestPage(page);
+    const model1 = new IntegrationTestPage(page);
 
     // Verify Idle state evidence: button exists with correct text and enabled
     await expect(model.runBtn).toBeVisible();
@@ -138,7 +138,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
   });
 
   test('Transition S0_Idle -> S1_TestRunning: clicking runs tests shows running message and disables button', async ({ page }) => {
-    const model = new IntegrationTestPage(page);
+    const model2 = new IntegrationTestPage(page);
 
     // Click button to trigger RunTest event
     await model.clickRun();
@@ -154,7 +154,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
   });
 
   test('Transition S1_TestRunning -> S2_TestCompleted: tests complete and results are rendered; button re-enabled', async ({ page }) => {
-    const model = new IntegrationTestPage(page);
+    const model3 = new IntegrationTestPage(page);
 
     // Start the test run
     await model.clickRun();
@@ -197,13 +197,13 @@ test.describe('Integration Testing Demo - FSM validation', () => {
   });
 
   test('Edge case: button remains disabled during run and additional clicks do not trigger duplicate runs', async ({ page }) => {
-    const model = new IntegrationTestPage(page);
+    const model4 = new IntegrationTestPage(page);
 
     // Start test run
     await model.clickRun();
 
     // Immediately ensure the button is disabled
-    const disabledDuringRun = await model.isRunButtonDisabled();
+    const disabledDuringRun1 = await model.isRunButtonDisabled();
     expect(disabledDuringRun).toBe(true);
 
     // Attempt to click while disabled. Playwright's click may attempt to perform the action but the browser will not fire events on disabled controls.
@@ -235,7 +235,7 @@ test.describe('Integration Testing Demo - FSM validation', () => {
   });
 
   test('S3_TestFailed: verify that an uncaught "Test run failed:" message is not present for normal runs (negative test)', async ({ page }) => {
-    const model = new IntegrationTestPage(page);
+    const model5 = new IntegrationTestPage(page);
 
     // Run the integration tests normally
     await model.clickRun();

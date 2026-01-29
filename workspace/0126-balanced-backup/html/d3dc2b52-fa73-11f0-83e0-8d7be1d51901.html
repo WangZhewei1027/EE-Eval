@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Symmetric Cryptography Demo (AES‑GCM)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html,body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: #f7fafc; color: #1a202c; margin: 0; padding: 24px; }
+    .container { max-width: 980px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 6px 24px rgba(16,24,40,0.08); }
+    h1 { margin: 0 0 6px 0; font-size: 20px; }
+    p.lead { margin: 6px 0 18px 0; color: #475569; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .full { grid-column: 1 / -1; }
+    label { display:block; font-weight: 600; margin-bottom:6px; color: #0f172a; }
+    textarea, input[type="text"], input[type="password"], select { width: 100%; padding:10px 12px; border-radius:8px; border:1px solid #e2e8f0; box-sizing: border-box; font-family: inherit; font-size: 14px; }
+    textarea { min-height: 100px; resize: vertical; }
+    .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+    button { padding:10px 12px; border-radius:8px; border:1px solid transparent; background:#0ea5a4; color:white; cursor:pointer; font-weight:600; }
+    button.secondary { background:#64748b; }
+    button.ghost { background: transparent; color:#0f172a; border:1px solid #e2e8f0; }
+    .small { font-size:13px; color:#475569; margin-top:6px; }
+    pre.output { background:#0f172a; color:#e6edf3; padding:12px; border-radius:8px; overflow:auto; max-height:280px; }
+    .meta { margin-top:10px; font-size:13px; color:#475569; }
+    .kbd { background:#e6eef0; padding:4px 8px; border-radius:6px; font-weight:700; display:inline-block; }
+    .explain { font-size:14px; color:#334155; line-height:1.45; }
+    footer { margin-top:18px; font-size:13px; color:#64748b; text-align:center; }
+    @media (max-width:820px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Symmetric Cryptography — Interactive Demo</h1>
+    <p class="lead">This page demonstrates symmetric encryption using the Web Crypto API (AES‑GCM). Symmetric cryptography uses the same key for encryption and decryption. You can generate a key, derive one from a passphrase, encrypt text, and decrypt it back.</p>
+
+    <div class="grid">
+      <div>
+        <label for="plaintext">Plaintext (message to encrypt)</label>
+        <textarea id="plaintext">Hello! This is a short demo of AES‑GCM symmetric encryption.</textarea>
+        <div class="row">
+          <button id="encryptBtn">Encrypt →</button>
+          <button id="clearCipher" class="ghost">Clear Ciphertext</button>
+          <div style="flex:1"></div>
+        </div>
+      </div>
+
+      <div>
+        <label for="ciphertext">Ciphertext (Base64)</label>
+        <textarea id="ciphertext" placeholder="Encrypted data will appear here" readonly></textarea>
+        <div class="row">
+          <button id="decryptBtn" class="secondary">← Decrypt</button>
+          <button id="copyCipher" class="ghost">Copy</button>
+          <div style="flex:1"></div>
+        </div>
+      </div>
+
+      <div class="full">
+        <label for="keyInput">Key / Passphrase</label>
+        <input id="keyInput" type="text" placeholder="Paste a base64 key, or type a passphrase (choose mode below)">
+        <div class="row" style="margin-top:8px;">
+          <select id="keyMode">
+            <option value="raw">Raw key (base64)</option>
+            <option value="passphrase" selected>Derive from passphrase (PBKDF2)</option>
+          </select>
+          <button id="genKey" class="ghost">Generate Random AES‑GCM Key</button>
+          <button id="deriveKey" class="ghost">Derive from passphrase</button>
+          <button id="importKey" class="ghost">Import Raw Base64 Key</button>
+        </div>
+        <div class="meta">
+          <span class="kbd">Algorithm:</span> AES‑GCM, 256‑bit key. If deriving from a passphrase we use PBKDF2 + SHA‑256. IV is randomly generated per encryption (12 bytes) and prefixed to ciphertext.
+        </div>
+        <div style="margin-top:10px;" id="deriveInfo"></div>
+      </div>
+
+      <div>
+        <label>Key (Base64)</label>
+        <input id="exportedKey" readonly placeholder="No key yet">
+        <div class="small">You can copy this base64 key and reuse it. If you derived a key from a passphrase, a salt is shown below — you must keep the salt to derive the same key again.</div>
+      </div>
+
+      <div>
+        <label>PBKDF2 Salt (Base64)</label>
+        <input id="saltOut" readonly placeholder="(not used unless deriving)">
+      </div>
+
+      <div class="full">
+        <label>Explanation & Notes</label>
+        <div class="explain">
+          - Symmetric keys must be kept secret and shared securely between sender and receiver.<br>
+          - AES‑GCM provides confidentiality and authenticity (an authentication tag). Tampering the ciphertext will cause decryption to fail.<br>
+          - This demo prefixes the IV (initialization vector) to the ciphertext so the recipient can extract it to decrypt. The IV must be unique for each encryption with the same key.<br>
+          - Deriving keys from passphrases requires a salt (random value) and many iterations to slow attackers performing guesses. Keep salt and parameters with the ciphertext or send them alongside via a secure channel.<br>
+        </div>
+      </div>
+
+      <div class="full">
+        <label>Low-level Output / Debug</label>
+        <pre class="output" id="debug"></pre>
+      </div>
+    </div>
+
+    <footer>Built with Web Crypto API — AES‑GCM demo. Not intended for production use without architectural review.</footer>
+  </div>
+
+  <script>
+    // Small utility functions
+    const encode = s => new TextEncoder().encode(s);
+    const decode = buf => new TextDecoder().decode(buf);
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      return btoa(binary);
+    }
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+    function randomBytes(length) {
+      const b = new Uint8Array(length);
+      crypto.getRandomValues(b);
+      return b;
+    }
+    function logDebug(...args) {
+      const el = document.getElementById('debug');
+      el.textContent = (el.textContent ? el.textContent + '\n' : '') + args.join(' ');
+      el.scrollTop = el.scrollHeight;
+    }
+    function clearDebug() { document.getElementById('debug').textContent = ''; }
+
+    // State
+    let currentCryptoKey = null; // CryptoKey used for encrypt/decrypt
+    let exportedKeyBase64 = '';
+    let currentSaltBase64 = '';
+    const ivLength = 12; // 96-bit recommended for AES-GCM
+
+    // Elements
+    const plaintextEl = document.getElementById('plaintext');
+    const ciphertextEl = document.getElementById('ciphertext');
+    const encryptBtn = document.getElementById('encryptBtn');
+    const decryptBtn = document.getElementById('decryptBtn');
+    const genKeyBtn = document.getElementById('genKey');
+    const deriveKeyBtn = document.getElementById('deriveKey');
+    const importKeyBtn = document.getElementById('importKey');
+    const keyInputEl = document.getElementById('keyInput');
+    const exportedKeyEl = document.getElementById('exportedKey');
+    const saltOutEl = document.getElementById('saltOut');
+    const keyModeEl = document.getElementById('keyMode');
+    const deriveInfoEl = document.getElementById('deriveInfo');
+    const copyCipherBtn = document.getElementById('copyCipher');
+    const clearCipherBtn = document.getElementById('clearCipher');
+
+    // Core crypto functions
+    async function generateAesKey() {
+      // Generate 256-bit AES-GCM key
+      const key = await crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+      // export raw base64
+      const raw = await crypto.subtle.exportKey('raw', key);
+      exportedKeyBase64 = arrayBufferToBase64(raw);
+      currentCryptoKey = key;
+      currentSaltBase64 = '';
+      updateUIKey();
+      logDebug('Generated random AES‑GCM key (base64 length:', exportedKeyBase64.length, ')');
+      return key;
+    }
+
+    async function importRawKeyFromBase64(b64) {
+      try {
+        const raw = base64ToArrayBuffer(b64.trim());
+        const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', true, ['encrypt', 'decrypt']);
+        currentCryptoKey = key;
+        exportedKeyBase64 = b64.trim();
+        currentSaltBase64 = '';
+        updateUIKey();
+        logDebug('Imported raw key from base64.');
+      } catch (e) {
+        alert('Failed to import key: ensure it is a correct base64-encoded raw key (32 bytes for AES-256).');
+        throw e;
+      }
+    }
+
+    async function deriveKeyFromPassphrase(passphrase, saltBase64=null, iterations=150000) {
+      // If saltBase64 is null, generate a new random salt (16 bytes)
+      let salt;
+      if (!saltBase64) {
+        salt = randomBytes(16);
+        currentSaltBase64 = arrayBufferToBase64(salt);
+      } else {
+        salt = new Uint8Array(base64ToArrayBuffer(saltBase64));
+        currentSaltBase64 = saltBase64;
+      }
+      // Import passphrase as key material
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        encode(passphrase),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveKey']
+      );
+      // Derive AES‑GCM 256-bit key
+      const derivedKey = await crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt: salt,
+          iterations: iterations,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+      const raw = await crypto.subtle.exportKey('raw', derivedKey);
+      exportedKeyBase64 = arrayBufferToBase64(raw);
+      currentCryptoKey = derivedKey;
+      updateUIKey();
+      deriveInfoEl.innerHTML = `Derived with PBKDF2 (iterations: ${iterations}). Keep the salt (below) to derive the same key again.`;
+      logDebug('Derived key from passphrase. Iterations:', iterations, 'Salt (b64):', currentSaltBase64);
+      return derivedKey;
+    }
+
+    async function encryptWithCurrentKey(plainText) {
+      if (!currentCryptoKey) {
+        alert('No key selected. Generate or import/derive a key first.');
+        return null;
+      }
+      try {
+        const iv = randomBytes(ivLength);
+        const ciphertext = await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: iv },
+          currentCryptoKey,
+          encode(plainText)
+        );
+        // Prefix IV to ciphertext so recipient can extract it
+        const ivAndCipher = new Uint8Array(iv.byteLength + ciphertext.byteLength);
+        ivAndCipher.set(iv, 0);
+        ivAndCipher.set(new Uint8Array(ciphertext), iv.byteLength);
+        const b64 = arrayBufferToBase64(ivAndCipher.buffer);
+        logDebug('Encrypted data (iv len ' + ivLength + ' bytes). Ciphertext b64 length:', b64.length);
+        return b64;
+      } catch (e) {
+        console.error(e);
+        alert('Encryption failed: ' + (e && e.message ? e.message : e));
+        return null;
+      }
+    }
+
+    async function decryptWithCurrentKey(b64Cipher) {
+      if (!currentCryptoKey) {
+        alert('No key selected. Generate or import/derive a key first.');
+        return null;
+      }
+      try {
+        const ivAndCipher = new Uint8Array(base64ToArrayBuffer(b64Cipher.trim()));
+        const iv = ivAndCipher.slice(0, ivLength);
+        const ciphertext = ivAndCipher.slice(ivLength);
+        const plainBuf = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: iv },
+          currentCryptoKey,
+          ciphertext
+        );
+        const plain = decode(plainBuf);
+        logDebug('Decryption successful. Recovered plaintext length:', plain.length);
+        return plain;
+      } catch (e) {
+        console.error(e);
+        alert('Decryption failed. (Possible causes: wrong key, altered ciphertext, incorrect IV or tag mismatch.)');
+        logDebug('Decryption error:', e && e.message ? e.message : e);
+        return null;
+      }
+    }
+
+    // UI helpers
+    function updateUIKey() {
+      exportedKeyEl.value = exportedKeyBase64 || '';
+      saltOutEl.value = currentSaltBase64 || '';
+    }
+
+    async function onGenerateKeyClicked() {
+      clearDebug();
+      await generateAesKey();
+      deriveInfoEl.textContent = 'Random key generated.';
+    }
+    async function onDeriveKeyClicked() {
+      clearDebug();
+      const input = keyInputEl.value;
+      if (!input) { alert('Type a passphrase in the Key/Passphrase field then click "Derive from passphrase".'); return; }
+      // Use default iterations
+      await deriveKeyFromPassphrase(input, null, 150000);
+    }
+    async function onImportKeyClicked() {
+      clearDebug();
+      const input = keyInputEl.value.trim();
+      if (!input) { alert('Paste base64-encoded raw key into the Key field then click Import.'); return; }
+      await importRawKeyFromBase64(input);
+      deriveInfoEl.textContent = 'Imported raw key (base64).';
+    }
+
+    encryptBtn.addEventListener('click', async () => {
+      clearDebug();
+      const pt = plaintextEl.value;
+      const start = performance.now();
+      const b64 = await encryptWithCurrentKey(pt);
+      const duration = (performance.now() - start).toFixed(2);
+      if (b64) {
+        ciphertextEl.value = b64;
+        logDebug('Encryption time (ms):', duration);
+      }
+    });
+
+    decryptBtn.addEventListener('click', async () => {
+      clearDebug();
+      const b64 = ciphertextEl.value.trim();
+      if (!b64) { alert('Paste ciphertext (base64) into the Ciphertext area to decrypt.'); return; }
+      const start = performance.now();
+      const pt = await decryptWithCurrentKey(b64);
+      const duration = (performance.now() - start).toFixed(2);
+      if (pt !== null) {
+        // Place plaintext into the plaintext box
+        plaintextEl.value = pt;
+        logDebug('Decryption time (ms):', duration);
+      }
+    });
+
+    genKeyBtn.addEventListener('click', onGenerateKeyClicked);
+    deriveKeyBtn.addEventListener('click', onDeriveKeyClicked);
+    importKeyBtn.addEventListener('click', onImportKeyClicked);
+
+    copyCipherBtn.addEventListener('click', async () => {
+      const text = ciphertextEl.value;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        alert('Ciphertext copied to clipboard.');
+      } catch (e) {
+        alert('Copy failed: ' + e);
+      }
+    });
+
+    clearCipherBtn.addEventListener('click', () => { ciphertextEl.value = ''; });
+
+    // Initialize demo with a generated key
+    (async function init() {
+      clearDebug();
+      logDebug('Initializing Web Crypto AES‑GCM demo...');
+      try {
+        await generateAesKey();
+        deriveInfoEl.textContent = 'A random key has been generated for you. You can also derive from a passphrase or import a base64 key.';
+      } catch (e) {
+        logDebug('Initialization failed:', e && e.message ? e.message : e);
+      }
+    })();
+
+    // Helper: if user switches keyMode, update placeholder
+    keyModeEl.addEventListener('change', () => {
+      if (keyModeEl.value === 'raw') {
+        keyInputEl.type = 'text';
+        keyInputEl.placeholder = 'Paste a base64 key (raw 32 bytes => base64)';
+      } else {
+        keyInputEl.type = 'password';
+        keyInputEl.placeholder = 'Type a passphrase to derive a key (PBKDF2)';
+      }
+    });
+  </script>
+</body>
+</html>

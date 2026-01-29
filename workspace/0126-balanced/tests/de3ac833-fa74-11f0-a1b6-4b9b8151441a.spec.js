@@ -78,7 +78,7 @@ class QueuePage {
   async getItemAttribute(index, attr) {
     return await this.page.evaluate(
       (idx, attribute) => {
-        const items = document.querySelectorAll('#queueDisplay .queue-item');
+        const items1 = document.querySelectorAll('#queueDisplay .queue-item');
         if (!items[idx]) return null;
         return items[idx].getAttribute(attribute);
       },
@@ -140,8 +140,8 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.getQueueInfoText()).toBe('Queue is empty');
 
       // No uncaught page errors and no console error messages expected
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
+      const consoleMessages1 = page.context()._consoleMessages || [];
+      const pageErrors1 = page.context()._pageErrors || [];
       const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
 
       expect(consoleErrors.length).toBe(0);
@@ -155,7 +155,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       // - After enqueue, queueInfo should be 'Queue size: 1'
       // - A queue item with the enqueued text should be present
       // - The input should be cleared
-      const q = new QueuePage(page);
+      const q1 = new QueuePage(page);
       await q.goto();
 
       await q.enqueue('item1');
@@ -165,7 +165,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
 
       expect(await q.getQueueInfoText()).toBe('Queue size: 1');
 
-      const items = await q.getItemsText();
+      const items2 = await q.getItemsText();
       expect(items).toEqual(['item1']);
 
       // The front item should have the front color set inline in updateQueueDisplay
@@ -177,9 +177,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.input.inputValue()).toBe('');
 
       // No console errors or page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages2 = page.context()._consoleMessages || [];
+      const pageErrors2 = page.context()._pageErrors || [];
+      const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -188,7 +188,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       // Validates second Enqueue within Non-Empty:
       // - Queue size increments to 2
       // - Order is FIFO: item1 at front, item2 at rear
-      const q = new QueuePage(page);
+      const q2 = new QueuePage(page);
       await q.goto();
 
       await q.enqueue('item1');
@@ -200,7 +200,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
 
       expect(await q.getQueueInfoText()).toBe('Queue size: 2');
 
-      const items = await q.getItemsText();
+      const items3 = await q.getItemsText();
       expect(items).toEqual(['item1', 'item2']);
 
       // Rear item should have blue background inline style '#2196F3' (rgb(33,150,243))
@@ -208,9 +208,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(rearBg.replace(/\s/g, '')).toContain('rgb(33,150,243)'.replace(/\s/g, ''));
 
       // No console errors or page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages3 = page.context()._consoleMessages || [];
+      const pageErrors3 = page.context()._pageErrors || [];
+      const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -221,7 +221,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       // Validates Peek event behavior:
       // - When queue is non-empty, clicking peek updates queueInfo to show front of queue
       // - The front item receives a transform highlight briefly
-      const q = new QueuePage(page);
+      const q3 = new QueuePage(page);
       await q.goto();
 
       // Setup: enqueue two items
@@ -250,15 +250,15 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       // Wait until transform should have reverted (500ms)
       await page.waitForTimeout(500);
       const transformAfter = await page.evaluate(() => {
-        const item = document.querySelector('#queueDisplay .queue-item');
+        const item1 = document.querySelector('#queueDisplay .queue-item1');
         return item ? window.getComputedStyle(item).getPropertyValue('transform') : '';
       });
 
       // After revert, transform should either be 'none' or a neutral matrix; at least it should not be stuck as the highlighted transform
       // (We simply assert that the page remains interactive and no errors occurred.)
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages4 = page.context()._consoleMessages || [];
+      const pageErrors4 = page.context()._pageErrors || [];
+      const consoleErrors3 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -266,7 +266,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
     test('Peek on empty queue shows appropriate message', async ({ page }) => {
       // Validates Peek from empty queue (edge case):
       // - Should display 'Queue is empty - nothing to peek'
-      const q = new QueuePage(page);
+      const q4 = new QueuePage(page);
       await q.goto();
 
       // Ensure empty
@@ -277,9 +277,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.getQueueInfoText()).toBe('Queue is empty - nothing to peek');
 
       // No console/page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages5 = page.context()._consoleMessages || [];
+      const pageErrors5 = page.context()._pageErrors || [];
+      const consoleErrors4 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -290,7 +290,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       // Validates Dequeue when more than one item in queue:
       // - After dequeue, queue size decrements
       // - First item removed and next item becomes front
-      const q = new QueuePage(page);
+      const q5 = new QueuePage(page);
       await q.goto();
 
       // Enqueue two items
@@ -315,7 +315,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
 
       // Now queue should have 1 item with 'item2' at front
       expect(await q.getQueueInfoText()).toBe('Queue size: 1');
-      const items = await q.getItemsText();
+      const items4 = await q.getItemsText();
       expect(items).toEqual(['item2']);
 
       // The front item should have title indicating front of queue
@@ -323,9 +323,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(title).toContain('Front of queue');
 
       // No console/page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages6 = page.context()._consoleMessages || [];
+      const pageErrors6 = page.context()._pageErrors || [];
+      const consoleErrors5 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -333,7 +333,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
     test('Dequeue last item transitions to Empty state (Non-Empty -> Empty)', async ({ page }) => {
       // Validates Dequeue when only one item is present:
       // - After dequeue completes, queue becomes empty and queueInfo reads 'Queue is empty'
-      const q = new QueuePage(page);
+      const q6 = new QueuePage(page);
       await q.goto();
 
       await q.enqueue('solo');
@@ -348,9 +348,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.getQueueInfoText()).toBe('Queue is empty');
 
       // No console/page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages7 = page.context()._consoleMessages || [];
+      const pageErrors7 = page.context()._pageErrors || [];
+      const consoleErrors6 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -358,7 +358,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
     test('Dequeue on empty queue displays cannot dequeue message (edge case)', async ({ page }) => {
       // Validates attempting to dequeue when empty:
       // - Should not throw errors and should update queueInfo with inability message
-      const q = new QueuePage(page);
+      const q7 = new QueuePage(page);
       await q.goto();
 
       expect(await q.getItemsCount()).toBe(0);
@@ -368,9 +368,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.getQueueInfoText()).toBe('Queue is empty - cannot dequeue');
 
       // No console/page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages8 = page.context()._consoleMessages || [];
+      const pageErrors8 = page.context()._pageErrors || [];
+      const consoleErrors7 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -381,7 +381,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       // Validates Clear event:
       // - Clears queue, updates display to empty
       // - Note: implementation sets queueInfo to 'Queue has been cleared'
-      const q = new QueuePage(page);
+      const q8 = new QueuePage(page);
       await q.goto();
 
       await q.enqueue('a');
@@ -403,16 +403,16 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.getItemsCount()).toBe(0);
 
       // No console/page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages9 = page.context()._consoleMessages || [];
+      const pageErrors9 = page.context()._pageErrors || [];
+      const consoleErrors8 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
 
     test('Enqueue with empty or whitespace input does nothing (edge case)', async ({ page }) => {
       // Validates that enqueue ignores empty/whitespace-only input
-      const q = new QueuePage(page);
+      const q9 = new QueuePage(page);
       await q.goto();
 
       // Attempt to enqueue empty string
@@ -430,9 +430,9 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       expect(await q.getQueueInfoText()).toBe('Queue is empty');
 
       // No console/page errors
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleMessages10 = page.context()._consoleMessages || [];
+      const pageErrors10 = page.context()._pageErrors || [];
+      const consoleErrors9 = consoleMessages.filter((m) => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
@@ -442,7 +442,7 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
     test('No unexpected console or page errors during typical usage', async ({ page }) => {
       // This test performs a sequence of normal interactions and asserts that no console errors or page errors were emitted.
       // It also ensures the FSM states are reached during the interactions.
-      const q = new QueuePage(page);
+      const q10 = new QueuePage(page);
       await q.goto();
 
       await q.enqueue('one');
@@ -457,11 +457,11 @@ test.describe('Queue Demonstration - FSM validation tests', () => {
       await page.waitForTimeout(50);
 
       // Capture console and page error arrays
-      const consoleMessages = page.context()._consoleMessages || [];
-      const pageErrors = page.context()._pageErrors || [];
+      const consoleMessages11 = page.context()._consoleMessages || [];
+      const pageErrors11 = page.context()._pageErrors || [];
 
       // For diagnostics ensure there are no console errors or uncaught page exceptions
-      const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+      const consoleErrors10 = consoleMessages.filter((m) => m.type === 'error');
       // If any errors occurred, the test will fail and the afterEach will attach diagnostic logs.
       expect(consoleErrors.length).toBe(0);
       expect(pageErrors.length).toBe(0);

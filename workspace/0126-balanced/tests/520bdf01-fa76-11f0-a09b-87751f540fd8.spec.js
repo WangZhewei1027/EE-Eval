@@ -81,9 +81,9 @@ test.describe('Overfitting Example (Application ID: 520bdf01-fa76-11f0-a09b-8775
 
   test('No transitions/events: interacting with the page does not trigger new errors or state changes', async ({ page }) => {
     // Capture errors and console errors before and after interaction
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', (err) => pageErrors.push(String(err?.message || err)));
-    const consoleErrors = [];
+    const consoleErrors1 = [];
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
     await page.goto(APP_URL, { waitUntil: 'load' });

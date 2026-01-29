@@ -188,7 +188,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
   test.describe('Process Management (S1_ProcessesAdded)', () => {
     test('should add a new process input when clicking "Add Process"', async ({ page }) => {
       // This validates the AddProcess event and transition S0 -> S1
-      const app = new SchedulingPage(page);
+      const app1 = new SchedulingPage(page);
 
       const beforeCount = await app.getProcessCount();
       await app.addProcess();
@@ -210,7 +210,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
 
     test('should remove a process input and renumber remaining processes', async ({ page }) => {
       // This validates the RemoveProcess event and self-transition S1 -> S1
-      const app = new SchedulingPage(page);
+      const app2 = new SchedulingPage(page);
 
       // Ensure we have at least 3 to remove one safely
       await app.addProcess(); // increase count by 1
@@ -228,13 +228,13 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
       expect(secondProcessText).toContain('Process 2:');
 
       // No console errors produced
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('should show alert when attempting to remove the last remaining process (edge case)', async ({ page }) => {
       // This validates the edge case behavior in removeProcess where an alert is shown
-      const app = new SchedulingPage(page);
+      const app3 = new SchedulingPage(page);
 
       // Remove processes until only one remains
       let count = await app.getProcessCount();
@@ -259,7 +259,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
   test.describe('Algorithm Selection (S2_AlgorithmSelected)', () => {
     test('should show quantum input when Round Robin (rr) is selected and hide otherwise', async ({ page }) => {
       // This validates SelectAlgorithm event and effects on the DOM
-      const app = new SchedulingPage(page);
+      const app4 = new SchedulingPage(page);
 
       // Select round robin
       await app.selectAlgorithm('rr');
@@ -281,7 +281,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
   test.describe('Run Scheduling (S3_SchedulingRunning)', () => {
     test('should run FCFS and populate Gantt chart, time markers, and metrics', async ({ page }) => {
       // This validates the RunScheduling event from S2 -> S3 with FCFS
-      const app = new SchedulingPage(page);
+      const app5 = new SchedulingPage(page);
 
       // Ensure we have the default algorithm fcfs
       await app.selectAlgorithm('fcfs');
@@ -307,7 +307,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
       expect(avgText).toContain('Average Turnaround Time:');
 
       // No console errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
 
       // No uncaught page errors
@@ -316,17 +316,17 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
 
     test('should run SJF and produce same number of completed processes but possibly different Gantt segmentation', async ({ page }) => {
       // Validate SJF algorithm execution
-      const app = new SchedulingPage(page);
+      const app6 = new SchedulingPage(page);
 
       await app.selectAlgorithm('sjf');
       await app.runScheduling();
 
       // Table rows should match number of processes (4)
-      const tableRows = await app.getProcessTableRowsCount();
+      const tableRows1 = await app.getProcessTableRowsCount();
       expect(tableRows).toBe(4);
 
       // Gantt bars should be present
-      const ganttCount = await app.getGanttBarsCount();
+      const ganttCount1 = await app.getGanttBarsCount();
       expect(ganttCount).toBeGreaterThan(0);
 
       // No page errors occurred
@@ -335,29 +335,29 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
 
     test('should run SRTF (preemptive) and produce at least one gantt entry and metrics', async ({ page }) => {
       // Validate SRTF algorithm execution
-      const app = new SchedulingPage(page);
+      const app7 = new SchedulingPage(page);
 
       await app.selectAlgorithm('srtf');
       await app.runScheduling();
 
-      const ganttCount = await app.getGanttBarsCount();
+      const ganttCount2 = await app.getGanttBarsCount();
       expect(ganttCount).toBeGreaterThan(0);
 
-      const tableRows = await app.getProcessTableRowsCount();
+      const tableRows2 = await app.getProcessTableRowsCount();
       expect(tableRows).toBe(4);
 
       // time markers are present
-      const timeCount = await app.getTimeMarkersCount();
+      const timeCount1 = await app.getTimeMarkersCount();
       expect(timeCount).toBeGreaterThan(0);
 
       // No console errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('should run Round Robin with visible quantum and produce gantt alternating segments', async ({ page }) => {
       // Validate RR algorithm execution and the quantum UI behavior
-      const app = new SchedulingPage(page);
+      const app8 = new SchedulingPage(page);
 
       await app.selectAlgorithm('rr');
       expect(await app.isQuantumVisible()).toBe(true);
@@ -368,14 +368,14 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
       await app.runScheduling();
 
       // For RR, there will be multiple gantt segments; ensure at least more than or equal to 1
-      const ganttCount = await app.getGanttBarsCount();
+      const ganttCount3 = await app.getGanttBarsCount();
       expect(ganttCount).toBeGreaterThan(0);
 
-      const tableRows = await app.getProcessTableRowsCount();
+      const tableRows3 = await app.getProcessTableRowsCount();
       expect(tableRows).toBe(4);
 
       // avg metrics present
-      const avgText = await app.getAvgMetricsText();
+      const avgText1 = await app.getAvgMetricsText();
       expect(avgText).toContain('Average Turnaround Time:');
 
       // No page errors
@@ -384,7 +384,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
 
     test('should alert and not run scheduling when Priority is selected (edge case)', async ({ page }) => {
       // Validate that selecting Priority triggers alert and runScheduling returns early
-      const app = new SchedulingPage(page);
+      const app9 = new SchedulingPage(page);
 
       // Ensure enough processes exist (reset by reloading)
       await page.reload();
@@ -407,7 +407,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
       expect(dialogMessages[dialogMessages.length - 1]).toContain('Priority scheduling would require priority inputs for each process');
 
       // Ensure no gantt bars were created after attempting priority scheduling
-      const ganttCount = await app.getGanttBarsCount();
+      const ganttCount4 = await app.getGanttBarsCount();
       expect(ganttCount).toBe(0);
 
       // No uncaught page errors
@@ -418,7 +418,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
   test.describe('Runtime Console & Error Observability', () => {
     test('should not emit uncaught page errors or console errors during normal interactions', async ({ page }) => {
       // Final smoke test: perform a series of interactions and assert no console or page errors occurred
-      const app = new SchedulingPage(page);
+      const app10 = new SchedulingPage(page);
 
       // Perform interactions
       await app.addProcess();
@@ -439,7 +439,7 @@ test.describe('CPU Scheduling Visualization - de3cc402-fa74-11f0-a1b6-4b9b815144
       expect(pageErrors.length).toBe(0);
 
       // Assert there are no console errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });

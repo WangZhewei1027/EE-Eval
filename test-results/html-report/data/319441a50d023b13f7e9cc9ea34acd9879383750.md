@@ -1,0 +1,63 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic:
+    - img
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Circular Linked List" [level=1] [ref=e6]
+          - paragraph [ref=e7]: A refined, visual metaphor for a linked list where the final node loops back to the first — creating a circular structure. Observe the flow; interaction is intentionally minimal.
+        - group "controls" [ref=e8]:
+          - button "Pause" [ref=e9] [cursor=pointer]
+          - button "Shuffle" [ref=e10] [cursor=pointer]
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - text: "Nodes:"
+          - strong [ref=e13]: "8"
+        - generic [ref=e14]:
+          - text: "Speed:"
+          - strong [ref=e15]: 1×
+      - generic [ref=e17]:
+        - img [ref=e18]
+        - generic:
+          - generic:
+            - generic: HEAD
+            - generic: Circular reference
+        - generic [ref=e28]:
+          - generic [ref=e29]:
+            - generic [ref=e30]: A
+            - generic [ref=e31]: "0x1a"
+          - generic [ref=e32]:
+            - generic [ref=e33]: B
+            - generic [ref=e34]: "0x2b"
+          - generic [ref=e35]:
+            - generic [ref=e36]: C
+            - generic [ref=e37]: "0x3c"
+          - generic [ref=e38]:
+            - generic [ref=e39]: D
+            - generic [ref=e40]: "0x4d"
+          - generic [ref=e41]:
+            - generic [ref=e42]: E
+            - generic [ref=e43]: "0x5e"
+          - generic [ref=e44]:
+            - generic [ref=e45]: F
+            - generic [ref=e46]: "0x6f"
+          - generic [ref=e47]:
+            - generic [ref=e48]: G
+            - generic [ref=e49]: 0x7g
+          - generic [ref=e50]:
+            - generic [ref=e51]: H
+            - generic [ref=e52]: 0x8h
+      - generic [ref=e53]:
+        - generic [ref=e54]: Minimal controls • Observation-focused
+        - generic [ref=e55]: Concept visualization • Aesthetic UX
+    - generic [ref=e56]:
+      - heading "How to read this illustration" [level=3] [ref=e57]
+      - paragraph [ref=e58]: The nodes arranged around the ring represent elements of a linked list. Each link (arrow) points to the next node; the last connection loops back to the first — forming a continuous circle. The glowing token orbits the ring to show traversal flow over time. Nodes lightly pulse as the token passes, visually representing visitation.
+      - paragraph [ref=e59]:
+        - strong [ref=e60]: "Key ideas:"
+        - text: Single-direction links, a head pointer, and a cyclical end-to-start connection. Unlike a linear list, a circular linked list has no null terminator — traversal can continue indefinitely.
+```

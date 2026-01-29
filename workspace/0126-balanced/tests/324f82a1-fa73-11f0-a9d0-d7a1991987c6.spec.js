@@ -98,7 +98,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
 
   test('Add Task transition (S0_Idle -> S1_TaskAdded): valid task creates a new sprint and task', async ({ page }) => {
     // This test validates the AddTask event, FSM transition, DOM updates, and attributes evidences.
-    const app = new SprintTrackerPage(page);
+    const app1 = new SprintTrackerPage(page);
     await app.goto();
 
     const testTask = 'Implement login flow';
@@ -140,7 +140,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
 
   test('UpdateProgress event: checking and unchecking updates completed count and triggers alert when all completed', async ({ page }) => {
     // This test validates the UpdateProgress event and its loop-back transition (S1_TaskAdded -> S1_TaskAdded)
-    const app = new SprintTrackerPage(page);
+    const app2 = new SprintTrackerPage(page);
     await app.goto();
 
     // Prepare to capture dialog messages
@@ -155,7 +155,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
     await app.addTask(singleTask);
 
     // The checkbox should exist
-    const checkbox = app.firstCheckboxInSprint(1);
+    const checkbox1 = app.firstCheckboxInSprint(1);
     await expect(checkbox).toBeVisible();
 
     // Check the box -> completed should go from 0 to 1 and alert should fire saying all tasks completed
@@ -174,7 +174,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
 
   test('Edge case: Adding empty task shows alert and does not create a sprint', async ({ page }) => {
     // Validate error scenario: clicking Add Task with empty/whitespace input should alert and not change sprints
-    const app = new SprintTrackerPage(page);
+    const app3 = new SprintTrackerPage(page);
     await app.goto();
 
     // Prepare dialog capture
@@ -199,7 +199,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
 
   test('Multiple AddTask calls create multiple sprints (each task creates a new sprint)', async ({ page }) => {
     // Validate that each AddTask creates a new sprint as per implementation
-    const app = new SprintTrackerPage(page);
+    const app4 = new SprintTrackerPage(page);
     await app.goto();
 
     const tasks = ['Task A', 'Task B', 'Task C'];
@@ -213,7 +213,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
       const sprint = app.sprintLocator(i);
       await expect(sprint).toBeVisible();
       await expect(app.taskListLocator(i).locator('li')).toHaveCount(1);
-      const liText = await app.taskListLocator(i).locator('li').first().innerText();
+      const liText1 = await app.taskListLocator(i).locator('li').first().innerText();
       expect(liText).toContain(tasks[i - 1]);
       await expect(app.totalCountLocator(i)).toHaveText('1');
       await expect(app.completedCountLocator(i)).toHaveText('0');
@@ -225,11 +225,11 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
 
   test('Sanity check: event handler attributes exist exactly as described in FSM extraction', async ({ page }) => {
     // This test explicitly checks the presence of evidence strings mentioned in the FSM extraction summary.
-    const app = new SprintTrackerPage(page);
+    const app5 = new SprintTrackerPage(page);
     await app.goto();
 
     // Verify add button's inline onclick evidence
-    const addButton = page.locator('#add-task button');
+    const addButton1 = page.locator('#add-task button');
     const addOnclick = await addButton.getAttribute('onclick');
     // Evidence expected: "onclick=\"addTask()\""
     expect(addOnclick).toContain('addTask');
@@ -237,7 +237,7 @@ test.describe('Agile Methodology - Sprint Tracker (FSM validation)', () => {
     // Add a task to create a sprint and a checkbox to inspect its onclick attribute
     await app.addTask('Check handler existence');
 
-    const checkbox = app.firstCheckboxInSprint(1);
+    const checkbox2 = app.firstCheckboxInSprint(1);
     const cbOnclick = await checkbox.getAttribute('onclick');
     // Evidence expected: "onclick=\"updateProgress(${sprintNumber}, this)\"" which should contain updateProgress
     expect(cbOnclick).toContain('updateProgress(1');

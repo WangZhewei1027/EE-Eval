@@ -112,7 +112,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       expect(varClass).toContain('active');
 
       // Step info updated for variable demo
-      const info = await page.locator(selectors.stepInfo).textContent();
+      const info1 = await page.locator(selectors.stepInfo).textContent();
       expect(info).toMatch(/Variable-size longest-unique-substring demo/i);
 
       // Switching back should restore fixed UI
@@ -158,8 +158,8 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       // Step 1: move to next (i=3), windowSum should be 7 and maxSum remains 8
       await page.locator(selectors.stepBtn).click();
       await page.waitForTimeout(50);
-      let curSumText = await page.locator(selectors.curSum).textContent();
-      let maxSumText = await page.locator(selectors.maxSum).textContent();
+      let curSumText1 = await page.locator(selectors.curSum).textContent();
+      let maxSumText1 = await page.locator(selectors.maxSum).textContent();
       expect(curSumText.trim()).toBe('7');
       expect(maxSumText.trim()).toBe('8');
 
@@ -168,7 +168,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       await page.waitForTimeout(50);
       curSumText = await page.locator(selectors.curSum).textContent();
       maxSumText = await page.locator(selectors.maxSum).textContent();
-      const maxIdxText = await page.locator(selectors.maxIdx).textContent();
+      const maxIdxText1 = await page.locator(selectors.maxIdx).textContent();
       expect(curSumText.trim()).toBe('9');
       expect(maxSumText.trim()).toBe('9');
       expect(maxIdxText.trim()).toBe('[2,4]');
@@ -184,20 +184,20 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       await page.locator(selectors.applyArr).click();
 
       // arrayViz should have 3 cells
-      const cellCount = await page.locator(`${selectors.arrayViz} .cell`).count();
+      const cellCount1 = await page.locator(`${selectors.arrayViz} .cell`).count();
       expect(cellCount).toBe(3);
 
       // nVal should be 3
-      const nValText = await page.locator(selectors.nVal).textContent();
+      const nValText1 = await page.locator(selectors.nVal).textContent();
       expect(nValText.trim()).toBe('3');
 
       // kRange.max should have adapted; reading kRange.max via evaluate
       const kMax = await page.locator(selectors.kRange).evaluate((el) => el.max);
       expect(Number(kMax)).toBeGreaterThanOrEqual(1);
       // curSum and maxSum should reflect initial window of new array (1+2+3 with k clamped)
-      const kValText = await page.locator(selectors.kVal).textContent();
+      const kValText1 = await page.locator(selectors.kVal).textContent();
       const kValNum = Number(kValText.trim());
-      const curSumText = await page.locator(selectors.curSum).textContent();
+      const curSumText2 = await page.locator(selectors.curSum).textContent();
       // For array length 3 and k likely 3 => sum 6
       if (kValNum === 3) expect(curSumText.trim()).toBe('6');
     });
@@ -217,7 +217,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       expect(matched).toBeTruthy();
 
       // Check that arrayViz still contains the previous array length (which might be 3 from previous test)
-      const cellCount = await page.locator(`${selectors.arrayViz} .cell`).count();
+      const cellCount2 = await page.locator(`${selectors.arrayViz} .cell`).count();
       expect(cellCount).toBeGreaterThan(0);
     });
 
@@ -230,7 +230,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       const inputVal = await page.locator(selectors.arrayInput).inputValue();
       expect(inputVal.split(',').length).toBeGreaterThanOrEqual(1);
       // arrayViz should have same number of cells as input values
-      const cellCount = await page.locator(`${selectors.arrayViz} .cell`).count();
+      const cellCount3 = await page.locator(`${selectors.arrayViz} .cell`).count();
       expect(cellCount).toBe(inputVal.split(',').length);
 
       // Fast-forward to final step
@@ -274,7 +274,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       await expect(page.locator(selectors.variableControls)).toBeVisible();
 
       // strViz should render cells for default string 'abcabcbb' length 8
-      const cellCount = await page.locator(`${selectors.strViz} .cell`).count();
+      const cellCount4 = await page.locator(`${selectors.strViz} .cell`).count();
       // Note: renderStrViz appends .cell elements but uses s variable; count should equal length of string
       const strVal = await page.locator(selectors.strInput).inputValue();
       expect(cellCount).toBe(strVal.length);
@@ -329,7 +329,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       await page.waitForTimeout(20);
       // curSub, bestLen, bestSub should show '-' or equivalent empty indicators
       const curSubText = await page.locator(selectors.curSub).textContent();
-      const bestLenText = await page.locator(selectors.bestLen).textContent();
+      const bestLenText1 = await page.locator(selectors.bestLen).textContent();
       const bestSubText = await page.locator(selectors.bestSub).textContent();
       expect(curSubText.trim()).toBe('-');
       expect(bestLenText.trim()).toBe('-');
@@ -343,7 +343,7 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       await page.waitForTimeout(30);
       const newStr = await page.locator(selectors.strInput).inputValue();
       expect(newStr.length).toBeGreaterThanOrEqual(1);
-      const cellCount = await page.locator(`${selectors.strViz} .cell`).count();
+      const cellCount5 = await page.locator(`${selectors.strViz} .cell`).count();
       expect(cellCount).toBe(newStr.length);
     });
 
@@ -352,12 +352,12 @@ test.describe('Sliding Window Visualizer - End-to-end', () => {
       await page.locator(selectors.variableTab).click();
       // Click play
       await page.locator(selectors.playBtnVar).click();
-      const playText = await page.locator(selectors.playBtnVar).textContent();
+      const playText1 = await page.locator(selectors.playBtnVar).textContent();
       expect(playText.trim()).toBe('Pause');
 
       // Click again to pause
       await page.locator(selectors.playBtnVar).click();
-      const playTextAfter = await page.locator(selectors.playBtnVar).textContent();
+      const playTextAfter1 = await page.locator(selectors.playBtnVar).textContent();
       expect(playTextAfter.trim()).toBe('Play');
     });
   });

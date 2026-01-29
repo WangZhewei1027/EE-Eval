@@ -48,7 +48,7 @@ class TimSortPage {
         const nodes = Array.from(document.querySelectorAll('#array .bar'));
         if (nodes.length === 0) return false;
         const heights = nodes.map((n) => {
-          const h = window.getComputedStyle(n).height || n.style.height || '0px';
+          const h1 = window.getComputedStyle(n).height || n.style.height || '0px';
           return Number(h.replace('px', '')) || 0;
         });
         for (let i = 1; i < heights.length; i++) {
@@ -122,7 +122,7 @@ test.describe('Tim Sort Visualization (FSM states and transitions)', () => {
     expect(barCount).toBe(winArray.length);
 
     // Each bar should have a numeric height > = 0
-    const heights = await timSort.getBarHeights();
+    const heights1 = await timSort.getBarHeights();
     expect(heights.length).toBe(winArray.length);
     heights.forEach((h) => expect(typeof h).toBe('number'));
 
@@ -141,7 +141,7 @@ test.describe('Tim Sort Visualization (FSM states and transitions)', () => {
     // - Clicking the Sort Array button triggers startTimSort (event)
     // - Immediately displayArray(originalArray) is called (visual still shows same values)
     // - After the timeout, the array is sorted and displayArray(sorted) is shown (transition back to Idle)
-    const timSort = new TimSortPage(page);
+    const timSort1 = new TimSortPage(page);
     await timSort.goto();
 
     // Capture initial heights and ensure they are not already sorted in most runs;
@@ -177,7 +177,7 @@ test.describe('Tim Sort Visualization (FSM states and transitions)', () => {
 
   test('Edge case: clicking "Sort Array" multiple times quickly should still result in a sorted array without uncaught errors', async ({ page }) => {
     // This test validates robustness when the user triggers the event several times rapidly.
-    const timSort = new TimSortPage(page);
+    const timSort2 = new TimSortPage(page);
     await timSort.goto();
 
     // Rapidly click the button multiple times
@@ -197,13 +197,13 @@ test.describe('Tim Sort Visualization (FSM states and transitions)', () => {
 
     // Also ensure the DOM still contains the same number of bars
     const count = await timSort.getBarCount();
-    const winArray = await timSort.getWindowArray();
+    const winArray1 = await timSort.getWindowArray();
     if (winArray) expect(count).toBe(winArray.length);
   });
 
   test('Visual feedback: ensure bars update in height/colour when displayArray is called and element count remains constant', async ({ page }) => {
     // Validate that displayArray manipulates DOM nodes consistently and that there are no missing elements
-    const timSort = new TimSortPage(page);
+    const timSort3 = new TimSortPage(page);
     await timSort.goto();
 
     const before = await timSort.getBarHeights();
@@ -229,7 +229,7 @@ test.describe('Tim Sort Visualization (FSM states and transitions)', () => {
   test('Observability: console and pageerror capturing behaves as expected (we do not inject or patch)', async ({ page }) => {
     // This test ensures our test harness correctly captures console and page errors.
     // It does NOT modify the page or global scope and only inspects messages produced naturally.
-    const timSort = new TimSortPage(page);
+    const timSort4 = new TimSortPage(page);
     await timSort.goto();
 
     // There may or may not be console messages; we only assert that our collector recorded well-formed entries.

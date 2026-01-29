@@ -73,7 +73,7 @@ class AppPage {
     await this.page.waitForFunction(
       (selector, source) => {
         const re = new RegExp(source);
-        const container = document.querySelector(selector);
+        const container1 = document.querySelector(selector);
         if (!container) return false;
         return Array.from(container.querySelectorAll('p')).some(p => re.test(p.textContent));
       },
@@ -133,7 +133,7 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
 
   test('Generate Keys transition (S0_Idle -> S1_KeysGenerated) produces expected outputs and JWK', async ({ page }) => {
     // This validates key generation produces human-readable messages and a JWK public key export.
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
     await app.goto();
 
     await app.clickGenerate();
@@ -143,7 +143,7 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
     await app.waitForOutputContains('Public key can be shared, private key must be kept secret.');
     await app.waitForOutputContains('Public Key (JWK format):');
 
-    const outputs = await app.getOutputsText();
+    const outputs1 = await app.getOutputsText();
     // Ensure at least the success text and the JWK JSON are present
     const joined = outputs.join('\n');
     expect(joined).toContain('Key pair generated successfully!');
@@ -155,19 +155,19 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
 
   test('Signing without generating keys first shows an error (edge case)', async ({ page }) => {
     // Validate user sees helpful error if they try to sign before generating keys (edge case).
-    const app = new AppPage(page);
+    const app2 = new AppPage(page);
     await app.goto();
 
     await app.clickSign();
 
     await app.waitForOutputContains('Please generate a key pair first.');
-    const outputs = await app.getOutputsText();
+    const outputs2 = await app.getOutputsText();
     expect(outputs.some(t => t.includes('Please generate a key pair first.'))).toBeTruthy();
   });
 
   test('Sign message after generating keys (S1_KeysGenerated -> S2_MessageSigned) shows signature hex', async ({ page }) => {
     // Validate signing produces a signature and hex string is output.
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
     await app.goto();
 
     await app.clickGenerate();
@@ -182,7 +182,7 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
     await app.waitForOutputContains('Signature (hex):');
 
     // Ensure a hex string appears after the label
-    const outputs = await app.getOutputsText();
+    const outputs3 = await app.getOutputsText();
     const hexLine = outputs.find(line => line.startsWith('Signature (hex):'));
     expect(hexLine).toBeTruthy();
 
@@ -194,7 +194,7 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
 
   test('Verify signature succeeds after sign (S2_MessageSigned -> S3_SignatureVerified)', async ({ page }) => {
     // Full flow: generate -> sign -> verify -> expect valid signature outputs.
-    const app = new AppPage(page);
+    const app4 = new AppPage(page);
     await app.goto();
 
     await app.clickGenerate();
@@ -209,13 +209,13 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
     await app.waitForOutputContains('Signature is VALID!');
     await app.waitForOutputContains("This message was signed with the private key and hasn't been altered.");
 
-    const outputs = await app.getOutputsText();
+    const outputs4 = await app.getOutputsText();
     expect(outputs.some(t => t.includes('Signature is VALID!'))).toBeTruthy();
   });
 
   test('Tamper message after signing (S2_MessageSigned -> S5_MessageTampered) then verify yields INVALID (S4_SignatureInvalid)', async ({ page }) => {
     // Generate keys, sign, tamper, then verify -> expect invalid signature messages.
-    const app = new AppPage(page);
+    const app5 = new AppPage(page);
     await app.goto();
 
     await app.clickGenerate();
@@ -239,13 +239,13 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
     await app.waitForOutputContains('Signature is INVALID!');
     await app.waitForOutputContains("This message may have been altered or wasn't signed with the expected private key.");
 
-    const outputs = await app.getOutputsText();
+    const outputs5 = await app.getOutputsText();
     expect(outputs.some(t => t.includes('Signature is INVALID!'))).toBeTruthy();
   });
 
   test('Verify without signing shows an error (edge case): should ask to generate keys and sign', async ({ page }) => {
     // After generating keys but before signing, verify should prompt to generate keys and sign.
-    const app = new AppPage(page);
+    const app6 = new AppPage(page);
     await app.goto();
 
     // Generate keys only
@@ -256,26 +256,26 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
     await app.clickVerify();
 
     await app.waitForOutputContains('Please generate keys and sign a message first.');
-    const outputs = await app.getOutputsText();
+    const outputs6 = await app.getOutputsText();
     expect(outputs.some(t => t.includes('Please generate keys and sign a message first.'))).toBeTruthy();
   });
 
   test('Tamper without signing shows an error (edge case)', async ({ page }) => {
     // If originalMessage is not set (i.e., not signed), tamperMessage should instruct to sign first.
-    const app = new AppPage(page);
+    const app7 = new AppPage(page);
     await app.goto();
 
     // Without signing, clicking tamper should produce an error telling user to sign first.
     await app.clickTamper();
 
     await app.waitForOutputContains('Please sign a message first.');
-    const outputs = await app.getOutputsText();
+    const outputs7 = await app.getOutputsText();
     expect(outputs.some(t => t.includes('Please sign a message first.'))).toBeTruthy();
   });
 
   test('Generating keys twice produces two different exported public keys (state mutation and replacement)', async ({ page }) => {
     // Generate keys twice and ensure that two separate public key exports are produced (demonstrates state change).
-    const app = new AppPage(page);
+    const app8 = new AppPage(page);
     await app.goto();
 
     // First generation
@@ -307,7 +307,7 @@ test.describe('Digital Signature Demo - FSM state and transition tests', () => {
   test('Console and runtime error inspection: capture console messages and ensure no uncaught errors', async ({ page }) => {
     // This test explicitly collects console messages and page errors and asserts there are no uncaught runtime errors.
     // It also surfaces any unusual console warnings for manual inspection via test output if needed.
-    const app = new AppPage(page);
+    const app9 = new AppPage(page);
     await app.goto();
 
     // Interact with the app to exercise code paths

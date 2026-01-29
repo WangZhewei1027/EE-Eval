@@ -62,8 +62,8 @@ class AsymmetricCryptoPage {
   }
 
   async getAllCodeTexts() {
-    const texts = [];
-    const n = await this.codeBlocks.count();
+    const texts1 = [];
+    const n1 = await this.codeBlocks.count();
     for (let i = 0; i < n; i++) {
       texts.push(await this.codeBlocks.nth(i).textContent());
     }
@@ -132,7 +132,7 @@ test.describe('Application: Asymmetric Cryptography (520bdf04-fa76-11f0-a09b-877
   // The inline script calls `require('crypto-js')` inside the browser, which should cause a ReferenceError (require is not defined).
   // We must observe console logs and page errors and assert that such errors occur naturally.
   test('Runtime: observe and assert page runtime errors are emitted (ReferenceError / related)', async ({ page }) => {
-    const app = new AsymmetricCryptoPage(page);
+    const app1 = new AsymmetricCryptoPage(page);
 
     // Prepare to capture console messages and page errors that happen during page load.
     const consoleMessages = [];
@@ -182,12 +182,12 @@ test.describe('Application: Asymmetric Cryptography (520bdf04-fa76-11f0-a09b-877
   test('FSM: verify extracted FSM indicates Idle state only and no transitions/events', async ({ page }) => {
     // This application has an FSM extraction summary that describes a single initial Idle state and no transitions.
     // Since there are no interactive elements or event handlers, we assert that there are no elements that would enable transitions.
-    const app = new AsymmetricCryptoPage(page);
+    const app2 = new AsymmetricCryptoPage(page);
 
     await app.goto();
 
     // There are no interactive UI controls, so transitions cannot be triggered via the DOM.
-    const interactiveCount = await app.countInteractiveCandidates();
+    const interactiveCount1 = await app.countInteractiveCandidates();
     expect(interactiveCount).toBe(0);
 
     // There are no event attributes (onclick etc.) present on the page
@@ -200,13 +200,13 @@ test.describe('Application: Asymmetric Cryptography (520bdf04-fa76-11f0-a09b-877
 
     // Since FSM has only the initial Idle state, verify presence of static content that suggests an informational/idle page.
     await expect(app.h1).toBeVisible();
-    const paragraphs = await app.getAllParagraphTexts();
+    const paragraphs1 = await app.getAllParagraphTexts();
     expect(paragraphs.length).toBeGreaterThanOrEqual(1);
   });
 
   // Edge case test: ensure that attempts to find JS-driven interactions return empty results
   test('Edge cases: no JS-driven links or onclick handlers present', async ({ page }) => {
-    const app = new AsymmetricCryptoPage(page);
+    const app3 = new AsymmetricCryptoPage(page);
     await app.goto();
 
     // Find any anchor tags that use javascript: pseudo-URLs (should be none)

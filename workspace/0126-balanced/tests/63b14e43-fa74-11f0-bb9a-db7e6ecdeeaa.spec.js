@@ -130,7 +130,7 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
     // - clearDisplay() being invoked (S1_InputReceived entry)
     // - interpolationSearch being executed and stepCallback being called (S2_Searching)
     // - Final result indicating the element is found (S3_ResultFound)
-    const p = new InterpolationSearchPage(page);
+    const p1 = new InterpolationSearchPage(page);
     await p.goto();
 
     // Verify starting state
@@ -174,7 +174,7 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
 
   test('S2 -> S4: search for a non-existent element transitions to Result Not Found', async ({ page }) => {
     // This test validates the path where interpolationSearch returns -1 and S4_ResultNotFound is shown.
-    const p = new InterpolationSearchPage(page);
+    const p2 = new InterpolationSearchPage(page);
     await p.goto();
 
     // Use a target not in the array
@@ -186,13 +186,13 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
 
     // Wait for final result to indicate NOT found
     await p.waitForFinalResultContains('NOT found', { timeout: 2000 });
-    const finalText = await p.getFinalResultText();
+    const finalText1 = await p.getFinalResultText();
     expect(finalText).toContain('Result: Element 999 NOT found in the array.');
   });
 
   test('Transition actions: clearDisplay is invoked on SearchClick (arrayDisplay and steps cleared)', async ({ page }) => {
     // Explicitly verify clearDisplay behavior on transition from Idle to InputReceived.
-    const p = new InterpolationSearchPage(page);
+    const p3 = new InterpolationSearchPage(page);
     await p.goto();
 
     // Pre-populate displays to non-empty states to ensure clearDisplay clears them
@@ -216,7 +216,7 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
 
   test('Edge case: invalid (unsorted) array shows validation message', async ({ page }) => {
     // This test validates the invalid array scenario -> S1/InputReceived then immediate final message
-    const p = new InterpolationSearchPage(page);
+    const p4 = new InterpolationSearchPage(page);
     await p.goto();
 
     // Provide an unsorted array
@@ -226,13 +226,13 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
 
     // Since parseArray returns null for unsorted arrays, finalResult should be set immediately
     await p.waitForFinalResultContains('Array invalid or not sorted ascending!', { timeout: 1000 });
-    const finalText = await p.getFinalResultText();
+    const finalText2 = await p.getFinalResultText();
     expect(finalText).toContain('Array invalid or not sorted ascending! Please check your input.');
   });
 
   test('Edge case: empty array shows "Array is empty."', async ({ page }) => {
     // This test validates behavior when the user provides an empty array input
-    const p = new InterpolationSearchPage(page);
+    const p5 = new InterpolationSearchPage(page);
     await p.goto();
 
     await p.setArray(''); // empty
@@ -240,13 +240,13 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
     await p.clickSearch();
 
     await p.waitForFinalResultContains('Array is empty.', { timeout: 1000 });
-    const finalText = await p.getFinalResultText();
+    const finalText3 = await p.getFinalResultText();
     expect(finalText).toContain('Array is empty.');
   });
 
   test('Edge case: invalid target value shows "Target value is not a valid number."', async ({ page }) => {
     // This test validates behavior when the target input is not a valid number
-    const p = new InterpolationSearchPage(page);
+    const p6 = new InterpolationSearchPage(page);
     await p.goto();
 
     await p.setArray('10,20,30');
@@ -254,14 +254,14 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
     await p.clickSearch();
 
     await p.waitForFinalResultContains('Target value is not a valid number.', { timeout: 1000 });
-    const finalText = await p.getFinalResultText();
+    const finalText4 = await p.getFinalResultText();
     expect(finalText).toContain('Target value is not a valid number.');
   });
 
   test('Visual feedback: array highlighting and step messages appear during search', async ({ page }) => {
     // Validate that during the Searching state visual highlights (via inline styles) are applied
     // and that step messages are appended to the steps container.
-    const p = new InterpolationSearchPage(page);
+    const p7 = new InterpolationSearchPage(page);
     await p.goto();
 
     await p.setArray('10,20,30,40,50');
@@ -272,11 +272,11 @@ test.describe.serial('Interpolation Search Visualization - FSM tests', () => {
     await p.waitForStepsCountAtLeast(1, { timeout: 2000 });
 
     // Check that the arrayDisplay innerHTML contains inline style attributes that represent highlighting
-    const arrayHtml = await p.arrayDisplay.innerHTML();
+    const arrayHtml1 = await p.arrayDisplay.innerHTML();
     expect(arrayHtml).toMatch(/<span style=".*">/);
 
     // Steps should include messages with 'Step' or 'Calculated position' or final messages
-    const stepsText = await p.stepsDiv.innerText();
+    const stepsText1 = await p.stepsDiv.innerText();
     expect(/Calculated position|Step \d+:|Found key|not found/i.test(stepsText)).toBeTruthy();
 
     // Wait for final result (found)

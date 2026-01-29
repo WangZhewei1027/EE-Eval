@@ -101,8 +101,8 @@ class RegressionPage {
   // Read chart regression line endpoints (dataset[1])
   async getRegressionLineEndpoints() {
     return await this.page.evaluate(() => {
-      const canvas = document.getElementById('regressionChart');
-      const chart = window.Chart && window.Chart.getChart ? window.Chart.getChart(canvas) : null;
+      const canvas1 = document.getElementById('regressionChart');
+      const chart1 = window.Chart && window.Chart.getChart ? window.Chart.getChart(canvas) : null;
       if (!chart) return null;
       const data = chart.data.datasets[1].data;
       return data.map(p => ({ x: p.x, y: p.y }));
@@ -176,7 +176,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
   });
 
   test('Reset Data transitions to Idle (S1 -> S0) and clears data, chart, and stats', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app1 = new RegressionPage(page);
     await app.gotoAndWait();
 
     // Click Reset Data to clear points
@@ -191,7 +191,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
     expect(chartCountAfterReset).toBe(0);
 
     // Equation, slope, intercept, rSquared should be reset to textual zeros as updateRegression is called
-    const eq = await app.getEquationText();
+    const eq1 = await app.getEquationText();
     expect(eq).toBe('y = 0.00x + 0.00');
     expect(await app.getSlopeText()).toBe('0.0000');
     expect(await app.getInterceptText()).toBe('0.0000');
@@ -203,7 +203,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
   });
 
   test('Clicking on the canvas adds a data point (S0 -> S1 via ClickAddDataPoint)', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app2 = new RegressionPage(page);
     await app.gotoAndWait();
 
     // Ensure a clean baseline by resetting first
@@ -212,19 +212,19 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
     expect(await app.getDataPointsText()).toBe('');
 
     // Click canvas at center to add a new point
-    const box = await app.canvas.boundingBox();
+    const box1 = await app.canvas.boundingBox();
     if (!box) throw new Error('Canvas not available for clicking');
     const centerX = Math.floor(box.width / 2);
     const centerY = Math.floor(box.height / 2);
     await app.clickCanvasAt(centerX, centerY);
 
     // After click, the textarea should have one line describing the point
-    const dataText = await app.getDataPointsText();
+    const dataText1 = await app.getDataPointsText();
     const lines = dataText.split('\n').filter(Boolean);
     expect(lines.length).toBe(1);
 
     // Chart should show 1 data point
-    const chartCount = await app.getChartPointCount();
+    const chartCount1 = await app.getChartPointCount();
     expect(chartCount).toBe(1);
 
     // Because only 1 point exists, regression calculation returns zeros (edge case)
@@ -238,7 +238,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
   });
 
   test('Add Random Points button populates ~10 points and updates regression (S0 -> S1 via ClickAddRandomPoints)', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app3 = new RegressionPage(page);
     await app.gotoAndWait();
 
     // Reset first for a deterministic test
@@ -249,13 +249,13 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
     await app.clickRandom();
 
     // After clicking, textarea should have ~10 entries
-    const dataText = await app.getDataPointsText();
-    const lines = dataText.split('\n').filter(Boolean);
+    const dataText2 = await app.getDataPointsText();
+    const lines1 = dataText.split('\n').filter(Boolean);
     expect(lines.length).toBeGreaterThanOrEqual(8);
     expect(lines.length).toBeLessThanOrEqual(12);
 
     // Chart scatter dataset should match count
-    const chartCount = await app.getChartPointCount();
+    const chartCount2 = await app.getChartPointCount();
     expect(chartCount).toBeGreaterThanOrEqual(8);
 
     // Ensure slope/intercept/r-squared are strings representing finite numbers
@@ -272,7 +272,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
   });
 
   test('Calculate Manually updates regression for programmatically added points (S1 -> S1 via ClickCalculateManually)', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app4 = new RegressionPage(page);
     await app.gotoAndWait();
 
     // Reset to ensure we start with zero points
@@ -284,8 +284,8 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
     await app.addDataPointViaEval(2, 5); // y = 2*2 + 1 = 5
 
     // Ensure the points were added to the textarea
-    const dataText = await app.getDataPointsText();
-    const lines = dataText.split('\n').filter(Boolean);
+    const dataText3 = await app.getDataPointsText();
+    const lines2 = dataText.split('\n').filter(Boolean);
     expect(lines.length).toBe(2);
 
     // Now click Calculate Manually to force updateRegression()
@@ -312,7 +312,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
   });
 
   test('Edge cases: calculating regression with fewer than 2 points returns zeros and does not throw', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app5 = new RegressionPage(page);
     await app.gotoAndWait();
 
     // Reset to zero points
@@ -342,7 +342,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
   });
 
   test('Observes console and page errors during interactions (assert none of ReferenceError/SyntaxError/TypeError occurred)', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app6 = new RegressionPage(page);
     await app.gotoAndWait();
 
     // Perform some interactions that exercise code paths
@@ -360,7 +360,7 @@ test.describe('Linear Regression Demo - FSM validation and interactions', () => 
 
     // Ensure console errors array is empty
     if (consoleErrors.length > 0) {
-      const msgs = consoleErrors.map(e => e.text).join('\n---\n');
+      const msgs1 = consoleErrors.map(e => e.text).join('\n---\n');
       expect(consoleErrors.length, `Unexpected console error messages:\n${msgs}`).toBe(0);
     }
 

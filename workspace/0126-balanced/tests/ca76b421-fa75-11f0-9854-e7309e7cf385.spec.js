@@ -82,12 +82,12 @@ test.describe('B+ Tree interactive application (ca76b421-fa75-11f0-9854-e7309e7c
   // The FSM declares clicking #tree should trigger addNode(), but the HTML implementation doesn't wire a click handler.
   // This test verifies the mismatch and asserts that clicking does not add a node unless addNode is called directly.
   test('Clicking #tree should trigger AddNode transition (verified behavior) - click is NOT wired in implementation', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => consoleMessages.push(msg.text()));
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const tree = new TreePage(page);
+    const tree1 = new TreePage(page);
     await tree.goto();
 
     // Wait for initial automatic addNode() console message
@@ -116,19 +116,19 @@ test.describe('B+ Tree interactive application (ca76b421-fa75-11f0-9854-e7309e7c
 
   // Test: directly invoking addNode() (this calls the implementation's function) should add a node and log success.
   test('Direct invocation of addNode() triggers Node Added transition (S1_NodeAdded) - validates addNode() function', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => consoleMessages.push(msg.text()));
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const tree = new TreePage(page);
+    const tree2 = new TreePage(page);
     await tree.goto();
 
     // Wait for initial automatic addition
     await page.waitForEvent('console', { predicate: m => m.text().includes('Node added successfully'), timeout: 2000 });
 
-    const beforeCount = await tree.getVisibleNodeCount();
-    const beforeSuccessLogs = consoleMessages.filter(m => m.includes('Node added successfully')).length;
+    const beforeCount1 = await tree.getVisibleNodeCount();
+    const beforeSuccessLogs1 = consoleMessages.filter(m => m.includes('Node added successfully')).length;
 
     // Invoke the existing addNode() function directly in page context (simulate the transition action)
     const consoleEventPromise = page.waitForEvent('console', { predicate: m => m.text().includes('Node added successfully'), timeout: 2000 });
@@ -137,11 +137,11 @@ test.describe('B+ Tree interactive application (ca76b421-fa75-11f0-9854-e7309e7c
     expect(newConsole.text()).toContain('Node added successfully');
 
     // After calling addNode(), the DOM should have one more visible node under #tree
-    const afterCount = await tree.getVisibleNodeCount();
+    const afterCount1 = await tree.getVisibleNodeCount();
     expect(afterCount).toBe(beforeCount + 1);
 
     // Confirm a new success log was emitted
-    const afterSuccessLogs = consoleMessages.filter(m => m.includes('Node added successfully')).length;
+    const afterSuccessLogs1 = consoleMessages.filter(m => m.includes('Node added successfully')).length;
     expect(afterSuccessLogs).toBe(beforeSuccessLogs + 1);
 
     // No unexpected page errors should have occurred
@@ -152,12 +152,12 @@ test.describe('B+ Tree interactive application (ca76b421-fa75-11f0-9854-e7309e7c
   // The implementation stores a reference "nodes = document.getElementById('tree')" at load.
   // Even if the element is removed from the document, addNode() will append to that detached element and still log success.
   test('Edge case: calling addNode() after removing #tree - logs success but node not visible in document', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => consoleMessages.push(msg.text()));
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const tree = new TreePage(page);
+    const tree3 = new TreePage(page);
     await tree.goto();
 
     // Wait for initial automatic addNode()
@@ -187,10 +187,10 @@ test.describe('B+ Tree interactive application (ca76b421-fa75-11f0-9854-e7309e7c
 
   // Edge case: attempt to click or interact with #tree after it has been removed -> should produce an error when invoking DOM APIs on null
   test('Edge case: clicking removed #tree via page.evaluate leads to a TypeError in the page context', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors4 = [];
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    const tree = new TreePage(page);
+    const tree4 = new TreePage(page);
     await tree.goto();
 
     // Remove the element

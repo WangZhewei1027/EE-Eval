@@ -91,7 +91,7 @@ test.describe('Backtracking Demo (N-Queens) - FSM validation and behavior', () =
 
   // Test successful solving path (S1_Solving -> S3_DisplaySolutions) for N=4
   test('S1_Solving -> S3_DisplaySolutions: Solving N=4 yields two solutions', async ({ page }) => {
-    const demo = new BacktrackingPage(page);
+    const demo1 = new BacktrackingPage(page);
     await demo.goto();
 
     // Capture previous output (should be empty)
@@ -127,16 +127,16 @@ test.describe('Backtracking Demo (N-Queens) - FSM validation and behavior', () =
 
   // Test no-solution path (S1_Solving -> S2_NoSolutions) for N=2
   test('S1_Solving -> S2_NoSolutions: Solving N=2 yields "No solutions found."', async ({ page }) => {
-    const demo = new BacktrackingPage(page);
+    const demo2 = new BacktrackingPage(page);
     await demo.goto();
 
     // Set N to 2 which has no solutions for the N-Queens problem
     await demo.setN(2);
-    const prevOutput = await demo.getOutputText();
+    const prevOutput1 = await demo.getOutputText();
 
     await demo.clickSolve();
 
-    const output = await demo.waitForOutputChange(prevOutput);
+    const output1 = await demo.waitForOutputChange(prevOutput);
     expect(output.trim()).toBe('No solutions found.');
 
     // Ensure no console/page errors
@@ -146,16 +146,16 @@ test.describe('Backtracking Demo (N-Queens) - FSM validation and behavior', () =
 
   // Edge case: invalid input (<1) triggers validation message
   test('Validation: N < 1 shows validation error message', async ({ page }) => {
-    const demo = new BacktrackingPage(page);
+    const demo3 = new BacktrackingPage(page);
     await demo.goto();
 
     // Enter 0 which is invalid according to the app logic
     await demo.setN(0);
-    const prevOutput = await demo.getOutputText();
+    const prevOutput2 = await demo.getOutputText();
 
     await demo.clickSolve();
 
-    const output = await demo.waitForOutputChange(prevOutput);
+    const output2 = await demo.waitForOutputChange(prevOutput);
     expect(output.trim()).toBe('Please enter a valid number of queens.');
 
     // Check that no runtime errors occurred
@@ -165,16 +165,16 @@ test.describe('Backtracking Demo (N-Queens) - FSM validation and behavior', () =
 
   // Edge and correctness: N=1 should produce a single solution "Q"
   test('S3_DisplaySolutions: N=1 yields a single single-cell solution', async ({ page }) => {
-    const demo = new BacktrackingPage(page);
+    const demo4 = new BacktrackingPage(page);
     await demo.goto();
 
     await demo.setN(1);
-    const prevOutput = await demo.getOutputText();
+    const prevOutput3 = await demo.getOutputText();
 
     await demo.clickSolve();
 
-    const output = await demo.waitForOutputChange(prevOutput);
-    const rawSolutions = output.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+    const output3 = await demo.waitForOutputChange(prevOutput);
+    const rawSolutions1 = output.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
 
     expect(rawSolutions.length).toBe(1);
     expect(rawSolutions[0].trim()).toBe('Q');
@@ -186,7 +186,7 @@ test.describe('Backtracking Demo (N-Queens) - FSM validation and behavior', () =
 
   // Verify repeated interactions: changing N and clicking Solve updates output deterministically
   test('Repeated solves update the output correctly when N changes', async ({ page }) => {
-    const demo = new BacktrackingPage(page);
+    const demo5 = new BacktrackingPage(page);
     await demo.goto();
 
     // First solve N=4
@@ -221,15 +221,15 @@ test.describe('Backtracking Demo (N-Queens) - FSM validation and behavior', () =
 
   // Observability: ensure that clicking the Solve button is wired to an event handler
   test('Event wiring: Solve button click triggers handler (observable through output change)', async ({ page }) => {
-    const demo = new BacktrackingPage(page);
+    const demo6 = new BacktrackingPage(page);
     await demo.goto();
 
     // The existence of the click event listener is observable by the fact that clicking changes the output.
     // We'll use N=2 which is deterministic: clicking Solve should set output to "No solutions found."
     await demo.setN(2);
-    const prev = await demo.getOutputText();
+    const prev1 = await demo.getOutputText();
     await demo.clickSolve();
-    const output = await demo.waitForOutputChange(prev);
+    const output4 = await demo.waitForOutputChange(prev);
     expect(output.trim()).toBe('No solutions found.');
 
     // No runtime errors triggered by the click

@@ -66,7 +66,7 @@ class TxDemoPage {
 
   // Add an operation to the tx: type: 'transfer'|'deposit'|'withdraw', amount: number, from/to ids as needed
   async addOperationToTx(txId, { type = 'deposit', amount = 10.0, from = 'A', to = 'B' } = {}) {
-    const card = this.txCardLocator(txId);
+    const card1 = this.txCardLocator(txId);
     await expect(card).toBeVisible();
     // Click the Add Op button inside this card
     const addOpBtn = card.locator('button', { hasText: 'Add Op' });
@@ -105,7 +105,7 @@ class TxDemoPage {
 
   // Click commit for tx and wait for state change in the card
   async commitTx(txId) {
-    const card = this.txCardLocator(txId);
+    const card2 = this.txCardLocator(txId);
     const commitBtn = card.locator('button', { hasText: 'Commit' });
     await commitBtn.click();
     // Wait until state element updates to 'committed' or 'aborted'
@@ -118,10 +118,10 @@ class TxDemoPage {
 
   // Click rollback for tx and wait for aborted state
   async rollbackTx(txId) {
-    const card = this.txCardLocator(txId);
+    const card3 = this.txCardLocator(txId);
     const rb = card.locator('button', { hasText: 'Rollback' });
     await rb.click();
-    const stateEl = this.page.locator(`#state-${txId}`);
+    const stateEl1 = this.page.locator(`#state-${txId}`);
     await expect(stateEl).toHaveText(/aborted/);
   }
 
@@ -291,7 +291,7 @@ test.describe('Transaction Demo — FSM and UI behavior', () => {
     expect(parseMoney(accB_after.balanceText)).toBeCloseTo(parseMoney(accB_before.balanceText) + 10.00, 2);
 
     // Log should include "committed"
-    const logText = await demo.getLogText();
+    const logText1 = await demo.getLogText();
     expect(logText).toContain(`committed`);
   });
 
@@ -304,11 +304,11 @@ test.describe('Transaction Demo — FSM and UI behavior', () => {
     await demo.rollbackTx(id);
 
     // Validate UI state is aborted
-    const stateText = await demo.page.locator(`#state-${id}`).innerText();
+    const stateText1 = await demo.page.locator(`#state-${id}`).innerText();
     expect(stateText).toBe('aborted');
 
     // Log should include "rolled back by user"
-    const logText = await demo.getLogText();
+    const logText2 = await demo.getLogText();
     expect(logText).toContain('rolled back by user');
   });
 
@@ -342,14 +342,14 @@ test.describe('Transaction Demo — FSM and UI behavior', () => {
     });
     expect(lsAfterClear.accounts).toBe(false);
     // Log should include "Cleared persisted state."
-    const logText = await demo.getLogText();
+    const logText3 = await demo.getLogText();
     expect(logText).toContain('Cleared persisted state.');
   });
 
   test('ChangeConcurrencyMode captures mode change and affects commits (ChangeConcurrencyMode event)', async () => {
     // Switch to optimistic mode and validate log
     await demo.setMode('optimistic');
-    let log = await demo.getLogText();
+    let log1 = await demo.getLogText();
     expect(log).toContain('Mode switched to: optimistic');
 
     // Run the provided 2-TX scenario which is designed to produce an optimistic conflict when mode=optimistic
@@ -382,13 +382,13 @@ test.describe('Transaction Demo — FSM and UI behavior', () => {
     });
     expect(lsAfterReset.accounts).toBe(false);
     // Accounts table should reflect default balances (we know default for A is 1000.00)
-    const accounts = await demo.readAccountsTable();
+    const accounts1 = await demo.readAccountsTable();
     const accA = accounts.find(a => a.id === 'A');
-    const parseMoney = (s) => parseFloat(s.replace(/[^0-9.-]+/g, ''));
+    const parseMoney1 = (s) => parseFloat(s.replace(/[^0-9.-]+/g, ''));
     expect(parseMoney(accA.balanceText)).toBeCloseTo(1000.00, 2);
 
     // Log should include "Demo reset to defaults."
-    const log = await demo.getLogText();
+    const log2 = await demo.getLogText();
     expect(log).toContain('Demo reset to defaults.');
   });
 
@@ -396,20 +396,20 @@ test.describe('Transaction Demo — FSM and UI behavior', () => {
     // Create tx
     const { id } = await demo.createNewTransaction();
     // Open Add Op form
-    const card = demo.txCardLocator(id);
+    const card4 = demo.txCardLocator(id);
     await card.locator('button', { hasText: 'Add Op' }).click();
-    const opsDiv = page.locator(`#ops-${id}`);
-    const form = opsDiv.locator('div').first();
+    const opsDiv1 = page.locator(`#ops-${id}`);
+    const form1 = opsDiv.locator('div').first();
     await expect(form).toBeVisible();
     // Leave amount empty and click Add -> it triggers alert (dialog) which we auto-accept
-    const addBtn = form.locator('button', { hasText: 'Add' });
+    const addBtn1 = form.locator('button', { hasText: 'Add' });
     await addBtn.click();
     // The form should still exist or be removed (alert prevents adding op). Verify no op-row added
     const opRows = page.locator(`#ops-${id} .op-row`);
     await expect(opRows).toHaveCount(0);
     // Also verify console captured an alert (in our test environment it is accepted automatically)
     // Check that log does not contain "added op" for this TX
-    const log = await demo.getLogText();
+    const log3 = await demo.getLogText();
     expect(log).not.toContain(`TX ${id}: added op`);
   });
 

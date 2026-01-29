@@ -119,7 +119,7 @@ test.describe('DNS Concept Demo - FSM states and transitions', () => {
 
   test('Submitting empty input shows validation message (edge case)', async ({ page }) => {
     // This test exercises the guard for empty domain input
-    const dns = new DNSPage(page);
+    const dns1 = new DNSPage(page);
 
     // Ensure input is empty (simulate user submitting without entering anything)
     await dns.fillDomain('');
@@ -143,7 +143,7 @@ test.describe('DNS Concept Demo - FSM states and transitions', () => {
 
   test('Invalid domain format transitions to Invalid Domain Format state (S3_InvalidDomainFormat)', async ({ page }) => {
     // This test submits a syntactically invalid domain and verifies the specific error output
-    const dns = new DNSPage(page);
+    const dns2 = new DNSPage(page);
 
     // Choose a clearly invalid domain string that fails the domainRegex and singleLabelRegex
     const invalidDomain = 'inva lid!!'; // spaces and exclamation marks -> invalid
@@ -152,11 +152,11 @@ test.describe('DNS Concept Demo - FSM states and transitions', () => {
     await dns.resolveDomain(invalidDomain);
 
     // Result should indicate invalid domain format and include the sanitized input in the message
-    const resultText = await dns.getResultText();
+    const resultText1 = await dns.getResultText();
     expect(resultText).toMatch(/is not a valid domain name format/);
 
     // Verify the sanitized domain appears (quotes are included in the message per implementation)
-    const resultHTML = await dns.getResultHTML();
+    const resultHTML1 = await dns.getResultHTML();
     // sanitized content should not include raw characters like < or >
     expect(resultHTML).toContain(`is not a valid domain name format.`);
     // The invalid input string should be present in the message (sanitized)
@@ -165,30 +165,30 @@ test.describe('DNS Concept Demo - FSM states and transitions', () => {
 
   test('Domain not in demo DNS table transitions to Domain Not Found state (S4_DomainNotFound)', async ({ page }) => {
     // This test provides a well-formed domain that is not present in the dnsTable
-    const dns = new DNSPage(page);
+    const dns3 = new DNSPage(page);
 
     const unknownDomain = 'not-in-table-example.test';
 
     await dns.resolveDomain(unknownDomain);
 
     // Expect a "could not be resolved in this demo DNS table" message
-    const resultText = await dns.getResultText();
+    const resultText2 = await dns.getResultText();
     expect(resultText).toMatch(/could not be resolved in this demo DNS table/);
 
     // Inspect HTML to ensure domain is wrapped in <strong> inside the message per implementation
-    const resultHTML = await dns.getResultHTML();
+    const resultHTML2 = await dns.getResultHTML();
     expect(resultHTML).toContain('<strong>');
     expect(resultHTML).toContain(unknownDomain);
   });
 
   test('Valid domain resolves to IP address(es) (S2_ValidDomain) - single IP example.com', async ({ page }) => {
     // This test verifies that a known domain from dnsTable resolves and shows the IP list
-    const dns = new DNSPage(page);
+    const dns4 = new DNSPage(page);
 
     await dns.resolveDomain('example.com');
 
     // Should display "Domain:" and "Resolved IP address"
-    const resultText = await dns.getResultText();
+    const resultText3 = await dns.getResultText();
     expect(resultText).toMatch(/Domain:/);
     expect(resultText).toMatch(/Resolved IP address/);
 
@@ -196,61 +196,61 @@ test.describe('DNS Concept Demo - FSM states and transitions', () => {
     const liCount = await dns.getResultListItemCount();
     expect(liCount).toBe(1);
 
-    const resultHTML = await dns.getResultHTML();
+    const resultHTML3 = await dns.getResultHTML();
     expect(resultHTML).toContain('93.184.216.34');
   });
 
   test('Valid domain with multiple IPs shows pluralized label and correct count (google.com)', async ({ page }) => {
     // This test checks pluralization and multiple IP rendering for Google
-    const dns = new DNSPage(page);
+    const dns5 = new DNSPage(page);
 
     await dns.resolveDomain('google.com');
 
     // Google entry in demo dnsTable includes multiple IPs
-    const resultText = await dns.getResultText();
+    const resultText4 = await dns.getResultText();
     // Should mention "Resolved IP address" followed by "es" when more than one IP present
     expect(resultText).toMatch(/Resolved IP addresses/);
 
-    const liCount = await dns.getResultListItemCount();
+    const liCount1 = await dns.getResultListItemCount();
     expect(liCount).toBeGreaterThan(1);
 
     // Ensure each IP string appears in the list HTML
-    const resultHTML = await dns.getResultHTML();
+    const resultHTML4 = await dns.getResultHTML();
     expect(resultHTML).toContain('142.250.190.14');
     expect(resultHTML).toContain('142.250.190.78');
   });
 
   test('Single-label domain allowed (localhost) resolves to 127.0.0.1', async ({ page }) => {
     // The demo allows single-label domains via singleLabelRegex (e.g., "localhost")
-    const dns = new DNSPage(page);
+    const dns6 = new DNSPage(page);
 
     await dns.resolveDomain('localhost');
 
-    const resultText = await dns.getResultText();
+    const resultText5 = await dns.getResultText();
     expect(resultText).toMatch(/Domain:/);
     expect(resultText).toMatch(/Resolved IP address/);
 
-    const resultHTML = await dns.getResultHTML();
+    const resultHTML5 = await dns.getResultHTML();
     expect(resultHTML).toContain('127.0.0.1');
   });
 
   test('Trimming and lowercasing: whitespace and uppercase domain is normalized before resolution', async ({ page }) => {
     // This test ensures input is trimmed and lowercased by the JS before lookup (example: "  EXAMPLE.COM  ")
-    const dns = new DNSPage(page);
+    const dns7 = new DNSPage(page);
 
     await dns.resolveDomain('   EXAMPLE.COM   ');
 
     // The displayed domain should be sanitized and shown in lowercase per implementation (domain is lowercased)
-    const resultText = await dns.getResultText();
+    const resultText6 = await dns.getResultText();
     // Check that the domain is present and resolved
     expect(resultText.toLowerCase()).toContain('example.com');
-    const resultHTML = await dns.getResultHTML();
+    const resultHTML6 = await dns.getResultHTML();
     expect(resultHTML).toContain('93.184.216.34');
   });
 
   test('Submitting the form does not trigger navigation (verifies e.preventDefault() in submit handler)', async ({ page }) => {
     // This test specifically verifies the S0 -> S1 transition where the submit handler calls e.preventDefault()
-    const dns = new DNSPage(page);
+    const dns8 = new DNSPage(page);
 
     const initialUrl = page.url();
     await dns.fillDomain('example.com');
@@ -271,7 +271,7 @@ test.describe('DNS Concept Demo - FSM states and transitions', () => {
     expect(page.url()).toBe(initialUrl);
 
     // Confirm the expected resolution happened (to ensure the submit handler ran)
-    const resultText = await dns.getResultText();
+    const resultText7 = await dns.getResultText();
     expect(resultText).toContain('Resolved IP address');
   });
 });

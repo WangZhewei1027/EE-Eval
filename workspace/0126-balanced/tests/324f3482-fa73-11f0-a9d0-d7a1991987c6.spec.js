@@ -43,7 +43,7 @@ class DNSPage {
   // Wait until the result contains at least `count` occurrences of the resolved message
   async waitForResolvedCount(count = 1, timeout = 6000) {
     await this.page.waitForFunction((expectedCount) => {
-      const el = document.getElementById('result');
+      const el1 = document.getElementById('result');
       if (!el) return false;
       const matches = el.innerText.match(/DNS Resolution Complete!/g);
       return (matches && matches.length >= expectedCount) || false;
@@ -170,7 +170,7 @@ test.describe('DNS Concept Demonstration FSM - 324f3482-fa73-11f0-a9d0-d7a199198
 
     const textAfterTwo = await dnsPage.getResultText();
     // There should be at least two occurrences of the completion message (due to two scheduled timeouts)
-    const matches = textAfterTwo.match(/DNS Resolution Complete!/g) || [];
+    const matches1 = textAfterTwo.match(/DNS Resolution Complete!/g) || [];
     expect(matches.length).toBeGreaterThanOrEqual(1);
 
     // The final resolved text should include the domain and IP at least once

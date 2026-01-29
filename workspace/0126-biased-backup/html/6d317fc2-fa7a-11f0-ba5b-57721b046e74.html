@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Load Balancing Simulator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { display: flex; flex-direction: column; gap: 20px; }
+        .panel { border: 1px solid #ccc; padding: 15px; }
+        .server { border: 1px solid #000; padding: 10px; margin: 5px; }
+        .active { background-color: #f0f0f0; }
+        .overloaded { border-color: red; }
+        .underutilized { border-color: orange; }
+        .stats { margin-top: 10px; font-size: 0.9em; }
+        button { margin: 5px; padding: 5px 10px; }
+        input, select { margin: 5px; }
+        .hidden { display: none; }
+        #visualization { height: 200px; border: 1px solid #000; position: relative; }
+        .request { position: absolute; width: 10px; height: 10px; background: black; border-radius: 50%; }
+    </style>
+</head>
+<body>
+    <h1>Load Balancing Simulator</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Configuration</h2>
+            <div>
+                <label>Number of Servers: <input type="number" id="serverCount" min="1" max="10" value="3"></label>
+                <button id="setupServers">Setup Servers</button>
+            </div>
+            <div>
+                <label>Load Balancer Algorithm:
+                    <select id="algorithm">
+                        <option value="roundRobin">Round Robin</option>
+                        <option value="leastConnections">Least Connections</option>
+                        <option value="random">Random</option>
+                        <option value="ipHash">IP Hash</option>
+                        <option value="weighted">Weighted</option>
+                    </select>
+                </label>
+            </div>
+            <div id="weightControls" class="hidden">
+                <h3>Server Weights</h3>
+                <div id="weightInputs"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Traffic Generator</h2>
+            <div>
+                <label>Requests per second: <input type="range" id="requestRate" min="1" max="20" value="5"></label>
+                <span id="requestRateValue">5</span>
+            </div>
+            <div>
+                <label>Request duration (ms): <input type="range" id="requestDuration" min="50" max="2000" value="500"></label>
+                <span id="requestDurationValue">500</span>
+            </div>
+            <div>
+                <label>Traffic pattern:
+                    <select id="trafficPattern">
+                        <option value="steady">Steady</option>
+                        <option value="bursty">Bursty</option>
+                        <option value="spiky">Spiky</option>
+                    </select>
+                </label>
+            </div>
+            <button id="startTraffic">Start Traffic</button>
+            <button id="stopTraffic" disabled>Stop Traffic</button>
+            <button id="singleRequest">Send Single Request</button>
+        </div>
+
+        <div class="panel">
+            <h2>Server Status</h2>
+            <div id="serversContainer"></div>
+        </div>
+
+        <div class="panel">
+            <h2>Visualization</h2>
+            <div id="visualization"></div>
+            <div>
+                <button id="toggleView">Toggle Detailed View</button>
+                <button id="resetStats">Reset Statistics</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Statistics</h2>
+            <div id="statsContainer">
+                <div>Total Requests: <span id="totalRequests">0</span></div>
+                <div>Requests in Progress: <span id="activeRequests">0</span></div>
+                <div>Average Response Time: <span id="avgResponseTime">0</span>ms</div>
+                <div>Load Balancer Efficiency: <span id="efficiency">0</span>%</div>
+                <div id="detailedStats" class="hidden">
+                    <h3>Per-Server Stats</h3>
+                    <div id="serverStats"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let servers = [];
+        let requests = [];
+        let requestInterval;
+        let lastRequestTime = 0;
+        let totalRequests = 0;
+        let stats = {
+            totalRequests: 0,
+            completedRequests: 0,
+            totalResponseTime: 0,
+            serverStats: {}
+        };
+
+        // DOM elements
+        const serverCountInput = document.getElementById('serverCount');
+        const setupServersBtn = document.getElementById('setupServers');
+        const algorithmSelect = document.getElementById('algorithm');
+        const weightControls = document.getElementById('weightControls');
+        const weightInputs = document.getElementById('weightInputs');
+        const requestRateInput = document.getElementById('requestRate');
+        const requestRateValue = document.getElementById('requestRateValue');
+        const requestDurationInput = document.getElementById('requestDuration');
+        const requestDurationValue = document.getElementById('requestDurationValue');
+        const trafficPatternSelect = document.getElementById('trafficPattern');
+        const startTrafficBtn = document.getElementById('startTraffic');
+        const stopTrafficBtn = document.getElementById('stopTraffic');
+        const singleRequestBtn = document.getElementById('singleRequest');
+        const serversContainer = document.getElementById('serversContainer');
+        const visualization = document.getElementById('visualization');
+        const toggleViewBtn = document.getElementById('toggleView');
+        const resetStatsBtn = document.getElementById('resetStats');
+        const totalRequestsSpan = document.getElementById('totalRequests');
+        const activeRequestsSpan = document.getElementById('activeRequests');
+        const avgResponseTimeSpan = document.getElementById('avgResponseTime');
+        const efficiencySpan = document.getElementById('efficiency');
+        const detailedStats = document.getElementById('detailedStats');
+        const serverStats = document.getElementById('serverStats');
+
+        // Event listeners
+        setupServersBtn.addEventListener('click', setupServers);
+        algorithmSelect.addEventListener('change', handleAlgorithmChange);
+        requestRateInput.addEventListener('input', () => requestRateValue.textContent = requestRateInput.value);
+        requestDurationInput.addEventListener('input', () => requestDurationValue.textContent = requestDurationInput.value);
+        startTrafficBtn.addEventListener('click', startTraffic);
+        stopTrafficBtn.addEventListener('click', stopTraffic);
+        singleRequestBtn.addEventListener('click', sendSingleRequest);
+        toggleViewBtn.addEventListener('click', toggleDetailedView);
+        resetStatsBtn.addEventListener('click', resetStats);
+
+        // Initialize
+        setupServers();
+
+        function setupServers() {
+            const count = parseInt(serverCountInput.value);
+            servers = [];
+            serversContainer.innerHTML = '';
+            stats.serverStats = {};
+            
+            for (let i = 0; i < count; i++) {
+                const server = {
+                    id: i,
+                    activeRequests: 0,
+                    totalRequests: 0,
+                    totalProcessingTime: 0,
+                    weight: 1
+                };
+                servers.push(server);
+                stats.serverStats[i] = { requestsHandled: 0, totalTime: 0 };
+                
+                const serverEl = document.createElement('div');
+                serverEl.className = 'server';
+                serverEl.id = `server-${i}`;
+                serverEl.innerHTML = `
+                    <h3>Server ${i}</h3>
+                    <div>Active requests: <span class="active-count">0</span></div>
+                    <div>Total requests: <span class="total-count">0</span></div>
+                    <div>Avg. time: <span class="avg-time">0</span>ms</div>
+                    <div class="stats hidden">
+                        <div>Capacity: <span class="capacity">10</span></div>
+                        <div>Health: <span class="health">100</span>%</div>
+                    </div>
+                `;
+                serversContainer.appendChild(serverEl);
+            }
+            
+            updateWeightControls();
+            updateVisualization();
+        }
+
+        function handleAlgorithmChange() {
+            if (algorithmSelect.value === 'weighted') {
+                weightControls.classList.remove('hidden');
+            } else {
+                weightControls.classList.add('hidden');
+            }
+        }
+
+        function updateWeightControls() {
+            weightInputs.innerHTML = '';
+            servers.forEach(server => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <label>Server ${server.id} weight: 
+                        <input type="number" class="server-weight" data-server="${server.id}" 
+                               min="1" max="10" value="${server.weight}">
+                    </label>
+                `;
+                weightInputs.appendChild(div);
+            });
+            
+            document.querySelectorAll('.server-weight').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const serverId = parseInt(e.target.dataset.server);
+                    servers[serverId].weight = parseInt(e.target.value);
+                });
+            });
+        }
+
+        function startTraffic() {
+            stopTraffic();
+            startTrafficBtn.disabled = true;
+            stopTrafficBtn.disabled = false;
+            
+            const rate = parseInt(requestRateInput.value);
+            const duration = parseInt(requestDurationInput.value);
+            const pattern = trafficPatternSelect.value;
+            
+            let delay;
+            if (pattern === 'steady') {
+                delay = 1000 / rate;
+                requestInterval = setInterval(() => sendRequest(duration), delay);
+            } else if (pattern === 'bursty') {
+                // Bursts of 5 seconds with varying intensity
+                let burstCount = 0;
+                requestInterval = setInterval(() => {
+                    burstCount++;
+                    const burstRate = (burstCount % 10 < 5) ? rate * 2 : rate / 2;
+                    for (let i = 0; i < burstRate / 5; i++) {
+                        sendRequest(duration);
+                    }
+                }, 200);
+            } else if (pattern === 'spiky') {
+                // Random spikes
+                requestInterval = setInterval(() => {
+                    const r = Math.random();
+                    const spikeIntensity = r > 0.9 ? rate * 3 : r > 0.7 ? rate * 1.5 : rate;
+                    for (let i = 0; i < spikeIntensity / 5; i++) {
+                        sendRequest(duration);
+                    }
+                }, 200);
+            }
+        }
+
+        function stopTraffic() {
+            clearInterval(requestInterval);
+            startTrafficBtn.disabled = false;
+            stopTrafficBtn.disabled = true;
+        }
+
+        function sendSingleRequest() {
+            const duration = parseInt(requestDurationInput.value);
+            sendRequest(duration);
+        }
+
+        function sendRequest(duration) {
+            const server = selectServer();
+            if (!server) return;
+            
+            const request = {
+                id: totalRequests++,
+                serverId: server.id,
+                startTime: Date.now(),
+                duration: duration,
+                completed: false
+            };
+            
+            server.activeRequests++;
+            server.totalRequests++;
+            stats.serverStats[server.id].requestsHandled++;
+            stats.totalRequests++;
+            
+            requests.push(request);
+            updateServerDisplay(server);
+            updateStats();
+            visualizeRequest(request);
+            
+            setTimeout(() => {
+                request.completed = true;
+                server.activeRequests--;
+                const responseTime = Date.now() - request.startTime;
+                server.totalProcessingTime += responseTime;
+                stats.serverStats[server.id].totalTime += responseTime;
+                stats.totalResponseTime += responseTime;
+                stats.completedRequests++;
+                
+                updateServerDisplay(server);
+                updateStats();
+                removeVisualizedRequest(request);
+            }, duration);
+        }
+
+        function selectServer() {
+            const algorithm = algorithmSelect.value;
+            
+            if (algorithm === 'roundRobin') {
+                // Simple round robin
+                const lastServerId = requests.length > 0 ? requests[requests.length - 1].serverId : -1;
+                const nextIndex = (lastServerId + 1) % servers.length;
+                return servers[nextIndex];
+            } else if (algorithm === 'leastConnections') {
+                // Least connections
+                return servers.reduce((min, server) => 
+                    server.activeRequests < min.activeRequests ? server : min, servers[0]);
+            } else if (algorithm === 'random') {
+                // Random selection
+                return servers[Math.floor(Math.random() * servers.length)];
+            } else if (algorithm === 'ipHash') {
+                // Simulate IP hash by hashing request count
+                return servers[totalRequests % servers.length];
+            } else if (algorithm === 'weighted') {
+                // Weighted round robin
+                const totalWeight = servers.reduce((sum, server) => sum + server.weight, 0);
+                let random = Math.random() * totalWeight;
+                for (const server of servers) {
+                    if (random < server.weight) {
+                        return server;
+                    }
+                    random -= server.weight;
+                }
+                return servers[0];
+            }
+        }
+
+        function updateServerDisplay(server) {
+            const serverEl = document.getElementById(`server-${server.id}`);
+            serverEl.querySelector('.active-count').textContent = server.activeRequests;
+            serverEl.querySelector('.total-count').textContent = server.totalRequests;
+            
+            const avgTime = server.totalRequests > 0 
+                ? Math.round(server.totalProcessingTime / server.totalRequests) 
+                : 0;
+            serverEl.querySelector('.avg-time').textContent = avgTime;
+            
+            // Update server status classes
+            serverEl.classList.remove('overloaded', 'underutilized', 'active');
+            if (server.activeRequests > 5) {
+                serverEl.classList.add('overloaded');
+            } else if (server.activeRequests === 0) {
+                serverEl.classList.add('underutilized');
+            } else {
+                serverEl.classList.add('active');
+            }
+        }
+
+        function updateStats() {
+            totalRequestsSpan.textContent = stats.totalRequests;
+            activeRequestsSpan.textContent = requests.filter(r => !r.completed).length;
+            
+            const avgResponseTime = stats.completedRequests > 0 
+                ? Math.round(stats.totalResponseTime / stats.completedRequests) 
+                : 0;
+            avgResponseTimeSpan.textContent = avgResponseTime;
+            
+            // Calculate efficiency (how well distributed the load is)
+            let efficiency = 0;
+            if (stats.totalRequests > 0) {
+                const avgLoad = stats.totalRequests / servers.length;
+                let variance = 0;
+                for (const server of servers) {
+                    variance += Math.pow(server.totalRequests - avgLoad, 2);
+                }
+                efficiency = Math.max(0, 100 - (Math.sqrt(variance / servers.length) / avgLoad * 100));
+            }
+            efficiencySpan.textContent = Math.round(efficiency);
+            
+            // Update detailed stats if visible
+            if (!detailedStats.classList.contains('hidden')) {
+                updateDetailedStats();
+            }
+        }
+
+        function updateDetailedStats() {
+            serverStats.innerHTML = '';
+            servers.forEach(server => {
+                const stat = stats.serverStats[server.id];
+                const avgTime = stat.requestsHandled > 0 
+                    ? Math.round(stat.totalTime / stat.requestsHandled) 
+                    : 0;
+                
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <h4>Server ${server.id}</h4>
+                    <div>Requests handled: ${stat.requestsHandled}</div>
+                    <div>Average time: ${avgTime}ms</div>
+                    <div>Current load: ${server.activeRequests}</div>
+                `;
+                serverStats.appendChild(div);
+            });
+        }
+
+        function visualizeRequest(request) {
+            const requestEl = document.createElement('div');
+            requestEl.className = 'request';
+            requestEl.id = `request-${request.id}`;
+            requestEl.style.left = `${Math.random() * 90 + 5}%`;
+            requestEl.style.top = `${Math.random() * 90 + 5}%`;
+            visualization.appendChild(requestEl);
+            
+            // Animate to server
+            setTimeout(() => {
+                const serverEl = document.getElementById(`server-${request.serverId}`);
+                const serverRect = serverEl.getBoundingClientRect();
+                const visRect = visualization.getBoundingClientRect();
+                
+                const x = (serverRect.left + serverRect.width/2 - visRect.left) / visRect.width * 100;
+                const y = (serverRect.top + serverRect.height/2 - visRect.top) / visRect.height * 100;
+                
+                requestEl.style.transition = 'all 0.5s linear';
+                requestEl.style.left = `${x}%`;
+                requestEl.style.top = `${y}%`;
+            }, 100);
+        }
+
+        function removeVisualizedRequest(request) {
+            const requestEl = document.getElementById(`request-${request.id}`);
+            if (requestEl) {
+                requestEl.style.opacity = '0';
+                setTimeout(() => requestEl.remove(), 500);
+            }
+        }
+
+        function toggleDetailedView() {
+            detailedStats.classList.toggle('hidden');
+            document.querySelectorAll('.server .stats').forEach(el => {
+                el.classList.toggle('hidden');
+            });
+            
+            if (!detailedStats.classList.contains('hidden')) {
+                updateDetailedStats();
+            }
+        }
+
+        function resetStats() {
+            stopTraffic();
+            stats = {
+                totalRequests: 0,
+                completedRequests: 0,
+                totalResponseTime: 0,
+                serverStats: {}
+            };
+            
+            servers.forEach(server => {
+                server.activeRequests = 0;
+                server.totalRequests = 0;
+                server.totalProcessingTime = 0;
+                stats.serverStats[server.id] = { requestsHandled: 0, totalTime: 0 };
+                updateServerDisplay(server);
+            });
+            
+            requests = [];
+            totalRequests = 0;
+            updateStats();
+            visualization.innerHTML = '';
+        }
+
+        function updateVisualization() {
+            visualization.innerHTML = '';
+            
+            // Draw servers in visualization
+            servers.forEach(server => {
+                const serverEl = document.createElement('div');
+                serverEl.className = 'server-vis';
+                serverEl.textContent = `S${server.id}`;
+                serverEl.style.position = 'absolute';
+                serverEl.style.left = `${(server.id + 1) * (100 / (servers.length + 1))}%`;
+                serverEl.style.top = '50%';
+                serverEl.style.transform = 'translate(-50%, -50%)';
+                serverEl.style.border = '1px solid black';
+                serverEl.style.padding = '5px';
+                visualization.appendChild(serverEl);
+            });
+        }
+    </script>
+</body>
+</html>

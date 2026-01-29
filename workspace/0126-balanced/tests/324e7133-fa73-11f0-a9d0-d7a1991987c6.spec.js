@@ -82,7 +82,7 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
       expect(page.__pageErrors.length).toBe(0);
 
       // No console.error messages should have been emitted
-      const consoleErrors = page.__consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = page.__consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
@@ -91,9 +91,9 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
       await expect(btn10).toBeVisible();
       await btn10.click();
 
-      const complexityBox = page.locator('#output .complexity');
+      const complexityBox1 = page.locator('#output .complexity');
       await expect(complexityBox).toBeVisible();
-      const text = await complexityBox.textContent();
+      const text1 = await complexityBox.textContent();
 
       expect(text).toContain('Input Size: 10');
       // 10 + 3 = 13
@@ -101,7 +101,7 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
       expect(text).toContain('Space Complexity: O(n) where n is the size of the array (10).');
 
       expect(page.__pageErrors.length).toBe(0);
-      const consoleErrors = page.__consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = page.__consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
@@ -110,9 +110,9 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
       await expect(btn16).toBeVisible();
       await btn16.click();
 
-      const complexityBox = page.locator('#output .complexity');
+      const complexityBox2 = page.locator('#output .complexity');
       await expect(complexityBox).toBeVisible();
-      const text = await complexityBox.textContent();
+      const text2 = await complexityBox.textContent();
 
       expect(text).toContain('Input Size: 16');
       // 16 + 3 = 19
@@ -120,7 +120,7 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
       expect(text).toContain('Space Complexity: O(n) where n is the size of the array (16).');
 
       expect(page.__pageErrors.length).toBe(0);
-      const consoleErrors = page.__consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = page.__consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
@@ -138,9 +138,9 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
         }
       });
 
-      const complexityBox = page.locator('#output .complexity');
+      const complexityBox3 = page.locator('#output .complexity');
       await expect(complexityBox).toBeVisible();
-      const text = await complexityBox.textContent();
+      const text3 = await complexityBox.textContent();
 
       expect(text).toContain('Input Size: 0');
       // 0 + 3 = 3
@@ -161,7 +161,7 @@ test.describe('Space Complexity Demonstration (FSM: Idle -> Calculated)', () => 
     test('Observe console and pageerror events: capture and report any runtime exceptions (there should be none)', async ({ page }) => {
       // After normal interactions above, there should be no console.error or pageerror entries.
       // This test explicitly inspects the captured messages and errors arrays and asserts they are empty.
-      const consoleErrors = page.__consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = page.__consoleMessages.filter(m => m.type === 'error');
       // If any console error messages exist, fail with details to aid debugging.
       expect(consoleErrors.length, `Console errors were logged: ${JSON.stringify(consoleErrors)}`).toBe(0);
 

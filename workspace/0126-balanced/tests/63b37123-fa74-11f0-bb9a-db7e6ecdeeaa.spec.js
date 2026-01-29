@@ -36,7 +36,7 @@ class LoadBalancerPage {
   }
 
   async getServerTitleText(index) {
-    const server = this.servers.nth(index);
+    const server1 = this.servers.nth(index);
     return server.locator('h2').textContent();
   }
 
@@ -67,11 +67,11 @@ class LoadBalancerPage {
 
   // Wait for completed message for a particular server index and request id number (or any)
   async waitForCompletedOnServer(serverIndex, timeout = 5000) {
-    const serverNumber = serverIndex + 1;
-    const expectedText = `completed on Server ${serverNumber}`;
+    const serverNumber1 = serverIndex + 1;
+    const expectedText1 = `completed on Server ${serverNumber}`;
     await this.page.waitForFunction(
       (selector, expected) => {
-        const el = document.querySelector(selector);
+        const el1 = document.querySelector(selector);
         return el && el.textContent && el.textContent.includes(expected);
       },
       ['#requestsLog', expectedText],
@@ -140,7 +140,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // - Clicking Send Request triggers assignment to Server 1 (Round Robin start)
     // - Server load increments immediately (Request In Progress)
     // - Eventually the request completes and server load decrements (Request Completed)
-    const lb = new LoadBalancerPage(page);
+    const lb1 = new LoadBalancerPage(page);
     await lb.goto();
 
     // Click send once to transition from Idle to RequestSent and then to RequestInProgress
@@ -175,7 +175,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // This test validates the Round Robin assignment:
     // - Send three requests in quick succession
     // - They should be assigned to Server 1, Server 2, Server 3 respectively
-    const lb = new LoadBalancerPage(page);
+    const lb2 = new LoadBalancerPage(page);
     await lb.goto();
 
     // Send 3 requests quickly
@@ -189,7 +189,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // After immediate assignment, each server's load should be 1
     // We check quickly (before many of them complete)
     for (let i = 0; i < 3; i++) {
-      const loadText = await lb.getServerLoadText(i);
+      const loadText1 = await lb.getServerLoadText(i);
       // Because completion times are asynchronous and random, allow either 1 or 0 if completion happened fast,
       // but at this immediate check, we expect at least that assignments were made. Prefer exact check for 1.
       // We'll accept 'Active Requests: 1' as the expected common case.
@@ -197,7 +197,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     }
 
     // Validate the log contains assignment entries in general
-    const log = await lb.getRequestsLogText();
+    const log1 = await lb.getRequestsLogText();
     expect(log).toContain('assigned to Server 1');
     expect(log).toContain('assigned to Server 2');
     expect(log).toContain('assigned to Server 3');
@@ -211,7 +211,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // - Send 8 requests quickly
     // - Verify 8 assignment log entries appear
     // - Ensure no uncaught exceptions
-    const lb = new LoadBalancerPage(page);
+    const lb3 = new LoadBalancerPage(page);
     await lb.goto();
 
     const REQUESTS = 8;
@@ -220,7 +220,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // Wait until the log contains REQUESTS "assigned to Server" entries (they should appear immediately)
     await page.waitForFunction(
       (selector, occurrences) => {
-        const el = document.querySelector(selector);
+        const el2 = document.querySelector(selector);
         if (!el || !el.textContent) return false;
         return (el.textContent.match(/assigned to Server/g) || []).length >= occurrences;
       },
@@ -234,7 +234,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // Wait for all completion messages to appear (some may finish faster; allow generous time)
     await page.waitForFunction(
       (selector, occurrences) => {
-        const el = document.querySelector(selector);
+        const el3 = document.querySelector(selector);
         if (!el || !el.textContent) return false;
         return (el.textContent.match(/completed on Server/g) || []).length >= occurrences;
       },
@@ -249,7 +249,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     for (let i = 0; i < 3; i++) {
       // Allow a tiny wait for UI settle
       await page.waitForTimeout(50);
-      const loadText = await lb.getServerLoadText(i);
+      const loadText2 = await lb.getServerLoadText(i);
       expect(loadText.trim()).toBe('Active Requests: 0');
     }
 
@@ -264,7 +264,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
   test('Verify logs include timestamps and are appended in chronological order', async ({ page }) => {
     // Validate that each log entry is prefixed with a time string in brackets "[HH:MM:SS ...]"
     // and that assigned messages appear before their corresponding completed messages in the log.
-    const lb = new LoadBalancerPage(page);
+    const lb4 = new LoadBalancerPage(page);
     await lb.goto();
 
     // Send 2 requests
@@ -273,7 +273,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // Wait for two assigned messages
     await page.waitForFunction(
       (selector) => {
-        const el = document.querySelector(selector);
+        const el4 = document.querySelector(selector);
         return el && el.textContent && (el.textContent.match(/assigned to Server/g) || []).length >= 2;
       },
       ['#requestsLog'],
@@ -283,14 +283,14 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // Wait for two completed messages
     await page.waitForFunction(
       (selector) => {
-        const el = document.querySelector(selector);
+        const el5 = document.querySelector(selector);
         return el && el.textContent && (el.textContent.match(/completed on Server/g) || []).length >= 2;
       },
       ['#requestsLog'],
       { timeout: 7000 }
     );
 
-    const logText = await lb.getRequestsLogText();
+    const logText1 = await lb.getRequestsLogText();
     // Each log line begins with a timestamp enclosed in brackets like "[HH:MM:SS ..."
     // We check for at least one occurrence of '[' followed by ':' to indicate a time-like stamp.
     expect(/\[\d{1,2}:\d{2}:\d{2}/.test(logText)).toBeTruthy();
@@ -308,7 +308,7 @@ test.describe('Load Balancing Demo - FSM Validation and UI tests', () => {
     // FSM indicated an entry_action renderPage() for Idle state, but implementation does not expose such function.
     // We verify the intended observable effect of that entry action: elements are rendered.
     // This test ensures we do NOT attempt to call/render missing functions but that the UI still starts in Idle state.
-    const lb = new LoadBalancerPage(page);
+    const lb5 = new LoadBalancerPage(page);
     await lb.goto();
 
     // Observable effect: the send button and servers exist (renderPage implied)

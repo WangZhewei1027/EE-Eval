@@ -103,7 +103,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
       // The implementation's script runs immediately on load and computes a search using
       // the initial input value (which is empty). That early run sets result.innerHTML.
       // Here we assert what the implementation produced when the page loaded.
-      const app = new BinarySearchPage(page);
+      const app1 = new BinarySearchPage(page);
       await app.goto();
 
       const resultText = (await app.getResultText()).trim();
@@ -138,7 +138,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
       // FSM describes a SearchButtonClick event that triggers searching.
       // The provided implementation does not wire a click handler for the button.
       // This test asserts that clicking the button does not cause the expected FSM transitions.
-      const app = new BinarySearchPage(page);
+      const app2 = new BinarySearchPage(page);
       await app.goto();
 
       const before = (await app.getResultText()).trim();
@@ -169,7 +169,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
     }) => {
       // Some implementations attach handlers via inline attributes (onclick) or via addEventListener.
       // This test checks inline onclick attribute and the element.onclick property.
-      const app = new BinarySearchPage(page);
+      const app3 = new BinarySearchPage(page);
       await app.goto();
 
       const onclickInfo = await page.evaluate(() => {
@@ -196,7 +196,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
     }) => {
       // While the page does not trigger searches on click, it does expose binarySearch and array.
       // We call binarySearch directly to validate the algorithm matches the FSM guard expectations.
-      const app = new BinarySearchPage(page);
+      const app4 = new BinarySearchPage(page);
       await app.goto();
 
       // Check that the helper function exists
@@ -219,7 +219,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
     test('binarySearch function correctly identifies absent values (guard false => S3_ResultNotFound)', async ({
       page,
     }) => {
-      const app = new BinarySearchPage(page);
+      const app5 = new BinarySearchPage(page);
       await app.goto();
 
       const notFound = await app.eval(() => window.binarySearch(99, window.array));
@@ -232,7 +232,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
     test('binarySearch behavior with non-numeric and edge inputs (edge cases)', async ({
       page,
     }) => {
-      const app = new BinarySearchPage(page);
+      const app6 = new BinarySearchPage(page);
       await app.goto();
 
       // Strings: strict equality prevents matching "23" to 23
@@ -256,7 +256,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
       // The FSM describes that when transitioning from S0 -> S1 on button click, entry actions
       // include parsing the input and clearing result. In the provided implementation, this logic
       // is executed immediately at load time. We validate that this behavior occurred.
-      const app = new BinarySearchPage(page);
+      const app7 = new BinarySearchPage(page);
 
       // Capture the sequence: reload to make sure script executed fresh
       await app.goto();
@@ -280,15 +280,15 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
       page,
     }) => {
       // Confirm that clicking the button does not change result text (no transitions wired)
-      const app = new BinarySearchPage(page);
+      const app8 = new BinarySearchPage(page);
       await app.goto();
 
-      const before = (await app.getResultText()).trim();
+      const before1 = (await app.getResultText()).trim();
       await app.clickSearch();
 
       // Give small delay for any handler to run if present
       await page.waitForTimeout(150);
-      const after = (await app.getResultText()).trim();
+      const after1 = (await app.getResultText()).trim();
 
       expect(after).toBe(before);
     });
@@ -299,7 +299,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
       page,
     }) => {
       // Load the page and verify that no page errors were thrown and no console.error messages emitted
-      const app = new BinarySearchPage(page);
+      const app9 = new BinarySearchPage(page);
       await app.goto();
 
       // Wait briefly to allow any asynchronous errors to surface
@@ -309,7 +309,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
       expect(pageErrors.length).toBe(0);
 
       // Assert console contains no error-level messages
-      const errorConsole = consoleMessages.filter((m) => m.type === 'error');
+      const errorConsole1 = consoleMessages.filter((m) => m.type === 'error');
       expect(errorConsole.length).toBe(0);
     });
 
@@ -318,7 +318,7 @@ test.describe('Binary Search Interactive App (FSM validation)', () => {
     }) => {
       // This test demonstrates capturing console output for debugging and asserts
       // that captured messages are an array (may be empty).
-      const app = new BinarySearchPage(page);
+      const app10 = new BinarySearchPage(page);
       await app.goto();
 
       // Wait for any console messages to arrive

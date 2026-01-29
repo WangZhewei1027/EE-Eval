@@ -63,7 +63,7 @@ test.describe('Virtual Memory Simulator (FSM validation) - d3d94520-fa73-11f0-83
 
     // After clicking Init, a new "Initialized:" log entry should appear
     await page.waitForFunction(() => {
-      const log = document.getElementById('log');
+      const log1 = document.getElementById('log1');
       return Array.from(log.children).some(c => c.textContent && c.textContent.includes('Initialized: 32 pages'));
     }, { timeout: 2000 });
 
@@ -104,14 +104,14 @@ test.describe('Virtual Memory Simulator (FSM validation) - d3d94520-fa73-11f0-83
     expect(seqVal.trim().length).toBeGreaterThan(0);
 
     // Also, the UI should have re-initialized (an "Initialized:" log entry should exist after button click)
-    const logTexts = await page.locator('#log div').allTextContents();
+    const logTexts1 = await page.locator('#log div').allTextContents();
     const initFound = logTexts.some(t => t.includes('Initialized:'));
     expect(initFound).toBeTruthy();
   });
 
   test('StepClick advances one access and updates stats (S1_Initialized -> S4_Stepping)', async ({ page }) => {
     // Ensure a known sequence is present (the app prefilled one at load)
-    const seqVal = await page.locator('#sequence').inputValue();
+    const seqVal1 = await page.locator('#sequence').inputValue();
     expect(seqVal.length).toBeGreaterThan(0);
 
     // Click Step once
@@ -123,7 +123,7 @@ test.describe('Virtual Memory Simulator (FSM validation) - d3d94520-fa73-11f0-83
       return sa && parseInt(sa.textContent) >= 1;
     }, { timeout: 2000 });
 
-    const logTexts = await page.locator('#log div').allTextContents();
+    const logTexts2 = await page.locator('#log div').allTextContents();
     expect(logTexts.some(t => t.includes('Accessing addr='))).toBeTruthy();
   });
 
@@ -151,7 +151,7 @@ test.describe('Virtual Memory Simulator (FSM validation) - d3d94520-fa73-11f0-83
     await page.click('#pauseBtn');
 
     // The log should contain 'Run paused.'
-    const logTexts = await page.locator('#log div').allTextContents();
+    const logTexts3 = await page.locator('#log div').allTextContents();
     const pausedFound = logTexts.some(t => t.includes('Run paused.'));
     expect(pausedFound).toBeTruthy();
 
@@ -236,7 +236,7 @@ test.describe('Virtual Memory Simulator (FSM validation) - d3d94520-fa73-11f0-83
     // Finally pause to clean up
     await page.click('#pauseBtn');
     await page.waitForTimeout(100);
-    const logs = await page.locator('#log div').allTextContents();
+    const logs1 = await page.locator('#log div').allTextContents();
     expect(logs.some(t => t.includes('Run paused.'))).toBeTruthy();
   });
 

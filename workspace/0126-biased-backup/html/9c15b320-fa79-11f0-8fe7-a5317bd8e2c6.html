@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ACID Properties Interactive Simulator</title>
+  <style>
+    /* Extremely minimal styling: keep default browser look, only tiny layout tweaks */
+    body { margin: 8px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: black; background: white; }
+    .container { display: flex; gap: 12px; align-items: flex-start; }
+    .column { min-width: 320px; max-width: 720px; }
+    textarea, input, select { font-family: inherit; font-size: 13px; }
+    button { font-size: 13px; }
+    .small { font-size: 12px; }
+    pre { white-space: pre-wrap; }
+    .ops-list { max-height: 180px; overflow: auto; border: 1px solid #ccc; padding: 6px; }
+    .table { border-collapse: collapse;}
+    .table td, .table th { padding: 4px 6px; border: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h2>ACID Properties Interactive Simulator</h2>
+  <div>
+    This simulator lets you build, run, step through and manipulate transactions to explore Atomicity, Consistency, Isolation and Durability. Create transactions, compose operations, configure isolation/durability/WAL, run multiple transactions concurrently, force crashes, recover, and inspect logs, lock tables and persisted state. Interface is intentionally plain.
+  </div>
+
+  <div style="margin-top:10px;">
+    <button id="reset-db">Reset DB to Default</button>
+    <button id="load-persisted">Load Persisted DB</button>
+    <button id="export-state">Export Current State (JSON)</button>
+    <button id="clear-storage">Clear Local Storage (WAL & DB)</button>
+    <label class="small"> Scheduler:
+      <select id="scheduler-mode">
+        <option value="manual">Manual (step)</option>
+        <option value="roundrobin">Round-Robin</option>
+        <option value="random">Random</option>
+        <option value="priority">Priority (by ID)</option>
+      </select>
+    </label>
+    <label class="small"> Auto speed (ms): <input id="auto-speed" type="number" value="500" style="width:70px;"></label>
+  </div>
+
+  <div class="container" style="margin-top:10px;">
+    <div class="column" id="left-col">
+      <h3>Create / Manage Transactions</h3>
+
+      <div>
+        <label>Transaction name: <input id="tx-name" value="T1"></label>
+        <label>Isolation:
+          <select id="tx-isolation">
+            <option value="READ_UNCOMMITTED">READ_UNCOMMITTED</option>
+            <option value="READ_COMMITTED">READ_COMMITTED</option>
+            <option value="REPEATABLE_READ">REPEATABLE_READ</option>
+            <option value="SERIALIZABLE">SERIALIZABLE</option>
+          </select>
+        </label>
+        <label>Durability:
+          <select id="tx-durability">
+            <option value="durable">Durable (persist commits)</option>
+            <option value="non-durable">Non-durable (memory only)</option>
+          </select>
+        </label>
+        <label>WAL:
+          <select id="tx-wal">
+            <option value="wal">Write-Ahead Log ON</option>
+            <option value="nowal">Write-Ahead Log OFF</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="create-tx">Create Transaction</button>
+        <button id="spawn-random">Spawn Random Transaction</button>
+        <button id="clear-txs">Clear All Transactions</button>
+      </div>
+
+      <h4 style="margin-top:10px;">Transactions</h4>
+      <div id="tx-list" class="ops-list" aria-live="polite"></div>
+
+      <h4 style="margin-top:10px;">Selected Transaction Controls</h4>
+      <div>
+        <label>Selected TX ID: <input id="selected-tx-id" style="width:50px"></label>
+        <button id="begin-tx">Begin</button>
+        <button id="step-tx">Step Next Op</button>
+        <button id="run-tx">Run To End</button>
+        <button id="commit-tx">Commit</button>
+        <button id="abort-tx">Abort</button>
+        <button id="force-wait">Force Wait (simulate lock)</button>
+      </div>
+
+      <h4 style="margin-top:10px;">Build Operation</h4>
+      <div>
+        <label>Type:
+          <select id="op-type">
+            <option value="READ">READ</option>
+            <option value="WRITE">WRITE</option>
+            <option value="TRANSFER">TRANSFER</option>
+            <option value="ASSERT">ASSERT (consistency check)</option>
+          </select>
+        </label>
+        <label>Key:
+          <select id="op-key"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select>
+        </label>
+        <label>To Key (transfer): <select id="op-key-to"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></label>
+        <label>Amount: <input id="op-amount" value="10" style="width:70px"></label>
+      </div>
+      <div style="margin-top:6px;">
+        <button id="op-add">Add Operation to Selected TX</button>
+        <button id="op-insert">Insert at Cursor</button>
+        <button id="op-remove">Remove Selected Op</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>Selected Op Index: <input id="selected-op-index" style="width:40px"></label>
+      </div>
+
+      <div style="margin-top:10px;">
+        <button id="simulate-concurrent">Simulate Scheduler Run (many txs)</button>
+        <button id="auto-run">Auto Run (use scheduler)</button>
+        <button id="stop-auto">Stop Auto</button>
+        <button id="deadlock-detect">Detect Deadlocks</button>
+        <button id="resolve-deadlocks">Resolve (abort victim)</button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <h4>Advanced Controls</h4>
+        <label>Allow dirty reads for READ_UNCOMMITTED: <input id="allow-dirty" type="checkbox" checked></label>
+        <label>Enforce constraints on commit: <input id="enforce-constraints" type="checkbox" checked></label>
+        <label>Strict S/X locks for SERIALIZABLE: <input id="strict-2pl" type="checkbox" checked></label>
+        <div style="margin-top:6px;">
+          <button id="force-crash">Force Crash (simulate power loss)</button>
+          <button id="recover">Recover</button>
+          <button id="inspect-wal">Show WAL</button>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="column" id="middle-col">
+      <h3>Global Database</h3>
+      <div>
+        <strong>Accounts:</strong>
+        <table class="table" id="accounts-table" style="margin-top:6px;">
+          <thead><tr><th>Key</th><th>Balance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Initialize accounts with total sum: <input id="init-total" value="1000" style="width:80px;"></label>
+        <label>Num accounts: <input id="init-count" value="4" style="width:50px;"></label>
+        <button id="init-db">Init DB</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        <strong>Persistence (localStorage):</strong>
+        <div>Persisted DB present: <span id="persisted-indicator">unknown</span></div>
+        <div>WAL entries present: <span id="wal-indicator">0</span></div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <h4>Lock Table</h4>
+        <pre id="lock-table" style="max-height:160px; overflow:auto; border:1px solid #ccc; padding:6px;"></pre>
+      </div>
+
+      <div style="margin-top:12px;">
+        <h4>Write-Ahead Log (WAL)</h4>
+        <pre id="wal-log" style="max-height:160px; overflow:auto; border:1px solid #ccc; padding:6px;"></pre>
+      </div>
+
+    </div>
+
+    <div class="column" id="right-col">
+      <h3>Transaction / Execution Log</h3>
+      <div>
+        <label>Event log search: <input id="log-search" style="width:160px;"></label>
+        <button id="clear-log">Clear Log Display</button>
+      </div>
+      <pre id="event-log" style="max-height:760px; overflow:auto; border:1px solid #ccc; padding:6px;"></pre>
+
+      <h4 style="margin-top:10px;">Inspector</h4>
+      <div>
+        <button id="show-all-state">Show Full In-Memory State</button>
+        <button id="show-all-pers">Show Persisted (localStorage)</button>
+      </div>
+      <pre id="inspector" style="max-height:220px; overflow:auto; border:1px solid #ccc; padding:6px;"></pre>
+
+    </div>
+  </div>
+
+<script>
+/*
+  ACID Interactive Simulator
+  - In-memory DB of accounts: keys A,B,C,...
+  - Transactions: build op lists, start, step, commit, abort
+  - Isolation levels: READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE
+  - Locks: S/X lock manager
+  - WAL & durability: writes to localStorage to simulate persistence
+  - Crash & recover simulation
+  - Constraints: no negative balances, total constant
+  - Multiple transactions & scheduler
+*/
+
+(function(){
+  // ======== Utilities ========
+  function logEvent(msg, level) {
+    var el = document.getElementById('event-log');
+    var t = new Date().toISOString().substr(11,12) + " ";
+    el.textContent = t + (level ? ("[" + level + "] ") : "") + msg + "\n" + el.textContent;
+  }
+  function setText(id, txt) { document.getElementById(id).textContent = txt; }
+  function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+  function uid(prefix){ return prefix + Math.random().toString(36).slice(2,9); }
+
+  // ======== Persistent keys ========
+  const STORAGE_DB = 'acid_sim_db';
+  const STORAGE_WAL = 'acid_sim_wal';
+
+  // ======== Global Simulator State ========
+  let inMemoryDB = {}; // key -> number
+  let persistedDB = null;
+  let walLog = []; // array of {txid, ops, committedAt}
+  let transactions = {}; // txid -> tx object
+  let txOrder = []; // maintain order
+  let locks = {}; // resource -> {mode, owners: Set(txid), queue: [{txid,mode,op}]}
+  let crashed = false;
+  let autoRunner = null;
+
+  // ======== Default DB initialization ========
+  function initDefaultDB(count, total) {
+    count = Math.max(1, Math.floor(count));
+    total = Number(total) || 1000;
+    inMemoryDB = {};
+    var base = Math.floor(total / count);
+    var remainder = total - base * count;
+    for (var i = 0; i < count; i++) {
+      var key = String.fromCharCode(65 + i); // A,B,C...
+      inMemoryDB[key] = base + (i === 0 ? remainder : 0);
+    }
+    saveIndicators();
+    logEvent("Initialized in-memory DB with " + count + " accounts, total " + total);
+    renderAccounts();
+  }
+
+  function savePersistedDB() {
+    try {
+      localStorage.setItem(STORAGE_DB, JSON.stringify(inMemoryDB));
+    } catch (e) {
+      logEvent("Failed to persist DB: " + e, "ERROR");
+    }
+    updateIndicators();
+  }
+
+  function loadPersistedDB() {
+    var s = localStorage.getItem(STORAGE_DB);
+    if (!s) { logEvent("No persisted DB found"); return null; }
+    try {
+      persistedDB = JSON.parse(s);
+      inMemoryDB = clone(persistedDB);
+      logEvent("Loaded persisted DB into memory");
+      renderAccounts();
+      updateIndicators();
+      return persistedDB;
+    } catch (e) {
+      logEvent("Failed to load persisted DB: " + e, "ERROR");
+      return null;
+    }
+  }
+
+  function clearStorage() {
+    localStorage.removeItem(STORAGE_DB);
+    localStorage.removeItem(STORAGE_WAL);
+    walLog = [];
+    persistedDB = null;
+    updateIndicators();
+    logEvent("Cleared persisted storage (DB and WAL).");
+  }
+
+  function loadWALFromStorage() {
+    var s = localStorage.getItem(STORAGE_WAL);
+    if (!s) { walLog = []; return; }
+    try {
+      walLog = JSON.parse(s) || [];
+    } catch(e) {
+      walLog = [];
+    }
+    updateIndicators();
+  }
+
+  function appendToWAL(entry, persist) {
+    walLog.push(entry);
+    if (persist) {
+      try {
+        localStorage.setItem(STORAGE_WAL, JSON.stringify(walLog));
+      } catch (e) {
+        logEvent("Failed to persist WAL: " + e, "ERROR");
+      }
+    }
+    updateIndicators();
+    renderWAL();
+  }
+
+  function flushWAL() {
+    try {
+      localStorage.setItem(STORAGE_WAL, JSON.stringify(walLog));
+      logEvent("WAL flushed to localStorage.");
+    } catch(e) {
+      logEvent("Failed to flush WAL: " + e, "ERROR");
+    }
+    updateIndicators();
+  }
+
+  function clearWAL() {
+    walLog = [];
+    localStorage.removeItem(STORAGE_WAL);
+    updateIndicators();
+    renderWAL();
+    logEvent("WAL cleared.");
+  }
+
+  function updateIndicators() {
+    var p = localStorage.getItem(STORAGE_DB) ? "yes" : "no";
+    document.getElementById('persisted-indicator').textContent = p;
+    loadWALFromStorage();
+    document.getElementById('wal-indicator').textContent = walLog.length;
+    renderWAL();
+  }
+
+  function saveIndicators() {
+    // do not auto persist DB unless commit/durability says so
+    document.getElementById('persisted-indicator').textContent = localStorage.getItem(STORAGE_DB) ? "yes" : "no";
+    document.getElementById('wal-indicator').textContent = walLog.length;
+  }
+
+  // ======== Rendering functions ========
+  function renderAccounts() {
+    var tbody = document.querySelector('#accounts-table tbody');
+    tbody.innerHTML = '';
+    var keys = Object.keys(inMemoryDB).sort();
+    for (var k of keys) {
+      var tr = document.createElement('tr');
+      var td1 = document.createElement('td'); td1.textContent = k;
+      var td2 = document.createElement('td'); td2.textContent = inMemoryDB[k];
+      tr.appendChild(td1); tr.appendChild(td2);
+      tbody.appendChild(tr);
+    }
+  }
+
+  function renderTxList() {
+    var el = document.getElementById('tx-list');
+    el.innerHTML = '';
+    for (var id of txOrder) {
+      var tx = transactions[id];
+      var div = document.createElement('div');
+      var header = document.createElement('div');
+      header.textContent = id + " | " + tx.name + " | " + tx.state + " | iso:" + tx.isolation + " | dur:" + tx.durability + " | WAL:" + (tx.wal ? "ON":"OFF");
+      var ops = document.createElement('div');
+      ops.style.marginLeft = '6px';
+      ops.textContent = tx.ops.map((o,i)=> (i+1)+") "+opToString(o)).join("\n");
+      var details = document.createElement('div');
+      details.textContent = "pc=" + tx.pc + " | reads=" + JSON.stringify(Array.from(tx.readSet || [])) + " | writes=" + JSON.stringify(Object.keys(tx.writes || {}));
+      details.style.marginLeft = '6px';
+      div.appendChild(header);
+      div.appendChild(ops);
+      div.appendChild(details);
+      div.style.borderTop = '1px solid #eee';
+      div.style.paddingTop = '4px';
+      el.appendChild(div);
+    }
+  }
+
+  function renderLockTable() {
+    var el = document.getElementById('lock-table');
+    var out = [];
+    for (var r in locks) {
+      var entry = locks[r];
+      out.push("Resource " + r + " | mode:" + (entry.mode||'none') + " | owners: " + (entry.owners ? Array.from(entry.owners).join(",") : "[]"));
+      if (entry.queue && entry.queue.length) {
+        out.push("  Queue: " + entry.queue.map(q=>q.txid+"("+q.mode+")").join(", "));
+      }
+    }
+    el.textContent = out.join("\n");
+  }
+
+  function renderWAL() {
+    var el = document.getElementById('wal-log');
+    el.textContent = JSON.stringify(walLog, null, 2);
+  }
+
+  function renderInspector(obj) {
+    document.getElementById('inspector').textContent = JSON.stringify(obj, null, 2);
+  }
+
+  // ======== Transaction model ========
+  function createTransaction(name, isolation, durability, wal) {
+    var id = uid("TX_");
+    transactions[id] = {
+      id: id,
+      name: name || id,
+      state: 'new', // new, active, waiting, committed, aborted
+      isolation: isolation || 'READ_COMMITTED',
+      durability: durability || 'durable',
+      wal: wal || false,
+      ops: [], // operation sequence
+      pc: 0, // next op index
+      writes: {}, // local write workspace key->value
+      readSet: new Set(),
+      locksHeld: new Set(),
+      snapshot: null, // for repeatable read
+      createdAt: Date.now()
+    };
+    txOrder.push(id);
+    renderTxList();
+    logEvent("Created transaction " + id + " (" + name + ")");
+    return id;
+  }
+
+  function deleteAllTransactions() {
+    transactions = {};
+    txOrder = [];
+    locks = {};
+    logEvent("Cleared all transactions and locks");
+    renderTxList();
+    renderLockTable();
+  }
+
+  function opToString(o) {
+    if (!o) return '';
+    switch(o.type) {
+      case 'READ': return "READ " + o.key;
+      case 'WRITE': return "WRITE " + o.key + " = " + o.value;
+      case 'TRANSFER': return "TRANSFER " + o.from + " -> " + o.to + " amt:" + o.amount;
+      case 'ASSERT': return "ASSERT " + (o.expr || 'constraint');
+      default: return JSON.stringify(o);
+    }
+  }
+
+  // ======== Lock manager ========
+  function ensureLockResource(r) {
+    if (!locks[r]) locks[r] = {mode: null, owners: new Set(), queue: []};
+  }
+
+  function compatible(existingMode, requestMode, owners, requester) {
+    // shared (S) compatible with other S.
+    if (!existingMode) return true;
+    if (existingMode === 'S' && requestMode === 'S') {
+      // multiple S owners allowed
+      return true;
+    }
+    // otherwise exclusive conflicts except if the only owner is the requester and upgrading?
+    if (owners.size === 1 && owners.has(requester)) {
+      // same owner requesting upgrade possible (treat as compatible)
+      return true;
+    }
+    return false;
+  }
+
+  function acquireLock(txid, resource, mode, op) {
+    ensureLockResource(resource);
+    var entry = locks[resource];
+    if (compatible(entry.mode, mode, entry.owners, txid)) {
+      // grant
+      entry.mode = entry.mode || mode;
+      entry.owners.add(txid);
+      transactions[txid].locksHeld.add(resource);
+      logEvent(txid + " acquired " + mode + " lock on " + resource);
+      renderLockTable();
+      return true;
+    } else {
+      // enqueue
+      entry.queue.push({txid: txid, mode: mode, op: op});
+      transactions[txid].state = 'waiting';
+      logEvent(txid + " waiting for " + mode + " lock on " + resource);
+      renderLockTable();
+      return false;
+    }
+  }
+
+  function releaseLocks(txid) {
+    var tx = transactions[txid];
+    if (!tx) return;
+    for (var r of Array.from(tx.locksHeld)) {
+      var entry = locks[r];
+      if (!entry) continue;
+      entry.owners.delete(txid);
+      if (entry.owners.size === 0) {
+        entry.mode = null;
+      }
+      tx.locksHeld.delete(r);
+      // try to grant queued requests in order
+      while (entry.queue.length) {
+        var q = entry.queue[0];
+        if (compatible(entry.mode, q.mode, entry.owners, q.txid)) {
+          entry.queue.shift();
+          entry.mode = entry.mode || q.mode;
+          entry.owners.add(q.txid);
+          transactions[q.txid].locksHeld.add(r);
+          if (transactions[q.txid].state === 'waiting') transactions[q.txid].state = 'active';
+          logEvent(q.txid + " granted queued " + q.mode + " lock on " + r);
+        } else break;
+      }
+    }
+    renderLockTable();
+  }
+
+  // ======== Operation execution ========
+  function readValueVisibleTo(tx, key) {
+    // Respect isolation
+    if (tx.writes.hasOwnProperty(key)) return tx.writes[key];
+    if (tx.isolation === 'READ_UNCOMMITTED') {
+      // may read uncommitted writes from other txs if allowed
+      var allowDirty = document.getElementById('allow-dirty').checked;
+      if (allowDirty && document.getElementById('tx-isolation').value === 'READ_UNCOMMITTED') {
+        // but per transaction-level selection we should check others; implement: find latest uncommitted write
+      }
+      // We'll implement RU as: reads current inMemoryDB plus any uncommitted writes from any active txn (non-serializable)
+      for (var id of txOrder) {
+        var other = transactions[id];
+        if (other && other !== tx && other.state === 'active') {
+          if (other.writes.hasOwnProperty(key)) return other.writes[key];
+        }
+      }
+      return inMemoryDB[key];
+    }
+    if (tx.isolation === 'READ_COMMITTED') {
+      // read committed: inMemoryDB contains committed state
+      return inMemoryDB[key];
+    }
+    if (tx.isolation === 'REPEATABLE_READ') {
+      // use snapshot created on begin
+      if (tx.snapshot && tx.snapshot.hasOwnProperty(key)) return tx.snapshot[key];
+      return inMemoryDB[key];
+    }
+    if (tx.isolation === 'SERIALIZABLE') {
+      // assume strict 2PL: we will attempt to acquire S lock before read then read from inMemoryDB + own workspace
+      return inMemoryDB[key];
+    }
+    return inMemoryDB[key];
+  }
+
+  function executeOperation(txid) {
+    if (crashed) return {ok:false, msg:"System crashed, cannot execute"};
+    var tx = transactions[txid];
+    if (!tx) return {ok:false, msg:"No such tx"};
+    if (tx.state === 'aborted' || tx.state === 'committed') return {ok:false, msg:"TX not active"};
+    if (tx.pc >= tx.ops.length) {
+      tx.state = 'active';
+      return {ok:true, msg:"No more ops"};
+    }
+    var op = tx.ops[tx.pc];
+    logEvent(txid + " executing op #" + (tx.pc+1) + " : " + opToString(op));
+    // For Serializable or strict lock modes, attempt to acquire locks as needed
+    var strict2pl = document.getElementById('strict-2pl').checked;
+    var needX = false, needS = false;
+    if (op.type === 'READ') needS = true;
+    if (op.type === 'WRITE' || op.type === 'TRANSFER') needX = true;
+    if (tx.isolation === 'SERIALIZABLE' && strict2pl) {
+      if (needS) {
+        var ok = acquireLock(txid, op.key, 'S', op);
+        if (!ok) return {ok:false, msg:"blocked on lock"};
+      }
+      if (needX) {
+        // for transfer, acquire X on both resources
+        if (op.type === 'TRANSFER') {
+          var ok1 = acquireLock(txid, op.from, 'X', op);
+          var ok2 = acquireLock(txid, op.to, 'X', op);
+          if (!ok1 || !ok2) return {ok:false, msg:"blocked on lock"};
+        } else {
+          var ok = acquireLock(txid, op.key, 'X', op);
+          if (!ok) return {ok:false, msg:"blocked on lock"};
+        }
+      }
+    } else {
+      // for other isolation levels we may still acquire X locks for writes to prevent lost updates
+      if (needX) {
+        if (op.type === 'TRANSFER') {
+          var ok1 = acquireLock(txid, op.from, 'X', op);
+          var ok2 = acquireLock(txid, op.to, 'X', op);
+          if (!ok1 || !ok2) return {ok:false, msg:"blocked on lock"};
+        } else {
+          var ok = acquireLock(txid, op.key, 'X', op);
+          if (!ok) return {ok:false, msg:"blocked on lock"};
+        }
+      }
+    }
+
+    // Execute op logic (operate on tx.writes, not global DB)
+    try {
+      if (op.type === 'READ') {
+        var val = readValueVisibleTo(tx, op.key);
+        tx.readSet.add(op.key);
+        logEvent(txid + " READ " + op.key + " => " + (val === undefined ? 'NULL' : val));
+      } else if (op.type === 'WRITE') {
+        // write into local workspace
+        tx.writes[op.key] = Number(op.value);
+        tx.readSet.add(op.key);
+        logEvent(txid + " WRITE local " + op.key + " = " + op.value);
+      } else if (op.type === 'TRANSFER') {
+        var fromVal = tx.writes.hasOwnProperty(op.from) ? tx.writes[op.from] : readValueVisibleTo(tx, op.from);
+        var toVal = tx.writes.hasOwnProperty(op.to) ? tx.writes[op.to] : readValueVisibleTo(tx, op.to);
+        fromVal = Number(fromVal || 0);
+        toVal = Number(toVal || 0);
+        var amt = Number(op.amount);
+        tx.writes[op.from] = fromVal - amt;
+        tx.writes[op.to] = toVal + amt;
+        tx.readSet.add(op.from); tx.readSet.add(op.to);
+        logEvent(txid + " TRANSFER local: " + op.from + ": " + fromVal + " -> " + tx.writes[op.from] + " ; " + op.to + ": " + toVal + " -> " + tx.writes[op.to]);
+      } else if (op.type === 'ASSERT') {
+        // evaluate simple asserts: support expr "SUM==1000" or "NO_NEGATIVE"
+        if (op.expr === 'NO_NEGATIVE') {
+          // check that applying local writes to DB results in no negative
+          var simulated = clone(inMemoryDB);
+          for (var k in tx.writes) simulated[k] = tx.writes[k];
+          for (var k in simulated) if (simulated[k] < 0) throw new Error("Negative balance detected for " + k);
+          logEvent(txid + " ASSERT NO_NEGATIVE passed");
+        } else if (op.expr && op.expr.startsWith('SUM==')) {
+          var target = Number(op.expr.split('==')[1]);
+          var simulated = clone(inMemoryDB);
+          for (var k in tx.writes) simulated[k] = tx.writes[k];
+          var sum = 0; for (var k in simulated) sum += Number(simulated[k] || 0);
+          if (sum !== target) throw new Error("SUM check failed: " + sum + " != " + target);
+          logEvent(txid + " ASSERT SUM== passed");
+        } else {
+          logEvent(txid + " ASSERT no-op");
+        }
+      } else {
+        logEvent(txid + " Unknown op: " + JSON.stringify(op), "WARN");
+      }
+    } catch(e) {
+      tx.state = 'aborted';
+      releaseLocks(txid);
+      logEvent(txid + " aborted during op: " + e.message, "ERROR");
+      return {ok:false, msg:"operation error: " + e.message};
+    }
+
+    tx.pc++;
+    return {ok:true, msg:"op executed"};
+  }
+
+  // ======== Commit / Abort ========
+  function validateConstraints(simulated) {
+    // Enforce "no negative" and total sum constant if enforce-constraints checked
+    if (!document.getElementById('enforce-constraints').checked) return {ok:true};
+    for (var k in simulated) {
+      if (simulated[k] < 0) return {ok:false, msg:"Constraint violated: negative balance " + k};
+    }
+    // total sum must equal initial persisted or initial total; if persisted DB exists, use that initial total
+    var initialTotal = 0;
+    // compute initial from persisted DB if available, else from current inMemoryDB plus applied txs? We'll use current in-memory baseline before applying simulated changes
+    // For simplicity, track that transfers should preserve sum; if simulated sum differs from current DB sum, and there's no creation, flag violation.
+    var currentSum = 0;
+    for (var k in inMemoryDB) currentSum += Number(inMemoryDB[k] || 0);
+    var newSum = 0;
+    for (var k in simulated) newSum += Number(simulated[k] || 0);
+    if (Math.abs(newSum - currentSum) > 0.0001) {
+      return {ok:false, msg:"Constraint violated: total sum changed from " + currentSum + " to " + newSum};
+    }
+    return {ok:true};
+  }
+
+  function commitTransaction(txid) {
+    if (crashed) { logEvent("Cannot commit while crashed", "ERROR"); return; }
+    var tx = transactions[txid];
+    if (!tx || tx.state === 'committed' || tx.state === 'aborted') return;
+    // For atomicity: assemble simulated DB
+    var simulated = clone(inMemoryDB);
+    for (var k in tx.writes) simulated[k] = tx.writes[k];
+    // Validate constraints
+    var v = validateConstraints(simulated);
+    if (!v.ok) {
+      tx.state = 'aborted';
+      releaseLocks(txid);
+      logEvent(txid + " commit failed: " + v.msg, "ERROR");
+      return;
+    }
+    // WAL handling
+    if (tx.wal && tx.durability === 'durable') {
+      // write WAL record synchronously (simulate)
+      var walEntry = {txid: txid, ops: clone(tx.writes), committedAt: Date.now()};
+      appendToWAL(walEntry, true);
+      logEvent(txid + " wrote WAL entry (durable) before applying");
+    } else if (tx.wal && tx.durability === 'non-durable') {
+      // write WAL but not persisted across crash
+      var walEntry = {txid: txid, ops: clone(tx.writes), committedAt: Date.now()};
+      appendToWAL(walEntry, false);
+      logEvent(txid + " wrote WAL entry (memory only) before applying");
+    }
+
+    // Apply changes atomically to inMemoryDB
+    for (var k in tx.writes) {
+      inMemoryDB[k] = tx.writes[k];
+    }
+
+    // If durable, persist DB
+    if (tx.durability === 'durable') {
+      savePersistedDB();
+      // Optionally flush WAL
+      if (tx.wal) flushWAL();
+    }
+
+    tx.state = 'committed';
+    releaseLocks(txid);
+    logEvent(txid + " committed successfully. Applied writes: " + JSON.stringify(tx.writes));
+    renderAccounts();
+    updateIndicators();
+  }
+
+  function abortTransaction(txid, reason) {
+    var tx = transactions[txid];
+    if (!tx) return;
+    tx.state = 'aborted';
+    tx.writes = {};
+    releaseLocks(txid);
+    logEvent(txid + " aborted. " + (reason || ""));
+    renderTxList();
+  }
+
+  // ======== Scheduler / Execution orchestration ========
+  function schedulerStep() {
+    if (crashed) return;
+    var mode = document.getElementById('scheduler-mode').value;
+    // pick one active transaction to step
+    var activeTxs = txOrder.filter(id => transactions[id] && transactions[id].state !== 'committed' && transactions[id].state !== 'aborted');
+    if (!activeTxs.length) {
+      logEvent("No active transactions to schedule");
+      return;
+    }
+    var pickId = null;
+    if (mode === 'manual') {
+      logEvent("Manual scheduler: use Step buttons");
+      return;
+    } else if (mode === 'roundrobin') {
+      // rotate order
+      pickId = activeTxs[0];
+      // rotate order: find first non-waiting or waiting?
+      for (var id of activeTxs) {
+        if (transactions[id].state === 'active') { pickId = id; break; }
+      }
+    } else if (mode === 'random') {
+      pickId = activeTxs[Math.floor(Math.random()*activeTxs.length)];
+    } else if (mode === 'priority') {
+      pickId = activeTxs.sort()[0];
+    } else {
+      pickId = activeTxs[0];
+    }
+
+    var tx = transactions[pickId];
+    if (!tx) return;
+    if (tx.state === 'waiting') {
+      logEvent(pickId + " is waiting; scheduler skipping");
+      return;
+    }
+    if (tx.pc >= tx.ops.length) {
+      // no ops; try to auto-commit
+      if (tx.state !== 'committed' && tx.state !== 'aborted') {
+        logEvent(pickId + " has no remaining ops; auto-committing");
+        commitTransaction(pickId);
+      }
+      return;
+    }
+    var res = executeOperation(pickId);
+    if (!res.ok && res.msg && res.msg.indexOf('blocked') >= 0) {
+      // blocked on locks
+    } else if (!res.ok) {
+      // operation failure caused abort inside executeOperation
+      logEvent("Execution error for " + pickId + ": " + res.msg, "ERROR");
+    } else {
+      // op executed successfully
+      if (transactions[pickId].pc >= transactions[pickId].ops.length) {
+        // finished ops - auto commit
+        logEvent(pickId + " finished ops; auto-committing");
+        commitTransaction(pickId);
+      }
+    }
+    renderTxList();
+    renderLockTable();
+  }
+
+  // ======== Crash & Recovery ========
+  function forceCrash() {
+    crashed = true;
+    // simulate power loss: in-memory transactions and locks lost, but persistent WAL and persisted DB remain in localStorage
+    logEvent("FORCED CRASH: in-memory state frozen. Transactions cannot run until recovery.");
+    // do NOT clear WAL or persisted DB
+  }
+
+  function recoverSystem() {
+    if (!crashed) { logEvent("System not crashed; recovery is a no-op"); return; }
+    // reload persisted DB into memory (the durable baseline)
+    var persisted = localStorage.getItem(STORAGE_DB);
+    if (persisted) {
+      try {
+        inMemoryDB = JSON.parse(persisted);
+        logEvent("Recovered DB from persisted storage.");
+      } catch(e) {
+        logEvent("Failed to parse persisted DB: " + e, "ERROR");
+      }
+    } else {
+      logEvent("No persisted DB to restore; starting with existing in-memory if any");
+    }
+    // Reapply WAL entries to bring DB to committed state
+    var wal = localStorage.getItem(STORAGE_WAL);
+    if (wal) {
+      try {
+        var entries = JSON.parse(wal) || [];
+        for (var e of entries) {
+          // apply op map
+          for (var k in e.ops) inMemoryDB[k] = e.ops[k];
+          logEvent("Reapplied WAL for " + e.txid + " at recovery");
+        }
+      } catch(e) {
+        logEvent("Failed to apply WAL: " + e, "ERROR");
+      }
+    } else {
+      logEvent("No WAL present on recovery.");
+    }
+    // Reset transient state
+    transactions = {};
+    txOrder = [];
+    locks = {};
+    crashed = false;
+    logEvent("Recovery complete. In-memory transactions cleared; start new transactions.");
+    renderAccounts();
+    renderLockTable();
+    renderWAL();
+    renderTxList();
+    updateIndicators();
+  }
+
+  // ======== Deadlock detection ========
+  function detectDeadlocks() {
+    // Build wait-for graph: if tx is waiting for resource r whose owners are set O, then edges tx -> owner
+    var graph = {};
+    for (var id of txOrder) graph[id] = new Set();
+    for (var r in locks) {
+      var entry = locks[r];
+      if (entry.queue && entry.queue.length) {
+        for (var q of entry.queue) {
+          var waiting = q.txid;
+          for (var owner of entry.owners) {
+            graph[waiting].add(owner);
+          }
+        }
+      }
+    }
+    // detect cycles via DFS
+    var visited = {}, stack = {};
+    var cycles = [];
+    function dfs(n, path) {
+      visited[n] = true; stack[n] = true; path.push(n);
+      for (let m of graph[n]) {
+        if (!visited[m]) dfs(m, path);
+        else if (stack[m]) {
+          // found cycle; extract
+          var idx = path.indexOf(m);
+          if (idx >= 0) cycles.push(path.slice(idx).concat([m]));
+        }
+      }
+      stack[n] = false; path.pop();
+    }
+    for (var n in graph) if (!visited[n]) dfs(n, []);
+    if (cycles.length) {
+      logEvent("Deadlock(s) detected: " + JSON.stringify(cycles), "WARN");
+      return cycles;
+    } else {
+      logEvent("No deadlocks detected");
+      return [];
+    }
+  }
+
+  function resolveDeadlocks() {
+    var cycles = detectDeadlocks();
+    if (!cycles.length) return;
+    // choose victim: abort the youngest tx (largest createdAt) in the first cycle
+    var cycle = cycles[0];
+    var victim = null; var maxCreated = -1;
+    for (var id of cycle) {
+      var t = transactions[id];
+      if (t && t.createdAt > maxCreated) { victim = id; maxCreated = t.createdAt; }
+    }
+    if (victim) {
+      abortTransaction(victim, "Aborted to resolve deadlock");
+      logEvent("Aborted " + victim + " as deadlock victim");
+    }
+  }
+
+  // ======== UI wiring ========
+  function wireUI() {
+    document.getElementById('reset-db').addEventListener('click', function(){
+      initDefaultDB(4,1000);
+      clearWAL();
+    });
+    document.getElementById('load-persisted').addEventListener('click', function(){ loadPersistedDB(); });
+    document.getElementById('init-db').addEventListener('click', function(){
+      var total = Number(document.getElementById('init-total').value);
+      var count = Number(document.getElementById('init-count').value);
+      initDefaultDB(count, total);
+    });
+    document.getElementById('export-state').addEventListener('click', function(){
+      var s = {inMemoryDB: inMemoryDB, wal: walLog, transactions: transactions};
+      var blob = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(s, null, 2));
+      window.open(blob, "_blank");
+    });
+    document.getElementById('clear-storage').addEventListener('click', function(){ clearStorage(); });
+
+    document.getElementById('create-tx').addEventListener('click', function(){
+      var name = document.getElementById('tx-name').value;
+      var iso = document.getElementById('tx-isolation').value;
+      var dur = document.getElementById('tx-durability').value;
+      var wal = document.getElementById('tx-wal').value === 'wal';
+      var id = createTransaction(name, iso, dur, wal);
+      renderTxList();
+    });
+    document.getElementById('spawn-random').addEventListener('click', function(){
+      // spawn a transaction with random operations
+      var names = ['Alice','Bob','Cart','Delta','Echo'];
+      var name = names[Math.floor(Math.random()*names.length)];
+      var iso = ['READ_UNCOMMITTED','READ_COMMITTED','REPEATABLE_READ','SERIALIZABLE'][Math.floor(Math.random()*4)];
+      var dur = Math.random() < 0.6 ? 'durable' : 'non-durable';
+      var wal = Math.random() < 0.7;
+      var id = createTransaction(name, iso, dur, wal);
+      // add random ops
+      var keys = Object.keys(inMemoryDB);
+      for (var i=0;i<3;i++) {
+        var t = Math.random();
+        if (t < 0.4) {
+          transactions[id].ops.push({type:'READ', key: keys[Math.floor(Math.random()*keys.length)]});
+        } else if (t < 0.7) {
+          transactions[id].ops.push({type:'TRANSFER', from: keys[Math.floor(Math.random()*keys.length)], to: keys[Math.floor(Math.random()*keys.length)], amount: Math.floor(Math.random()*50)});
+        } else {
+          var key = keys[Math.floor(Math.random()*keys.length)];
+          transactions[id].ops.push({type:'WRITE', key: key, value: Math.floor(Math.random()*200)});
+        }
+      }
+      renderTxList();
+    });
+
+    document.getElementById('clear-txs').addEventListener('click', function(){ deleteAllTransactions(); });
+
+    document.getElementById('selected-tx-id').addEventListener('change', function(){
+      // no-op
+    });
+
+    document.getElementById('begin-tx').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) { logEvent("No such tx: " + id); return;}
+      var tx = transactions[id];
+      if (tx.state === 'new') {
+        tx.state = 'active';
+        tx.pc = 0;
+        tx.writes = {};
+        tx.readSet = new Set();
+        tx.locksHeld = new Set();
+        if (tx.isolation === 'REPEATABLE_READ') {
+          tx.snapshot = clone(inMemoryDB);
+          logEvent(id + " snapshot created for REPEATABLE_READ");
+        }
+        logEvent("Transaction " + id + " begun");
+        renderTxList();
+      } else logEvent("Transaction " + id + " already started or finished");
+    });
+
+    document.getElementById('step-tx').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) { logEvent("No such tx: " + id); return;}
+      var res = executeOperation(id);
+      if (!res.ok) logEvent("Step result: " + res.msg, "INFO");
+      if (transactions[id].pc >= transactions[id].ops.length && transactions[id].state === 'active') {
+        logEvent(id + " finished operations (manual); not auto-committing unless user requests");
+      }
+      renderTxList();
+      renderLockTable();
+      renderAccounts();
+    });
+
+    document.getElementById('run-tx').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) { logEvent("No such tx: " + id); return;}
+      // step until complete or blocked
+      var count = 0;
+      while (transactions[id] && transactions[id].pc < transactions[id].ops.length && transactions[id].state === 'active' && count < 500) {
+        var res = executeOperation(id);
+        if (!res.ok) { break; }
+        count++;
+      }
+      if (transactions[id] && transactions[id].pc >= transactions[id].ops.length) logEvent(id + " reached end of ops; auto-commit invoked");
+      if (transactions[id] && transactions[id].state === 'active') {
+        commitTransaction(id);
+      }
+      renderTxList();
+      renderAccounts();
+    });
+
+    document.getElementById('commit-tx').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      commitTransaction(id);
+      renderTxList();
+      renderAccounts();
+    });
+
+    document.getElementById('abort-tx').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      abortTransaction(id, "Manual abort");
+      renderTxList();
+    });
+
+    document.getElementById('op-add').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) { logEvent("Select a transaction to add ops"); return; }
+      var type = document.getElementById('op-type').value;
+      var key = document.getElementById('op-key').value;
+      var keyTo = document.getElementById('op-key-to').value;
+      var amount = Number(document.getElementById('op-amount').value);
+      var op = null;
+      if (type === 'READ') op = {type:'READ', key: key};
+      if (type === 'WRITE') op = {type:'WRITE', key: key, value: amount};
+      if (type === 'TRANSFER') op = {type:'TRANSFER', from: key, to: keyTo, amount: amount};
+      if (type === 'ASSERT') {
+        // allow simple selects for assert
+        op = {type:'ASSERT', expr: (document.getElementById('op-amount').value === "0" ? 'NO_NEGATIVE' : ('SUM==' + Number(document.getElementById('op-amount').value)))};
+      }
+      transactions[id].ops.push(op);
+      logEvent("Added op to " + id + ": " + opToString(op));
+      renderTxList();
+    });
+
+    document.getElementById('op-insert').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) { logEvent("Select a transaction to insert ops"); return; }
+      var idx = Number(document.getElementById('selected-op-index').value) - 1;
+      if (isNaN(idx) || idx < 0) idx = transactions[id].ops.length;
+      var type = document.getElementById('op-type').value;
+      var key = document.getElementById('op-key').value;
+      var keyTo = document.getElementById('op-key-to').value;
+      var amount = Number(document.getElementById('op-amount').value);
+      var op = null;
+      if (type === 'READ') op = {type:'READ', key: key};
+      if (type === 'WRITE') op = {type:'WRITE', key: key, value: amount};
+      if (type === 'TRANSFER') op = {type:'TRANSFER', from: key, to: keyTo, amount: amount};
+      if (type === 'ASSERT') op = {type:'ASSERT', expr: (amount===0?'NO_NEGATIVE':'SUM=='+amount)};
+      transactions[id].ops.splice(idx, 0, op);
+      logEvent("Inserted op into " + id + " at " + (idx+1) + ": " + opToString(op));
+      renderTxList();
+    });
+
+    document.getElementById('op-remove').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) { logEvent("Select a transaction to remove ops"); return; }
+      var idx = Number(document.getElementById('selected-op-index').value) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= transactions[id].ops.length) { logEvent("Invalid op index"); return; }
+      var removed = transactions[id].ops.splice(idx,1);
+      logEvent("Removed op from " + id + ": " + opToString(removed[0]));
+      renderTxList();
+    });
+
+    document.getElementById('force-wait').addEventListener('click', function(){
+      var id = document.getElementById('selected-tx-id').value;
+      if (!transactions[id]) return;
+      transactions[id].state = 'waiting';
+      logEvent(id + " manually forced to waiting");
+      renderTxList();
+    });
+
+    document.getElementById('simulate-concurrent').addEventListener('click', function(){
+      // spawn several txs and run scheduler for some steps
+      for (var i=0;i<4;i++) {
+        var id = createTransaction("sim"+i, ['READ_COMMITTED','SERIALIZABLE','REPEATABLE_READ','READ_UNCOMMITTED'][i%4], Math.random()<0.5?'durable':'non-durable', Math.random()<0.6);
+        // build a transfer chain to create conflicts
+        var keys = Object.keys(inMemoryDB);
+        transactions[id].ops.push({type:'TRANSFER', from: keys[i%keys.length], to: keys[(i+1)%keys.length], amount: 30});
+        transactions[id].ops.push({type:'READ', key: keys[(i+2)%keys.length]});
+        transactions[id].ops.push({type:'ASSERT', expr: 'NO_NEGATIVE'});
+        transactions[id].state = 'active';
+      }
+      // run scheduler for a number of steps
+      var steps = 30;
+      for (var s=0;s<steps;s++) schedulerStep();
+      renderTxList();
+      renderAccounts();
+    });
+
+    document.getElementById('auto-run').addEventListener('click', function(){
+      if (autoRunner) { logEvent("Auto-run already active"); return; }
+      var speed = Number(document.getElementById('auto-speed').value) || 500;
+      autoRunner = setInterval(function(){
+        var mode = document.getElementById('scheduler-mode').value;
+        if (mode === 'manual') return;
+        schedulerStep();
+      }, speed);
+      logEvent("Auto-run started at speed " + speed + "ms");
+    });
+    document.getElementById('stop-auto').addEventListener('click', function(){
+      if (autoRunner) { clearInterval(autoRunner); autoRunner = null; logEvent("Auto-run stopped"); }
+    });
+
+    document.getElementById('deadlock-detect').addEventListener('click', function(){ detectDeadlocks(); });
+    document.getElementById('resolve-deadlocks').addEventListener('click', function(){ resolveDeadlocks(); });
+
+    document.getElementById('force-crash').addEventListener('click', function(){ forceCrash(); });
+    document.getElementById('recover').addEventListener('click', function(){ recoverSystem(); });
+    document.getElementById('inspect-wal').addEventListener('click', function(){ renderWAL(); });
+
+    document.getElementById('show-all-state').addEventListener('click', function(){ renderInspector({inMemoryDB:inMemoryDB, transactions: transactions, locks: locks}); });
+    document.getElementById('show-all-pers').addEventListener('click', function(){ renderInspector({persistedDB: localStorage.getItem(STORAGE_DB), wal: localStorage.getItem(STORAGE_WAL)}); });
+
+    document.getElementById('clear-log').addEventListener('click', function(){ document.getElementById('event-log').textContent = ""; });
+
+    document.getElementById('init-db').addEventListener('click', function(){ renderAccounts(); });
+
+    document.getElementById('reset-db').addEventListener('dblclick', function(){ clearStorage(); initDefaultDB(4,1000); });
+
+    // init basic state
+    loadWALFromStorage();
+    if (!localStorage.getItem(STORAGE_DB)) {
+      initDefaultDB(4, 1000);
+    } else {
+      // show persisted but not auto-load
+      setText('persisted-indicator','yes');
+      renderAccounts();
+    }
+
+    renderTxList();
+    renderLockTable();
+    renderWAL();
+    updateIndicators();
+  }
+
+  // initialize
+  wireUI();
+  logEvent("Simulator ready. Create transactions and experiment.");
+
+  // Expose some helpers for debugging via console
+  window.acidSim = {
+    inMemoryDB: inMemoryDB,
+    transactions: transactions,
+    walLog: walLog,
+    locks: locks,
+    createTransaction: createTransaction,
+    commitTransaction: commitTransaction,
+    abortTransaction: abortTransaction,
+    executeOperation: executeOperation,
+    forceCrash: forceCrash,
+    recover: recoverSystem,
+    detectDeadlocks: detectDeadlocks
+  };
+
+})();
+</script>
+</body>
+</html>

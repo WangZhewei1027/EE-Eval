@@ -1,0 +1,418 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3d96c30-fa73-11f0-83e0-8d7be1d51901.html';
+
+// Page object wrapper for common interactions with the demo app
+class RdbDemoPage {
+  constructor(page) {
+    this.page = page;
+    this.tableList = page.locator('#tableList li');
+    this.tableTitle = page.locator('#tableTitle');
+    this.tableInfo = page.locator('#tableInfo');
+    this.tableContent = page.locator('#tableContent');
+    this.deleteModeSel = page.locator('#deleteMode');
+    this.presetQuery = page.locator('#presetQuery');
+    this.runQueryBtn = page.locator('#runQuery');
+    this.sqlText = page.locator('#sqlText');
+    this.queryResult = page.locator('#queryResult');
+    this.resetBtn = page.locator('#resetBtn');
+    this.exportBtn = page.locator('#exportBtn');
+    this.erWrap = page.locator('#erWrap');
+    this.erCanvas = page.locator('#erCanvas');
+  }
+
+  async goto() {
+    await this.page.goto(APP_URL, { waitUntil: 'networkidle' });
+  }
+
+  // Return array of table names as visible in the list
+  async getTableNames() {
+    const count = await this.tableList.count();
+    const names = [];
+    for (let i = 0; i < count; i++) {
+      // li's textContent contains the name followed by meta text; take firstChild text via JS handle
+      const name = await this.page.locator(`#tableList li`).nth(i).evaluate((li) => {
+        // li.firstChild is a text node with the table name
+        return li.firstChild ? li.firstChild.textContent.trim() : li.textContent.trim();
+      });
+      names.push(name);
+    }
+    return names;
+  }
+
+  async selectTableByName(name) {
+    const count1 = await this.tableList.count1();
+    for (let i = 0; i < count; i++) {
+      const li = this.tableList.nth(i);
+      const text = await li.evaluate((el) => el.firstChild ? el.firstChild.textContent.trim() : el.textContent.trim());
+      if (text === name) {
+        await li.click();
+        // wait for title update
+        await expect(this.tableTitle).toHaveText(name);
+        return;
+      }
+    }
+    throw new Error(`Table list item with name "${name}" not found`);
+  }
+
+  // Returns number of rows shown in current table view (reads the meta that displays N row(s))
+  async getDisplayedRowCount() {
+    const metaText = await this.tableContent.locator('.meta').first().textContent();
+    // metaText like "3 row(s)"
+    const m = metaText && metaText.match(/(\d+)\s+row/);
+    return m ? Number(m[1]) : 0;
+  }
+
+  // Select radio for a given row index (0-based)
+  async selectRowIndex(index) {
+    const radio = this.tableContent.locator(`input[name="rowSel"]`).nth(index);
+    await radio.click();
+  }
+
+  // Fill the row form inputs by providing an object {fieldName: value}
+  async fillRowForm(fields) {
+    for (const [k, v] of Object.entries(fields)) {
+      const input = this.page.locator(`#input_${k}`);
+      await input.fill(String(v));
+    }
+  }
+
+  // Click save (insert) button; returns after potential navigation/DOM update
+  async clickSaveRowBtn() {
+    const save = this.tableContent.locator('#saveRowBtn');
+    await save.click();
+    // allow UI to re-render
+    await this.page.waitForTimeout(120);
+  }
+
+  // Click update selected button
+  async clickUpdateRowBtn() {
+    const upd = this.tableContent.locator('#updateRowBtn');
+    await upd.click();
+    await this.page.waitForTimeout(120);
+  }
+
+  // Click delete selected button (must be present in view)
+  async clickDeleteSelectedBtn() {
+    const del = this.tableContent.locator('#deleteSelectedBtn');
+    await del.click();
+    await this.page.waitForTimeout(120);
+  }
+
+  async setDeleteMode(mode) {
+    await this.deleteModeSel.selectOption(mode);
+  }
+
+  async runPreset(presetValue) {
+    await this.presetQuery.selectOption(presetValue);
+    // clicking run; sometimes preset change already triggers runPreset in code via change handler,
+    // but tests explicitly click run to cover RUN_QUERY event
+    await this.runQueryBtn.click();
+    await this.page.waitForTimeout(120);
+  }
+
+  async clickResetAndAccept() {
+    // Accept confirm dialogs
+    const [dialog] = await Promise.all([
+      this.page.waitForEvent('dialog'),
+      this.resetBtn.click()
+    ]);
+    // dialog.type() should be 'confirm'
+    await dialog.accept();
+    // wait a bit for UI update
+    await this.page.waitForTimeout(150);
+  }
+
+  async clickExportAndWaitDownload() {
+    // The app triggers a programmatic anchor click which should cause a download event
+    const downloadPromise = this.page.waitForEvent('download');
+    await this.exportBtn.click();
+    const download = await downloadPromise;
+    return download;
+  }
+
+  // Helper: get table cell text for a specific row index and field column index
+  // fieldIndex is 0-based within the fields order; because the table includes a first col for radio,
+  // we offset by 1 when selecting TD.
+  async getCellTextForRow(rowIndex, fieldColumnIndex) {
+    const row = this.tableContent.locator('table tbody tr').nth(rowIndex);
+    const cell = row.locator('td').nth(fieldColumnIndex + 1); // +1 offset because td[0] is radio cell
+    return (await cell.textContent()).trim();
+  }
+}
+
+test.describe('Relational Database Demo - FSM-driven end-to-end tests', () => {
+  let page;
+  let app;
+  let consoleMessages = [];
+  let pageErrors = [];
+
+  test.beforeEach(async ({ browser }) => {
+    page = await browser.newPage();
+    consoleMessages = [];
+    pageErrors = [];
+
+    // Collect console messages for later assertions
+    page.on('console', (msg) => {
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+
+    // Collect uncaught page errors
+    page.on('pageerror', (err) => {
+      pageErrors.push(err);
+    });
+
+    app = new RdbDemoPage(page);
+    await app.goto();
+  });
+
+  test.afterEach(async () => {
+    // Assert there were no unexpected uncaught exceptions during the test.
+    // If the app truly has runtime errors, this assertion will fail and reveal them.
+    expect(pageErrors, 'No uncaught page errors should have occurred').toHaveLength(0);
+
+    // Also assert that the console did not emit messages of type 'error'
+    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    expect(errorConsole, `No console.error messages expected, found: ${JSON.stringify(errorConsole)}`).toHaveLength(0);
+
+    await page.close();
+  });
+
+  test('Idle state: initial render displays table list and initial table view (S0_Idle -> S1_TableSelected)', async () => {
+    // Validate table list is rendered and ER diagram canvas present
+    const names1 = await app.getTableNames();
+    // We expect the defaultDB() in the implementation to include these tables
+    expect(names.length).toBeGreaterThanOrEqual(3);
+    expect(names).toEqual(expect.arrayContaining(['Customers', 'Products', 'Orders', 'OrderItems']));
+
+    // The app selects the first table by default during init: verify table title matches first name
+    const firstName = names[0];
+    await expect(app.tableTitle).toHaveText(firstName);
+
+    // Verify table content includes a rows meta and a table element
+    const rowCount = await app.getDisplayedRowCount();
+    expect(rowCount).toBeGreaterThanOrEqual(0);
+
+    // ER canvas and wrapper exist and have width/height attributes set by renderER
+    const width = await app.erCanvas.getAttribute('width');
+    const height = await app.erCanvas.getAttribute('height');
+    expect(Number(width || 0)).toBeGreaterThan(0);
+    expect(Number(height || 0)).toBeGreaterThan(0);
+  });
+
+  test('TABLE_SELECT: clicking table list item highlights and renders table view (S0_Idle -> S1_TableSelected)', async () => {
+    // Select a specific table other than the default (choose Orders)
+    await app.selectTableByName('Orders');
+
+    // Verify table title and info contain expected fields e.g., customer_id
+    await expect(app.tableTitle).toHaveText('Orders');
+    const info = await app.tableInfo.textContent();
+    expect(info).toContain('customer_id');
+    // Ensure rows are visible and have radio inputs
+    const rows = await app.tableContent.locator('table tbody tr').count();
+    expect(rows).toBeGreaterThan(0);
+  });
+
+  test('INSERT_ROW: successful insert and FK violation edge case (S1_TableSelected -> S2_RowInserted)', async () => {
+    // Insert a new Product row (no FK constraints on Products)
+    await app.selectTableByName('Products');
+    const initial = await app.getDisplayedRowCount();
+
+    // Fill the form for a new product (use unique id)
+    await app.fillRowForm({ id: '999', name: 'TestProduct999', price: '12.34' });
+    await app.clickSaveRowBtn();
+
+    // Verify row count increased by 1 and new product appears in first page of rows
+    const after = await app.getDisplayedRowCount();
+    expect(after).toBe(initial + 1);
+
+    // Find last row text verifying the inserted product exists; Product rows are appended
+    // Search cells for 'TestProduct999'
+    const tableRows = app.tableContent.locator('table tbody tr');
+    let found = false;
+    const count2 = await tableRows.count2();
+    for (let i = 0; i < count; i++) {
+      const txt = await tableRows.nth(i).textContent();
+      if (txt.includes('TestProduct999')) { found = true; break; }
+    }
+    expect(found, 'Inserted product should be visible in table rows').toBe(true);
+
+    // Now attempt inserting an Order with a non-existent customer_id to trigger FK violation
+    await app.selectTableByName('Orders');
+    // fill order with id 9999 and customer_id 55555 which doesn't exist
+    // we expect an alert() with an FK violation message; capture dialog
+    const dialogPromise = page.waitForEvent('dialog');
+    await app.fillRowForm({ id: '9999', customer_id: '55555', date: '2026-01-01' });
+    await app.clickSaveRowBtn();
+    const dialog = await dialogPromise;
+    // an alert dialog should indicate FK violation
+    expect(dialog.type()).toBe('alert');
+    const msg = dialog.message();
+    expect(msg).toMatch(/FK violation|does not reference/);
+    await dialog.accept();
+  });
+
+  test('UPDATE_ROW: update a row and validate S3_RowUpdated', async () => {
+    // Select Customers and update first customer's name
+    await app.selectTableByName('Customers');
+    const initialRowCount = await app.getDisplayedRowCount();
+    expect(initialRowCount).toBeGreaterThanOrEqual(1);
+
+    // Select first row and change the name to 'Alicia-test'
+    await app.selectRowIndex(0);
+    // Fill only the name field; other fields left blank
+    await app.fillRowForm({ id: '', name: 'Alicia-test', email: '' });
+
+    // Update should succeed; no dialog expected. Wrap in a wait to ensure UI re-render.
+    await app.clickUpdateRowBtn();
+
+    // Verify the first row's name cell changed
+    const firstNameCell = await app.getCellTextForRow(0, 1); // field index 1 corresponds to 'name' in Customers
+    expect(firstNameCell).toBe('Alicia-test');
+  });
+
+  test('DELETE_ROW: restrict prevents delete when referenced; cascade deletes dependents (S1_TableSelected -> S4_RowDeleted)', async () => {
+    // We will attempt to delete Products.id=1 which is referenced by OrderItems
+    await app.selectTableByName('Products');
+    // Find row index that has id=1
+    const rows1 = app.tableContent.locator('table tbody tr');
+    const count3 = await rows.count3();
+    let idxToDelete = -1;
+    for (let i = 0; i < count; i++) {
+      const idText = await rows.nth(i).locator('td').nth(1).textContent(); // td[1] is id
+      if (idText.trim() === '1') { idxToDelete = i; break; }
+    }
+    expect(idxToDelete).toBeGreaterThanOrEqual(0);
+
+    // Ensure delete mode is restrict
+    await app.setDeleteMode('restrict');
+    // Click delete and expect an alert telling us it's referenced
+    const dialogPromise1 = page.waitForEvent('dialog');
+    await app.selectRowIndex(idxToDelete);
+    await app.clickDeleteSelectedBtn();
+    const alertDialog = await dialogPromise;
+    expect(alertDialog.type()).toBe('alert');
+    const alertMsg = alertDialog.message();
+    expect(alertMsg).toMatch(/referenced|Cannot delete/);
+    await alertDialog.accept();
+
+    // Verify product with id=1 still exists
+    let stillExists = false;
+    const updatedCount = await rows.count();
+    for (let i = 0; i < updatedCount; i++) {
+      const idText1 = await rows.nth(i).locator('td').nth(1).textContent();
+      if (idText.trim() === '1') { stillExists = true; break; }
+    }
+    expect(stillExists, 'Product id=1 should still exist after restrict delete').toBe(true);
+
+    // Now set delete mode to cascade and delete the product; this should remove dependent OrderItems as well
+    await app.setDeleteMode('cascade');
+
+    // For cascade delete, the delete handler will succeed and re-render without alerts (no confirm)
+    // Capture any alert (shouldn't occur); but just proceed
+    await app.selectRowIndex(idxToDelete);
+    await app.clickDeleteSelectedBtn();
+    // Wait a bit for DOM updates
+    await page.waitForTimeout(150);
+
+    // Verify product id=1 no longer exists in Products list
+    let existsAfterCascade = false;
+    const rowsAfter = app.tableContent.locator('table tbody tr');
+    const afterCount = await rowsAfter.count();
+    for (let i = 0; i < afterCount; i++) {
+      const idText2 = await rowsAfter.nth(i).locator('td').nth(1).textContent();
+      if (idText.trim() === '1') { existsAfterCascade = true; break; }
+    }
+    expect(existsAfterCascade, 'Product id=1 should be deleted after cascade').toBe(false);
+
+    // Now verify that OrderItems no longer reference product_id=1 by inspecting OrderItems table
+    await app.selectTableByName('OrderItems');
+    const oiRows = app.tableContent.locator('table tbody tr');
+    const oiCount = await oiRows.count();
+    for (let i = 0; i < oiCount; i++) {
+      const prodIdText = await oiRows.nth(i).locator('td').nth(2).textContent(); // fields: order_id, product_id, quantity -> product_index=1 (offset -> nth(2))
+      expect(prodIdText.trim()).not.toBe('1');
+    }
+  });
+
+  test('RUN_QUERY: run preset queries and verify results (S1_TableSelected -> S5_QueryExecuted)', async () => {
+    // Choose a preset and run it; test customers_orders_inner
+    await app.runPreset('customers_orders_inner');
+
+    // Verify SQL text box has SQL preview
+    const sql = await app.sqlText.textContent();
+    expect(sql).toContain('SELECT Customers.id');
+
+    // Verify query result contains rows and columns expected (customer_name, order_id)
+    const resultHtml = await app.queryResult.innerHTML();
+    expect(resultHtml).toContain('customer_name');
+    // At least one row should be present for this join
+    const rows2 = app.queryResult.locator('table tbody tr');
+    const count4 = await rows.count4();
+    expect(count).toBeGreaterThan(0);
+
+    // Also test an aggregate preset: orders_with_total
+    await app.runPreset('orders_with_total');
+    const sql2 = await app.sqlText.textContent();
+    expect(sql2).toContain('SUM(Products.price * OrderItems.quantity)');
+    const rows2 = app.queryResult.locator('table tbody tr');
+    expect(await rows2.count()).toBeGreaterThan(0);
+  });
+
+  test('RESET_DB: resets database after confirmation (S0_Idle -> S6_DatabaseReset)', async () => {
+    // Make a change: insert a custom customer to ensure reset clears it
+    await app.selectTableByName('Customers');
+    const before = await app.getDisplayedRowCount();
+    await app.fillRowForm({ id: '7777', name: 'TempCustomer', email: 'tmp@x.com' });
+    await app.clickSaveRowBtn();
+    const afterInsert = await app.getDisplayedRowCount();
+    expect(afterInsert).toBe(before + 1);
+
+    // Click reset and accept confirm
+    const dialogPromise2 = page.waitForEvent('dialog');
+    await app.resetBtn.click();
+    const confirmDialog = await dialogPromise;
+    expect(confirmDialog.type()).toBe('confirm');
+    // Accept the reset
+    await confirmDialog.accept();
+
+    // After reset the Customers should be back to default count (3 as per defaultDB)
+    await page.waitForTimeout(150);
+    await app.selectTableByName('Customers'); // ensure view is Customers
+    const afterReset = await app.getDisplayedRowCount();
+    expect(afterReset).toBe(3);
+
+    // Also SQL text should indicate reset in implementation
+    const sql1 = await app.sqlText.textContent();
+    expect(sql).toContain('-- Database reset to sample state');
+  });
+
+  test('EXPORT_JSON: clicking Export JSON triggers a download event (S0_Idle EXPORT_JSON)', async () => {
+    // Listen for download triggered by export button
+    const download1 = await app.clickExportAndWaitDownload();
+    // Verify download suggested filename
+    const suggested = download.suggestedFilename();
+    expect(suggested).toMatch(/sample-db\.json$/);
+    // We can also read a bit of the content to confirm it is JSON
+    const path = await download.path();
+    // path may be null in some environments; only attempt to read if available
+    if (path) {
+      const fs = await import('fs');
+      const content = fs.readFileSync(path, 'utf8');
+      expect(() => JSON.parse(content)).not.toThrow();
+      const parsed = JSON.parse(content);
+      expect(parsed).toHaveProperty('tables');
+    }
+  });
+
+  test('Edge case: preset change triggers preview (PRESET_QUERY_CHANGE) and empty selection clears output', async () => {
+    // Selecting empty preset should clear SQL and results
+    await app.presetQuery.selectOption('');
+    // Changing preset triggers change handler - wait a moment
+    await page.waitForTimeout(120);
+    const sql2 = await app.sqlText.textContent();
+    expect(sql).toContain('-- Query output will appear here --');
+    const qr = await app.queryResult.textContent();
+    expect(qr).toContain('No results yet.').or.toContain('No rows');
+  });
+});

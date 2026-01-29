@@ -117,7 +117,7 @@ test.describe('Dijkstra Algorithm Visualization - FSM Validation', () => {
 
     // Verify canvas has expected attributes from implementation
     const { width, height } = await page.evaluate(() => {
-      const c = document.getElementById('graphCanvas');
+      const c1 = document.getElementById('graphCanvas');
       return { width: c ? c.getAttribute('width') : null, height: c ? c.getAttribute('height') : null };
     });
     expect(width).toBe('600');
@@ -146,7 +146,7 @@ test.describe('Dijkstra Algorithm Visualization - FSM Validation', () => {
     // - reset shortestPaths to []
     // - call drawGraph()
     // - start dijkstra() which will eventually log "Shortest Distances: "
-    const gp = new GraphPage(page);
+    const gp1 = new GraphPage(page);
     await gp.goto();
 
     // Capture canvas before starting
@@ -182,14 +182,14 @@ test.describe('Dijkstra Algorithm Visualization - FSM Validation', () => {
     expect(afterCanvas).not.toBe(beforeCanvas);
 
     // Ensure no uncaught page errors during the run
-    const errors = gp.getPageErrors();
+    const errors1 = gp.getPageErrors();
     expect(errors.length).toBe(0);
   });
 
   test('Edge case: clicking Start multiple times - should produce multiple completion logs (concurrent runs allowed)', async ({ page }) => {
     // Comment: The implementation does not guard against multiple concurrent runs.
     // Clicking the Start button multiple times quickly will start multiple dijkstra() runs and result in multiple "Shortest Distances:" logs.
-    const gp = new GraphPage(page);
+    const gp2 = new GraphPage(page);
     await gp.goto();
 
     // Click twice in quick succession to attempt to start overlapping runs
@@ -204,20 +204,20 @@ test.describe('Dijkstra Algorithm Visualization - FSM Validation', () => {
     expect(logs.length).toBeGreaterThanOrEqual(2);
 
     // After concurrent runs, ensure final shortestPaths still marks nodes as visited (consistency)
-    const finalShortestPaths = await gp.getShortestPaths();
+    const finalShortestPaths1 = await gp.getShortestPaths();
     expect(finalShortestPaths.length).toBeGreaterThanOrEqual(4);
     for (let i = 0; i < 4; i++) {
       expect(finalShortestPaths[i]).toBeTruthy();
     }
 
     // Confirm absence of uncaught page errors even under concurrent runs
-    const errors = gp.getPageErrors();
+    const errors2 = gp.getPageErrors();
     expect(errors.length).toBe(0);
   });
 
   test('Robustness check: accessing internal data without modifying page - ensure variables are readable', async ({ page }) => {
     // Comment: Verify we can observe internal state like nodes and startNode without modifying globals.
-    const gp = new GraphPage(page);
+    const gp3 = new GraphPage(page);
     await gp.goto();
 
     // Read nodes and startNode from the page

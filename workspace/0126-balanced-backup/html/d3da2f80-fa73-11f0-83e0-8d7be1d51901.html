@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Routing Demo (Hash-based SPA Router)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #222; }
+    body { margin: 0; padding: 0; display: flex; min-height: 100vh; }
+    nav { width: 220px; background:#0f1724; color:#fff; padding:18px; box-sizing:border-box; }
+    main { flex:1; padding: 20px; }
+    h1 { margin-top: 0; }
+    a.link { display:block; padding:8px 10px; color: #9fb6ff; text-decoration:none; border-radius:6px; margin-bottom:6px; }
+    a.link:hover { background: rgba(255,255,255,0.03); }
+    a.link.active { background: #1f6feb; color:white; box-shadow:0 2px 6px rgba(31,111,235,0.18); }
+    .meta { font-size: 13px; color:#9aa9c7; margin-bottom:12px; }
+    .card { background:#fff; border-radius:8px; padding:12px; box-shadow: 0 2px 6px rgba(16,24,40,0.06); }
+    .controls { margin:12px 0; }
+    button { cursor:pointer; padding:8px 12px; border-radius:6px; border:1px solid #d1d5db; background:#f8fafc; }
+    .loading { color:#7c3aed; font-weight:600; }
+    .muted { color:#6b7280; font-size: 14px; }
+    footer { margin-top:18px; font-size:13px; color:#6b7280; }
+    .kbd { background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:6px; }
+    pre { background:#0b1220; color:#dbeafe; padding:10px; border-radius:6px; overflow:auto; font-size:13px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <h2>Routing Demo</h2>
+    <div class="meta">Hash-based SPA router • client-side routes</div>
+
+    <!-- Navigation uses hash URLs (#/path). That's easiest for static files without a server. -->
+    <a class="link" href="#/">Home</a>
+    <a class="link" href="#/about">About</a>
+    <a class="link" href="#/users">Users</a>
+    <a class="link" href="#/users/1">User 1</a>
+    <a class="link" href="#/users/2?tab=posts">User 2 (posts)</a>
+    <a class="link" href="#/nope">404 Example</a>
+
+    <footer>
+      Tip: use browser back/forward to see routing history in action.<br>
+      URL examples: <span class="kbd">#/users/123</span> <span class="kbd">#/users/2?tab=posts</span>
+    </footer>
+  </nav>
+
+  <main>
+    <div id="app" class="card">
+      <!-- Content will be rendered here by the router -->
+    </div>
+
+    <section style="margin-top:18px;">
+      <h3>Router Implementation (concept)</h3>
+      <p class="muted">This demo shows a tiny hash-based router with:
+      route parameters (e.g. /users/:id), query parsing, nested routes, and a 404 fallback.</p>
+
+      <pre>
+/**
+ * Routes are defined as: { path: '/users/:id', render: (params, query) => '...' }
+ * The router converts path patterns into RegExp to extract params.
+ * It listens to "hashchange" and renders the matching route.
+ */
+      </pre>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      // Simple utilities
+      const qsToObj = (qs) => {
+        const obj = {};
+        if (!qs) return obj;
+        // remove leading ?
+        qs = qs.replace(/^\?/, '');
+        qs.split('&').forEach(pair => {
+          if (!pair) return;
+          const [k, v=''] = pair.split('=').map(decodeURIComponent);
+          obj[k] = v;
+        });
+        return obj;
+      };
+
+      // Convert path pattern like "/users/:id/posts/:pid" into a RegExp and capture param names
+      function pathToRegex(path) {
+        const keys = [];
+        const pattern = path
+          .replace(/\/+$/, '') // remove trailing slash
+          .replace(/([.*+?^=!:${}()|[\]\/\\])/g, '\\$1') // escape regex special
+          .replace(/\\:([a-zA-Z0-9_]+)/g, (_, key) => {
+            keys.push(key);
+            return '([^/]+)'; // capture group for param
+          })
+          .replace(/\\\*/g, '.*'); // wildcard *
+        const regex = new RegExp('^' + pattern + '/?$');
+        return { regex, keys };
+      }
+
+      // Router class
+      class Router {
+        constructor(rootEl) {
+          this.rootEl = rootEl;
+          this.routes = []; // { path, render, regex, keys }
+          // Bind events
+          window.addEventListener('hashchange', () => this._onRouteChange());
+          // Initial render
+          this._onRouteChange();
+        }
+
+        add(path, renderFn) {
+          const info = pathToRegex(path);
+          this.routes.push({ path, render: renderFn, regex: info.regex, keys: info.keys });
+          return this;
+        }
+
+        // Get the current path fragment after the '#'
+        _getFragment() {
+          const hash = location.hash || '#/';
+          // remove leading '#'
+          const frag = hash.slice(1);
+          // split path and query
+          const [pathPart, queryPart] = frag.split('?');
+          return { path: pathPart || '/', query: qsToObj(queryPart || '') };
+        }
+
+        _onRouteChange() {
+          const { path, query } = this._getFragment();
+          // find first matching route
+          for (const r of this.routes) {
+            const match = path.match(r.regex);
+            if (match) {
+              // extract params based on keys
+              const params = {};
+              r.keys.forEach((k, i) => { params[k] = decodeURIComponent(match[i+1]); });
+              // call render function (it can be sync or return a Promise)
+              const result = r.render(params, query, this.navigate.bind(this));
+              // If the render returns a Promise, show loading state
+              if (result instanceof Promise) {
+                this._setLoading();
+                result.then(html => this._setContent(html)).catch(err => this._setContent(`<pre style="color:tomato;">${escapeHtml(err && err.stack || String(err))}</pre>`));
+              } else {
+                this._setContent(result);
+              }
+              this._updateActiveLinks(path);
+              return;
+            }
+          }
+          // No route matched -> 404
+          this._setContent(this._render404(path));
+          this._updateActiveLinks(null);
+        }
+
+        // Programmatic navigation
+        navigate(pathWithQuery) {
+          location.hash = pathWithQuery;
+        }
+
+        _setLoading() {
+          this.rootEl.innerHTML = '<div class="loading">Loading…</div>';
+        }
+
+        _setContent(html) {
+          this.rootEl.innerHTML = html;
+        }
+
+        _render404(path) {
+          return `
+            <h1>404 — Not Found</h1>
+            <p class="muted">No route matches <strong>${escapeHtml(path)}</strong>.</p>
+            <div class="controls">
+              <button onclick="location.hash='#/'">Go Home</button>
+              <button onclick="history.back()">Go Back</button>
+            </div>
+          `;
+        }
+
+        _updateActiveLinks(currentPath) {
+          // highlight nav links that match the current hash (simple startsWith)
+          document.querySelectorAll('a.link').forEach(a => {
+            const target = (a.getAttribute('href') || '').replace(/^#/, '') || '/';
+            if (currentPath && (target === currentPath || currentPath.startsWith(target) && target !== '/')) {
+              a.classList.add('active');
+            } else if (target === '/' && currentPath === '/') {
+              a.classList.add('active');
+            } else {
+              a.classList.remove('active');
+            }
+          });
+        }
+      }
+
+      // Escape HTML for safe insertion into templates
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // Instantiate router
+      const appEl = document.getElementById('app');
+      const router = new Router(appEl);
+
+      // Demo data to show "lazy loading"
+      const fakeUserData = {
+        1: { id: 1, name: 'Alice', bio: 'Frontend engineer and tea enthusiast.' },
+        2: { id: 2, name: 'Bob', bio: 'Backend dev, loves Go and databases.' },
+        3: { id: 3, name: 'Carol', bio: 'Designer and illustrator.' }
+      };
+
+      // Routes
+      router
+        .add('/', () => {
+          return `
+            <h1>Home</h1>
+            <p class="muted">A tiny client-side router demonstration using the URL hash.</p>
+            <div class="controls">
+              <button onclick="location.hash='#/about'">Go to About</button>
+              <button onclick="location.hash='#/users'">See Users</button>
+            </div>
+            <hr/>
+            <h3>Why routing?</h3>
+            <p class="muted">Routing lets a single-page app present different "pages" to the user while staying on one HTML document.</p>
+          `;
+        })
+
+        .add('/about', () => {
+          return `
+            <h1>About</h1>
+            <p class="muted">This shows client-side routing — no full page reload when navigating links inside the app.</p>
+            <p>Router features in this demo:</p>
+            <ul>
+              <li>Static routes: <span class="kbd">#/about</span></li>
+              <li>Parameterized routes: <span class="kbd">#/users/:id</span></li>
+              <li>Query parameters: <span class="kbd">#/users/2?tab=posts</span></li>
+              <li>404/fallback route</li>
+            </ul>
+          `;
+        })
+
+        .add('/users', () => {
+          // Simulate async loading of users
+          return new Promise(resolve => {
+            setTimeout(() => {
+              const list = Object.values(fakeUserData).map(u => `
+                <li>
+                  <strong>${escapeHtml(u.name)}</strong> —
+                  <a href="#/users/${u.id}">Profile</a> •
+                  <a href="#/users/${u.id}?tab=posts">Posts</a>
+                </li>
+              `).join('');
+              resolve(`
+                <h1>Users</h1>
+                <p class="muted">List of sample users (simulated network request).</p>
+                <ul>${list}</ul>
+              `);
+            }, 600); // simulate network latency
+          });
+        })
+
+        // Parameterized route: /users/:id
+        .add('/users/:id', (params, query, navigate) => {
+          const id = params.id;
+          // simulate fetching the user
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              const user = fakeUserData[id];
+              if (!user) {
+                // reject to demonstrate error handling
+                resolve(`<h1>User not found</h1><p class="muted">No user with id ${escapeHtml(id)}.</p><div class="controls"><button onclick="location.hash='#/users'">Back to users</button></div>`);
+                return;
+              }
+              // Render user info and optionally nested view
+              const tab = query.tab || 'profile';
+              const nested = (tab === 'posts') ? renderUserPosts(id) : renderUserProfile(user);
+              const html = `
+                <h1>${escapeHtml(user.name)}</h1>
+                <p class="muted">${escapeHtml(user.bio)}</p>
+
+                <div class="controls">
+                  <button onclick="location.hash='#/users/${id}'">Profile</button>
+                  <button onclick="location.hash='#/users/${id}?tab=posts'">Posts</button>
+                  <button onclick="history.back()">Back</button>
+                </div>
+
+                <section style="margin-top:12px;">${nested}</section>
+              `;
+              resolve(html);
+            }, 450);
+          });
+
+          // nested view functions
+          function renderUserProfile(user) {
+            return `
+              <div>
+                <h3>Profile</h3>
+                <p><strong>ID:</strong> ${escapeHtml(user.id)}</p>
+                <p>${escapeHtml(user.bio)}</p>
+                <p class="muted">This section demonstrates nested content inside a route.</p>
+              </div>
+            `;
+          }
+          function renderUserPosts(id) {
+            // pretend this needs another async call
+            const posts = [
+              { id: 'a', title: `Post A by ${id}` },
+              { id: 'b', title: `Post B by ${id}` }
+            ];
+            return `
+              <div>
+                <h3>Posts</h3>
+                <ul>${posts.map(p => `<li>${escapeHtml(p.title)}</li>`).join('')}</ul>
+                <p class="muted">Posts loaded for user ${escapeHtml(id)}.</p>
+              </div>
+            `;
+          }
+        });
+
+      // On initial load, ensure we have a hash (default to #/)
+      if (!location.hash) {
+        location.hash = '/';
+      }
+    })();
+  </script>
+</body>
+</html>

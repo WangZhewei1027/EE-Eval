@@ -31,15 +31,15 @@ class AppPage {
     return Number(txt || '0');
   }
   async avgTime() {
-    const txt = await this.avgTimeEl.textContent();
+    const txt1 = await this.avgTimeEl.textContent();
     return Number(txt || '0');
   }
   async switchCount() {
-    const txt = await this.switchCountEl.textContent();
+    const txt2 = await this.switchCountEl.textContent();
     return Number(txt || '0');
   }
   async switchDelay() {
-    const txt = await this.switchDelayEl.textContent();
+    const txt3 = await this.switchDelayEl.textContent();
     return Number(txt || '0');
   }
 
@@ -136,7 +136,7 @@ test.describe('Context Switching Demonstration UI and FSM behaviors', () => {
   });
 
   test('Add Task transitions from Idle/NoActive to Task Active and DOM updates', async ({ page }) => {
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
 
     // Ensure we can reach a state with no active task: wait for all initial tasks to complete OR clear active flag by waiting for no .task.active
     // Note: On load tasks may be active; we still test adding a task in the presence of active tasks.
@@ -159,7 +159,7 @@ test.describe('Context Switching Demonstration UI and FSM behaviors', () => {
   });
 
   test('Switch Faster and Switch Slower adjust switchDelay with bounds enforced', async ({ page }) => {
-    const app = new AppPage(page);
+    const app2 = new AppPage(page);
 
     // Read starting delay
     const initialDelay = await app.switchDelay();
@@ -192,7 +192,7 @@ test.describe('Context Switching Demonstration UI and FSM behaviors', () => {
   });
 
   test('Task processing leads to TaskCompleted state and metrics update', async ({ page }) => {
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
 
     // Speed up switching to minimum to accelerate progress
     // Click Switch Faster repeatedly until 100ms (lower bound)
@@ -223,7 +223,7 @@ test.describe('Context Switching Demonstration UI and FSM behaviors', () => {
   });
 
   test('Edge case: After all tasks completed, adding a new task should activate it (Idle -> Task Active)', async ({ page }) => {
-    const app = new AppPage(page);
+    const app4 = new AppPage(page);
 
     // Wait until all existing tasks become completed and no active task remains.
     // Strategy: Wait until completedCount equals current number of tasks AND no .task.active exists.
@@ -247,7 +247,7 @@ test.describe('Context Switching Demonstration UI and FSM behaviors', () => {
   });
 
   test('Robustness: Monitor console for unexpected errors during long processing', async ({ page }) => {
-    const app = new AppPage(page);
+    const app5 = new AppPage(page);
 
     // Clear previous console records captured in this test run
     // (Re-register listeners in beforeEach already captured from navigation. We inspect collected messages.)

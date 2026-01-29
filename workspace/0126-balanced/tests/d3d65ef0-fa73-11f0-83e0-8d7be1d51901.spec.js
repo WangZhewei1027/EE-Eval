@@ -100,7 +100,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
   test('S1 -> S2 StartSorting: start auto-play and verify Running state', async ({ page }) => {
     // Ensure we have a small array (size 6) from previous test or set again to be safe
     await page.evaluate(() => {
-      const sizeEl = document.getElementById('size');
+      const sizeEl1 = document.getElementById('size');
       sizeEl.value = '6';
       sizeEl.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -136,7 +136,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
   test('S2 -> S3 PauseSorting and resume back to S2', async ({ page }) => {
     // Prepare and start auto-run again to test pause/resume
     await page.evaluate(() => {
-      const sizeEl = document.getElementById('size');
+      const sizeEl2 = document.getElementById('size');
       sizeEl.value = '6';
       sizeEl.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -179,7 +179,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
   test('S2 -> S4 via StepSorting: step through until finished and verify Finished state', async ({ page }) => {
     // Use small size to keep step iterations reasonable
     await page.evaluate(() => {
-      const sizeEl = document.getElementById('size');
+      const sizeEl3 = document.getElementById('size');
       sizeEl.value = '6';
       sizeEl.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -238,7 +238,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
     }, sortedColor);
 
     // Check that at least one bar shows sorted color; due to timing, all should be sorted but check at least half
-    const bars = page.locator('#bars .bar');
+    const bars1 = page.locator('#bars1 .bar');
     const count = await bars.count();
     let sortedCount = 0;
     for (let i = 0; i < count; i++) {
@@ -255,7 +255,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
   test('ResetSorting returns UI to initial interactive state and resets stats', async ({ page }) => {
     // Prepare: ensure we have finished state to test reset behavior.
     await page.evaluate(() => {
-      const sizeEl = document.getElementById('size');
+      const sizeEl4 = document.getElementById('size');
       sizeEl.value = '6';
       sizeEl.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -290,7 +290,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
   test('Bar click toggles sorted highlight (edge interaction)', async ({ page }) => {
     // Generate a small array
     await page.evaluate(() => {
-      const sizeEl = document.getElementById('size');
+      const sizeEl5 = document.getElementById('size');
       sizeEl.value = '6';
       sizeEl.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -324,7 +324,7 @@ test.describe.serial('Quick Sort Visualization - FSM end-to-end', () => {
   test('Keyboard shortcuts: space toggles start/step and p triggers pause', async ({ page }) => {
     // Use small array
     await page.evaluate(() => {
-      const sizeEl = document.getElementById('size');
+      const sizeEl6 = document.getElementById('size');
       sizeEl.value = '6';
       sizeEl.dispatchEvent(new Event('input', { bubbles: true }));
     });

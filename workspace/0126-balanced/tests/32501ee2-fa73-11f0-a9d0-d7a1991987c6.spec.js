@@ -144,7 +144,7 @@ test.describe('Neural Networks Demo (FSM Validation) - 32501ee2-fa73-11f0-a9d0-d
 
     // Wait for the result to be set
     await page.waitForFunction(() => {
-      const el = document.getElementById('result');
+      const el1 = document.getElementById('result');
       return el && el.innerText === 'Neural Network Trained!';
     }, { timeout: 10000 });
 
@@ -156,7 +156,7 @@ test.describe('Neural Networks Demo (FSM Validation) - 32501ee2-fa73-11f0-a9d0-d
     expect(pageErrors.length, 'no page errors after rapid double-click').toBe(0);
 
     // Also ensure console did not capture error-level messages
-    const errorConsoles = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoles1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoles.length, 'no console errors after rapid double-click').toBe(0);
   });
 
@@ -216,7 +216,7 @@ test.describe('Neural Networks Demo (FSM Validation) - 32501ee2-fa73-11f0-a9d0-d
     expect(relevantErrors.length, 'no ReferenceError, SyntaxError, or TypeError should have occurred').toBe(0);
 
     // For debugging, if any console.error messages exist, fail the test and include them
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length, 'no console.error calls during exercise of the app').toBe(0);
   });
 });

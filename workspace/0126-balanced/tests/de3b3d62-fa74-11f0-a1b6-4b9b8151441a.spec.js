@@ -107,7 +107,7 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
       await expect(deleteBtn).toBeVisible();
 
       // Capture DOM snapshot before clicking
-      const beforeHTML = await page.evaluate(() => document.body ? document.body.innerHTML : '');
+      const beforeHTML1 = await page.evaluate(() => document.body ? document.body.innerHTML : '');
 
       // Click the delete button (this is expected to call deleteNode() if implemented)
       await deleteBtn.click();
@@ -116,7 +116,7 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
       await page.waitForTimeout(300);
 
       // Capture DOM after clicking
-      const afterHTML = await page.evaluate(() => document.body ? document.body.innerHTML : '');
+      const afterHTML1 = await page.evaluate(() => document.body ? document.body.innerHTML : '');
 
       // Check if deleteNode exists in global scope
       const hasDeleteNode = await page.evaluate(() => typeof deleteNode === 'function');
@@ -124,12 +124,12 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
       if (hasDeleteNode) {
         // If function exists, expect some sign of update: DOM change or console output
         expect(hasDeleteNode).toBe(true);
-        const domChanged = beforeHTML !== afterHTML;
-        const consoleMention = consoleMessages.some(m => /deleteNode|Tree visualization|visualization/i.test(m));
+        const domChanged1 = beforeHTML !== afterHTML;
+        const consoleMention1 = consoleMessages.some(m => /deleteNode|Tree visualization|visualization/i.test(m));
         expect(domChanged || consoleMention).toBeTruthy();
       } else {
         // Expect ReferenceError mentioning deleteNode
-        const foundReferenceError = pageErrors.some(msg => /deleteNode/.test(msg));
+        const foundReferenceError1 = pageErrors.some(msg => /deleteNode/.test(msg));
         expect(foundReferenceError).toBeTruthy();
       }
     });
@@ -145,7 +145,7 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
       await expect(visualizeBtn).toBeVisible();
 
       // Snapshot before
-      const beforeHTML = await page.evaluate(() => document.body ? document.body.innerHTML : '');
+      const beforeHTML2 = await page.evaluate(() => document.body ? document.body.innerHTML : '');
 
       // Click visualize
       await visualizeBtn.click();
@@ -154,7 +154,7 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
       await page.waitForTimeout(300);
 
       // Snapshot after
-      const afterHTML = await page.evaluate(() => document.body ? document.body.innerHTML : '');
+      const afterHTML2 = await page.evaluate(() => document.body ? document.body.innerHTML : '');
 
       // Check if visualizeTree function exists
       const hasVisualizeTree = await page.evaluate(() => typeof visualizeTree === 'function');
@@ -162,12 +162,12 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
       if (hasVisualizeTree) {
         // If the function exists, we expect a visualization to be displayed (DOM changed) or console logs indicating display
         expect(hasVisualizeTree).toBe(true);
-        const domChanged = beforeHTML !== afterHTML;
-        const consoleMention = consoleMessages.some(m => /visualizeTree|visualization|Tree visualization/i.test(m));
+        const domChanged2 = beforeHTML !== afterHTML;
+        const consoleMention2 = consoleMessages.some(m => /visualizeTree|visualization|Tree visualization/i.test(m));
         expect(domChanged || consoleMention).toBeTruthy();
       } else {
         // If missing, expect a ReferenceError mentioning visualizeTree
-        const foundReferenceError = pageErrors.some(msg => /visualizeTree/.test(msg));
+        const foundReferenceError2 = pageErrors.some(msg => /visualizeTree/.test(msg));
         expect(foundReferenceError).toBeTruthy();
       }
     });
@@ -181,9 +181,9 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
 
       await page.goto(APP_URL, { waitUntil: 'load' });
 
-      const insertBtn = page.locator('button#insert');
-      const deleteBtn = page.locator('button#delete');
-      const visualizeBtn = page.locator('button#visualize');
+      const insertBtn1 = page.locator('button#insert');
+      const deleteBtn1 = page.locator('button#delete');
+      const visualizeBtn1 = page.locator('button#visualize');
 
       // Ensure buttons present
       await expect(insertBtn).toHaveCount(1);
@@ -230,7 +230,7 @@ test.describe('Red-Black Tree Visualization - FSM tests (de3b3d62-fa74-11f0-a1b6
         expect(hasUpdateTreeVisualization).toBe(true);
       } else {
         // If not present, ensure that a ReferenceError mentioning updateTreeVisualization was observed
-        const found = pageErrors.some(msg => /updateTreeVisualization/.test(msg));
+        const found1 = pageErrors.some(msg => /updateTreeVisualization/.test(msg));
         expect(found).toBeTruthy();
       }
     });

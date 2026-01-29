@@ -106,7 +106,7 @@ test.describe('Load Balancing Simulation (Application ID: 324f5b90-fa73-11f0-a9d
       // - clicking the button triggers sendRequest()
       // - the UI is updated for the chosen server
       // - a console log with the expected message is emitted
-      const app = new LoadBalancerPage(page);
+      const app1 = new LoadBalancerPage(page);
 
       // Click once
       await app.clickSend();
@@ -115,7 +115,7 @@ test.describe('Load Balancing Simulation (Application ID: 324f5b90-fa73-11f0-a9d
       await page.waitForTimeout(20);
 
       // After first click, the first server (server1) should have been chosen
-      const loads = await app.getLoads();
+      const loads1 = await app.getLoads();
       expect(loads).toEqual([1, 0, 0]);
 
       // Assert console logged the expected string for Server 1
@@ -130,12 +130,12 @@ test.describe('Load Balancing Simulation (Application ID: 324f5b90-fa73-11f0-a9d
     test('Multiple clicks distribute requests to the currently least-loaded server (deterministic tie-breaking)', async ({ page }) => {
       // This test validates repeated transitions stay in the Idle state but update loads:
       // FSM transition S0_Idle -> S0_Idle on SendRequest multiple times.
-      const app = new LoadBalancerPage(page);
+      const app2 = new LoadBalancerPage(page);
 
       // Perform 3 clicks: should distribute one to each server in order 1,2,3
       await app.clickSendTimes(3);
       await page.waitForTimeout(20);
-      let loads = await app.getLoads();
+      let loads2 = await app.getLoads();
       expect(loads).toEqual([1, 1, 1]);
 
       // Click a 4th time: the first server (indexOf returns first min) should get incremented to 2
@@ -164,7 +164,7 @@ test.describe('Load Balancing Simulation (Application ID: 324f5b90-fa73-11f0-a9d
       // - clicking many times in quick succession still updates DOM correctly
       // - sum of loads equals number of clicks
       // - no ReferenceError/SyntaxError/TypeError occurred
-      const app = new LoadBalancerPage(page);
+      const app3 = new LoadBalancerPage(page);
 
       const clicks = 30;
       await app.clickSendTimes(clicks);
@@ -172,7 +172,7 @@ test.describe('Load Balancing Simulation (Application ID: 324f5b90-fa73-11f0-a9d
       // Allow extra time for all console messages and DOM updates
       await page.waitForTimeout(100);
 
-      const loads = await app.getLoads();
+      const loads3 = await app.getLoads();
       const total = loads.reduce((a, b) => a + b, 0);
       expect(total).toBe(clicks);
 
@@ -197,7 +197,7 @@ test.describe('Load Balancing Simulation (Application ID: 324f5b90-fa73-11f0-a9d
       // Note: per instructions we do NOT patch or modify the page; we only observe and assert.
 
       // Short interaction to exercise the page
-      const app = new LoadBalancerPage(page);
+      const app4 = new LoadBalancerPage(page);
       await app.clickSendTimes(2);
       await page.waitForTimeout(20);
 

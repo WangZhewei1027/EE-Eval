@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Merge Sort Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+  }
+  button, input[type=number], input[type=text], select {
+    font-family: monospace, monospace;
+    font-size: 1em;
+    margin: 0.2em 0.4em 0.2em 0;
+  }
+  #arrayInput {
+    width: 300px;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  label {
+    display: inline-block;
+    margin-top: 0.5em;
+  }
+  fieldset {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    padding: 0.5em;
+    max-width: 720px;
+  }
+  #statesList {
+    max-height: 150px;
+    overflow-y: scroll;
+    border: 1px solid black;
+    padding: 0.3em;
+    margin-top: 0.3em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Merge Sort Interactive Demo</h1>
+
+<p>
+This tool lets you enter a list of numbers and step through the <strong>Merge Sort</strong> algorithm interactively.
+You can explore every division, merge, and the evolution of the array.
+</p>
+
+<fieldset>
+<legend>Input & Initialization</legend>
+
+<label for="arrayInput">Enter array (comma, space or newline separated numbers):</label><br />
+<textarea id="arrayInput" rows="3" cols="50" aria-label="Array input"></textarea><br />
+<button id="loadArrayBtn">Load Array & Initialize</button>
+<button id="randomArrayBtn">Generate Random Array</button>
+<label for="randomSizeInput">Size:</label>
+<input type="number" id="randomSizeInput" min="2" max="100" value="10" aria-label="Random array size input" />
+</fieldset>
+
+<fieldset>
+<legend>Algorithm Controls</legend>
+
+<button id="stepForwardBtn" disabled>Step Forward</button>
+<button id="stepBackBtn" disabled>Step Back</button>
+<button id="autoPlayBtn" disabled>Auto Play</button>
+<button id="pauseBtn" disabled>Pause</button>
+<label for="speedSlider">Speed (steps/sec):</label>
+<input type="range" id="speedSlider" min="1" max="10" value="3" aria-label="Auto play speed slider" />
+</fieldset>
+
+<fieldset>
+<legend>Current State</legend>
+<label>Current array state:</label><br />
+<pre id="currentArrayPre">[]</pre>
+
+<label>Current operation:</label><br />
+<pre id="currentOperationPre">Not started</pre>
+
+<label>Split / Merge path (clickable):</label><br />
+<div id="statesList" aria-label="List of recorded algorithm states" tabindex="0">
+<!-- states -->
+</div>
+</fieldset>
+
+<fieldset>
+<legend>Deep Exploration Controls</legend>
+<p>Jump directly to any recorded step or change array on-the-fly:</p>
+
+<label for="jumpToInput">Step number (0 = initial):</label>
+<input type="number" id="jumpToInput" min="0" value="0" style="width:5em" />
+<button id="jumpToBtn" disabled>Jump To Step</button>
+<button id="resetBtn" disabled>Reset</button>
+
+<p>Modify elements of current array state:</p>
+<label for="modifyIndexInput">Index:</label>
+<input type="number" id="modifyIndexInput" min="0" value="0" style="width:5em" disabled aria-label="Index of element to modify" />
+<label for="modifyValueInput">Value:</label>
+<input type="number" id="modifyValueInput" value="0" style="width:6em" disabled aria-label="New value of element to modify" />
+<button id="modifyBtn" disabled>Modify and Recalculate From Here</button>
+
+</fieldset>
+
+<script>
+(() => {
+  // Data model and state management for interactive merge sort exploration
+
+  /*
+    We'll keep an array 'states':
+    Each state is an object:
+    {
+      array: [Number], // current array at this step
+      operation: String, // description text: "Split L=[...] R=[...]", or "Merge indexes x-y with w-z", or "Initial array"
+      leftIndexes: [start, end] or null,
+      rightIndexes: [start, end] or null,
+      isMerge: boolean,
+      mergedFrom: [stateIndex1, stateIndex2] or null,
+      parentIndex: number or null (which step led to this merge)
+    }
+
+    The states array represents the step history, step 0 is initial array state.
+
+    We'll implement merge sort, but recording each split and merge as a separate step.
+
+    Controls update manipulation of the current step index (currentStep)
+  */
+
+  // DOM references
+  const arrayInput = document.getElementById("arrayInput");
+  const loadArrayBtn = document.getElementById("loadArrayBtn");
+  const randomArrayBtn = document.getElementById("randomArrayBtn");
+  const randomSizeInput = document.getElementById("randomSizeInput");
+
+  const stepForwardBtn = document.getElementById("stepForwardBtn");
+  const stepBackBtn = document.getElementById("stepBackBtn");
+  const autoPlayBtn = document.getElementById("autoPlayBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+  const speedSlider = document.getElementById("speedSlider");
+
+  const currentArrayPre = document.getElementById("currentArrayPre");
+  const currentOperationPre = document.getElementById("currentOperationPre");
+  const statesListDiv = document.getElementById("statesList");
+
+  const jumpToInput = document.getElementById("jumpToInput");
+  const jumpToBtn = document.getElementById("jumpToBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const modifyIndexInput = document.getElementById("modifyIndexInput");
+  const modifyValueInput = document.getElementById("modifyValueInput");
+  const modifyBtn = document.getElementById("modifyBtn");
+
+  // Data state
+  let states = [];
+  let currentStep = 0;
+  let autoPlayTimer = null;
+  let autoPlayIntervalMs = 333; // default for 3 steps/s
+
+  // Utility
+  function parseArrayInput(text) {
+    // parse numbers separated by comma/space/newline
+    const parts = text.trim().split(/[\s,]+/);
+    const arr = [];
+    for (let p of parts) {
+      if (p === "") continue;
+      let n = Number(p);
+      if (!Number.isFinite(n)) return null;
+      arr.push(n);
+    }
+    if (arr.length < 2) return null;
+    return arr;
+  }
+
+  // Given an array, returns a deep copy array
+  function arrCopy(arr) {
+    return arr.slice();
+  }
+
+  // Recursive full merge sort recording all steps into newStates starting from offset
+  // Each step records the subarray state and operation description
+  // Returns the index into newStates of the final sorted array state
+  function mergeSortRecord(arr, startIdx, endIdx, newStates, parentIndex = null) {
+    /*
+      arr: full original array (for reference)
+      startIdx, endIdx: current subarray to sort (inclusive)
+      newStates: array where we'll push new states
+      parentIndex: index in newStates of parent operation that led here (null for first call)
+    */
+
+    if (startIdx === endIdx) {
+      // single element, record and return
+      const singleArr = [arr[startIdx]];
+      const state = {
+        array: singleArr,
+        operation: `Single element at index ${startIdx}: [${singleArr}]`,
+        leftIndexes: [startIdx, startIdx],
+        rightIndexes: null,
+        isMerge: false,
+        mergedFrom: null,
+        parentIndex
+      };
+      newStates.push(state);
+      return newStates.length - 1;
+    }
+
+    // split in middle
+    const mid = Math.floor((startIdx + endIdx) / 2);
+
+    // record splitting step
+    const subArray = arr.slice(startIdx, endIdx + 1);
+
+    const splitState = {
+      array: arrCopy(subArray),
+      operation: `Split subarray indexes ${startIdx} to ${endIdx} into [${startIdx}..${mid}] and [${mid+1}..${endIdx}]`,
+      leftIndexes: [startIdx, mid],
+      rightIndexes: [mid+1, endIdx],
+      isMerge: false,
+      mergedFrom: null,
+      parentIndex
+    };
+    newStates.push(splitState);
+    const splitStepIndex = newStates.length - 1;
+
+    // recurse left and right
+    const leftIdx = mergeSortRecord(arr, startIdx, mid, newStates, splitStepIndex);
+    const rightIdx = mergeSortRecord(arr, mid + 1, endIdx, newStates, splitStepIndex);
+
+    // retrieve the sorted left and right arrays from states
+    const leftArr = newStates[leftIdx].array;
+    const rightArr = newStates[rightIdx].array;
+
+    // merge leftArr and rightArr, producing mergedArr
+    const mergedArr = [];
+    let i = 0, j = 0;
+    while (i < leftArr.length && j < rightArr.length) {
+      if (leftArr[i] <= rightArr[j]) {
+        mergedArr.push(leftArr[i]);
+        i++;
+      } else {
+        mergedArr.push(rightArr[j]);
+        j++;
+      }
+    }
+    while (i < leftArr.length) {
+      mergedArr.push(leftArr[i]);
+      i++;
+    }
+    while (j < rightArr.length) {
+      mergedArr.push(rightArr[j]);
+      j++;
+    }
+
+    const mergedState = {
+      array: mergedArr,
+      operation: `Merge [${startIdx}..${mid}] and [${mid+1}..${endIdx}] into sorted subarray: [${mergedArr.join(", ")}]`,
+      leftIndexes: [startIdx, mid],
+      rightIndexes: [mid+1, endIdx],
+      isMerge: true,
+      mergedFrom: [leftIdx, rightIdx],
+      parentIndex: splitStepIndex,
+    };
+
+    newStates.push(mergedState);
+    return newStates.length - 1;
+  }
+
+  // Build all states from initial array input
+  function buildAllStatesFromArray(arr) {
+    const allStates = [];
+    // step 0 initial state
+    allStates.push({
+      array: arrCopy(arr),
+      operation: "Initial array",
+      leftIndexes: [0, arr.length - 1],
+      rightIndexes: null,
+      isMerge: false,
+      mergedFrom: null,
+      parentIndex: null,
+    });
+    if (arr.length < 2) {
+      // nothing to do, just one element or empty
+      return allStates;
+    }
+    // build merge sort states from arr indexes 0..length-1
+    mergeSortRecord(arr, 0, arr.length - 1, allStates, 0);
+    return allStates;
+  }
+
+  // Refresh the states list panel
+  function renderStatesList() {
+    statesListDiv.innerHTML = "";
+    states.forEach((st, idx) => {
+      const el = document.createElement("div");
+      el.textContent = `Step ${idx}: ${st.operation}`;
+      el.style.cursor = "pointer";
+      if (idx === currentStep) {
+        el.style.fontWeight = "bold";
+        el.style.textDecoration = "underline";
+      }
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-pressed", idx === currentStep);
+      el.addEventListener("click", () => {
+        jumpToStep(idx);
+      });
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          jumpToStep(idx);
+        }
+      });
+      statesListDiv.appendChild(el);
+    });
+  }
+
+  // Update the display for current step
+  function updateDisplay() {
+    const st = states[currentStep];
+    currentArrayPre.textContent = `[${st.array.join(", ")}]`;
+    currentOperationPre.textContent = st.operation;
+
+    jumpToInput.value = currentStep.toString();
+    jumpToInput.max = states.length - 1;
+
+    modifyIndexInput.disabled = st.array.length === 0;
+    if (!modifyIndexInput.disabled) {
+      modifyIndexInput.max = st.array.length - 1;
+      if (modifyIndexInput.value > modifyIndexInput.max)
+        modifyIndexInput.value = modifyIndexInput.max;
+    }
+    const enableHistoryNav = states.length > 1;
+    stepForwardBtn.disabled = currentStep >= states.length - 1;
+    stepBackBtn.disabled = currentStep <= 0;
+    jumpToBtn.disabled = !enableHistoryNav;
+    modifyBtn.disabled = modifyIndexInput.disabled;
+    resetBtn.disabled = !enableHistoryNav;
+
+    // Auto play/pause buttons toggle
+    autoPlayBtn.disabled = !enableHistoryNav;
+    pauseBtn.disabled = true;
+
+    renderStatesList();
+  }
+
+  // Change step index within states
+  function jumpToStep(idx) {
+    if (idx < 0) idx = 0;
+    if (idx >= states.length) idx = states.length - 1;
+    currentStep = idx;
+    updateDisplay();
+  }
+
+  // Increment step forward
+  function stepForward() {
+    if (currentStep < states.length - 1) {
+      currentStep++;
+      updateDisplay();
+    }
+  }
+
+  // Step backward in history
+  function stepBack() {
+    if (currentStep > 0) {
+      currentStep--;
+      updateDisplay();
+    }
+  }
+
+  // Auto play controls
+  function startAutoPlay() {
+    if (autoPlayTimer) return; // already running
+    autoPlayBtn.disabled = true;
+    pauseBtn.disabled = false;
+    stepBackBtn.disabled = true;
+    stepForwardBtn.disabled = true;
+    jumpToBtn.disabled = true;
+    modifyBtn.disabled = true;
+    resetBtn.disabled = true;
+    speedSlider.disabled = true;
+    autoPlayTimer = setInterval(() => {
+      if (currentStep < states.length - 1) {
+        currentStep++;
+        updateDisplay();
+      } else {
+        stopAutoPlay();
+      }
+    }, autoPlayIntervalMs);
+  }
+
+  function stopAutoPlay() {
+    if (!autoPlayTimer) return;
+    clearInterval(autoPlayTimer);
+    autoPlayTimer = null;
+    autoPlayBtn.disabled = false;
+    pauseBtn.disabled = true;
+    stepBackBtn.disabled = false;
+    stepForwardBtn.disabled = false;
+    jumpToBtn.disabled = false;
+    modifyBtn.disabled = false;
+    resetBtn.disabled = false;
+    speedSlider.disabled = false;
+  }
+
+  // Generate random array
+  function generateRandomArray(size) {
+    const arr = [];
+    for (let i = 0; i < size; i++) {
+      // Choose integers between -999 and 999
+      const v = Math.floor(Math.random() * 1999) - 999;
+      arr.push(v);
+    }
+    return arr;
+  }
+
+  // Immediately recalculate states from current array (from user modify or initial load)
+  function recalcStatesFromArray(arr) {
+    if (arr.length < 1) {
+      alert("Array must contain at least one element.");
+      return;
+    }
+    states = buildAllStatesFromArray(arr);
+    currentStep = 0;
+    updateDisplay();
+  }
+
+  // Modify current displayed state array element and recalc from there
+  function modifyCurrentStepAndRecalc(index, newValue) {
+    if (index < 0 || index >= states[currentStep].array.length) {
+      alert("Index out of bounds");
+      return;
+    }
+    // Create a copy of the current array at this step and modify
+    const baseArr = arrCopy(states[currentStep].array);
+    baseArr[index] = newValue;
+
+    // We'll rebuild all states starting from baseArr only for the subarray slice this step shows.
+    // BUT since we can modify arbitrary element, better to recalc entire states from baseArr
+    recalcStatesFromArray(baseArr);
+  }
+
+  // --- Event listeners ---
+
+  loadArrayBtn.addEventListener("click", () => {
+    const arrText = arrayInput.value;
+    const parsedArr = parseArrayInput(arrText);
+    if (!parsedArr) {
+      alert("Invalid array input! Enter at least 2 valid numbers separated by commas, spaces or newlines.");
+      return;
+    }
+    recalcStatesFromArray(parsedArr);
+  });
+
+  randomArrayBtn.addEventListener("click", () => {
+    let size = parseInt(randomSizeInput.value, 10);
+    if (!Number.isInteger(size) || size < 2 || size > 100) {
+      alert("Invalid size. Please enter an integer between 2 and 100.");
+      return;
+    }
+    const randArr = generateRandomArray(size);
+    arrayInput.value = randArr.join(", ");
+    recalcStatesFromArray(randArr);
+  });
+
+  stepForwardBtn.addEventListener("click", () => {
+    stepForward();
+  });
+
+  stepBackBtn.addEventListener("click", () => {
+    stepBack();
+  });
+
+  autoPlayBtn.addEventListener("click", () => {
+    startAutoPlay();
+  });
+
+  pauseBtn.addEventListener("click", () => {
+    stopAutoPlay();
+  });
+
+  speedSlider.addEventListener("input", () => {
+    const speed = parseInt(speedSlider.value, 10);
+    if (speed > 0) {
+      autoPlayIntervalMs = 1000 / speed;
+      if (autoPlayTimer) {
+        stopAutoPlay();
+        startAutoPlay();
+      }
+    }
+  });
+
+  jumpToBtn.addEventListener("click", () => {
+    let val = parseInt(jumpToInput.value, 10);
+    if (isNaN(val) || val < 0 || val >= states.length) {
+      alert(`Invalid step number. Enter a number between 0 and ${states.length - 1}.`);
+      return;
+    }
+    jumpToStep(val);
+  });
+
+  resetBtn.addEventListener("click", () => {
+    currentStep = 0;
+    updateDisplay();
+  });
+
+  modifyBtn.addEventListener("click", () => {
+    const idx = parseInt(modifyIndexInput.value, 10);
+    const val = Number(modifyValueInput.value);
+    if (!Number.isFinite(val)) {
+      alert("Invalid new value.");
+      return;
+    }
+    modifyCurrentStepAndRecalc(idx, val);
+  });
+
+  // Update modifyValue when index changes
+  modifyIndexInput.addEventListener("change", () => {
+    const idx = parseInt(modifyIndexInput.value, 10);
+    if (idx >= 0 && idx < states[currentStep].array.length) {
+      modifyValueInput.value = states[currentStep].array[idx];
+    }
+  });
+
+  // Keyboard shortcuts:
+  // Right Arrow = step forward
+  // Left Arrow = step backward
+  // Space = auto play / pause toggle
+  window.addEventListener("keydown", (ev) => {
+    if (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA" || ev.target.isContentEditable) {
+      return; // do not interfere with typing
+    }
+    if (ev.key === "ArrowRight") {
+      ev.preventDefault();
+      stepForward();
+    } else if (ev.key === "ArrowLeft") {
+      ev.preventDefault();
+      stepBack();
+    } else if (ev.key === " ") {
+      ev.preventDefault();
+      if (autoPlayTimer) {
+        stopAutoPlay();
+      } else {
+        startAutoPlay();
+      }
+    }
+  });
+
+  // On page load: Initialize minimal state with empty array and disabled controls
+  function initialSetup() {
+    states = [{
+      array: [],
+      operation: "No array loaded",
+      leftIndexes: null,
+      rightIndexes: null,
+      isMerge: false,
+      mergedFrom: null,
+      parentIndex: null
+    }];
+    currentStep = 0;
+    updateDisplay();
+
+    stepForwardBtn.disabled = true;
+    stepBackBtn.disabled = true;
+    autoPlayBtn.disabled = true;
+    pauseBtn.disabled = true;
+    jumpToBtn.disabled = true;
+    modifyBtn.disabled = true;
+    resetBtn.disabled = true;
+    modifyIndexInput.disabled = true;
+    modifyValueInput.disabled = true;
+  }
+
+  // Initialize on page load
+  initialSetup();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Context Switching Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 2em;
+    background: #f4f4f4;
+  }
+  h1 {
+    text-align: center;
+  }
+  #log {
+    background: #222;
+    color: #0f0;
+    font-family: monospace;
+    height: 300px;
+    overflow-y: scroll;
+    padding: 1em;
+    border-radius: 5px;
+    margin-top: 1em;
+  }
+  button {
+    font-size: 1rem;
+    padding: 0.5em 1.5em;
+    margin: 0.5em 0;
+    cursor: pointer;
+    border-radius: 5px;
+    border: none;
+    background: #0078d4;
+    color: white;
+    transition: background 0.3s;
+  }
+  button:hover:not(:disabled) {
+    background: #005a9e;
+  }
+  button:disabled {
+    background: #888;
+    cursor: not-allowed;
+  }
+  .task-list {
+    display: flex;
+    gap: 1em;
+    flex-wrap: wrap;
+  }
+  .task {
+    background: white;
+    border-radius: 5px;
+    padding: 1em;
+    flex: 1 1 200px;
+    box-shadow: 0 2px 5px rgb(0 0 0 / 0.1);
+  }
+  .task h3 {
+    margin-top: 0;
+  }
+  .task button {
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+<h1>Context Switching Demo</h1>
+<p>
+  This demonstration simulates two tasks that take turns running on a "CPU". 
+  Each task runs a series of computations and then "switches" context to the other task,
+  showing how the CPU saves state and resumes later.
+</p>
+
+<div class="task-list">
+  <div class="task">
+    <h3>Task 1 (Counter)</h3>
+    <p>Counts upward with brief pauses to simulate work.</p>
+    <button id="startTask1">Start Task 1</button>
+    <button id="pauseTask1" disabled>Pause Task 1</button>
+    <div>Current Count: <span id="count1">0</span></div>
+  </div>
+  <div class="task">
+    <h3>Task 2 (Factorial)</h3>
+    <p>Calculates factorial step-by-step with pauses.</p>
+    <button id="startTask2">Start Task 2</button>
+    <button id="pauseTask2" disabled>Pause Task 2</button>
+    <div>Current n: <span id="n2">1</span></div>
+    <div>Current factorial: <span id="fact2">1</span></div>
+  </div>
+</div>
+
+<button id="startContextSwitching" disabled>Start Context Switching</button>
+
+<div id="log" aria-live="polite" aria-label="Context switch log"></div>
+
+<script>
+  /*
+   * Context Switching Concept:
+   * We simulate two tasks that each perform a CPU-bound operation:
+   * - Task 1 counts from 0 upwards.
+   * - Task 2 calculates factorial of increasing numbers.
+   * 
+   * Instead of running to completion, we simulate a CPU scheduler
+   * preemptively switching between them every 500ms.
+   * 
+   * We save task "contexts" (their variable states),
+   * and resume them on subsequent turns.
+   */
+
+  const logEl = document.getElementById('log');
+  function log(msg) {
+    const time = new Date().toLocaleTimeString();
+    logEl.textContent += `[${time}] ${msg}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // Task 1: Counting
+  const count1El = document.getElementById('count1');
+  let task1Context = {
+    count: 0,
+    running: false,
+  };
+
+  // Task 2: Factorial calculation
+  const n2El = document.getElementById('n2');
+  const fact2El = document.getElementById('fact2');
+  let task2Context = {
+    n: 1,
+    factorial: 1,
+    running: false,
+  };
+
+  // Buttons
+  const startTask1Btn = document.getElementById('startTask1');
+  const pauseTask1Btn = document.getElementById('pauseTask1');
+  const startTask2Btn = document.getElementById('startTask2');
+  const pauseTask2Btn = document.getElementById('pauseTask2');
+  const startContextSwitchingBtn = document.getElementById('startContextSwitching');
+
+  // Each task will be implemented as a generator so we can yield control and resume.
+  
+  // Task 1 generator function simulating increments with work chunks
+  function* task1Generator(ctx) {
+    while (true) {
+      ctx.count++;
+      count1El.textContent = ctx.count;
+      log(`Task 1: counted to ${ctx.count}`);
+      // Simulate some work by looping many times (blocking CPU for a moment)
+      for (let i=0; i<1e6; i++) {
+        // busy wait to simulate work
+        if(i === 1e6 -1) yield; // yield context switch point after work chunk
+      }
+    }
+  }
+
+  // Task 2 generator function simulating factorial calculation stepwise
+  function* task2Generator(ctx) {
+    while (true) {
+      ctx.factorial *= ctx.n;
+      n2El.textContent = ctx.n;
+      fact2El.textContent = ctx.factorial;
+      log(`Task 2: factorial(${ctx.n}) = ${ctx.factorial}`);
+      ctx.n++;
+      // Simulate work loop
+      for(let i=0; i<8e5; i++) {
+        if(i === 8e5 -1) yield; // yield context switch point
+      }
+    }
+  }
+
+  let genTask1 = null;
+  let genTask2 = null;
+
+  function resetTask1() {
+    task1Context.count = 0;
+    count1El.textContent = 0;
+    pauseTask1Btn.disabled = true;
+    startTask1Btn.disabled = false;
+    task1Context.running = false;
+    genTask1 = null;
+  }
+
+  function resetTask2() {
+    task2Context.n = 1;
+    task2Context.factorial = 1;
+    n2El.textContent = 1;
+    fact2El.textContent = 1;
+    pauseTask2Btn.disabled = true;
+    startTask2Btn.disabled = false;
+    task2Context.running = false;
+    genTask2 = null;
+  }
+
+  startTask1Btn.onclick = () => {
+    if(!genTask1) {
+      genTask1 = task1Generator(task1Context);
+    }
+    task1Context.running = true;
+    pauseTask1Btn.disabled = false;
+    startTask1Btn.disabled = true;
+    log("Task 1 started.");
+    startContextSwitchingBtn.disabled = false;
+    runTask1Once();
+  };
+  pauseTask1Btn.onclick = () => {
+    task1Context.running = false;
+    pauseTask1Btn.disabled = true;
+    startTask1Btn.disabled = false;
+    log("Task 1 paused.");
+  };
+
+  startTask2Btn.onclick = () => {
+    if(!genTask2) {
+      genTask2 = task2Generator(task2Context);
+    }
+    task2Context.running = true;
+    pauseTask2Btn.disabled = false;
+    startTask2Btn.disabled = true;
+    log("Task 2 started.");
+    startContextSwitchingBtn.disabled = false;
+    runTask2Once();
+  };
+  pauseTask2Btn.onclick = () => {
+    task2Context.running = false;
+    pauseTask2Btn.disabled = true;
+    startTask2Btn.disabled = false;
+    log("Task 2 paused.");
+  };
+
+  // Single step execution for demonstration when starting tasks independently:
+  function runTask1Once() {
+    if(task1Context.running && genTask1) {
+      const res = genTask1.next();
+      // auto-pause after one step so user can see output
+      pauseTask1Btn.click();
+    }
+  }
+  function runTask2Once() {
+    if(task2Context.running && genTask2) {
+      const res = genTask2.next();
+      pauseTask2Btn.click();
+    }
+  }
+
+  /*************
+    Context Switching Scheduler
+  *************/
+  let schedulerInterval = null;
+  const quantumMs = 500; // timeslice 500ms per task
+  let currentTask = 1;
+
+  startContextSwitchingBtn.onclick = () => {
+    if(!genTask1 || !genTask2) {
+      alert("Start both tasks first to enable context switching.");
+      return;
+    }
+    if(schedulerInterval) {
+      // Stop scheduler
+      clearInterval(schedulerInterval);
+      schedulerInterval = null;
+      startContextSwitchingBtn.textContent = "Start Context Switching";
+      // Enable all buttons again
+      [startTask1Btn, startTask2Btn].forEach(b => b.disabled = false);
+      [pauseTask1Btn, pauseTask2Btn].forEach(b => b.disabled = true);
+      task1Context.running = false;
+      task2Context.running = false;
+      log("Context switching stopped.");
+      return;
+    }
+    
+    // Prepare and disable direct control buttons during scheduling
+    startTask1Btn.disabled = true;
+    pauseTask1Btn.disabled = true;
+    startTask2Btn.disabled = true;
+    pauseTask2Btn.disabled = true;
+    task1Context.running = false;
+    task2Context.running = false;
+
+    startContextSwitchingBtn.textContent = "Stop Context Switching";
+    log("Context switching started.");
+
+    // Scheduler repeatedly runs each task generator for a timeslice
+    schedulerInterval = setInterval(() => {
+      if(currentTask === 1) {
+        log("Scheduler: Running Task 1");
+        try {
+          genTask1.next();
+        } catch(e) {
+          log("Task 1 finished or error occurred: " + e);
+          clearInterval(schedulerInterval);
+        }
+        currentTask = 2;
+      } else {
+        log("Scheduler: Running Task 2");
+        try {
+          genTask2.next();
+        } catch(e) {
+          log("Task 2 finished or error occurred: " + e);
+          clearInterval(schedulerInterval);
+        }
+        currentTask = 1;
+      }
+    }, quantumMs);
+  };
+
+  // Reset tasks on page load
+  resetTask1();
+  resetTask2();
+
+  // Log initial info
+  log("Load complete. Please start both tasks to enable context switching.");
+</script>
+</body>
+</html>

@@ -133,7 +133,7 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
   test('S1_ConstantTime - clicking constant button sets exact constant-time message', async ({ page }) => {
     // This validates the transition from Idle -> ConstantTime (S0 -> S1)
-    const app = new TimeComplexityPage(page);
+    const app1 = new TimeComplexityPage(page);
 
     // Click the constant time button and wait for result update.
     await app.clickConstant();
@@ -152,14 +152,14 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
   test('S2_LinearTime - clicking linear button shows linear-time message starting with expected prefix', async ({ page }) => {
     // This validates the transition from Idle -> LinearTime (S0 -> S2)
-    const app = new TimeComplexityPage(page);
+    const app2 = new TimeComplexityPage(page);
 
     // Click the linear time button and wait for result update.
     // Note: Implementation runs linearTime(10000) which should complete quickly enough.
     await app.clickLinear();
     await app.waitForNonEmptyResult(10000); // allow more time just in case
 
-    const resultText = await app.getResultText();
+    const resultText1 = await app.getResultText();
 
     // Validate prefix and structure rather than exact milliseconds value
     const expectedPrefix = 'O(n) - Linear Time: Time taken for n = 10000 is ';
@@ -180,23 +180,23 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
   test('S3_QuadraticTime - clicking quadratic button shows quadratic-time message starting with expected prefix', async ({ page }) => {
     // This validates the transition from Idle -> QuadraticTime (S0 -> S3)
-    const app = new TimeComplexityPage(page);
+    const app3 = new TimeComplexityPage(page);
 
     // Click the quadratic time button and wait for result update.
     // Implementation runs quadraticTime(100) - should be quick but give some timeout headroom.
     await app.clickQuadratic();
     await app.waitForNonEmptyResult(10000);
 
-    const resultText = await app.getResultText();
+    const resultText2 = await app.getResultText();
 
     // Validate prefix and structure
-    const expectedPrefix = 'O(n^2) - Quadratic Time: Time taken for n = 100 is ';
+    const expectedPrefix1 = 'O(n^2) - Quadratic Time: Time taken for n = 100 is ';
     expect(resultText.startsWith(expectedPrefix)).toBe(true);
     expect(resultText.endsWith(' milliseconds.')).toBe(true);
 
     // Parse the milliseconds value
-    const millisPart = resultText.slice(expectedPrefix.length, -' milliseconds.'.length).trim();
-    const millisNumber = Number(millisPart);
+    const millisPart1 = resultText.slice(expectedPrefix.length, -' milliseconds.'.length).trim();
+    const millisNumber1 = Number(millisPart);
     expect(Number.isFinite(millisNumber)).toBe(true);
 
     // No console/page errors expected
@@ -206,7 +206,7 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
 
   test('Edge cases and robustness - rapid repeated clicks update result predictably and do not produce errors', async ({ page }) => {
     // Validate multiple quick interactions and ensure last-clicked result is displayed
-    const app = new TimeComplexityPage(page);
+    const app4 = new TimeComplexityPage(page);
 
     // Rapid sequence: constant -> linear -> quadratic
     await Promise.all([
@@ -220,7 +220,7 @@ test.describe('Time Complexity Demonstration - FSM validation', () => {
     // Wait for result to be non-empty; final expected is quadratic result
     await app.waitForNonEmptyResult(10000);
 
-    const resultText = await app.getResultText();
+    const resultText3 = await app.getResultText();
 
     // Since last click is quadratic, expect quadratic prefix (robustness of event handling)
     expect(resultText.startsWith('O(n^2) - Quadratic Time: Time taken for n = 100 is ')).toBe(true);

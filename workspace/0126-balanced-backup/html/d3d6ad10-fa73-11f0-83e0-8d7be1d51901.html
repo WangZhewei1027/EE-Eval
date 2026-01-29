@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>TimSort Visual Demonstration</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 0; padding: 0; background:#f7f9fc; color:#111; }
+    header { padding: 16px; background: linear-gradient(90deg,#3b82f6,#06b6d4); color: white; }
+    header h1 { margin: 0; font-size: 20px; }
+    .container { display: grid; grid-template-columns: 320px 1fr; gap: 12px; padding: 12px; height: calc(100vh - 76px); box-sizing: border-box; }
+    .controls { background: white; border-radius: 8px; padding: 12px; box-shadow: 0 2px 8px rgba(12,18,31,0.06); overflow:auto; }
+    .controls label { display:block; margin-top:10px; font-weight:600; font-size:13px; }
+    .controls input[type=range] { width: 100%; }
+    .controls button, .controls input[type=number], .controls select { margin-top:8px; padding:8px; width:100%; box-sizing:border-box; border-radius:6px; border:1px solid #d1d5db; background:white; }
+    .controls .row { display:flex; gap:8px; }
+    .controls .row button { flex:1; }
+    .stats { margin-top:12px; font-size:13px; }
+    .visual { background: white; border-radius:8px; padding:12px; box-shadow: 0 2px 8px rgba(12,18,31,0.06); display:flex; flex-direction:column; gap:8px; height:100%; }
+    #canvasContainer { flex:1; border:1px dashed #e6edf3; border-radius:6px; padding:10px; position:relative; overflow:auto; background: linear-gradient(180deg,#ffffff,#fbfdff); }
+    #bars { display:flex; align-items:flex-end; height:100%; gap:2px; transition:height 160ms; }
+    .bar { background:#60a5fa; width:12px; height:20px; border-radius:2px; transition: height 160ms, background 120ms; display:inline-block; }
+    .bar.default { background:#60a5fa; }
+    .bar.run { background:#f97316; } /* orange */
+    .bar.merge { background:#a78bfa; } /* purple */
+    .bar.compare { background:#ef4444; } /* red */
+    .bar.sorted { background:#10b981; } /* green */
+    .legend { display:flex; gap:8px; font-size:13px; align-items:center; }
+    .legend span { display:flex; gap:6px; align-items:center; }
+    .swatch { width:14px; height:14px; border-radius:3px; display:inline-block; }
+    .stackView { margin-top:8px; font-size:13px; background:#f8fafc; padding:8px; border-radius:6px; max-height:200px; overflow:auto; }
+    pre { background:#0f172a; color:#e6eef8; padding:8px; border-radius:6px; font-size:12px; overflow:auto; }
+    .footerNote { margin-top:8px; font-size:13px; color:#374151; }
+    small { color:#475569; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TimSort Visual Demonstration</h1>
+  </header>
+
+  <div class="container">
+    <div class="controls">
+      <label>Array size (20 - 200)
+        <input id="size" type="range" min="20" max="200" value="80" />
+      </label>
+      <label>Randomness / Seed
+        <div class="row">
+          <input id="seed" type="number" min="0" placeholder="Leave blank = random" />
+          <button id="randomize">Randomize Array</button>
+        </div>
+      </label>
+
+      <label>Animation speed (ms per step)
+        <input id="speed" type="range" min="10" max="800" value="80" />
+      </label>
+
+      <label>Controls</label>
+      <div class="row">
+        <button id="stepBtn">Step</button>
+        <button id="playBtn">Play</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+
+      <div class="row">
+        <button id="detectRunsBtn">Detect Runs</button>
+        <button id="fullSortBtn">Run Full TimSort</button>
+      </div>
+
+      <div class="stats">
+        <div>n = <span id="nVal">80</span></div>
+        <div>minrun = <strong id="minrunVal">0</strong></div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Run stack</label>
+        <div class="stackView" id="stackView">[]</div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Algorithm explanation</label>
+        <div style="font-size:13px; line-height:1.3;">
+          TimSort: Find "natural" runs, make them at least minrun via insertion sort, then merge runs using stack invariants to keep merges balanced. This demo shows detection, run extension, and merges step-by-step.
+        </div>
+      </div>
+
+      <div class="footerNote">
+        <small>Tip: press "Detect Runs" to see natural runs, then "Step" to advance through TimSort. "Play" runs automatically.</small>
+      </div>
+    </div>
+
+    <div class="visual">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="legend">
+          <span><i class="swatch" style="background:#60a5fa"></i> default</span>
+          <span><i class="swatch" style="background:#f97316"></i> run</span>
+          <span><i class="swatch" style="background:#a78bfa"></i> merging</span>
+          <span><i class="swatch" style="background:#ef4444"></i> compare</span>
+          <span><i class="swatch" style="background:#10b981"></i> sorted</span>
+        </div>
+        <div style="font-size:13px; color:#374151">TimSort Visualization</div>
+      </div>
+
+      <div id="canvasContainer">
+        <div id="bars" aria-hidden="true"></div>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:flex-start;">
+        <div style="flex:1">
+          <label>Operation log</label>
+          <pre id="log" style="height:120px">Ready.</pre>
+        </div>
+        <div style="width:260px;">
+          <label>Snapshot / Debug</label>
+          <div style="background:#f8fafc;padding:8px;border-radius:6px;font-size:13px;">
+            <div>Phase: <span id="phase">idle</span></div>
+            <div>Next action count: <span id="actionCount">0</span></div>
+            <div style="margin-top:6px;">Current merge: <span id="currentMerge">-</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // TimSort Visualization - Single file implementation
+    // Author: Generated for demo
+    (function(){
+      // DOM
+      const barsEl = document.getElementById('bars');
+      const sizeEl = document.getElementById('size');
+      const seedEl = document.getElementById('seed');
+      const randomizeBtn = document.getElementById('randomize');
+      const stepBtn = document.getElementById('stepBtn');
+      const playBtn = document.getElementById('playBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const detectRunsBtn = document.getElementById('detectRunsBtn');
+      const fullSortBtn = document.getElementById('fullSortBtn');
+      const speedEl = document.getElementById('speed');
+      const nVal = document.getElementById('nVal');
+      const minrunVal = document.getElementById('minrunVal');
+      const stackView = document.getElementById('stackView');
+      const logEl = document.getElementById('log');
+      const phaseEl = document.getElementById('phase');
+      const actionCountEl = document.getElementById('actionCount');
+      const currentMergeEl = document.getElementById('currentMerge');
+
+      let arr = [];
+      let frames = []; // sequence of frames (snapshots) to animate/step
+      let playing = false;
+      let playTimer = null;
+      let currentFrame = 0;
+
+      function seededRandom(seed) {
+        // simple LCG
+        let s = seed >>> 0;
+        return function() {
+          s = (s * 1664525 + 1013904223) >>> 0;
+          return s / 4294967296;
+        }
+      }
+
+      function buildArray(n, seed) {
+        const rand = seed == null ? Math.random : seededRandom(seed);
+        const a = [];
+        for (let i=0;i<n;i++){
+          // create partial presortedness sometimes by creating runs
+          // generate clusters to create natural runs occasionally
+          let val = Math.floor(rand()*100) + 1;
+          a.push(val);
+        }
+        return a;
+      }
+
+      function renderArray(snapshot) {
+        const data = snapshot ? snapshot.arr : arr;
+        barsEl.innerHTML = '';
+        const maxv = Math.max(...data);
+        for (let i=0;i<data.length;i++){
+          const v = data[i];
+          const bar = document.createElement('div');
+          bar.className = 'bar default';
+          const h = Math.max(3, Math.round((v / maxv) * 260));
+          bar.style.height = h + 'px';
+          // determine color from snapshot metadata
+          if (snapshot) {
+            if (snapshot.sortedIndices && snapshot.sortedIndices.has(i)) {
+              bar.className = 'bar sorted';
+            } else if (snapshot.merge && i >= snapshot.merge.start && i < snapshot.merge.start + snapshot.merge.len) {
+              bar.className = 'bar merge';
+            } else if (snapshot.runMap && snapshot.runMap[i] !== undefined) {
+              bar.className = 'bar run';
+            } else if (snapshot.compare && snapshot.compare.has(i)) {
+              bar.className = 'bar compare';
+            } else {
+              bar.className = 'bar default';
+            }
+          }
+          bar.title = String(v);
+          barsEl.appendChild(bar);
+        }
+      }
+
+      function log(msg) {
+        const time = new Date().toLocaleTimeString();
+        logEl.textContent = `[${time}] ${msg}\n` + logEl.textContent;
+      }
+
+      // TimSort helpers
+
+      function minRunLength(n) {
+        // Python TimSort minrun calculation
+        let r = 0;
+        while (n >= 64) {
+          r |= n & 1;
+          n >>= 1;
+        }
+        return n + r;
+      }
+
+      // We'll build frames as snapshots at key points.
+      function pushFrame(arrSnapshot, options = {}) {
+        // arrSnapshot is an array copy
+        const snapshot = {
+          arr: arrSnapshot.slice(),
+          runMap: options.runMap ? new Map(options.runMap) : null,
+          merge: options.merge ? Object.assign({}, options.merge) : null,
+          compare: options.compare ? new Set(options.compare) : null,
+          sortedIndices: options.sortedIndices ? new Set(options.sortedIndices) : null,
+          stack: options.stack ? options.stack.map(s => ({start:s.start,len:s.len})) : null,
+          phase: options.phase || null,
+          note: options.note || ''
+        };
+        frames.push(snapshot);
+      }
+
+      // Insertion sort on range [lo, hi)
+      function insertionSortRange(a, lo, hi, framesContext) {
+        for (let i = lo + 1; i < hi; i++) {
+          let key = a[i];
+          let j = i - 1;
+          while (j >= lo && a[j] > key) {
+            a[j+1] = a[j];
+            // capture frame showing the swap/shift
+            framesContext.pushFrame(a, { compare: [j, j+1], phase: 'insertion-shift' });
+            j--;
+          }
+          a[j+1] = key;
+          framesContext.pushFrame(a, { compare: [j+1], phase: 'insertion-insert' });
+        }
+      }
+
+      // Merge two adjacent runs [start, start+len1) and [start+len1, start+len1+len2)
+      function mergeAt(a, start, len1, len2, framesContext) {
+        const start2 = start + len1;
+        const left = a.slice(start, start2);
+        const right = a.slice(start2, start2 + len2);
+        let i = 0, j = 0, k = start;
+        // Mark merge area for frames
+        framesContext.pushFrame(a, { merge: {start: start, len: len1 + len2}, phase: 'merge-start', compare: [] });
+
+        while (i < left.length && j < right.length) {
+          // show comparison
+          framesContext.pushFrame(a, { merge: {start: start, len: len1 + len2}, compare: [start + i, start + len1 + j], phase: 'merge-compare' });
+          if (left[i] <= right[j]) {
+            a[k++] = left[i++];
+          } else {
+            a[k++] = right[j++];
+          }
+          // show write
+          framesContext.pushFrame(a, { merge: {start: start, len: len1 + len2}, phase: 'merge-write', compare: [] });
+        }
+        while (i < left.length) {
+          a[k++] = left[i++];
+          framesContext.pushFrame(a, { merge: {start: start, len: len1 + len2}, phase: 'merge-write' });
+        }
+        while (j < right.length) {
+          a[k++] = right[j++];
+          framesContext.pushFrame(a, { merge: {start: start, len: len1 + len2}, phase: 'merge-write' });
+        }
+        // final frame marking merged run
+        framesContext.pushFrame(a, { merge: {start: start, len: len1 + len2}, phase: 'merge-done' });
+      }
+
+      // TimSort main that generates frames but does not animate
+      function generateTimSortFrames(inputArr) {
+        const a = inputArr.slice();
+        const n = a.length;
+        const minrun = minRunLength(n);
+        const ctx = { pushFrame: pushFrame.bind(null) };
+
+        frames = []; // reset frames
+        pushFrame(a, { phase: 'start' });
+
+        // 1) Identify natural runs
+        let runs = [];
+        let i = 0;
+        while (i < n) {
+          let runStart = i;
+          i++;
+          if (i === n) {
+            // single element run
+            runs.push({ start: runStart, len: 1 });
+            break;
+          }
+          if (a[i-1] <= a[i]) {
+            // ascending
+            while (i < n && a[i-1] <= a[i]) i++;
+          } else {
+            // descending
+            while (i < n && a[i-1] > a[i]) i++;
+            // reverse the descending run to make ascending
+            a.splice(runStart, i - runStart, ...a.slice(runStart, i).reverse());
+            // capture frame for reversal
+            pushFrame(a, { phase: 'reverse-run', runMap: rangeToMap(runStart, i - runStart), note: `Reverse run [${runStart},${i})` });
+          }
+          runs.push({ start: runStart, len: i - runStart });
+        }
+        pushFrame(a, { phase: 'runs-detected', note: `Detected ${runs.length} runs`, runMap: runsToMap(runs), stack: runs });
+
+        // 2) Extend short runs to at least minrun via insertion sort
+        const runStack = [];
+        for (let r of runs) {
+          let runLen = r.len;
+          if (runLen < minrun) {
+            const extend = Math.min(minrun, n - r.start);
+            runLen = extend;
+            // insertion sort the range [r.start, r.start+runLen)
+            insertionSortRange(a, r.start, r.start + runLen, { pushFrame });
+            pushFrame(a, { phase: 'extend-run', runMap: rangeToMap(r.start, runLen), note: `Extended/insertion-sorted run at ${r.start}` });
+          }
+          runStack.push({ start: r.start, len: runLen });
+          pushFrame(a, { phase: 'push-run', stack: runStack, runMap: rangeToMap(r.start, runLen) });
+
+          // Maintain invariants and merge as needed
+          collapseRuns(a, runStack, { pushFrame });
+        }
+
+        // After all runs processed, force merges until one run remains
+        while (runStack.length > 1) {
+          collapseRuns(a, runStack, { pushFrame }, true); // force merge
+        }
+
+        pushFrame(a, { phase: 'done', sortedIndices: new Set(Array.from({length:n}, (_,i)=>i)) });
+      }
+
+      // helper: convert runs to map for coloring
+      function runsToMap(runs) {
+        const m = new Map();
+        for (const r of runs) {
+          for (let i = r.start; i < r.start + r.len; i++) m.set(i, true);
+        }
+        return m;
+      }
+
+      function rangeToMap(start, len) {
+        const m = new Map();
+        for (let i = start; i < start + len; i++) m.set(i, true);
+        return m;
+      }
+
+      // collapseRuns ensures invariants by merging appropriate runs
+      function collapseRuns(a, stack, ctx, force=false) {
+        // pushFrame to show stack
+        ctx.pushFrame(a, { phase: 'check-stack', stack: stack });
+        const pushFrameLocal = ctx.pushFrame;
+        function mergeAtIndex(i) {
+          const A = stack[i];
+          const B = stack[i+1];
+          pushFrameLocal(a, { phase: 'will-merge', note: `Merging runs at ${A.start} (len ${A.len}) and ${B.start} (len ${B.len})`, stack: stack, merge: {start:A.start, len:A.len + B.len} });
+          mergeAt(a, A.start, A.len, B.len, ctx);
+          // replace A and B with merged run
+          stack.splice(i, 2, { start: A.start, len: A.len + B.len });
+          pushFrameLocal(a, { phase: 'merged', stack: stack });
+        }
+
+        // TimSort invariants: while stack has at least 2 runs and invariants violated, merge.
+        let changed = true;
+        while (stack.length > 1 && changed) {
+          changed = false;
+          const m = stack.length;
+          if (m >= 3) {
+            const A = stack[m-3].len;
+            const B = stack[m-2].len;
+            const C = stack[m-1].len;
+            if (A <= B + C) {
+              // choose which to merge
+              if (A < C) {
+                mergeAtIndex(m-3);
+              } else {
+                mergeAtIndex(m-2);
+              }
+              changed = true;
+              continue;
+            }
+          }
+          // second invariant
+          if (stack.length >= 2) {
+            const X = stack[stack.length-2].len;
+            const Y = stack[stack.length-1].len;
+            if (X <= Y || force) {
+              mergeAtIndex(stack.length-2);
+              changed = true;
+              continue;
+            }
+          }
+        }
+      }
+
+      // Animation/Playback management
+      function updateUIStatus() {
+        nVal.textContent = arr.length;
+        minrunVal.textContent = minRunLength(arr.length);
+        actionCountEl.textContent = Math.max(0, frames.length - currentFrame);
+        phaseEl.textContent = (frames[currentFrame] && frames[currentFrame].phase) || 'idle';
+        if (frames[currentFrame] && frames[currentFrame].stack) {
+          stackView.textContent = JSON.stringify(frames[currentFrame].stack.map(s=>`{start:${s.start},len:${s.len}}`), null, 0);
+        } else {
+          stackView.textContent = '[]';
+        }
+        if (frames[currentFrame] && frames[currentFrame].merge) {
+          currentMergeEl.textContent = `${frames[currentFrame].merge.start}..${frames[currentFrame].merge.start + frames[currentFrame].merge.len}`;
+        } else currentMergeEl.textContent = '-';
+      }
+
+      function showFrame(idx) {
+        if (idx < 0) idx = 0;
+        if (idx >= frames.length) idx = frames.length -1;
+        currentFrame = idx;
+        const snapshot = frames[currentFrame];
+        renderArray(snapshot);
+        log(`[frame ${currentFrame+1}/${frames.length}] phase=${snapshot.phase} ${snapshot.note || ''}`);
+        updateUIStatus();
+      }
+
+      function stepOnce() {
+        if (frames.length === 0) {
+          log('No frames to step. Generate frames by pressing "Detect Runs" or "Full TimSort".');
+          return;
+        }
+        if (currentFrame < frames.length - 1) {
+          currentFrame++;
+          showFrame(currentFrame);
+        } else {
+          log('Reached last frame.');
+        }
+      }
+
+      function playToggle() {
+        playing = !playing;
+        playBtn.textContent = playing ? 'Pause' : 'Play';
+        if (playing) {
+          const delay = Number(speedEl.value);
+          (function runner(){
+            if (!playing) return;
+            if (currentFrame < frames.length - 1) {
+              currentFrame++;
+              showFrame(currentFrame);
+              playTimer = setTimeout(runner, delay);
+            } else {
+              playing = false;
+              playBtn.textContent = 'Play';
+              log('Playback finished.');
+            }
+          })();
+        } else {
+          clearTimeout(playTimer);
+        }
+      }
+
+      // wiring events
+      sizeEl.addEventListener('input', ()=>{
+        const n = Number(sizeEl.value);
+        nVal.textContent = n;
+      });
+
+      randomizeBtn.addEventListener('click', ()=>{
+        const n = Number(sizeEl.value);
+        const seedVal = seedEl.value === '' ? null : Number(seedEl.value);
+        arr = buildArray(n, seedVal);
+        frames = [];
+        currentFrame = 0;
+        renderArray({arr});
+        log('Array randomized.');
+        updateUIStatus();
+      });
+
+      resetBtn.addEventListener('click', ()=>{
+        // reset to initial random array at current settings
+        randomizeBtn.click();
+      });
+
+      detectRunsBtn.addEventListener('click', ()=>{
+        // build frames but stop after detection and extension
+        const input = arr.slice();
+        frames = [];
+        currentFrame = 0;
+        pushFrame(input, { phase: 'start' });
+        // detect & extend runs with slightly different flow where we don't force final merges
+        const n = input.length;
+        const minrun = minRunLength(n);
+        pushFrame(input, { phase: 'info', note: `minrun=${minrun}` });
+
+        // detect runs
+        let runs = [];
+        let i = 0;
+        while (i < n) {
+          let runStart = i;
+          i++;
+          if (i === n) {
+            runs.push({ start: runStart, len: 1 });
+            break;
+          }
+          if (input[i-1] <= input[i]) {
+            while (i < n && input[i-1] <= input[i]) i++;
+          } else {
+            while (i < n && input[i-1] > input[i]) i++;
+            input.splice(runStart, i - runStart, ...input.slice(runStart, i).reverse());
+            pushFrame(input, { phase: 'reverse-run', note: `Reversed descending run [${runStart},${i})`, runMap: rangeToMap(runStart, i-runStart) });
+          }
+          runs.push({ start: runStart, len: i - runStart });
+        }
+        pushFrame(input, { phase: 'runs-detected', note: `Detected ${runs.length} runs`, runMap: runsToMap(runs) });
+
+        // extend short runs via insertion
+        const runStack = [];
+        for (const r of runs) {
+          let runLen = r.len;
+          if (runLen < minrun) {
+            runLen = Math.min(minrun, n - r.start);
+            insertionSortRange(input, r.start, r.start + runLen, { pushFrame });
+            pushFrame(input, { phase: 'extend-run', runMap: rangeToMap(r.start, runLen), note: `Extended run at ${r.start}` });
+          }
+          runStack.push({ start: r.start, len: runLen });
+          pushFrame(input, { phase: 'push-run', stack: runStack, runMap: rangeToMap(r.start, runLen) });
+        }
+        // show final stack without doing merges
+        pushFrame(input, { phase: 'detection-done', stack: runStack, note: 'Run detection & extension complete' });
+        frames = frames; // frames already collected
+        log(`Detected and extended runs; ${frames.length} frames generated.`);
+        showFrame(0);
+      });
+
+      fullSortBtn.addEventListener('click', ()=>{
+        // generate full timsort frames
+        generateTimSortFrames(arr);
+        currentFrame = 0;
+        log(`Full TimSort frames generated: ${frames.length} frames.`);
+        showFrame(0);
+      });
+
+      stepBtn.addEventListener('click', ()=>{
+        if (playing) {
+          playToggle();
+        }
+        stepOnce();
+      });
+
+      playBtn.addEventListener('click', ()=>{
+        // if no frames, generate default full sort
+        if (frames.length === 0) {
+          generateTimSortFrames(arr);
+        }
+        playToggle();
+      });
+
+      resetBtn.addEventListener('click', ()=>{
+        // reset frames and array
+        const seedVal = seedEl.value === '' ? null : Number(seedEl.value);
+        arr = buildArray(Number(sizeEl.value), seedVal);
+        frames = [];
+        currentFrame = 0;
+        renderArray({arr});
+        log('Reset array.');
+        updateUIStatus();
+      });
+
+      // Initialization
+      (function init(){
+        const seedVal = seedEl.value === '' ? null : Number(seedEl.value);
+        arr = buildArray(Number(sizeEl.value), seedVal);
+        renderArray({arr});
+        minrunVal.textContent = minRunLength(arr.length);
+        nVal.textContent = arr.length;
+        log('Ready. Generate frames with "Detect Runs" or "Full TimSort".');
+      })();
+
+    })();
+  </script>
+</body>
+</html>

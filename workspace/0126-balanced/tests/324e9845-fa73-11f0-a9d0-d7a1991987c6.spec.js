@@ -111,7 +111,7 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
   // Test transition: RunScheduling from Idle -> Scheduling Running -> Results Shown (FCFS)
   test('RunScheduling (default FCFS) transitions to Results Shown and displays correct FCFS completion times', async ({ page }) => {
     // Each test uses a fresh page object to collect console/page errors for that run
-    const sim = new SchedulingPage(page);
+    const sim1 = new SchedulingPage(page);
     await sim.goto();
 
     // By default select value should be 'fcfs'
@@ -154,12 +154,12 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
 
   // Test selecting a different algorithm and change event (S0_Idle -> user selects algorithm)
   test('SelectAlgorithm event: selecting SJF updates select value and produces SJF results', async ({ page }) => {
-    const sim = new SchedulingPage(page);
+    const sim2 = new SchedulingPage(page);
     await sim.goto();
 
     // Programmatically select 'sjf' which should trigger the "change" interaction (no console output is expected from page)
     await sim.selectAlgorithm('sjf');
-    const selected = await sim.getSelectedAlgorithm();
+    const selected1 = await sim.getSelectedAlgorithm();
     expect(selected).toBe('sjf');
 
     // Now run the scheduling to exercise the transition and SJF algorithm
@@ -169,7 +169,7 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
     // Validate that SJF sorted by burst time asc and produced correct completion times:
     // Sorted order by burst time: P2(2), P4(3), P1(5), P5(6), P3(8)
     // Cumulative completion times: 2,5,10,16,24
-    const rows = await sim.getProcessTableRows();
+    const rows1 = await sim.getProcessTableRows();
     const expectedOrder = [
       { process: 'P2', completionTime: '2' },
       { process: 'P4', completionTime: '5' },
@@ -192,7 +192,7 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
 
   // Test Round Robin algorithm behavior and that displayResults reflects the completion order from RR
   test('RunScheduling with RR (Round Robin) shows RR-specific completion order and times', async ({ page }) => {
-    const sim = new SchedulingPage(page);
+    const sim3 = new SchedulingPage(page);
     await sim.goto();
 
     // Select Round Robin
@@ -206,10 +206,10 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
     // Collect rows; Round Robin with quantum=3 as implemented yields completion times:
     // Simulate: P1(5),P2(2),P3(8),P4(3),P5(6)
     // Execution order completion times: P2:5, P4:11, P1:13, P5:19, P3:21 (see reasoning in test plan)
-    const rows = await sim.getProcessTableRows();
+    const rows2 = await sim.getProcessTableRows();
 
     // There will be 5 rows but their ordering will be completion order as returned by roundRobin
-    const expectedOrder = [
+    const expectedOrder1 = [
       { process: 'P2', completionTime: '5' },
       { process: 'P4', completionTime: '11' },
       { process: 'P1', completionTime: '13' },
@@ -230,7 +230,7 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
 
   // Edge case: Force an invalid algorithm selection (empty string) to trigger an error path
   test('Edge case: missing/invalid algorithm value leads to runtime error (displayResults called with undefined)', async ({ page }) => {
-    const sim = new SchedulingPage(page);
+    const sim4 = new SchedulingPage(page);
     await sim.goto();
 
     // Intentionally set the select to an empty string to create a branch not handled by switch
@@ -274,7 +274,7 @@ test.describe('CPU Scheduling Simulation (FSM) - 324e9845-fa73-11f0-a9d0-d7a1991
 
   // Validate that the FSM does not implicitly call undefined entry actions like renderPage() at load
   test('FSM entry action check: renderPage() is not invoked automatically (no ReferenceError on load)', async ({ page }) => {
-    const sim = new SchedulingPage(page);
+    const sim5 = new SchedulingPage(page);
     await sim.goto();
 
     // If the page had attempted to call a missing function renderPage(), a ReferenceError would appear in page errors.

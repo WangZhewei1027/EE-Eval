@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paging Demo — Virtual Memory</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1720;
+      --card:#0b1220;
+      --muted:#98a0b0;
+      --accent:#3fb0ff;
+      --accent2:#7bffb0;
+      --danger:#ff7b7b;
+      --ok:#7bffb0;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071020 0%, #072233 60%);color:#e6eef6;}
+    .wrap{max-width:1100px;margin:28px auto;padding:22px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,0.6)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:4px 0 18px;color:var(--muted);font-size:13px}
+    .controls{
+      display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;
+    }
+    .card{
+      background:var(--card);padding:12px;border-radius:10px;flex:1;min-width:220px;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="number"],select,input[type="text"]{
+      width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);
+      background:var(--glass);color:inherit;font-size:13px;
+    }
+    .row{display:flex;gap:8px}
+    .row > *{flex:1}
+    button{
+      background:linear-gradient(90deg,var(--accent) 0%, #79c7ff 100%);border:none;padding:8px 12px;border-radius:8px;color:#012338;font-weight:600;cursor:pointer;
+      box-shadow:0 6px 18px rgba(63,176,255,0.08);
+    }
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);font-weight:600}
+    .main-grid{display:grid;grid-template-columns:1fr 420px;gap:14px}
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);padding:12px;border-radius:10px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:6px 8px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03)}
+    th{font-size:12px;color:var(--muted)}
+    .small{font-size:12px;color:var(--muted)}
+    .frames{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .frame{
+      min-width:60px;padding:8px;border-radius:8px;text-align:center;background:linear-gradient(180deg,#08141e,#07131b);
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    .frame .id{font-size:11px;color:var(--muted)}
+    .frame .page{font-weight:700;font-size:15px;margin-top:6px}
+    .valid{color:var(--ok)}
+    .invalid{color:var(--muted)}
+    .log{height:260px;overflow:auto;padding:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);border-radius:8px;border:1px solid rgba(255,255,255,0.02);font-family:monospace;font-size:13px}
+    .stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .stat{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);min-width:110px}
+    .tlb{display:flex;gap:8px;flex-wrap:wrap}
+    .tlb .entry{padding:8px;border-radius:8px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02);min-width:80px}
+    .hilite{background:linear-gradient(90deg,rgba(127,191,255,0.12),transparent);border-radius:6px;padding:6px}
+    footer{margin-top:14px;color:var(--muted);font-size:12px}
+    .controls .card.small{flex:0 0 220px}
+    .muted{color:var(--muted)}
+    .danger{color:var(--danger)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Paging Demo — Virtual Memory</h1>
+    <p class="lead">Interactive simulation of paging: break virtual addresses into page number + offset, translate via page table (and optional TLB), simulate page faults and replacements (FIFO / LRU).</p>
+
+    <div class="controls">
+      <div class="card small">
+        <label>Number of virtual pages</label>
+        <input id="numPages" type="number" min="2" max="256" value="16" />
+      </div>
+      <div class="card small">
+        <label>Page size (bytes)</label>
+        <input id="pageSize" type="number" min="4" max="4096" step="4" value="64" />
+      </div>
+      <div class="card small">
+        <label>Physical frames</label>
+        <input id="numFrames" type="number" min="1" max="64" value="4" />
+      </div>
+      <div class="card small">
+        <label>Replacement policy</label>
+        <select id="policy">
+          <option value="fifo">FIFO</option>
+          <option value="lru">LRU</option>
+        </select>
+      </div>
+      <div class="card small">
+        <label>Enable TLB</label>
+        <select id="tlbEnable">
+          <option value="false">No</option>
+          <option value="true" selected>Yes</option>
+        </select>
+        <label class="small" style="margin-top:6px">TLB entries</label>
+        <input id="tlbEntries" type="number" min="1" max="64" value="4" />
+      </div>
+
+      <div style="flex:0 0 210px" class="card">
+        <label>Reset / Build</label>
+        <div class="row">
+          <button id="buildBtn">Build</button>
+          <button id="resetBtn" class="ghost">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div>
+        <div class="panel">
+          <div style="display:flex;gap:12px;align-items:center">
+            <div style="flex:1">
+              <label>Access virtual address (decimal or 0xhex)</label>
+              <input id="accessAddr" type="text" placeholder="e.g. 123 or 0x7B" />
+            </div>
+            <div style="width:260px;display:flex;gap:8px">
+              <button id="accessBtn">Access</button>
+              <button id="randBtn" class="ghost">Random</button>
+              <button id="seqBtn" class="ghost">Seq (20)</button>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <div style="flex:1" class="hilite">
+              <label>Address breakdown</label>
+              <div id="breakdown" style="padding:8px;font-family:monospace"></div>
+            </div>
+            <div style="width:200px">
+              <label>Counters</label>
+              <div class="stats">
+                <div class="stat"><div class="small">Accesses</div><div id="cntAccess">0</div></div>
+                <div class="stat"><div class="small">Hits</div><div id="cntHit">0</div></div>
+                <div class="stat"><div class="small">Page faults</div><div id="cntPF">0</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:10px">
+            <div style="flex:1">
+              <label>Page table</label>
+              <div id="ptableWrap" style="margin-top:8px"></div>
+            </div>
+            <div style="width:220px">
+              <label>Physical frames</label>
+              <div id="framesWrap" class="frames"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <label>TLB (if enabled)</label>
+            </div>
+            <div class="small muted">replacement: LRU</div>
+          </div>
+          <div class="tlb" id="tlbWrap" style="margin-top:8px"></div>
+
+          <div style="margin-top:12px">
+            <label>Event log</label>
+            <div id="log" class="log"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div>
+        <div class="panel">
+          <label>Visualization / Legend</label>
+          <div style="margin-top:8px;font-size:13px;color:var(--muted)">
+            - Virtual addresses are split: <b>Page number</b> + <b>Offset</b>. Page size determines offset bits.<br>
+            - Page table maps each virtual page to a physical frame (or invalid). A page fault happens when a page is not in memory.<br>
+            - Replacement policy decides which resident page to evict when frames are full.<br>
+            - TLB caches recent translations for faster hits.
+          </div>
+
+          <hr style="margin:10px 0;border:none;border-top:1px dashed rgba(255,255,255,0.03)" />
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div class="frame"><div class="id">Valid</div><div class="page valid">In memory</div></div>
+            <div class="frame"><div class="id">Invalid</div><div class="page invalid">Not present</div></div>
+            <div class="frame"><div class="id">TLB</div><div class="page">Cache</div></div>
+            <div class="frame"><div class="id">PF</div><div class="page danger">Page fault</div></div>
+          </div>
+
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <label>Sequence control</label>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="runSeq">Run sequence (auto)</button>
+            <button id="stepSeq" class="ghost">Step</button>
+            <button id="clearLog" class="ghost">Clear log</button>
+          </div>
+          <div style="margin-top:8px" class="small muted">The "Seq (20)" button generates a pattern with locality to demonstrate replacement.</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Simple educational simulator — addresses limited to virtual space; no real disk I/O, just simulated loads/evictions.</footer>
+  </div>
+
+<script>
+(() => {
+  // Elements
+  const numPagesEl = document.getElementById('numPages');
+  const pageSizeEl = document.getElementById('pageSize');
+  const numFramesEl = document.getElementById('numFrames');
+  const policyEl = document.getElementById('policy');
+  const buildBtn = document.getElementById('buildBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const accessAddrEl = document.getElementById('accessAddr');
+  const accessBtn = document.getElementById('accessBtn');
+  const randBtn = document.getElementById('randBtn');
+  const seqBtn = document.getElementById('seqBtn');
+  const breakdownEl = document.getElementById('breakdown');
+  const ptableWrap = document.getElementById('ptableWrap');
+  const framesWrap = document.getElementById('framesWrap');
+  const cntAccessEl = document.getElementById('cntAccess');
+  const cntHitEl = document.getElementById('cntHit');
+  const cntPFEl = document.getElementById('cntPF');
+  const logEl = document.getElementById('log');
+  const tlbEnableEl = document.getElementById('tlbEnable');
+  const tlbEntriesEl = document.getElementById('tlbEntries');
+  const tlbWrap = document.getElementById('tlbWrap');
+  const runSeqBtn = document.getElementById('runSeq');
+  const stepSeqBtn = document.getElementById('stepSeq');
+  const clearLogBtn = document.getElementById('clearLog');
+
+  let state = null;
+  let seq = [];
+  let seqIndex = 0;
+  let autoRunTimer = null;
+
+  function log(...args){
+    const s = args.join(' ');
+    const p = document.createElement('div');
+    p.textContent = s;
+    logEl.prepend(p);
+  }
+
+  function build(){
+    const numPages = parseInt(numPagesEl.value,10);
+    const pageSize = parseInt(pageSizeEl.value,10);
+    const numFrames = parseInt(numFramesEl.value,10);
+    const policy = policyEl.value;
+    const tlbEnabled = (tlbEnableEl.value === 'true');
+    const tlbSize = parseInt(tlbEntriesEl.value,10);
+
+    // Basic validation
+    if(!(numPages>0 && pageSize>0 && numFrames>0)){
+      alert('Please set positive numbers.');
+      return;
+    }
+
+    // State initialization
+    state = {
+      numPages, pageSize, numFrames, policy, tlbEnabled, tlbSize,
+      // page table: array of {valid:boolean, frame:int, lastUsed:number}
+      ptable: new Array(numPages).fill(null).map(()=>({valid:false, frame:-1, lastUsed:0})),
+      // frames: array mapping frame -> vpage or -1 if free
+      frames: new Array(numFrames).fill(-1),
+      // free frames list
+      freeFrames: [...Array(numFrames).keys()],
+      // replacement metadata
+      fifoQueue: [], // for FIFO store vpage order
+      accessCounter: 0,
+      hits: 0,
+      pf: 0,
+      time: 0,
+      // TLB: array of entries {vpage, frame, lastUsed}
+      tlb: tlbEnabled ? [] : null
+    };
+
+    seq = [];
+    seqIndex = 0;
+    clearLog();
+    renderAll();
+    log(`Built: ${numPages} virtual pages, page size ${pageSize} bytes, ${numFrames} frames, policy=${policy}${tlbEnabled ? ', TLB size='+tlbSize : ''}`);
+  }
+
+  function reset(){
+    state = null;
+    seq = [];
+    seqIndex = 0;
+    clearLog();
+    ptableWrap.innerHTML = '';
+    framesWrap.innerHTML = '';
+    tlbWrap.innerHTML = '';
+    cntAccessEl.textContent = '0';
+    cntHitEl.textContent = '0';
+    cntPFEl.textContent = '0';
+    breakdownEl.textContent = '';
+  }
+
+  function clearLog(){
+    logEl.innerHTML = '';
+  }
+
+  function renderAll(){
+    if(!state) return;
+    renderPT();
+    renderFrames();
+    renderTLB();
+    updateCounters();
+  }
+
+  function renderPT(){
+    const n = state.numPages;
+    let html = '<table><thead><tr><th>VPN</th><th>Valid</th><th>Frame</th><th>LastUsed</th></tr></thead><tbody>';
+    for(let i=0;i<n;i++){
+      const e = state.ptable[i];
+      html += `<tr><td>${i}</td><td class="${e.valid ? 'valid':'invalid'}">${e.valid ? 'yes':'no'}</td><td>${e.valid ? e.frame : '-'}</td><td>${e.lastUsed||'-'}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    ptableWrap.innerHTML = html;
+  }
+
+  function renderFrames(){
+    framesWrap.innerHTML = '';
+    for(let f=0;f<state.numFrames;f++){
+      const vpage = state.frames[f];
+      const div = document.createElement('div');
+      div.className = 'frame';
+      div.innerHTML = `<div class="id">Frame ${f}</div><div class="page">${vpage===-1?'<span class="invalid">free</span>':'Page '+vpage}</div>`;
+      framesWrap.appendChild(div);
+    }
+  }
+
+  function renderTLB(){
+    tlbWrap.innerHTML = '';
+    if(!state.tlb) {
+      tlbWrap.innerHTML = '<div class="small muted">TLB disabled</div>';
+      return;
+    }
+    if(state.tlb.length===0){
+      tlbWrap.innerHTML = '<div class="small muted">empty</div>';
+      return;
+    }
+    for(const ent of state.tlb){
+      const div = document.createElement('div');
+      div.className = 'entry';
+      div.innerHTML = `<div style="font-weight:700">${ent.vpage}</div><div class="small">frame ${ent.frame}</div><div class="small muted">lu:${ent.lastUsed}</div>`;
+      tlbWrap.appendChild(div);
+    }
+  }
+
+  function updateCounters(){
+    cntAccessEl.textContent = state.accessCounter;
+    cntHitEl.textContent = state.hits;
+    cntPFEl.textContent = state.pf;
+  }
+
+  function parseAddr(input){
+    input = (''+input).trim();
+    if(input.startsWith('0x') || input.startsWith('0X')) return parseInt(input,16);
+    return parseInt(input,10);
+  }
+
+  function breakdown(address){
+    const pageSize = state.pageSize;
+    const pageNum = Math.floor(address/pageSize);
+    const offset = address % pageSize;
+    const pageBits = Math.ceil(Math.log2(state.numPages));
+    const offBits = Math.ceil(Math.log2(pageSize));
+    const bin = address.toString(2);
+    breakdownEl.innerHTML = `
+      <div class="small muted">Address: ${address} (0x${address.toString(16)})</div>
+      <div style="margin-top:6px"><b>Page:</b> ${pageNum} &nbsp; <b>Offset:</b> ${offset} <span class="small muted">(${offBits} offset bits)</span></div>
+      <div class="small muted">Virtual address bits (approx): pageBits=${pageBits}, offsetBits=${offBits}</div>
+    `;
+    return {pageNum,offset};
+  }
+
+  function checkTLB(vpage){
+    if(!state.tlb) return null;
+    for(const ent of state.tlb){
+      if(ent.vpage === vpage) {
+        ent.lastUsed = ++state.time;
+        return ent;
+      }
+    }
+    return null;
+  }
+
+  function insertTLB(vpage,frame){
+    if(!state.tlb) return;
+    // if exists update; else insert and evict by LRU if needed
+    for(const ent of state.tlb){
+      if(ent.vpage===vpage){ ent.frame=frame; ent.lastUsed=++state.time; return; }
+    }
+    if(state.tlb.length < state.tlbSize){
+      state.tlb.push({vpage,frame,lastUsed:++state.time});
+    } else {
+      // evict LRU
+      let lruIdx = 0, lruVal = state.tlb[0].lastUsed;
+      for(let i=1;i<state.tlb.length;i++){
+        if(state.tlb[i].lastUsed < lruVal){ lruVal = state.tlb[i].lastUsed; lruIdx = i; }
+      }
+      state.tlb[lruIdx] = {vpage,frame,lastUsed:++state.time};
+    }
+  }
+
+  function evictPage(vpage){
+    // remove from frame and page table
+    const entry = state.ptable[vpage];
+    if(!entry.valid) return; // nothing
+    const f = entry.frame;
+    state.frames[f] = -1;
+    entry.valid = false;
+    entry.frame = -1;
+    entry.lastUsed = 0;
+    // remove from FIFO queue if present
+    const idx = state.fifoQueue.indexOf(vpage);
+    if(idx!==-1) state.fifoQueue.splice(idx,1);
+    // remove TLB entries referencing this vpage
+    if(state.tlb){
+      state.tlb = state.tlb.filter(e => e.vpage!==vpage);
+    }
+    // mark frame free
+    state.freeFrames.push(f);
+    log(`Evicted page ${vpage} from frame ${f}`);
+  }
+
+  function chooseVictim(){
+    if(state.freeFrames.length>0){
+      return null; // free
+    }
+    if(state.policy === 'fifo'){
+      // FIFO: take oldest enqueued page
+      const victim = state.fifoQueue.shift();
+      return victim;
+    } else if(state.policy === 'lru'){
+      // choose page with smallest lastUsed in ptable among valid pages
+      let victim = -1, lu = Infinity;
+      for(let p=0;p<state.numPages;p++){
+        const e = state.ptable[p];
+        if(e.valid && e.lastUsed < lu){
+          lu = e.lastUsed; victim = p;
+        }
+      }
+      return victim;
+    }
+    return null;
+  }
+
+  function bringPage(vpage){
+    // allocate frame
+    if(state.freeFrames.length===0){
+      const victim = chooseVictim();
+      if(victim===null || victim===-1) { log('No victim found?'); return; }
+      evictPage(victim);
+    }
+    // allocate a free frame
+    const frame = state.freeFrames.shift();
+    state.frames[frame] = vpage;
+    state.ptable[vpage].valid = true;
+    state.ptable[vpage].frame = frame;
+    state.ptable[vpage].lastUsed = ++state.time;
+    // track for replacement
+    if(state.policy === 'fifo'){
+      state.fifoQueue.push(vpage);
+    }
+    // insert to TLB optionally
+    insertTLB(vpage,frame);
+    log(`Loaded page ${vpage} into frame ${frame}`);
+    return frame;
+  }
+
+  function accessAddressRaw(address){
+    if(!state) { alert('Build the configuration first.'); return; }
+    const maxAddr = state.numPages * state.pageSize - 1;
+    if(address<0 || address>maxAddr) {
+      log(`Address ${address} out of range (0..${maxAddr})`);
+      return;
+    }
+    state.accessCounter++;
+    state.time++;
+    const {pageNum,offset} = breakdown(address);
+    let typed = `Access VA ${address} => VPN ${pageNum}, offset ${offset}`;
+    // Check TLB
+    const tlbEnt = checkTLB(pageNum);
+    if(state.tlb){
+      if(tlbEnt){
+        // TLB hit
+        state.hits++;
+        const paddr = tlbEnt.frame*state.pageSize + offset;
+        log(`TLB hit: VPN ${pageNum} -> frame ${tlbEnt.frame} => PA ${paddr}`);
+        // update ptable lastUsed for LRU
+        state.ptable[pageNum].lastUsed = state.time;
+        renderAll();
+        return;
+      } else {
+        log(`TLB miss for VPN ${pageNum}`);
+      }
+    }
+    // check page table
+    const pte = state.ptable[pageNum];
+    if(pte.valid){
+      state.hits++;
+      pte.lastUsed = state.time;
+      // update TLB with this translation
+      insertTLB(pageNum, pte.frame);
+      const paddr = pte.frame * state.pageSize + offset;
+      log(`Page table hit: VPN ${pageNum} -> frame ${pte.frame} => PA ${paddr}`);
+    } else {
+      // page fault
+      state.pf++;
+      log(`Page fault on VPN ${pageNum}`);
+      // bring page into memory
+      const frame = bringPage(pageNum);
+      const paddr = frame * state.pageSize + offset;
+      log(`After load: VPN ${pageNum} -> frame ${frame} => PA ${paddr}`);
+    }
+    renderAll();
+  }
+
+  function randomAddr(){
+    if(!state) { alert('Build first.'); return; }
+    const max = state.numPages * state.pageSize;
+    return Math.floor(Math.random()*max);
+  }
+
+  function generateSequence(length=20){
+    // generate a sequence with locality: choose a hot set of pages
+    const pages = state.numPages;
+    const hot = Math.max(1, Math.floor(pages/4));
+    const hotStart = Math.floor(Math.random()*(pages-hot+1));
+    const seq = [];
+    for(let i=0;i<length;i++){
+      if(Math.random() < 0.7){
+        // pick from hot set
+        const p = hotStart + Math.floor(Math.random()*hot);
+        const addr = p*state.pageSize + Math.floor(Math.random()*state.pageSize);
+        seq.push(addr);
+      } else {
+        // random elsewhere
+        seq.push(Math.floor(Math.random()*pages)*state.pageSize + Math.floor(Math.random()*state.pageSize));
+      }
+    }
+    return seq;
+  }
+
+  // Event listeners
+  buildBtn.addEventListener('click', build);
+  resetBtn.addEventListener('click', reset);
+
+  accessBtn.addEventListener('click', ()=>{
+    const raw = accessAddrEl.value.trim();
+    if(raw==='') { alert('Enter an address or press Random.'); return; }
+    const a = parseAddr(raw);
+    if(Number.isNaN(a)) { alert('Invalid address'); return; }
+    accessAddressRaw(a);
+  });
+
+  randBtn.addEventListener('click', ()=>{
+    if(!state) { alert('Build first.'); return; }
+    const a = randomAddr();
+    accessAddrEl.value = a;
+    accessAddressRaw(a);
+  });
+
+  seqBtn.addEventListener('click', ()=>{
+    if(!state) { alert('Build first.'); return; }
+    seq = generateSequence(20);
+    seqIndex = 0;
+    log('Generated sequence (20) with locality. Use Step or Run.');
+    // show the seq in log
+    log('Sequence addresses (first 8): ' + seq.slice(0,8).join(', '));
+  });
+
+  stepSeqBtn.addEventListener('click', ()=>{
+    if(!state) { alert('Build first.'); return; }
+    if(seq.length===0){ alert('No sequence generated. Press "Seq (20)".'); return; }
+    if(seqIndex >= seq.length) { log('Sequence complete.'); return; }
+    accessAddressRaw(seq[seqIndex++]);
+  });
+
+  runSeqBtn.addEventListener('click', ()=>{
+    if(!state) { alert('Build first.'); return; }
+    if(seq.length===0){ alert('No sequence generated. Press "Seq (20)".'); return; }
+    if(autoRunTimer) { clearInterval(autoRunTimer); autoRunTimer = null; runSeqBtn.textContent = 'Run sequence (auto)'; return; }
+    autoRunTimer = setInterval(()=>{
+      if(seqIndex>=seq.length){ clearInterval(autoRunTimer); autoRunTimer=null; runSeqBtn.textContent='Run sequence (auto)'; log('Sequence finished.'); return; }
+      accessAddressRaw(seq[seqIndex++]);
+    }, 450);
+    runSeqBtn.textContent = 'Stop';
+  });
+
+  clearLogBtn.addEventListener('click', clearLog);
+
+  // Allow Enter to access
+  accessAddrEl.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ accessBtn.click(); }
+  });
+
+  // Build initial
+  build();
+
+  // Expose for debug (optional)
+  window.pagingState = () => state;
+
+})();
+</script>
+</body>
+</html>

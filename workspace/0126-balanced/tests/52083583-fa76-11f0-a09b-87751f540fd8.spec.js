@@ -116,23 +116,23 @@ test.describe('Multiset FSM - Interactive application validation', () => {
     const msg = String(err.message || err);
     expect(msg.toLowerCase()).toContain('cannot');
     // Ensure the DOM Count text was not updated as the error prevented normal handler progress
-    const countText = await multiset.getFirstExampleCountText();
+    const countText1 = await multiset.getFirstExampleCountText();
     expect(countText).toBe('Count: {a: 2, b: 3, c: 1}');
   });
 
   test('RemoveElement event triggers runtime error when invoked from Idle (expected error)', async ({ page }) => {
     // This validates the transition S0_Idle -> S2_ElementRemoved upon Remove click.
     // Because the implementation looks up the same missing 'multiset' id, a runtime error is expected.
-    const pageErrorPromise = page.waitForEvent('pageerror');
+    const pageErrorPromise1 = page.waitForEvent('pageerror');
     await page.click('#remove');
-    const err = await pageErrorPromise;
+    const err1 = await pageErrorPromise;
 
     expect(err).toBeTruthy();
-    const msg = String(err.message || err);
+    const msg1 = String(err.message || err);
     expect(msg.toLowerCase()).toContain('cannot');
 
     // Confirm Count text remains unchanged after the failed remove attempt
-    const countText = await multiset.getFirstExampleCountText();
+    const countText2 = await multiset.getFirstExampleCountText();
     expect(countText).toBe('Count: {a: 2, b: 3, c: 1}');
   });
 
@@ -159,7 +159,7 @@ test.describe('Multiset FSM - Interactive application validation', () => {
     expect(String(removeErr.message || removeErr).toLowerCase()).toContain('cannot');
 
     // The Count text should remain unchanged because updateCount wasn't successfully invoked
-    const countText = await multiset.getFirstExampleCountText();
+    const countText3 = await multiset.getFirstExampleCountText();
     expect(countText).toBe('Count: {a: 2, b: 3, c: 1}');
   });
 
@@ -184,9 +184,9 @@ test.describe('Multiset FSM - Interactive application validation', () => {
   test('Error observation: console and pageerror messages are captured for diagnostics', async ({ page }) => {
     // This test ensures our instrumentation captures both console and runtime errors.
     // Trigger a failing action (click add) and then assert the captured structures.
-    const pageErrorPromise = page.waitForEvent('pageerror');
+    const pageErrorPromise2 = page.waitForEvent('pageerror');
     await page.click('#add');
-    const err = await pageErrorPromise;
+    const err2 = await pageErrorPromise;
     expect(err).toBeTruthy();
 
     // At least one pageerror was captured in the array (pageErrors)

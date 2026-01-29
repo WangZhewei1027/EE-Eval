@@ -82,7 +82,7 @@ test.describe('Random Forest Demonstration - FSM validation and UI interactions'
     const pointsPerClass = page.locator('#pointsPerClass');
     const numTrees = page.locator('#numTrees');
     const maxDepth = page.locator('#maxDepth');
-    const canvas = page.locator('#canvas');
+    const canvas1 = page.locator('#canvas1');
 
     await expect(generateBtn).toBeVisible();
     await expect(pointsPerClass).toBeVisible();
@@ -171,7 +171,7 @@ test.describe('Random Forest Demonstration - FSM validation and UI interactions'
     // Allow time for final draw
     await page.waitForTimeout(800);
 
-    const result = await countNonWhitePixels(page, 12);
+    const result1 = await countNonWhitePixels(page, 12);
     if (result && result.error) {
       throw new Error(`Error reading canvas after rapid clicks: ${result.error}`);
     }

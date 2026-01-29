@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SVM (Support Vector Machine) Interactive Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 12px; }
+    #top { display:flex; gap:12px; align-items:flex-start; }
+    #controls { width: 340px; }
+    canvas { border:1px solid #ccc; background: #fafafa; cursor: crosshair; }
+    .btn { padding:6px 10px; margin:4px 2px; cursor:pointer; }
+    .info { font-size: 13px; color:#333; margin-top:8px; }
+    label { display:block; margin-top:8px; font-size:13px; }
+    input[type=range] { width:180px; vertical-align: middle; }
+    .small { font-size:12px; color:#555; }
+    .legend { display:flex; gap:8px; margin-top:8px; align-items:center; }
+    .swatch { width:14px; height:14px; display:inline-block; border-radius:3px; border:1px solid #999; }
+  </style>
+</head>
+<body>
+  <h2>Support Vector Machine — Interactive Demonstration (Pegasos SGD)</h2>
+  <div id="top">
+    <div id="controls">
+      <div>
+        <strong>How to use</strong>
+        <div class="small info">
+          - Click on the canvas to add points. Use "Class" buttons to pick label.<br>
+          - Press "Train" to run the SVM learner (Pegasos). "Epochs" controls training iterations.<br>
+          - Toggle "Auto-train" to update continuously while adding points.<br>
+          - "Random dataset" generates sample data; "Clear" removes all points.<br>
+          - Support vectors are highlighted with black outlines when hinge loss is active (y*(w·x+b) ≤ 1).
+        </div>
+      </div>
+
+      <label>Class:
+        <button id="class-pos" class="btn" style="background:#ff8080;">Positive (red)</button>
+        <button id="class-neg" class="btn" style="background:#80b3ff;">Negative (blue)</button>
+      </label>
+
+      <label>Training controls:
+        <div style="margin-top:6px;">
+          <button id="train" class="btn">Train</button>
+          <button id="auto" class="btn">Auto-train: off</button>
+          <button id="clear" class="btn">Clear</button>
+          <button id="random-sep" class="btn">Random (separable)</button>
+          <button id="random-mix" class="btn">Random (mixed)</button>
+        </div>
+      </label>
+
+      <label>Epochs: <span id="epoch-val">200</span>
+        <input id="epochs" type="range" min="10" max="2000" step="10" value="200">
+      </label>
+
+      <label>Lambda (regularization): <span id="lambda-val">0.02</span>
+        <input id="lambda" type="range" min="0.001" max="0.2" step="0.001" value="0.02">
+      </label>
+
+      <label>Mini-batch size: <span id="batch-val">10</span>
+        <input id="batch" type="range" min="1" max="50" step="1" value="10">
+      </label>
+
+      <div class="legend">
+        <div style="display:flex; gap:8px; align-items:center;">
+          <div class="swatch" style="background:#ff8080"></div> Positive (y = +1)
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <div class="swatch" style="background:#80b3ff"></div> Negative (y = -1)
+        </div>
+      </div>
+
+      <div class="info">
+        <div id="stats"></div>
+      </div>
+    </div>
+
+    <div>
+      <canvas id="plot" width="600" height="600"></canvas>
+      <div style="margin-top:8px; font-size:12px; color:#444;">
+        Click on canvas to add a point. Shift+Click toggles class for that click only.
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  SVM Interactive Demo (single-file)
+  - Uses the Pegasos algorithm (stochastic gradient) to train a linear SVM.
+  - Points are in normalized coordinates [-1, 1].
+  - Objective minimized: (lambda/2)||w||^2 + (1/n) sum_i max(0, 1 - y_i*(w·x_i + b))
+  - Support vectors (active hinge loss) are those with y*(w·x + b) <= 1 + tol.
+  - Visualization: decision boundary f(x)=w·x+b=0, margin lines f(x)=±1.
+*/
+
+const canvas = document.getElementById('plot');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const MARGIN = 20;
+
+let points = []; // {x,y,label} x,y in [-1,1], label in {+1,-1}
+let currentLabel = +1;
+let autoTrain = false;
+
+let params = {
+  epochs: 200,
+  lambda: 0.02,
+  batch: 10
+};
+
+let model = { w: [0,0], b: 0 };
+
+// UI elements
+const classPosBtn = document.getElementById('class-pos');
+const classNegBtn = document.getElementById('class-neg');
+const trainBtn = document.getElementById('train');
+const autoBtn = document.getElementById('auto');
+const clearBtn = document.getElementById('clear');
+const randomSepBtn = document.getElementById('random-sep');
+const randomMixBtn = document.getElementById('random-mix');
+const epochsSlider = document.getElementById('epochs');
+const lambdaSlider = document.getElementById('lambda');
+const batchSlider = document.getElementById('batch');
+const epochVal = document.getElementById('epoch-val');
+const lambdaVal = document.getElementById('lambda-val');
+const batchVal = document.getElementById('batch-val');
+const statsDiv = document.getElementById('stats');
+
+function toCanvasX(x) { return MARGIN + (x + 1) * (W - 2*MARGIN) / 2; }
+function toCanvasY(y) { return MARGIN + (1 - (y + 1)/2) * (H - 2*MARGIN); }
+function fromCanvasX(cx) { return ((cx - MARGIN) / (W - 2*MARGIN)) * 2 - 1; }
+function fromCanvasY(cy) { return ((1 - (cy - MARGIN) / (H - 2*MARGIN))) * 2 - 1; }
+
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  drawAxes();
+  drawDecisionBoundary();
+  drawPoints();
+}
+
+function drawAxes() {
+  ctx.save();
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // grid
+  for(let i=-8;i<=8;i++){
+    let x = toCanvasX(i/8);
+    ctx.moveTo(x,MARGIN);
+    ctx.lineTo(x,H-MARGIN);
+    let y = toCanvasY(i/8);
+    ctx.moveTo(MARGIN,y);
+    ctx.lineTo(W-MARGIN,y);
+  }
+  ctx.stroke();
+  // border
+  ctx.strokeStyle = '#ccc';
+  ctx.strokeRect(MARGIN, MARGIN, W-2*MARGIN, H-2*MARGIN);
+  ctx.restore();
+}
+
+function drawPoints() {
+  const w = model.w, b = model.b;
+  const norm = Math.hypot(w[0], w[1]) || 1;
+  const tol = 1e-6;
+  for (let p of points) {
+    const cx = toCanvasX(p.x), cy = toCanvasY(p.y);
+    // compute hinge condition
+    const f = p.label * (w[0]*p.x + w[1]*p.y + b);
+    const isSupport = (f <= 1 + 1e-3); // active hinge loss
+    ctx.beginPath();
+    ctx.fillStyle = p.label > 0 ? '#ff8080' : '#80b3ff';
+    ctx.strokeStyle = isSupport ? '#000' : '#666';
+    ctx.lineWidth = isSupport ? 2.5 : 1;
+    ctx.arc(cx, cy, isSupport ? 7 : 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    // small inner dot
+    ctx.beginPath();
+    ctx.fillStyle = '#fff';
+    ctx.arc(cx, cy, 2.2, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawDecisionBoundary() {
+  const w = model.w, b = model.b;
+  // if all-zero, nothing to draw
+  if (Math.abs(w[0])<1e-9 && Math.abs(w[1])<1e-9 && Math.abs(b)<1e-9) return;
+  // compute intersection with canvas square in normalized coords [-1,1]
+  const lines = [0,1,-1].map(val => ({a:w[0], b:w[1], c:b - val})); // we will draw for val = 0 (decision), ±1 (margins)
+  const colors = ['#222', '#444', '#444'];
+  const dashes = [[], [6,6], [6,6]];
+  for (let idx=0; idx<lines.length; idx++) {
+    const L = lines[idx];
+    const pts = [];
+    const eps = 1e-9;
+    // intersect line a*x + b*y + c = 0 with each of four boundaries x=-1,x=1,y=-1,y=1
+    if (Math.abs(L.b) > eps) {
+      // x = -1
+      let y = -(L.a * (-1) + L.c) / L.b;
+      if (y>=-1-1e-6 && y<=1+1e-6) pts.push({x:-1,y:y});
+      // x = 1
+      y = -(L.a * (1) + L.c) / L.b;
+      if (y>=-1-1e-6 && y<=1+1e-6) pts.push({x:1,y:y});
+    }
+    if (Math.abs(L.a) > eps) {
+      // y = -1
+      let x = -(L.b * (-1) + L.c) / L.a;
+      if (x>=-1-1e-6 && x<=1+1e-6) pts.push({x:x,y:-1});
+      // y = 1
+      x = -(L.b * (1) + L.c) / L.a;
+      if (x>=-1-1e-6 && x<=1+1e-6) pts.push({x:x,y:1});
+    }
+    if (pts.length >= 2) {
+      const p0 = pts[0], p1 = pts[1];
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(toCanvasX(p0.x), toCanvasY(p0.y));
+      ctx.lineTo(toCanvasX(p1.x), toCanvasY(p1.y));
+      ctx.strokeStyle = colors[idx];
+      ctx.lineWidth = idx===0 ? 2 : 1.5;
+      if (dashes[idx].length) ctx.setLineDash(dashes[idx]);
+      else ctx.setLineDash([]);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+canvas.addEventListener('click', (ev) => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = ev.clientX - rect.left;
+  const cy = ev.clientY - rect.top;
+  const x = fromCanvasX(cx);
+  const y = fromCanvasY(cy);
+  // If shift pressed, invert class for this click
+  const label = ev.shiftKey ? -currentLabel : currentLabel;
+  points.push({x:x, y:y, label: label});
+  if (autoTrain) trainAndDraw();
+  else draw();
+});
+
+classPosBtn.addEventListener('click', () => { currentLabel = +1; classPosBtn.style.boxShadow='inset 0 0 0 2px #900'; classNegBtn.style.boxShadow=''; });
+classNegBtn.addEventListener('click', () => { currentLabel = -1; classNegBtn.style.boxShadow='inset 0 0 0 2px #045'; classPosBtn.style.boxShadow=''; });
+classPosBtn.click();
+
+trainBtn.addEventListener('click', () => trainAndDraw());
+autoBtn.addEventListener('click', () => {
+  autoTrain = !autoTrain;
+  autoBtn.textContent = 'Auto-train: ' + (autoTrain ? 'on' : 'off');
+  if (autoTrain) trainAndDraw();
+});
+
+clearBtn.addEventListener('click', () => { points = []; model = {w:[0,0], b:0}; draw(); updateStats(); });
+randomSepBtn.addEventListener('click', () => {
+  points = generateRandom(40, true); model = {w:[0,0], b:0}; if (autoTrain) trainAndDraw(); else draw(); updateStats();
+});
+randomMixBtn.addEventListener('click', () => {
+  points = generateRandom(40, false); model = {w:[0,0], b:0}; if (autoTrain) trainAndDraw(); else draw(); updateStats();
+});
+
+epochsSlider.addEventListener('input', () => { params.epochs = parseInt(epochsSlider.value); epochVal.textContent = params.epochs; });
+lambdaSlider.addEventListener('input', () => { params.lambda = parseFloat(lambdaSlider.value); lambdaVal.textContent = params.lambda; });
+batchSlider.addEventListener('input', () => { params.batch = parseInt(batchSlider.value); batchVal.textContent = params.batch; });
+
+function trainAndDraw() {
+  if (points.length === 0) { draw(); updateStats(); return; }
+  pegasosTrain(points, params.epochs, params.lambda, params.batch, model);
+  draw();
+  updateStats();
+}
+
+function updateStats() {
+  if (points.length === 0) {
+    statsDiv.innerHTML = '<em>No points</em>';
+    return;
+  }
+  const w = model.w, b = model.b;
+  let correct = 0;
+  let hinge = 0;
+  for (let p of points) {
+    const val = p.label * (w[0]*p.x + w[1]*p.y + b);
+    if (val > 0) correct++;
+    hinge += Math.max(0, 1 - val);
+  }
+  hinge /= points.length;
+  const acc = Math.round(100 * correct / points.length);
+  // margin: based on SVM primal scaling, margin lines at f(x)=±1. margin distance = min_i y*(w·x+b)/||w||
+  const norm = Math.hypot(w[0], w[1]) || 1e-9;
+  let minv = Infinity;
+  for (let p of points) {
+    minv = Math.min(minv, p.label * (w[0]*p.x + w[1]*p.y + b) / norm);
+  }
+  const marginText = (minv === Infinity ? 'N/A' : (minv < 0 ? 'No positive margin (not separable)' : minv.toFixed(3)));
+  statsDiv.innerHTML = `
+    Points: ${points.length} • Accuracy: ${acc}% • Hinge loss: ${hinge.toFixed(3)} • Margin: ${marginText}<br>
+    w = [${w[0].toFixed(3)}, ${w[1].toFixed(3)}] • b = ${b.toFixed(3)} • lambda = ${params.lambda}
+  `;
+}
+
+// Pegasos algorithm implementation (with bias)
+function pegasosTrain(data, epochs, lambda, batchSize, modelRef) {
+  // copy current model to start from
+  let w = [modelRef.w[0], modelRef.w[1]];
+  let b = modelRef.b;
+  const n = data.length;
+  const rand = (a,b) => a + Math.random()*(b-a);
+
+  let t = 0;
+  for (let epoch=0; epoch<epochs; epoch++) {
+    // shuffle indices
+    const indices = [];
+    for (let i=0;i<n;i++) indices.push(i);
+    for (let i=n-1;i>0;i--) {
+      const j = Math.floor(Math.random()* (i+1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    for (let start=0; start<n; start += batchSize) {
+      t++;
+      const eta = 1 / (lambda * t);
+      const batch = indices.slice(start, Math.min(start+batchSize, n));
+      // find set A_t of examples in batch that violate margin
+      let A = [];
+      for (let idx of batch) {
+        const p = data[idx];
+        const val = p.label * (w[0]*p.x + w[1]*p.y + b);
+        if (val < 1) A.push(idx);
+      }
+      // shrink w
+      w[0] *= (1 - eta*lambda);
+      w[1] *= (1 - eta*lambda);
+      // gradient step from violating examples
+      if (A.length > 0) {
+        let gx = 0, gy = 0, gb = 0;
+        for (let idx of A) {
+          const p = data[idx];
+          gx += p.label * p.x;
+          gy += p.label * p.y;
+          gb += p.label;
+        }
+        const coeff = eta / A.length;
+        w[0] += coeff * gx;
+        w[1] += coeff * gy;
+        b += coeff * gb;
+      }
+      // projection step for w to ensure ||w|| <= 1/sqrt(lambda)
+      const normw = Math.hypot(w[0], w[1]);
+      const maxnorm = 1 / Math.sqrt(lambda);
+      if (normw > maxnorm) {
+        const scale = maxnorm / normw;
+        w[0] *= scale; w[1] *= scale;
+      }
+    }
+  }
+  modelRef.w[0] = w[0]; modelRef.w[1] = w[1]; modelRef.b = b;
+}
+
+// generate random dataset (two Gaussian blobs). If separable = true, separate clusters well.
+function generateRandom(n, separable) {
+  const pts = [];
+  const cx1 = separable ? -0.6 : -0.3;
+  const cx2 = separable ? 0.6 : 0.3;
+  const cy1 = separable ? -0.2 : -0.2;
+  const cy2 = separable ? 0.2 : 0.2;
+  const s = separable ? 0.12 : 0.28;
+  for (let i=0;i<n/2;i++) {
+    pts.push({ x: cx1 + (randomNormal()*s), y: cy1 + (randomNormal()*s), label: +1 });
+  }
+  for (let i=0;i<n/2;i++) {
+    pts.push({ x: cx2 + (randomNormal()*s), y: cy2 + (randomNormal()*s), label: -1 });
+  }
+  return pts;
+}
+
+// simple normal sampler (Box-Muller)
+function randomNormal() {
+  let u = 0, v = 0;
+  while(u === 0) u = Math.random();
+  while(v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// initial draw and some example points
+points = generateRandom(30, true);
+draw();
+updateStats();
+
+</script>
+</body>
+</html>

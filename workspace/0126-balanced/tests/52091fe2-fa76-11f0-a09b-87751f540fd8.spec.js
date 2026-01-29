@@ -64,7 +64,7 @@ test.describe('Ternary Search Interactive Application (52091fe2-fa76-11f0-a09b-8
   });
 
   test('Clicking Start triggers Searching (S0 -> S1): console logs show recursive searches', async ({ page }) => {
-    const startButton = page.locator('button[onclick="searchTernary(0, 10)"]');
+    const startButton1 = page.locator('button[onclick="searchTernary(0, 10)"]');
     // Confirm function exists on the page
     const hasFunction = await page.evaluate(() => typeof window.searchTernary === 'function');
     expect(hasFunction).toBe(true);
@@ -157,7 +157,7 @@ test.describe('Ternary Search Interactive Application (52091fe2-fa76-11f0-a09b-8
   });
 
   test('Rapid repeated clicks produce repeated Searching logs (robustness / repeated event handling)', async ({ page }) => {
-    const startButton = page.locator('button[onclick="searchTernary(0, 10)"]');
+    const startButton2 = page.locator('button[onclick="searchTernary(0, 10)"]');
 
     // Clear console messages
     consoleMessages = [];
@@ -171,12 +171,12 @@ test.describe('Ternary Search Interactive Application (52091fe2-fa76-11f0-a09b-8
     // Wait for searching logs to appear; each click should produce ~4 Searching logs => ~8 total
     await waitForConsoleMessagesContaining('Searching for value', 6, 3000);
 
-    const searchingLogs = consoleMessages.filter((m) => m.text.startsWith('Searching for value'));
+    const searchingLogs1 = consoleMessages.filter((m) => m.text.startsWith('Searching for value'));
     // Expect at least 6 logs and likely exactly 8 depending on timings; assert minimum to avoid flakiness
     expect(searchingLogs.length).toBeGreaterThanOrEqual(6);
 
     // Ensure no ValueFound logs were produced
-    const foundLogs = consoleMessages.filter((m) => m.text.includes('found at index'));
+    const foundLogs1 = consoleMessages.filter((m) => m.text.includes('found at index'));
     expect(foundLogs.length).toBe(0);
 
     // Ensure no page errors as a result of rapid clicks
@@ -185,7 +185,7 @@ test.describe('Ternary Search Interactive Application (52091fe2-fa76-11f0-a09b-8
 
   test('Validate expected event handler attribute exists (evidence of FSM StartSearch event)', async ({ page }) => {
     // The FSM indicates a StartSearch event triggered by button[onclick="searchTernary(0, 10)"]
-    const startButton = page.locator('button[onclick="searchTernary(0, 10)"]');
+    const startButton3 = page.locator('button[onclick="searchTernary(0, 10)"]');
     await expect(startButton).toHaveCount(1);
 
     // Check the raw attribute value from the DOM

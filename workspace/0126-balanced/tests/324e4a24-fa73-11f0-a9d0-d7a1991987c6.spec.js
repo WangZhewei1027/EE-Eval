@@ -90,7 +90,7 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
 
   test.describe('Transition RunExampleClick -> S1_ResultDisplayed and behavior', () => {
     test('Clicking Run Example processes a sorted array and displays unique elements', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers1 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // Input: sorted array with duplicates
@@ -110,7 +110,7 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
     });
 
     test('Multiple clicks update the result accordingly (state transitions are repeatable)', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers2 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // First input and click
@@ -137,14 +137,14 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
 
   test.describe('Edge cases and error scenario observations', () => {
     test('Empty input behaves according to implementation (split yields [""] -> Number("") === 0)', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers3 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // Empty input
       await twoPointers.setInput('');
       await twoPointers.clickRun();
 
-      const text = (await twoPointers.getResultText()).trim();
+      const text1 = (await twoPointers.getResultText()).trim();
       // Implementation transforms empty string into [0]; assert observed behavior explicitly
       expect(text).toContain('Unique elements');
       expect(text).toMatch(/0/);
@@ -154,14 +154,14 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
     });
 
     test('Whitespace and spaced input is handled (numbers with spaces are parsed correctly)', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers4 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // Input containing spaces
       await twoPointers.setInput('1, 1 , 2,  3');
       await twoPointers.clickRun();
 
-      const text = (await twoPointers.getResultText()).trim();
+      const text2 = (await twoPointers.getResultText()).trim();
       // Expect the unique elements to be 1,2,3 (whitespace should not break Number parsing)
       expect(text).toContain('1');
       expect(text).toContain('2');
@@ -173,14 +173,14 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
     });
 
     test('Non-numeric input results observed (NaN behavior) and no runtime exceptions', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers5 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // Non-numeric inputs -> Number('a') === NaN
       await twoPointers.setInput('a,a');
       await twoPointers.clickRun();
 
-      const text = (await twoPointers.getResultText()).trim();
+      const text3 = (await twoPointers.getResultText()).trim();
       // Implementation will display NaN values; assert that NaN appears in the result string
       expect(text).toContain('Unique elements');
       expect(text).toMatch(/NaN/);
@@ -190,14 +190,14 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
     });
 
     test('Unsorted input demonstrates algorithm only removes adjacent duplicates', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers6 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // Unsorted array with duplicates separated (not adjacent)
       await twoPointers.setInput('2,1,2');
       await twoPointers.clickRun();
 
-      const text = (await twoPointers.getResultText()).trim();
+      const text4 = (await twoPointers.getResultText()).trim();
       // Since algorithm only removes consecutive duplicates, the array remains as-is.
       // Assert that both 2 and 1 remain and duplicates were not globally removed.
       expect(text).toContain('2');
@@ -215,7 +215,7 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
 
   test.describe('FSM evidence and observables verification', () => {
     test('S1 evidence: result div innerText uses expected prefix "Unique elements:" on successful run', async ({ page }) => {
-      const twoPointers = new TwoPointersPage(page);
+      const twoPointers7 = new TwoPointersPage(page);
       await twoPointers.goto();
 
       // Provide a canonical sorted input
@@ -223,7 +223,7 @@ test.describe('Two Pointers Example (FSM validation): 324e4a24-fa73-11f0-a9d0-d7
       await twoPointers.clickRun();
 
       // Verify the expected evidence text is present in the DOM after transition
-      const text = (await twoPointers.getResultText()).trim();
+      const text5 = (await twoPointers.getResultText()).trim();
       expect(text.startsWith('Unique elements:')).toBe(true);
 
       // Verify the list representation uses square brackets and comma-separated values

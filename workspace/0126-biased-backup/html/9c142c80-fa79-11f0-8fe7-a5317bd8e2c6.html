@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Binary Search Interactive Lab</title>
+  <style>
+  /* Intentionally minimal - no colors, no animations, default browser styling. */
+  body { font-family: sans-serif; margin: 12px; color: black; background: white; }
+  .controls { margin-bottom: 8px; }
+  fieldset { margin-bottom: 10px; }
+  .array-row { white-space: pre; font-family: monospace; margin: 8px 0; }
+  button { margin-right: 4px; margin-bottom: 4px; }
+  input[type="text"] { width: 260px; }
+  textarea { width: 100%; height: 80px; }
+  .small { font-size: 0.9em; }
+  .log { max-height: 220px; overflow:auto; border: 1px solid #ccc; padding: 6px; }
+  </style>
+</head>
+<body>
+
+<h1>Binary Search Interactive Lab</h1>
+<div class="controls">
+  <fieldset>
+    <legend>Array Generation / Input</legend>
+    Length: <input id="length" type="number" value="11" min="1" style="width:60px"> 
+    Seed (optional): <input id="seed" type="text" placeholder="e.g. 123"> 
+    <label><input id="allowDup" type="checkbox"> allow duplicates</label>
+    <label><input id="sorted" type="checkbox" checked> sorted</label>
+    Order:
+    <label><input name="order" type="radio" value="asc" checked> asc</label>
+    <label><input name="order" type="radio" value="desc"> desc</label>
+    <button id="genRandom">Generate Random</button>
+    <button id="fillRange">Fill Range</button>
+    <button id="clearArray">Clear</button>
+    <div style="margin-top:6px">
+      Custom CSV (comma or space separated): <input id="customArray" type="text" placeholder="e.g. 1,2,3,5,8"> 
+      <button id="applyCustom">Apply</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Search & Comparator Settings</legend>
+    Target: <input id="targetInput" type="text" placeholder="target value"> 
+    <label><input id="useClickTarget" type="checkbox"> set target by clicking array</label>
+    Variant:
+    <select id="variant">
+      <option value="any">Find any matching index</option>
+      <option value="leftmost">Find leftmost (first) index</option>
+      <option value="rightmost">Find rightmost (last) index</option>
+      <option value="insert">Find insertion position (where to insert to keep sorted)</option>
+    </select>
+    Comparator:
+    <select id="comparator">
+      <option value="number">Numeric</option>
+      <option value="string">Lexicographic</option>
+    </select>
+    Indexing:
+    <label><input name="indexing" type="radio" value="0" checked> 0-based</label>
+    <label><input name="indexing" type="radio" value="1"> 1-based</label>
+    <label><input id="midCeil" type="checkbox"> mid = ceil((low+high)/2)</label>
+    <label><input id="offByOneBug" type="checkbox"> simulate off-by-one bug</label>
+  </fieldset>
+</div>
+
+<fieldset>
+  <legend>Array Visualization and Manual Interaction</legend>
+  <div class="small">Click an element to toggle its selection or, if "set target by clicking array" is enabled, set the target.</div>
+  <div id="arrayArea" class="array-row"></div>
+  <div>
+    Click to probe manually: <label><input id="manualProbe" type="checkbox"> Manual probe mode</label>
+    <button id="probeSelected">Probe selected (compare mid)</button>
+    <button id="forceSetMid">Force mid to selected</button>
+    <button id="clearSelection">Clear selection</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Execution Controls</legend>
+  <button id="initSearch">Initialize Search</button>
+  <button id="stepBack">Step Back</button>
+  <button id="stepForward">Step Forward</button>
+  <button id="autoRun">Run Auto</button>
+  <button id="pauseRun">Pause</button>
+  <button id="fastForward">Complete</button>
+  <button id="resetSearch">Reset</button>
+  Speed (ms): <input id="speed" type="range" min="50" max="2000" value="400">
+  <span id="speedVal">400</span>
+  <div style="margin-top:6px">
+    Jump to step: <input id="jumpStep" type="number" style="width:80px"> <button id="jumpBtn">Jump</button>
+    Save state: <button id="saveState">Save</button> Load: <input id="loadState" type="file">
+    Export trace: <button id="exportTrace">Export Trace JSON</button>
+    Import trace: <input id="importTrace" type="file">
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Modes & Tools</legend>
+  <button id="linearCompare">Run Linear Search (compare)</button>
+  <button id="explainStep">Explain Current Step</button>
+  <label><input id="hints" type="checkbox"> Hints on step</label>
+  <button id="toggleLog">Toggle Log Visibility</button>
+  <button id="undo">Undo last change</button>
+  <button id="redo">Redo</button>
+  <button id="simulateBug">Inject common bug (mid wrong)</button>
+</fieldset>
+
+<fieldset>
+  <legend>Challenge Mode</legend>
+  <div class="small">Try to minimize steps. A random target may be present or absent.</div>
+  <button id="startChallenge">Start Challenge</button>
+  <button id="submitAnswer">Submit Answer</button>
+  <div>Challenge status: <span id="challengeStatus">idle</span></div>
+  <div>Score: <span id="challengeScore">0</span></div>
+</fieldset>
+
+<fieldset>
+  <legend>State, Trace & Logs</legend>
+  <div>Current state: <span id="stateLabel">idle</span></div>
+  <div>Low: <span id="lowVal">-</span>, Mid: <span id="midVal">-</span>, High: <span id="highVal">-</span>, Comparisons: <span id="compVal">0</span>, Steps: <span id="stepCount">0</span></div>
+  <div>Result indices (found): <span id="resultIndices">[]</span></div>
+  <div>Optimal bound log2(n): <span id="logBound">-</span></div>
+  <div id="logBox" class="log"></div>
+</fieldset>
+
+<script>
+(function(){
+  // State and configuration
+  let array = [];
+  let selectedIndices = new Set();
+  let target = null;
+  let config = {
+    allowDup: false,
+    sorted: true,
+    order: 'asc',
+    comparator: 'number',
+    variant: 'any',
+    indexingBase: 0,
+    midCeil: false,
+    manualProbe: false,
+    offByOneBug: false
+  };
+
+  // Search runtime state (snapshots for undo/redo/step)
+  let search = {
+    initialized: false,
+    low: 0,
+    high: -1,
+    mid: null,
+    comparisons: 0,
+    steps: [],
+    stepIndex: -1, // points to current snapshot in steps
+    done: false,
+    foundIndices: [],
+    trace: [] // trace entries {low,mid,high,compOutcome,desc}
+  };
+
+  // Undo/Redo stacks for editing array or settings
+  let undoStack = [];
+  let redoStack = [];
+
+  // Auto-run timer
+  let autoTimer = null;
+
+  // Challenge mode
+  let challenge = {
+    running: false,
+    targetIndex: null,
+    optimalSteps: null,
+    usedSteps: 0,
+    startedAtSteps: 0
+  };
+
+  // Utility functions
+  function log(msg) {
+    const box = document.getElementById('logBox');
+    const time = new Date().toLocaleTimeString();
+    box.appendChild(document.createTextNode('['+time+'] '+msg));
+    box.appendChild(document.createElement('br'));
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('logBox').innerHTML = '';
+  }
+
+  function parseArrayInput(text) {
+    if (!text) return [];
+    // split by comma or whitespace
+    let parts = text.split(/[\s,]+/).filter(p=>p.length>0);
+    // interpret as numbers if comparator is numeric
+    return parts.map(p=>{
+      let num = Number(p);
+      return isFinite(num) ? num : p;
+    });
+  }
+
+  function shuffle(seed) {
+    // simple pseudo RNG, reproducible if seed provided
+    let s = seed ? hashCode(String(seed)) : Math.floor(Math.random()*1e9);
+    function rnd() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+    return rnd;
+  }
+  function hashCode(str) {
+    let h = 2166136261 >>> 0;
+    for (let i=0;i<str.length;i++) {
+      h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h;
+  }
+
+  function generateRandomArray(len, seed) {
+    let rnd = shuffle(seed);
+    let arr = [];
+    for (let i=0;i<len;i++) {
+      // generate values with some duplicates optionally
+      arr.push(Math.floor(rnd()*100));
+    }
+    if (config.sorted) {
+      arr.sort((a,b)=> (config.order==='asc' ? a-b : b-a));
+      if (config.allowDup) {
+        // optionally duplicate some
+        if (len > 1 && Math.random() < 0.5) {
+          for (let i=0;i<Math.floor(len/5);i++) {
+            let idx = Math.floor(rnd()*len);
+            let j = Math.min(len-1, idx+Math.floor(rnd()*3));
+            arr[j] = arr[idx];
+          }
+        }
+      }
+    }
+    return arr;
+  }
+
+  function fillRange(len) {
+    let arr = [];
+    for (let i=0;i<len;i++) arr.push(i*2);
+    if (config.order === 'desc') arr.reverse();
+    return arr;
+  }
+
+  function updateConfigFromUI() {
+    config.allowDup = document.getElementById('allowDup').checked;
+    config.sorted = document.getElementById('sorted').checked;
+    config.order = document.querySelector('input[name="order"]:checked').value;
+    config.comparator = document.getElementById('comparator').value;
+    config.variant = document.getElementById('variant').value;
+    config.indexingBase = Number(document.querySelector('input[name="indexing"]:checked').value);
+    config.midCeil = document.getElementById('midCeil').checked;
+    config.manualProbe = document.getElementById('manualProbe').checked;
+    config.offByOneBug = document.getElementById('offByOneBug').checked;
+  }
+
+  function renderArray() {
+    const area = document.getElementById('arrayArea');
+    area.innerHTML = '';
+    if (array.length === 0) { area.textContent = '(empty)'; return; }
+    // Build textual representation with indices and markers
+    // We'll create clickable spans (buttons would be styled but okay)
+    array.forEach((v,i)=>{
+      let wrapper = document.createElement('span');
+      wrapper.style.cursor = 'pointer';
+      wrapper.style.display = 'inline-block';
+      wrapper.style.paddingRight = '8px';
+      wrapper.dataset.index = i;
+      // marker strings
+      let markers = [];
+      if (search.initialized) {
+        if (i === search.low) markers.push('L');
+        if (i === search.mid) markers.push('M');
+        if (i === search.high) markers.push('H');
+      }
+      if (selectedIndices.has(i)) {
+        markers.push('S');
+      }
+      let idxDisplay = (config.indexingBase === 0) ? i : (i+1);
+      wrapper.textContent = '['+idxDisplay+'] '+String(v) + (markers.length ? ' <'+markers.join(',')+'>' : '');
+      wrapper.addEventListener('click', onArrayClick);
+      area.appendChild(wrapper);
+      area.appendChild(document.createTextNode(' '));
+    });
+  }
+
+  function onArrayClick(e) {
+    let i = Number(e.currentTarget.dataset.index);
+    let useClickTarget = document.getElementById('useClickTarget').checked;
+    if (useClickTarget) {
+      // set target to this element's value
+      target = array[i];
+      document.getElementById('targetInput').value = String(target);
+      log('Target set by clicking array: index '+i+' value '+target);
+      // optionally re-initialize
+    } else {
+      if (selectedIndices.has(i)) selectedIndices.delete(i);
+      else selectedIndices.add(i);
+    }
+    renderArray();
+  }
+
+  function comparatorCompare(a,b) {
+    if (config.comparator === 'number') {
+      let na = Number(a), nb = Number(b);
+      if (isNaN(na) || isNaN(nb)) {
+        // fallback to string compare
+        return String(a) < String(b) ? -1 : (String(a) > String(b) ? 1 : 0);
+      }
+      return na < nb ? -1 : (na > nb ? 1 : 0);
+    } else {
+      let sa = String(a), sb = String(b);
+      return sa < sb ? -1 : (sa > sb ? 1 : 0);
+    }
+  }
+
+  function computeMid(low, high) {
+    if (config.midCeil) {
+      let mid = Math.ceil((low + high) / 2);
+      if (config.offByOneBug) mid = Math.min(high, mid+1);
+      return mid;
+    } else {
+      let mid = Math.floor((low + high) / 2);
+      if (config.offByOneBug) mid = Math.max(low, mid-1);
+      return mid;
+    }
+  }
+
+  function snapshotState(desc) {
+    // store deep copy of relevant state
+    return {
+      low: search.low,
+      high: search.high,
+      mid: search.mid,
+      comparisons: search.comparisons,
+      done: search.done,
+      foundIndices: search.foundIndices.slice(),
+      desc: desc || ''
+    };
+  }
+
+  function pushStep(desc) {
+    let snap = snapshotState(desc);
+    // if we stepped forward after some undos, cut tail
+    if (search.stepIndex < search.steps.length - 1) {
+      search.steps = search.steps.slice(0, search.stepIndex + 1);
+    }
+    search.steps.push(snap);
+    search.stepIndex = search.steps.length - 1;
+    renderState();
+  }
+
+  function initSearch() {
+    updateConfigFromUI();
+    // read target input
+    let t = document.getElementById('targetInput').value;
+    target = t.length ? (config.comparator === 'number' ? Number(t) : t) : null;
+    if (target !== null && config.comparator === 'number' && isNaN(target)) {
+      // keep as string
+      target = t;
+    }
+    // initialize bounds
+    search.low = 0;
+    search.high = Math.max(0, array.length-1);
+    search.mid = null;
+    search.comparisons = 0;
+    search.done = false;
+    search.foundIndices = [];
+    search.trace = [];
+    search.steps = [];
+    search.stepIndex = -1;
+    search.initialized = true;
+    pushStep('initialized');
+    log('Search initialized. array length='+array.length+', target='+String(target));
+    // compute optimal bound
+    document.getElementById('logBound').textContent = (array.length>0) ? Math.ceil(Math.log2(array.length+1)) : '-';
+    renderArray();
+    renderState();
+    challenge.startedAtSteps = getTotalStepCount();
+  }
+
+  function stepForward() {
+    if (!search.initialized) { log('Search not initialized. Click Initialize Search first.'); return; }
+    if (search.done) { log('Search already completed.'); return; }
+    // perform one comparison step
+    let low = search.low, high = search.high;
+    if (low > high) {
+      // termination case: not found
+      search.done = true;
+      if (search.variant === 'insert') {
+        // insertion point is low
+        search.foundIndices = [low];
+        log('Terminated: insertion position '+low);
+      } else {
+        search.foundIndices = [];
+        log('Terminated: target not found.');
+      }
+      pushStep('terminated');
+      renderState();
+      return;
+    }
+    let mid = computeMid(low, high);
+    search.mid = mid;
+    let arrVal = array[mid];
+    search.comparisons++;
+    let cmp = comparatorCompare(arrVal, target);
+    let outcomeDesc = '';
+    if (cmp === 0) {
+      outcomeDesc = 'equal';
+      // handle variants
+      if (search.variant === 'any') {
+        search.foundIndices = [mid];
+        search.done = true;
+        log('Comparison at mid='+mid+' value='+arrVal+' => equal; finished');
+      } else if (search.variant === 'leftmost') {
+        // move left to find first occurrence
+        search.foundIndices = [mid];
+        // continue search on left half to find earlier equal
+        high = mid - 1;
+        search.high = high;
+        outcomeDesc += '; move high to mid-1 to find leftmost';
+        log('Comparison at mid='+mid+' value='+arrVal+' => equal; continue left to find leftmost');
+      } else if (search.variant === 'rightmost') {
+        search.foundIndices = [mid];
+        low = mid + 1;
+        search.low = low;
+        outcomeDesc += '; move low to mid+1 to find rightmost';
+        log('Comparison at mid='+mid+' value='+arrVal+' => equal; continue right to find rightmost');
+      } else if (search.variant === 'insert') {
+        // insertion - equal means found, but insertion point may be before duplicates
+        search.foundIndices = [mid];
+        // For insertion position, we might want first index of equals
+        high = mid - 1;
+        search.high = high;
+        outcomeDesc += '; equal - for insertion find earliest equal';
+        log('Comparison at mid='+mid+' value='+arrVal+' => equal; continue left for insertion position');
+      }
+    } else if (cmp < 0) {
+      // arrVal < target => move right
+      low = mid + 1;
+      search.low = low;
+      outcomeDesc = 'less -> move low to mid+1';
+      log('Comparison at mid='+mid+' value='+arrVal+' < target => move low to '+search.low);
+    } else { // cmp > 0
+      high = mid - 1;
+      search.high = high;
+      outcomeDesc = 'greater -> move high to mid-1';
+      log('Comparison at mid='+mid+' value='+arrVal+' > target => move high to '+search.high);
+    }
+    // save trace
+    search.trace.push({low, mid, high, comp: cmp, val: arrVal, desc: outcomeDesc, step: search.comparisons});
+    // check termination conditions for leftmost/rightmost/insert after moving bounds
+    if (!search.done && search.low > search.high) {
+      // concluded
+      search.done = true;
+      if (search.variant === 'insert') {
+        search.foundIndices = [search.low];
+        log('Ended: insertion position '+search.low);
+      } else {
+        // if we had captured foundIndices (equal case) but continued to find boundaries, we already have result
+        if (search.foundIndices.length>0) {
+          // For leftmost/rightmost, foundIndices hold last matched index (may not be final leftmost/rightmost)
+          // After termination, refine accordingly:
+          if (search.variant === 'leftmost') {
+            // we tracked the last equal we saw; but if we moved high leftwards, the earliest equal is the min foundIndices
+            // reconstruct: find leftmost equal in array by scanning left from previous found one
+            let f = search.foundIndices[0];
+            while (f>0 && comparatorCompare(array[f-1], target)===0) f--;
+            search.foundIndices = [f];
+            log('Leftmost resolved to index '+f);
+          } else if (search.variant === 'rightmost') {
+            let f = search.foundIndices[0];
+            while (f < array.length-1 && comparatorCompare(array[f+1], target)===0) f++;
+            search.foundIndices = [f];
+            log('Rightmost resolved to index '+f);
+          }
+        } else {
+          log('Target not found.');
+        }
+      }
+      pushStep('terminated');
+    } else {
+      pushStep('step '+search.comparisons+': mid='+mid+' cmp='+outcomeDesc);
+    }
+    renderState();
+  }
+
+  function stepBack() {
+    if (!search.initialized) { log('Search not initialized'); return; }
+    if (search.stepIndex <= 0) {
+      log('At initial state; cannot step back further.');
+      return;
+    }
+    search.stepIndex--;
+    let snap = search.steps[search.stepIndex];
+    restoreSnapshot(snap);
+    renderState();
+    log('Stepped back to index '+search.stepIndex+' desc: '+snap.desc);
+  }
+
+  function restoreSnapshot(snap) {
+    search.low = snap.low;
+    search.high = snap.high;
+    search.mid = snap.mid;
+    search.comparisons = snap.comparisons;
+    search.done = snap.done;
+    search.foundIndices = snap.foundIndices.slice();
+    // Note: trace is not rewound; trace is purely additive for illustration. We could slice it though:
+    search.trace = search.trace.slice(0, snap.comparisons);
+  }
+
+  function renderState() {
+    document.getElementById('stateLabel').textContent = search.initialized ? (search.done ? 'done' : 'running') : 'idle';
+    document.getElementById('lowVal').textContent = search.initialized ? ( (search.low!=null)?search.low:'-') : '-';
+    document.getElementById('midVal').textContent = search.initialized ? ( (search.mid!=null)?search.mid:'-') : '-';
+    document.getElementById('highVal').textContent = search.initialized ? ( (search.high!=null)?search.high:'-') : '-';
+    document.getElementById('compVal').textContent = search.comparisons;
+    document.getElementById('stepCount').textContent = search.steps.length;
+    document.getElementById('resultIndices').textContent = JSON.stringify(search.foundIndices);
+    renderArray();
+    // If hints enabled, show next hint
+    if (document.getElementById('hints').checked) {
+      let hint = explainCurrentStep(true);
+      if (hint) log('HINT: '+hint);
+    }
+  }
+
+  function explainCurrentStep(shortOnly) {
+    if (!search.initialized) return 'Search not initialized.';
+    if (search.stepIndex < 0) return 'Search initialized, no steps yet.';
+    let snap = search.steps[search.stepIndex];
+    let low = snap.low, high = snap.high, mid = snap.mid;
+    if (snap.desc) {
+      return snap.desc;
+    }
+    if (low > high) return 'Bounds crossed: low > high. Terminated.';
+    let midCalc = computeMid(low, high);
+    let s = 'Bounds ['+low+','+high+'] mid='+midCalc;
+    if (!shortOnly) {
+      s += '. Use comparator '+config.comparator+'. Variant: '+config.variant;
+    }
+    return s;
+  }
+
+  function explainStepBtn() {
+    let ex = explainCurrentStep(false);
+    log('Explanation: '+ex);
+    return ex;
+  }
+
+  function autoRunToggle() {
+    if (autoTimer) {
+      clearInterval(autoTimer); autoTimer = null; log('Auto-run paused'); return;
+    }
+    let speed = Number(document.getElementById('speed').value);
+    autoTimer = setInterval(()=>{
+      if (!search.initialized) { clearInterval(autoTimer); autoTimer=null; return; }
+      if (search.done) { clearInterval(autoTimer); autoTimer=null; log('Auto-run completed'); return; }
+      stepForward();
+      challenge.usedSteps++;
+    }, speed);
+    log('Auto-run started at '+speed+'ms');
+  }
+
+  function fastForward() {
+    if (!search.initialized) { log('Not initialized'); return; }
+    let loops = 0;
+    while (!search.done && loops < 100000) { stepForward(); loops++; }
+    log('Fast-forwarded to completion in '+loops+' steps (bounded).');
+  }
+
+  function resetSearch() {
+    search = {
+      initialized: false,
+      low: 0,
+      high: -1,
+      mid: null,
+      comparisons: 0,
+      steps: [],
+      stepIndex: -1,
+      done: false,
+      foundIndices: [],
+      trace: []
+    };
+    document.getElementById('stateLabel').textContent = 'idle';
+    renderState();
+    log('Search reset.');
+  }
+
+  function probeSelected() {
+    if (!search.initialized) { log('Initialize search first.'); return; }
+    if (!config.manualProbe) { log('Manual probe mode not enabled.'); return; }
+    if (selectedIndices.size === 0) { log('No selected index to probe.'); return; }
+    // use the first selected index as mid
+    let mid = Array.from(selectedIndices)[0];
+    search.mid = mid;
+    search.comparisons++;
+    let arrVal = array[mid];
+    let cmp = comparatorCompare(arrVal, target);
+    let desc = 'manual probe at mid='+mid+' compares val='+arrVal;
+    if (cmp === 0) {
+      log('Manual probe: equal at mid='+mid);
+      if (config.variant === 'any') {
+        search.foundIndices = [mid];
+        search.done = true;
+      } else {
+        // continue by rules: adjust bounds so the algorithm may proceed
+        if (config.variant === 'leftmost') {
+          search.foundIndices = [mid];
+          search.high = mid - 1;
+          log('Continue left to find leftmost');
+        } else if (config.variant === 'rightmost') {
+          search.foundIndices = [mid];
+          search.low = mid + 1;
+          log('Continue right to find rightmost');
+        } else if (config.variant === 'insert') {
+          search.foundIndices = [mid];
+          search.high = mid - 1;
+          log('Continue left for insertion position');
+        }
+      }
+    } else if (cmp < 0) {
+      search.low = mid + 1;
+      log('Manual probe: value < target; move low to '+search.low);
+    } else {
+      search.high = mid - 1;
+      log('Manual probe: value > target; move high to '+search.high);
+    }
+    search.trace.push({low: search.low, mid: mid, high: search.high, comp: cmp, val: arrVal, desc: desc, step: search.comparisons});
+    pushStep('manual probe mid='+mid);
+    renderState();
+  }
+
+  function forceSetMid() {
+    if (!search.initialized) { log('Init first'); return; }
+    if (selectedIndices.size === 0) { log('Select an index first'); return; }
+    let mid = Array.from(selectedIndices)[0];
+    search.mid = mid;
+    pushStep('forced mid='+mid);
+    renderState();
+    log('Forced mid to '+mid);
+  }
+
+  function clearSelection() {
+    selectedIndices.clear();
+    renderArray();
+  }
+
+  function linearCompare() {
+    let t = document.getElementById('targetInput').value;
+    let comp = config.comparator === 'number' ? Number(t) : t;
+    let steps = 0, found = -1;
+    for (let i=0;i<array.length;i++) {
+      steps++;
+      if (comparatorCompare(array[i], comp) === 0) { found = i; break; }
+    }
+    log('Linear search steps='+steps+' found index='+found);
+    alert('Linear search result: steps='+steps+' found index='+found);
+  }
+
+  function saveStateToFile() {
+    let obj = {
+      array: array,
+      config: config,
+      target: target,
+      search: search
+    };
+    let blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url; a.download = 'binary_search_state.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log('State saved to file.');
+  }
+
+  function exportTrace() {
+    let blob = new Blob([JSON.stringify(search.trace, null, 2)], {type:'application/json'});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url; a.download = 'binary_search_trace.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log('Trace exported.');
+  }
+
+  function importTraceFile(file) {
+    if (!file) return;
+    let reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        let tr = JSON.parse(e.target.result);
+        search.trace = tr;
+        log('Trace imported with '+tr.length+' entries.');
+        // reflect last state if possible
+        if (tr.length>0) {
+          let last = tr[tr.length-1];
+          search.low = last.low; search.high = last.high; search.mid = last.mid;
+          pushStep('imported trace');
+        }
+      } catch(err) { log('Import failed: '+err.message); }
+    };
+    reader.readAsText(file);
+  }
+
+  function importStateFile(file) {
+    if (!file) return;
+    let reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        let obj = JSON.parse(e.target.result);
+        array = obj.array || [];
+        config = Object.assign(config, obj.config || {});
+        target = obj.target;
+        search = obj.search || search;
+        log('State imported.');
+        renderArray();
+        renderState();
+      } catch(err) { log('Import failed: '+err.message); }
+    };
+    reader.readAsText(file);
+  }
+
+  function getTotalStepCount() {
+    return search.comparisons;
+  }
+
+  function startChallenge() {
+    // generate random array and target
+    let len = Math.max(5, Number(document.getElementById('length').value) || 11);
+    array = generateRandomArray(len, Math.random());
+    // decide target present or absent
+    let present = Math.random() < 0.6;
+    let t;
+    if (present) {
+      let idx = Math.floor(Math.random()*array.length);
+      t = array[idx];
+      challenge.targetIndex = idx;
+    } else {
+      // choose a value guaranteed not in array (use high sentinel)
+      t = '__absent__'+Math.random();
+      challenge.targetIndex = null;
+    }
+    document.getElementById('targetInput').value = String(t);
+    updateConfigFromUI();
+    target = t;
+    initSearch();
+    challenge.running = true;
+    challenge.usedSteps = 0;
+    challenge.optimalSteps = Math.ceil(Math.log2(array.length+1));
+    document.getElementById('challengeStatus').textContent = 'running';
+    renderArray();
+    log('Challenge started. target present='+ (challenge.targetIndex!==null));
+  }
+
+  function submitChallengeAnswer() {
+    if (!challenge.running) { alert('Challenge not running'); return; }
+    // submit foundIndices or selectedIndices
+    let answered;
+    if (selectedIndices.size > 0) answered = Array.from(selectedIndices)[0];
+    else if (search.foundIndices.length>0) answered = search.foundIndices[0];
+    else answered = -1;
+    let correct = (challenge.targetIndex === null ? (answered === -1 || answered === array.length) : answered === challenge.targetIndex);
+    let score = 0;
+    if (correct) {
+      // score relative to optimal
+      let used = challenge.usedSteps || getTotalStepCount();
+      let opt = challenge.optimalSteps;
+      // higher score for closer to optimal
+      score = Math.max(0, Math.round(100 * (opt / Math.max(opt, used))));
+    } else {
+      score = 0;
+    }
+    challenge.running = false;
+    document.getElementById('challengeStatus').textContent = 'finished';
+    document.getElementById('challengeScore').textContent = String(score);
+    log('Challenge ended. correct='+correct+' usedSteps='+ (challenge.usedSteps || getTotalStepCount())+' score='+score);
+    alert('Challenge result: correct='+correct+' score='+score);
+  }
+
+  function undo() {
+    if (undoStack.length === 0) { log('Nothing to undo'); return; }
+    let item = undoStack.pop();
+    redoStack.push({
+      array: array.slice(),
+      config: Object.assign({}, config),
+      target: target
+    });
+    array = item.array;
+    config = item.config;
+    target = item.target;
+    renderArray();
+    renderState();
+    log('Undid changes.');
+  }
+
+  function redo() {
+    if (redoStack.length === 0) { log('Nothing to redo'); return; }
+    let item = redoStack.pop();
+    undoStack.push({
+      array: array.slice(),
+      config: Object.assign({}, config),
+      target: target
+    });
+    array = item.array;
+    config = item.config;
+    target = item.target;
+    renderArray();
+    renderState();
+    log('Redo applied.');
+  }
+
+  function storeUndoPoint() {
+    undoStack.push({
+      array: array.slice(),
+      config: Object.assign({}, config),
+      target: target
+    });
+    if (undoStack.length>50) undoStack.shift();
+    redoStack = [];
+  }
+
+  // Handlers for UI controls
+  document.getElementById('genRandom').addEventListener('click', ()=>{
+    updateConfigFromUI();
+    let len = Math.max(1, Number(document.getElementById('length').value) || 11);
+    let seed = document.getElementById('seed').value || null;
+    storeUndoPoint();
+    array = generateRandomArray(len, seed);
+    renderArray();
+    log('Generated random array of length '+len);
+  });
+
+  document.getElementById('fillRange').addEventListener('click', ()=>{
+    updateConfigFromUI();
+    let len = Math.max(1, Number(document.getElementById('length').value) || 11);
+    storeUndoPoint();
+    array = fillRange(len);
+    renderArray();
+    log('Filled range array length '+len);
+  });
+
+  document.getElementById('clearArray').addEventListener('click', ()=>{
+    storeUndoPoint();
+    array = [];
+    renderArray();
+    log('Array cleared.');
+  });
+
+  document.getElementById('applyCustom').addEventListener('click', ()=>{
+    let txt = document.getElementById('customArray').value;
+    storeUndoPoint();
+    array = parseArrayInput(txt);
+    // if sorted required, sort:
+    updateConfigFromUI();
+    if (config.sorted) {
+      array.sort((a,b)=> comparatorCompare(a,b));
+      if (config.order==='desc') array.reverse();
+    }
+    renderArray();
+    log('Custom array applied with '+array.length+' elements.');
+  });
+
+  document.getElementById('initSearch').addEventListener('click', ()=>{ updateConfigFromUI(); initSearch(); });
+
+  document.getElementById('stepForward').addEventListener('click', ()=>{
+    stepForward();
+    challenge.usedSteps++;
+  });
+
+  document.getElementById('stepBack').addEventListener('click', stepBack);
+
+  document.getElementById('autoRun').addEventListener('click', ()=>{
+    autoRunToggle();
+  });
+
+  document.getElementById('pauseRun').addEventListener('click', ()=>{
+    if (autoTimer) { clearInterval(autoTimer); autoTimer=null; log('Auto-run paused'); }
+    else log('Auto-run not running.');
+  });
+
+  document.getElementById('fastForward').addEventListener('click', fastForward);
+  document.getElementById('resetSearch').addEventListener('click', resetSearch);
+  document.getElementById('probeSelected').addEventListener('click', probeSelected);
+  document.getElementById('forceSetMid').addEventListener('click', forceSetMid);
+  document.getElementById('clearSelection').addEventListener('click', clearSelection);
+
+  document.getElementById('speed').addEventListener('input', (e)=> {
+    document.getElementById('speedVal').textContent = e.target.value;
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      autoRunToggle();
+    }
+  });
+
+  document.getElementById('jumpBtn').addEventListener('click', ()=>{
+    let idx = Number(document.getElementById('jumpStep').value);
+    if (!search.initialized) { log('Init first'); return; }
+    if (isNaN(idx) || idx < 0 || idx >= search.steps.length) { log('Invalid step index.'); return; }
+    search.stepIndex = idx;
+    restoreSnapshot(search.steps[idx]);
+    renderState();
+    log('Jumped to step '+idx);
+  });
+
+  document.getElementById('saveState').addEventListener('click', saveStateToFile);
+  document.getElementById('exportTrace').addEventListener('click', exportTrace);
+
+  document.getElementById('importTrace').addEventListener('change', (e)=>{
+    importTraceFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  document.getElementById('loadState').addEventListener('change', (e)=>{
+    importStateFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  document.getElementById('linearCompare').addEventListener('click', linearCompare);
+  document.getElementById('explainStep').addEventListener('click', explainStepBtn);
+  document.getElementById('toggleLog').addEventListener('click', ()=>{
+    const logBox = document.getElementById('logBox');
+    logBox.style.display = (logBox.style.display === 'none') ? 'block' : 'none';
+  });
+
+  document.getElementById('undo').addEventListener('click', undo);
+  document.getElementById('redo').addEventListener('click', redo);
+
+  document.getElementById('simulateBug').addEventListener('click', ()=>{
+    config.offByOneBug = !config.offByOneBug;
+    document.getElementById('offByOneBug').checked = config.offByOneBug;
+    log('Off-by-one bug toggled. Now: '+config.offByOneBug);
+  });
+
+  document.getElementById('startChallenge').addEventListener('click', startChallenge);
+  document.getElementById('submitAnswer').addEventListener('click', submitChallengeAnswer);
+
+  // Export / Import traces and state via file inputs
+  document.getElementById('importTrace').addEventListener('change', (e)=>{
+    importTraceFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  // Clicking toggle to set target by clicking array
+  document.getElementById('useClickTarget').addEventListener('change', (e)=>{
+    log('Set target by clicking array: ' + e.target.checked);
+  });
+
+  // Manual probe toggle
+  document.getElementById('manualProbe').addEventListener('change', (e)=>{
+    config.manualProbe = e.target.checked;
+    log('Manual probe mode: '+config.manualProbe);
+  });
+
+  // When comparator, variant, indexing changes - update config
+  document.getElementById('comparator').addEventListener('change', updateConfigFromUI);
+  document.getElementById('variant').addEventListener('change', updateConfigFromUI);
+  document.getElementById('midCeil').addEventListener('change', updateConfigFromUI);
+  document.getElementById('offByOneBug').addEventListener('change', updateConfigFromUI);
+
+  // Keybindings for convenience
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'ArrowRight') { stepForward(); e.preventDefault(); }
+    if (e.key === 'ArrowLeft') { stepBack(); e.preventDefault(); }
+    if (e.key === ' ') { autoRunToggle(); e.preventDefault(); }
+  });
+
+  // Initial render
+  renderArray();
+  renderState();
+  clearLog();
+  log('Interactive Binary Search Lab ready.');
+
+  // expose some convenience for debugging in console
+  window._bs = {
+    get array(){return array;},
+    set array(a){array=a; renderArray();},
+    init: initSearch,
+    step: stepForward,
+    state: ()=>search,
+    config: config,
+    log: log
+  };
+})();
+</script>
+
+</body>
+</html>

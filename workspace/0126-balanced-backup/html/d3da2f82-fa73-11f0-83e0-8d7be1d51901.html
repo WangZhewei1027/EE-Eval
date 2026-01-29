@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Load Balancing Simulator</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1724;
+      --panel:#0b1220;
+      --accent:#36c;
+      --muted:#95a0b5;
+      --good:#2dd4bf;
+      --bad:#ff6b6b;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, Roboto, system-ui, -apple-system, "Segoe UI", "Helvetica", Arial;
+      color: #dbe6ff;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071025 0%, #071b2a 100%);font-size:14px}
+    .app{max-width:1200px;margin:18px auto;padding:18px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; box-shadow: 0 8px 30px rgba(2,6,23,0.8);}
+    h1{margin:0 0 6px 0;font-size:20px}
+    .top {display:flex;gap:16px;align-items:center;}
+    .controls {display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:12px 0;}
+    .control {background:var(--panel); padding:8px 10px; border-radius:8px; display:flex; gap:8px; align-items:center; color:var(--muted);}
+    .control label{font-size:12px;color:var(--muted)}
+    select, input[type=range], input[type=number]{
+      background:transparent;border:1px solid rgba(255,255,255,0.06); color:var(--muted); padding:6px 8px; border-radius:6px;
+    }
+    button{background:linear-gradient(90deg,var(--accent),#6ea4ff); color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer}
+    button.secondary{background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted)}
+    .layout{display:flex; gap:14px; margin-top:10px;}
+    .vis {flex:1; min-width:520px; background:var(--glass); border-radius:10px; padding:12px;}
+    .sidebar {width:360px; background:var(--glass); border-radius:10px; padding:12px;}
+    .lb-row{display:flex; align-items:center; gap:8px; margin-bottom:8px}
+    .box {background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:8px; padding:8px;}
+    .lb-box{height:56px; display:flex; align-items:center; justify-content:center; width:150px; font-weight:600; letter-spacing:0.6px}
+    #canvasArea{width:100%; height:300px; background:linear-gradient(180deg, rgba(5,10,20,0.8), rgba(5,10,30,0.7)); border-radius:8px; position:relative; overflow:hidden}
+    .servers {display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+    .server {width:120px; min-height:120px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:8px; padding:8px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:8px; cursor:pointer; border:2px solid transparent}
+    .server.down{opacity:0.5; border-color:rgba(255,80,80,0.25)}
+    .server .title{font-weight:700}
+    .server .stat{font-size:12px;color:var(--muted)}
+    .bulb{width:12px;height:12px;border-radius:50%}
+    .bulb.up{background:var(--good)}
+    .bulb.down{background:var(--bad)}
+    .queue{display:flex;gap:4px;flex-wrap:wrap; justify-content:center}
+    .req-dot{width:10px;height:10px;border-radius:50%; background:#9cc4ff; box-shadow:0 1px 6px rgba(110,170,255,0.2)}
+    .charts{display:flex; gap:8px; margin-top:10px}
+    canvas{background:transparent;border-radius:6px}
+    .small{font-size:12px;color:var(--muted)}
+    .stats-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px}
+    .stat-card{background:rgba(255,255,255,0.02); padding:8px; border-radius:8px}
+    .footer-note{font-size:12px;color:var(--muted); margin-top:10px}
+    .weight-input{width:48px}
+    .muted{color:var(--muted); font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top">
+      <div style="flex:1">
+        <h1>Load Balancing Simulator</h1>
+        <div class="muted">Interactive demo: simulate how a load balancer routes requests to backend servers using different algorithms.</div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted">Simulation Tick: <span id="tickMs">100</span> ms</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="control">
+        <label>Algorithm</label>
+        <select id="algo">
+          <option value="roundrobin">Round Robin</option>
+          <option value="weighted">Weighted Round Robin</option>
+          <option value="leastconn">Least Connections</option>
+          <option value="random">Random</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label>Req/s</label>
+        <input id="rate" type="range" min="0" max="50" value="8" />
+        <div style="width:56px;text-align:center;font-weight:700;color:var(--muted)"><span id="rateVal">8</span></div>
+      </div>
+
+      <div class="control">
+        <label>Mean service (ms)</label>
+        <input id="serviceMean" type="number" min="50" max="2000" value="600" />
+      </div>
+
+      <div class="control">
+        <label>Variance (ms)</label>
+        <input id="serviceVar" type="number" min="0" max="1500" value="200" />
+      </div>
+
+      <div class="control">
+        <button id="startBtn">Start</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+      </div>
+
+      <div class="control">
+        <button id="addServer" class="secondary">+ Server</button>
+        <button id="removeServer" class="secondary">- Server</button>
+      </div>
+
+    </div>
+
+    <div class="layout">
+      <div class="vis box">
+        <div class="lb-row">
+          <div style="flex:1;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div class="lb-box box" style="width:220px; background:linear-gradient(90deg,#1b3050,#15304a); color:#cde2ff">
+                Load Balancer
+              </div>
+              <div class="small muted">Strategy: <span id="algoLabel">Round Robin</span></div>
+              <div class="small muted">Pointer: <span id="pointerLabel">0</span></div>
+            </div>
+          </div>
+          <div style="text-align:right" id="simControls">
+            <div class="small muted">Total generated: <b id="totalGen">0</b></div>
+            <div class="small muted">Dropped: <b id="dropped">0</b></div>
+          </div>
+        </div>
+
+        <div id="canvasArea" class="box">
+          <canvas id="animCanvas"></canvas>
+        </div>
+
+        <div class="servers" id="serversContainer" title="Click a server to toggle up/down">
+          <!-- servers rendered here -->
+        </div>
+
+        <div class="charts">
+          <canvas id="chartCanvas" width="900" height="120"></canvas>
+        </div>
+
+      </div>
+
+      <div class="sidebar">
+        <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
+          <div style="font-weight:700">Overview</div>
+          <div class="small muted">Click server box to bring it up/down</div>
+        </div>
+
+        <div style="margin-top:8px;" class="stats-grid">
+          <div class="stat-card">
+            <div class="small muted">Throughput (req/s)</div>
+            <div style="font-weight:800;font-size:20px" id="throughput">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="small muted">Avg response (ms)</div>
+            <div style="font-weight:800;font-size:20px" id="avgResp">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="small muted">In-flight (processing)</div>
+            <div style="font-weight:800;font-size:20px" id="inflight">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="small muted">Queued total</div>
+            <div style="font-weight:800;font-size:20px" id="queuedTotal">0</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div style="font-weight:700">Servers</div>
+          <div class="muted small" style="margin-top:6px">You can change server weights when using Weighted RR.</div>
+          <div id="serverWeights" style="margin-top:8px"></div>
+        </div>
+
+        <div class="footer-note">
+          This is a simplified simulation: each request is routed then served by a backend with service times drawn around the configured mean. Try failing servers, changing algorithms and request rate to see different behaviors (queues, queue imbalance, and response times).
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+/*
+  Load Balancing Simulator
+  - Single-file client-side simulation/visualization
+  - Algorithms: Round Robin, Weighted Round Robin, Least Connections, Random
+  - Interactive controls: request rate, service time mean/variance, number of servers
+  - Click a server to toggle up/down
+*/
+
+// Utility functions
+function randRange(a,b){ return a + Math.random()*(b-a) }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)) }
+function now(){ return Date.now() }
+
+// Simulation parameters and state
+const state = {
+  tickMs: 100,
+  running: false,
+  spawnRate: 8, // req/sec
+  serviceMean: 600, // ms
+  serviceVar: 200, // ms
+  servers: [],
+  nextReqId: 1,
+  totalGenerated: 0,
+  dropped: 0,
+  algo: 'roundrobin',
+  rrPointer: 0,
+  weightedRotation: [], // array of server indices for simple WRR
+  metricsWindow: 60,
+  throughputHistory: [], // per second
+  respHistory: [],
+  animObjects: [], // moving request animation objects
+  lastChartTick: now()
+}
+
+// DOM references
+const algoSelect = document.getElementById('algo')
+const rateInput = document.getElementById('rate')
+const rateVal = document.getElementById('rateVal')
+const serviceMeanInput = document.getElementById('serviceMean')
+const serviceVarInput = document.getElementById('serviceVar')
+const startBtn = document.getElementById('startBtn')
+const resetBtn = document.getElementById('resetBtn')
+const addServerBtn = document.getElementById('addServer')
+const removeServerBtn = document.getElementById('removeServer')
+const serversContainer = document.getElementById('serversContainer')
+const serverWeightsDiv = document.getElementById('serverWeights')
+const animCanvas = document.getElementById('animCanvas')
+const chartCanvas = document.getElementById('chartCanvas')
+const totalGenLabel = document.getElementById('totalGen')
+const droppedLabel = document.getElementById('dropped')
+const pointerLabel = document.getElementById('pointerLabel')
+const algoLabel = document.getElementById('algoLabel')
+const throughputLabel = document.getElementById('throughput')
+const avgRespLabel = document.getElementById('avgResp')
+const inflightLabel = document.getElementById('inflight')
+const queuedTotalLabel = document.getElementById('queuedTotal')
+const tickMsLabel = document.getElementById('tickMs')
+
+// Canvas setup
+const actx = animCanvas.getContext('2d')
+const cctx = chartCanvas.getContext('2d')
+function resizeCanvases(){
+  animCanvas.width = animCanvas.clientWidth
+  animCanvas.height = animCanvas.clientHeight
+  chartCanvas.width = chartCanvas.clientWidth
+  chartCanvas.height = 120
+}
+window.addEventListener('resize', () => {
+  resizeCanvases()
+  renderAll()
+})
+resizeCanvases()
+
+// Initialize with 3 servers
+function initServers(n=3){
+  state.servers = []
+  for(let i=0;i<n;i++){
+    state.servers.push(makeServer(i+1))
+  }
+  rebuildWeightedRotation()
+}
+function makeServer(id){
+  return {
+    id,
+    healthy: true,
+    queue: [],
+    processing: null,
+    stats: { processed: 0, cumulativeResp: 0 },
+    weight: 1
+  }
+}
+
+initServers(3)
+renderServers()
+renderWeights()
+
+// UI bindings
+algoSelect.addEventListener('change', ()=>{
+  state.algo = algoSelect.value
+  algoLabel.textContent = algoSelect.options[algoSelect.selectedIndex].text
+  renderWeights()
+})
+rateInput.addEventListener('input', ()=>{
+  state.spawnRate = parseFloat(rateInput.value)
+  rateVal.textContent = rateInput.value
+})
+serviceMeanInput.addEventListener('change', ()=>{
+  state.serviceMean = parseFloat(serviceMeanInput.value)
+})
+serviceVarInput.addEventListener('change', ()=>{
+  state.serviceVar = parseFloat(serviceVarInput.value)
+})
+startBtn.addEventListener('click', toggleRun)
+resetBtn.addEventListener('click', resetSim)
+addServerBtn.addEventListener('click', ()=>{
+  const nextId = state.servers.length ? Math.max(...state.servers.map(s=>s.id))+1 : 1
+  state.servers.push(makeServer(nextId))
+  rebuildWeightedRotation()
+  renderServers()
+  renderWeights()
+})
+removeServerBtn.addEventListener('click', ()=>{
+  if(state.servers.length>1){
+    state.servers.pop()
+    rebuildWeightedRotation()
+    renderServers()
+    renderWeights()
+  }
+})
+
+// Toggling server up/down by clicking in renderServers
+function toggleServer(index){
+  const s = state.servers[index]
+  s.healthy = !s.healthy
+  // If server becomes down, pointer may need adjustment; don't drop queued requests (they just pause)
+  rebuildWeightedRotation()
+  renderServers()
+}
+
+// Weighted rotation array
+function rebuildWeightedRotation(){
+  state.weightedRotation = []
+  state.servers.forEach((s,idx)=>{
+    const w = Math.max(1, Math.round(s.weight || 1))
+    for(let k=0;k<w;k++) state.weightedRotation.push(idx)
+  })
+  if(state.rrPointer >= state.weightedRotation.length) state.rrPointer = 0
+}
+
+// Routing algorithms
+function routeRequest(req){
+  const healthyIdxs = state.servers.map((s,i)=>s.healthy ? i : -1).filter(i=>i>=0)
+  if(healthyIdxs.length===0){
+    state.dropped++
+    return null
+  }
+  let chosen = null
+  if(state.algo === 'roundrobin'){
+    // simple round robin over healthy servers
+    let attempts = 0
+    while(attempts < state.servers.length){
+      const idx = state.rrPointer % state.servers.length
+      state.rrPointer = (state.rrPointer + 1) % state.servers.length
+      attempts++
+      if(state.servers[idx] && state.servers[idx].healthy){
+        chosen = idx; break
+      }
+    }
+  } else if(state.algo === 'weighted'){
+    // rotate through weightedRotation skipping down servers
+    if(state.weightedRotation.length === 0){
+      // fallback: choose first healthy
+      chosen = healthyIdxs[0]
+    } else {
+      let attempts = 0
+      while(attempts < state.weightedRotation.length){
+        const pos = state.rrPointer % state.weightedRotation.length
+        const idx = state.weightedRotation[pos]
+        state.rrPointer = (state.rrPointer + 1) % state.weightedRotation.length
+        attempts++
+        if(state.servers[idx] && state.servers[idx].healthy){
+          chosen = idx; break
+        }
+      }
+      if(chosen===null) chosen = healthyIdxs[0]
+    }
+  } else if(state.algo === 'leastconn'){
+    // choose server with smallest (queue length + processing? treat processing as 1)
+    let bestIdx = null; let bestVal = Infinity
+    state.servers.forEach((s,i)=>{
+      if(!s.healthy) return
+      const val = s.queue.length + (s.processing ? 1 : 0)
+      if(val < bestVal){ bestVal = val; bestIdx = i }
+    })
+    chosen = bestIdx
+  } else if(state.algo === 'random'){
+    const choice = healthyIdxs[Math.floor(Math.random()*healthyIdxs.length)]
+    chosen = choice
+  }
+  return chosen
+}
+
+// Service time generator: draw from normal around mean with sd = var, clamp > 20ms
+function drawService(){
+  const mean = state.serviceMean
+  const sd = state.serviceVar
+  // Box-Muller for normal
+  let u = 0, v = 0
+  while(u === 0) u = Math.random()
+  while(v === 0) v = Math.random()
+  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0*Math.PI*v)
+  const val = mean + z * sd
+  return Math.max(20, Math.round(val))
+}
+
+// Simulation loop
+let simInterval = null
+let animInterval = null
+let spawnAccumulator = 0
+function startSim(){
+  if(state.running) return
+  state.running = true
+  startBtn.textContent = 'Stop'
+  tickMsLabel.textContent = state.tickMs
+  // spawn loop
+  simInterval = setInterval(simTick, state.tickMs)
+  // animation loop for drawing
+  animInterval = setInterval(renderAll, 30)
+  // chart ticking per second
+  state.lastChartTick = now()
+}
+function stopSim(){
+  if(!state.running) return
+  state.running = false
+  startBtn.textContent = 'Start'
+  clearInterval(simInterval)
+  clearInterval(animInterval)
+}
+function toggleRun(){
+  if(state.running) stopSim(); else startSim()
+}
+
+function resetSim(){
+  stopSim()
+  state.nextReqId = 1
+  state.totalGenerated = 0
+  state.dropped = 0
+  state.throughputHistory = []
+  state.respHistory = []
+  state.animObjects = []
+  state.servers.forEach(s=>{
+    s.queue = []
+    s.processing = null
+    s.stats = { processed:0, cumulativeResp:0 }
+  })
+  state.rrPointer = 0
+  spawnAccumulator = 0
+  renderAll()
+}
+
+// Sim tick does routing and processing
+function simTick(){
+  // spawn requests using fractional expected number
+  const expected = state.spawnRate * (state.tickMs / 1000)
+  spawnAccumulator += expected
+  const toSpawn = Math.floor(spawnAccumulator)
+  spawnAccumulator -= toSpawn
+  for(let i=0;i<toSpawn;i++){
+    spawnRequest()
+  }
+
+  // processing step: decrement processing time for each server
+  const dt = state.tickMs
+  const tNow = now()
+  let completedThisTick = 0
+  for(const s of state.servers){
+    // if not healthy, processing continues (we simulate only a server failure stops new assignments, not current processing)
+    if(s.processing){
+      s.processing.remaining -= dt
+      if(s.processing.remaining <= 0){
+        // complete
+        const resp = tNow - s.processing.createdAt
+        s.stats.processed++
+        s.stats.cumulativeResp += resp
+        completedThisTick++
+        // free processing and start next from queue if any
+        s.processing = null
+      }
+    }
+    // start next if free
+    if(!s.processing && s.queue.length>0 && s.healthy){
+      s.processing = s.queue.shift()
+      // if processing started, we add slight overhead
+    }
+  }
+
+  // chart/metrics update: per second
+  if(tNow - state.lastChartTick >= 1000){
+    const thru = completedThisTick
+    state.throughputHistory.push(thru)
+    const avgResp = computeAvgResponseMillis()
+    state.respHistory.push(avgResp)
+    if(state.throughputHistory.length > state.metricsWindow) state.throughputHistory.shift()
+    if(state.respHistory.length > state.metricsWindow) state.respHistory.shift()
+    state.lastChartTick = tNow
+  }
+
+  // update labels
+  totalGenLabel.textContent = state.totalGenerated
+  droppedLabel.textContent = state.dropped
+  pointerLabel.textContent = state.rrPointer
+}
+
+// spawn a single request and route it
+function spawnRequest(){
+  const id = state.nextReqId++
+  const req = { id, createdAt: now(), remaining: drawService() }
+  state.totalGenerated++
+  const chosen = routeRequest(req)
+  if(chosen === null || chosen === undefined){
+    // dropped
+    state.dropped++
+    return
+  }
+  // enqueue on chosen server
+  state.servers[chosen].queue.push(req)
+  // create animation object for request traveling from LB to server
+  createAnimObject(chosen)
+}
+
+// create animation visual object: travels from LB center to server position
+function createAnimObject(serverIndex){
+  // compute target coords for server box in canvas
+  const sRect = getServerRect(serverIndex)
+  if(!sRect) return
+  const canvasRect = animCanvas.getBoundingClientRect()
+  const from = { x: canvasRect.width * 0.12, y: canvasRect.height * 0.12 } // lb pos
+  const to = { x: sRect.cx - canvasRect.left, y: sRect.cy - canvasRect.top }
+  state.animObjects.push({
+    id: 'r' + Math.random().toString(36).slice(2,7),
+    start: now(),
+    duration: 420 + Math.random()*200,
+    from, to
+  })
+}
+
+// render functions
+function renderAll(){
+  renderServers()
+  drawAnimations()
+  drawChart()
+  updateSidebarStats()
+}
+
+// compute average response across all servers
+function computeAvgResponseMillis(){
+  let tot=0, cnt=0
+  for(const s of state.servers){
+    tot += s.stats.cumulativeResp
+    cnt += s.stats.processed
+  }
+  return cnt ? Math.round(tot / cnt) : 0
+}
+
+function updateSidebarStats(){
+  // throughput: last value
+  const lastThroughput = state.throughputHistory.length ? state.throughputHistory[state.throughputHistory.length-1] : 0
+  throughputLabel.textContent = lastThroughput
+  avgRespLabel.textContent = computeAvgResponseMillis()
+  let inflight=0, queued=0
+  for(const s of state.servers){
+    if(s.processing) inflight++
+    queued += s.queue.length
+  }
+  inflightLabel.textContent = inflight
+  queuedTotalLabel.textContent = queued
+}
+
+// Render server boxes in DOM
+function renderServers(){
+  serversContainer.innerHTML = ''
+  const canvasRect = animCanvas.getBoundingClientRect()
+  state.servers.forEach((s,i)=>{
+    const el = document.createElement('div')
+    el.className = 'server box' + (s.healthy ? '' : ' down')
+    el.dataset.idx = i
+    el.title = 'Click to toggle server up/down'
+    el.addEventListener('click', ()=>{ toggleServer(i) })
+    const title = document.createElement('div'); title.className = 'title'; title.textContent = 'S' + s.id
+    const bulb = document.createElement('div'); bulb.className = 'bulb ' + (s.healthy ? 'up' : 'down')
+    const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.alignItems='center'; topRow.style.gap='8px'
+    topRow.appendChild(bulb)
+    topRow.appendChild(title)
+    const stats = document.createElement('div'); stats.className='stat'
+    stats.innerHTML = `proc: ${s.stats.processed} &nbsp; avg: ${s.stats.processed ? Math.round(s.stats.cumulativeResp/s.stats.processed) : 0} ms`
+    const qRow = document.createElement('div'); qRow.style.width='100%'; qRow.style.display='flex'; qRow.style.flexDirection='column'; qRow.style.alignItems='center'
+    const qlabel = document.createElement('div'); qlabel.className='stat'; qlabel.textContent = `queue: ${s.queue.length}`
+    const dots = document.createElement('div'); dots.className='queue'
+    // show up to 6 small dots for queue
+    for(let k=0;k<Math.min(6,s.queue.length);k++){
+      const d = document.createElement('div'); d.className='req-dot'
+      dots.appendChild(d)
+    }
+    qRow.appendChild(qlabel); qRow.appendChild(dots)
+    el.appendChild(topRow)
+    el.appendChild(stats)
+    el.appendChild(qRow)
+    serversContainer.appendChild(el)
+  })
+}
+
+// For animations, compute server element center
+function getServerRect(index){
+  const children = serversContainer.children
+  if(index < 0 || index >= children.length) return null
+  const el = children[index]
+  const r = el.getBoundingClientRect()
+  return { left:r.left, top:r.top, right:r.right, bottom:r.bottom, cx:(r.left+r.right)/2, cy:(r.top+r.bottom)/2 }
+}
+
+function drawAnimations(){
+  // clear
+  actx.clearRect(0,0,animCanvas.width,animCanvas.height)
+  // draw background LB and server targets
+  // Draw LB box
+  const width = animCanvas.width, height = animCanvas.height
+  // LB position
+  const lbX = width * 0.12, lbY = height * 0.12
+  actx.fillStyle = '#17395b'
+  actx.fillRect(lbX-48, lbY-20, 96, 40)
+  actx.fillStyle = '#cfe6ff'
+  actx.font = '12px sans-serif'
+  actx.fillText('LB', lbX-8, lbY+4)
+  // Draw server anchors
+  state.servers.forEach((s,i)=>{
+    const rect = getServerRect(i)
+    if(!rect) return
+    // transform rect to canvas coords
+    const canvasRect = animCanvas.getBoundingClientRect()
+    const cx = rect.cx - canvasRect.left
+    const cy = rect.cy - canvasRect.top
+    actx.beginPath()
+    actx.fillStyle = s.healthy ? 'rgba(45,212,191,0.06)' : 'rgba(255,107,107,0.05)'
+    actx.arc(cx, cy, 22, 0, Math.PI*2)
+    actx.fill()
+    // small outline
+    actx.strokeStyle = s.healthy ? 'rgba(45,212,191,0.4)' : 'rgba(255,107,107,0.4)'
+    actx.lineWidth = 1
+    actx.stroke()
+  })
+
+  // update and draw animObjects
+  const nowT = now()
+  for(let i=state.animObjects.length-1;i>=0;i--){
+    const obj = state.animObjects[i]
+    const t = (nowT - obj.start) / obj.duration
+    if(t >= 1){
+      state.animObjects.splice(i,1)
+      continue
+    }
+    const ease = 1 - Math.pow(1-t, 2) // ease-out
+    const x = obj.from.x + (obj.to.x - obj.from.x) * ease
+    const y = obj.from.y + (obj.to.y - obj.from.y) * ease
+    const radius = 5 + 4*(1-t)
+    const grad = actx.createRadialGradient(x,y,1,x+6,y-6,18)
+    grad.addColorStop(0, 'rgba(156,196,255,1)')
+    grad.addColorStop(1, 'rgba(60,110,200,0.06)')
+    actx.fillStyle = grad
+    actx.beginPath()
+    actx.arc(x,y,radius,0,Math.PI*2)
+    actx.fill()
+  }
+}
+
+// Chart drawing - throughput and avg response over time
+function drawChart(){
+  const w = chartCanvas.width, h = chartCanvas.height
+  cctx.clearRect(0,0,w,h)
+  // background
+  cctx.fillStyle = 'rgba(255,255,255,0.02)'
+  cctx.fillRect(0,0,w,h)
+  // grid lines
+  cctx.strokeStyle = 'rgba(255,255,255,0.03)'
+  cctx.lineWidth = 1
+  for(let i=0;i<5;i++){
+    const y = (i/4)*h
+    cctx.beginPath(); cctx.moveTo(0,y); cctx.lineTo(w,y); cctx.stroke()
+  }
+  // throughput (bar-like)
+  const maxLen = state.metricsWindow
+  const vals = state.throughputHistory.slice(-maxLen)
+  const maxVal = Math.max(5, ...vals)
+  const barW = w / Math.max(1, maxLen)
+  cctx.fillStyle = 'rgba(109,187,255,0.9)'
+  vals.forEach((v,i)=>{
+    const x = i * barW
+    const barH = (v / maxVal) * (h * 0.55)
+    cctx.fillRect(x, h - barH, barW*0.8, barH)
+  })
+
+  // avg response line
+  const resp = state.respHistory.slice(-maxLen)
+  const maxResp = Math.max(100, ...resp)
+  cctx.beginPath()
+  for(let i=0;i<resp.length;i++){
+    const x = i * barW + barW*0.4
+    const y = h - (resp[i] / maxResp) * (h * 0.9)
+    if(i===0) cctx.moveTo(x,y); else cctx.lineTo(x,y)
+  }
+  cctx.strokeStyle = 'rgba(45,212,191,0.95)'
+  cctx.lineWidth = 2
+  cctx.stroke()
+
+  // legend
+  cctx.fillStyle = 'rgba(255,255,255,0.8)'
+  cctx.font = '12px sans-serif'
+  cctx.fillText('Throughput (bars) & Avg resp (line)', 8, 14)
+}
+
+// Render server weights controls for weighted RR
+function renderWeights(){
+  serverWeightsDiv.innerHTML = ''
+  if(state.algo !== 'weighted') {
+    serverWeightsDiv.appendChild(document.createTextNode('Weights are shown only for Weighted RR.'))
+    return
+  }
+  state.servers.forEach((s,i)=>{
+    const div = document.createElement('div')
+    div.style.display='flex'; div.style.alignItems='center'; div.style.justifyContent='space-between'; div.style.padding='6px 0'
+    const label = document.createElement('div'); label.textContent = 'S' + s.id; label.style.fontWeight='700'
+    const inp = document.createElement('input'); inp.type = 'number'; inp.value = s.weight || 1; inp.min=1; inp.className='weight-input'
+    inp.addEventListener('change', ()=>{
+      s.weight = Math.max(1, Math.round(Number(inp.value) || 1))
+      rebuildWeightedRotation()
+    })
+    div.appendChild(label)
+    div.appendChild(inp)
+    serverWeightsDiv.appendChild(div)
+  })
+}
+
+// initial render
+renderAll()
+
+// keyboard shortcuts
+window.addEventListener('keydown', (e)=>{
+  if(e.key === ' '){ e.preventDefault(); toggleRun() }
+  if(e.key === 'r'){ resetSim() }
+})
+
+// expose some debug functions to console for experimentation
+window.LBSim = {
+  state, startSim, stopSim, resetSim
+}
+
+</script>
+</body>
+</html>

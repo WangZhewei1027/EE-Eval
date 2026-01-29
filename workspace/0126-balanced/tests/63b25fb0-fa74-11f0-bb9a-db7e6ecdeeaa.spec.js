@@ -126,8 +126,8 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
 
   test('InputChange event updates displayed value, explanation, and canvas rendering', async ({ page }) => {
     // Capture console and page errors for this test
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
 
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
@@ -136,7 +136,7 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const app = new OmegaPage(page);
+    const app1 = new OmegaPage(page);
     await app.goto();
 
     // Capture initial canvas rendering for comparison
@@ -155,7 +155,7 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
       expect(displayed).toBe(String(val));
 
       // Explanation must mention the current n and describe inequality status
-      const explanation = await app.getExplanationText();
+      const explanation1 = await app.getExplanationText();
       expect(explanation).toContain(`n = ${val}`); // should mention the current n in context
 
       // The canvas rendering should exist and ideally change when n changes (vertical indicator & points)
@@ -178,14 +178,14 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
 
   test('Edge cases: setting input outside declared min/max and rapid changes', async ({ page }) => {
     // This test deliberately tries values outside the defined range to observe behavior
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push({ text: msg.text(), location: msg.location() });
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const app = new OmegaPage(page);
+    const app2 = new OmegaPage(page);
     await app.goto();
 
     // Attempt to set to 0 (below min) and 150 (above max). The page logic reads +inputN.value which may accept the value.
@@ -196,12 +196,12 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
     for (const v of outOfRangeValues) {
       // We use evaluate on the input to set the value even if out of bounds; do not alter page functions
       await app.setInputValue(v);
-      const displayed = await app.getDisplayedNValue();
+      const displayed1 = await app.getDisplayedNValue();
       // The UI will reflect whatever the input.value was set to (string), even if out of range
       expect(displayed).toBe(String(v));
 
       // Explanation text should include the current n value in message
-      const explanation = await app.getExplanationText();
+      const explanation2 = await app.getExplanationText();
       expect(explanation).toContain(`n = ${v}`);
 
       resultingCanvasData.push(await app.getCanvasDataURL());
@@ -232,8 +232,8 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
     // This test focuses on observing console logs and page errors and asserting their absence.
     // This aligns with the requirement to observe console logs and let any runtime errors happen naturally.
     const consoleMessages = [];
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
 
     page.on('console', (msg) => {
       consoleMessages.push({ type: msg.type(), text: msg.text() });
@@ -241,7 +241,7 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    const app = new OmegaPage(page);
+    const app3 = new OmegaPage(page);
     await app.goto();
 
     // Trigger a few interactions
@@ -262,7 +262,7 @@ test.describe('Big-Omega (Ω) Notation Demo - FSM & UI tests', () => {
     // Validate final UI state sanity
     const finalN = await app.getDisplayedNValue();
     expect(finalN).toBe('75');
-    const explanation = await app.getExplanationText();
+    const explanation3 = await app.getExplanationText();
     expect(explanation).toContain('n = 75');
   });
 });

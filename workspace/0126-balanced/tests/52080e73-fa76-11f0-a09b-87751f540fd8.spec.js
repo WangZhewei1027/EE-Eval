@@ -132,7 +132,7 @@ test.describe('Deque Interactive Application (52080e73-fa76-11f0-a09b-87751f540f
   });
 
   test('PushFront and PushBack update peekFront/peekBack accordingly', async ({ page }) => {
-    const dp = new DequePage(page);
+    const dp1 = new DequePage(page);
 
     // Start with a fresh page; perform pushes and then peek values.
     // We do not modify or redefine any functions, only call them.
@@ -149,7 +149,7 @@ test.describe('Deque Interactive Application (52080e73-fa76-11f0-a09b-87751f540f
   });
 
   test('PopFront and PopBack remove and return values in FIFO/LIFO order as expected', async ({ page }) => {
-    const dp = new DequePage(page);
+    const dp2 = new DequePage(page);
 
     // Arrange: push a known sequence of values
     // pushFront(1) -> front: 1
@@ -170,7 +170,7 @@ test.describe('Deque Interactive Application (52080e73-fa76-11f0-a09b-87751f540f
   });
 
   test('Peek operations do not remove elements (peek is non-destructive)', async ({ page }) => {
-    const dp = new DequePage(page);
+    const dp3 = new DequePage(page);
 
     // Ensure a known state for this test by pushing a single element
     await dp.pushBack(77);
@@ -188,7 +188,7 @@ test.describe('Deque Interactive Application (52080e73-fa76-11f0-a09b-87751f540f
   });
 
   test('Edge case: popping from an empty deque returns null', async ({ page }) => {
-    const dp = new DequePage(page);
+    const dp4 = new DequePage(page);
 
     // Force the deque into an empty array using page.evaluate.
     // This does not redefine functions; it only changes the existing global variable 'deque'.
@@ -212,7 +212,7 @@ test.describe('Deque Interactive Application (52080e73-fa76-11f0-a09b-87751f540f
   });
 
   test('DOM container (#deque) remains present but is not modified by script (visual feedback check)', async ({ page }) => {
-    const dp = new DequePage(page);
+    const dp5 = new DequePage(page);
 
     const text = await dp.dequeContainerText();
     // The script never writes to #deque, so it should be empty string
@@ -228,7 +228,7 @@ test.describe('Deque Interactive Application (52080e73-fa76-11f0-a09b-87751f540f
   test('Console messages include expected types and ordering hints (smoke check)', async ({ page }) => {
     // Basic verification that console captured both log entries and that there are multiple messages
     const types = consoles.map(c => c.type);
-    const texts = consoles.map(c => c.text);
+    const texts1 = consoles.map(c => c.text);
 
     // There should be at least a few console messages (the inline script logs several)
     expect(texts.length).toBeGreaterThanOrEqual(6);

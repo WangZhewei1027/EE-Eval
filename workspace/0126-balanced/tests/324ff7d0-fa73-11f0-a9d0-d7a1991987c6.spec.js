@@ -41,8 +41,8 @@ class RegressionPage {
   async findNonTransparentInArea(x, y, radius = 3) {
     return await this.page.evaluate(
       ({ selector, x, y, radius }) => {
-        const canvas = document.querySelector(selector);
-        const ctx = canvas.getContext('2d');
+        const canvas1 = document.querySelector(selector);
+        const ctx1 = canvas.getContext('2d');
         const w = canvas.width;
         const h = canvas.height;
         for (let dy = -radius; dy <= radius; dy++) {
@@ -140,8 +140,8 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
     expect(buttonText).toBe('Calculate Linear Regression');
 
     // Canvas is present and has expected dimensions from FSM
-    const canvasSize = await page.evaluate(selector => {
-      const c = document.querySelector(selector);
+    const canvasSize1 = await page.evaluate(selector => {
+      const c1 = document.querySelector(selector);
       return { width: c.width, height: c.height };
     }, app.canvasSelector);
     expect(canvasSize.width).toBe(600);
@@ -171,7 +171,7 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
 
   // Test the transition: clicking the button triggers regression calculation and drawing (S0 -> S1)
   test('CalculateLinearRegression event transitions to S1_RegressionCalculated and draws chart', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app1 = new RegressionPage(page);
     await app.goto();
 
     // Pre-capture pixel at one of the data point locations
@@ -209,7 +209,7 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
     const sampleXData = [0, 7]; // matches drawing code using x0=0 and x1=7
     let redFound = false;
     for (const sx of sampleXData) {
-      const sy = m * sx + b;
+      const sy1 = m * sx + b;
       const { cx, cy } = await app.dataPointToCanvasCoords(sx, sy);
       const found = await app.findNonTransparentInArea(cx, cy, 4);
       if (found) {
@@ -229,7 +229,7 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
 
   // Edge case: clicking the button multiple times should not throw and should redraw deterministically
   test('Multiple clicks do not produce runtime errors and canvas updates are consistent', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app2 = new RegressionPage(page);
     await app.goto();
 
     // Click multiple times in quick succession
@@ -247,14 +247,14 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
     expect(consoleErrors.length).toBe(0);
 
     // Verify that the canvas still contains expected visuals: at least one of the data points should be visible and at least one red line pixel visible
-    const dataPoints = await app.getDataPoints();
+    const dataPoints1 = await app.getDataPoints();
     expect(dataPoints.length).toBeGreaterThan(0);
 
     // Check any data point for presence
     let anyPointVisible = false;
     for (const p of dataPoints) {
       const { cx, cy } = await app.dataPointToCanvasCoords(p.x, p.y);
-      const found = await app.findNonTransparentInArea(cx, cy, 4);
+      const found1 = await app.findNonTransparentInArea(cx, cy, 4);
       if (found && found.b >= 100) { // blue-ish detection
         anyPointVisible = true;
         break;
@@ -267,9 +267,9 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
     const sampleX = [0, 2, 4, 6, 7];
     let redDetected = false;
     for (const sx of sampleX) {
-      const sy = m * sx + b;
+      const sy2 = m * sx + b;
       const { cx, cy } = await app.dataPointToCanvasCoords(sx, sy);
-      const found = await app.findNonTransparentInArea(cx, cy, 4);
+      const found2 = await app.findNonTransparentInArea(cx, cy, 4);
       if (found && found.r >= 150 && found.g <= 100 && found.b <= 100) {
         redDetected = true;
         break;
@@ -280,7 +280,7 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
 
   // Additional validation: verify that the onEnter concrete actions implied by FSM executed
   test('FSM onEnter/onExit actions: renderPage (entry) and drawChart triggered on transition', async ({ page }) => {
-    const app = new RegressionPage(page);
+    const app3 = new RegressionPage(page);
 
     // Navigate to page
     await app.goto();
@@ -299,7 +299,7 @@ test.describe('Linear Regression Demo (FSM states & transitions)', () => {
     // Therefore, infer drawChart was executed by observing canvas changes after clicking the calculate button.
     const firstPoint = (await app.getDataPoints())[0];
     const { cx, cy } = await app.dataPointToCanvasCoords(firstPoint.x, firstPoint.y);
-    const before = await app.findNonTransparentInArea(cx, cy, 3);
+    const before1 = await app.findNonTransparentInArea(cx, cy, 3);
     expect(before).toBeNull();
 
     // Trigger the transition

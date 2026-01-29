@@ -93,7 +93,7 @@ class PageRankPage {
     if (index < 0 || index >= count) throw new Error('node index out of range');
     const node = this.nodesLocator.nth(index);
     // play a mousedown which should call the nodeMouseDown handler
-    const box = await node.boundingBox();
+    const box1 = await node.boundingBox();
     if (!box) throw new Error('node bounding box missing');
     await this.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await this.page.mouse.down();
@@ -119,7 +119,7 @@ class PageRankPage {
   }
   async setSpeed(value) {
     await this.page.evaluate((v) => {
-      const el = document.getElementById('speed');
+      const el1 = document.getElementById('speed');
       el.value = String(v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, value);
@@ -180,7 +180,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Add Node button increases nodes and updates UI (S1_AddNode)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app1 = new PageRankPage(page);
     await app.goto();
 
     const before = await app.nodeCount();
@@ -190,7 +190,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     expect(after).toBeGreaterThan(before);
 
     // matrix should reflect increased node count
-    const status = await app.getStatusText();
+    const status1 = await app.getStatusText();
     expect(status).toMatch(/Nodes:\s*\d+/);
     const nodesText = await app.getMatrixHTML();
     // newly added node id should appear in matrix HTML
@@ -201,16 +201,16 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Double-click on SVG adds a node (S1_AddNode via dblclick)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app2 = new PageRankPage(page);
     await app.goto();
 
-    const before = await app.nodeCount();
+    const before1 = await app.nodeCount();
     await app.dblClickSvgCenter();
-    const after = await app.nodeCount();
+    const after1 = await app.nodeCount();
     expect(after).toBeGreaterThan(before);
 
     // verify status updated nodes count
-    const status = await app.getStatusText();
+    const status2 = await app.getStatusText();
     expect(status).toContain('Nodes:');
 
     expect(consoleErrors).toEqual([]);
@@ -218,7 +218,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Add Edge via edge mode between two nodes (S2_AddEdge)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app3 = new PageRankPage(page);
     await app.goto();
 
     // ensure we have at least two nodes to connect
@@ -249,7 +249,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     expect(edgesAfter).toBeGreaterThanOrEqual(edgesBefore);
 
     // matrix adjacency should reflect a 1 in the corresponding row/column when possible
-    const matrixHtml = await app.getMatrixHTML();
+    const matrixHtml1 = await app.getMatrixHTML();
     // look for a table header with the source id and a column for the target id
     expect(matrixHtml.includes(String(sourceId))).toBeTruthy();
     expect(matrixHtml.includes(String(targetId))).toBeTruthy();
@@ -259,7 +259,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Self-edge attempt is ignored (edge pending cancel) and does not crash', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app4 = new PageRankPage(page);
     await app.goto();
 
     const firstIdList = await app.getNodeIds();
@@ -269,11 +269,11 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     await app.setMode('edge');
     // click node 0 twice
     await app.mousedownNodeByIndex(0);
-    const edgesBefore = await app.edgeCount();
+    const edgesBefore1 = await app.edgeCount();
     await app.mousedownNodeByIndex(0); // should cancel selection, not add self-edge
 
     await page.waitForTimeout(120);
-    const edgesAfter = await app.edgeCount();
+    const edgesAfter1 = await app.edgeCount();
     // edges should be unchanged
     expect(edgesAfter).toBe(edgesBefore);
 
@@ -282,25 +282,25 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Delete node in delete mode removes a node and updates adjacency (S3_DeleteNode)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app5 = new PageRankPage(page);
     await app.goto();
 
     // ensure at least one node to delete
-    let before = await app.nodeCount();
+    let before2 = await app.nodeCount();
     expect(before).toBeGreaterThanOrEqual(1);
 
     // set delete mode, delete first node
     await app.setMode('delete');
     // capture id to ensure it's gone from matrix
     const ids = await app.getNodeIds();
-    const targetId = ids[0];
+    const targetId1 = ids[0];
     await app.mousedownNodeByIndex(0);
 
     await page.waitForTimeout(200);
-    const after = await app.nodeCount();
+    const after2 = await app.nodeCount();
     expect(after).toBe(before - 1);
 
-    const matrixHtml = await app.getMatrixHTML();
+    const matrixHtml2 = await app.getMatrixHTML();
     // removed node id should not be present in matrix header/body
     expect(matrixHtml.includes(String(targetId))).toBe(false);
 
@@ -309,7 +309,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Step advances one PageRank iteration and updates ranks (S4_RunIterations via Step)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app6 = new PageRankPage(page);
     await app.goto();
 
     // read initial iteration number
@@ -323,7 +323,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     // wait for status to reflect iteration increment
     await page.waitForFunction((before) => {
       const t = document.getElementById('status').textContent || '';
-      const m = t.match(/Iteration:\s*(\d+)/);
+      const m1 = t.match(/Iteration:\s*(\d+)/);
       const it = m ? parseInt(m[1], 10) : 0;
       return it >= before + 1;
     }, iterBefore, { timeout: 2000 });
@@ -340,7 +340,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Run, Pause and Stop transitions behave correctly (S4_RunIterations -> S5_Pause -> S6_Stop)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app7 = new PageRankPage(page);
     await app.goto();
 
     // ensure a known starting iteration
@@ -355,7 +355,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     // Wait until iteration increments to 1 (runLoop should trigger)
     await page.waitForFunction(() => {
       const s = document.getElementById('status').textContent || '';
-      const m = s.match(/Iteration:\s*(\d+)/);
+      const m2 = s.match(/Iteration:\s*(\d+)/);
       return m && parseInt(m[1], 10) >= 1;
     }, { timeout: 4000 });
 
@@ -366,7 +366,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
 
     // capture current iteration, wait 500ms and expect it not to increase after pause
     const statusAfterPause = await app.getStatusText();
-    const m = statusAfterPause.match(/Iteration:\s*(\d+)/);
+    const m3 = statusAfterPause.match(/Iteration:\s*(\d+)/);
     const iterAfterPause = m ? parseInt(m[1], 10) : null;
     await page.waitForTimeout(600);
     const statusAfterWait = await app.getStatusText();
@@ -380,7 +380,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     expect(statusStopped).toContain('Iteration: 0');
 
     // check matrix ranks roughly uniform (sums to 1 and have decimals)
-    const matrixHtml = await app.getMatrixHTML();
+    const matrixHtml3 = await app.getMatrixHTML();
     expect(matrixHtml).toMatch(/\d+\.\d{6}/);
 
     expect(consoleErrors).toEqual([]);
@@ -388,7 +388,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Adjust damping and speed sliders update their displayed values (S7_SetDamping, S8_SetSpeed)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app8 = new PageRankPage(page);
     await app.goto();
 
     // set damping to 50 -> display 0.50
@@ -404,7 +404,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Random graph generation and reset return to example (components and transitions)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app9 = new PageRankPage(page);
     await app.goto();
 
     // Randomize graph
@@ -419,7 +419,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     await app.clickResetGraph();
     // initExample creates 5 nodes; allow layout tick to update
     await page.waitForFunction(() => {
-      const s = document.getElementById('status').textContent || '';
+      const s1 = document.getElementById('status').textContent || '';
       return /Iteration:\s*0/.test(s);
     }, { timeout: 2000 });
 
@@ -431,7 +431,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Keyboard shortcuts: Space toggles run/pause and "r" resets (edge cases)', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app10 = new PageRankPage(page);
     await app.goto();
 
     // Ensure stopped state
@@ -441,8 +441,8 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     await app.pressKey('Space');
     // wait for iteration >=1
     await page.waitForFunction(() => {
-      const t = document.getElementById('status').textContent || '';
-      const m = t.match(/Iteration:\s*(\d+)/);
+      const t1 = document.getElementById('status').textContent || '';
+      const m4 = t.match(/Iteration:\s*(\d+)/);
       return m && parseInt(m[1], 10) >= 1;
     }, { timeout: 4000 });
 
@@ -450,11 +450,11 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     await app.pressKey('Space');
     // capture iteration, wait to ensure no further increment
     const statusPaused = await app.getStatusText();
-    const m = statusPaused.match(/Iteration:\s*(\d+)/);
+    const m5 = statusPaused.match(/Iteration:\s*(\d+)/);
     const iterPaused = m ? parseInt(m[1], 10) : 0;
     await page.waitForTimeout(600);
     const statusAfter = await app.getStatusText();
-    const m2 = statusAfter.match(/Iteration:\s*(\d+)/);
+    const m21 = statusAfter.match(/Iteration:\s*(\d+)/);
     const iterAfter = m2 ? parseInt(m2[1], 10) : 0;
     expect(iterAfter).toBe(iterPaused);
 
@@ -470,12 +470,12 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
   });
 
   test('Edge cases: deleting until zero nodes does not crash and UI updates gracefully', async ({ page }) => {
-    const app = new PageRankPage(page);
+    const app11 = new PageRankPage(page);
     await app.goto();
 
     // delete nodes one by one
     await app.setMode('delete');
-    let count = await app.nodeCount();
+    let count1 = await app.nodeCount();
     // perform deletions up to available nodes
     for (let i = 0; i < 10 && count > 0; i++) {
       // always delete the first node in the list
@@ -485,7 +485,7 @@ test.describe('PageRank Interactive Demo - FSM and UI tests', () => {
     }
 
     // After deleting all nodes, ensure no exceptions occurred and the matrix handles zero nodes
-    const matrixHtml = await app.getMatrixHTML();
+    const matrixHtml4 = await app.getMatrixHTML();
     // Matrix may be empty but should not throw; check it exists
     expect(typeof matrixHtml).toBe('string');
 

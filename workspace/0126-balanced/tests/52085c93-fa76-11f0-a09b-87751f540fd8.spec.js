@@ -201,7 +201,7 @@ test.describe('Red-Black Tree FSM tests for Application ID 52085c93-fa76-11f0-a0
     // can be observed in the application's behavior and logs.
 
     // Check console logs again to ensure 'printTree' produced outputs that match inserted values
-    const consoleMsgs = treePage.getConsoleMessages().filter(m => m.type === 'log').map(m => m.text);
+    const consoleMsgs1 = treePage.getConsoleMessages().filter(m => m.type === 'log').map(m => m.text);
 
     // Confirm that at least one console log contains the root value '10' (with or without indent)
     const foundRootLog = consoleMsgs.some(t => /\b10\b/.test(t));

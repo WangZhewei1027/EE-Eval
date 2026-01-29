@@ -53,7 +53,7 @@ class KruskalPage {
 
   async getMstListItems() {
     return this.mstList.evaluate((el) => {
-      const items = [];
+      const items1 = [];
       for (const child of el.children) {
         items.push(child.textContent.trim());
       }
@@ -133,7 +133,7 @@ test.describe('Kruskal Algorithm Visualization - FSM and UI validation', () => {
 
   test('Transition: S0_Idle -> S1_GraphGenerated via clicking Generate Random Graph', async ({ page }) => {
     // This test verifies clicking the Generate button regenerates the graph and updates edgesList and canvas.
-    const kruskal = new KruskalPage(page);
+    const kruskal1 = new KruskalPage(page);
     await kruskal.navigate();
 
     // Capture current edges list snapshot
@@ -157,13 +157,13 @@ test.describe('Kruskal Algorithm Visualization - FSM and UI validation', () => {
 
     // No uncaught page errors and no console error logs during this interaction
     expect(pageErrors, `Unexpected page errors after Generate Graph: ${pageErrors.map(e => String(e)).join(' | ')}`).toHaveLength(0);
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Unexpected console errors after Generate Graph: ${JSON.stringify(errorConsoleMessages)}`).toHaveLength(0);
   });
 
   test('Transition: S1_GraphGenerated -> S2_KruskalRunning via clicking Run Kruskal\'s Algorithm', async ({ page }) => {
     // Validate that running Kruskal populates the MST list and updates the canvas (visual feedback).
-    const kruskal = new KruskalPage(page);
+    const kruskal2 = new KruskalPage(page);
     await kruskal.navigate();
 
     // Ensure we are in state GraphGenerated: edges exist
@@ -186,13 +186,13 @@ test.describe('Kruskal Algorithm Visualization - FSM and UI validation', () => {
 
     // No uncaught runtime exceptions during algorithm run
     expect(pageErrors, `Unexpected page errors during Run Kruskal: ${pageErrors.map(e => String(e)).join(' | ')}`).toHaveLength(0);
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Unexpected console errors during Run Kruskal: ${JSON.stringify(errorConsoleMessages)}`).toHaveLength(0);
   });
 
   test('Transition: S1_GraphGenerated -> S3_Reset via clicking Reset (MST cleared, Graph remains)', async ({ page }) => {
     // Validate that reset clears MST but keeps graph edges displayed (per implementation).
-    const kruskal = new KruskalPage(page);
+    const kruskal3 = new KruskalPage(page);
     await kruskal.navigate();
 
     // Ensure MST placeholder exists initially
@@ -216,25 +216,25 @@ test.describe('Kruskal Algorithm Visualization - FSM and UI validation', () => {
 
     // Validate no console errors or uncaught page errors during reset
     expect(pageErrors, `Unexpected page errors during Reset: ${pageErrors.map(e => String(e)).join(' | ')}`).toHaveLength(0);
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Unexpected console errors during Reset: ${JSON.stringify(errorConsoleMessages)}`).toHaveLength(0);
   });
 
   test('Transition: S2_KruskalRunning -> S1_GraphGenerated via Reset (clear after running)', async ({ page }) => {
     // Validate that after running Kruskal, Reset returns to GraphGenerated state (MST cleared).
-    const kruskal = new KruskalPage(page);
+    const kruskal4 = new KruskalPage(page);
     await kruskal.navigate();
 
     // Run Kruskal
     await kruskal.clickRunKruskal();
-    const mstAfterRun = await kruskal.getMstListItems();
+    const mstAfterRun1 = await kruskal.getMstListItems();
     expect(mstAfterRun.join('\n')).not.toContain("No edges in MST yet");
 
     // Now reset
     await kruskal.clickReset();
 
     // MST should be cleared (placeholder message)
-    const mstAfterReset = await kruskal.getMstListItems();
+    const mstAfterReset1 = await kruskal.getMstListItems();
     expect(mstAfterReset.join('\n')).toContain("No edges in MST yet");
 
     // Ensure edges still shown
@@ -243,13 +243,13 @@ test.describe('Kruskal Algorithm Visualization - FSM and UI validation', () => {
 
     // Ensure no page errors and console errors
     expect(pageErrors, `Unexpected page errors during Reset after Run: ${pageErrors.map(e => String(e)).join(' | ')}`).toHaveLength(0);
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Unexpected console errors during Reset after Run: ${JSON.stringify(errorConsoleMessages)}`).toHaveLength(0);
   });
 
   test('Edge cases: multiple consecutive clicks and idempotency of Reset; observe console and page errors', async ({ page }) => {
     // This test repeatedly clicks buttons to try to surface race conditions or thrown errors.
-    const kruskal = new KruskalPage(page);
+    const kruskal5 = new KruskalPage(page);
     await kruskal.navigate();
 
     // Rapidly click Generate several times
@@ -281,13 +281,13 @@ test.describe('Kruskal Algorithm Visualization - FSM and UI validation', () => {
       const details = pageErrors.map(e => String(e)).join('\n---\n');
       throw new Error(`Uncaught page errors detected during stress test:\n${details}`);
     }
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages5 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Console error messages detected during stress test: ${JSON.stringify(errorConsoleMessages)}`).toHaveLength(0);
   });
 
   test('Sanity check: exported functions and no Syntax/Reference/Type errors on load (observing console and page errors)', async ({ page }) => {
     // This test explicitly observes console messages for common JS error names and asserts none were emitted.
-    const kruskal = new KruskalPage(page);
+    const kruskal6 = new KruskalPage(page);
     await kruskal.navigate();
 
     // Ensure functions exist

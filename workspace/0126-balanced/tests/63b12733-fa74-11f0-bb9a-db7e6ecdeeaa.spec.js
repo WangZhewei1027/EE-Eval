@@ -115,7 +115,7 @@ test.describe('TimSort Demonstration - FSM states & transitions', () => {
     // This test performs the StartSort click and verifies both the "Starting TimSort" (Sorting state)
     // and the "Final sorted array" (Sorted final state) messages are emitted into the steplog,
     // checks for merge-step/run-detection-step entries, and ensures no page errors occurred.
-    const tim = new TimSortPage(page);
+    const tim1 = new TimSortPage(page);
 
     // Ensure Idle precondition
     await expect(tim.startBtn).toBeVisible();
@@ -155,7 +155,7 @@ test.describe('TimSort Demonstration - FSM states & transitions', () => {
 
   test('Re-running sorting with a new input clears previous logs and produces new final output', async ({ page }) => {
     // Validate that the log gets cleared at the start of a new run (logElement.innerHTML = '')
-    const tim = new TimSortPage(page);
+    const tim2 = new TimSortPage(page);
 
     // Run once with default input
     await tim.clickStart();
@@ -186,7 +186,7 @@ test.describe('TimSort Demonstration - FSM states & transitions', () => {
 
   test('Edge case: empty input triggers alert with appropriate message', async ({ page }) => {
     // When textarea is empty, clicking Start should show an alert with the expected message
-    const tim = new TimSortPage(page);
+    const tim3 = new TimSortPage(page);
 
     // Clear input
     await tim.setInputValue('');
@@ -206,15 +206,15 @@ test.describe('TimSort Demonstration - FSM states & transitions', () => {
   });
 
   test('Edge case: invalid/non-numeric input triggers alert indicating invalid numbers', async ({ page }) => {
-    const tim = new TimSortPage(page);
+    const tim4 = new TimSortPage(page);
 
     // Set invalid input
     await tim.setInputValue('a, b, c');
 
     // Wait for dialog
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise1 = page.waitForEvent('dialog');
     await tim.clickStart();
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     try {
       expect(dialog.message()).toBe('Please enter valid numbers.');
     } finally {
@@ -226,7 +226,7 @@ test.describe('TimSort Demonstration - FSM states & transitions', () => {
 
   test('Implementation logs include expected informational messages (run detection and merging)', async ({ page }) => {
     // Validate presence of multiple different kinds of log messages showing the algorithm steps
-    const tim = new TimSortPage(page);
+    const tim5 = new TimSortPage(page);
 
     await tim.clickStart();
 

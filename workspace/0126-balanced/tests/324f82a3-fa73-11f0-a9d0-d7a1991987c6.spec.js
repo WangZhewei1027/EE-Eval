@@ -84,9 +84,9 @@ test.describe('Integration Testing Demo - FSM validation (324f82a3-fa73-11f0-a9d
 
       const usernameInput = page.locator('#username');
       const emailInput = page.locator('#email');
-      const submitBtn = page.locator('button[type="submit"]');
+      const submitBtn1 = page.locator('button[type="submit"]');
       const userList = page.locator('#userList');
-      const resultDiv = page.locator('#result');
+      const resultDiv1 = page.locator('#result');
 
       // Fill and submit
       await usernameInput.fill('alice');
@@ -124,11 +124,11 @@ test.describe('Integration Testing Demo - FSM validation (324f82a3-fa73-11f0-a9d
     test('Registering multiple users accumulates in user list and shows latest result', async ({ page }) => {
       // Validate that subsequent submissions append to the list and display the latest result
 
-      const usernameInput = page.locator('#username');
-      const emailInput = page.locator('#email');
-      const submitBtn = page.locator('button[type="submit"]');
-      const items = page.locator('#userList li');
-      const resultDiv = page.locator('#result');
+      const usernameInput1 = page.locator('#username');
+      const emailInput1 = page.locator('#email');
+      const submitBtn2 = page.locator('button[type="submit"]');
+      const items1 = page.locator('#userList li');
+      const resultDiv2 = page.locator('#result');
 
       // Register first user
       await usernameInput.fill('bob');
@@ -153,7 +153,7 @@ test.describe('Integration Testing Demo - FSM validation (324f82a3-fa73-11f0-a9d
       await expect(resultDiv).toHaveText('User Registered: carol (carol@example.org)');
 
       // Verify internal service state contains both users
-      const users = await page.evaluate(() => window.userService.getAllUsers());
+      const users1 = await page.evaluate(() => window.userService.getAllUsers());
       expect(users.length).toBe(2);
       expect(users[0]).toEqual({ username: 'bob', email: 'bob@example.com' });
       expect(users[1]).toEqual({ username: 'carol', email: 'carol@example.org' });
@@ -170,9 +170,9 @@ test.describe('Integration Testing Demo - FSM validation (324f82a3-fa73-11f0-a9d
       // Expected: The browser will prevent submission due to required attributes,
       // and no user should be added to the user list and result should remain empty.
 
-      const submitBtn = page.locator('button[type="submit"]');
-      const items = page.locator('#userList li');
-      const resultDiv = page.locator('#result');
+      const submitBtn3 = page.locator('button[type="submit"]');
+      const items2 = page.locator('#userList li');
+      const resultDiv3 = page.locator('#result');
 
       // Ensure fields are empty by default
       await expect(page.locator('#username')).toHaveValue('');
@@ -194,11 +194,11 @@ test.describe('Integration Testing Demo - FSM validation (324f82a3-fa73-11f0-a9d
       // Fill username but invalid email; the input type="email" should prevent submission.
       // Expected: no new users added and no result shown.
 
-      const usernameInput = page.locator('#username');
-      const emailInput = page.locator('#email');
-      const submitBtn = page.locator('button[type="submit"]');
-      const items = page.locator('#userList li');
-      const resultDiv = page.locator('#result');
+      const usernameInput2 = page.locator('#username');
+      const emailInput2 = page.locator('#email');
+      const submitBtn4 = page.locator('button[type="submit"]');
+      const items3 = page.locator('#userList li');
+      const resultDiv4 = page.locator('#result');
 
       await usernameInput.fill('dave');
       await emailInput.fill('not-an-email'); // invalid email format
@@ -221,9 +221,9 @@ test.describe('Integration Testing Demo - FSM validation (324f82a3-fa73-11f0-a9d
       // This test explicitly observes the console and page errors while performing normal interactions.
       // It does not attempt to create errors; it asserts that no JS runtime errors have occurred.
 
-      const usernameInput = page.locator('#username');
-      const emailInput = page.locator('#email');
-      const submitBtn = page.locator('button[type="submit"]');
+      const usernameInput3 = page.locator('#username');
+      const emailInput3 = page.locator('#email');
+      const submitBtn5 = page.locator('button[type="submit"]');
 
       // Perform a valid submit
       await usernameInput.fill('eve');

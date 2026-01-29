@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Suffix Tree (Trie + Compression) — Interactive Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 0; padding: 0; display: flex; height: 100vh; }
+  #sidebar { width: 360px; min-width: 260px; max-width: 420px; padding: 16px; box-sizing: border-box; border-right: 1px solid #e0e0e0; background: #fafafa; overflow: auto; }
+  #main { flex: 1; display: flex; flex-direction: column; background: #fff; }
+  h1 { margin: 0 0 12px 0; font-size: 18px; }
+  label { display: block; margin-top: 8px; font-size: 13px; color: #333; }
+  input[type="text"], textarea { width: 100%; padding: 8px; box-sizing: border-box; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  .row { display: flex; gap: 8px; margin-top: 8px; }
+  button { padding: 8px 10px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  button.ghost { background: #e0e0e0; color: #111; }
+  small { color: #666; }
+  #info { margin-top: 12px; font-size: 13px; color: #444; line-height: 1.4; }
+  #suffixes { margin-top: 12px; max-height: 220px; overflow: auto; border-top: 1px dashed #ddd; padding-top: 8px; }
+  .sufItem { padding: 6px 8px; border-radius: 6px; cursor: pointer; margin-bottom: 6px; background: #fff; border: 1px solid #f0f0f0; }
+  .sufItem:hover { background: #f3f8ff; border-color: #d0e6ff; }
+  .sufItem.selected { background: #e6f0ff; border-color: #b6d1ff; }
+  #searchResult { margin-top: 8px; font-size: 13px; color: #333; }
+  #canvasWrap { flex: 1; position: relative; overflow: hidden; }
+  #svg { width: 100%; height: 100%; background: linear-gradient(180deg, #fff, #fbfbff); cursor: grab; }
+  .node { fill: #1976d2; stroke: #0e5ca8; stroke-width: 1; cursor: pointer; }
+  .leaf { fill: #43a047; stroke: #2e7d32; }
+  .nodeLabel { font-size: 12px; fill: #fff; pointer-events: none; dominant-baseline: middle; text-anchor: middle; }
+  .edge { stroke: #333; stroke-width: 1.2; fill: none; cursor: pointer; }
+  .edgeLabel { font-size: 12px; fill: #000; pointer-events: none; background: rgba(255,255,255,0.9); }
+  .highlightEdge { stroke: #ff6f00 !important; stroke-width: 3 !important; }
+  .highlightNode { stroke: #ff6f00 !important; stroke-width: 3 !important; }
+  .mini { font-size: 12px; color: #666; }
+  footer { padding: 8px 16px; font-size: 12px; color: #666; border-top: 1px solid #eee; background: #fafafa; }
+  /* tooltip */
+  .tip { position: absolute; background: rgba(0,0,0,0.8); color: #fff; padding: 6px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; z-index: 20; white-space: pre-wrap; }
+  .controlsGrid { display: grid; gap: 8px; grid-template-columns: 1fr auto; align-items: center; }
+  .muted { color: #888; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <h1>Suffix Tree — interactive demo</h1>
+  <label>Input string
+    <input id="inputStr" type="text" value="banana$" />
+  </label>
+  <div class="row">
+    <button id="buildBtn">Build Tree</button>
+    <button id="randBtn" class="ghost">Random</button>
+    <button id="clearBtn" class="ghost">Clear</button>
+  </div>
+  <label style="margin-top:12px;">Pattern search
+    <div class="controlsGrid">
+      <input id="pattern" type="text" placeholder="Type a pattern to search (e.g., ana)" />
+      <button id="searchBtn">Search</button>
+    </div>
+  </label>
+  <div id="searchResult" class="mini">No search yet.</div>
+
+  <div id="info">
+    This demo builds a suffix trie by inserting all suffixes, then compresses chains of single-child nodes into a suffix tree (a compact suffix tree). It lets you:
+    <ul>
+      <li>Click a suffix (left) to highlight its leaf in the tree.</li>
+      <li>Search a pattern to highlight the matched path and show matching suffix indices.</li>
+      <li>Drag to pan and use mouse wheel to zoom.</li>
+    </ul>
+    Tip: include a unique end marker (like $) to make all suffixes end at leaves.
+  </div>
+
+  <div id="suffixes">
+    <div class="muted">Suffixes (click to highlight)</div>
+    <div id="sufList"></div>
+  </div>
+
+  <div style="margin-top:12px;">
+    <div class="muted">Notes</div>
+    <ul>
+      <li>Construction here is the simple "insert all suffixes" trie then compress (not Ukkonen's linear algorithm) — good for visualization.</li>
+      <li>Works best with strings up to ~150 characters in this demo.</li>
+    </ul>
+  </div>
+  <div style="height:14px"></div>
+</div>
+
+<div id="main">
+  <div id="canvasWrap">
+    <svg id="svg" viewBox="0 0 1600 900" preserveAspectRatio="xMinYMin meet">
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 z" fill="#333" />
+        </marker>
+      </defs>
+      <g id="viewport">
+        <!-- tree graphics go here -->
+      </g>
+    </svg>
+    <div id="tooltip" class="tip"></div>
+  </div>
+  <footer>
+    Visualization: nodes are circular, edges labeled with substrings. Leaves show suffix start index. Try "banana$" and search "ana".
+  </footer>
+</div>
+
+<script>
+(function(){
+  // Utilities
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function $(id){ return document.getElementById(id); }
+
+  // Data structures: build suffix trie, then compress to tree
+  function buildSuffixTrie(s){
+    // Node: {children: Map<char, node>, parent, incoming: label (string), leafIndices: Set}
+    function newNode(){ return {children:new Map(), parent:null, incoming:'', leafIndices: new Set(), id: nextId++}; }
+    let root = newNode();
+    root.incoming = '';
+    let nextId = 0;
+    nextId = 1; // ensure root id 1?
+    root.id = 0;
+    for(let i=0;i<s.length;i++){
+      let cur = root;
+      cur.leafIndices.add(i);
+      for(let j=i;j<s.length;j++){
+        let ch = s[j];
+        if(!cur.children.has(ch)){
+          let nd = newNode();
+          nd.parent = cur;
+          nd.incoming = ch;
+          cur.children.set(ch, nd);
+        }
+        cur = cur.children.get(ch);
+        cur.leafIndices.add(i);
+      }
+    }
+    // assign ids
+    let idCount=1;
+    function walkAssign(n){
+      n.id = idCount++;
+      for(let c of n.children.values()) walkAssign(c);
+    }
+    walkAssign(root);
+    return root;
+  }
+
+  function compressTrie(root){
+    // Create new nodes and edges representing compressed tree.
+    // We'll perform DFS: whenever node has exactly one child, merge labels.
+    function compressNode(node){
+      let newNode = {children: [], parent:null, incoming: node.incoming, id: node.id, leafIndices: new Set(node.leafIndices)};
+      for(let [ch, child] of node.children){
+        let cur = child;
+        let label = cur.incoming;
+        // follow while single child
+        while(cur.children.size===1){
+          let [[nextCh, nextNode]] = cur.children.entries();
+          label += nextNode.incoming;
+          cur = nextNode;
+        }
+        // cur is the compressed-end child
+        let compressedChild = compressNode(cur);
+        compressedChild.incoming = label;
+        compressedChild.parent = newNode;
+        newNode.children.push(compressedChild);
+      }
+      return newNode;
+    }
+    // special: root.incoming='' but compressNode expects incoming on children; we pass root but ensure incoming kept
+    let compressedRoot = compressNode(root);
+    compressedRoot.incoming = '';
+    compressedRoot.parent = null;
+    return compressedRoot;
+  }
+
+  // Layout: simple tidy top-down layout based on leaf order
+  function layoutTree(root){
+    const levelHeight = 100;
+    // first compute leaves and assign x positions left-to-right
+    let xCounter = 50; // spacing
+    const xSpacing = 140;
+    function dfsAssign(node, depth){
+      node.depth = depth;
+      if(node.children.length===0){
+        node.x = xCounter;
+        xCounter += xSpacing;
+        node.y = depth * levelHeight + 50;
+      } else {
+        for(let ch of node.children) dfsAssign(ch, depth+1);
+        // set x center of children
+        let minX = Math.min(...node.children.map(c=>c.x));
+        let maxX = Math.max(...node.children.map(c=>c.x));
+        node.x = (minX + maxX)/2;
+        node.y = depth * levelHeight + 50;
+      }
+    }
+    dfsAssign(root, 0);
+  }
+
+  // Render into SVG
+  const svg = $('svg');
+  const viewport = $('viewport');
+  const tooltip = $('tooltip');
+
+  function clearSVG(){ while(viewport.firstChild) viewport.removeChild(viewport.firstChild); }
+
+  function renderTree(root, s){
+    clearSVG();
+    // draw edges then nodes; give each element a data-id
+    let edgesGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+    let nodesGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+    viewport.appendChild(edgesGroup);
+    viewport.appendChild(nodesGroup);
+
+    // traverse
+    function drawNode(node){
+      for(let child of node.children){
+        drawEdge(node, child);
+        drawNode(child);
+      }
+      drawCircle(node);
+    }
+
+    function drawEdge(parent, child){
+      // edge as path or line
+      let x1 = parent.x, y1 = parent.y;
+      let x2 = child.x, y2 = child.y;
+      // curve path for nicer look
+      let dx = 0;
+      let midY = (y1 + y2)/2;
+      let path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      let d = `M ${x1} ${y1+12} C ${x1} ${midY} ${x2} ${midY} ${x2} ${y2-12}`;
+      path.setAttribute('d', d);
+      path.setAttribute('class', 'edge');
+      path.setAttribute('data-from', parent.id);
+      path.setAttribute('data-to', child.id);
+      path.setAttribute('data-label', child.incoming);
+      // marker optional: not necessary
+      path.addEventListener('mouseenter', (ev)=> showTipForEdge(ev, child));
+      path.addEventListener('mouseleave', hideTip);
+      path.addEventListener('click', (ev)=> { ev.stopPropagation(); selectEdge(path, child); });
+      edgesGroup.appendChild(path);
+
+      // label at midpoint of path (approx)
+      let midX = (x1 + x2)/2;
+      let midY2 = (y1 + y2)/2;
+      let txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      txt.setAttribute('x', midX);
+      txt.setAttribute('y', midY2);
+      txt.setAttribute('class','edgeLabel');
+      txt.setAttribute('text-anchor','middle');
+      txt.textContent = shortenLabel(child.incoming);
+      edgesGroup.appendChild(txt);
+
+      // hidden full-label tooltip via mouseover handled above
+    }
+
+    function shortenLabel(lbl){
+      if(lbl.length>18) return lbl.slice(0,8) + '…' + lbl.slice(-8);
+      return lbl;
+    }
+
+    function drawCircle(node){
+      let g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('transform', `translate(${node.x},${node.y})`);
+      g.setAttribute('data-id', node.id);
+      let circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circle.setAttribute('r', 14);
+      circle.setAttribute('class', node.children.length===0 ? 'node leaf' : 'node');
+      circle.addEventListener('mouseenter', (ev)=> showTipForNode(ev, node));
+      circle.addEventListener('mouseleave', hideTip);
+      circle.addEventListener('click', (ev)=> { ev.stopPropagation(); selectNode(node); });
+      g.appendChild(circle);
+
+      // label: if leaf show indices
+      let label = document.createElementNS('http://www.w3.org/2000/svg','text');
+      label.setAttribute('class','nodeLabel');
+      label.textContent = node.children.length===0 ? Array.from(node.leafIndices).join(',') : '';
+      g.appendChild(label);
+
+      nodesGroup.appendChild(g);
+    }
+
+    drawNode(root);
+  }
+
+  // Tooltip helpers
+  function showTipForEdge(ev, child){
+    let text = `edge: "${child.incoming}"\nleads to subtree with suffix indices:\n${Array.from(child.leafIndices).join(', ')}`;
+    showTipAt(ev.clientX, ev.clientY, text);
+  }
+  function showTipForNode(ev, node){
+    let text = node.children.length===0 ?
+       `leaf node\nsuffix starts at index(es): ${Array.from(node.leafIndices).join(', ')}` :
+       `internal node\nsubtree suffix indices: ${Array.from(node.leafIndices).join(', ')}`;
+    showTipAt(ev.clientX, ev.clientY, text);
+  }
+  function showTipAt(x,y,text){
+    tooltip.style.left = (x + 12) + 'px';
+    tooltip.style.top = (y + 12) + 'px';
+    tooltip.textContent = text;
+    tooltip.style.display = 'block';
+  }
+  function hideTip(){ tooltip.style.display = 'none'; }
+
+  // Selection / highlighting
+  let lastHighlight = { edges: [], nodes: [] };
+  function clearHighlight(){
+    lastHighlight.edges.forEach(e=> e.classList.remove('highlightEdge'));
+    lastHighlight.nodes.forEach(n=> n.querySelector('circle')?.classList.remove('highlightNode'));
+    lastHighlight = { edges: [], nodes: [] };
+    // clear suffix selection list highlight
+    document.querySelectorAll('.sufItem').forEach(el => el.classList.remove('selected'));
+  }
+
+  function selectEdge(pathElem, childNode){
+    clearHighlight();
+    pathElem.classList.add('highlightEdge');
+    lastHighlight.edges.push(pathElem);
+    // highlight subtree nodes (leaves) of this child
+    highlightLeavesByIndices(Array.from(childNode.leafIndices));
+    showSearchResult(Array.from(childNode.leafIndices));
+  }
+
+  function selectNode(node){
+    clearHighlight();
+    // highlight path from root to node
+    let pathElems = [];
+    // Find edges along path: trace parents
+    let cur = node;
+    while(cur.parent){
+      let frm = cur.parent.id;
+      let to = cur.id;
+      // find path element
+      let selector = `path.edge[data-from="${frm}"][data-to="${to}"]`;
+      let pathElem = viewport.querySelector(selector);
+      if(pathElem){
+        pathElem.classList.add('highlightEdge');
+        lastHighlight.edges.push(pathElem);
+      }
+      cur = cur.parent;
+    }
+    // highlight node
+    let nodeGroup = viewport.querySelector(`g[data-id="${node.id}"]`);
+    if(nodeGroup){
+      nodeGroup.querySelector('circle').classList.add('highlightNode');
+      lastHighlight.nodes.push(nodeGroup);
+    }
+    // highlight leaves under node
+    highlightLeavesByIndices(Array.from(node.leafIndices));
+    showSearchResult(Array.from(node.leafIndices));
+  }
+
+  function highlightLeavesByIndices(indices){
+    // find node groups for leaves with matching indices
+    document.querySelectorAll('g[data-id]').forEach(g=>{
+      let txt = g.querySelector('text');
+      if(!txt) return;
+      let ids = txt.textContent.split(',').filter(Boolean).map(x=>parseInt(x,10));
+      if(ids.length===0) return;
+      let matched = ids.some(id=> indices.includes(id));
+      if(matched){
+        g.querySelector('circle').classList.add('highlightNode');
+        lastHighlight.nodes.push(g);
+      }
+    });
+    // mark list items
+    document.querySelectorAll('.sufItem').forEach(el=>{
+      let id = parseInt(el.getAttribute('data-index'),10);
+      if(indices.includes(id)) el.classList.add('selected'); else el.classList.remove('selected');
+    });
+  }
+
+  function showSearchResult(indices){
+    let el = $('searchResult');
+    if(indices.length===0) el.textContent = 'No matches.';
+    else el.textContent = 'Matched suffix start indices: ' + indices.join(', ');
+  }
+
+  // Pattern search in compressed tree
+  function searchPattern(root, pattern){
+    // returns {matched: boolean, node: node (if ended exactly at node), edgeInfo: {parent, child, matchedOnLabelPrefixLength} (if ends inside edge), indices: []}
+    let cur = root;
+    let i = 0;
+    while(i < pattern.length){
+      let ch = pattern[i];
+      // find child whose incoming label starts with ch
+      let child = null;
+      for(let c of cur.children){
+        if(c.incoming[0] === ch){ child = c; break; }
+      }
+      if(!child) return {matched:false, indices: []};
+      // compare label with remaining pattern
+      let lbl = child.incoming;
+      let j=0;
+      while(j<lbl.length && i<pattern.length && lbl[j]===pattern[i]){ j++; i++; }
+      if(i===pattern.length){
+        // matched ends inside this label (possibly exactly at end)
+        // gather indices from child subtree
+        return {matched:true, node: null, edgeInfo:{parent:cur, child:child, matchedOnLabelPrefixLength:j}, indices: Array.from(child.leafIndices)};
+      }
+      if(j<lbl.length && i<pattern.length){
+        // mismatch inside label
+        return {matched:false, indices: []};
+      }
+      // j==lbl.length -> move down
+      cur = child;
+    }
+    // matched entire pattern exactly at cur (either root or internal node)
+    return {matched:true, node: cur, edgeInfo:null, indices: Array.from(cur.leafIndices)};
+  }
+
+  // Controls and glue
+  let currentCompressed = null;
+  let currentString = '';
+
+  function buildAndRender(){
+    let s = $('inputStr').value;
+    if(!s || s.length===0){ alert('Please enter a string.'); return; }
+    currentString = s;
+    // build
+    let trieRoot = buildSuffixTrie(s);
+    let compressed = compressTrie(trieRoot);
+    // copy leafIndices up property: compress already assigned
+    layoutTree(compressed);
+    renderTree(compressed, s);
+    currentCompressed = compressed;
+    populateSuffixList(s);
+    clearHighlight();
+    $('searchResult').textContent = 'Built suffix tree for string of length ' + s.length + '.';
+  }
+
+  function populateSuffixList(s){
+    let list = $('sufList');
+    list.innerHTML = '';
+    for(let i=0;i<s.length;i++){
+      let div = document.createElement('div');
+      div.className = 'sufItem';
+      div.setAttribute('data-index', i);
+      div.textContent = `${i}: ${s.slice(i)}`;
+      div.addEventListener('click', ()=> {
+        // find leaf node(s) that contain this index
+        clearHighlight();
+        // find any g containing this index
+        document.querySelectorAll('g[data-id]').forEach(g=>{
+          let txt = g.querySelector('text');
+          if(!txt) return;
+          let ids = txt.textContent.split(',').filter(Boolean).map(x=>parseInt(x,10));
+          if(ids.includes(i)){
+            // highlight path to this node: find node group
+            let gid = g.getAttribute('data-id');
+            // find node in our compressed tree structure by id
+            let target = findNodeById(currentCompressed, parseInt(gid,10));
+            if(target) selectNode(target);
+            // highlight list item
+            document.querySelectorAll('.sufItem').forEach(el => el.classList.remove('selected'));
+            div.classList.add('selected');
+          }
+        });
+      });
+      list.appendChild(div);
+    }
+  }
+
+  function findNodeById(root, id){
+    if(!root) return null;
+    if(root.id === id) return root;
+    for(let c of root.children){
+      let r = findNodeById(c, id);
+      if(r) return r;
+    }
+    return null;
+  }
+
+  // pattern search UI
+  $('searchBtn').addEventListener('click', ()=> {
+    let pat = $('pattern').value;
+    if(!currentCompressed){ alert('Build a tree first.'); return; }
+    if(!pat || pat.length===0){ alert('Type a pattern.'); return; }
+    clearHighlight();
+    let res = searchPattern(currentCompressed, pat);
+    if(!res.matched){
+      $('searchResult').textContent = 'No match found.';
+      return;
+    }
+    // highlight path: if matched ended inside edge, highlight that edge and the matched portion by highlighting the whole edge
+    if(res.edgeInfo){
+      // find path element
+      let parent = res.edgeInfo.parent;
+      let child = res.edgeInfo.child;
+      let pathElem = viewport.querySelector(`path.edge[data-from="${parent.id}"][data-to="${child.id}"]`);
+      if(pathElem){
+        pathElem.classList.add('highlightEdge');
+        lastHighlight.edges.push(pathElem);
+      }
+      // highlight subtree leaves under child
+      highlightLeavesByIndices(res.indices);
+      showSearchResult(res.indices);
+    } else if(res.node){
+      selectNode(res.node);
+    } else {
+      $('searchResult').textContent = 'Matched (no node/edge?)';
+    }
+  });
+
+  // build button
+  $('buildBtn').addEventListener('click', buildAndRender);
+  $('randBtn').addEventListener('click', ()=> {
+    // generate random lowercase string with $
+    let n = 8 + Math.floor(Math.random()*8);
+    let arr = [];
+    let alph = 'abcdefghijklmnopqrstuvwxyz';
+    for(let i=0;i<n-1;i++) arr.push(alph.charAt(Math.floor(Math.random()*alph.length)));
+    arr.push('$');
+    $('inputStr').value = arr.join('');
+  });
+  $('clearBtn').addEventListener('click', ()=> {
+    $('inputStr').value = '';
+    $('pattern').value = '';
+    clearHighlight();
+    currentCompressed = null;
+    $('sufList').innerHTML = '';
+    $('searchResult').textContent = 'Cleared.';
+    clearSVG();
+  });
+
+  // initial build
+  buildAndRender();
+
+  // Pan & zoom for svg
+  (function(){
+    let svgEl = svg;
+    let vp = viewport;
+    let state = {dragging:false, lastX:0, lastY:0, tx:0, ty:0, scale:1};
+    // initial transform
+    vp.setAttribute('transform','translate(0,0) scale(1)');
+    svgEl.addEventListener('mousedown', (e)=>{
+      state.dragging = true;
+      state.lastX = e.clientX; state.lastY = e.clientY;
+      svgEl.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', (e)=>{
+      if(!state.dragging) return;
+      let dx = e.clientX - state.lastX;
+      let dy = e.clientY - state.lastY;
+      state.lastX = e.clientX; state.lastY = e.clientY;
+      state.tx += dx; state.ty += dy;
+      updateTransform();
+    });
+    window.addEventListener('mouseup', (e)=>{
+      state.dragging = false; svgEl.style.cursor = 'grab';
+    });
+    function updateTransform(){
+      vp.setAttribute('transform', `translate(${state.tx} ${state.ty}) scale(${state.scale})`);
+    }
+    svgEl.addEventListener('wheel', (e)=>{
+      e.preventDefault();
+      // zoom relative to pointer
+      const scaleFactor = 1.08;
+      let pt = getSvgPoint(e.clientX, e.clientY);
+      let beforeX = (pt.x - state.tx) / state.scale;
+      let beforeY = (pt.y - state.ty) / state.scale;
+      if(e.deltaY < 0) state.scale *= scaleFactor; else state.scale /= scaleFactor;
+      // clamp
+      state.scale = Math.max(0.2, Math.min(5, state.scale));
+      // after adjusting scale, compute new tx/ty so that pointer keeps same world coords
+      let afterX = beforeX * state.scale + state.tx;
+      let afterY = beforeY * state.scale + state.ty;
+      state.tx += (pt.x - afterX);
+      state.ty += (pt.y - afterY);
+      updateTransform();
+    }, {passive:false});
+
+    function getSvgPoint(clientX, clientY){
+      let pt = svgEl.createSVGPoint();
+      pt.x = clientX; pt.y = clientY;
+      let ctm = svgEl.getScreenCTM();
+      if(ctm) return pt.matrixTransform(ctm.inverse());
+      return {x: clientX, y: clientY};
+    }
+  })();
+
+  // click background to clear highlight
+  svg.addEventListener('click', ()=> clearHighlight());
+
+  // expose in window for debugging
+  window._st_demo = { buildAndRender, searchPattern, currentCompressed };
+})();
+</script>
+</body>
+</html>

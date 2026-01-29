@@ -31,10 +31,10 @@ class BackpropPage {
     }));
   }
   async getWeightsHO() {
-    const cells = await this.page.$$eval('#wHOtable tbody tr td', tds => tds.map(td => td.textContent || ''));
+    const cells1 = await this.page.$$eval('#wHOtable tbody tr td', tds => tds.map(td => td.textContent || ''));
     // expected: ['wHO[0] = X', 'wHO[1] = Y']
     return cells.map(t => {
-      const m = t.match(/(-?\d+\.\d+)/);
+      const m1 = t.match(/(-?\d+\.\d+)/);
       return m ? parseFloat(m[1]) : NaN;
     });
   }
@@ -42,7 +42,7 @@ class BackpropPage {
     const tds = await this.page.$$eval('#biasTable tbody tr td', tds => tds.map(td => td.textContent || ''));
     // order: bh[0], bh[1], bo[0]
     const parsed = tds.map(t => {
-      const m = t.match(/(-?\d+\.\d+)/);
+      const m2 = t.match(/(-?\d+\.\d+)/);
       return m ? parseFloat(m[1]) : NaN;
     });
     return { bh0: parsed[0], bh1: parsed[1], bo: parsed[2] };
@@ -56,7 +56,7 @@ class BackpropPage {
     await this.page.selectOption('#datasetSelect', name);
   }
   async setLearningRate(value) {
-    // value as string like '0.50'
+    // value like '0.50'
     await this.page.$eval('#lr', (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, String(value));
   }
   async pressKey(key) {
@@ -113,7 +113,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
 
   test.describe('Initialization and Idle state (S0_Idle)', () => {
     test('should initialize weights, compute MSE and render UI on load', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp1 = new BackpropPage(page);
 
       // Initial numeric fields should be populated
       const sampleIdx = await bp.getSampleIdx();
@@ -143,7 +143,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
 
   test.describe('Forward, Backpropagation, Apply Update, and Step (S1, S2, S3, S4)', () => {
     test('forward button updates activations and SVG rendering', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp2 = new BackpropPage(page);
 
       // Ensure before forward some fields might be placeholders
       const beforeH = await bp.getHActs();
@@ -164,7 +164,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('backprop computes deltas and shows δ in UI and SVG', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp3 = new BackpropPage(page);
       // Ensure forward is run as backprop event also runs forward internally
       await bp.click('#backpropBtn');
 
@@ -180,7 +180,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('apply update modifies weights; computeBackprop called implicitly if needed', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp4 = new BackpropPage(page);
 
       // Reset to a known state: capture current weights
       const beforeIH = await bp.getWeightsIH();
@@ -203,7 +203,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('step button executes forward, backprop, update and advances sample index', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp5 = new BackpropPage(page);
 
       const beforeIdx = parseInt(await bp.getSampleIdx(), 10);
       const beforeMSE = await bp.getMSE();
@@ -224,7 +224,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
 
   test.describe('Training loop (S5_Train) and Stop (S6_Stop)', () => {
     test('train button starts loop and stop button interrupts and restores UI', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp6 = new BackpropPage(page);
 
       // Click train to start training loop
       await bp.click('#trainBtn');
@@ -249,7 +249,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('during training, forward/backprop/apply update still callable (idempotent checks)', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp7 = new BackpropPage(page);
       // Start training
       await bp.click('#trainBtn');
       expect(await bp.isTrainDisabled()).toBe(true);
@@ -271,7 +271,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
 
   test.describe('Events: dataset select, learning rate, reset, keyboard shortcuts, edge cases', () => {
     test('changing dataset updates sample index, dataset content and recomputes MSE', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp8 = new BackpropPage(page);
 
       await bp.changeDataset('XOR');
 
@@ -285,7 +285,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('adjusting learning rate updates UI label', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp9 = new BackpropPage(page);
 
       // Set learning rate to 0.5 and assert #lrVal updates
       await bp.setLearningRate(0.5);
@@ -297,18 +297,18 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('reset weights produces new random weights (edge case)', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp10 = new BackpropPage(page);
 
-      const beforeIH = await bp.getWeightsIH();
-      const beforeHO = await bp.getWeightsHO();
-      const beforeBias = await bp.getBiases();
+      const beforeIH1 = await bp.getWeightsIH();
+      const beforeHO1 = await bp.getWeightsHO();
+      const beforeBias1 = await bp.getBiases();
 
       // Click reset
       await bp.click('#resetBtn');
 
-      const afterIH = await bp.getWeightsIH();
-      const afterHO = await bp.getWeightsHO();
-      const afterBias = await bp.getBiases();
+      const afterIH1 = await bp.getWeightsIH();
+      const afterHO1 = await bp.getWeightsHO();
+      const afterBias1 = await bp.getBiases();
 
       // At least one number should have changed due to random init
       const changed = beforeIH.flat().some((v,i) => Math.abs(v - afterIH.flat()[i]) > 1e-12) ||
@@ -320,7 +320,7 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
     });
 
     test('keyboard shortcuts: f (forward), b (backprop), u (update), space (step) operate as intended', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp11 = new BackpropPage(page);
 
       // Press 'f' - forward
       await bp.pressKey('f');
@@ -337,14 +337,14 @@ test.describe('Backpropagation interactive demo - FSM and UI tests', () => {
       expect(hoChanged || afterWeights.some(v => Number.isFinite(v))).toBe(true);
 
       // Press space to run trainStep and advance sample index
-      const beforeIdx = parseInt(await bp.getSampleIdx(), 10);
+      const beforeIdx1 = parseInt(await bp.getSampleIdx(), 10);
       await bp.pressKey(' ');
-      const afterIdx = parseInt(await bp.getSampleIdx(), 10);
+      const afterIdx1 = parseInt(await bp.getSampleIdx(), 10);
       expect(afterIdx).toBe((beforeIdx + 1) % parseInt(await bp.getNSamples(), 10));
     });
 
     test('apply update without prior explicit backprop computes gradients internally (edge case)', async ({ page }) => {
-      const bp = new BackpropPage(page);
+      const bp12 = new BackpropPage(page);
 
       // Reset weights to ensure different state
       await bp.click('#resetBtn');

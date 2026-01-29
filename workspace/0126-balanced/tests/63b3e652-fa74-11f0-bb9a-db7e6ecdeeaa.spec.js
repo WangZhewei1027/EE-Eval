@@ -138,7 +138,7 @@ test.describe('Interpreter Pattern Demo - FSM validation and UI behavior', () =>
     await expect(pageModel.outputArea).toHaveText('Please enter an expression to interpret.');
 
     // History should still be empty (no entries added)
-    const history = await pageModel.getHistoryItems();
+    const history1 = await pageModel.getHistoryItems();
     expect(history.length).toBe(0);
   });
 
@@ -156,7 +156,7 @@ test.describe('Interpreter Pattern Demo - FSM validation and UI behavior', () =>
     expect(out.toLowerCase()).toContain('invalid');
 
     // Ensure no history item was created
-    const history = await pageModel.getHistoryItems();
+    const history2 = await pageModel.getHistoryItems();
     expect(history.length).toBe(0);
   });
 
@@ -166,13 +166,13 @@ test.describe('Interpreter Pattern Demo - FSM validation and UI behavior', () =>
     await pageModel.setInput('7 +');
     await pageModel.clickInterpret();
 
-    const out = await pageModel.getOutputText();
+    const out1 = await pageModel.getOutputText();
     expect(out.startsWith('Error:')).toBe(true);
     // Parser error should indicate that a number was expected but none was found
     expect(out.toLowerCase()).toContain('number expected');
 
     // No history should be created
-    const history = await pageModel.getHistoryItems();
+    const history3 = await pageModel.getHistoryItems();
     expect(history.length).toBe(0);
   });
 
@@ -191,7 +191,7 @@ test.describe('Interpreter Pattern Demo - FSM validation and UI behavior', () =>
       await expect(pageModel.outputArea).toHaveText(item.expected);
     }
 
-    const history = await pageModel.getHistoryItems();
+    const history4 = await pageModel.getHistoryItems();
     expect(history.length).toBe(expressions.length);
 
     // Check prepend order: last interpreted expression appears first
@@ -206,13 +206,13 @@ test.describe('Interpreter Pattern Demo - FSM validation and UI behavior', () =>
     await pageModel.setInput('  12   +   foo  ');
     await pageModel.clickInterpret();
 
-    const out = await pageModel.getOutputText();
+    const out2 = await pageModel.getOutputText();
     expect(out.startsWith('Error:')).toBe(true);
     // message should mention invalid token or similar
     expect(out.toLowerCase()).toContain('invalid');
 
     // Ensure application did not throw uncaught exceptions (captured by afterEach)
-    const history = await pageModel.getHistoryItems();
+    const history5 = await pageModel.getHistoryItems();
     expect(history.length).toBe(0);
   });
 });

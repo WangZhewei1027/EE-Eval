@@ -92,7 +92,7 @@ test.describe('Semaphore Example - FSM states and transitions', () => {
 
   test('Transition S0_Idle -> S1_Running on click: immediate text "Running"', async ({ page }) => {
     // This test validates that clicking the semaphore from Idle immediately changes the button text to "Running"
-    const app = new SemaphorePage(page);
+    const app1 = new SemaphorePage(page);
     await app.goto();
 
     // Click to trigger transition
@@ -127,7 +127,7 @@ test.describe('Semaphore Example - FSM states and transitions', () => {
     // results in the expected sequence per the implementation:
     // - immediate text 'Running' (class removed)
     // - after timeout: text 'Waiting' and message 'Waiting for semaphore to be released'
-    const app = new SemaphorePage(page);
+    const app2 = new SemaphorePage(page);
     await app.goto();
 
     // Move to Waiting state first by clicking once and waiting for timeout
@@ -143,7 +143,7 @@ test.describe('Semaphore Example - FSM states and transitions', () => {
     await app.clickSemaphore();
 
     // Immediately after click the implementation removes 'running' and sets text to 'Running'
-    const immediateText = await app.getSemaphoreText();
+    const immediateText1 = await app.getSemaphoreText();
     expect(immediateText).toBe('Running');
 
     // Immediately after click, 'running' class should be removed
@@ -161,7 +161,7 @@ test.describe('Semaphore Example - FSM states and transitions', () => {
   test('Edge case: multiple rapid clicks before timeout should result in the last scheduled timeout winning', async ({ page }) => {
     // This edge-case test validates behavior when the user clicks rapidly multiple times.
     // The implementation schedules multiple timeouts; the last one should determine the final displayed message.
-    const app = new SemaphorePage(page);
+    const app3 = new SemaphorePage(page);
     await app.goto();
 
     // Rapidly click three times (each within a short interval less than the 500ms timeout)
@@ -189,7 +189,7 @@ test.describe('Semaphore Example - FSM states and transitions', () => {
 
   test('Sanity check: ensure no unexpected console errors or uncaught exceptions during normal interactions', async ({ page }) => {
     // This test performs a typical flow and explicitly asserts that no JS errors or console.error messages were emitted.
-    const app = new SemaphorePage(page);
+    const app4 = new SemaphorePage(page);
     await app.goto();
 
     // Perform a sequence of interactions

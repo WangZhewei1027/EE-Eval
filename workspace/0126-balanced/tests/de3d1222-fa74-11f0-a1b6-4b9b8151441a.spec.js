@@ -122,7 +122,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
   // Successful transaction path (S0 -> S1 -> S2)
   test.describe('Successful Transaction (S1 -> S2)', () => {
     test('should perform a successful transfer and commit the transaction', async ({ page }) => {
-      const txn = new TransactionPage(page);
+      const txn1 = new TransactionPage(page);
       await txn.goto();
 
       // Start a transfer of $200 from Account A to Account B
@@ -145,7 +145,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
       expect(idxStarted).toBeLessThan(idxCommitted);
 
       // Verify balances updated correctly after commit
-      const balances = await txn.getBalances();
+      const balances1 = await txn.getBalances();
       expect(balances.accountA).toBe(1000 - 200); // 800
       expect(balances.accountB).toBe(500 + 200);  // 700
 
@@ -157,7 +157,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
   // Error scenarios (S1 -> S3)
   test.describe('Transaction Failure Scenarios (S1 -> S3)', () => {
     test('should handle simulated network error (transferWithError) and log failure and rollback entries', async ({ page }) => {
-      const txn = new TransactionPage(page);
+      const txn2 = new TransactionPage(page);
       await txn.goto();
 
       // Use an amount that is within the available balance so withdrawal happens before simulated failure
@@ -175,7 +175,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
       // Inspect balances after simulated network error.
       // Note: The implementation withdraws before throwing and does not restore balances,
       // so the demo will reflect the withdrawn amount despite the "rollback" message.
-      const balances = await txn.getBalances();
+      const balances2 = await txn.getBalances();
       expect(balances.accountA).toBe(1000 - 150); // 850 (withdrawn but not restored)
       expect(balances.accountB).toBe(500);       // still 500 (deposit didn't happen)
 
@@ -184,7 +184,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
     });
 
     test('should handle insufficient funds error and not change balances', async ({ page }) => {
-      const txn = new TransactionPage(page);
+      const txn3 = new TransactionPage(page);
       await txn.goto();
 
       // Set amount greater than account A's balance to trigger "Insufficient funds" before withdrawal
@@ -199,7 +199,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
       await txn.waitForLogMessage('Transaction rolled back');
 
       // Because the throw happens before withdrawal, balances should remain unchanged
-      const balances = await txn.getBalances();
+      const balances3 = await txn.getBalances();
       expect(balances.accountA).toBe(1000);
       expect(balances.accountB).toBe(500);
 
@@ -216,7 +216,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
   // Edge cases and validation checks
   test.describe('Edge cases and validations', () => {
     test('should validate amount input and show a validation error for zero or invalid amount', async ({ page }) => {
-      const txn = new TransactionPage(page);
+      const txn4 = new TransactionPage(page);
       await txn.goto();
 
       // Set invalid amount 0 and click transfer
@@ -226,7 +226,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
       // Expect a validation error message in the log
       await txn.waitForLogMessage('Please enter a valid positive amount');
 
-      const logs = await txn.getLogMessages();
+      const logs1 = await txn.getLogMessages();
       expect(logs.some((t) => t.includes('Please enter a valid positive amount'))).toBeTruthy();
 
       // The error should be styled with the 'error' class
@@ -234,7 +234,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
       expect(classes.some((c) => c.includes('error'))).toBeTruthy();
 
       // Balances should remain unchanged
-      const balances = await txn.getBalances();
+      const balances4 = await txn.getBalances();
       expect(balances.accountA).toBe(1000);
       expect(balances.accountB).toBe(500);
 
@@ -246,7 +246,7 @@ test.describe('Transaction Demonstration - FSM based tests', () => {
   // General assertions about console/page errors for the whole test suite run
   test('should not emit uncaught page errors or console.errors during normal operations', async ({ page }) => {
     // This test will perform a simple sequence and assert there were no uncaught exceptions recorded by the browser
-    const txn = new TransactionPage(page);
+    const txn5 = new TransactionPage(page);
     await txn.goto();
 
     // Do a successful small transaction

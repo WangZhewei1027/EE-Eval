@@ -85,7 +85,7 @@ test.describe('Space Complexity Demo - FSM states and transitions', () => {
     // This test validates:
     // - On click, outputIterative shows "Calculating..." (onEnter / transition start)
     // - After processing, outputIterative shows the computed result and the O(1) space complexity message (onExit)
-    const app = new SpaceComplexityPage(page);
+    const app1 = new SpaceComplexityPage(page);
     await app.goto();
 
     // Click to trigger iterative calculation (RunIterativeSum event)
@@ -121,7 +121,7 @@ test.describe('Space Complexity Demo - FSM states and transitions', () => {
     // This test validates:
     // - On click, outputArray shows "Calculating..." (onEnter)
     // - After processing, outputArray shows the computed result and the O(n) space complexity message (onExit)
-    const app = new SpaceComplexityPage(page);
+    const app2 = new SpaceComplexityPage(page);
     await app.goto();
 
     // Click to trigger array-based calculation (RunArraySum event)
@@ -139,15 +139,15 @@ test.describe('Space Complexity Demo - FSM states and transitions', () => {
     expect(arrayText).toContain('(Space Complexity: O(n))');
 
     // Verify numeric correctness for sum 1..1e6
-    const n = 1000000;
-    const expected = (n * (n + 1)) / 2;
+    const n1 = 1000000;
+    const expected1 = (n * (n + 1)) / 2;
     expect(arrayText).toContain(String(expected));
   }, 60000); // arraySum can be more heavy; increase timeout
 
   test('Edge case: rapid repeated clicks on arraySum should not cause uncaught exceptions and final state remains valid', async ({ page }) => {
     // This test attempts to reproduce potential race or memory issues by clicking multiple times rapidly.
     // It asserts that no uncaught exceptions occur and final output contains expected result/message.
-    const app = new SpaceComplexityPage(page);
+    const app3 = new SpaceComplexityPage(page);
     await app.goto();
 
     // Rapidly trigger the array-based calculation multiple times.
@@ -167,14 +167,14 @@ test.describe('Space Complexity Demo - FSM states and transitions', () => {
 
     const finalText = await app.getArrayText();
     expect(finalText).toContain('Memory used: Array of length 1000000 created.');
-    const n = 1000000;
-    const expected = (n * (n + 1)) / 2;
+    const n2 = 1000000;
+    const expected2 = (n * (n + 1)) / 2;
     expect(finalText).toContain(String(expected));
   }, 120000);
 
   test('Validation of FSM expected observables: both onEnter "Calculating..." and onExit result messages for both flows', async ({ page }) => {
     // This combined test validates the FSM's declared observables for both transitions.
-    const app = new SpaceComplexityPage(page);
+    const app4 = new SpaceComplexityPage(page);
     await app.goto();
 
     // Iterative path observables

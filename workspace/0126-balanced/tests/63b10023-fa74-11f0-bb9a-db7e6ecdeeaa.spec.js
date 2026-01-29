@@ -140,7 +140,7 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
 
     test('GenerateNewArray transition (S0 -> S1): clicking Generate New Array replaces array contents', async ({ page }) => {
       // Validate clicking newArrayBtn triggers generateArray() and updates the DOM
-      const qs = new QuickSortPage(page);
+      const qs1 = new QuickSortPage(page);
       await qs.goto();
 
       const before = await qs.readBarValues();
@@ -167,7 +167,7 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
 
   test.describe('Speed Adjustment (AdjustSpeed event)', () => {
     test('AdjustSpeed input updates internal speed and speedLabel accordingly', async ({ page }) => {
-      const qs = new QuickSortPage(page);
+      const qs2 = new QuickSortPage(page);
       await qs.goto();
 
       // Set to fastest: range value 1000 => speed = 1001 - 1000 = 1 ms
@@ -185,16 +185,16 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
   test.describe('Sorting Process and Visual Feedback (S1 -> S2 -> S3)', () => {
     test('StartQuickSort transition: sorting runs, disable buttons while sorting, and results in sorted array', async ({ page }) => {
       // This test will accelerate sorting to keep runtime reasonable.
-      const qs = new QuickSortPage(page);
+      const qs3 = new QuickSortPage(page);
       await qs.goto();
 
       // Speed up sorting drastically to complete quickly: set range = 1000 -> speed 1ms
       await qs.setSpeedRange(1000);
-      const speedText = await qs.getSpeedLabelText();
+      const speedText1 = await qs.getSpeedLabelText();
       expect(speedText).toBe('1 ms');
 
       // Capture array values before sort
-      const before = await qs.readBarValues();
+      const before1 = await qs.readBarValues();
 
       // Start sorting
       await qs.clickSort();
@@ -215,14 +215,14 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
       expect(sortDisabledAfter).toBe(false);
 
       // Validate the array is now sorted (non-decreasing)
-      const after = await qs.readBarValues();
+      const after1 = await qs.readBarValues();
       expect(after.length).toBe(30);
       for (let i = 1; i < after.length; i++) {
         expect(after[i]).toBeGreaterThanOrEqual(after[i - 1]);
       }
 
       // We expect that sorting changed the array order unless it was already sorted
-      const arraysEqual = JSON.stringify(before) === JSON.stringify(after);
+      const arraysEqual1 = JSON.stringify(before) === JSON.stringify(after);
       if (arraysEqual) {
         // If unchanged, mark a warning in console messages (non-failing)
         consoleMessages.push({ type: 'warning', text: 'Array appeared already sorted before sorting started.' });
@@ -231,7 +231,7 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
 
     test('Visual cues during sorting: pivot/comparison/swapped classes appear at least once', async ({ page }) => {
       // We set a modest speed so that intermediate states can be observed.
-      const qs = new QuickSortPage(page);
+      const qs4 = new QuickSortPage(page);
       await qs.goto();
 
       // Set speed to a value allowing brief observation: range ~980 => speed 21 ms
@@ -255,7 +255,7 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
     });
 
     test('Edge case: Generate New Array button is disabled during sorting and remains disabled until completion', async ({ page }) => {
-      const qs = new QuickSortPage(page);
+      const qs5 = new QuickSortPage(page);
       await qs.goto();
 
       // Speed should be slow enough to allow us to check disabled state; set to 950 => speed 51ms
@@ -284,7 +284,7 @@ test.describe('Quick Sort Visualization - FSM and UI tests', () => {
   test.describe('Console and Page Error Monitoring', () => {
     test('There should be no uncaught ReferenceError, SyntaxError, or TypeError logged on page load and interactions', async ({ page }) => {
       // This test observes console and page errors during a set of typical interactions
-      const qs = new QuickSortPage(page);
+      const qs6 = new QuickSortPage(page);
       await qs.goto();
 
       // Interact: adjust speed, generate new array, start and finish sorting quickly

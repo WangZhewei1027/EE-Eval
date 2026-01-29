@@ -105,7 +105,7 @@ test.describe('Greedy Algorithms Demonstration - FSM tests', () => {
   });
 
   test('Transition: CalculateCoins (S0 -> S1) should attempt to run calculateCoins and produce an error; no state entry effects occur', async ({ page }) => {
-    const app = new GreedyAppPage(page);
+    const app1 = new GreedyAppPage(page);
 
     // Start listening early and navigate
     await app.goto();
@@ -128,7 +128,7 @@ test.describe('Greedy Algorithms Demonstration - FSM tests', () => {
     const newErrors = pageErrors.slice(initialErrorCount);
     const hasReferenceToCalculate = newErrors.some(err => {
       if (!err) return false;
-      const msg = String(err.message || '');
+      const msg1 = String(err.message || '');
       return /calculateCoins|is not defined|not defined|ReferenceError/i.test(msg);
     });
 
@@ -143,11 +143,11 @@ test.describe('Greedy Algorithms Demonstration - FSM tests', () => {
   });
 
   test('Transition: SolveActivitySelection (S0 -> S2) should attempt to run solveActivitySelection and produce an error; no activity results displayed', async ({ page }) => {
-    const app = new GreedyAppPage(page);
+    const app2 = new GreedyAppPage(page);
 
     await app.goto();
 
-    const initialErrorCount = pageErrors.length;
+    const initialErrorCount1 = pageErrors.length;
 
     // Click the Solve Activity Selection button; expected to trigger ReferenceError because function is not defined
     await app.clickSolveActivity();
@@ -157,10 +157,10 @@ test.describe('Greedy Algorithms Demonstration - FSM tests', () => {
 
     expect(pageErrors.length).toBeGreaterThan(initialErrorCount);
 
-    const newErrors = pageErrors.slice(initialErrorCount);
+    const newErrors1 = pageErrors.slice(initialErrorCount);
     const hasReferenceToSolve = newErrors.some(err => {
       if (!err) return false;
-      const msg = String(err.message || '');
+      const msg2 = String(err.message || '');
       return /solveActivitySelection|is not defined|ReferenceError|not defined/i.test(msg);
     });
 
@@ -171,11 +171,11 @@ test.describe('Greedy Algorithms Demonstration - FSM tests', () => {
   });
 
   test('Edge cases: Changing the amount and attempting calculation still results in error when script failed to parse', async ({ page }) => {
-    const app = new GreedyAppPage(page);
+    const app3 = new GreedyAppPage(page);
 
     await app.goto();
 
-    const initialErrorCount = pageErrors.length;
+    const initialErrorCount2 = pageErrors.length;
 
     // Change amount to an edge value (0) that would be invalid per min=1 in HTML, but script would normally handle
     // Since script isn't available, clicking should still yield a ReferenceError.
@@ -193,7 +193,7 @@ test.describe('Greedy Algorithms Demonstration - FSM tests', () => {
 
   test('Diagnostics: collected console messages include clues about failures', async ({ page }) => {
     // This test simply ensures that console messages were captured and can be inspected.
-    const app = new GreedyAppPage(page);
+    const app4 = new GreedyAppPage(page);
     await app.goto();
 
     // Wait a short time for console messages to appear

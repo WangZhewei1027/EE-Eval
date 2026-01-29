@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Compiler Playground</title>
+<style>
+/* Minimal styling only to make layout usable; visually plain otherwise */
+body { margin: 12px; font-family: monospace; color: black; background: white; }
+section { margin-bottom: 12px; }
+label { display: inline-block; margin-right: 8px; }
+textarea { width: 100%; height: 160px; }
+input[type="text"], input[type="number"] { width: 160px; }
+button { margin: 2px; }
+select { width: 200px; }
+pre { white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ddd; padding: 6px; min-height: 40px; }
+.details { border: 1px solid #eee; padding: 6px; }
+ul { margin: 4px 0 4px 20px; padding: 0; }
+</style>
+</head>
+<body>
+
+<h1>Compiler Playground</h1>
+
+<section>
+  <strong>Files</strong>
+  <div>
+    <label for="fileSelect">Open file:</label>
+    <select id="fileSelect"></select>
+    <button id="newFileBtn">New File</button>
+    <button id="importFileBtn">Import .txt</button>
+    <input type="file" id="fileInput" style="display:none">
+    <button id="saveFileBtn">Save Changes</button>
+    <button id="deleteFileBtn">Delete File</button>
+    <button id="duplicateFileBtn">Duplicate</button>
+  </div>
+  <div style="margin-top:6px;">
+    <label>Filename:</label><input type="text" id="fileNameInput">
+  </div>
+  <div style="margin-top:6px;">
+    <label>Source:</label>
+    <textarea id="sourceArea">// Try arithmetic, let bindings, if, while
+let a = 2 + 3 * 4;
+let b = a - 5;
+let c = b * (a + 1);
+if (c > 20) {
+  let d = c + 1;
+  d = d + a;
+}
+</textarea>
+  </div>
+</section>
+
+<section>
+  <strong>Compiler Controls & Pipeline</strong>
+  <div>
+    <label>Optimization Level:</label>
+    <input id="optLevel" type="range" min="0" max="3" value="1">
+    <span id="optLevelVal">1</span>
+    <label style="margin-left:12px;">Parser strict:</label>
+    <input id="strictParse" type="checkbox">
+    <label style="margin-left:12px;">Verbose logs:</label>
+    <input id="verbose" type="checkbox">
+    <label style="margin-left:12px;">Incremental compile:</label>
+    <input id="incremental" type="checkbox">
+  </div>
+
+  <div style="margin-top:8px;">
+    <strong>Pass pipeline (reorderable)</strong>
+    <div id="passList" class="details"></div>
+    <button id="addPassBtn">Add Pass</button>
+    <button id="resetPipelineBtn">Reset Pipeline</button>
+  </div>
+
+  <div style="margin-top:8px;">
+    <button id="lexBtn">Lex</button>
+    <button id="parseBtn">Parse</button>
+    <button id="irBtn">Generate IR</button>
+    <button id="optStepBtn">Optimize (one pass)</button>
+    <button id="optAllBtn">Optimize (all)</button>
+    <button id="codegenBtn">Codegen</button>
+    <button id="simulateBtn">Simulate</button>
+    <button id="runBtn">Run</button>
+    <button id="stepBtn">Step</button>
+    <button id="resetBtn">Reset State</button>
+  </div>
+
+  <div style="margin-top:6px;">
+    <label>Breakpoint instruction #:</label><input id="breakInstr" type="number" min="0" value="-1">
+    <label style="margin-left:12px;">Inject syntax error:</label><input id="injectError" type="checkbox">
+    <button id="fuzzBtn" title="Generate random program">Fuzz Generate</button>
+    <button id="loadSampleBtn">Load Samples</button>
+    <select id="sampleSelect"></select>
+  </div>
+</section>
+
+<section>
+  <strong>Interactive AST / IR Editor</strong>
+  <div>
+    <label>AST view (click nodes to edit/add/remove)</label>
+    <div id="astView" class="details"></div>
+  </div>
+
+  <div style="margin-top:8px;">
+    <label>IR view (editable)</label>
+    <div id="irView" class="details"></div>
+    <button id="irAddInstr">Add Instruction</button>
+    <button id="irApplyBtn">Apply IR (rebuild codegen/sim)</button>
+  </div>
+</section>
+
+<section>
+  <strong>Outputs & Logs</strong>
+  <div style="display:block;">
+    <label>Tokens:</label><pre id="tokensOut"></pre>
+    <label>Generated Code:</label>
+    <select id="codeTarget">
+      <option value="js">JavaScript</option>
+      <option value="asm">Assembly-like</option>
+    </select>
+    <pre id="codeOut" class="details"></pre>
+    <label>Simulator / Execution state:</label>
+    <pre id="simOut" class="details"></pre>
+    <label>Compiler Logs:</label>
+    <pre id="logOut" class="details"></pre>
+  </div>
+</section>
+
+<section>
+  <strong>Snapshots & History</strong>
+  <div>
+    <button id="saveSnapshot">Save Snapshot</button>
+    <button id="listSnapshots">List</button>
+    <button id="revertSnapshot">Revert to Selected</button>
+    <select id="snapshotSelect"></select>
+    <button id="diffSnapshot">Diff with Current</button>
+    <pre id="snapshotOut" class="details"></pre>
+  </div>
+
+  <div style="margin-top:8px;">
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+  </div>
+</section>
+
+<section>
+  <strong>Developer / Internal State (inspect)</strong>
+  <button id="dumpState">Dump State (console)</button>
+  <pre id="stateOut" class="details"></pre>
+</section>
+
+<script>
+/*
+  Compiler Playground
+  - Minimal visual design
+  - Rich interactivity, many controls
+  - Simple language: let bindings, assignments, expressions, if, while
+  - Pipeline: lex -> parse -> IR -> optimize passes -> codegen -> simulate
+  - Editable AST and IR
+  - Snapshots, undo/redo, fuzz generator, pipeline reordering
+*/
+
+(function(){
+
+// ---------- State ----------
+const state = {
+  files: {},
+  selectedFile: null,
+  tokens: [],
+  ast: null,
+  ir: [],
+  generatedCode: '',
+  simState: null,
+  logs: [],
+  passes: [
+    { id: genId(), name: 'const-fold', enabled: true, desc: 'Constant folding' },
+    { id: genId(), name: 'dead-code', enabled: true, desc: 'Dead code elimination' },
+    { id: genId(), name: 'copy-prop', enabled: true, desc: 'Copy propagation' },
+    { id: genId(), name: 'strength-reduce', enabled: false, desc: 'Strength reduction' }
+  ],
+  optLevel: 1,
+  strictParse: false,
+  verbose: false,
+  incremental: false,
+  history: [],
+  future: [],
+  snapshots: []
+};
+
+function genId(){ return 'p'+Math.random().toString(36).slice(2,9); }
+
+// ---------- Elements ----------
+const fileSelect = document.getElementById('fileSelect');
+const newFileBtn = document.getElementById('newFileBtn');
+const importFileBtn = document.getElementById('importFileBtn');
+const fileInput = document.getElementById('fileInput');
+const saveFileBtn = document.getElementById('saveFileBtn');
+const deleteFileBtn = document.getElementById('deleteFileBtn');
+const duplicateFileBtn = document.getElementById('duplicateFileBtn');
+const fileNameInput = document.getElementById('fileNameInput');
+const sourceArea = document.getElementById('sourceArea');
+
+const optLevel = document.getElementById('optLevel');
+const optLevelVal = document.getElementById('optLevelVal');
+const strictParse = document.getElementById('strictParse');
+const verbose = document.getElementById('verbose');
+const incremental = document.getElementById('incremental');
+
+const passList = document.getElementById('passList');
+const addPassBtn = document.getElementById('addPassBtn');
+const resetPipelineBtn = document.getElementById('resetPipelineBtn');
+
+const lexBtn = document.getElementById('lexBtn');
+const parseBtn = document.getElementById('parseBtn');
+const irBtn = document.getElementById('irBtn');
+const optStepBtn = document.getElementById('optStepBtn');
+const optAllBtn = document.getElementById('optAllBtn');
+const codegenBtn = document.getElementById('codegenBtn');
+const simulateBtn = document.getElementById('simulateBtn');
+const runBtn = document.getElementById('runBtn');
+const stepBtn = document.getElementById('stepBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+const breakInstr = document.getElementById('breakInstr');
+const injectError = document.getElementById('injectError');
+const fuzzBtn = document.getElementById('fuzzBtn');
+const loadSampleBtn = document.getElementById('loadSampleBtn');
+const sampleSelect = document.getElementById('sampleSelect');
+
+const astView = document.getElementById('astView');
+const irView = document.getElementById('irView');
+const irAddInstr = document.getElementById('irAddInstr');
+const irApplyBtn = document.getElementById('irApplyBtn');
+
+const tokensOut = document.getElementById('tokensOut');
+const codeOut = document.getElementById('codeOut');
+const simOut = document.getElementById('simOut');
+const logOut = document.getElementById('logOut');
+const codeTarget = document.getElementById('codeTarget');
+
+const saveSnapshot = document.getElementById('saveSnapshot');
+const listSnapshots = document.getElementById('listSnapshots');
+const revertSnapshot = document.getElementById('revertSnapshot');
+const snapshotSelect = document.getElementById('snapshotSelect');
+const diffSnapshot = document.getElementById('diffSnapshot');
+const snapshotOut = document.getElementById('snapshotOut');
+
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
+
+const dumpStateBtn = document.getElementById('dumpState');
+const stateOut = document.getElementById('stateOut');
+
+// ---------- Samples ----------
+const samples = {
+  'simple-arith': `let x = 1 + 2 * 3;
+let y = x + 4;
+x = x + y;`,
+  'loops': `let a = 0;
+let i = 0;
+while (i < 5) {
+  a = a + i;
+  i = i + 1;
+}
+a;`,
+  'if-example': `let n = 10;
+let res = 0;
+if (n > 5) {
+  res = n * 2;
+} else {
+  res = n - 2;
+}
+res;`,
+  'dead-code-demo': `let x = 1;
+let y = 2;
+x = 3;
+let z = x + y;
+z;`,
+};
+
+// ---------- Utilities ----------
+function log(...args){ state.logs.push(args.map(String).join(' ')); if (state.logs.length > 500) state.logs.shift(); renderLogs(); }
+function renderLogs(){ logOut.textContent = state.logs.join('\n'); }
+function pushHistory(snapshot){ state.history.push(JSON.stringify(snapshot)); if(state.history.length>100) state.history.shift(); state.future=[]; updateUndoRedo(); }
+function updateUndoRedo(){ undoBtn.disabled = state.history.length===0; redoBtn.disabled = state.future.length===0; }
+function saveHistoryForAction(name){ pushHistory(snapshotState()); log('Saved history:', name); }
+function snapshotState(){
+  return {
+    files: JSON.parse(JSON.stringify(state.files)),
+    selectedFile: state.selectedFile,
+    source: sourceArea.value,
+    tokens: state.tokens,
+    ast: state.ast,
+    ir: state.ir,
+    generatedCode: state.generatedCode,
+    simState: state.simState,
+    passes: JSON.parse(JSON.stringify(state.passes)),
+    optLevel: state.optLevel
+  };
+}
+function restoreSnapshot(snap){
+  state.files = JSON.parse(JSON.stringify(snap.files));
+  state.selectedFile = snap.selectedFile;
+  sourceArea.value = snap.source;
+  state.tokens = snap.tokens;
+  state.ast = snap.ast;
+  state.ir = snap.ir;
+  state.generatedCode = snap.generatedCode;
+  state.simState = snap.simState;
+  state.passes = snap.passes;
+  state.optLevel = snap.optLevel;
+  renderAll();
+}
+function simpleDiff(a,b){
+  let aa = (a||'').split(/\n/);
+  let bb = (b||'').split(/\n/);
+  let out = [];
+  let n = Math.max(aa.length, bb.length);
+  for(let i=0;i<n;i++){
+    let la = aa[i]||'';
+    let lb = bb[i]||'';
+    if(la===lb) out.push('  '+la);
+    else {
+      out.push('- '+la);
+      out.push('+ '+lb);
+    }
+  }
+  return out.join('\n');
+}
+
+// ---------- File Management ----------
+function refreshFileList(){
+  fileSelect.innerHTML = '';
+  Object.keys(state.files).forEach(name=>{
+    let opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    fileSelect.appendChild(opt);
+  });
+  if(!state.selectedFile){
+    let first = Object.keys(state.files)[0];
+    if(first) state.selectedFile = first;
+  }
+  fileSelect.value = state.selectedFile || '';
+  fileNameInput.value = state.selectedFile || '';
+}
+function newFile(name, content){
+  if(!name) name = 'file'+Object.keys(state.files).length+'.c';
+  let unique = name;
+  let i = 1;
+  while(state.files[unique]){ unique = name.replace(/(\.\w+)?$/, '') + '_' + i + ( /\.\w+$/.test(name)?RegExp.$1:'' ); i++; }
+  state.files[unique] = content||'';
+  state.selectedFile = unique;
+  refreshFileList();
+  renderAll();
+  saveHistoryForAction('new-file');
+}
+newFile('main.c', sourceArea.value);
+
+fileSelect.addEventListener('change', ()=>{
+  state.selectedFile = fileSelect.value;
+  fileNameInput.value = state.selectedFile;
+  sourceArea.value = state.files[state.selectedFile] || '';
+});
+
+newFileBtn.addEventListener('click', ()=>{
+  let name = prompt('Filename:', 'untitled.c');
+  if(name) newFile(name, '');
+});
+
+importFileBtn.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', (e)=>{
+  let f = e.target.files[0];
+  if(!f) return;
+  let reader = new FileReader();
+  reader.onload = function(){ newFile(f.name, this.result); };
+  reader.readAsText(f);
+});
+
+saveFileBtn.addEventListener('click', ()=>{
+  if(!state.selectedFile) return alert('No file selected');
+  state.files[fileNameInput.value || state.selectedFile] = sourceArea.value;
+  if(fileNameInput.value !== state.selectedFile){
+    // rename
+    delete state.files[state.selectedFile];
+    state.selectedFile = fileNameInput.value;
+  }
+  refreshFileList();
+  saveHistoryForAction('save-file');
+  log('Saved file', state.selectedFile);
+});
+
+deleteFileBtn.addEventListener('click', ()=>{
+  if(!state.selectedFile) return;
+  if(!confirm('Delete '+state.selectedFile+'?')) return;
+  delete state.files[state.selectedFile];
+  state.selectedFile = Object.keys(state.files)[0] || null;
+  refreshFileList();
+  renderAll();
+  saveHistoryForAction('delete-file');
+});
+
+duplicateFileBtn.addEventListener('click', ()=>{
+  if(!state.selectedFile) return;
+  let newName = state.selectedFile.replace(/(\.\w+)?$/, '') + '_copy' + (/\.\w+$/.test(state.selectedFile)?RegExp.$1:'');
+  newFile(newName, state.files[state.selectedFile]);
+});
+
+// ---------- Pipeline / Passes ----------
+function renderPassList(){
+  passList.innerHTML = '';
+  state.passes.forEach((p, idx)=>{
+    let div = document.createElement('div');
+    let cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = !!p.enabled;
+    cb.addEventListener('change', ()=> { p.enabled = cb.checked; saveHistoryForAction('toggle-pass'); renderPassList(); });
+    let up = document.createElement('button'); up.textContent = '↑'; up.addEventListener('click', ()=>{
+      if(idx===0) return;
+      state.passes.splice(idx-1,0,state.passes.splice(idx,1)[0]);
+      saveHistoryForAction('move-pass-up');
+      renderPassList();
+    });
+    let down = document.createElement('button'); down.textContent = '↓'; down.addEventListener('click', ()=>{
+      if(idx===state.passes.length-1) return;
+      state.passes.splice(idx+1,0,state.passes.splice(idx,1)[0]);
+      saveHistoryForAction('move-pass-down');
+      renderPassList();
+    });
+    let edit = document.createElement('button'); edit.textContent = 'edit'; edit.addEventListener('click', ()=>{
+      let name = prompt('Pass name', p.name);
+      if(name) { p.name = name; saveHistoryForAction('edit-pass'); renderPassList(); }
+    });
+    let rm = document.createElement('button'); rm.textContent = 'rm'; rm.addEventListener('click', ()=>{
+      if(confirm('Remove pass '+p.name+'?')) { state.passes.splice(idx,1); saveHistoryForAction('rm-pass'); renderPassList(); }
+    });
+    div.appendChild(cb);
+    let span = document.createElement('span'); span.textContent = ' ' + p.name + ' - ' + (p.desc||''); div.appendChild(span);
+    div.appendChild(up); div.appendChild(down); div.appendChild(edit); div.appendChild(rm);
+    passList.appendChild(div);
+  });
+}
+addPassBtn.addEventListener('click', ()=>{
+  let name = prompt('Pass name','new-pass');
+  if(!name) return;
+  state.passes.push({id: genId(), name: name, enabled: true, desc: ''});
+  saveHistoryForAction('add-pass');
+  renderPassList();
+});
+resetPipelineBtn.addEventListener('click', ()=>{
+  if(!confirm('Reset pipeline to defaults?')) return;
+  state.passes = [
+    { id: genId(), name: 'const-fold', enabled: true, desc: 'Constant folding' },
+    { id: genId(), name: 'dead-code', enabled: true, desc: 'Dead code elimination' },
+    { id: genId(), name: 'copy-prop', enabled: true, desc: 'Copy propagation' },
+    { id: genId(), name: 'strength-reduce', enabled: false, desc: 'Strength reduction' }
+  ];
+  saveHistoryForAction('reset-pipeline');
+  renderPassList();
+});
+
+// ---------- Lexer ----------
+function makeLexer(code){
+  const tokenSpec = [
+    ['NUMBER', /^\d+/],
+    ['IDENT', /^[A-Za-z_][A-Za-z0-9_]*/],
+    ['OP', /^[+\-*/=<>!]+/],
+    ['LPAREN', /^\(/],
+    ['RPAREN', /^\)/],
+    ['LBRACE', /^\{/],
+    ['RBRACE', /^\}/],
+    ['SEMICOLON', /^;/],
+    ['COMMA', /^,/],
+    ['LET', /^let\b/],
+    ['IF', /^if\b/],
+    ['ELSE', /^else\b/],
+    ['WHILE', /^while\b/],
+    ['WS', /^\s+/],
+    ['UNKNOWN', /^./]
+  ];
+  let pos = 0;
+  let tokens = [];
+  while(pos < code.length){
+    let slice = code.slice(pos);
+    let matched = false;
+    for(let [type, rx] of tokenSpec){
+      let m = rx.exec(slice);
+      if(m){
+        matched = true;
+        let val = m[0];
+        if(type !== 'WS'){
+          tokens.push({type: type, value: val, pos});
+        }
+        pos += val.length;
+        break;
+      }
+    }
+    if(!matched) break;
+  }
+  return tokens;
+}
+
+// ---------- Parser (rudimentary) ----------
+function parseTokens(tokens){
+  let idx = 0;
+  function peek(){ return tokens[idx]; }
+  function consume(expected){
+    let t = tokens[idx];
+    if(!t) throw new Error('Unexpected end, expected '+expected);
+    if(expected && t.type !== expected && !(expected instanceof Array && expected.includes(t.type))) throw new Error('Expected '+expected+' got '+t.type+' ('+t.value+') at pos '+t.pos);
+    idx++;
+    return t;
+  }
+  function parseProgram(){
+    let body = [];
+    while(idx < tokens.length){
+      body.push(parseStatement());
+    }
+    return {type:'Program', body};
+  }
+  function parseStatement(){
+    let t = peek();
+    if(!t) throw new Error('Unexpected end of input');
+    if(t.type === 'LET'){
+      consume('LET');
+      let id = consume('IDENT');
+      consume('OP'); // should be =
+      let expr = parseExpression();
+      consume('SEMICOLON');
+      return {type:'VarDecl', id:id.value, init:expr};
+    }
+    if(t.type === 'IF'){
+      consume('IF');
+      consume('LPAREN'); let test = parseExpression(); consume('RPAREN');
+      let consequent = parseBlockOrStatement();
+      let alternate = null;
+      if(peek() && peek().type === 'ELSE'){ consume('ELSE'); alternate = parseBlockOrStatement(); }
+      return {type:'If', test, consequent, alternate};
+    }
+    if(t.type === 'WHILE'){
+      consume('WHILE');
+      consume('LPAREN'); let test = parseExpression(); consume('RPAREN');
+      let body = parseBlockOrStatement();
+      return {type:'While', test, body};
+    }
+    // Assignment or expression-statement
+    let maybe = parseExpression();
+    if(peek() && peek().type === 'SEMICOLON') { consume('SEMICOLON'); return {type:'ExprStmt', expr: maybe}; }
+    // If we get here, maybe it's assign: IDENT = expr;
+    if(peek() && peek().type === 'OP' && peek().value === '='){
+      // previous must have been IDENT
+      if(maybe.type !== 'Identifier') throw new Error('Invalid assignment target');
+      consume('OP');
+      let expr = parseExpression();
+      consume('SEMICOLON');
+      return {type:'Assign', id: maybe.name, value: expr};
+    }
+    throw new Error('Unknown statement starting with '+t.type);
+  }
+  function parseBlockOrStatement(){
+    if(peek() && peek().type === 'LBRACE'){
+      consume('LBRACE');
+      let stmts = [];
+      while(peek() && peek().type !== 'RBRACE'){
+        stmts.push(parseStatement());
+      }
+      consume('RBRACE');
+      return {type:'Block', body: stmts};
+    } else {
+      return parseStatement();
+    }
+  }
+  function parseExpression(){
+    return parseBinary();
+  }
+  function parsePrimary(){
+    let t = peek();
+    if(!t) throw new Error('Unexpected end in primary');
+    if(t.type === 'NUMBER'){ consume('NUMBER'); return {type:'Literal', value: Number(t.value)}; }
+    if(t.type === 'IDENT'){ consume('IDENT'); return {type:'Identifier', name: t.value}; }
+    if(t.type === 'LPAREN'){ consume('LPAREN'); let e = parseExpression(); consume('RPAREN'); return e; }
+    throw new Error('Unexpected token in expression: '+t.type+' '+t.value);
+  }
+  function parseBinary(precedence = 0){
+    let left = parsePrimary();
+    while(true){
+      let t = peek();
+      if(!t || t.type !== 'OP') break;
+      let prec = getPrec(t.value);
+      if(prec < precedence) break;
+      let op = consume('OP').value;
+      let right = parseBinary(prec+1);
+      left = {type:'BinaryExpression', operator: op, left, right};
+    }
+    return left;
+  }
+  function getPrec(op){
+    if(op === '||') return 1;
+    if(op === '&&') return 2;
+    if(op === '==' || op === '!=') return 3;
+    if(op === '<' || op === '>' || op === '<=' || op === '>=') return 4;
+    if(op === '+' || op === '-') return 5;
+    if(op === '*' || op === '/') return 6;
+    return 0;
+  }
+
+  let prog = parseProgram();
+  return prog;
+}
+
+// ---------- IR Generation ----------
+let tempId = 0;
+function newTemp(){ return 't'+(++tempId); }
+function generateIR(ast){
+  tempId = 0;
+  let ir = [];
+  let env = {};
+  function gen(node){
+    if(!node) return null;
+    switch(node.type){
+      case 'Program':
+        node.body.forEach(s=>gen(s));
+        break;
+      case 'VarDecl':
+        let v = node.id;
+        let r = gen(node.init);
+        ir.push({op:'mov', args:[r], dest:v, srcComment: 'decl'});
+        break;
+      case 'Assign':
+        let val = gen(node.value);
+        ir.push({op:'mov', args:[val], dest:node.id});
+        break;
+      case 'ExprStmt':
+        gen(node.expr);
+        break;
+      case 'If':
+        {
+          let test = gen(node.test);
+          let lthen = 'L'+Math.random().toString(36).slice(2,7);
+          let lend = 'L'+Math.random().toString(36).slice(2,7);
+          ir.push({op:'jz', args:[test], label:lthen});
+          // false -> jump to else (we use labels)
+          let saved = []
+          // then
+          let thenStart = 'LBL_'+lthen;
+          ir.push({op:'label', label:thenStart});
+          if(node.consequent.type==='Block') node.consequent.body.forEach(s=>gen(s)); else gen(node.consequent);
+          ir.push({op:'jmp', label:lend});
+          if(node.alternate){
+            let elseStart = 'LBL_else_'+lthen;
+            ir.push({op:'label', label:elseStart});
+            if(node.alternate.type==='Block') node.alternate.body.forEach(s=>gen(s)); else gen(node.alternate);
+          }
+          ir.push({op:'label', label:lend});
+        }
+        break;
+      case 'While':
+        {
+          let start = 'L'+Math.random().toString(36).slice(2,7);
+          let cond = 'COND_'+start;
+          ir.push({op:'label', label:cond});
+          let test = gen(node.test);
+          let end = 'END_'+start;
+          ir.push({op:'jz', args:[test], label:end});
+          if(node.body.type==='Block') node.body.body.forEach(s=>gen(s)); else gen(node.body);
+          ir.push({op:'jmp', label:cond});
+          ir.push({op:'label', label:end});
+        }
+        break;
+      case 'Literal':
+        let tmp = newTemp();
+        ir.push({op:'const', args:[node.value], dest:tmp});
+        return tmp;
+      case 'Identifier':
+        return node.name;
+      case 'BinaryExpression':
+        let l = gen(node.left);
+        let r = gen(node.right);
+        let t = newTemp();
+        let opName = node.operator;
+        ir.push({op: 'binop', opType:opName, args:[l,r], dest:t});
+        return t;
+      default:
+        if(state.verbose) log('Unhandled node in IR gen', node.type);
+    }
+    return null;
+  }
+  gen(ast);
+  return ir;
+}
+
+// ---------- Optimizations ----------
+function applyPass(ir, pass){
+  if(pass.name === 'const-fold'){
+    // find binops with const args
+    let changed=false;
+    for(let i=0;i<ir.length;i++){
+      let ins = ir[i];
+      if(ins.op==='binop' && ins.args.every(a=>isConstSource(ir,a))){
+        let left = constValue(ir, ins.args[0]);
+        let right = constValue(ir, ins.args[1]);
+        if(typeof left === 'number' && typeof right === 'number'){
+          let res = evalBinop(left, right, ins.opType);
+          ir[i] = {op:'const', args:[res], dest: ins.dest, folded:true};
+          changed=true;
+        }
+      }
+    }
+    if(state.verbose) log('const-fold changed=', changed);
+    return {ir, changed};
+  }
+  if(pass.name === 'dead-code'){
+    // remove mov to vars never used
+    let used = new Set();
+    ir.forEach(ins=>{
+      (ins.args||[]).forEach(a=>{ if(typeof a==='string') used.add(a); });
+      if(ins.dest) { /* dest will be used by others if referenced */ }
+    });
+    // detect dests that are never used later
+    let destUsed = new Set();
+    for(let i=0;i<ir.length;i++){
+      let ins = ir[i];
+      (ins.args||[]).forEach(a=>destUsed.add(a));
+    }
+    let newIr = [];
+    let removed = 0;
+    for(let ins of ir){
+      if(ins.dest && !destUsed.has(ins.dest) && ins.op==='mov' && ins.srcComment!=='decl'){
+        removed++;
+        continue;
+      }
+      newIr.push(ins);
+    }
+    if(state.verbose) log('dead-code removed',removed);
+    return {ir: newIr, changed: removed>0};
+  }
+  if(pass.name === 'copy-prop'){
+    // simple copy propagation: mov t = x ; then use t -> x if safe
+    let mapping = {};
+    let changed = false;
+    for(let i=0;i<ir.length;i++){
+      let ins = ir[i];
+      if(ins.op==='mov' && ins.args.length===1 && typeof ins.args[0] === 'string'){
+        mapping[ins.dest] = ins.args[0];
+      } else {
+        // replace args
+        if(ins.args && ins.args.length){
+          ins.args = ins.args.map(a=>{
+            if(typeof a === 'string' && mapping[a]) { changed=true; return mapping[a]; }
+            return a;
+          });
+        }
+      }
+    }
+    if(state.verbose) log('copy-prop changed', changed);
+    return {ir, changed};
+  }
+  if(pass.name === 'strength-reduce'){
+    // replace mul by 2 with add
+    let changed=false;
+    for(let i=0;i<ir.length;i++){
+      let ins = ir[i];
+      if(ins.op==='binop' && ins.opType==='*'){
+        if(ins.args[1]===2 || ins.args[0]===2){
+          let other = ins.args[0]===2?ins.args[1]:ins.args[0];
+          ir[i] = {op:'binop', opType:'+', args:[other, other], dest:ins.dest};
+          changed=true;
+        }
+      }
+    }
+    return {ir, changed};
+  }
+  return {ir, changed:false};
+}
+function isConstSource(ir, src){
+  if(typeof src === 'number') return true;
+  // find last defining instruction for src
+  for(let i=ir.length-1;i>=0;i--){
+    let ins = ir[i];
+    if(ins.dest === src){
+      if(ins.op === 'const') return true;
+      return false;
+    }
+  }
+  return false;
+}
+function constValue(ir, src){
+  if(typeof src === 'number') return src;
+  for(let i=ir.length-1;i>=0;i--){
+    let ins = ir[i];
+    if(ins.dest === src){
+      if(ins.op === 'const') return ins.args[0];
+      return undefined;
+    }
+  }
+  return undefined;
+}
+function evalBinop(a,b,op){
+  switch(op){
+    case '+': return a+b;
+    case '-': return a-b;
+    case '*': return a*b;
+    case '/': return Math.floor(a/b);
+    case '>': return a>b?1:0;
+    case '<': return a<b?1:0;
+    case '>=': return a>=b?1:0;
+    case '<=': return a<=b?1:0;
+    case '==': return a==b?1:0;
+    case '!=': return a!=b?1:0;
+    default: return 0;
+  }
+}
+
+// ---------- Codegen ----------
+function codegen(ir, target){
+  if(target === 'asm'){
+    return ir.map((ins,idx)=>{
+      if(ins.op === 'const') return `${idx}: ${ins.dest} = ${ins.args[0]}`;
+      if(ins.op === 'mov') return `${idx}: ${ins.dest} = ${ins.args[0]}`;
+      if(ins.op === 'binop') return `${idx}: ${ins.dest} = ${ins.args[0]} ${ins.opType} ${ins.args[1]}`;
+      if(ins.op === 'label') return `${ins.label}:`;
+      if(ins.op === 'jmp') return `${idx}: jmp ${ins.label}`;
+      if(ins.op === 'jz') return `${idx}: jz ${ins.args[0]} -> ${ins.label}`;
+      return `${idx}: ${JSON.stringify(ins)}`;
+    }).join('\n');
+  } else {
+    // JS
+    let lines = [];
+    lines.push('(function(){');
+    lines.push('  let env = {};');
+    for(let ins of ir){
+      if(ins.op === 'const'){
+        lines.push(`  env["${ins.dest}"] = ${JSON.stringify(ins.args[0])};`);
+      } else if(ins.op === 'mov'){
+        let src = (typeof ins.args[0] === 'string') ? `env["${ins.args[0]}"]` : JSON.stringify(ins.args[0]);
+        lines.push(`  env["${ins.dest}"] = ${src};`);
+      } else if(ins.op === 'binop'){
+        let a = (typeof ins.args[0] === 'string') ? `env["${ins.args[0]}"]` : JSON.stringify(ins.args[0]);
+        let b = (typeof ins.args[1] === 'string') ? `env["${ins.args[1]}"]` : JSON.stringify(ins.args[1]);
+        lines.push(`  env["${ins.dest}"] = (${a}) ${ins.opType} (${b});`);
+      } else if(ins.op === 'label'){
+        lines.push(`  /* label ${ins.label} */`);
+      } else if(ins.op === 'jmp'){
+        lines.push(`  /* jmp ${ins.label} */`);
+      } else if(ins.op === 'jz'){
+        lines.push(`  /* jz ${ins.args[0]} -> ${ins.label} */`);
+      }
+    }
+    lines.push('  return env;');
+    lines.push('})();');
+    return lines.join('\n');
+  }
+}
+
+// ---------- Simulator (interprets IR step by step) ----------
+function makeSimulator(ir){
+  let ip = 0;
+  let env = {};
+  let labels = {};
+  // map label positions
+  ir.forEach((ins, idx)=>{
+    if(ins.op === 'label'){
+      labels[ins.label] = idx;
+    }
+  });
+  function step(){
+    if(ip < 0 || ip >= ir.length) return {done:true};
+    let ins = ir[ip];
+    if(ins.op === 'const'){ env[ins.dest] = ins.args[0]; ip++; return {ip, ins}; }
+    if(ins.op === 'mov'){
+      let v = ins.args[0];
+      env[ins.dest] = (typeof v === 'string') ? env[v] : v;
+      ip++; return {ip, ins};
+    }
+    if(ins.op === 'binop'){
+      let a = (typeof ins.args[0] === 'string') ? env[ins.args[0]] : ins.args[0];
+      let b = (typeof ins.args[1] === 'string') ? env[ins.args[1]] : ins.args[1];
+      env[ins.dest] = evalBinop(a,b,ins.opType);
+      ip++; return {ip, ins};
+    }
+    if(ins.op === 'jz'){
+      let cond = (typeof ins.args[0] === 'string') ? env[ins.args[0]] : ins.args[0];
+      if(!cond) {
+        // jump to label index (we find next label matching)
+        let target = null;
+        // find label definition index
+        for(let i=0;i<ir.length;i++){
+          if(ir[i].op === 'label' && ir[i].label === ins.label){ target = i; break; }
+        }
+        if(target !== null) ip = target+1;
+        else ip++;
+      } else ip++;
+      return {ip, ins};
+    }
+    if(ins.op === 'jmp'){
+      let targetIdx = null;
+      for(let i=0;i<ir.length;i++){
+        if(ir[i].op === 'label' && ir[i].label === ins.label){ targetIdx = i; break; }
+      }
+      if(targetIdx !== null) ip = targetIdx+1; else ip++;
+      return {ip, ins};
+    }
+    if(ins.op === 'label'){ ip++; return {ip, ins}; }
+    ip++;
+    return {ip, ins};
+  }
+  return {step, getEnv: ()=>JSON.parse(JSON.stringify(env)), ipRef: ()=>ip, setIp: (n)=>{ip=n}, reset: ()=>{ ip=0; env={}; }};
+}
+
+// ---------- Rendering AST interactive ----------
+function renderASTView(){
+  astView.innerHTML = '';
+  if(!state.ast){ astView.textContent = '(no AST)'; return; }
+  function nodeToElement(node){
+    let el = document.createElement('div');
+    el.style.marginLeft = '8px';
+    let header = document.createElement('span');
+    header.textContent = node.type + (node.id?(' '+node.id):'') + (node.name?(' '+node.name):'');
+    el.appendChild(header);
+    let editBtn = document.createElement('button'); editBtn.textContent = 'edit'; editBtn.addEventListener('click', ()=>{
+      let keys = Object.keys(node).filter(k=>k!=='type' && k!=='body');
+      if(keys.length===0) return alert('No editable fields');
+      let key = keys[0];
+      let val = JSON.stringify(node[key]);
+      let nv = prompt('Edit '+key, val);
+      if(nv !== null){
+        try{ node[key] = JSON.parse(nv); } catch(e){ node[key] = nv; }
+        saveHistoryForAction('edit-ast');
+        renderASTView();
+      }
+    });
+    let addBtn = document.createElement('button'); addBtn.textContent = 'add-child'; addBtn.addEventListener('click', ()=>{
+      if(!node.body) node.body = [];
+      let sample = {type:'ExprStmt', expr:{type:'Literal', value:0}};
+      node.body.push(sample);
+      saveHistoryForAction('add-ast-node');
+      renderASTView();
+    });
+    let rmBtn = document.createElement('button'); rmBtn.textContent = 'rm'; rmBtn.addEventListener('click', ()=>{
+      if(!confirm('Remove this node?')) return;
+      // We cannot easily remove parentless node; inform user to remove via parent
+      alert('To remove, edit the parent node body manually (this demo keeps AST removal simple).');
+    });
+    el.appendChild(editBtn); el.appendChild(addBtn); el.appendChild(rmBtn);
+    // show children
+    if(node.body && Array.isArray(node.body)){
+      node.body.forEach(child=>{
+        el.appendChild(nodeToElement(child));
+      });
+    } else {
+      // show nested fields
+      Object.keys(node).forEach(k=>{
+        if(k==='type') return;
+        let v = node[k];
+        if(typeof v === 'object' && v !== null){
+          let child = nodeToElement(v);
+          let label = document.createElement('div'); label.textContent = k+':'; label.style.marginLeft='8px';
+          el.appendChild(label);
+          el.appendChild(child);
+        } else {
+          let li = document.createElement('div'); li.style.marginLeft='8px'; li.textContent = k+': '+JSON.stringify(v);
+          el.appendChild(li);
+        }
+      });
+    }
+    return el;
+  }
+  astView.appendChild(nodeToElement(state.ast));
+}
+
+// ---------- IR view editable ----------
+function renderIRView(){
+  irView.innerHTML = '';
+  if(!state.ir || state.ir.length===0){ irView.textContent='(no IR)'; return; }
+  state.ir.forEach((ins, idx)=>{
+    let div = document.createElement('div');
+    let txt = document.createElement('input'); txt.type='text'; txt.value = JSON.stringify(ins);
+    txt.style.width = '80%';
+    let apply = document.createElement('button'); apply.textContent='apply'; apply.addEventListener('click', ()=>{
+      try{
+        let obj = JSON.parse(txt.value);
+        state.ir[idx] = obj;
+        saveHistoryForAction('edit-ir');
+        renderIRView();
+      }catch(e){ alert('Invalid JSON'); }
+    });
+    let up = document.createElement('button'); up.textContent='↑'; up.addEventListener('click', ()=>{
+      if(idx>0){ state.ir.splice(idx-1,0,state.ir.splice(idx,1)[0]); saveHistoryForAction('move-ir'); renderIRView(); }
+    });
+    let down = document.createElement('button'); down.textContent='↓'; down.addEventListener('click', ()=>{
+      if(idx<state.ir.length-1){ state.ir.splice(idx+1,0,state.ir.splice(idx,1)[0]); saveHistoryForAction('move-ir'); renderIRView(); }
+    });
+    let rm = document.createElement('button'); rm.textContent='rm'; rm.addEventListener('click', ()=>{
+      if(confirm('Delete instruction?')){ state.ir.splice(idx,1); saveHistoryForAction('rm-ir'); renderIRView(); }
+    });
+    div.appendChild(txt); div.appendChild(apply); div.appendChild(up); div.appendChild(down); div.appendChild(rm);
+    irView.appendChild(div);
+  });
+}
+irAddInstr.addEventListener('click', ()=>{
+  let sample = {op:'const', args:[0], dest:'t'+(Math.random()*100|0)};
+  state.ir.push(sample);
+  saveHistoryForAction('add-ir');
+  renderIRView();
+});
+irApplyBtn.addEventListener('click', ()=>{
+  // apply IR edits -> regenerate code & sim
+  state.generatedCode = codegen(state.ir, codeTarget.value);
+  renderAll();
+  saveHistoryForAction('apply-ir');
+});
+
+// ---------- Actions ----------
+optLevel.addEventListener('input', ()=>{
+  state.optLevel = +optLevel.value;
+  optLevelVal.textContent = state.optLevel;
+});
+strictParse.addEventListener('change', ()=> state.strictParse = strictParse.checked);
+verbose.addEventListener('change', ()=> state.verbose = verbose.checked);
+incremental.addEventListener('change', ()=> state.incremental = incremental.checked);
+
+lexBtn.addEventListener('click', ()=>{
+  try{
+    let code = sourceArea.value;
+    if(injectError.checked) code += ' @';
+    state.tokens = makeLexer(code);
+    tokensOut.textContent = state.tokens.map(t=>t.type+':'+t.value).join('\n');
+    log('Lexed', state.tokens.length, 'tokens');
+    renderAll();
+    saveHistoryForAction('lex');
+  }catch(e){ log('Lex error', e.message); }
+});
+parseBtn.addEventListener('click', ()=>{
+  try{
+    if(state.tokens.length===0) state.tokens = makeLexer(sourceArea.value);
+    let ast = parseTokens(state.tokens);
+    state.ast = ast;
+    log('Parsed AST root', ast.type || '?');
+    renderASTView();
+    saveHistoryForAction('parse');
+  }catch(e){
+    log('Parse error:', e.message);
+    state.ast = null;
+  }
+});
+irBtn.addEventListener('click', ()=>{
+  try{
+    if(!state.ast) {
+      if(state.tokens.length===0) state.tokens = makeLexer(sourceArea.value);
+      state.ast = parseTokens(state.tokens);
+    }
+    state.ir = generateIR(state.ast);
+    log('Generated IR,', state.ir.length, 'instructions');
+    renderIRView();
+    saveHistoryForAction('irgen');
+  }catch(e){ log('IR gen error', e.message); }
+});
+
+let lastPassIndex = 0;
+optStepBtn.addEventListener('click', ()=>{
+  if(!state.ir || state.ir.length===0) return alert('No IR');
+  // find next enabled pass
+  let start = lastPassIndex % state.passes.length;
+  let found = -1;
+  for(let i=0;i<state.passes.length;i++){
+    let idx = (start+i) % state.passes.length;
+    if(state.passes[idx].enabled){ found = idx; break; }
+  }
+  if(found === -1) return alert('No enabled passes');
+  let pass = state.passes[found];
+  let r = applyPass(state.ir, pass);
+  state.ir = r.ir;
+  log('Applied pass', pass.name, 'changed=', r.changed);
+  renderIRView();
+  lastPassIndex = found+1;
+  saveHistoryForAction('opt-step-'+pass.name);
+});
+optAllBtn.addEventListener('click', ()=>{
+  if(!state.ir || state.ir.length===0) return alert('No IR');
+  let changedAny=false;
+  for(let pass of state.passes){
+    if(!pass.enabled) continue;
+    let r = applyPass(state.ir, pass);
+    state.ir = r.ir;
+    changedAny = changedAny || r.changed;
+    if(state.verbose) log('Pass', pass.name, 'applied changed=', r.changed);
+  }
+  log('All passes applied, anyChange=', changedAny);
+  renderIRView();
+  saveHistoryForAction('opt-all');
+});
+
+codegenBtn.addEventListener('click', ()=>{
+  try{
+    if(!state.ir || state.ir.length===0) {
+      if(state.ast) state.ir = generateIR(state.ast);
+      else state.ir = generateIR(parseTokens(makeLexer(sourceArea.value)));
+    }
+    state.generatedCode = codegen(state.ir, codeTarget.value);
+    codeOut.textContent = state.generatedCode;
+    log('Codegen done target', codeTarget.value);
+    saveHistoryForAction('codegen');
+  }catch(e){ log('Codegen error', e.message); }
+});
+
+let sim = null;
+simulateBtn.addEventListener('click', ()=>{
+  if(!state.ir || state.ir.length===0) return alert('No IR to simulate');
+  sim = makeSimulator(state.ir);
+  let steps = 0;
+  let history = [];
+  while(true){
+    if(steps++ > 1000) { log('Simulation aborted (max steps)'); break; }
+    let res = sim.step();
+    if(res.done) break;
+    history.push({ip: sim.ipRef(), env: sim.getEnv()});
+    if(typeof breakInstr.value === 'string' && +breakInstr.value >=0 && sim.ipRef() === +breakInstr.value){
+      log('Breakpoint hit at', sim.ipRef());
+      break;
+    }
+    if(sim.ipRef() >= state.ir.length) break;
+  }
+  state.simState = sim.getEnv();
+  simOut.textContent = JSON.stringify(state.simState, null, 2);
+  log('Simulation finished (steps:', steps, ')');
+  saveHistoryForAction('simulate');
+});
+
+runBtn.addEventListener('click', ()=>{
+  // full automated run: lex->parse->ir->opt->codegen->simulate
+  try{
+    state.tokens = makeLexer(sourceArea.value);
+    state.ast = parseTokens(state.tokens);
+    state.ir = generateIR(state.ast);
+    for(let pass of state.passes){ if(pass.enabled) { let r = applyPass(state.ir, pass); state.ir = r.ir; } }
+    state.generatedCode = codegen(state.ir, codeTarget.value);
+    codeOut.textContent = state.generatedCode;
+    // simulate once
+    let s = makeSimulator(state.ir);
+    while(true){
+      let r = s.step();
+      if(r.done) break;
+      if(s.ipRef() > 10000) break;
+      if(typeof breakInstr.value === 'string' && +breakInstr.value >=0 && s.ipRef() === +breakInstr.value){ log('Breakpoint at', s.ipRef()); break; }
+    }
+    state.simState = s.getEnv();
+    simOut.textContent = JSON.stringify(state.simState, null, 2);
+    log('Run completed');
+    renderAll();
+    saveHistoryForAction('run');
+  }catch(e){ log('Run failed', e.message); }
+});
+
+stepBtn.addEventListener('click', ()=>{
+  // If sim exists, step; else create
+  if(!sim){
+    if(!state.ir || state.ir.length===0) return alert('No IR');
+    sim = makeSimulator(state.ir);
+  }
+  let r = sim.step();
+  state.simState = sim.getEnv();
+  simOut.textContent = JSON.stringify(state.simState, null, 2);
+  log('Stepped to ip', sim.ipRef());
+  saveHistoryForAction('step');
+});
+resetBtn.addEventListener('click', ()=>{
+  state.tokens = [];
+  state.ast = null;
+  state.ir = [];
+  state.generatedCode = '';
+  state.simState = null;
+  sim = null;
+  tokensOut.textContent = '';
+  codeOut.textContent = '';
+  simOut.textContent = '';
+  astView.textContent = '';
+  irView.textContent = '';
+  log('Reset state');
+  saveHistoryForAction('reset');
+  renderAll();
+});
+
+// ---------- Fuzz generator ----------
+function fuzzGenerate(){
+  let n = Math.floor(Math.random()*6)+2;
+  let lines = [];
+  for(let i=0;i<n;i++){
+    let kind = Math.random();
+    if(kind < 0.3) lines.push('let v'+i+' = '+(Math.floor(Math.random()*10))+';');
+    else if(kind < 0.6) lines.push('v'+i+' = v'+Math.floor(Math.random()*Math.max(1,i))+' + '+Math.floor(Math.random()*5)+';');
+    else lines.push('if (v'+Math.floor(Math.random()*Math.max(1,i))+' > '+Math.floor(Math.random()*10)+') { v'+i+' = '+Math.floor(Math.random()*10)+'; }');
+  }
+  sourceArea.value = lines.join('\n');
+  log('Fuzz generated program');
+}
+fuzzBtn.addEventListener('click', fuzzGenerate);
+
+// ---------- Samples ----------
+loadSampleBtn.addEventListener('click', ()=>{
+  sampleSelect.innerHTML = '';
+  Object.keys(samples).forEach(k=>{
+    let o = document.createElement('option'); o.value=k; o.textContent=k; sampleSelect.appendChild(o);
+  });
+});
+sampleSelect.addEventListener('change', ()=>{
+  let k = sampleSelect.value;
+  if(!k) return;
+  sourceArea.value = samples[k];
+});
+
+// ---------- Snapshots & History ----------
+saveSnapshot.addEventListener('click', ()=>{
+  let name = prompt('Snapshot name:', 'snap'+(state.snapshots.length+1));
+  if(!name) return;
+  let s = snapshotState(); s.name = name;
+  state.snapshots.push(s);
+  snapshotSelect.appendChild(new Option(name, state.snapshots.length-1));
+  log('Saved snapshot', name);
+  saveHistoryForAction('save-snap');
+});
+listSnapshots.addEventListener('click', ()=>{
+  snapshotSelect.innerHTML = '';
+  state.snapshots.forEach((s,i)=>snapshotSelect.appendChild(new Option(s.name||('snap'+i), i)));
+});
+revertSnapshot.addEventListener('click', ()=>{
+  let idx = +snapshotSelect.value;
+  if(isNaN(idx) || !state.snapshots[idx]) return alert('Select snapshot');
+  if(!confirm('Revert to snapshot '+state.snapshots[idx].name+ '?')) return;
+  restoreSnapshot(state.snapshots[idx]);
+  saveHistoryForAction('revert-snap');
+  log('Reverted snapshot', state.snapshots[idx].name);
+});
+diffSnapshot.addEventListener('click', ()=>{
+  let idx = +snapshotSelect.value;
+  if(isNaN(idx) || !state.snapshots[idx]) return alert('Select snapshot');
+  let s = state.snapshots[idx];
+  let d = simpleDiff(s.source, sourceArea.value);
+  snapshotOut.textContent = d;
+  log('Diff shown for snapshot', s.name);
+});
+
+// ---------- Undo / Redo ----------
+undoBtn.addEventListener('click', ()=>{
+  if(state.history.length===0) return;
+  let last = state.history.pop();
+  state.future.push(JSON.stringify(snapshotState()));
+  let snap = JSON.parse(last);
+  restoreSnapshot(snap);
+  updateUndoRedo();
+  log('Undo');
+});
+redoBtn.addEventListener('click', ()=>{
+  if(state.future.length===0) return;
+  let f = state.future.pop();
+  state.history.push(JSON.stringify(snapshotState()));
+  let snap = JSON.parse(f);
+  restoreSnapshot(snap);
+  updateUndoRedo();
+  log('Redo');
+});
+
+// ---------- State dump ----------
+dumpStateBtn.addEventListener('click', ()=>{
+  console.log('State dump', JSON.parse(JSON.stringify(state)));
+  stateOut.textContent = JSON.stringify(state, null, 2);
+});
+
+// ---------- Misc render ----------
+function renderAll(){
+  refreshFileList();
+  renderPassList();
+  renderASTView();
+  renderIRView();
+  tokensOut.textContent = (state.tokens||[]).map(t=>t.type+':'+t.value).join('\n');
+  codeOut.textContent = state.generatedCode || '';
+  simOut.textContent = JSON.stringify(state.simState || {}, null, 2);
+  renderLogs();
+  stateOut.textContent = JSON.stringify({
+    files: Object.keys(state.files).length,
+    selectedFile: state.selectedFile,
+    tokens: state.tokens.length,
+    ast: state.ast?state.ast.type:null,
+    ir: state.ir.length,
+    passes: state.passes.map(p=>p.name+'('+ (p.enabled?'on':'off') +')')
+  }, null, 2);
+}
+
+// ---------- Init ----------
+renderAll();
+optLevelVal.textContent = state.optLevel;
+renderPassList();
+loadSampleBtn.click();
+
+// ---------- Developer convenience: auto-run small compile when blurring source area ----------
+sourceArea.addEventListener('blur', ()=>{
+  if(state.incremental){
+    try{
+      state.tokens = makeLexer(sourceArea.value);
+      state.ast = parseTokens(state.tokens);
+      state.ir = generateIR(state.ast);
+      renderAll();
+      log('Incremental compile done on blur');
+    }catch(e){ log('Incremental compile failed', e.message); }
+  }
+});
+
+})(); // IIFE
+</script>
+
+</body>
+</html>

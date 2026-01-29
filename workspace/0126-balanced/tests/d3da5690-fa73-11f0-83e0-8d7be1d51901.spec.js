@@ -196,7 +196,7 @@ test.describe('Socket Programming Demo - end-to-end', () => {
 
   test.describe('WebRTC DataChannel (peers & message exchange)', () => {
     test('Create peers, exchange text and binary messages, then close peers', async ({ page }) => {
-      const app = new AppPage(page);
+      const app1 = new AppPage(page);
 
       // Ensure initial state
       await expect(app.rtc.pcState).toHaveText('none');
@@ -297,7 +297,7 @@ test.describe('Socket Programming Demo - end-to-end', () => {
 
   test.describe('Virtual Socket (fragmentation & reassembly)', () => {
     test('Create virtual socket, validate fragmentation, reassembly, and close', async ({ page }) => {
-      const app = new AppPage(page);
+      const app2 = new AppPage(page);
 
       // Ensure logs empty initially
       await expect(app.vs.sendLog).toHaveText('');
@@ -344,7 +344,7 @@ test.describe('Socket Programming Demo - end-to-end', () => {
     // Note: we do not modify page or suppress errors; we only report/assert their presence or absence constraints.
 
     // The collected arrays are at top-level of this describe; re-open the page to collect any startup messages
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
 
     // At least ensure that we can query elements successfully (page loaded)
     await expect(app.ws.state).toBeVisible();

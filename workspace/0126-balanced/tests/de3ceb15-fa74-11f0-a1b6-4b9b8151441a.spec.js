@@ -100,12 +100,12 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
     // Wait for "Database created with object store and indexes" OR "Database opened successfully!" to appear.
     // The upgrade log may appear first; wait for opened message which is the key evidence for S1.
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out1 = document.getElementById('output');
       return out && out.innerText.includes('Database opened successfully!');
     }, { timeout: 5000 });
 
     // Verify the output contains the expected evidence strings for initialization
-    let outputText = await outputLocator.innerText();
+    let outputText1 = await outputLocator.innerText();
     expect(outputText).toContain('Database opened successfully!');
     // upgrade message is optional depending on whether DB existed; if present assert it too (non-blocking)
     if (outputText.includes('Database created with object store and indexes')) {
@@ -119,7 +119,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     // After adding, the transaction.oncomplete should log "All users added successfully!"
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out2 = document.getElementById('output');
       return out && out.innerText.includes('All users added successfully!');
     }, { timeout: 5000 });
 
@@ -133,7 +133,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     // getAllUsers clears the log and then logs "<h3>All Users:</h3>" and then records with class "record"
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out3 = document.getElementById('output');
       return out && out.innerHTML.includes('All Users:') && document.querySelectorAll('.record').length > 0;
     }, { timeout: 5000 });
 
@@ -148,7 +148,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     // queryUsers clears and then logs "Users Older Than 25:"
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out4 = document.getElementById('output');
       return out && out.innerText.includes('Users Older Than 25:');
     }, { timeout: 5000 });
 
@@ -165,7 +165,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     // updateUser clears log and then logs updating message followed by "User updated successfully!"
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out5 = document.getElementById('output');
       return out && out.innerText.includes('User updated successfully!');
     }, { timeout: 5000 });
 
@@ -177,7 +177,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
     // Validate that Bob's age was updated by fetching all users again and checking his age is 33
     await page.click('#getAll');
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out6 = document.getElementById('output');
       return out && out.innerText.includes('All Users:') && out.innerText.includes('Bob');
     }, { timeout: 5000 });
 
@@ -191,7 +191,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     // deleteUser clears log and then logs "User Alice deleted successfully!" upon success
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out7 = document.getElementById('output');
       return out && out.innerText.includes('User Alice deleted successfully!');
     }, { timeout: 5000 });
 
@@ -201,7 +201,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
     // Confirm Alice is no longer present by fetching all users
     await page.click('#getAll');
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out8 = document.getElementById('output');
       return out && out.innerText.includes('All Users:');
     }, { timeout: 5000 });
 
@@ -213,7 +213,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     // clearDB clears and then logs "Database cleared successfully!"
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out9 = document.getElementById('output');
       return out && out.innerText.includes('Database cleared successfully!');
     }, { timeout: 5000 });
 
@@ -223,7 +223,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
     // After clearing, getAllUsers should report "No users found in the database."
     await page.click('#getAll');
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out10 = document.getElementById('output');
       return out && out.innerText.includes('No users found in the database.');
     }, { timeout: 5000 });
 
@@ -234,7 +234,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
     expect(pageErrors.length).toBe(0);
 
     // Also check console did not record unexpected error-level logs during the full run
-    const errorConsole = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
+    const errorConsole1 = consoleMessages.filter(m => m.type === 'error' || m.type === 'warning');
     // Warnings are acceptable but flag excessive errors; assert there are zero error types
     const onlyErrors = consoleMessages.filter(m => m.type === 'error');
     expect(onlyErrors.length).toBe(0);
@@ -247,13 +247,13 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
 
     await page.click('#initDb');
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out11 = document.getElementById('output');
       return out && out.innerText.includes('Database opened successfully!');
     }, { timeout: 5000 });
 
     await page.click('#addData');
     await page.waitForFunction(() => {
-      const out = document.getElementById('output');
+      const out12 = document.getElementById('output');
       return out && out.innerText.includes('All users added successfully!');
     }, { timeout: 5000 });
 
@@ -264,7 +264,7 @@ test.describe('NoSQL Demo (IndexedDB) - FSM states and transitions', () => {
     expect(pageErrors.length).toBe(0);
 
     // Ensure that the DOM output includes expected evidence messages captured earlier
-    const outputText = await page.locator('#output').innerText();
+    const outputText2 = await page.locator('#output').innerText();
     expect(outputText).toContain('Database opened successfully!');
     expect(outputText).toContain('All users added successfully!');
   });

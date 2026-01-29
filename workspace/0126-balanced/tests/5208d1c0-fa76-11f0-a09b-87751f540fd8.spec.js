@@ -122,12 +122,12 @@ test.describe('Insertion Sort Interactive Application (FSM validation)', () => {
     await model.clickSortButton();
     await model.clickSortButton();
 
-    const expected = 'Sorted array: 11 12 22 25 34 64 90';
+    const expected1 = 'Sorted array: 11 12 22 25 34 64 90';
     const actual = (await model.getResultText()).trim();
     expect(actual).toBe(expected);
 
     // Ensure repeated clicks do not add additional unexpected console errors
-    const pageErrors = model.getPageErrors();
+    const pageErrors1 = model.getPageErrors();
     expect(pageErrors.length).toBe(0);
 
     // Ensure console still contains the initial load log; clicking does not produce additional logs in the implementation.

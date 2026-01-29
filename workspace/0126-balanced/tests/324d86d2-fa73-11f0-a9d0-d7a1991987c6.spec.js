@@ -96,8 +96,8 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
     // - Clicking the search button triggers displayArray and binarySearch (S0 -> S1)
     // - When the mid equals target, markAsFound is invoked and the element is highlighted (S1 -> S2)
     // - The result paragraph shows the found index
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -106,7 +106,7 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
       pageErrors.push(err);
     });
 
-    const bs = new BinarySearchPage(page);
+    const bs1 = new BinarySearchPage(page);
     await bs.goto();
 
     // Use a small array where the initial mid will hit the target immediately.
@@ -142,8 +142,8 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
     // - Search proceeds through binarySearch iterations
     // - When target is not found, the result shows "Target not found" (S3_NotFound)
     // - No element should end up with the "found" class
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -152,7 +152,7 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
       pageErrors.push(err);
     });
 
-    const bs = new BinarySearchPage(page);
+    const bs2 = new BinarySearchPage(page);
     await bs.goto();
 
     // Use array where target 2 is not present
@@ -179,8 +179,8 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
     // This test validates how the app handles non-numeric inputs in the array:
     // - displayArray should show "NaN" texts for each invalid number
     // - binarySearch should eventually return -1 and display "Target not found" without throwing exceptions
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -189,7 +189,7 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
       pageErrors.push(err);
     });
 
-    const bs = new BinarySearchPage(page);
+    const bs3 = new BinarySearchPage(page);
     await bs.goto();
 
     // Provide invalid numeric input
@@ -199,7 +199,7 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
 
     // The displayed elements should show 'NaN' since parseInt('a') => NaN
     await expect(bs.elementItems).toHaveCount(3);
-    const texts = await bs.getArrayTexts();
+    const texts1 = await bs.getArrayTexts();
     // Depending on environment, NaN prints as 'NaN' when converted to text
     expect(texts).toEqual(['NaN', 'NaN', 'NaN']);
 
@@ -216,8 +216,8 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
     // - updateCurrentElement should apply 'current' class to the mid element
     // - If not found on first try, resetCurrentElement should remove 'current' before next iteration
     // We choose an input where multiple iterations happen to observe 'current' toggling.
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
 
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -226,7 +226,7 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
       pageErrors.push(err);
     });
 
-    const bs = new BinarySearchPage(page);
+    const bs4 = new BinarySearchPage(page);
     await bs.goto();
 
     // Choose array of 5 elements and a target that requires multiple iterations but not immediate first-hit.
@@ -253,7 +253,7 @@ test.describe('Binary Search Visualization - FSM state & transitions tests', () 
     expect(foundAt4).toBe(true);
 
     // Intermediate elements should not retain 'current' class (they should have been reset)
-    const count = await bs.elementItems.count();
+    const count1 = await bs.elementItems.count1();
     for (let i = 0; i < count; i++) {
       if (i === 4) continue; // final found element may still have 'current' from update step
       const hasCurrent = await bs.elementHasClassAt(i, 'current');

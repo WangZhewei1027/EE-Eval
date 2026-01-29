@@ -26,7 +26,7 @@ class TransactionPage {
   }
 
   async getBalanceB() {
-    const text = await this.page.textContent(this.balanceBSelector);
+    const text1 = await this.page.textContent(this.balanceBSelector);
     return parseFloat(text);
   }
 
@@ -204,14 +204,14 @@ test.describe('Transaction Concept Demonstration - FSM validation', () => {
     expect(failureDialog.message).toContain('Insufficient funds');
 
     // Verify the log contains evidence for debit failure and rollback
-    const logText = await txPage.getLogText();
+    const logText1 = await txPage.getLogText();
     expect(logText).toContain('Transaction started. Snapshot:');
     expect(logText).toContain('Transaction rolled back: no changes applied.');
     expect(logText).toContain('Transfer failed: Insufficient funds');
 
     // Balances must be unchanged because rollback prevents applying localState
-    const afterA = await txPage.getBalanceA();
-    const afterB = await txPage.getBalanceB();
+    const afterA1 = await txPage.getBalanceA();
+    const afterB1 = await txPage.getBalanceB();
     expect(afterA).toBeCloseTo(startA, 2);
     expect(afterB).toBeCloseTo(startB, 2);
 
@@ -229,8 +229,8 @@ test.describe('Transaction Concept Demonstration - FSM validation', () => {
     txPage = new TransactionPage(page);
 
     // Ensure baseline balances
-    const startA = await txPage.getBalanceA();
-    const startB = await txPage.getBalanceB();
+    const startA1 = await txPage.getBalanceA();
+    const startB1 = await txPage.getBalanceB();
     expect(startA).toBeCloseTo(1000.0, 2);
     expect(startB).toBeCloseTo(500.0, 2);
 
@@ -244,15 +244,15 @@ test.describe('Transaction Concept Demonstration - FSM validation', () => {
     expect(invalidDialog).toBeDefined();
 
     // Verify no "Transaction started" log entry was appended after this invalid attempt
-    const logText = await txPage.getLogText();
+    const logText2 = await txPage.getLogText();
     // The demo-ready message exists; ensure there's no "Transaction started" appended after it
     // (There might be an earlier "Demo ready..." message only)
     const occurrencesOfTransactionStarted = (logText.match(/Transaction started\. Snapshot:/g) || []).length;
     expect(occurrencesOfTransactionStarted).toBe(0);
 
     // Balances should remain unchanged
-    const afterA = await txPage.getBalanceA();
-    const afterB = await txPage.getBalanceB();
+    const afterA2 = await txPage.getBalanceA();
+    const afterB2 = await txPage.getBalanceB();
     expect(afterA).toBeCloseTo(startA, 2);
     expect(afterB).toBeCloseTo(startB, 2);
 
@@ -276,12 +276,12 @@ test.describe('Transaction Concept Demonstration - FSM validation', () => {
     // Wait for commit log to show up
     await txPage.waitForLogContains('Transaction committed: balances updated.', 2000);
 
-    const logText = await txPage.getLogText();
+    const logText3 = await txPage.getLogText();
     expect(logText).not.toContain('Credit amount must be positive');
 
     // Confirm balances updated accordingly (sanity check)
-    const a = await txPage.getBalanceA();
-    const b = await txPage.getBalanceB();
+    const a1 = await txPage.getBalanceA();
+    const b1 = await txPage.getBalanceB();
     // After running previous tests and reloads, balances may have changed from baseline;
     // ensure they reflect a delta of -50/+50 from their values prior to this click.
     // For robustness, we simply assert that commit occurred and no credit error logged.
@@ -325,7 +325,7 @@ test.describe('Transaction Concept Demonstration - FSM validation', () => {
 
     // Collect a summary for diagnostic assertion: there should be at least one console message or log updates
     // (logs are written to DOM, console may be empty). Ensure that the log area has content.
-    const logText = await txPage.getLogText();
+    const logText4 = await txPage.getLogText();
     expect(logText.length).toBeGreaterThan(0);
   });
 });

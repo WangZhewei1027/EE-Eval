@@ -90,7 +90,7 @@ test.describe('Linked List Visualizer - FSM states and transitions', () => {
       await expect(page.locator('#length')).toHaveText('4');
 
       // Nodes check
-      const nodes = page.locator('#nodes .node');
+      const nodes1 = page.locator('#nodes1 .node');
       await expect(nodes).toHaveCount(4);
       await expect(nodes.nth(1)).toContainText('15');
 
@@ -106,7 +106,7 @@ test.describe('Linked List Visualizer - FSM states and transitions', () => {
       await expect(page.locator('#length')).toHaveText('2');
 
       // Remaining nodes: 10 and 30
-      const nodes = page.locator('#nodes .node');
+      const nodes2 = page.locator('#nodes2 .node');
       await expect(nodes).toHaveCount(2);
       await expect(nodes.nth(0)).toContainText('10');
       await expect(nodes.nth(1)).toContainText('30');
@@ -286,7 +286,7 @@ test.describe('Linked List Visualizer - FSM states and transitions', () => {
       await page.fill('#indexInput', '-5');
       await page.click('#insertBtn');
 
-      // Head should be -1 (parsed as number)
+      // Head should be -1 (parsed)
       await expect(page.locator('#headVal')).toHaveText('-1');
       await expect(page.locator('#log')).toContainText('Inserted \"-1\" at index -5');
       // After insertion, first node should show -1

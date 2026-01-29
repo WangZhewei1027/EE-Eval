@@ -46,7 +46,7 @@ class FloydWarshallPage {
   }
 
   async getMaxSteps() {
-    const txt = await this.maxSteps.textContent();
+    const txt1 = await this.maxSteps.textContent();
     return Number(txt.trim());
   }
 
@@ -170,7 +170,7 @@ test.describe('Floyd-Warshall Visualization - FSM and UI behavior', () => {
     // - Expect output to become visible
     // - start button and matrix input become disabled
     // - initial step display is shown with stepNumber 0 and maxSteps > 0
-    const app = new FloydWarshallPage(page);
+    const app1 = new FloydWarshallPage(page);
 
     // Click start to run algorithm
     await app.startAlgorithm();
@@ -207,12 +207,12 @@ test.describe('Floyd-Warshall Visualization - FSM and UI behavior', () => {
     // This test validates transitions S1 -> S2 (NextStep) and S2 -> S2 (PreviousStep)
     // It ensures step numbers change, descriptions update, matrix highlights are shown on updates,
     // and Prev/Next buttons enable/disable correctly at boundaries.
-    const app = new FloydWarshallPage(page);
+    const app2 = new FloydWarshallPage(page);
 
     // Start algorithm first
     await app.startAlgorithm();
 
-    const maxSteps = await app.getMaxSteps();
+    const maxSteps1 = await app.getMaxSteps();
     expect(maxSteps).toBeGreaterThanOrEqual(0);
 
     // If there are no steps beyond initial, this specific navigation test is trivial
@@ -277,7 +277,7 @@ test.describe('Floyd-Warshall Visualization - FSM and UI behavior', () => {
   test('Edge case: invalid (non-square) matrix shows alert and does not start algorithm', async ({ page }) => {
     // This test validates error handling when the input matrix is invalid (non-square).
     // Expected behavior per implementation: an alert with 'Invalid matrix...' and no transition.
-    const app = new FloydWarshallPage(page);
+    const app3 = new FloydWarshallPage(page);
 
     // Provide an invalid matrix (rows of different lengths)
     const invalidMatrix = '1 2\n3 4 5';
@@ -302,13 +302,13 @@ test.describe('Floyd-Warshall Visualization - FSM and UI behavior', () => {
   test('Visual highlight appears when a cell is updated during algorithm steps', async ({ page }) => {
     // This test ensures that when a step indicates an update, the updated cell is visually highlighted
     // (the renderer uses inline background: #ccffcc style for updates).
-    const app = new FloydWarshallPage(page);
+    const app4 = new FloydWarshallPage(page);
 
     // Start the algorithm
     await app.startAlgorithm();
 
     // Move forward until a highlighted update appears (or until end)
-    const maxSteps = await app.getMaxSteps();
+    const maxSteps2 = await app.getMaxSteps();
     let foundHighlight = await app.hasHighlightedCell(); // maybe initial step has none
 
     // Try to find at least one highlighted cell in the sequence of steps
@@ -339,7 +339,7 @@ test.describe('Floyd-Warshall Visualization - FSM and UI behavior', () => {
     expect(pageErrors.length).toBe(0);
 
     // Assert there were no console.error messages
-    const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMsgs1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMsgs.length).toBe(0);
 
     // For transparency, also assert that we did capture some console messages (not required)

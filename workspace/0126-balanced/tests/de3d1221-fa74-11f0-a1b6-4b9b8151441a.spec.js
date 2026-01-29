@@ -122,7 +122,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // This test validates the SuccessfulAtomicTransaction transition to S1_Atomicity_Success:
       // - The DOM contains the success message: Transaction committed successfully!
       // - The transaction log contains a success entry describing the atomic funds transfer.
-      const app = new AcidDemoPage(page);
+      const app1 = new AcidDemoPage(page);
       await app.goto();
 
       // Click the Successful Atomic Transaction button
@@ -132,7 +132,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       await expect(app.atomicityResult.locator('p.success')).toHaveText('Transaction committed successfully!');
 
       // Verify transaction log contains the success entry for atomic transfer
-      const logs = await app.getTransactionLogEntries();
+      const logs1 = await app.getTransactionLogEntries();
       // Expect at least one entry and the last entry to be the atomic success
       expect(logs.length).toBeGreaterThan(0);
       const last = logs[logs.length - 1];
@@ -147,7 +147,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // This test validates the FailedAtomicTransaction transition to S2_Atomicity_Failure:
       // - DOM contains the failure message: Transaction failed - no changes applied
       // - Transaction log contains a failure entry.
-      const app = new AcidDemoPage(page);
+      const app2 = new AcidDemoPage(page);
       await app.goto();
 
       // Click the Failed Atomic Transaction button
@@ -157,9 +157,9 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       await expect(app.atomicityResult.locator('p.failure')).toContainText('Transaction failed - no changes applied');
 
       // Verify the transaction log has a corresponding failure entry
-      const logs = await app.getTransactionLogEntries();
+      const logs2 = await app.getTransactionLogEntries();
       expect(logs.length).toBeGreaterThan(0);
-      const last = logs[logs.length - 1];
+      const last1 = logs[logs.length - 1];
       expect(last.text).toContain('Funds transfer failed and was rolled back');
       expect(last.className).toContain('failure');
 
@@ -177,7 +177,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // This test validates S3_Consistency_Success when demoConsistency() succeeds:
       // - The DOM shows "Withdrawal successful! New balance: $800"
       // - A success transaction log entry is created.
-      const app = new AcidDemoPage(page);
+      const app3 = new AcidDemoPage(page);
       await app.goto();
 
       // Trigger consistency once (200 withdrawal from 1000 -> 800)
@@ -187,9 +187,9 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       await expect(app.consistencyResult.locator('p.success')).toHaveText('Withdrawal successful! New balance: $800');
 
       // Verify transaction log entry contains the expected success message
-      const logs = await app.getTransactionLogEntries();
+      const logs3 = await app.getTransactionLogEntries();
       expect(logs.length).toBeGreaterThan(0);
-      const last = logs[logs.length - 1];
+      const last2 = logs[logs.length - 1];
       expect(last.text).toContain('Withdrew $200 - maintained consistency');
       expect(last.className).toContain('success');
 
@@ -200,7 +200,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
     test('Consistency failure occurs when funds are insufficient after repeated withdrawals', async ({ page }) => {
       // This test forces the S4_Consistency_Failure path by repeatedly invoking demoConsistency()
       // until the accountBalance is exhausted and an insufficient funds error occurs.
-      const app = new AcidDemoPage(page);
+      const app4 = new AcidDemoPage(page);
       await app.goto();
 
       // Withdraw repeatedly: starting balance 1000; each click withdraws 200.
@@ -219,9 +219,9 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       await expect(app.consistencyResult.locator('p.failure')).toContainText('Insufficient funds - violates account balance constraint');
 
       // Verify the transaction log includes an entry marking the rejection to maintain consistency
-      const logs = await app.getTransactionLogEntries();
+      const logs4 = await app.getTransactionLogEntries();
       expect(logs.length).toBeGreaterThanOrEqual(6);
-      const last = logs[logs.length - 1];
+      const last3 = logs[logs.length - 1];
       expect(last.text).toContain('Withdrawal rejected to maintain consistency');
       expect(last.className).toContain('failure');
 
@@ -235,7 +235,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // This test validates the S5_Isolation state:
       // - The isolation result contains text indicating Transaction 1 read $1000 and continues with original value.
       // - The transaction log contains an entry for Transaction 2 deposit.
-      const app = new AcidDemoPage(page);
+      const app5 = new AcidDemoPage(page);
       await app.goto();
 
       // Trigger isolation demonstration
@@ -246,7 +246,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       await expect(app.isolationResult).toContainText("Transaction 1 is isolated from Transaction 2's changes until commit");
 
       // Verify log contains the deposit from Transaction 2
-      const logs = await app.getTransactionLogEntries();
+      const logs5 = await app.getTransactionLogEntries();
       expect(logs.length).toBeGreaterThan(0);
       const found = logs.find(l => l.text.includes('Transaction 2 deposited $300'));
       expect(found).toBeTruthy();
@@ -263,7 +263,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // - After triggering demoDurability(), the DOM eventually contains:
       //   "Transaction committed to persistent storage" and "After recovery: Transaction remains committed"
       // - A persisted transaction log entry exists.
-      const app = new AcidDemoPage(page);
+      const app6 = new AcidDemoPage(page);
       await app.goto();
 
       // Trigger durability demonstration (which uses nested setTimeouts)
@@ -280,8 +280,8 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // (the log entry is added after the nested timeout as well)
       // Wait a bit more to ensure the log entry has been appended
       await app.page.waitForTimeout(200);
-      const logs = await app.getTransactionLogEntries();
-      const found = logs.find(l => l.text.includes('Transaction persisted despite system failure'));
+      const logs6 = await app.getTransactionLogEntries();
+      const found1 = logs.find(l => l.text.includes('Transaction persisted despite system failure'));
       expect(found).toBeTruthy();
       expect(found?.className).toContain('success');
 
@@ -294,7 +294,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
     test('Rapid repeated clicks on atomicity buttons create multiple log entries without causing unhandled errors', async ({ page }) => {
       // Edge case: simulate rapid user interactions (multiple quick clicks).
       // Validate that multiple entries are appended to the log and that no unhandled errors are raised.
-      const app = new AcidDemoPage(page);
+      const app7 = new AcidDemoPage(page);
       await app.goto();
 
       // Rapidly click success button 3 times
@@ -307,7 +307,7 @@ test.describe('ACID Properties Interactive App - Comprehensive E2E', () => {
       // Small wait to allow DOM updates
       await page.waitForTimeout(100);
 
-      const logs = await app.getTransactionLogEntries();
+      const logs7 = await app.getTransactionLogEntries();
       // At least 3 entries related to the atomic success should exist (there may be others if previous actions ran)
       const atomicSuccessCount = logs.filter(l => l.text.includes('Funds transfer completed atomically')).length;
       expect(atomicSuccessCount).toBeGreaterThanOrEqual(3);

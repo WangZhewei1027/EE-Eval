@@ -128,7 +128,7 @@ test.describe('Application 520aa682-fa76-11f0-a09b-87751f540fd8 - OSI Model (FSM
     // Wait briefly for pageerror to propagate
     await page.waitForTimeout(50);
 
-    const matched = pageErrors.some(e => /triggerTransition/i.test(e.message || '') || /triggerTransition/i.test(e.name || ''));
+    const matched1 = pageErrors.some(e => /triggerTransition/i.test(e.message || '') || /triggerTransition/i.test(e.name || ''));
     expect(matched).toBeTruthy();
   });
 
@@ -164,7 +164,7 @@ test.describe('Application 520aa682-fa76-11f0-a09b-87751f540fd8 - OSI Model (FSM
     await expect(page).toHaveTitle('OSI Model');
 
     // Confirm again that there are no anchors or interactive controls that could represent transitions
-    const interactiveCount = await page.locator('button, input, textarea, select, a').count();
+    const interactiveCount1 = await page.locator('button, input, textarea, select, a').count();
     expect(interactiveCount).toBe(0);
 
     // The page should display seven layer sections representing static content

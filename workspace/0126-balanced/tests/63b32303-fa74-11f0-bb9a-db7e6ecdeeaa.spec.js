@@ -37,7 +37,7 @@ class OsiPage {
   }
 
   async pressOnLayer(number, key) {
-    const loc = this.locatorForLayerNumber(number);
+    const loc1 = this.locatorForLayerNumber(number);
     await loc.focus();
     // Use locator.press to trigger keyboard handlers on the element itself
     await loc.press(key);
@@ -127,7 +127,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
     await expect(firstLayer).toHaveAttribute('tabindex', '0');
 
     // Verify DOM order is descending 7..1 (sorted in script)
-    const numbers = await osi.getLayerNumbersInDomOrder();
+    const numbers1 = await osi.getLayerNumbersInDomOrder();
     expect(numbers[0]).toBe('7');
     expect(numbers[numbers.length - 1]).toBe('1');
 
@@ -143,7 +143,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
     // - Clicking a layer applies .selected class
     // - layerDetails content (title and function) updates to the chosen layer
     // - currentSelected global variable reflects selection
-    const osi = new OsiPage(page);
+    const osi1 = new OsiPage(page);
     await osi.goto();
 
     // Select Transport Layer (number 4)
@@ -169,7 +169,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
   test('Clicking different layers updates details and moves selection (S1 -> S1 via LayerClick with guard)', async ({ page }) => {
     // Validate transitions when changing selection:
     // - Selecting layer 5 then layer 3 moves the selected class and updates details
-    const osi = new OsiPage(page);
+    const osi2 = new OsiPage(page);
     await osi.goto();
 
     // Click layer 5
@@ -190,7 +190,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
   test('Guard behavior: clicking already-selected layer does not change state (S1 on same LayerClick guarded)', async ({ page }) => {
     // Validate the guard "currentSelected === number" prevents re-running selection logic:
     // - Clicking same layer twice should not change currentSelected or re-render content
-    const osi = new OsiPage(page);
+    const osi3 = new OsiPage(page);
     await osi.goto();
 
     // Choose layer 2
@@ -212,7 +212,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
   test('Keyboard activation: Enter and Space trigger selection (LayerKeyDown event)', async ({ page }) => {
     // Validate keyboard accessibility:
     // - Pressing Enter or Space on a focused layer triggers selection and updates details
-    const osi = new OsiPage(page);
+    const osi4 = new OsiPage(page);
     await osi.goto();
 
     // Focus layer 1 and press Enter
@@ -231,7 +231,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
 
   test('Keyboard non-activation: pressing other keys does not trigger select', async ({ page }) => {
     // Ensure that pressing unrelated keys (e.g., 'a') on a layer does not select it.
-    const osi = new OsiPage(page);
+    const osi5 = new OsiPage(page);
     await osi.goto();
 
     // Ensure starting state has no selection
@@ -248,14 +248,14 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
 
   test('Edge case: verify ARIA and accessibility attributes on details and layers', async ({ page }) => {
     // Validate that layer-details has aria-live and is accessible; layers have proper aria-labels
-    const osi = new OsiPage(page);
+    const osi6 = new OsiPage(page);
     await osi.goto();
 
     await expect(page.locator('#layer-details')).toHaveAttribute('aria-live', 'polite');
     await expect(page.locator('#layer-details')).toHaveAttribute('aria-atomic', 'true');
 
     // Each layer should have an aria-label like "Layer N: Name"
-    const count = await osi.getLayerCount();
+    const count1 = await osi.getLayerCount();
     for (let i = 0; i < count; i++) {
       const layer = page.locator('#osi-model .layer').nth(i);
       const aria = await layer.getAttribute('aria-label');
@@ -267,7 +267,7 @@ test.describe('OSI Model Interactive Demo - FSM and Accessibility Tests', () => 
     // This test explicitly loads the page and collects runtime exceptions.
     // The afterEach hook will assert there were no pageerrors/console.errors.
     // We still perform additional sanity checks for the FSM observable states.
-    const osi = new OsiPage(page);
+    const osi7 = new OsiPage(page);
     await osi.goto();
 
     // Sanity: select a layer to ensure interactive handlers run without throwing.

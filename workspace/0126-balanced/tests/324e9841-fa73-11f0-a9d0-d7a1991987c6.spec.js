@@ -126,7 +126,7 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
       await expect(page.locator('#reset')).toHaveText('Reset');
 
       // Output should be empty initially
-      const lines = await app.getOutputLines();
+      const lines1 = await app.getOutputLines();
       expect(lines.length).toBe(0);
     });
   });
@@ -134,14 +134,14 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
   test.describe('Add Element interactions and transitions', () => {
     test('clicking Add once transitions S0_Idle -> S1_ElementAdded and reports correct values', async ({ page }) => {
       // Validate first transition and verify report: "Total Array Size: 2, Elements: 1, Operations: 1"
-      const app = new AmortizedPage(page);
+      const app1 = new AmortizedPage(page);
       await app.goto();
 
       // Click Add once
       await app.clickAdd();
 
       // Expect exactly one report line matching the simulation
-      const lines = await app.getOutputLines();
+      const lines2 = await app.getOutputLines();
       expect(lines.length).toBe(1);
       const expected = simulateExpectedOutputs(1);
       expect(lines).toEqual(expected);
@@ -149,7 +149,7 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
 
     test('multiple Add clicks cause resizes and operations count reflects both adds and resizes', async ({ page }) => {
       // Validate a sequence of adds and confirm the series of report lines match expected behavior
-      const app = new AmortizedPage(page);
+      const app2 = new AmortizedPage(page);
       await app.goto();
 
       const addCount = 6; // exercise multiple resizes across capacity boundaries
@@ -157,12 +157,12 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
         await app.clickAdd();
       }
 
-      const lines = await app.getOutputLines();
+      const lines3 = await app.getOutputLines();
       // Ensure we have one line per add
       expect(lines.length).toBe(addCount);
 
       // Compute expected lines and compare
-      const expected = simulateExpectedOutputs(addCount);
+      const expected1 = simulateExpectedOutputs(addCount);
       expect(lines).toEqual(expected);
 
       // Additional sanity checks on the last line: capacity should be >= elements
@@ -180,11 +180,11 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
 
     test('edge case: no Add clicks keeps output empty (remains in S0_Idle)', async ({ page }) => {
       // Validate that without interactions the page remains in Idle and no reports are produced
-      const app = new AmortizedPage(page);
+      const app3 = new AmortizedPage(page);
       await app.goto();
 
       // Do not click anything
-      const lines = await app.getOutputLines();
+      const lines4 = await app.getOutputLines();
       expect(lines.length).toBe(0);
     });
   });
@@ -192,7 +192,7 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
   test.describe('Reset behavior and transitions', () => {
     test('clicking Reset triggers page reload and clears output (S0_Idle -> S0_Idle)', async ({ page }) => {
       // This validates the Reset event and its transition back to Idle via location.reload()
-      const app = new AmortizedPage(page);
+      const app4 = new AmortizedPage(page);
       await app.goto();
 
       // Add a couple elements to populate output
@@ -222,7 +222,7 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
   test.describe('Robustness and error observation', () => {
     test('should not produce ReferenceError, SyntaxError, or TypeError on load and interactions', async ({ page }) => {
       // This test explicitly loads the page and performs several interactions while collecting runtime errors
-      const app = new AmortizedPage(page);
+      const app5 = new AmortizedPage(page);
       await app.goto();
 
       // Perform a sequence of interactions
@@ -246,7 +246,7 @@ test.describe('Amortized Analysis Demonstration (Application ID: 324e9841-fa73-1
     test('observes and surfaces any uncaught page errors or console errors (if they occur)', async ({ page }) => {
       // This test demonstrates observation: if the app produced uncaught errors they would be captured.
       // We still assert no critical errors occurred, but we print collected diagnostics when a non-critical issue exists.
-      const app = new AmortizedPage(page);
+      const app6 = new AmortizedPage(page);
       await app.goto();
 
       // Intentionally perform interactions to surface potential runtime issues

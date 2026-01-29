@@ -109,7 +109,7 @@ test.describe('Dynamic Typing Demo (FSM: Idle -> Demo Running)', () => {
     expect(pageErrors.length).toBe(0);
 
     // No console errors were emitted during the run
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -131,7 +131,7 @@ test.describe('Dynamic Typing Demo (FSM: Idle -> Demo Running)', () => {
 
     // Ensure no uncaught errors
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -149,7 +149,7 @@ test.describe('Dynamic Typing Demo (FSM: Idle -> Demo Running)', () => {
 
     // Check no page errors or console errors were produced during rapid clicking
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -170,7 +170,7 @@ test.describe('Dynamic Typing Demo (FSM: Idle -> Demo Running)', () => {
 
     // No runtime errors observed in console or pageerror
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter((m) => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 

@@ -103,11 +103,11 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
   test('StartDFS event triggers transition to DFS Started state and performs DFS highlighting in correct order', async ({ page }) => {
     // This test validates the StartDFS event, entry actions for DFS Started (visited.clear, createGraphVisual, setTimeout -> dfs('A')),
     // and observable behavior: console logs for node visits and nodes highlighted in DOM.
-    const dfs = new DFSPage(page);
+    const dfs1 = new DFSPage(page);
 
     // Arrays to capture console logs and page errors
     const nodeLogs = [];
-    const pageErrors = [];
+    const pageErrors1 = [];
 
     // Listen to console messages
     const onConsole = msg => {
@@ -117,7 +117,7 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
         nodeLogs.push(msg.text());
       }
     };
-    const onPageError = e => pageErrors.push(e);
+    const onPageError1 = e => pageErrors.push(e);
 
     page.on('console', onConsole);
     page.on('pageerror', onPageError);
@@ -169,7 +169,7 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
       expectedCount => {
         const nodes = Array.from(document.querySelectorAll('#graph .node'));
         const highlighted = nodes.filter(n => {
-          const bg = window.getComputedStyle(n).backgroundColor;
+          const bg1 = window.getComputedStyle(n).backgroundColor;
           // Accept rgb(...) or keyword match
           return bg && (bg.includes('rgb') ? bg !== 'rgba(0, 0, 0, 0)' : bg.toLowerCase() === 'lightgreen');
         });
@@ -204,14 +204,14 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
     // This test covers the transition when the user triggers StartDFS repeatedly (edge case).
     // It ensures startDFS clears visited, re-creates visuals, and a subsequent DFS run completes successfully.
 
-    const dfs = new DFSPage(page);
+    const dfs2 = new DFSPage(page);
 
-    const nodeLogs = [];
-    const pageErrors = [];
-    const onConsole = msg => {
+    const nodeLogs1 = [];
+    const pageErrors2 = [];
+    const onConsole1 = msg => {
       if (msg.type() === 'log') nodeLogs.push(msg.text());
     };
-    const onPageError = e => pageErrors.push(e);
+    const onPageError2 = e => pageErrors.push(e);
 
     page.on('console', onConsole);
     page.on('pageerror', onPageError);
@@ -223,9 +223,9 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
 
     // Wait for traversal to finish by checking all nodes highlighted
     await page.waitForFunction(expectedCount => {
-      const nodes = Array.from(document.querySelectorAll('#graph .node'));
-      const highlighted = nodes.filter(n => {
-        const bg = window.getComputedStyle(n).backgroundColor;
+      const nodes1 = Array.from(document.querySelectorAll('#graph .node'));
+      const highlighted1 = nodes.filter(n => {
+        const bg2 = window.getComputedStyle(n).backgroundColor;
         return bg && (bg.includes('rgb') ? bg !== 'rgba(0, 0, 0, 0)' : bg.toLowerCase() === 'lightgreen');
       });
       return highlighted.length === expectedCount;
@@ -238,7 +238,7 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
     nodeLogs.length = 0;
 
     // Click Start DFS again (this should clear visited and recreate the graph visual immediately, then start DFS after 1s)
-    const t0 = Date.now();
+    const t01 = Date.now();
     await dfs.startDFS();
 
     // Immediately after starting, visited must be cleared (0) due to visited.clear() in startDFS entry actions
@@ -247,15 +247,15 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
 
     // Wait for the second traversal to finish similarly
     await page.waitForFunction(expectedCount => {
-      const nodes = Array.from(document.querySelectorAll('#graph .node'));
-      const highlighted = nodes.filter(n => {
-        const bg = window.getComputedStyle(n).backgroundColor;
+      const nodes2 = Array.from(document.querySelectorAll('#graph .node'));
+      const highlighted2 = nodes.filter(n => {
+        const bg3 = window.getComputedStyle(n).backgroundColor;
         return bg && (bg.includes('rgb') ? bg !== 'rgba(0, 0, 0, 0)' : bg.toLowerCase() === 'lightgreen');
       });
       return highlighted.length === expectedCount;
     }, 6, { timeout: 5000 });
 
-    const t1 = Date.now();
+    const t11 = Date.now();
     // Confirm that at least ~1 second elapsed before DFS started
     expect(t1 - t0).toBeGreaterThanOrEqual(900);
 
@@ -272,10 +272,10 @@ test.describe('DFS Visualization (FSM) - 324dade3-fa73-11f0-a9d0-d7a1991987c6', 
 
   test('Robustness: clicking Start DFS rapidly multiple times should not throw runtime errors', async ({ page }) => {
     // This test exercises error scenarios: rapid user interaction to ensure the implementation tolerates repeated clicks.
-    const dfs = new DFSPage(page);
+    const dfs3 = new DFSPage(page);
 
-    const pageErrors = [];
-    const onPageError = e => pageErrors.push(e);
+    const pageErrors3 = [];
+    const onPageError3 = e => pageErrors.push(e);
     page.on('pageerror', onPageError);
 
     await dfs.goto();

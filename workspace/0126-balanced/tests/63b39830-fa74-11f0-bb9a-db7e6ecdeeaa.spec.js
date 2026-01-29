@@ -130,7 +130,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
 
   // Validate changing HTTP method triggers updatePayloadVisibility (HTTP_METHOD_CHANGE event)
   test('Changing HTTP method toggles payload visibility (HTTP_METHOD_CHANGE)', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app1 = new RestApiPage(page);
 
     // Change method to POST -> payload should be enabled
     await app.selectMethod('POST');
@@ -152,7 +152,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
 
   // Validate transition S0_Idle -> S1_RequestSent -> S2_ResponseReceived using GET request
   test('Send GET request transitions: S0_Idle -> S1_RequestSent -> S2_ResponseReceived', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app2 = new RestApiPage(page);
 
     // Ensure method is GET
     await app.selectMethod('GET');
@@ -182,7 +182,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
 
   // Validate POST request with valid JSON payload goes to S2_ResponseReceived
   test('Send POST request with valid JSON receives a response (S1_RequestSent -> S2_ResponseReceived)', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app3 = new RestApiPage(page);
 
     // Switch to POST
     await app.selectMethod('POST');
@@ -203,7 +203,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
     // Wait for a 201 or 200 response (jsonplaceholder returns 201 for POST)
     await expect(app.responseArea).toHaveText(/Status:\s*(200|201)/, { timeout: 15000 });
 
-    const respText = (await app.getResponseText()) || '';
+    const respText1 = (await app.getResponseText()) || '';
     expect(respText).toContain('Headers:');
     expect(respText).toContain('Body:');
     // Body should be JSON and include the fields we sent or an id
@@ -219,7 +219,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
 
   // Validate error handling for invalid/missing JSON payload: S0_Idle -> S1_RequestSent (should not happen) -> S3_Error (alert path)
   test('POST with empty payload shows alert and does not send request (edge case)', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app4 = new RestApiPage(page);
 
     await app.selectMethod('POST');
     expect(await app.getSelectedMethod()).toBe('POST');
@@ -253,18 +253,18 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
   });
 
   test('POST with malformed JSON shows alert with error message (edge case)', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app5 = new RestApiPage(page);
 
     await app.selectMethod('POST');
     await app.setPayload('{"title": "foo", invalid }'); // malformed JSON
 
     // Prepare to capture the dialog that should appear
-    const dialogPromise = page.waitForEvent('dialog');
+    const dialogPromise1 = page.waitForEvent('dialog');
 
     // Click send - should trigger alert about invalid JSON
     await app.clickSend();
 
-    const dialog = await dialogPromise;
+    const dialog1 = await dialogPromise;
     // The message includes the thrown error message; just assert it starts with 'Invalid JSON payload:'
     expect(dialog.message()).toMatch(/^Invalid JSON payload:/);
 
@@ -281,7 +281,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
 
   // Validate error transition: when fetch fails, responseArea is updated to Error: <message> (S1_RequestSent -> S3_Error)
   test('Network/fetch error leads to Error state (S3_Error)', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app6 = new RestApiPage(page);
 
     // Point URL to an invalid host to force fetch rejection
     // We set the URL value directly in the DOM; this is a normal test interaction
@@ -312,7 +312,7 @@ test.describe('REST API Demo - FSM validation (63b39830-fa74-11f0-bb9a-db7e6ecde
 
   // Validate we captured console messages and pageerror behavior across interactions
   test('Console and page error monitoring works (observability checks)', async ({ page }) => {
-    const app = new RestApiPage(page);
+    const app7 = new RestApiPage(page);
 
     // Do a simple GET request to produce network activity
     await app.selectMethod('GET');

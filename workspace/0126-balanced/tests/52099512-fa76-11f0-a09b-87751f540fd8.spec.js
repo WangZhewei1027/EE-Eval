@@ -86,20 +86,20 @@ test.describe('Divide and Conquer App - FSM and DOM validation', () => {
   });
 
   test('DivideAction (click Divide) transitions to Divided state and updates result', async ({ page }) => {
-    // Click the Divide button (event: DivideAction) and assert that result updates (S1_Divided)
+    // Click the Divide button (event) and assert that result updates (S1_Divided)
     await pageObject.clickDivide();
 
     // Wait for some non-empty text in result; give a reasonable timeout for computation
     await expect(pageObject.result).not.toHaveText('', { timeout: 2000 });
 
-    const resultText = (await pageObject.getResultText()).trim();
+    const resultText1 = (await pageObject.getResultText()).trim();
     // The implementation attempts to compute a numeric result; assert we got something that looks numeric
     expect(resultText.length).toBeGreaterThan(0);
     expect(resultText).toMatch(/[0-9]/);
 
     // Also ensure no ReferenceError/SyntaxError/TypeError occurred during this interaction
-    const combinedConsole = consoleErrors.join('\n');
-    const pageErrorMessages = pageErrors.map(e => String(e));
+    const combinedConsole1 = consoleErrors.join('\n');
+    const pageErrorMessages1 = pageErrors.map(e => String(e));
     expect(combinedConsole).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
     for (const err of pageErrorMessages) {
       expect(err).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
@@ -113,13 +113,13 @@ test.describe('Divide and Conquer App - FSM and DOM validation', () => {
     // Wait for some non-empty text in result
     await expect(pageObject.result).not.toHaveText('', { timeout: 2000 });
 
-    const resultText = (await pageObject.getResultText()).trim();
+    const resultText2 = (await pageObject.getResultText()).trim();
     expect(resultText.length).toBeGreaterThan(0);
     expect(resultText).toMatch(/[0-9]/);
 
     // No ReferenceError/SyntaxError/TypeError expected
-    const combinedConsole = consoleErrors.join('\n');
-    const pageErrorMessages = pageErrors.map(e => String(e));
+    const combinedConsole2 = consoleErrors.join('\n');
+    const pageErrorMessages2 = pageErrors.map(e => String(e));
     expect(combinedConsole).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
     for (const err of pageErrorMessages) {
       expect(err).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
@@ -145,8 +145,8 @@ test.describe('Divide and Conquer App - FSM and DOM validation', () => {
     expect(await pageObject.result.isVisible()).toBe(true);
 
     // No critical JS errors expected during normal repeated interactions
-    const combinedConsole = consoleErrors.join('\n');
-    const pageErrorMessages = pageErrors.map(e => String(e));
+    const combinedConsole3 = consoleErrors.join('\n');
+    const pageErrorMessages3 = pageErrors.map(e => String(e));
     expect(combinedConsole).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
     for (const err of pageErrorMessages) {
       expect(err).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
@@ -182,7 +182,7 @@ test.describe('Divide and Conquer App - FSM and DOM validation', () => {
     await expect(pageObject.result).not.toHaveText('', { timeout: 2000 });
 
     // Assert console error messages collected do not include ReferenceError/SyntaxError/TypeError
-    const combinedConsole = consoleErrors.join('\n');
+    const combinedConsole4 = consoleErrors.join('\n');
     expect(combinedConsole).not.toMatch(/ReferenceError|SyntaxError|TypeError/);
 
     // Also ensure pageErrors do not include those error types (they may include RangeError from explicit test above only)

@@ -106,7 +106,7 @@ test.describe('B-Tree Visualization - FSM and UI tests', () => {
 
   test('InsertNumber event: inserting a valid number transitions to NumberInserted and updates DOM', async ({ page }) => {
     // This test validates the InsertNumber event and the transition S0_Idle -> S1_NumberInserted
-    const btPage = new BTreePage(page);
+    const btPage1 = new BTreePage(page);
     await btPage.goto();
 
     // Insert a single value and verify UI updates and bTree state
@@ -140,7 +140,7 @@ test.describe('B-Tree Visualization - FSM and UI tests', () => {
   test('Inserting multiple numbers triggers splits and creates multiple nodes in visualization', async ({ page }) => {
     // This test inserts a sequence of numbers to exercise insertNonFull and splitChild logic,
     // ensuring the tree transitions to an internal (non-leaf) structure and DOM reflects multiple nodes.
-    const btPage = new BTreePage(page);
+    const btPage2 = new BTreePage(page);
     await btPage.goto();
 
     // Insert several numbers to force splits for t=2 (max keys per node = 3)
@@ -177,7 +177,7 @@ test.describe('B-Tree Visualization - FSM and UI tests', () => {
 
   test('Edge case: clicking Insert with empty or invalid input shows an alert (error scenario)', async ({ page }) => {
     // This test validates the alert path when input is invalid (S0_Idle -> stays S0_Idle with alert)
-    const btPage = new BTreePage(page);
+    const btPage3 = new BTreePage(page);
     await btPage.goto();
 
     // Ensure input is empty
@@ -203,7 +203,7 @@ test.describe('B-Tree Visualization - FSM and UI tests', () => {
 
   test('Verify draw() is invoked indirectly by checking DOM updates; no runtime exceptions during operations', async ({ page }) => {
     // This test replays a few operations and ensures the page does not emit page errors or console errors
-    const btPage = new BTreePage(page);
+    const btPage4 = new BTreePage(page);
     await btPage.goto();
 
     // Perform some inserts
@@ -212,13 +212,13 @@ test.describe('B-Tree Visualization - FSM and UI tests', () => {
     await btPage.insertNumber(3);
 
     // Ensure DOM contains expected nodes
-    const nodeTexts = await btPage.getAllNodeTexts();
+    const nodeTexts1 = await btPage.getAllNodeTexts();
     expect(nodeTexts.join(' ')).toContain('1');
     expect(nodeTexts.join(' ')).toContain('2');
     expect(nodeTexts.join(' ')).toContain('3');
 
     // Additionally ensure the internal draw() result matches DOM by comparing total keys count in bTree to number of values inserted
-    const totalKeys = await btPage.evaluate(() => {
+    const totalKeys1 = await btPage.evaluate(() => {
       let keys = [];
       function collect(n) {
         if (!n) return;

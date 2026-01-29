@@ -154,7 +154,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('S0 -> S1: Add Node transitions to GraphUpdated and updates SVG + labels', async ({ page }) => {
     // Validate that clicking Add Node updates the graph (S0_Idle -> S1_GraphUpdated)
-    const app = new PageRankPage(page);
+    const app1 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     const beforeCount = await app.getNodeCount();
@@ -178,7 +178,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('S0 -> S1: Add Link updates link count and does not produce errors', async ({ page }) => {
     // Validate Add Link behavior (Idle -> GraphUpdated via AddLink)
-    const app = new PageRankPage(page);
+    const app2 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     const beforeLinks = await app.getLinkCount();
@@ -198,7 +198,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('S1 -> S2: Calculate PageRank computes ranks and displays results', async ({ page }) => {
     // Validate Calculate PageRank (GraphUpdated -> PageRankCalculated)
-    const app = new PageRankPage(page);
+    const app3 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     // Ensure there is at least the initial graph; perform calculate
@@ -229,7 +229,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('S1 -> S0: Reset Graph returns graph to initial state and clears results', async ({ page }) => {
     // Validate Reset Graph transitions GraphUpdated -> Idle
-    const app = new PageRankPage(page);
+    const app4 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     // Add a node to move away from initial state
@@ -259,7 +259,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('S0 Idle: Adjust Damping Factor (input event) updates display (S0 stays S0)', async ({ page }) => {
     // Validate DampingFactorChange event keeps the state in Idle and updates UI
-    const app = new PageRankPage(page);
+    const app5 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     // Change damping to 0.60
@@ -275,7 +275,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('S0 Idle: Adjust Iterations (input event) updates display (S0 stays S0)', async ({ page }) => {
     // Validate IterationsChange event updates UI and does not change state
-    const app = new PageRankPage(page);
+    const app6 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     // Change iterations to 10
@@ -291,7 +291,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('Repeated interactions: multiple calculates and adds remain stable and error-free', async ({ page }) => {
     // Exercise the app with repeated interactions to catch potential intermittent errors
-    const app = new PageRankPage(page);
+    const app7 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     // Perform a sequence: add node, add link, calculate, add node, calculate
@@ -324,7 +324,7 @@ test.describe('PageRank Visualization - FSM & UI tests', () => {
 
   test('Sanity: No unexpected runtime errors logged to the console or as page errors', async ({ page }) => {
     // This test double-checks the console/page error collections after a fresh load and light interactions.
-    const app = new PageRankPage(page);
+    const app8 = new PageRankPage(page);
     await app.waitForInitialRender();
 
     // Perform a small set of interactions

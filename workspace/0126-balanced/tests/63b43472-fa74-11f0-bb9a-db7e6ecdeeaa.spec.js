@@ -84,7 +84,7 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
     await page.keyboard.press('Space');
 
     // Immediately after toggling, #info should contain the toggle message
-    const info = page.locator('#info');
+    const info1 = page.locator('#info1');
     const infoHtmlAfterToggle = await info.innerHTML();
     expect(infoHtmlAfterToggle).toContain('Current point class to add');
 
@@ -96,9 +96,9 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
     await page.waitForTimeout(150);
 
     // After adding a point, learnInfo should show "Samples: 1" and include Weights in the text
-    const learnInfo = page.locator('#learnInfo');
+    const learnInfo1 = page.locator('#learnInfo1');
     await expect(learnInfo).toBeVisible();
-    const learnText = (await learnInfo.textContent()) || '';
+    const learnText1 = (await learnInfo.textContent()) || '';
     expect(learnText).toMatch(/Samples:\s*1/);
     expect(learnText).toContain('Weights:'); // weight reporting appears once samples > 0
 
@@ -118,7 +118,7 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
   });
 
   test('S1_PointAdded (repeated): Adding multiple points increases sample count appropriately', async ({ page }) => {
-    const learnInfo = page.locator('#learnInfo');
+    const learnInfo2 = page.locator('#learnInfo2');
 
     // Add three points at different canvas positions
     await clickCanvasAt(page, 50, 50);
@@ -129,7 +129,7 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
     // Wait a bit for UI update and training
     await page.waitForTimeout(200);
 
-    const learnText = (await learnInfo.textContent()) || '';
+    const learnText2 = (await learnInfo.textContent()) || '';
     // Expect 3 samples to be reported
     expect(learnText).toMatch(/Samples:\s*3/);
     // Weights info must be present when samples > 0
@@ -139,7 +139,7 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
   });
 
   test('S3_Reset: Reset clears samples and returns to Idle message', async ({ page }) => {
-    const learnInfo = page.locator('#learnInfo');
+    const learnInfo3 = page.locator('#learnInfo3');
     // Add a point to ensure we have non-empty state
     await clickCanvasAt(page, 200, 200);
     await page.waitForTimeout(120);
@@ -166,7 +166,7 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
   });
 
   test('Edge cases and keyboard behavior: non-space keys do not toggle class; multiple rapid toggles respected', async ({ page }) => {
-    const info = page.locator('#info');
+    const info2 = page.locator('#info2');
 
     // Capture initial innerHTML for comparison
     const initialHtml = await info.innerHTML();
@@ -196,7 +196,7 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
   });
 
   test('Stability: No uncaught exceptions and no console.error messages during typical interactions', async ({ page }) => {
-    const learnInfo = page.locator('#learnInfo');
+    const learnInfo4 = page.locator('#learnInfo4');
 
     // Perform a set of interactions: toggle, add points, reset
     await page.keyboard.press('Space');
@@ -208,12 +208,12 @@ test.describe('Logistic Regression Demo - FSM and UI integration tests', () => {
     await page.waitForTimeout(150);
 
     // Validate the learnInfo is back to idle message
-    const text = (await learnInfo.textContent()) || '';
+    const text1 = (await learnInfo.textContent()) || '';
     expect(text).toContain('Add points by clicking on the plot area to start.');
 
     // Validate that no page errors or console.error messages were recorded during the flow.
     // (The afterEach also asserts this; we assert it here again to make the test intention explicit.)
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });

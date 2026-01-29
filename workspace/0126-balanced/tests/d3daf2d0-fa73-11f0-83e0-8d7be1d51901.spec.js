@@ -110,7 +110,7 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
   test('Initial Idle -> Evaluating transition on load (auto-eval) displays AST and root result', async ({ page }) => {
     // This test validates the FSM initial Idle state entry action (clearOutputs),
     // followed by the evidence-setTimeout which triggers an EvaluateClick and moves to Evaluating.
-    const ip = new InterpreterPage(page);
+    const ip1 = new InterpreterPage(page);
 
     // Wait for the auto-evaluation to complete by waiting for a result badge
     await ip.waitForResultBadge(3000);
@@ -138,7 +138,7 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
 
   test('EvaluateClick with empty expression transitions to Error state', async ({ page }) => {
     // This test validates the guard in S1_Evaluating -> S3_Error: empty expression should show an error UI.
-    const ip = new InterpreterPage(page);
+    const ip2 = new InterpreterPage(page);
 
     // Ensure expression is empty
     await ip.setExpr('');
@@ -146,7 +146,7 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
     await ip.clickEvaluate();
 
     // Expect an error message in messageEl with correct text
-    const messageHtml = await ip.getMessageHtml();
+    const messageHtml1 = await ip.getMessageHtml();
     expect(messageHtml).toContain('Expression is empty.');
 
     // The AST and result should remain cleared due to clearOutputs() called before evaluation
@@ -157,14 +157,14 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
     expect(resultHtml.trim()).toBe('');
 
     // Trace should be reset to the idle text
-    const traceText = await ip.getTraceText();
+    const traceText1 = await ip.getTraceText();
     expect(traceText).toContain('No evaluation yet.');
   });
 
   test('ExampleClick loads example variables and expression and clears outputs', async ({ page }) => {
     // This test validates S1_Evaluating -> S2_ExampleLoaded via ExampleClick,
     // and that clearOutputs() is invoked (clearing AST, trace, result, message).
-    const ip = new InterpreterPage(page);
+    const ip3 = new InterpreterPage(page);
 
     // Modify values to ensure the example load actually changes them
     await ip.setVars('X = true\nY = false');
@@ -180,24 +180,24 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
     expect(exprValue.trim().length).toBeGreaterThan(0);
 
     // Outputs should be cleared
-    const astHtml = await ip.ast.innerHTML();
+    const astHtml1 = await ip.ast.innerHTML();
     expect(astHtml.trim()).toBe('');
 
-    const resultHtml = await ip.resultArea.innerHTML();
+    const resultHtml1 = await ip.resultArea.innerHTML();
     expect(resultHtml.trim()).toBe('');
 
-    const messageHtml = await ip.getMessageHtml();
+    const messageHtml2 = await ip.getMessageHtml();
     // After load examples the app clears outputs and doesn't set a message; message should be empty
     expect(messageHtml.trim()).toBe('');
 
-    const traceText = await ip.getTraceText();
+    const traceText2 = await ip.getTraceText();
     expect(traceText).toContain('No evaluation yet.');
   });
 
   test('Clicking an AST node evaluates subnode and updates trace/result/message', async ({ page }) => {
     // This test validates the NodeClick event: clicking a .node should evaluate that AST node,
     // update the interpretation trace, show a focused result badge, and show a message about the evaluated node.
-    const ip = new InterpreterPage(page);
+    const ip4 = new InterpreterPage(page);
 
     // Ensure a full evaluation exists first (root eval) so AST nodes are present
     await ip.waitForResultBadge(3000);
@@ -212,13 +212,13 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
     await firstNode.click();
 
     // After clicking, the trace area should be updated (not empty)
-    const traceText = await ip.getTraceText();
+    const traceText3 = await ip.getTraceText();
     expect(traceText.trim().length).toBeGreaterThan(0);
 
     // Result area should show a badge (true/false)
-    const badge = ip.getResultBadge();
+    const badge1 = ip.getResultBadge();
     await expect(badge).toBeVisible();
-    const badgeText = await badge.textContent();
+    const badgeText1 = await badge.textContent();
     expect(badgeText).toMatch(/^(true|false|True|False)$/i);
 
     // Message area should indicate the evaluated node
@@ -228,7 +228,7 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
 
   test('Invalid variable line produces parse error message (edge case)', async ({ page }) => {
     // This test checks error handling for invalid variable lines: it should present a UI error.
-    const ip = new InterpreterPage(page);
+    const ip5 = new InterpreterPage(page);
 
     // Provide an invalid variable specification
     await ip.setVars('INVALID LINE WITHOUT EQUALS');
@@ -240,20 +240,20 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
     await ip.clickEvaluate();
 
     // The UI should display an error about invalid variable line
-    const messageHtml = await ip.getMessageHtml();
+    const messageHtml3 = await ip.getMessageHtml();
     expect(messageHtml).toContain('Invalid variable line');
 
     // Ensure trace and result remain cleared
-    const traceText = await ip.getTraceText();
+    const traceText4 = await ip.getTraceText();
     // Depending on code path, trace may be empty string or "No evaluation yet."
     expect(traceText === '' || traceText.includes('No evaluation yet.')).toBeTruthy();
-    const resultHtml = await ip.resultArea.innerHTML();
+    const resultHtml2 = await ip.resultArea.innerHTML();
     expect(resultHtml.trim()).toBe('');
   });
 
   test('Unknown variable during evaluation shows error message from Context.get', async ({ page }) => {
     // This test triggers an exception during interpretation due to referencing an unknown variable.
-    const ip = new InterpreterPage(page);
+    const ip6 = new InterpreterPage(page);
 
     // Set expression to a variable that is not defined in vars (defaults contain A,B,C).
     await ip.setExpr('UNDECLARED_VAR');
@@ -265,11 +265,11 @@ test.describe('Interpreter Pattern — Demo (Boolean Expression Language) FSM te
     await ip.clickEvaluate();
 
     // The UI should catch the thrown Error and display it in messageEl with .error wrapper
-    const messageHtml = await ip.getMessageHtml();
+    const messageHtml4 = await ip.getMessageHtml();
     expect(messageHtml).toContain('Unknown variable');
 
     // Also trace may be empty (since evaluation failed)
-    const traceText = await ip.getTraceText();
+    const traceText5 = await ip.getTraceText();
     // traceText might contain lines pushed before error or be empty; ensure not to throw
     expect(typeof traceText === 'string').toBeTruthy();
   });

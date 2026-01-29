@@ -19,7 +19,7 @@ class BigOPage {
 
   // Returns the primary description paragraph (first <p>)
   async primaryParagraphText() {
-    const el = await this.page.locator('p').first();
+    const el1 = await this.page.locator('p').first();
     return el.textContent();
   }
 
@@ -97,7 +97,7 @@ test.describe('Big-O Notation page - FSM S0_Idle and static content validation',
 
   test('Static content - list of Big-O types and example code are present', async ({ page }) => {
     // This test validates the static informational content and the example code block.
-    const bigO = new BigOPage(page);
+    const bigO1 = new BigOPage(page);
 
     const listItems = await bigO.listItemsText();
     // There should be several bullet points describing Big-O types.
@@ -119,7 +119,7 @@ test.describe('Big-O Notation page - FSM S0_Idle and static content validation',
   test('No interactive elements or transitions exist (FSM has no events/transitions)', async ({ page }) => {
     // The FSM definition shows zero transitions and no interactive components.
     // Confirm the page contains no interactive controls like buttons, inputs, anchors, selects, textareas.
-    const bigO = new BigOPage(page);
+    const bigO2 = new BigOPage(page);
     const interactiveCount = await bigO.interactiveControlCount();
     expect(interactiveCount).toBe(0);
 
@@ -144,7 +144,7 @@ test.describe('Big-O Notation page - FSM S0_Idle and static content validation',
   test('Edge case checks: absent elements and resilience', async ({ page }) => {
     // Validate the page gracefully lacks interactive UI elements and certain expected-but-absent selectors
     // Query for elements that should not exist and assert they are absent
-    const bigO = new BigOPage(page);
+    const bigO3 = new BigOPage(page);
 
     // These selectors represent interactive or stateful controls that the FSM did not provide
     expect(await bigO.hasSelector('#nonexistent-state')).toBe(false);

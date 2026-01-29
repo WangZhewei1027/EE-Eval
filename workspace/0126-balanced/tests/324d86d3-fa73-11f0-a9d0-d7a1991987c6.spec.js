@@ -101,7 +101,7 @@ test.describe('Jump Search Algorithm App - FSM states and transitions', () => {
 
   test('Transition S0 -> S1 and S1 -> S2: valid input leads to result displayed (found case)', async ({ page }) => {
     // This test validates that inputs are read (S1) and a successful search shows the result (S2)
-    const app = new JumpSearchPage(page);
+    const app1 = new JumpSearchPage(page);
     await app.goto();
 
     // Provide a valid sorted array and a target that exists
@@ -120,7 +120,7 @@ test.describe('Jump Search Algorithm App - FSM states and transitions', () => {
 
   test('Transition S1 -> S2: valid input leads to result displayed (not found case)', async ({ page }) => {
     // Validate branch where the element is not present in the array
-    const app = new JumpSearchPage(page);
+    const app2 = new JumpSearchPage(page);
     await app.goto();
 
     await app.setArray('1,2,3,4,5');
@@ -134,7 +134,7 @@ test.describe('Jump Search Algorithm App - FSM states and transitions', () => {
 
   test('Transition S1 -> S3: invalid inputs display error message (empty inputs)', async ({ page }) => {
     // Validate error handling when inputs are invalid (S3)
-    const app = new JumpSearchPage(page);
+    const app3 = new JumpSearchPage(page);
     await app.goto();
 
     // Case: both inputs empty
@@ -160,7 +160,7 @@ test.describe('Jump Search Algorithm App - FSM states and transitions', () => {
 
   test('Edge case: inputs with extra commas and whitespace still parse and find the correct index', async ({ page }) => {
     // This validates robustness of parsing logic used in performJumpSearch()
-    const app = new JumpSearchPage(page);
+    const app4 = new JumpSearchPage(page);
     await app.goto();
 
     // Input containing stray commas and spaces should be filtered; resulting array should be [1,2,3]
@@ -176,7 +176,7 @@ test.describe('Jump Search Algorithm App - FSM states and transitions', () => {
 
   test('Visual & DOM checks after operations: result area updates and inputs remain editable', async ({ page }) => {
     // Validate that after operations, UI remains interactive and DOM updates persist as expected.
-    const app = new JumpSearchPage(page);
+    const app5 = new JumpSearchPage(page);
     await app.goto();
 
     await app.setArray('10,20,30');

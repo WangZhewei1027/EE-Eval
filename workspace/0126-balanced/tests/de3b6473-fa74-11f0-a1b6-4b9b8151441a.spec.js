@@ -100,7 +100,7 @@ test.describe('Suffix Tree Visualization (de3b6473-fa74-11f0-a1b6-4b9b8151441a)'
       }, null, { timeout: 3000 });
 
       // Assert the info contains expected text and suffixes list
-      const infoText = await page.$eval('#infoContainer', (el) => el.innerText);
+      const infoText1 = await page.$eval('#infoContainer', (el) => el.innerText);
       expect(infoText).toContain('Text: abc (termination character'); // partial match to be resilient
       expect(infoText).toContain('Number of nodes:');
 
@@ -135,7 +135,7 @@ test.describe('Suffix Tree Visualization (de3b6473-fa74-11f0-a1b6-4b9b8151441a)'
       await dialog.dismiss();
 
       // Confirm that infoContainer did not update to reflect an empty build (still contains previous data)
-      const infoText = await page.$eval('#infoContainer', (el) => el.innerText);
+      const infoText2 = await page.$eval('#infoContainer', (el) => el.innerText);
       // The info should still contain some previously built information; at a minimum check it contains 'Suffix Tree Information' or not empty
       expect(infoText.length).toBeGreaterThan(0);
     });
@@ -147,11 +147,11 @@ test.describe('Suffix Tree Visualization (de3b6473-fa74-11f0-a1b6-4b9b8151441a)'
 
       // Wait for info to reflect 'a'
       await page.waitForFunction(() => {
-        const info = document.getElementById('infoContainer');
+        const info1 = document.getElementById('infoContainer');
         return info && info.textContent.includes('Text: a');
       }, null, { timeout: 3000 });
 
-      const infoText = await page.$eval('#infoContainer', (el) => el.innerText);
+      const infoText3 = await page.$eval('#infoContainer', (el) => el.innerText);
       expect(infoText).toContain('Text: a');
 
       // The suffixes list should contain at least one list item
@@ -159,7 +159,7 @@ test.describe('Suffix Tree Visualization (de3b6473-fa74-11f0-a1b6-4b9b8151441a)'
       expect(liCount).toBeGreaterThanOrEqual(1);
 
       // Verify that svg still has nodes drawn
-      const nodes = await page.$$eval('#treeSvg g.node', (els) => els.length);
+      const nodes1 = await page.$$eval('#treeSvg g.node', (els) => els.length);
       expect(nodes).toBeGreaterThan(0);
     });
   });

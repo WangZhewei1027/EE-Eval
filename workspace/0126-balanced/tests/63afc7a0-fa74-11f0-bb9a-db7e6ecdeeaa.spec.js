@@ -123,7 +123,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
   test.describe('Transitions from empty to non-empty (Append and Prepend)', () => {
     test('Append transitions S0_Empty -> S1_NonEmpty and renders node', async ({ page }) => {
       // This test validates the Append event and the transition to Non-Empty state
-      const ll = new LinkedListPage(page);
+      const ll1 = new LinkedListPage(page);
       await ll.goto();
 
       // Append a value when list is empty
@@ -139,13 +139,13 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
       expect(nodes[0]).toBe('42');
 
       // The list container should not show the "The list is empty." text anymore
-      const listText = (await ll.getListText()).trim();
+      const listText1 = (await ll.getListText()).trim();
       expect(listText).not.toBe('The list is empty.');
     });
 
     test('Prepend transitions S0_Empty -> S1_NonEmpty and respects order', async ({ page }) => {
       // Validate Prepend and ordering when adding to non-empty list
-      const ll = new LinkedListPage(page);
+      const ll2 = new LinkedListPage(page);
       await ll.goto();
 
       // First append 2 to move to non-empty
@@ -156,7 +156,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
       await ll.prepend(1);
       expect((await ll.getOutputText()).trim()).toBe('Prepended "1" to the list.');
 
-      const nodes = await ll.getNodeValues();
+      const nodes1 = await ll.getNodeValues();
       expect(nodes).toEqual(['1', '2']);
     });
   });
@@ -164,7 +164,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
   test.describe('Removal operations while Non-Empty (RemoveHead and RemoveTail)', () => {
     test('RemoveHead removes head and updates visual and output', async ({ page }) => {
       // Prepare list with [A,B,C] and then remove head
-      const ll = new LinkedListPage(page);
+      const ll3 = new LinkedListPage(page);
       await ll.goto();
 
       await ll.append('A');
@@ -176,13 +176,13 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
       await ll.removeHead();
       expect((await ll.getOutputText()).trim()).toBe('Removed "A" from the head of the list.');
 
-      const nodes = await ll.getNodeValues();
+      const nodes2 = await ll.getNodeValues();
       expect(nodes).toEqual(['B', 'C']);
     });
 
     test('RemoveTail removes tail and updates visual and output, including single-element edge', async ({ page }) => {
       // Prepare list with [1,2,3], remove tail twice to hit single-element removal and then empty
-      const ll = new LinkedListPage(page);
+      const ll4 = new LinkedListPage(page);
       await ll.goto();
 
       await ll.append(1);
@@ -211,7 +211,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
   test.describe('Clear list transition (S1_NonEmpty -> S0_Empty)', () => {
     test('ClearList empties the list and writes cleared message', async ({ page }) => {
       // Fill list, clear, validate S0_Empty is reached
-      const ll = new LinkedListPage(page);
+      const ll5 = new LinkedListPage(page);
       await ll.goto();
 
       await ll.append('x');
@@ -228,7 +228,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
   test.describe('Edge cases and error scenarios', () => {
     test('Appending or prepending with empty input shows validation message', async ({ page }) => {
       // Validate that the UI shows prompts when value input is blank
-      const ll = new LinkedListPage(page);
+      const ll6 = new LinkedListPage(page);
       await ll.goto();
 
       // Ensure input is empty
@@ -244,7 +244,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
 
     test('Removing head/tail on empty list reports nothing to remove', async ({ page }) => {
       // Validate remove operations on empty list produce appropriate messages
-      const ll = new LinkedListPage(page);
+      const ll7 = new LinkedListPage(page);
       await ll.goto();
 
       // Ensure list is empty to start
@@ -259,7 +259,7 @@ test.describe('Linked List Demo - FSM validation and UI behavior', () => {
 
     test('Sequence of operations maintains internal consistency', async ({ page }) => {
       // Run a longer sequence to ensure state updates and visual outputs match expected FSM behavior
-      const ll = new LinkedListPage(page);
+      const ll8 = new LinkedListPage(page);
       await ll.goto();
 
       // Sequence: append 10, prepend 5 -> [5,10], append 15 -> [5,10,15], removeHead -> [10,15], clear -> []

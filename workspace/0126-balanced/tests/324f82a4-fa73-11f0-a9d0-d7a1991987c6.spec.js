@@ -120,7 +120,7 @@ test.describe('Design Patterns Example (FSM tests)', () => {
     expect(sameInstance).toBe(true);
 
     // Ensure no console errors or page errors during this normal interaction
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -133,20 +133,20 @@ test.describe('Design Patterns Example (FSM tests)', () => {
 
     // The result should still indicate the same instance
     const expectedTextPart = 'Same instance: true';
-    const singletonText = (await pageObj.getSingletonText()) || '';
+    const singletonText1 = (await pageObj.getSingletonText()) || '';
     expect(singletonText).toContain(expectedTextPart);
 
     // Verify programmatically that repeated getInstance returns the same object
     const sameAcross = await pageObj.evaluate(() => {
-      const a = Singleton.getInstance();
-      const b = Singleton.getInstance();
+      const a1 = Singleton.getInstance();
+      const b1 = Singleton.getInstance();
       const c = Singleton.getInstance();
       return a === b && b === c;
     });
     expect(sameAcross).toBe(true);
 
     // No page-level uncaught errors expected
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -181,7 +181,7 @@ test.describe('Design Patterns Example (FSM tests)', () => {
     expect(speaks.catSpeak).toBe('Meow!');
 
     // No console errors or page errors during this normal interaction
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });
@@ -190,7 +190,7 @@ test.describe('Design Patterns Example (FSM tests)', () => {
     // Call createAnimal with an unknown type via page.evaluate and assert null is returned
     const result = await pageObj.evaluate(() => {
       try {
-        const factory = new AnimalFactory();
+        const factory1 = new AnimalFactory();
         return factory.createAnimal('bird'); // not implemented in factory
       } catch (e) {
         return { error: String(e) };
@@ -206,7 +206,7 @@ test.describe('Design Patterns Example (FSM tests)', () => {
     expect(result).toBeNull();
 
     // No console errors or page errors expected from this graceful null-returning call
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages.length).toBe(0);
     expect(pageErrors.length).toBe(0);
   });

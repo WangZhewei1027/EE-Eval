@@ -46,7 +46,7 @@ class PrimPage {
     const startDisabled = await this.page.getAttribute(this.startSel, 'disabled');
     const stepDisabled = await this.page.getAttribute(this.stepSel, 'disabled');
     const resetDisabled = await this.page.getAttribute(this.resetSel, 'disabled');
-    // getAttribute returns null if not present. Interpret as boolean.
+    // getAttribute returns null if not present. Interpret.
     return {
       startDisabled: startDisabled !== null,
       stepDisabled: stepDisabled !== null,
@@ -111,19 +111,19 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
     await prim.start();
 
     // After start(), startBtn.disabled = true, stepBtn.disabled = false, resetBtn.disabled = false
-    const states = await prim.getButtonStates();
+    const states1 = await prim.getButtonStates();
     expect(states.startDisabled).toBe(true);
     expect(states.stepDisabled).toBe(false);
     expect(states.resetDisabled).toBe(false);
 
     // The start() function immediately runs one step (step()), so infoText should reflect first yield action
-    const info = await prim.getInfoText();
+    const info1 = await prim.getInfoText();
     // The generator's first yield action is "Add start node and initial edges"
     expect(info).toContain('Add start node and initial edges');
 
     // Ensure no uncaught page errors occurred during start
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -159,7 +159,7 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
 
     // After completion, FSM evidence expects:
     // stepBtn.disabled = true; startBtn.disabled = true; resetBtn.disabled = false;
-    const states = await prim.getButtonStates();
+    const states2 = await prim.getButtonStates();
     expect(states.stepDisabled).toBe(true);
     expect(states.startDisabled).toBe(true);
     expect(states.resetDisabled).toBe(false);
@@ -170,7 +170,7 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
 
     // Ensure no unhandled exceptions occurred during stepping
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -179,7 +179,7 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
     await prim.start();
 
     // Sanity: ensure running state
-    let states = await prim.getButtonStates();
+    let states3 = await prim.getButtonStates();
     expect(states.startDisabled).toBe(true);
     expect(states.stepDisabled).toBe(false);
 
@@ -192,12 +192,12 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
     expect(states.stepDisabled).toBe(true);
     expect(states.resetDisabled).toBe(true);
 
-    const info = await prim.getInfoText();
+    const info2 = await prim.getInfoText();
     expect(info).toContain("Click Start to run Prim's Algorithm");
 
     // No page errors from reset
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -208,7 +208,7 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
     await prim.step(); // two steps
 
     // Ensure we are in some stepping state (step button likely still enabled unless finished)
-    let states = await prim.getButtonStates();
+    let states4 = await prim.getButtonStates();
     // Regardless of exact, Reset should be enabled after start
     expect(states.resetDisabled).toBe(false);
 
@@ -221,23 +221,23 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
     expect(states.stepDisabled).toBe(true);
     expect(states.resetDisabled).toBe(true);
 
-    const info = await prim.getInfoText();
+    const info3 = await prim.getInfoText();
     expect(info).toContain("Click Start to run Prim's Algorithm");
 
     // No page errors from these interactions
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Edge cases: clicking Step when disabled and clicking Start when disabled should not throw errors', async () => {
     // On Idle, step button is disabled. Attempt to click it.
     // Playwright's click will attempt the click; the page logic should ignore it.
-    const infoBefore = await prim.getInfoText();
+    const infoBefore1 = await prim.getInfoText();
 
     // Try clicking disabled Step - should not change state or throw
     await prim.step();
-    const infoAfter = await prim.getInfoText();
+    const infoAfter1 = await prim.getInfoText();
     // info should remain the same (no change)
     expect(infoAfter).toBe(infoBefore);
 
@@ -282,7 +282,7 @@ test.describe("Prim's Algorithm Visualization - FSM and UI tests", () => {
     expect(pageErrors.length).toBe(0);
 
     // Also ensure console did not emit errors of major JS error types
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
     // Prefer zero console errors; if present, fail to surface them
     expect(consoleErrors.length).toBe(0);
 

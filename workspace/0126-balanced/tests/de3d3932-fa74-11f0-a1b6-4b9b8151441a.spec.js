@@ -134,7 +134,7 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
     const vizHTML = await dns.visualizationInnerHTML();
     expect(vizHTML.trim().length, 'Visualization should start empty or minimal').toBeGreaterThanOrEqual(0);
 
-    // Result is hidden initially (display: none)
+    // Result is hidden initially (display)
     expect(await dns.isResultVisible()).toBe(false);
 
     // Check a few initial step texts match expected Idle content
@@ -150,7 +150,7 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
 
   test('Clicking Lookup with empty input shows alert and remains Idle (LookupDNS event error flow)', async ({ page }) => {
     // This validates an edge case: user clicks Lookup DNS without entering a domain.
-    const dns = new DNSPage(page);
+    const dns1 = new DNSPage(page);
     await dns.goto();
 
     // Click lookup while input is empty; an alert should appear.
@@ -180,7 +180,7 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
 
   test('Perform full DNS lookup -> displays servers, animates, and shows result (S0_Idle -> S1_LookingUp -> S0_Idle)', async ({ page }) => {
     // Validate a successful lookup: servers are created, animation runs, and result appears with domain & IP.
-    const dns = new DNSPage(page);
+    const dns2 = new DNSPage(page);
     await dns.goto();
 
     // Fill domain and start lookup
@@ -202,7 +202,7 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
     expect(ipPattern.test(resultText)).toBe(true);
 
     // Servers should have been created (Browser, Resolver, Root, TLD, Auth)
-    const serverCount = await dns.getServerCount();
+    const serverCount1 = await dns.getServerCount();
     expect(serverCount).toBeGreaterThanOrEqual(5);
 
     // Final step (step10) should contain 'Browser connects to IP' after the animation completes
@@ -210,8 +210,8 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
     expect(step10Text).toContain('Browser connects to IP');
 
     // Ensure no fatal JS errors occurred during the process
-    const fatalErrors = pageErrors.filter(e => {
-      const m = e && e.message ? e.message : String(e);
+    const fatalErrors1 = pageErrors.filter(e => {
+      const m1 = e && e.message ? e.message : String(e);
       return /ReferenceError|SyntaxError|TypeError/.test(m);
     });
     expect(fatalErrors.length).toBe(0);
@@ -219,7 +219,7 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
 
   test('Click Reset during an ongoing lookup clears visualization and returns to Idle (S1_LookingUp -> S2_Reset -> S0_Idle)', async ({ page }) => {
     // Start a lookup and click Reset while animation is in progress.
-    const dns = new DNSPage(page);
+    const dns3 = new DNSPage(page);
     await dns.goto();
 
     await dns.fillDomain('in-progress.example');
@@ -248,8 +248,8 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
     expect(step1Text).toContain('You enter');
 
     // Ensure there were no fatal runtime errors triggered by resetting mid-animation
-    const fatalErrors = pageErrors.filter(e => {
-      const m = e && e.message ? e.message : String(e);
+    const fatalErrors2 = pageErrors.filter(e => {
+      const m2 = e && e.message ? e.message : String(e);
       return /ReferenceError|SyntaxError|TypeError/.test(m);
     });
     expect(fatalErrors.length).toBe(0);
@@ -257,7 +257,7 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
 
   test('Reset from Idle clears input and keeps visualization/result empty (S0_Idle -> S2_Reset)', async ({ page }) => {
     // Validate Reset behavior when nothing is running: clears domain input and keeps result hidden.
-    const dns = new DNSPage(page);
+    const dns4 = new DNSPage(page);
     await dns.goto();
 
     // Fill domain but do not start lookup
@@ -270,20 +270,20 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
     expect(await dns.getDomainValue()).toBe('');
 
     // Visualization still empty
-    const vizHTML = await dns.visualizationInnerHTML();
+    const vizHTML1 = await dns.visualizationInnerHTML();
     expect(vizHTML.trim()).toBe('');
 
     // Result remains hidden
     expect(await dns.isResultVisible()).toBe(false);
 
     // Steps remain default numbered labels
-    const step1Text = await dns.getStepText(1);
+    const step1Text1 = await dns.getStepText(1);
     expect(step1Text.startsWith('1.')).toBe(true);
   });
 
   test('Sequential lookups work: perform lookup, reset, then lookup again', async ({ page }) => {
     // This test validates robustness across multiple transitions and events.
-    const dns = new DNSPage(page);
+    const dns5 = new DNSPage(page);
     await dns.goto();
 
     // First lookup
@@ -302,12 +302,12 @@ test.describe('DNS Concept Demonstration - FSM states and transitions', () => {
     await dns.clickLookup();
     await page.waitForSelector('#result', { state: 'visible', timeout: 20000 });
 
-    const resultText = await dns.getResultText();
+    const resultText1 = await dns.getResultText();
     expect(resultText).toContain('second.example');
 
     // Ensure no fatal runtime errors occurred across the sequence
-    const fatalErrors = pageErrors.filter(e => {
-      const m = e && e.message ? e.message : String(e);
+    const fatalErrors3 = pageErrors.filter(e => {
+      const m3 = e && e.message ? e.message : String(e);
       return /ReferenceError|SyntaxError|TypeError/.test(m);
     });
     expect(fatalErrors.length).toBe(0);

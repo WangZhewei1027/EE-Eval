@@ -124,7 +124,7 @@ test.describe('CPU Scheduling Interactive Application (FSM states & transitions)
     consoleMessages.length = 0;
     pageErrors.length = 0;
 
-    let evalError = null;
+    let evalError1 = null;
     try {
       // Calling scheduleProcesses(undefined) should attempt to call .sort on undefined and throw.
       await page.evaluate(() => {
@@ -150,7 +150,7 @@ test.describe('CPU Scheduling Interactive Application (FSM states & transitions)
     consoleMessages.length = 0;
     pageErrors.length = 0;
 
-    let evalError = null;
+    let evalError2 = null;
     try {
       // Calling executeProcesses(undefined) should attempt to iterate over undefined and throw.
       await page.evaluate(() => {
@@ -167,7 +167,7 @@ test.describe('CPU Scheduling Interactive Application (FSM states & transitions)
     expect(String(evalError.message)).toMatch(/is not iterable|Cannot read properties|undefined|TypeError/i);
 
     // Confirm page error handler saw something similar
-    const hasRelevantPageError = pageErrors.some(msg => /iterable|is not iterable|Cannot read properties|undefined/i.test(msg));
+    const hasRelevantPageError1 = pageErrors.some(msg => /iterable|is not iterable|Cannot read properties|undefined/i.test(msg));
     expect(hasRelevantPageError || !!evalError).toBeTruthy();
   });
 
@@ -198,7 +198,7 @@ test.describe('CPU Scheduling Interactive Application (FSM states & transitions)
     consoleMessages.length = 0;
     pageErrors.length = 0;
 
-    let threw = false;
+    let threw1 = false;
     try {
       await page.evaluate(() => {
         executeProcesses([]);

@@ -74,7 +74,7 @@ class DPApp {
   }
 
   async setRangeInput(id, value) {
-    const loc = this.page.locator(`#${id}`);
+    const loc1 = this.page.locator(`#${id}`);
     // range input may not accept direct fill; use evaluate to set value and dispatch input event
     await this.page.evaluate(
       ({ id, value }) => {
@@ -139,7 +139,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
 
   test.describe('Initial state (S0_Idle) and Algorithm selection (S1_AlgorithmSelected)', () => {
     test('Initial load should set up controls and show Ready status (S0_Idle entry action setupControls())', async ({ page }) => {
-      const app = new DPApp(page);
+      const app1 = new DPApp(page);
       // Verify status text shows Ready, indicating setupControls() ran on load
       await expect(page.locator(app.selectors.status)).toHaveText('Ready');
 
@@ -154,7 +154,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
     });
 
     test('Selecting another algorithm triggers setupControls() and updates UI (AlgorithmChange -> S1_AlgorithmSelected)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app2 = new DPApp(page);
       // Change to LCS
       await app.selectAlgorithm('lcs');
 
@@ -173,7 +173,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
 
   test.describe('Run interactions (S2_Running) and Step mode (S3_StepMode)', () => {
     test('Clicking Run triggers run(false): status goes to Running then Done (transition S1 -> S2)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app3 = new DPApp(page);
       // Ensure algorithm is Fibonacci
       await app.selectAlgorithm('fib');
       // minimize animation delays to speed test
@@ -196,7 +196,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
     });
 
     test('Clicking Step triggers step mode (run(true)): status shows Step mode — running then Done (S1 -> S3)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app4 = new DPApp(page);
       await app.selectAlgorithm('fib');
       await app.setRangeInput('delay', 0);
       await app.setNumberInput('n', 6);
@@ -215,7 +215,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
     });
 
     test('Within step mode, clicking Naive Recursion produces step visualization and updates result and call count', async ({ page }) => {
-      const app = new DPApp(page);
+      const app5 = new DPApp(page);
       await app.selectAlgorithm('fib');
       // Use very small delay to speed up step expansion
       await app.setRangeInput('delay', 10);
@@ -249,7 +249,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
 
   test.describe('Reset/Stopped state (S4_Stopped) and Reset transitions', () => {
     test('Clicking Reset during a running LCS run stops the animation and returns to Ready (S2 -> S4 via ResetClick)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app6 = new DPApp(page);
       // Choose LCS which has an animated table fill in runLCS
       await app.selectAlgorithm('lcs');
       // Reduce delay so table animation is faster but still allows interrupt
@@ -273,7 +273,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
     });
 
     test('Pressing X key triggers KeyReset and returns UI to initial Ready state (S2/S3 -> S4 via KeyReset)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app7 = new DPApp(page);
       // Start any run (use LCS again to create an active run)
       await app.selectAlgorithm('lcs');
       await app.setRangeInput('delay', 60);
@@ -295,7 +295,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
 
   test.describe('Keyboard shortcuts (KeyRun and KeyStep) and edge scenarios', () => {
     test('Pressing R starts a run (KeyRun event)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app8 = new DPApp(page);
       await app.selectAlgorithm('fib');
       await app.setNumberInput('n', 5);
       await app.setRangeInput('delay', 0);
@@ -310,7 +310,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
     });
 
     test('Edge case: extremely large LCS strings prompt confirm and do not crash (error scenario handling)', async ({ page }) => {
-      const app = new DPApp(page);
+      const app9 = new DPApp(page);
       await app.selectAlgorithm('lcs');
 
       // Set very large strings to trigger the confirm branch (the code calls confirm)
@@ -343,7 +343,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
 
   test.describe('OnEnter/OnExit behavior validations and extra assertions', () => {
     test('setupControls() (entry action for S0_Idle and S4_Stopped) is called and results in default Ready state after reset', async ({ page }) => {
-      const app = new DPApp(page);
+      const app10 = new DPApp(page);
       // Ensure initial Ready state from setupControls
       await expect(page.locator('#status')).toHaveText('Ready');
 
@@ -360,7 +360,7 @@ test.describe('DP Interactive Demonstration - FSM and UI behavior', () => {
     });
 
     test('run(false) and run(true) (onEnter for S2 and S3) set status appropriately and eventually update to Done (onExit updateStatus("Done"))', async ({ page }) => {
-      const app = new DPApp(page);
+      const app11 = new DPApp(page);
       await app.selectAlgorithm('fib');
       await app.setNumberInput('n', 5);
       await app.setRangeInput('delay', 0);

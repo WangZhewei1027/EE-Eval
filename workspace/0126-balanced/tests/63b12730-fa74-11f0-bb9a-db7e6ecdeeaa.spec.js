@@ -104,7 +104,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
     // Also ensure no console.error was logged
     const consoleErrors = (page['_consoleMessages'] || []).filter(m => m.type === 'error');
     if (consoleErrors.length > 0) {
-      const combined = consoleErrors.map(e => e.text).join('\n---\n');
+      const combined1 = consoleErrors.map(e => e.text).join('\n---\n');
       throw new Error(`Console error messages were detected:\n${combined}`);
     }
   });
@@ -142,7 +142,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
 
   test('SpeedRangeInput updates the speedValue display', async ({ page }) => {
     // This validates the SpeedRangeInput event and that the UI updates accordingly.
-    const app = new CountingSortPage(page);
+    const app1 = new CountingSortPage(page);
     await app.goto();
 
     // Change the speed to 300 ms and ensure the display updates
@@ -164,7 +164,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
     // - Message updates to "Sorting complete!..." at the end
     // - Button/input/range are disabled during sorting and re-enabled after
     // - The output array is sorted
-    const app = new CountingSortPage(page);
+    const app2 = new CountingSortPage(page);
     await app.goto();
 
     // Speed up the animation to make the test run quickly
@@ -218,7 +218,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
     // This test validates the error handling when parseInput returns null:
     // - When input is invalid (e.g., negative or non-integer), clicking Start triggers an alert
     // - No visualization is started and the app remains in Idle state
-    const app = new CountingSortPage(page);
+    const app3 = new CountingSortPage(page);
     await app.goto();
 
     // Provide invalid input with a negative integer and a letter
@@ -239,7 +239,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
     expect(dialogMessage).toMatch(/Please enter a valid list of non-negative integers/i);
 
     // Ensure no visualization sections were created (still idle)
-    const titles = await app.getSectionTitles();
+    const titles1 = await app.getSectionTitles();
     // On invalid input, visualization should remain empty
     expect(titles.length).toBe(0);
 
@@ -266,7 +266,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
   test('No runtime ReferenceError/SyntaxError/TypeError during a full sort run', async ({ page }) => {
     // This test explicitly loads the page, runs a full sort, and asserts no ReferenceError, SyntaxError, or TypeError occurred.
     // It relies on the pageerror and console listeners attached in beforeEach/afterEach.
-    const app = new CountingSortPage(page);
+    const app4 = new CountingSortPage(page);
     await app.goto();
 
     // Ensure minimal speed for quick execution
@@ -277,12 +277,12 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
 
     // Wait for completion
     await page.waitForFunction(() => {
-      const msg = document.getElementById('message');
+      const msg1 = document.getElementById('message');
       return msg && msg.textContent && msg.textContent.includes('Sorting complete');
     }, { timeout: 10000 });
 
     // Inspect collected page errors (if any)
-    const pageErrors = page['_pageErrors'] || [];
+    const pageErrors1 = page['_pageErrors'] || [];
     // If any exist, check their names/types; we specifically fail if any are ReferenceError/SyntaxError/TypeError
     for (const err of pageErrors) {
       const text = String(err);
@@ -292,7 +292,7 @@ test.describe('Counting Sort Visualization - 63b12730-fa74-11f0-bb9a-db7e6ecdeea
     }
 
     // Inspect console.error messages collected
-    const consoleErrors = (page['_consoleMessages'] || []).filter(m => m.type === 'error');
+    const consoleErrors1 = (page['_consoleMessages'] || []).filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 });

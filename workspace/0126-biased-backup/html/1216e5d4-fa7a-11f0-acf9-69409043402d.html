@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Garbage Collection Interactive Simulator</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 5em;
+    font-family: monospace, monospace;
+  }
+  select, input, button {
+    font-family: monospace, monospace;
+  }
+  fieldset {
+    margin-top: 1em;
+    padding: 0.5em;
+  }
+  label {
+    display: block;
+    margin-top: 0.5em;
+  }
+  pre {
+    background: #eee;
+    padding: 0.5em;
+    white-space: pre-wrap;
+    max-height: 15em;
+    overflow-y: auto;
+  }
+  .inline {
+    display: inline-block;
+    margin-right: 1em;
+  }
+</style>
+</head>
+<body>
+<h1>Garbage Collection Interactive Simulator</h1>
+
+<p>
+This simulator models a heap with objects, references, and roots. You can create objects,
+link references, set roots, and trigger different garbage collection algorithms to see
+what objects get collected or preserved.
+</p>
+
+<div>
+  <fieldset>
+    <legend>Heap Objects Management</legend>
+    <label>
+      New Object ID (integer ≥1):
+      <input type="number" id="newObjId" min="1" step="1" value="1" />
+      <button id="createObjBtn">Create Object</button>
+    </label>
+    <label>
+      Existing Objects: 
+      <select id="existingObjs" size="5" style="width:8em;"></select>
+    </label>
+    <div id="objDetails" style="white-space: pre-wrap; font-size: 0.9em;"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>References Management</legend>
+    <label>
+      From Object:
+      <select id="refFrom"></select>
+    </label>
+    <label>
+      To Object:
+      <select id="refTo"></select>
+    </label>
+    <button id="addRefBtn">Add Reference</button>
+    <button id="removeRefBtn">Remove Reference</button>
+    <label>
+      References of <span id="currentRefObj">-</span>:
+      <select id="refsList" size="5" style="width:8em;"></select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Roots Management</legend>
+    <label>
+      <input type="checkbox" class="rootCheckbox" id="rootObjCheckbox" />
+      Mark selected object as root
+    </label>
+    <div>Roots: <span id="rootsList"></span></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Garbage Collection Controls</legend>
+    <label>
+      Select GC Algorithm:
+      <select id="gcAlgorithm">
+        <option value="markSweep">Mark & Sweep</option>
+        <option value="referenceCounting">Reference Counting</option>
+        <option value="copying">Copying Collector (semi-space)</option>
+        <option value="generational">Generational (2 generations)</option>
+      </select>
+    </label>
+    <button id="runGcBtn">Run Garbage Collection</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Heap View & Logs</legend>
+    <button id="refreshHeapViewBtn">Refresh Heap View</button>
+    <pre id="heapView" style="height: 18em; overflow-y: scroll;"></pre>
+    <button id="clearLogBtn">Clear Logs</button>
+    <pre id="logOutput" style="height: 10em; overflow-y: scroll;"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Script Simulation</legend>
+    <p>Write a sequence of commands (one per line) to automate object creation, linking, rooting, and garbage collection.</p>
+    <textarea id="scriptInput" placeholder="Example commands:
+CREATE 1
+CREATE 2
+LINK 1 2
+ROOT 1
+GC markSweep
+"></textarea><br/>
+    <button id="runScriptBtn">Run Script</button>
+    <button id="clearScriptBtn">Clear Script</button>
+  </fieldset>
+</div>
+
+<script>
+(function(){
+  // Model of the heap and GC simulation
+
+  // Heap stores objects:
+  // object = { id: number, references: Set<number>, refCount: number, generation: 0 or 1 (for generational), marked: boolean }
+  // roots = Set of object ids
+
+  let heap = new Map();
+  let roots = new Set();
+
+  let logs = [];
+
+  // Utilities
+  function log(msg){
+    logs.push(msg);
+    let out = document.getElementById("logOutput");
+    out.textContent = logs.join("\\n");
+    out.scrollTop = out.scrollHeight;
+  }
+  function clearLog(){
+    logs = [];
+    document.getElementById("logOutput").textContent = "";
+  }
+  function refreshHeapView(){
+    let out = document.getElementById("heapView");
+    let lines = [];
+    lines.push("HEAP OBJECTS:");
+    if(heap.size === 0){
+      lines.push("  (no objects)");
+    } else {
+      for(let [id,obj] of [...heap.entries()].sort((a,b)=>a[0]-b[0])){
+        let refs = [...obj.references].sort((a,b)=>a-b).join(", ") || "(none)";
+        let rootMark = roots.has(id) ? "[ROOT]" : "";
+        let genMark = (obj.generation === 0) ? "Gen0" : "Gen1";
+        let refCountDisplay = "RC=" + obj.refCount;
+        let marked = (obj.marked) ? "[marked]" : "";
+        lines.push(`  Object ${id} ${rootMark} ${marked} (${genMark}, Ref to: ${refs}, ${refCountDisplay})`);
+      }
+    }
+    out.textContent = lines.join("\\n");
+    out.scrollTop = 0;
+  }
+
+  // Update the object selects in the UI
+  function updateObjectSelects(){
+    const selects = [document.getElementById("existingObjs"),
+                     document.getElementById("refFrom"),
+                     document.getElementById("refTo")];
+    for(let sel of selects){
+      let oldValue = sel.value;
+      sel.innerHTML = "";
+      for(let id of [...heap.keys()].sort((a,b) => a-b)){
+        let opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = id;
+        sel.appendChild(opt);
+      }
+      // try to keep old selection
+      if(oldValue && sel.querySelector(`option[value='${oldValue}']`)){
+        sel.value = oldValue;
+      } else if(sel.options.length > 0){
+        sel.selectedIndex = 0;
+      }
+    }
+    updateReferencesList();
+    updateRootsUI();
+    updateObjectDetails();
+    refreshHeapView();
+  }
+
+  // Update references of selected object
+  function updateReferencesList(){
+    let refList = document.getElementById("refsList");
+    refList.innerHTML = "";
+    let fromSel = document.getElementById("refFrom");
+    let objId = Number(fromSel.value);
+    if(!heap.has(objId)){
+      document.getElementById("currentRefObj").textContent = "-";
+      return;
+    }
+    document.getElementById("currentRefObj").textContent = objId;
+    let obj = heap.get(objId);
+    for(let refId of [...obj.references].sort((a,b)=>a-b)){
+      let opt = document.createElement("option");
+      opt.value = refId;
+      opt.textContent = refId;
+      refList.appendChild(opt);
+    }
+  }
+
+  // Update roots checkbox for selected object
+  function updateRootsUI(){
+    let existsObjs = document.getElementById("existingObjs");
+    let id = Number(existsObjs.value);
+    let cb = document.getElementById("rootObjCheckbox");
+    if(heap.has(id)){
+      cb.disabled = false;
+      cb.checked = roots.has(id);
+    } else {
+      cb.disabled = true;
+      cb.checked = false;
+    }
+  }
+
+  // Show details for selected object
+  function updateObjectDetails(){
+    let existsObjs = document.getElementById("existingObjs");
+    let id = Number(existsObjs.value);
+    let det = document.getElementById("objDetails");
+    if(!heap.has(id)){
+      det.textContent = "";
+      return;
+    }
+    let obj = heap.get(id);
+    let lines = [];
+    lines.push(`Object ID: ${id}`);
+    lines.push(`References to: ${[...obj.references].sort((a,b)=>a-b).join(", ") || "(none)"}`);
+    lines.push(`Reference count: ${obj.refCount}`);
+    lines.push(`Generation: ${obj.generation === 0 ? "0 (young)" : "1 (old)"}`);
+    lines.push(`Rooted: ${roots.has(id) ? "Yes" : "No"}`);
+    lines.push(`Marked (last GC): ${obj.marked ? "Yes" : "No"}`);
+    det.textContent = lines.join("\\n");
+  }
+
+  // Modifiers
+  function createObject(id){
+    if(heap.has(id)){
+      log(`Failed to create object ${id}: already exists.`);
+      return false;
+    }
+    heap.set(id, { id:id, references: new Set(), refCount:0, generation: 0, marked:false });
+    log(`Created object ${id}`);
+    updateObjectSelects();
+    return true;
+  }
+
+  function addReference(fromId, toId){
+    if(!heap.has(fromId) || !heap.has(toId)){
+      log(`Cannot add reference from ${fromId} to ${toId}: one or both objects do not exist.`);
+      return false;
+    }
+    let fromObj = heap.get(fromId);
+    if(fromObj.references.has(toId)){
+      log(`Reference from ${fromId} to ${toId} already exists.`);
+      return false;
+    }
+    fromObj.references.add(toId);
+    // Increase refCount of toId
+    let toObj = heap.get(toId);
+    toObj.refCount++;
+    log(`Added reference from ${fromId} to ${toId}`);
+    updateObjectSelects();
+    return true;
+  }
+
+  function removeReference(fromId, toId){
+    if(!heap.has(fromId) || !heap.has(toId)){
+      log(`Cannot remove reference from ${fromId} to ${toId}: one or both objects do not exist.`);
+      return false;
+    }
+    let fromObj = heap.get(fromId);
+    if(!fromObj.references.has(toId)){
+      log(`Reference from ${fromId} to ${toId} does not exist.`);
+      return false;
+    }
+    fromObj.references.delete(toId);
+    // Decrement refCount of toId
+    let toObj = heap.get(toId);
+    toObj.refCount = Math.max(0, toObj.refCount - 1);
+    log(`Removed reference from ${fromId} to ${toId}`);
+    updateObjectSelects();
+    return true;
+  }
+
+  function setRoot(id, isRoot){
+    if(!heap.has(id)){
+      log(`Cannot modify root: object ${id} does not exist.`);
+      return false;
+    }
+    if(isRoot){
+      if(!roots.has(id)){
+        roots.add(id);
+        heap.get(id).refCount++;
+        log(`Object ${id} set as root (refCount incremented)`);
+      } else {
+        log(`Object ${id} is already root.`);
+      }
+    } else {
+      if(roots.has(id)){
+        roots.delete(id);
+        let obj = heap.get(id);
+        obj.refCount = Math.max(0, obj.refCount - 1);
+        log(`Object ${id} removed from roots (refCount decremented)`);
+      } else {
+        log(`Object ${id} was not a root.`);
+      }
+    }
+    updateObjectSelects();
+    return true;
+  }
+
+  // Garbage Collection Algorithms
+
+  // 1. Mark & Sweep
+  function gcMarkSweep(){
+    log("Starting Mark & Sweep GC");
+    // Clear marks
+    for(let obj of heap.values()){
+      obj.marked = false;
+    }
+    // Mark phase
+    function mark(obj){
+      if(obj.marked) return;
+      obj.marked = true;
+      log(`Marked object ${obj.id}`);
+      for(let refId of obj.references){
+        if(heap.has(refId)){
+          mark(heap.get(refId));
+        }
+      }
+    }
+    for(let rootId of roots){
+      if(heap.has(rootId)){
+        mark(heap.get(rootId));
+      }
+    }
+    // Sweep phase: collect unmarked
+    let collected = [];
+    for(let [id, obj] of heap.entries()){
+      if(!obj.marked){
+        collected.push(id);
+      }
+    }
+    for(let id of collected){
+      heap.delete(id);
+      // Remove roots if any (should not occur)
+      roots.delete(id);
+      log(`Collected unreachable object ${id}`);
+    }
+    log(`Mark & Sweep GC collected ${collected.length} objects.`);
+  }
+
+  // 2. Reference Counting
+  // In this simulation, reference counts updated on references added/removed and roots set/unset.
+  // We also simulate cleanup here by repeatedly removing objects with ref count 0,
+  // cascading because their references' refCounts should decrease.
+  // We'll implement a simple process for that.
+  function gcReferenceCounting(){
+    log("Starting Reference Counting GC");
+    let toCollect = [];
+    // Find all objects with refCount==0
+    for(let [id,obj] of heap.entries()){
+      if(obj.refCount === 0){
+        toCollect.push(id);
+      }
+    }
+    let collectedCount = 0;
+    while(toCollect.length > 0){
+      let id = toCollect.pop();
+      if(!heap.has(id)) continue;
+      let obj = heap.get(id);
+      // Remove the object
+      heap.delete(id);
+      roots.delete(id);
+      collectedCount++;
+      log(`Collected object ${id} due to zero refCount`);
+      // Decrement refCount of all objects it referenced
+      for(let refId of obj.references){
+        if(heap.has(refId)){
+          let refObj = heap.get(refId);
+          refObj.refCount = Math.max(0, refObj.refCount - 1);
+          if(refObj.refCount === 0){
+            toCollect.push(refId);
+          }
+        }
+      }
+    }
+    log(`Reference Counting GC collected ${collectedCount} objects.`);
+  }
+
+  // 3. Copying Collector (Semi-Space)
+  // We simulate two spaces: fromSpace and toSpace, store objects in one.
+  // We move all objects reachable from roots to toSpace.
+  // Unreachable are discarded.
+  // Swap spaces after collection.
+  // This simulates compaction.
+  let semiSpace = { fromSpace: new Map(), toSpace: new Map(), usingFromSpace:true };
+  // Copy all objects from heap to fromSpace initially
+  function resetSemiSpaceFromHeap(){
+    semiSpace.fromSpace = new Map();
+    semiSpace.toSpace = new Map();
+    semiSpace.usingFromSpace = true;
+    for(let [id,obj] of heap){
+      // Make shallow copy but references are IDs only
+      semiSpace.fromSpace.set(id, {
+        id:id,
+        references: new Set(obj.references),
+        generation: obj.generation,
+        marked: false,
+        refCount: obj.refCount
+      });
+    }
+  }
+  function gcCopying(){
+    log("Starting Copying Collector GC");
+    resetSemiSpaceFromHeap();
+    let fromSpace = semiSpace.fromSpace;
+    let toSpace = new Map();
+    let worklist = [];
+
+    function copyObject(id){
+      if(toSpace.has(id)) return; // already copied
+      if(!fromSpace.has(id)) return;
+      let fromObj = fromSpace.get(id);
+      // Copy object shallowly
+      toSpace.set(id, {
+        id: id,
+        references: new Set(),
+        generation: fromObj.generation,
+        marked: false,
+        refCount:0
+      });
+      worklist.push(id);
+      log(`Copied object ${id} to toSpace`);
+    }
+
+    // Start by copying roots
+    for(let rid of roots){
+      copyObject(rid);
+    }
+
+    // Traverse references
+    while(worklist.length > 0){
+      let oid = worklist.pop();
+      let obj = toSpace.get(oid);
+      let fromObj = fromSpace.get(oid);
+      for(let refId of fromObj.references){
+        // Copy referenced object
+        copyObject(refId);
+        obj.references.add(refId);
+      }
+    }
+
+    // Recalculate refCounts (simulate)
+    for(let obj of toSpace.values()){
+      obj.refCount = 0;
+    }
+    for(let obj of toSpace.values()){
+      for(let refId of obj.references){
+        if(toSpace.has(refId)){
+          toSpace.get(refId).refCount++;
+        }
+      }
+    }
+    for(let rid of roots){
+      if(toSpace.has(rid)){
+        toSpace.get(rid).refCount++;
+      }
+    }
+
+    semiSpace.fromSpace = toSpace;
+    semiSpace.toSpace = new Map();
+    semiSpace.usingFromSpace = true;
+
+    // Update main heap to toSpace cloned objects
+    heap.clear();
+    for(let [id, obj] of toSpace){
+      heap.set(id, {
+        id:id,
+        references: new Set(obj.references),
+        refCount: obj.refCount,
+        generation: obj.generation,
+        marked: false
+      });
+    }
+    log(`Copying Collector GC completed. Heap compacted. Collected objects: ${[...fromSpace.keys()].filter(k => !heap.has(k)).length}`);
+  }
+
+  // 4. Generational GC (2 generations: Gen0 young, Gen1 old)
+  // Young gen: collected frequently with mark-sweep
+  // Old gen: collected less frequently (only by Reference Counting simulation here)
+  // Objects survive a number of GC cycles in young generation and get promoted.
+  // We'll keep an "age" counter per object in young gen.
+
+  // Extend each object with obj.age (integer)
+  // Objects created start age 0 in generation 0
+  // Define parameters:
+  const PROMOTION_AGE = 2; // survive 2 young GCs to promote to old
+
+  let genCycleCount = 0; // count how many generational GC cycles done
+
+  // On each GC:
+  // 1) Mark & Sweep young gen objects
+  // 2) Increase age of survivor young gen objects
+  // 3) Promote if age >= PROMOTION_AGE
+  // 4) Old gen collected by RC algorithm (simulate)
+
+  // Implement generational GC
+  function gcGenerational(){
+    log("Starting Generational GC");
+    genCycleCount++;
+    // Step 1: mark & sweep young gen (generation 0)
+    // Clear marks
+    for(let obj of heap.values()){
+      obj.marked = false;
+    }
+    // mark all roots and follow references, but only mark young gen objects here
+
+    // Mark function that marks young gen objects only and recursively visits their refs regardless gen
+    function markGen0(obj){
+      if(obj.generation === 0){
+        if(obj.marked) return;
+        obj.marked = true;
+      }
+      for(let rid of obj.references){
+        if(heap.has(rid)){
+          markGen0(heap.get(rid));
+        }
+      }
+    }
+    for(let rid of roots){
+      if(heap.has(rid)){
+        markGen0(heap.get(rid));
+      }
+    }
+    // Sweep young gen
+    let collectedYoung = [];
+    for(let [id, obj] of heap.entries()){
+      if(obj.generation === 0 && !obj.marked){
+        collectedYoung.push(id);
+        heap.delete(id);
+        roots.delete(id);
+        log(`Collected young generation unreachable object ${id} (Mark & Sweep)`);
+      }
+    }
+    // Step 2: Increase age of surviving young gen objects (marked ones)
+    for(let id of heap.keys()){
+      let obj = heap.get(id);
+      if(obj.generation === 0 && obj.marked){
+        obj.age = (obj.age||0) + 1;
+        log(`Increased age of object ${id} to ${obj.age}`);
+      }
+    }
+    // Step 3: Promote if aged enough
+    for(let id of heap.keys()){
+      let obj = heap.get(id);
+      if(obj.generation === 0 && (obj.age||0) >= PROMOTION_AGE){
+        obj.generation = 1;
+        delete obj.age;
+        log(`Promoted object ${id} to old generation`);
+      }
+    }
+    // Step 4: Collect old generation using Reference Counting
+    // Remove old gen objects with zero refCount
+    let oldGenObjects = [...heap.entries()].filter(([id,obj]) => obj.generation === 1);
+    // Recalculate refCount for old gen as no update from young links
+    // We recount reference counts of old gen objects only from other old gen and roots
+    // For simplicity assume roots count for both generations
+    for(let [id,obj] of oldGenObjects){
+      obj.refCount = 0;
+    }
+    for(let [id,obj] of oldGenObjects){
+      for(let rid of obj.references){
+        if(heap.has(rid)){
+          let refObj = heap.get(rid);
+          if(refObj.generation === 1){
+            refObj.refCount++;
+          }
+        }
+      }
+    }
+    for(let rid of roots){
+      if(heap.has(rid)){
+        let rObj = heap.get(rid);
+        if(rObj.generation === 1){
+          rObj.refCount++;
+        }
+      }
+    }
+    // Collect old gen objects with refCount 0
+    let collectedOld = [];
+    for(let [id,obj] of oldGenObjects){
+      if(obj.refCount === 0){
+        heap.delete(id);
+        roots.delete(id);
+        collectedOld.push(id);
+        log(`Collected old generation unreferenced object ${id} (Reference Counting)`);
+      }
+    }
+    log(`Generational GC summary: collected young: ${collectedYoung.length}, old: ${collectedOld.length}`);
+  }
+
+  // Run selected GC algorithm
+  function runGCSelected(){
+    let algo = document.getElementById("gcAlgorithm").value;
+    switch(algo){
+      case "markSweep": gcMarkSweep(); break;
+      case "referenceCounting": gcReferenceCounting(); break;
+      case "copying": gcCopying(); break;
+      case "generational": gcGenerational(); break;
+      default: log("Unknown GC algorithm selected."); break;
+    }
+    updateObjectSelects();
+    refreshHeapView();
+  }
+
+  // UI Event Handlers
+  document.getElementById("createObjBtn").addEventListener("click", function(){
+    let id = Number(document.getElementById("newObjId").value);
+    if(!Number.isInteger(id)||id < 1){
+      alert("Object ID must be an integer ≥ 1.");
+      return;
+    }
+    createObject(id);
+  });
+
+  document.getElementById("existingObjs").addEventListener("change", function(){
+    let id = Number(this.value);
+    updateObjectDetails();
+    updateRootsUI();
+  });
+  document.getElementById("refFrom").addEventListener("change", updateReferencesList);
+
+  document.getElementById("addRefBtn").addEventListener("click", function(){
+    let fromId = Number(document.getElementById("refFrom").value);
+    let toId = Number(document.getElementById("refTo").value);
+    if(fromId === toId){
+      alert("An object cannot reference itself.");
+      return;
+    }
+    addReference(fromId, toId);
+  });
+  document.getElementById("removeRefBtn").addEventListener("click", function(){
+    let fromId = Number(document.getElementById("refFrom").value);
+    let refsList = document.getElementById("refsList");
+    if(refsList.selectedIndex < 0){
+      alert("Select a reference to remove.");
+      return;
+    }
+    let toId = Number(refsList.value);
+    removeReference(fromId, toId);
+  });
+
+  document.getElementById("rootObjCheckbox").addEventListener("change", function(){
+    let existsObjs = document.getElementById("existingObjs");
+    let id = Number(existsObjs.value);
+    setRoot(id, this.checked);
+  });
+
+  document.getElementById("runGcBtn").addEventListener("click", function(){
+    runGCSelected();
+  });
+
+  document.getElementById("refreshHeapViewBtn").addEventListener("click", function(){
+    refreshHeapView();
+  });
+  document.getElementById("clearLogBtn").addEventListener("click", clearLog);
+
+  // Script processing
+  // Commands:
+  // CREATE <id>
+  // LINK <fromId> <toId>
+  // UNLINK <fromId> <toId>
+  // ROOT <id>
+  // UNROOT <id>
+  // GC <algorithm>  (markSweep, referenceCounting, copying, generational)
+  // CLEARLOG
+  // REFRESHHEAP
+  // Comments start with # or //
+  // Blank lines ignored
+
+  function runScript(scriptText){
+    clearLog();
+    log("Running Script...");
+    let lines = scriptText.split("\\n");
+    let lineNum = 0;
+    for(let l of lines){
+      lineNum++;
+      let line = l.trim();
+      if(line === "" || line.startsWith("#") || line.startsWith("//")) continue;
+      let parts = line.split(/\s+/);
+      let cmd = parts[0].toUpperCase();
+      try{
+        switch(cmd){
+          case "CREATE":
+            if(parts.length < 2) throw "CREATE command needs an object ID";
+            let id = Number(parts[1]);
+            if(!Number.isInteger(id) || id < 1) throw "Invalid object ID";
+            createObject(id);
+            break;
+          case "LINK":
+            if(parts.length < 3) throw "LINK command needs from and to IDs";
+            let f1 = Number(parts[1]), t1 = Number(parts[2]);
+            if(f1 === t1) throw "Cannot LINK object to itself";
+            addReference(f1, t1);
+            break;
+          case "UNLINK":
+            if(parts.length < 3) throw "UNLINK command needs from and to IDs";
+            let f2 = Number(parts[1]), t2 = Number(parts[2]);
+            removeReference(f2, t2);
+            break;
+          case "ROOT":
+            if(parts.length < 2) throw "ROOT command needs object ID";
+            let rID = Number(parts[1]);
+            setRoot(rID, true);
+            break;
+          case "UNROOT":
+            if(parts.length < 2) throw "UNROOT command needs object ID";
+            let urID = Number(parts[1]);
+            setRoot(urID, false);
+            break;
+          case "GC":
+            if(parts.length < 2) throw "GC command needs algorithm name";
+            let algo = parts[1];
+            if(!["markSweep","referenceCounting","copying","generational"].includes(algo)){
+              throw "Unsupported GC algorithm: "+algo;
+            }
+            document.getElementById("gcAlgorithm").value = algo;
+            runGCSelected();
+            break;
+          case "CLEARLOG":
+            clearLog();
+            break;
+          case "REFRESHHEAP":
+            refreshHeapView();
+            updateObjectSelects();
+            break;
+          default:
+            throw "Unknown command: "+cmd;
+        }
+      } catch(e){
+        log(`Error at line ${lineNum}: ${e}`);
+      }
+    }
+    log("Script completed.");
+    refreshHeapView();
+    updateObjectSelects();
+  }
+
+  document.getElementById("runScriptBtn").addEventListener("click", function(){
+    let script = document.getElementById("scriptInput").value;
+    runScript(script);
+  });
+  document.getElementById("clearScriptBtn").addEventListener("click", function(){
+    document.getElementById("scriptInput").value = "";
+  });
+
+  // Initialize interface with empty heap
+  updateObjectSelects();
+  refreshHeapView();
+  clearLog();
+
+})();
+</script>
+</body>
+</html>

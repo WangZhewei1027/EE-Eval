@@ -46,12 +46,12 @@ class CongestionApp {
   }
 
   async getCurrentTraffic() {
-    const text = await this.currentTraffic.textContent();
+    const text1 = await this.currentTraffic.textContent();
     return Number(text?.trim() ?? '0');
   }
 
   async getWindowSize() {
-    const text = await this.windowSize.textContent();
+    const text2 = await this.windowSize.textContent();
     return Number(text?.trim() ?? '0');
   }
 
@@ -111,7 +111,7 @@ test.describe('Congestion Control Demonstration - FSM and UI tests', () => {
 
   // Test idle state
   test('S0_Idle: Initial page shows Idle state controls (Start button visible and stats zeroed)', async ({ page }) => {
-    const app = new CongestionApp(page);
+    const app1 = new CongestionApp(page);
 
     // Validate Start button exists and is visible
     await expect(app.startBtn).toBeVisible();
@@ -134,7 +134,7 @@ test.describe('Congestion Control Demonstration - FSM and UI tests', () => {
 
   // Test starting the simulation transitions to running
   test('S0_Idle -> S1_SimulationRunning: Clicking Start begins animation and updates window size', async ({ page }) => {
-    const app = new CongestionApp(page);
+    const app2 = new CongestionApp(page);
 
     // Capture initial window size
     const initialWindowSize = await app.getWindowSize();
@@ -155,13 +155,13 @@ test.describe('Congestion Control Demonstration - FSM and UI tests', () => {
 
   // Test adding connections and triggering congestion
   test('S1_SimulationRunning -> S2_Congested: Adding fast and slow connections increases traffic and shows congestion warning', async ({ page }) => {
-    const app = new CongestionApp(page);
+    const app3 = new CongestionApp(page);
 
     // Start simulation
     await app.startSimulation();
 
     // Ensure simulation running (window size changes)
-    const initialWindowSize = await app.getWindowSize();
+    const initialWindowSize1 = await app.getWindowSize();
     await app.waitForWindowSizeToChange(initialWindowSize, 8000);
 
     // Add one fast connection
@@ -193,7 +193,7 @@ test.describe('Congestion Control Demonstration - FSM and UI tests', () => {
 
   // Test stopping simulation transitions back to idle and verify exit action behavior
   test('S1_SimulationRunning -> S0_Idle: Stop Simulation cancels animation; verify animation stopped and congestion warning handling', async ({ page }) => {
-    const app = new CongestionApp(page);
+    const app4 = new CongestionApp(page);
 
     // Start and add connections to create congestion
     await app.startSimulation();
@@ -232,7 +232,7 @@ test.describe('Congestion Control Demonstration - FSM and UI tests', () => {
 
   // Edge cases and robustness: multiple rapid interactions and high load
   test('Edge cases: Rapid start/stop and adding many connections should not throw errors and UI updates accordingly', async ({ page }) => {
-    const app = new CongestionApp(page);
+    const app5 = new CongestionApp(page);
 
     // Rapid start clicks
     await app.startSimulation();

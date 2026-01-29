@@ -92,8 +92,8 @@ test.describe('Paging FSM and interactive application tests (520a5863-fa76-11f0-
     // - paging() function exists and is callable
     // - invoking paging() causes another fetch('data.json') (via loadData() call inside paging)
     // - currentPage increments accordingly after calling paging()
-    const sampleData = generateSampleData(15);
-    let dataRequestCount = 0;
+    const sampleData1 = generateSampleData(15);
+    let dataRequestCount1 = 0;
 
     await page.route('**/data.json', async (route) => {
       dataRequestCount++;
@@ -148,9 +148,9 @@ test.describe('Paging FSM and interactive application tests (520a5863-fa76-11f0-
     // - The application is expected to attempt fetch and the resulting unhandled rejection or TypeError should surface
 
     let intercepted = false;
-    const consoleErrors = [];
-    const pageErrors = [];
-    let dataRequestCount = 0;
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
+    let dataRequestCount2 = 0;
 
     // Route to abort the network request to simulate a network failure (Failed to fetch)
     await page.route('**/data.json', async (route) => {
@@ -180,7 +180,7 @@ test.describe('Paging FSM and interactive application tests (520a5863-fa76-11f0-
     expect(errorsObserved).toBeGreaterThanOrEqual(1);
 
     // Additionally, because loadData couldn't populate the table, the tbody should be empty
-    const rowCount = await page.$$eval('#data tr', (rows) => rows.length);
+    const rowCount1 = await page.$$eval('#data tr', (rows) => rows.length);
     expect(rowCount).toBe(0);
   });
 

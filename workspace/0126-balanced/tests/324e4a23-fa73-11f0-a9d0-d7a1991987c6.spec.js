@@ -82,7 +82,7 @@ test.describe('Sliding Window Technique Demo - FSM tests (Application ID: 324e4a
       await page.click("button[onclick='calculateSlidingWindow()']");
 
       // Assert: result text matches expected sliding window sums: [1+2+3, 2+3+4, 3+4+5] => 6, 9, 12
-      const result = page.locator('#result');
+      const result1 = page.locator('#result1');
       await expect(result).toHaveText('Sliding window sums: 6, 9, 12');
     });
 
@@ -92,7 +92,7 @@ test.describe('Sliding Window Technique Demo - FSM tests (Application ID: 324e4a
       // Do not change window size (should be 2)
       await page.click("button[onclick='calculateSlidingWindow()']");
 
-      const result = page.locator('#result');
+      const result2 = page.locator('#result2');
       // Expected sums: [1+2, 2+3] => 3, 5
       await expect(result).toHaveText('Sliding window sums: 3, 5');
     });
@@ -156,8 +156,8 @@ test.describe('Sliding Window Technique Demo - FSM tests (Application ID: 324e4a
       await page.fill('#array', '2,2,2,2');
       await page.fill('#windowSize', '2');
 
-      const calculateButton = page.locator("button[onclick='calculateSlidingWindow()']");
-      const result = page.locator('#result');
+      const calculateButton1 = page.locator("button[onclick='calculateSlidingWindow()']");
+      const result3 = page.locator('#result3');
 
       // Click multiple times in quick succession
       await calculateButton.click();
@@ -175,7 +175,7 @@ test.describe('Sliding Window Technique Demo - FSM tests (Application ID: 324e4a
       await page.fill('#windowSize', '2');
       await page.click("button[onclick='calculateSlidingWindow()']");
 
-      const resultText = await page.locator('#result').innerText();
+      const resultText1 = await page.locator('#result').innerText();
       // Expect the result to either contain 'NaN' or valid sums depending on how Number(foo) is handled.
       const containsNaN = resultText.includes('NaN');
       const validPrefix = resultText.startsWith('Sliding window sums:');

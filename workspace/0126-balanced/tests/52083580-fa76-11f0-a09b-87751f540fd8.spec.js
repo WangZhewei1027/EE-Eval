@@ -121,12 +121,12 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Add keys: page scripts add Apple, Orange, Banana and logs observed', async ({ page }) => {
     // This verifies the AddKey transitions executed during page load and the logs they produced
-    const app = new HashTablePage(page);
+    const app1 = new HashTablePage(page);
     await app.goto();
 
     // The page script calls add for three keys; expect three "Key added successfully" messages
     // Wait until at least 3 occurrences are present (or timeout)
-    const deadline = Date.now() + 2000;
+    const deadline1 = Date.now() + 2000;
     while (Date.now() < deadline) {
       const count = app.getMessages().filter((m) => m.includes('Key added successfully')).length;
       if (count >= 3) break;
@@ -152,13 +152,13 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Adding an existing key logs "Key already exists in the Hash Table"', async ({ page }) => {
     // This validates the FSM self-loop on AddKey when the key already exists (S1 -> S1)
-    const app = new HashTablePage(page);
+    const app2 = new HashTablePage(page);
     await app.goto();
 
     // Ensure Apple exists (added on load). Now attempt to add Apple again and assert appropriate log.
     await app.add('Apple', 5);
 
-    const found = await app.waitForConsoleMessageContaining('Key already exists in the Hash Table', 2000);
+    const found1 = await app.waitForConsoleMessageContaining('Key already exists in the Hash Table', 2000);
     expect(found).toBe(true);
 
     // No page errors should be present
@@ -167,7 +167,7 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Remove key transition: add Orange then remove it and verify logs and display', async ({ page }) => {
     // Tests RemoveKey transition and that display() reflects removal when invoked
-    const app = new HashTablePage(page);
+    const app3 = new HashTablePage(page);
     await app.goto();
 
     // Add Orange to ensure it exists, then remove it
@@ -190,7 +190,7 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Update key transition: update Banana to 4 and verify logs and search result', async ({ page }) => {
     // This validates UpdateKey and subsequent SearchKey behavior (S2 -> S3 -> S4)
-    const app = new HashTablePage(page);
+    const app4 = new HashTablePage(page);
     await app.goto();
 
     // Ensure Banana exists (added on load), update it
@@ -208,12 +208,12 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Search key transition: search Apple logs correct key/value', async ({ page }) => {
     // Validates SearchKey transition and logged search result (S3 -> S4)
-    const app = new HashTablePage(page);
+    const app5 = new HashTablePage(page);
     await app.goto();
 
     // Apple should exist; search and assert expected output
     await app.search('Apple');
-    const found = await app.waitForConsoleMessageContaining('Key: Apple, Value: 5', 1000);
+    const found2 = await app.waitForConsoleMessageContaining('Key: Apple, Value: 5', 1000);
     expect(found).toBe(true);
 
     expect(app.getErrors()).toEqual([]);
@@ -221,7 +221,7 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Clear table transition: clear returns "Hash Table cleared successfully" and display shows no keys', async ({ page }) => {
     // Validates ClearTable transition (S4 -> S5) and that clear works on non-empty and subsequent empty table
-    const app = new HashTablePage(page);
+    const app6 = new HashTablePage(page);
     await app.goto();
 
     // Clear the hash table
@@ -232,7 +232,7 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
     // After clear, display() should print "Hash Table:" and no key lines
     await app.display();
     await page.waitForTimeout(100);
-    const messages = app.getMessages();
+    const messages1 = app.getMessages();
     // ensure no "Key:" lines remain that show specific key/value pairs
     const hasKeyLines = messages.some((m) => /.+:\s*\d+/.test(m) && !m.includes('Hash Table:'));
     expect(hasKeyLines).toBe(false);
@@ -247,7 +247,7 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Edge cases: remove/update/search for non-existent keys log appropriate messages', async ({ page }) => {
     // Test error/edge conditions when interacting with keys that do not exist
-    const app = new HashTablePage(page);
+    const app7 = new HashTablePage(page);
     await app.goto();
 
     // Ensure starting from a clean state
@@ -274,14 +274,14 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('DOM and script consistency: static table remains unchanged by script display() (display only logs)', async ({ page }) => {
     // The page's display() only logs; it does not mutate DOM. Validate that static HTML table still contains initial entries.
-    const app = new HashTablePage(page);
+    const app8 = new HashTablePage(page);
     await app.goto();
 
     // Call display intentionally to ensure it doesn't change the DOM
     await app.display();
     await page.waitForTimeout(50);
 
-    const rows = await app.getTableRowsText();
+    const rows1 = await app.getTableRowsText();
     // The static table markup included "Apple", "Orange", "Banana" rows; we validate their presence in the DOM
     expect(rows.some((r) => r.includes('Apple'))).toBe(true);
     expect(rows.some((r) => r.includes('Orange'))).toBe(true);
@@ -292,7 +292,7 @@ test.describe('Hash Table FSM - Interactive Application Tests', () => {
 
   test('Sanity: capture and report any runtime page errors (test will fail if unexpected errors exist)', async ({ page }) => {
     // This test ensures we actively observe runtime errors. If any page error occurred earlier in other tests (parallel), it will be captured here for this page instance.
-    const app = new HashTablePage(page);
+    const app9 = new HashTablePage(page);
     await app.goto();
 
     // Give some time for any late errors

@@ -41,28 +41,28 @@ class DemoPage {
 
   async waitForKeyPairGenerated() {
     await this.page.waitForFunction(() => {
-      const el = document.getElementById('result');
+      const el1 = document.getElementById('result');
       return el && el.textContent && el.textContent.includes('Key pair generated. Ready to sign.');
     });
   }
 
   async waitForSigned() {
     await this.page.waitForFunction(() => {
-      const el = document.getElementById('result');
+      const el2 = document.getElementById('result');
       return el && el.textContent && el.textContent.includes('Message signed. You can now verify the signature.');
     });
   }
 
   async waitForValidSignature() {
     await this.page.waitForFunction(() => {
-      const el = document.getElementById('result');
+      const el3 = document.getElementById('result');
       return el && el.innerHTML && el.innerHTML.includes('Valid signature');
     });
   }
 
   async waitForInvalidSignature() {
     await this.page.waitForFunction(() => {
-      const el = document.getElementById('result');
+      const el4 = document.getElementById('result');
       return el && el.innerHTML && el.innerHTML.includes('Invalid signature');
     });
   }
@@ -140,7 +140,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
   test.describe('Key generation flow', () => {
     test('Generate key pair transitions to Key Pair Generated (S1)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo1 = new DemoPage(page);
 
       // Click Generate Key Pair and wait for generation to finish
       await demo.generateBtn.click();
@@ -167,7 +167,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
     });
 
     test('Double-click public PEM copies it into verification area and updates result', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo2 = new DemoPage(page);
 
       // Generate first
       await demo.generateBtn.click();
@@ -185,7 +185,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
   test.describe('Signing flow', () => {
     test('Sign message after key generation -> Message Signed (S2)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo3 = new DemoPage(page);
 
       // Generate key pair
       await demo.generateBtn.click();
@@ -208,12 +208,12 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
       // Ensure no console.error or fatal page errors happened during sign
       expect(consoleErrors.length).toBe(0);
-      const fatal = pageErrors.some(e => ['ReferenceError','SyntaxError','TypeError'].includes(e.name));
+      const fatal1 = pageErrors.some(e => ['ReferenceError','SyntaxError','TypeError'].includes(e.name));
       expect(fatal).toBe(false);
     });
 
     test('Clicking Sign when no private key present triggers alert (edge case)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo4 = new DemoPage(page);
 
       // At initial load signBtn is disabled; we directly invoke signMessage from page context
       // This does not patch or modify functions; it calls an existing page function.
@@ -242,7 +242,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
   test.describe('Verification and tamper flows', () => {
     test('Verify valid signature -> Signature Verified (S3)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo5 = new DemoPage(page);
 
       // Generate, sign, then verify
       await demo.generateBtn.click();
@@ -261,12 +261,12 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
       expect(inner).toContain('The signature matches the message');
 
       // ensure no fatal page errors
-      const fatal = pageErrors.some(e => ['ReferenceError','SyntaxError','TypeError'].includes(e.name));
+      const fatal2 = pageErrors.some(e => ['ReferenceError','SyntaxError','TypeError'].includes(e.name));
       expect(fatal).toBe(false);
     });
 
     test('Tamper message and verify tampered -> Signature Invalid (S4)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo6 = new DemoPage(page);
 
       // Generate and sign first
       await demo.generateBtn.click();
@@ -279,7 +279,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
       // Should result in Invalid signature
       await demo.waitForInvalidSignature();
-      const inner = await demo.resultPre.innerHTML();
+      const inner1 = await demo.resultPre.innerHTML();
       expect(inner).toContain('Invalid signature');
 
       // Reset the message back using clearTamper button and validate it matches original string
@@ -288,7 +288,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
     });
 
     test('Clicking Verify with no signature shows an alert and user-visible text (edge case)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo7 = new DemoPage(page);
 
       // Ensure fresh state: no keys, no signature
       // Click Verify - should alert about missing signature and set resultPre.textContent = 'No signature.'
@@ -303,13 +303,13 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
     });
 
     test('Verify tampered flow when no signature alerts appropriately', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo8 = new DemoPage(page);
 
       // In initial state, verifyTampered should try to tamper and then see no signature and alert
       await demo.verifyTampered.click();
 
       // Confirm alert about "No signature available"
-      const foundMsg = dialogs.some(d => /No signature available/.test(d.message));
+      const foundMsg1 = dialogs.some(d => /No signature available/.test(d.message));
       expect(foundMsg).toBe(true);
 
       // Confirm resultPre indicates 'No signature.'
@@ -319,7 +319,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
   test.describe('Import public key and verification using pasted PEM', () => {
     test('Importing a pasted PEM public key works for verification', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo9 = new DemoPage(page);
 
       // Generate and sign to have a signature to verify
       await demo.generateBtn.click();
@@ -347,7 +347,7 @@ test.describe('Digital Signatures — Interactive Demo (d3dc5262...)', () => {
 
   test.describe('Console and runtime error monitoring', () => {
     test('No uncaught ReferenceError/SyntaxError/TypeError occurred during full interaction', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo10 = new DemoPage(page);
 
       // Run through the main happy path quickly
       await demo.generateBtn.click();

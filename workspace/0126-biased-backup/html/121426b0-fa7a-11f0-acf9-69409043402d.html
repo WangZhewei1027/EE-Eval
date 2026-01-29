@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interpolation Search Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  input[type="number"], input[type="text"], select {
+    width: 6em;
+  }
+  button {
+    margin-left: 0.3em;
+    margin-bottom: 0.3em;
+  }
+  .small {
+    font-size: 0.8em;
+    margin-top: 0.2em;
+  }
+  #array-display {
+    margin: 0.5em 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #log {
+    font-family: monospace;
+    font-size: 0.9em;
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 0.5em;
+    white-space: pre-wrap;
+    background: #fff;
+  }
+  label {
+    user-select: none;
+  }
+  fieldset {
+    margin-bottom: 1.2em;
+  }
+  .inline-group {
+    display: inline-block;
+    margin-right: 1em;
+  }
+  #step-controls button {
+    min-width: 5em;
+  }
+  #state-info {
+    font-size: 0.9em;
+    font-style: italic;
+  }
+  #example-list {
+    max-height: 6em;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 0.3em;
+    font-family: monospace;
+    white-space: nowrap;
+    margin-top: 0.3em;
+  }
+  #example-list > div {
+    cursor: pointer;
+    margin-bottom: 0.1em;
+  }
+  #example-list > div:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<h1>Interpolation Search Interactive Demo</h1>
+
+<fieldset>
+  <legend>Step 1: Input & Configure Array</legend>
+  <label for="array-input">Array elements (comma or space separated): </label><br />
+  <input type="text" id="array-input" size="60" value="10 20 30 40 50 60 70 80 90 100" />
+  <button id="parse-array-btn">Load Array</button>
+  <div class="small">Array must be sorted in ascending order for Interpolation Search to work correctly.</div>
+  <div id="array-error" style="color:red; font-weight:bold;"></div>
+  <div id="array-display"></div>
+  <label><input type="checkbox" id="auto-fill-checkbox" /> Auto-generate sorted ascending array (use below settings)</label>
+  <br />
+  <div id="auto-gen-settings" style="display:none; margin-top:0.5em;">
+    <label for="auto-gen-len">Length: </label><input type="number" id="auto-gen-len" min="1" max="1000" value="20" />
+    <label for="auto-gen-min">Min value: </label><input type="number" id="auto-gen-min" value="0" />
+    <label for="auto-gen-max">Max value: </label><input type="number" id="auto-gen-max" value="100" />
+    <label for="auto-gen-step">Approximate step: </label><input type="number" id="auto-gen-step" value="5" />
+    <button id="auto-gen-btn">Generate Array</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Step 2: Configure Search Target</legend>
+  <label for="search-key-input">Search target (key): </label>
+  <input type="number" id="search-key-input" />
+  <button id="start-search-btn" disabled>Start Search</button>
+  <button id="reset-btn" disabled>Reset All</button>
+  <div id="search-key-error" style="color:red; font-weight:bold;"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Step 3: Interpolation Search Walkthrough</legend>
+  <div id="state-info">Status: Not started</div>
+  <div id="step-controls">
+    <button id="step-forward-btn" disabled>Step Forward</button>
+    <button id="step-backward-btn" disabled>Step Backward</button>
+    <button id="run-to-end-btn" disabled>Run To End</button>
+    <button id="pause-btn" disabled>Pause</button>
+  </div>
+  <div>
+    <label for="speed-range">Auto Step Speed (ms): </label>
+    <input type="range" min="100" max="3000" step="100" id="speed-range" value="1000" />
+    <span id="speed-value">1000</span>
+  </div>
+  <div id="array-display-current" style="margin-top:1em; white-space: pre-wrap;"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Step 4: Detailed Log / Exploration</legend>
+  <label><input type="checkbox" id="auto-log-scroll" checked /> Auto-scroll log</label>
+  <div id="log"></div>
+  <div class="small">Log shows detailed internal state and calculation at each step.</div>
+</fieldset>
+
+<fieldset>
+  <legend>Extras</legend>
+  <button id="export-log-btn" disabled>Export Log as Text</button>
+  <button id="export-state-btn" disabled>Export Current State (JSON)</button>
+  <button id="import-state-btn">Import State (JSON)</button>
+  <input type="file" id="import-file-input" style="display:none" accept=".json" />
+  <br /><br />
+  <div>
+    <label for="example-select">Load Example Arrays:</label>
+    <select id="example-select">
+      <option value="">-- Select an example --</option>
+      <option value="basic">Basic small array (10 elements)</option>
+      <option value="uniform">Uniform increments (20 elements)</option>
+      <option value="sparse">Sparse increments (15 elements)</option>
+      <option value="large">Large array (100 elements)</option>
+      <option value="dense">Dense small range (25 elements)</option>
+      <option value="mixed">Mixed spacing small array (15 elements)</option>
+    </select>
+  </div>
+</fieldset>
+
+<script>
+(() => {
+  // State and data structures
+  let array = [];
+  let searchKey = null;
+  let isRunning = false;
+  let isPaused = false;
+  let autoStepInterval = null;
+  let autoStepSpeed = 1000;
+  let currentStepIndex = -1;
+
+  // Steps recorded for backward/forward navigation:
+  // Each step = {
+  //   low: number,
+  //   high: number,
+  //   pos: number,
+  //   valLow: number,
+  //   valHigh: number,
+  //   valPos: number,
+  //   compareResult: -1|0|1,
+  //   explanation: string
+  // }
+  let steps = [];
+
+  // Cached DOM elements
+  const arrayInput = document.getElementById('array-input');
+  const arrayDisplay = document.getElementById('array-display');
+  const arrayError = document.getElementById('array-error');
+  const parseArrayBtn = document.getElementById('parse-array-btn');
+  const startSearchBtn = document.getElementById('start-search-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const searchKeyInput = document.getElementById('search-key-input');
+  const searchKeyError = document.getElementById('search-key-error');
+  const stateInfo = document.getElementById('state-info');
+  const stepForwardBtn = document.getElementById('step-forward-btn');
+  const stepBackwardBtn = document.getElementById('step-backward-btn');
+  const runToEndBtn = document.getElementById('run-to-end-btn');
+  const pauseBtn = document.getElementById('pause-btn');
+  const arrayDisplayCurrent = document.getElementById('array-display-current');
+  const log = document.getElementById('log');
+  const autoScrollCheckbox = document.getElementById('auto-log-scroll');
+  const speedRange = document.getElementById('speed-range');
+  const speedValue = document.getElementById('speed-value');
+  const exportLogBtn = document.getElementById('export-log-btn');
+  const exportStateBtn = document.getElementById('export-state-btn');
+  const importStateBtn = document.getElementById('import-state-btn');
+  const importFileInput = document.getElementById('import-file-input');
+  const autoFillCheckbox = document.getElementById('auto-fill-checkbox');
+  const autoGenSettings = document.getElementById('auto-gen-settings');
+  const autoGenLen = document.getElementById('auto-gen-len');
+  const autoGenMin = document.getElementById('auto-gen-min');
+  const autoGenMax = document.getElementById('auto-gen-max');
+  const autoGenStep = document.getElementById('auto-gen-step');
+  const autoGenBtn = document.getElementById('auto-gen-btn');
+  const exampleSelect = document.getElementById('example-select');
+
+  // #################### HELPER FUNCTIONS ####################
+  function isSortedAscending(arr) {
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] < arr[i - 1]) return false;
+    }
+    return true;
+  }
+
+  // Display array as a string with indices
+  function formatArray(arr, highlightIndices = [], highlightColor = 'black') {
+    // highlightIndices: array of index numbers to be surrounded by []
+    // visually no styling, just [] around elements for clarity
+    return arr.map((v, i) => {
+      if (highlightIndices.includes(i)) {
+        return `[${v}]`;
+      } else {
+        return ' ' + v + ' ';
+      }
+    }).join('');
+  }
+
+  // Clear UI states and reset
+  function resetAll() {
+    array = [];
+    searchKey = null;
+    isRunning = false;
+    isPaused = false;
+    currentStepIndex = -1;
+    steps = [];
+    clearInterval(autoStepInterval);
+    autoStepInterval = null;
+
+    arrayError.textContent = '';
+    searchKeyError.textContent = '';
+    stateInfo.textContent = 'Status: Not started';
+    arrayDisplay.textContent = '';
+    arrayDisplayCurrent.textContent = '';
+    log.textContent = '';
+    setAllButtonsDisabled(true);
+    startSearchBtn.disabled = true;
+    resetBtn.disabled = true;
+    parseArrayBtn.disabled = false;
+    searchKeyInput.value = '';
+    searchKey = null;
+  }
+
+  // Enable/disable buttons according to state
+  // pass true to disable all except parse/load
+  function setAllButtonsDisabled(disableAll) {
+    stepForwardBtn.disabled = disableAll;
+    stepBackwardBtn.disabled = disableAll;
+    runToEndBtn.disabled = disableAll;
+    pauseBtn.disabled = true;
+    exportLogBtn.disabled = disableAll;
+    exportStateBtn.disabled = disableAll;
+  }
+
+  // Append a message to the log and optionally autoscroll
+  function logMessage(msg) {
+    const timestamp = new Date().toISOString().slice(11,23);
+    log.textContent += `[${timestamp}] ${msg}\n`;
+    if (autoScrollCheckbox.checked) {
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+
+  // Parse input array string into sorted ascending array of numbers
+  function parseInputArray(text) {
+    if (!text.trim()) return [];
+    let parts = text.trim().split(/[\s,]+/);
+    let parsed = parts.map(s => Number(s));
+    if (parsed.some(n => Number.isNaN(n))) {
+      throw new Error('Array contains invalid number(s).');
+    }
+    return parsed;
+  }
+
+  // Validate array correctness
+  function validateArray(arr) {
+    if (arr.length === 0) {
+      throw new Error('Array is empty.');
+    }
+    if (!isSortedAscending(arr)) {
+      throw new Error('Array is not sorted in ascending order.');
+    }
+  }
+
+  // Draw current search state: array with low, high, pos highlighted
+  function drawCurrentStep(step) {
+    if (!step) {
+      arrayDisplayCurrent.textContent = formatArray(array);
+      return;
+    }
+    const {low, high, pos} = step;
+    // Highlight low, high, pos (pos can equal low or high)
+    // To avoid overlap confusion, pos in [pos], low in (low), high in {high}
+    let arrDisplay = array.map((val, idx) => {
+      if (idx === pos) return `[${val}]`;
+      else if (idx === low) return `(${val})`;
+      else if (idx === high) return `{${val}}`;
+      else return ` ${val} `;
+    }).join('');
+    /*
+      Legend:
+      [x] position currently checked
+      (x) low index
+      {x} high index
+    */
+    arrayDisplayCurrent.textContent = arrDisplay + '\n' +
+      'Legend: [pos] currently checked, (low), {high}';
+  }
+
+  // Perform interpolation search steps and record each step
+  // Does not auto-step or animate, just records states
+  // Returns array of steps
+  function runInterpolationSearch(arr, key) {
+    let localSteps = [];
+    let low = 0;
+    let high = arr.length - 1;
+
+    while (low <= high && key >= arr[low] && key <= arr[high]) {
+      if (arr[high] === arr[low]) {
+        // Prevent division by zero; all values in range are equal
+        let pos = low;
+        let compareResult = (arr[pos] === key) ? 0 : (arr[pos] < key ? -1 : 1);
+        let explanation = `All elements between index ${low} and ${high} are equal.\n` +
+          `Checking position ${pos} with value ${arr[pos]} against key ${key}.`;
+        localSteps.push({low, high, pos, valLow: arr[low], valHigh: arr[high], valPos: arr[pos], compareResult, explanation});
+        if (compareResult === 0) {
+          break;
+        } else {
+          low = high + 1; // to exit loop
+          break;
+        }
+      }
+      let posCalcNumerator = (key - arr[low]) * (high - low);
+      let posCalcDenominator = (arr[high] - arr[low]);
+      let pos = low + Math.floor(posCalcNumerator / posCalcDenominator);
+      if (pos < low || pos > high) {
+        // Safety clamp
+        pos = Math.min(high, Math.max(low, pos));
+      }
+      let valPos = arr[pos];
+      let compareResult = (valPos === key) ? 0 : (valPos < key ? -1 : 1);
+      let explanation =
+        `Interpolation formula calculation:\n` +
+        `pos = low + ((key - arr[low]) * (high - low)) / (arr[high] - arr[low])\n` +
+        `pos = ${low} + ((${key} - ${arr[low]}) * (${high} - ${low})) / (${arr[high]} - ${arr[low]})\n` +
+        `pos = ${pos}\n` +
+        `Checking arr[${pos}] = ${valPos} against key = ${key}\n` +
+        `Result: ${compareResult===0 ? 'equal' : (compareResult<0 ? 'less than key' : 'greater than key')}`;
+
+      localSteps.push({
+        low,
+        high,
+        pos,
+        valLow: arr[low],
+        valHigh: arr[high],
+        valPos,
+        compareResult,
+        explanation,
+      });
+
+      if (compareResult === 0) {
+        break; // found
+      } else if (compareResult < 0) {
+        low = pos + 1;
+      } else {
+        high = pos - 1;
+      }
+    }
+    // Final step if not found in loop, cover case key not present or out of bounds
+    if (localSteps.length === 0 || localSteps[localSteps.length - 1].compareResult !== 0) {
+      // Add final step indicating failure, state after loop ends
+      let explanation = `Key ${key} not found after search bounds exhausted or not in range.`;
+      localSteps.push({
+        low: -1,
+        high: -1,
+        pos: -1,
+        valLow: null,
+        valHigh: null,
+        valPos: null,
+        compareResult: null,
+        explanation
+      });
+    }
+    return localSteps;
+  }
+
+  // Apply current step index and update UI
+  function applyStep(index) {
+    currentStepIndex = index;
+    let step = steps[currentStepIndex] || null;
+    drawCurrentStep(step);
+    if (!step) {
+      stateInfo.textContent = 'Status: Ready to start search';
+      stepForwardBtn.disabled = false;
+      stepBackwardBtn.disabled = true;
+      runToEndBtn.disabled = false;
+      pauseBtn.disabled = true;
+      return;
+    }
+    if (step.compareResult === 0) {
+      stateInfo.textContent = `Step ${currentStepIndex + 1}/${steps.length}: FOUND key at index ${step.pos}`;
+      stepForwardBtn.disabled = true;
+      runToEndBtn.disabled = true;
+      pauseBtn.disabled = true;
+    } else if (step.low < 0) {
+      stateInfo.textContent = `Step ${currentStepIndex + 1}/${steps.length}: Key NOT FOUND`;
+      stepForwardBtn.disabled = true;
+      runToEndBtn.disabled = true;
+      pauseBtn.disabled = true;
+    } else {
+      stateInfo.textContent = `Step ${currentStepIndex + 1}/${steps.length}:\n` +
+        `low=${step.low}, high=${step.high}, pos=${step.pos}, arr[pos]=${step.valPos}, ` +
+        `comparing with key=${searchKey} (${step.compareResult < 0 ? 'arr[pos]<key' : 'arr[pos]>key'})`;
+      stepForwardBtn.disabled = (currentStepIndex >= steps.length - 1);
+      stepBackwardBtn.disabled = (currentStepIndex <= 0);
+      runToEndBtn.disabled = false;
+      pauseBtn.disabled = true;
+    }
+  }
+
+  // Step one forward
+  function stepForward() {
+    if (currentStepIndex < steps.length - 1) {
+      applyStep(currentStepIndex + 1);
+      if (currentStepIndex >= steps.length - 1) {
+        // Reach end disables forward
+        isRunning = false;
+        isPaused = false;
+        clearInterval(autoStepInterval);
+        pauseBtn.disabled = true;
+      }
+    }
+  }
+
+  // Step one backward
+  function stepBackward() {
+    if (currentStepIndex > 0) {
+      applyStep(currentStepIndex - 1);
+    }
+  }
+
+  // Run to end with auto stepping
+  function runToEnd() {
+    if (currentStepIndex === steps.length - 1) return; // Already at end
+    isRunning = true;
+    isPaused = false;
+    stepForwardBtn.disabled = true;
+    stepBackwardBtn.disabled = true;
+    runToEndBtn.disabled = true;
+    pauseBtn.disabled = false;
+    autoStepInterval = setInterval(() => {
+      if (currentStepIndex < steps.length - 1) {
+        stepForward();
+      } else {
+        clearInterval(autoStepInterval);
+        isRunning = false;
+        isPaused = false;
+        pauseBtn.disabled = true;
+        stepForwardBtn.disabled = true;
+        stepBackwardBtn.disabled = false;
+        runToEndBtn.disabled = true;
+      }
+    }, autoStepSpeed);
+  }
+
+  // Pause auto run
+  function pauseRun() {
+    if (isRunning && !isPaused) {
+      clearInterval(autoStepInterval);
+      isPaused = true;
+      pauseBtn.textContent = 'Resume';
+      stepForwardBtn.disabled = false;
+      stepBackwardBtn.disabled = false;
+      runToEndBtn.disabled = false;
+      stateInfo.textContent += ' (Paused)';
+    } else if (isRunning && isPaused) {
+      isPaused = false;
+      pauseBtn.textContent = 'Pause';
+      stepForwardBtn.disabled = true;
+      stepBackwardBtn.disabled = true;
+      runToEndBtn.disabled = true;
+      autoStepInterval = setInterval(() => {
+        if (currentStepIndex < steps.length - 1) {
+          stepForward();
+        } else {
+          clearInterval(autoStepInterval);
+          isRunning = false;
+          isPaused = false;
+          pauseBtn.disabled = true;
+          stepForwardBtn.disabled = true;
+          stepBackwardBtn.disabled = false;
+          runToEndBtn.disabled = true;
+        }
+      }, autoStepSpeed);
+      stateInfo.textContent = stateInfo.textContent.replace(' (Paused)', '');
+    }
+  }
+
+  // Log detailed state for current step to log area
+  function logCurrentStep() {
+    if (currentStepIndex < 0 || currentStepIndex >= steps.length) return;
+    let s = steps[currentStepIndex];
+    if (!s) return;
+    let msg = `Step ${currentStepIndex + 1}:\n` +
+      `Search bounds: low=${s.low} (value=${s.valLow})  high=${s.high} (value=${s.valHigh})\n` +
+      `Interpolated position: pos=${s.pos} (value=${s.valPos})\n` +
+      s.explanation;
+    logMessage(msg);
+  }
+
+  // #################### EVENT HANDLERS ####################
+  parseArrayBtn.addEventListener('click', () => {
+    arrayError.textContent = '';
+    try {
+      const text = arrayInput.value;
+      const arrParsed = parseInputArray(text);
+      validateArray(arrParsed);
+      array = arrParsed;
+      arrayDisplay.textContent = 'Array loaded. Length: ' + array.length + '\n' + formatArray(array);
+      startSearchBtn.disabled = false;
+      resetBtn.disabled = false;
+      searchKeyInput.disabled = false;
+      searchKeyError.textContent = '';
+    } catch (e) {
+      arrayError.textContent = e.message;
+      array = [];
+      arrayDisplay.textContent = '';
+      startSearchBtn.disabled = true;
+      resetBtn.disabled = false;
+      searchKeyInput.disabled = true;
+    }
+  });
+
+  startSearchBtn.addEventListener('click', () => {
+    searchKeyError.textContent = '';
+    let val = Number(searchKeyInput.value);
+    if (Number.isNaN(val)) {
+      searchKeyError.textContent = 'Invalid search key, must be a number.';
+      return;
+    }
+    searchKey = val;
+    // Run interpolation search and record steps
+    steps = runInterpolationSearch(array, searchKey);
+    currentStepIndex = 0;
+    stateInfo.textContent = 'Status: Search started. Showing step 1';
+    setAllButtonsDisabled(false);
+    stepBackwardBtn.disabled = true;
+    stepForwardBtn.disabled = false;
+    runToEndBtn.disabled = false;
+    pauseBtn.disabled = true;
+    exportLogBtn.disabled = false;
+    exportStateBtn.disabled = false;
+    resetBtn.disabled = false;
+    parseArrayBtn.disabled = true;
+    startSearchBtn.disabled = true;
+    searchKeyInput.disabled = true;
+
+    log.textContent = `Starting Interpolation Search for key ${searchKey} in array length ${array.length}.\n`;
+    applyStep(currentStepIndex);
+    logCurrentStep();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    resetAll();
+  });
+
+  stepForwardBtn.addEventListener('click', () => {
+    stepForward();
+    logCurrentStep();
+  });
+
+  stepBackwardBtn.addEventListener('click', () => {
+    stepBackward();
+  });
+
+  runToEndBtn.addEventListener('click', () => {
+    runToEnd();
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    pauseRun();
+  });
+
+  speedRange.addEventListener('input', () => {
+    autoStepSpeed = Number(speedRange.value);
+    speedValue.textContent = autoStepSpeed;
+    if (isRunning && !isPaused) {
+      clearInterval(autoStepInterval);
+      autoStepInterval = setInterval(() => {
+        if (currentStepIndex < steps.length - 1) {
+          stepForward();
+        } else {
+          clearInterval(autoStepInterval);
+          isRunning = false;
+          isPaused = false;
+          pauseBtn.disabled = true;
+          stepForwardBtn.disabled = true;
+          stepBackwardBtn.disabled = false;
+          runToEndBtn.disabled = true;
+        }
+      }, autoStepSpeed);
+    }
+  });
+
+  exportLogBtn.addEventListener('click', () => {
+    if (!log.textContent) return;
+    const blob = new Blob([log.textContent], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'interpolation_search_log.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  exportStateBtn.addEventListener('click', () => {
+    const exportState = {
+      array,
+      searchKey,
+      steps,
+      currentStepIndex
+    };
+    const dataStr = JSON.stringify(exportState, null, 2);
+    const blob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'interpolation_search_state.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  importStateBtn.addEventListener('click', () => {
+    importFileInput.click();
+  });
+
+  importFileInput.addEventListener('change', (evt) => {
+    let file = evt.target.files[0];
+    if (!file) return;
+    let reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const imported = JSON.parse(e.target.result);
+        if (!imported.array || !Array.isArray(imported.array)) throw new Error('Invalid state file: missing array');
+        if (!imported.steps || !Array.isArray(imported.steps)) throw new Error('Invalid state file: missing steps');
+        if (typeof imported.currentStepIndex !== 'number') throw new Error('Invalid state file: missing currentStepIndex');
+        array = imported.array;
+        searchKey = imported.searchKey;
+        steps = imported.steps;
+        currentStepIndex = imported.currentStepIndex;
+
+        arrayInput.value = array.join(' ');
+        searchKeyInput.value = searchKey !== null ? searchKey : '';
+        arrayDisplay.textContent = 'Array loaded from import. Length: ' + array.length + '\n' + formatArray(array);
+        setAllButtonsDisabled(false);
+        exportLogBtn.disabled = false;
+        exportStateBtn.disabled = false;
+        resetBtn.disabled = false;
+        parseArrayBtn.disabled = true;
+        startSearchBtn.disabled = true;
+        searchKeyInput.disabled = true;
+
+        log.textContent = 'Imported state loaded.\n';
+        applyStep(currentStepIndex);
+        logCurrentStep();
+      } catch (ex) {
+        alert('Failed to load import: ' + ex.message);
+      }
+      importFileInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  autoFillCheckbox.addEventListener('change', () => {
+    if (autoFillCheckbox.checked) {
+      arrayInput.disabled = true;
+      parseArrayBtn.disabled = true;
+      autoGenSettings.style.display = '';
+      startSearchBtn.disabled = true;
+      resetBtn.disabled = false;
+      searchKeyInput.disabled = false;
+      arrayDisplay.textContent = '';
+      arrayError.textContent = '';
+    } else {
+      arrayInput.disabled = false;
+      parseArrayBtn.disabled = false;
+      autoGenSettings.style.display = 'none';
+      arrayDisplay.textContent = '';
+      arrayError.textContent = '';
+      startSearchBtn.disabled = true;
+      resetBtn.disabled = false;
+      searchKeyInput.disabled = true;
+    }
+  });
+
+  autoGenBtn.addEventListener('click', () => {
+    try {
+      let len = Number(autoGenLen.value);
+      let minV = Number(autoGenMin.value);
+      let maxV = Number(autoGenMax.value);
+      let approxStep = Number(autoGenStep.value);
+      if (Number.isNaN(len) || Number.isNaN(minV) || Number.isNaN(maxV) || Number.isNaN(approxStep)) {
+        throw new Error('Please enter valid numbers for all auto-generation settings.');
+      }
+      if (len < 1 || len > 1000) throw new Error('Length must be between 1 and 1000.');
+      if (minV > maxV) throw new Error('Min value must not exceed max value.');
+      if (approxStep < 1) throw new Error('Approximate step must be >= 1.');
+
+      let genArr = [];
+      let val = minV;
+      for (let i = 0; i < len; i++) {
+        genArr.push(val);
+        val += approxStep + (Math.random() < 0.3 ? 0 : Math.floor(Math.random()*approxStep)); // non-uniform spacing
+        if (val > maxV) val = maxV;
+      }
+      array = genArr;
+      arrayInput.value = '';
+      arrayDisplay.textContent = 'Auto-generated array (' + len + ' elements):\n' + formatArray(array);
+      startSearchBtn.disabled = false;
+      resetBtn.disabled = false;
+      searchKeyInput.disabled = false;
+      arrayError.textContent = '';
+    } catch (ex) {
+      arrayError.textContent = ex.message;
+    }
+  });
+
+  exampleSelect.addEventListener('change', () => {
+    const val = exampleSelect.value;
+    if (!val) return;
+    let exampleArr;
+    switch (val) {
+      case 'basic':
+        exampleArr = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+        break;
+      case 'uniform':
+        exampleArr = Array.from({length:20}, (_,i) => 5*i);
+        break;
+      case 'sparse':
+        exampleArr = [3,6,15,28,45,58,92,115,140,165,195,230,260,310,400];
+        break;
+      case 'large':
+        exampleArr = Array.from({length:100}, (_,i) => i*7 + 3);
+        break;
+      case 'dense':
+        exampleArr = Array.from({length:25}, (_,i) => i);
+        break;
+      case 'mixed':
+        exampleArr = [1,2,2,3,10,11,12,15,20,22,24,30,35,40,50];
+        break;
+      default:
+        exampleArr = [];
+    }
+    array = exampleArr;
+    arrayInput.value = exampleArr.join(' ');
+    arrayDisplay.textContent = 'Example "' + val + '" loaded. Length: ' + array.length + '\n' + formatArray(array);
+    startSearchBtn.disabled = false;
+    resetBtn.disabled = false;
+    searchKeyInput.disabled = false;
+    arrayError.textContent = '';
+    parseArrayBtn.disabled = false;
+    searchKeyInput.value = '';
+    currentStepIndex = -1;
+    steps = [];
+    log.textContent = '';
+    stateInfo.textContent = 'Status: Ready to start search';
+    setAllButtonsDisabled(true);
+    startSearchBtn.disabled = false;
+  });
+
+  // On page load
+  resetAll();
+  speedValue.textContent = speedRange.value;
+})();
+</script>
+</body>
+</html>

@@ -216,7 +216,7 @@ test.describe('Suffix Tree Interactive Demo (FSM validations) - d3d5e9c0-fa73-11
       await page.click('#buildBtn');
 
       // Hover an edge to display tooltip; then move away to hide it
-      const edge = page.locator('path.edge').first();
+      const edge1 = page.locator('path.edge1').first();
       await expect(edge).toHaveCount(1);
 
       // Hover

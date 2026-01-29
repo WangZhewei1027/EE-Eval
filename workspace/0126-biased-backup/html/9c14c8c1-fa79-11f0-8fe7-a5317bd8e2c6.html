@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Greedy Algorithms Explorer</title>
+<style>
+/* Minimal styling only to ensure readable layout. No colors, no animations. */
+body { font-family: Arial, Helvetica, sans-serif; margin: 12px; color: #000; background: #fff; }
+section { margin-bottom: 16px; padding: 6px; border: 1px solid #000; }
+label { display: inline-block; margin: 4px 6px 4px 0; }
+input[type="number"], input[type="text"], textarea, select { width: 220px; }
+textarea { width: 98%; height: 80px; }
+.item-row { margin-bottom: 4px; }
+.small { width: 60px; }
+.mono { font-family: monospace; white-space: pre; display: block; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>Greedy Algorithms Explorer</h1>
+
+<section>
+  <strong>Overview:</strong>
+  <div>
+    This interactive explorer demonstrates several greedy algorithms. Use the controls below to create datasets, step through greedy choices, override decisions, compare with optimal solutions (when available), and run batch experiments to find counterexamples. The interface is intentionally plain.
+  </div>
+</section>
+
+<section>
+  <label for="algoSelect">Choose algorithm:</label>
+  <select id="algoSelect">
+    <option value="coin">Coin Change (Greedy)</option>
+    <option value="fractional_knapsack">Fractional Knapsack</option>
+    <option value="zero_one_knapsack">0/1 Knapsack (compare greedy heuristic)</option>
+    <option value="activity">Activity Selection (unweighted)</option>
+    <option value="weighted_interval">Weighted Interval Scheduling</option>
+    <option value="job_seq">Job Sequencing with Deadlines</option>
+    <option value="huffman">Huffman Coding</option>
+  </select>
+  <button id="loadSample">Load Sample Data</button>
+  <button id="clearDataset">Clear Dataset</button>
+</section>
+
+<section id="algoConfig">
+  <!-- Per-algorithm controls will be injected here -->
+</section>
+
+<section>
+  <h3>Dataset Editor</h3>
+  <div id="datasetArea">
+    <!-- Items listing -->
+  </div>
+  <div>
+    <button id="addItem">Add Item</button>
+    <button id="randomItems">Generate Random</button>
+    <label>Count:
+      <input id="randCount" type="number" value="6" min="1" class="small">
+    </label>
+    <label>Seed:
+      <input id="randSeed" type="text" value="" class="small">
+    </label>
+    <button id="batchTest">Batch Test (many random instances)</button>
+    <label>Trials:
+      <input id="batchTrials" type="number" value="100" min="1" class="small">
+    </label>
+  </div>
+</section>
+
+<section>
+  <h3>Simulation Controls</h3>
+  <div>
+    <button id="resetSim">Reset</button>
+    <button id="stepBack">Step Back</button>
+    <button id="stepForward">Step Forward</button>
+    <button id="runFull">Run Full Greedy</button>
+    <label>Auto-play speed (ms):
+      <input id="playSpeed" type="number" value="600" min="50" class="small">
+    </label>
+    <button id="playPause">Play</button>
+    <button id="forceRecompute">Recompute From Overrides</button>
+  </div>
+  <div>
+    <button id="computeOptimal">Compute Optimal (if available)</button>
+    <button id="compareOnce">Compare greedy vs optimal for current dataset</button>
+  </div>
+</section>
+
+<section>
+  <h3>Inspector & Overrides</h3>
+  <div>
+    <label>
+      <input type="checkbox" id="showLog" checked> Show step log
+    </label>
+    <label>
+      <input type="checkbox" id="allowOverride" checked> Allow manual override choices
+    </label>
+  </div>
+  <div>
+    <strong>Logs:</strong>
+    <pre id="log" class="mono"></pre>
+  </div>
+  <div>
+    <strong>State Peek:</strong>
+    <pre id="stateView" class="mono"></pre>
+  </div>
+</section>
+
+<section>
+  <h3>Export / Save</h3>
+  <div>
+    <button id="saveJson">Save Dataset JSON</button>
+    <button id="loadJson">Load Dataset JSON</button>
+    <input id="jsonInput" type="text" placeholder='Paste JSON here' style="width:60%">
+  </div>
+  <div>
+    <strong>Result:</strong>
+    <pre id="resultView" class="mono"></pre>
+  </div>
+</section>
+
+<script>
+// Greedy Algorithms Explorer - plain UI, rich interactivity
+
+// Global state
+const state = {
+  algo: 'coin',
+  items: [], // generic; interpretation depends on algorithm
+  sim: null, // simulation state object for current algorithm
+  history: [], // for undo/step back
+  future: [], // for redo
+  playTimer: null,
+  overridesEnabled: true
+};
+
+// Utilities
+function id() { return Math.random().toString(36).slice(2,9); }
+function log(msg) {
+  if (!document.getElementById('showLog').checked) return;
+  const el = document.getElementById('log');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function setResult(msg) {
+  document.getElementById('resultView').textContent = msg;
+}
+function setStateView(obj) {
+  document.getElementById('stateView').textContent = JSON.stringify(obj, null, 2);
+}
+
+// UI wiring
+const algoSelect = document.getElementById('algoSelect');
+algoSelect.addEventListener('change', () => {
+  state.algo = algoSelect.value;
+  resetDatasetForAlgo();
+  renderAlgoConfig();
+  renderDatasetEditor();
+  resetSimulation();
+});
+
+document.getElementById('loadSample').addEventListener('click', () => {
+  loadSample();
+});
+document.getElementById('clearDataset').addEventListener('click', () => {
+  state.items = [];
+  renderDatasetEditor();
+  resetSimulation();
+});
+document.getElementById('addItem').addEventListener('click', () => {
+  addNewItem();
+});
+document.getElementById('randomItems').addEventListener('click', () => {
+  generateRandomItems();
+});
+document.getElementById('resetSim').addEventListener('click', () => {
+  resetSimulation();
+  log('Simulation reset.');
+});
+document.getElementById('stepForward').addEventListener('click', () => stepSimulation(1));
+document.getElementById('stepBack').addEventListener('click', () => stepSimulation(-1));
+document.getElementById('runFull').addEventListener('click', () => runFullGreedy());
+document.getElementById('playPause').addEventListener('click', () => togglePlay());
+document.getElementById('playSpeed').addEventListener('change', () => {
+  if (state.playTimer) { togglePlay(); togglePlay(); } // restart with new speed
+});
+document.getElementById('forceRecompute').addEventListener('click', () => {
+  recomputeFromOverrides();
+});
+document.getElementById('computeOptimal').addEventListener('click', () => computeOptimal());
+document.getElementById('compareOnce').addEventListener('click', () => compareGreedyOptimal());
+document.getElementById('batchTest').addEventListener('click', () => batchTest());
+document.getElementById('saveJson').addEventListener('click', () => {
+  const json = JSON.stringify({algo: state.algo, items: state.items}, null, 2);
+  setResult(json);
+});
+document.getElementById('loadJson').addEventListener('click', () => {
+  try {
+    const obj = JSON.parse(document.getElementById('jsonInput').value);
+    if (obj.algo) { state.algo = obj.algo; algoSelect.value = obj.algo; }
+    if (Array.isArray(obj.items)) state.items = obj.items;
+    renderAlgoConfig();
+    renderDatasetEditor();
+    resetSimulation();
+    log('Loaded JSON dataset.');
+  } catch (e) {
+    setResult('Invalid JSON: ' + e.message);
+  }
+});
+document.getElementById('showLog').addEventListener('change', () => {
+  if (!document.getElementById('showLog').checked) {
+    document.getElementById('log').textContent = '';
+  }
+});
+document.getElementById('allowOverride').addEventListener('change', (e) => {
+  state.overridesEnabled = e.target.checked;
+  renderDatasetEditor();
+});
+
+// Per-algorithm configurations injection
+function renderAlgoConfig() {
+  const container = document.getElementById('algoConfig');
+  container.innerHTML = '';
+  const algo = state.algo;
+
+  if (algo === 'coin') {
+    container.innerHTML = `
+      <div>
+        <label>Coins (comma separated, descending recommended):
+          <input id="coinsInput" type="text" value="25,10,5,1" style="width:320px">
+        </label>
+        <label>Target:
+          <input id="coinTarget" type="number" value="63" class="small">
+        </label>
+        <button id="applyCoins">Apply</button>
+        <button id="coinGreedyOnce">Greedy run once</button>
+      </div>
+      <div>
+        <small>Greedy chooses largest denomination <= remaining. You can override choices by editing item forced flags.</small>
+      </div>
+    `;
+    document.getElementById('applyCoins').addEventListener('click', () => {
+      const coins = parseCoins();
+      state.items = coins.map((c, idx) => ({id: id(), coin: c, name: 'coin_' + c, forced: null}));
+      document.getElementById('coinTarget').value = document.getElementById('coinTarget').value || 0;
+      renderDatasetEditor();
+      resetSimulation();
+    });
+    document.getElementById('coinGreedyOnce').addEventListener('click', () => {
+      runFullGreedy();
+    });
+  } else if (algo === 'fractional_knapsack') {
+    container.innerHTML = `
+      <div>
+        <label>Capacity:
+          <input id="fracCap" type="number" value="50" class="small">
+        </label>
+        <label>Sort tie-break:
+          <select id="fracTie">
+            <option value="none">none</option>
+            <option value="value">higher value</option>
+            <option value="weight">lower weight</option>
+          </select>
+        </label>
+        <button id="applyFrac">Apply</button>
+      </div>
+      <div><small>Fractional knapsack greedy by value/weight ratio (optimal for continuous knapsack).</small></div>
+    `;
+    document.getElementById('applyFrac').addEventListener('click', () => {
+      // If no items, create sample
+      if (!state.items.length) {
+        state.items = [
+          {id: id(), name: 'A', weight: 10, value: 60, forced: null},
+          {id: id(), name: 'B', weight: 20, value: 100, forced: null},
+          {id: id(), name: 'C', weight: 30, value: 120, forced: null}
+        ];
+      }
+      renderDatasetEditor();
+      resetSimulation();
+    });
+  } else if (algo === 'zero_one_knapsack') {
+    container.innerHTML = `
+      <div>
+        <label>Capacity:
+          <input id="kpCap" type="number" value="50" class="small">
+        </label>
+        <label>Greedy heuristic:
+          <select id="kpHeuristic">
+            <option value="ratio">Value/Weight ratio</option>
+            <option value="value">Highest value</option>
+            <option value="light">Lowest weight</option>
+          </select>
+        </label>
+        <button id="applyKP">Apply</button>
+      </div>
+      <div><small>0/1 knapsack greedy heuristics are not always optimal. You can compare with DP for small instances.</small></div>
+    `;
+    document.getElementById('applyKP').addEventListener('click', () => {
+      if (!state.items.length) {
+        state.items = [
+          {id: id(), name: 'A', weight: 10, value: 60, forced: null},
+          {id: id(), name: 'B', weight: 20, value: 100, forced: null},
+          {id: id(), name: 'C', weight: 30, value: 120, forced: null}
+        ];
+      }
+      renderDatasetEditor();
+      resetSimulation();
+    });
+  } else if (algo === 'activity') {
+    container.innerHTML = `
+      <div>
+        <label>Sort tie-break:
+          <select id="actTie">
+            <option value="start">earliest start</option>
+            <option value="name">name</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <button id="applyAct">Apply</button>
+      </div>
+      <div><small>Greedy by earliest finish time (optimal for unweighted activity selection).</small></div>
+    `;
+    document.getElementById('applyAct').addEventListener('click', () => {
+      if (!state.items.length) {
+        state.items = [
+          {id: id(), name: 'A', start: 1, end: 4, forced: null},
+          {id: id(), name: 'B', start: 3, end: 5, forced: null},
+          {id: id(), name: 'C', start: 0, end: 6, forced: null},
+          {id: id(), name: 'D', start: 5, end: 7, forced: null},
+          {id: id(), name: 'E', start: 8, end: 9, forced: null}
+        ];
+      }
+      renderDatasetEditor();
+      resetSimulation();
+    });
+  } else if (algo === 'weighted_interval') {
+    container.innerHTML = `
+      <div>
+        <button id="applyWIS">Apply / Load sample</button>
+        <small>Weighted interval scheduling: greedy by finish is not optimal; DP computes optimal.</small>
+      </div>
+    `;
+    document.getElementById('applyWIS').addEventListener('click', () => {
+      if (!state.items.length) {
+        state.items = [
+          {id: id(), name: 'A', start: 1, end: 3, weight: 5, forced: null},
+          {id: id(), name: 'B', start: 2, end: 5, weight: 6, forced: null},
+          {id: id(), name: 'C', start: 4, end: 6, weight: 5, forced: null},
+          {id: id(), name: 'D', start: 6, end: 7, weight: 4, forced: null},
+          {id: id(), name: 'E', start: 5, end: 8, weight: 11, forced: null}
+        ];
+      }
+      renderDatasetEditor();
+      resetSimulation();
+    });
+  } else if (algo === 'job_seq') {
+    container.innerHTML = `
+      <div>
+        <label>Maximum deadline (makes schedule length):
+          <input id="jobMaxDeadline" type="number" value="4" class="small">
+        </label>
+        <button id="applyJob">Apply</button>
+        <div><small>Greedy: schedule by profit descending with earliest available slot.</small></div>
+      </div>
+    `;
+    document.getElementById('applyJob').addEventListener('click', () => {
+      if (!state.items.length) {
+        state.items = [
+          {id: id(), name: 'J1', profit: 100, deadline: 2, forced: null},
+          {id: id(), name: 'J2', profit: 19, deadline: 1, forced: null},
+          {id: id(), name: 'J3', profit: 27, deadline: 2, forced: null},
+          {id: id(), name: 'J4', profit: 25, deadline: 1, forced: null},
+        ];
+      }
+      renderDatasetEditor();
+      resetSimulation();
+    });
+  } else if (algo === 'huffman') {
+    container.innerHTML = `
+      <div>
+        <button id="applyHuff">Apply / Load sample</button>
+        <div><small>Huffman coding builds an optimal prefix code by repeatedly merging the two least frequent symbols (greedy).</small></div>
+      </div>
+    `;
+    document.getElementById('applyHuff').addEventListener('click', () => {
+      if (!state.items.length) {
+        state.items = [
+          {id: id(), name: 'a', freq: 45, forced: null},
+          {id: id(), name: 'b', freq: 13, forced: null},
+          {id: id(), name: 'c', freq: 12, forced: null},
+          {id: id(), name: 'd', freq: 16, forced: null},
+          {id: id(), name: 'e', freq: 9, forced: null},
+          {id: id(), name: 'f', freq: 5, forced: null}
+        ];
+      }
+      renderDatasetEditor();
+      resetSimulation();
+    });
+  }
+}
+renderAlgoConfig();
+
+// Dataset editor rendering
+function renderDatasetEditor() {
+  const area = document.getElementById('datasetArea');
+  area.innerHTML = '';
+  const algo = state.algo;
+  if (!state.items || state.items.length === 0) {
+    area.textContent = '(no items)';
+    return;
+  }
+  state.items.forEach((it, idx) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.dataset.idx = idx;
+    if (algo === 'coin') {
+      row.innerHTML = `
+        <label>${idx+1}:</label>
+        <input data-field="coin" type="number" value="${it.coin}" class="small">
+        <label>Name:<input data-field="name" type="text" value="${it.name}"></label>
+        <label>Force:
+          <select data-field="forced">
+            <option value="">(none)</option>
+            <option value="include"${it.forced==='include'?' selected':''}>include</option>
+            <option value="exclude"${it.forced==='exclude'?' selected':''}>exclude</option>
+          </select>
+        </label>
+        <button data-action="remove">Remove</button>
+      `;
+    } else if (algo === 'fractional_knapsack' || algo === 'zero_one_knapsack') {
+      row.innerHTML = `
+        <label>${idx+1}:</label>
+        <input data-field="name" type="text" value="${it.name}" class="small">
+        <label>W:<input data-field="weight" type="number" value="${it.weight}" class="small"></label>
+        <label>V:<input data-field="value" type="number" value="${it.value}" class="small"></label>
+        <label>Force:
+          <select data-field="forced">
+            <option value="">(none)</option>
+            <option value="include"${it.forced==='include'?' selected':''}>include</option>
+            <option value="exclude"${it.forced==='exclude'?' selected':''}>exclude</option>
+          </select>
+        </label>
+        <button data-action="remove">Remove</button>
+      `;
+    } else if (algo === 'activity' || algo === 'weighted_interval') {
+      const weightField = algo === 'weighted_interval' ? `<label>W:<input data-field="weight" type="number" value="${it.weight || 1}" class="small"></label>` : '';
+      row.innerHTML = `
+        <label>${idx+1}:</label>
+        <input data-field="name" type="text" value="${it.name}" class="small">
+        <label>start:<input data-field="start" type="number" value="${it.start}" class="small"></label>
+        <label>end:<input data-field="end" type="number" value="${it.end}" class="small"></label>
+        ${weightField}
+        <label>Force:
+          <select data-field="forced">
+            <option value="">(none)</option>
+            <option value="include"${it.forced==='include'?' selected':''}>include</option>
+            <option value="exclude"${it.forced==='exclude'?' selected':''}>exclude</option>
+          </select>
+        </label>
+        <button data-action="remove">Remove</button>
+      `;
+    } else if (algo === 'job_seq') {
+      row.innerHTML = `
+        <label>${idx+1}:</label>
+        <input data-field="name" type="text" value="${it.name}" class="small">
+        <label>profit:<input data-field="profit" type="number" value="${it.profit}" class="small"></label>
+        <label>deadline:<input data-field="deadline" type="number" value="${it.deadline}" class="small"></label>
+        <label>Force:
+          <select data-field="forced">
+            <option value="">(none)</option>
+            <option value="include"${it.forced==='include'?' selected':''}>include</option>
+            <option value="exclude"${it.forced==='exclude'?' selected':''}>exclude</option>
+          </select>
+        </label>
+        <button data-action="remove">Remove</button>
+      `;
+    } else if (algo === 'huffman') {
+      row.innerHTML = `
+        <label>${idx+1}:</label>
+        <input data-field="name" type="text" value="${it.name}" class="small">
+        <label>freq:<input data-field="freq" type="number" value="${it.freq}" class="small"></label>
+        <button data-action="remove">Remove</button>
+      `;
+    }
+    // attach events
+    row.querySelectorAll('[data-field]').forEach(el => {
+      el.addEventListener('change', (e) => {
+        const field = el.getAttribute('data-field');
+        let val = el.value;
+        if (el.type === 'number') val = Number(val);
+        if (field === 'forced' && val === '') val = null;
+        state.items[idx][field] = val;
+        resetSimulation(); // item changed
+      });
+    });
+    row.querySelectorAll('[data-action="remove"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.items.splice(idx,1);
+        renderDatasetEditor();
+        resetSimulation();
+      });
+    });
+    area.appendChild(row);
+  });
+}
+
+// Dataset helpers
+function parseCoins() {
+  const s = document.getElementById('coinsInput').value;
+  return s.split(',').map(x => parseInt(x.trim())).filter(n => !isNaN(n)).sort((a,b)=>b-a);
+}
+
+function addNewItem() {
+  const algo = state.algo;
+  let it = {id: id(), forced: null};
+  if (algo === 'coin') { it.coin = 1; it.name = 'coin_1'; }
+  else if (algo === 'fractional_knapsack' || algo === 'zero_one_knapsack') { it.name='X'; it.weight=1; it.value=1; }
+  else if (algo === 'activity' || algo === 'weighted_interval') { it.name='A'; it.start=0; it.end=1; if (algo==='weighted_interval') it.weight=1; }
+  else if (algo === 'job_seq') { it.name='J'; it.profit=10; it.deadline=1; }
+  else if (algo === 'huffman') { it.name='a'; it.freq=1; }
+  state.items.push(it);
+  renderDatasetEditor();
+  resetSimulation();
+}
+
+function generateRandomItems() {
+  const algo = state.algo;
+  const cnt = Math.max(1, Number(document.getElementById('randCount').value) || 6);
+  const seed = document.getElementById('randSeed').value || Math.random().toString();
+  let rnd = mulberry32(hashStr(seed));
+  state.items = [];
+  for (let i=0;i<cnt;i++) {
+    if (algo === 'coin') {
+      // coins random descending
+      const coin = Math.pow(2, Math.floor(rnd()*6)) * (Math.floor(rnd()*3)+1);
+      state.items.push({id:id(), coin: coin, name: 'coin_'+coin, forced:null});
+    } else if (algo === 'fractional_knapsack' || algo === 'zero_one_knapsack') {
+      const w = Math.floor(rnd()*20)+1;
+      const v = Math.floor(rnd()*100)+1;
+      state.items.push({id:id(), name: String.fromCharCode(65+i), weight: w, value: v, forced:null});
+    } else if (algo === 'activity' || algo === 'weighted_interval') {
+      const s = Math.floor(rnd()*12);
+      const e = s + Math.floor(rnd()*6)+1;
+      const w = Math.floor(rnd()*20)+1;
+      state.items.push({id:id(), name: String.fromCharCode(65+i), start: s, end: e, weight: w, forced:null});
+    } else if (algo === 'job_seq') {
+      const profit = Math.floor(rnd()*200)+1;
+      const deadline = Math.floor(rnd()*Math.max(1,Math.floor(cnt/2)))+1;
+      state.items.push({id:id(), name:'J'+(i+1), profit: profit, deadline: deadline, forced:null});
+    } else if (algo === 'huffman') {
+      const freq = Math.floor(rnd()*100)+1;
+      state.items.push({id:id(), name: String.fromCharCode(97+i), freq: freq, forced:null});
+    }
+  }
+  renderDatasetEditor();
+  resetSimulation();
+}
+
+// simple seeded random
+function hashStr(str) {
+  let h = 2166136261 >>> 0;
+  for (let i=0;i<str.length;i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+// Simulation engine per algorithm
+function resetSimulation() {
+  state.sim = null;
+  state.history = [];
+  state.future = [];
+  document.getElementById('log').textContent = '';
+  setResult('');
+  setStateView({});
+  initSimForAlgo();
+}
+
+function initSimForAlgo() {
+  const algo = state.algo;
+  if (algo === 'coin') initCoinSim();
+  else if (algo === 'fractional_knapsack') initFracSim();
+  else if (algo === 'zero_one_knapsack') initZeroOneSim();
+  else if (algo === 'activity') initActivitySim();
+  else if (algo === 'weighted_interval') initWeightedIntervalSim();
+  else if (algo === 'job_seq') initJobSeqSim();
+  else if (algo === 'huffman') initHuffmanSim();
+  setStateView(state.sim);
+}
+
+// Generic helper for push history
+function pushHistory() {
+  state.history.push(JSON.parse(JSON.stringify(state.sim)));
+  state.future = [];
+}
+
+// 1) Coin Change simulation
+function initCoinSim() {
+  const coins = parseCoins();
+  const targetInput = document.getElementById('coinTarget');
+  const target = targetInput ? Number(targetInput.value) : 0;
+  // represent as list of coin types
+  state.sim = {
+    algo: 'coin',
+    coins: coins,
+    target: target,
+    remaining: target,
+    index: 0, // current coin index in coins list
+    chosen: {}, // coin value -> count chosen
+    log: []
+  };
+  log(`Coin change initialized. Coins: ${coins.join(', ')} Target: ${target}`);
+}
+
+function stepCoin() {
+  const sim = state.sim;
+  if (!sim) return;
+  // if finished
+  if (sim.remaining <= 0 || sim.index >= sim.coins.length) {
+    log('No further greedy choice possible.');
+    return;
+  }
+  pushHistory();
+  const coin = sim.coins[sim.index];
+  // check override for this coin type
+  const item = state.items.find(it => it.coin === coin);
+  const forced = item ? item.forced : null;
+  if (forced === 'exclude') {
+    sim.log.push(`Coin ${coin} excluded by override.`);
+    sim.index++;
+  } else if (forced === 'include') {
+    // include as many as possible from this denomination
+    const count = Math.floor(sim.remaining / coin);
+    if (count > 0) {
+      sim.chosen[coin] = (sim.chosen[coin]||0) + count;
+      sim.remaining -= coin * count;
+      sim.log.push(`Forced include: took ${count} coin(s) of ${coin}. Remaining ${sim.remaining}.`);
+    } else {
+      sim.log.push(`Forced include but none fit: coin ${coin}.`);
+    }
+    sim.index++;
+  } else {
+    // natural greedy: take as many of this coin as fit
+    const count = Math.floor(sim.remaining / coin);
+    if (count > 0) {
+      sim.chosen[coin] = (sim.chosen[coin]||0) + count;
+      sim.remaining -= coin * count;
+      sim.log.push(`Greedy: took ${count} coin(s) of ${coin}. Remaining ${sim.remaining}.`);
+    } else {
+      sim.log.push(`Greedy: cannot take coin ${coin}, move to next.`);
+    }
+    sim.index++;
+  }
+  setStateView(sim);
+  if (sim.remaining <= 0) sim.log.push('Target amount reached or below zero.');
+}
+
+function runCoinFull() {
+  while (state.sim && state.sim.remaining > 0 && state.sim.index < state.sim.coins.length) {
+    stepCoin();
+  }
+  setStateView(state.sim);
+  if (state.sim.remaining > 0) log('Greedy finished but target not reached.');
+  else log('Greedy completed reaching target.');
+  setResult(JSON.stringify(state.sim.chosen, null, 2));
+}
+
+function computeCoinOptimal() {
+  const sim = state.sim;
+  const coins = sim.coins.slice();
+  const T = sim.target;
+  // Unbounded coin change minimum number of coins DP; handle small T
+  const INF = 1e9;
+  const dp = Array(T + 1).fill(INF);
+  dp[0]=0;
+  const choice = Array(T+1).fill(null);
+  for (let amt=1; amt<=T; amt++) {
+    for (let c of coins) {
+      if (c<=amt && dp[amt-c]+1 < dp[amt]) {
+        dp[amt] = dp[amt-c]+1;
+        choice[amt] = c;
+      }
+    }
+  }
+  if (dp[T] >= INF) {
+    setResult('No solution found by DP (target unreachable).');
+    return null;
+  }
+  // reconstruct
+  let amt = T;
+  const taken = {};
+  while (amt>0) {
+    const c = choice[amt];
+    taken[c] = (taken[c]||0)+1;
+    amt -= c;
+  }
+  setResult('Optimal (min coins) solution:\n' + JSON.stringify(taken, null, 2));
+  return taken;
+}
+
+// 2) Fractional knapsack
+function initFracSim() {
+  const cap = Number(document.getElementById('fracCap').value) || 0;
+  const tie = document.getElementById('fracTie').value;
+  // ensure items exist
+  if (!state.items || state.items.length===0) {
+    state.items = [
+      {id:id(), name:'A', weight:10, value:60, forced:null},
+      {id:id(), name:'B', weight:20, value:100, forced:null},
+      {id:id(), name:'C', weight:30, value:120, forced:null}
+    ];
+    renderDatasetEditor();
+  }
+  const items = state.items.map(it => ({...it}));
+  items.forEach(it => it.ratio = it.value/it.weight);
+  items.sort((a,b)=>b.ratio - a.ratio || (tie==='value'?b.value-a.value:(tie==='weight'?a.weight-b.weight:0)));
+  state.sim = {
+    algo: 'fractional_knapsack',
+    capacity: cap,
+    items: items,
+    index: 0,
+    chosen: [], // {id, name, takenWeight, fraction, value}
+    remaining: cap,
+    log: []
+  };
+  log(`Fractional knapsack: capacity ${cap}, items sorted by ratio.`);
+}
+
+function stepFrac() {
+  const sim = state.sim;
+  if (!sim) return;
+  if (sim.index >= sim.items.length || sim.remaining <= 0) {
+    log('No further steps.');
+    return;
+  }
+  pushHistory();
+  const it = sim.items[sim.index];
+  const forced = (state.items.find(x=>x.id===it.id) || {}).forced;
+  if (forced === 'exclude') {
+    sim.log.push(`Item ${it.name} excluded by override.`);
+    sim.index++;
+  } else {
+    const take = Math.min(it.weight, sim.remaining);
+    const fraction = take / it.weight;
+    sim.chosen.push({id: it.id, name: it.name, takenWeight: take, fraction: fraction, value: it.value * fraction});
+    sim.remaining -= take;
+    sim.log.push(`Took ${take} weight (${(fraction*100).toFixed(1)}%) of ${it.name}, value gained ${(it.value*fraction).toFixed(2)}. Remaining capacity ${sim.remaining.toFixed(2)}.`);
+    sim.index++;
+  }
+  setStateView(sim);
+}
+
+function runFracFull() {
+  while (state.sim && state.sim.index < state.sim.items.length && state.sim.remaining > 0) {
+    stepFrac();
+  }
+  // compute total value
+  const tot = state.sim.chosen.reduce((s,x)=>s+x.value,0);
+  setResult('Total value (fractional): ' + tot.toFixed(4) + '\n' + JSON.stringify(state.sim.chosen,null,2));
+  log('Fractional greedy completed.');
+}
+
+// 3) 0/1 Knapsack greedy heuristic simulation
+function initZeroOneSim() {
+  const cap = Number(document.getElementById('kpCap').value) || 0;
+  const heuristic = document.getElementById('kpHeuristic').value;
+  if (!state.items || state.items.length===0) {
+    state.items = [
+      {id:id(), name:'A', weight:10, value:60, forced:null},
+      {id:id(), name:'B', weight:20, value:100, forced:null},
+      {id:id(), name:'C', weight:30, value:120, forced:null}
+    ];
+    renderDatasetEditor();
+  }
+  const items = state.items.map(it => ({...it}));
+  items.forEach(it => it.ratio = it.value/it.weight);
+  if (heuristic === 'ratio') items.sort((a,b)=>b.ratio-a.ratio);
+  else if (heuristic === 'value') items.sort((a,b)=>b.value-b.value);
+  else if (heuristic === 'light') items.sort((a,b)=>a.weight-b.weight);
+  state.sim = {
+    algo: 'zero_one_knapsack',
+    capacity: cap,
+    items: items,
+    index: 0,
+    taken: [],
+    remaining: cap,
+    log: []
+  };
+  log(`0/1 Knapsack greedy init. Capacity ${cap}, heuristic ${heuristic}.`);
+}
+
+function stepZeroOne() {
+  const sim = state.sim;
+  if (!sim) return;
+  if (sim.index >= sim.items.length || sim.remaining <=0) {
+    log('No further steps.');
+    return;
+  }
+  pushHistory();
+  const it = sim.items[sim.index];
+  const forced = (state.items.find(x=>x.id===it.id)||{}).forced;
+  if (forced === 'exclude') {
+    sim.log.push(`Item ${it.name} excluded by override.`);
+    sim.index++;
+  } else if (forced === 'include') {
+    if (it.weight <= sim.remaining) {
+      sim.taken.push(it);
+      sim.remaining -= it.weight;
+      sim.log.push(`Forced include: ${it.name} (w=${it.weight}, v=${it.value}). Remaining ${sim.remaining}.`);
+    } else {
+      sim.log.push(`Forced include but not enough capacity for ${it.name}.`);
+    }
+    sim.index++;
+  } else {
+    if (it.weight <= sim.remaining) {
+      sim.taken.push(it);
+      sim.remaining -= it.weight;
+      sim.log.push(`Greedy: took ${it.name}. Remaining ${sim.remaining}.`);
+    } else {
+      sim.log.push(`Skipped ${it.name} (does not fit).`);
+    }
+    sim.index++;
+  }
+  setStateView(sim);
+}
+
+function runZeroOneFull() {
+  while (state.sim && state.sim.index < state.sim.items.length && state.sim.remaining > 0) {
+    stepZeroOne();
+  }
+  const tot = state.sim.taken.reduce((s,x)=>s+x.value,0);
+  setResult('Greedy total value: ' + tot + '\nTaken: ' + state.sim.taken.map(x=>x.name).join(', '));
+  log('Greedy done for 0/1 knapsack.');
+}
+
+function computeZeroOneOptimal() {
+  const sim = state.sim;
+  const n = sim.items.length;
+  const W = sim.capacity;
+  if (n * W > 200000) {
+    setResult('DP too large for optimal (n*W > 200k).');
+    return null;
+  }
+  // items might have been reordered; use original items
+  const items = state.items;
+  const dp = Array(W+1).fill(0);
+  const take = Array(W+1).fill(null).map(()=>[]);
+  for (let i=0;i<items.length;i++) {
+    const wt = items[i].weight;
+    const val = items[i].value;
+    for (let w=W; w>=wt; w--) {
+      if (dp[w-wt] + val > dp[w]) {
+        dp[w] = dp[w-wt] + val;
+        take[w] = take[w-wt].concat([items[i]]);
+      }
+    }
+  }
+  const bestVal = dp[W];
+  const solution = take[W] || [];
+  setResult('Optimal DP value: ' + bestVal + '\nTaken: ' + solution.map(x=>x.name).join(', '));
+  return {value:bestVal, taken: solution};
+}
+
+// 4) Activity selection unweighted
+function initActivitySim() {
+  const tie = document.getElementById('actTie').value;
+  if (!state.items || state.items.length===0) {
+    state.items = [
+      {id:id(), name:'A', start:1, end:4, forced:null},
+      {id:id(), name:'B', start:3, end:5, forced:null},
+      {id:id(), name:'C', start:0, end:6, forced:null},
+      {id:id(), name:'D', start:5, end:7, forced:null},
+      {id:id(), name:'E', start:8, end:9, forced:null}
+    ];
+    renderDatasetEditor();
+  }
+  const items = state.items.map(it => ({...it}));
+  items.sort((a,b)=>a.end - b.end || (tie==='start'?a.start-b.start: (tie==='name'?a.name.localeCompare(b.name):0)));
+  state.sim = {
+    algo: 'activity',
+    items: items,
+    index: 0,
+    lastFinish: -Infinity,
+    chosen: [],
+    log: []
+  };
+  log('Activity selection initialized. Sorted by finish time.');
+}
+
+function stepActivity() {
+  const sim = state.sim;
+  if (!sim) return;
+  if (sim.index >= sim.items.length) {
+    log('Completed.');
+    return;
+  }
+  pushHistory();
+  const it = sim.items[sim.index];
+  const forced = (state.items.find(x=>x.id===it.id)||{}).forced;
+  if (forced === 'exclude') {
+    sim.log.push(`Activity ${it.name} excluded by override.`);
+  } else if (forced === 'include') {
+    if (it.start >= sim.lastFinish) {
+      sim.chosen.push(it);
+      sim.lastFinish = it.end;
+      sim.log.push(`Forced include: ${it.name}.`);
+    } else {
+      sim.log.push(`Forced include but conflicts with last finish. It is still included and causes conflict to demonstrate override effect.`);
+      // We still include to demonstrate override can break constraints.
+      sim.chosen.push(it);
+      sim.lastFinish = Math.max(sim.lastFinish, it.end);
+    }
+  } else {
+    if (it.start >= sim.lastFinish) {
+      sim.chosen.push(it);
+      sim.lastFinish = it.end;
+      sim.log.push(`Greedy selected ${it.name}.`);
+    } else {
+      sim.log.push(`Skipped ${it.name} due to conflict.`);
+    }
+  }
+  sim.index++;
+  setStateView(sim);
+}
+
+function runActivityFull() {
+  while (state.sim && state.sim.index < state.sim.items.length) stepActivity();
+  setResult('Selected: ' + state.sim.chosen.map(x=>x.name).join(', '));
+}
+
+// 5) Weighted interval scheduling (greedy vs DP)
+function initWeightedIntervalSim() {
+  if (!state.items || state.items.length===0) {
+    state.items = [
+      {id: id(), name: 'A', start: 1, end: 3, weight: 5, forced: null},
+      {id: id(), name: 'B', start: 2, end: 5, weight: 6, forced: null},
+      {id: id(), name: 'C', start: 4, end: 6, weight: 5, forced: null},
+      {id: id(), name: 'D', start: 6, end: 7, weight: 4, forced: null},
+      {id: id(), name: 'E', start: 5, end: 8, weight: 11, forced: null}
+    ];
+  }
+  // sort by end
+  const items = state.items.map((it,idx)=>({...it, idx: idx}));
+  items.sort((a,b)=>a.end - b.end);
+  // Precompute p(j): rightmost interval before j that doesn't overlap
+  const p = [];
+  for (let j=0;j<items.length;j++) {
+    let pj = -1;
+    for (let i=j-1;i>=0;i--) {
+      if (items[i].end <= items[j].start) { pj = i; break; }
+    }
+    p[j] = pj;
+  }
+  state.sim = {
+    algo: 'weighted_interval',
+    items: items,
+    p: p,
+    index: 0,
+    chosenGreedy: [],
+    lastFinish: -Infinity,
+    log: []
+  };
+  log('Weighted interval scheduling initialized. Greedy by finish time will be simulated stepwise for comparison to DP optimal.');
+}
+
+function stepWeightedIntervalGreedy() {
+  const sim = state.sim;
+  if (!sim) return;
+  if (sim.index >= sim.items.length) {
+    log('Greedy done.');
+    return;
+  }
+  pushHistory();
+  const it = sim.items[sim.index];
+  const forced = (state.items.find(x=>x.id===it.id)||{}).forced;
+  if (forced === 'exclude') {
+    sim.log.push(`Interval ${it.name} excluded.`);
+  } else if (forced === 'include') {
+    sim.chosenGreedy.push(it);
+    sim.lastFinish = Math.max(sim.lastFinish, it.end);
+    sim.log.push(`Forced include ${it.name}.`);
+  } else {
+    if (it.start >= sim.lastFinish) {
+      sim.chosenGreedy.push(it);
+      sim.lastFinish = it.end;
+      sim.log.push(`Greedy picked ${it.name}.`);
+    } else {
+      sim.log.push(`Greedy skipped ${it.name} due to overlap.`);
+    }
+  }
+  sim.index++;
+  setStateView(sim);
+}
+
+function runWeightedGreedyFull() {
+  while (state.sim && state.sim.index < state.sim.items.length) {
+    stepWeightedIntervalGreedy();
+  }
+  setResult('Greedy selected: ' + state.sim.chosenGreedy.map(x=>x.name).join(', '));
+}
+
+// DP for weighted interval scheduling
+function computeWeightedOptimal() {
+  const sim = state.sim;
+  if (!sim) { setResult('No simulation state.'); return null; }
+  const n = sim.items.length;
+  const M = Array(n+1).fill(0);
+  // DP: compute opt[j] = max(weight_j + opt[p(j)], opt[j-1])
+  for (let j=1; j<=n; j++) {
+    const wj = sim.items[j-1].weight;
+    const incl = wj + (sim.p[j-1] >=0 ? M[sim.p[j-1]+1] : 0);
+    M[j] = Math.max(incl, M[j-1]);
+  }
+  // reconstruct
+  const selected = [];
+  function recon(j) {
+    if (j <= 0) return;
+    const wj = sim.items[j-1].weight;
+    const incl = wj + (sim.p[j-1]>=0 ? M[sim.p[j-1]+1] : 0);
+    if (incl > M[j-1]) {
+      selected.push(sim.items[j-1]);
+      recon(sim.p[j-1]+1);
+    } else {
+      recon(j-1);
+    }
+  }
+  recon(n);
+  selected.reverse();
+  setResult('Optimal total weight: ' + M[n] + '\nSelected: ' + selected.map(x=>x.name).join(', '));
+  return {value: M[n], selected: selected};
+}
+
+// 6) Job Sequencing with Deadlines
+function initJobSeqSim() {
+  const maxD = Number(document.getElementById('jobMaxDeadline').value) || 1;
+  if (!state.items || state.items.length===0) {
+    state.items = [
+      {id: id(), name: 'J1', profit: 100, deadline: 2, forced: null},
+      {id: id(), name: 'J2', profit: 19, deadline: 1, forced: null},
+      {id: id(), name: 'J3', profit: 27, deadline: 2, forced: null},
+      {id: id(), name: 'J4', profit: 25, deadline: 1, forced: null},
+    ];
+  }
+  // greedy sequence: sort by profit desc
+  const items = state.items.map(it=>({...it}));
+  items.sort((a,b)=>b.profit - a.profit);
+  state.sim = {
+    algo: 'job_seq',
+    items: items,
+    maxDeadline: maxD,
+    schedule: Array(maxD).fill(null), // slots 0..maxD-1
+    index: 0,
+    log: []
+  };
+  log('Job sequencing initialized.');
+}
+
+function stepJobSeq() {
+  const sim = state.sim;
+  if (!sim) return;
+  if (sim.index >= sim.items.length) { log('No more jobs to consider.'); return; }
+  pushHistory();
+  const job = sim.items[sim.index];
+  const forced = (state.items.find(x=>x.id===job.id)||{}).forced;
+  if (forced === 'exclude') {
+    sim.log.push(`Job ${job.name} excluded.`);
+  } else if (forced === 'include') {
+    // force place job if slot available; if not, force overriding an existing job (demonstrate)
+    let placed = false;
+    for (let d=Math.min(sim.maxDeadline, job.deadline)-1; d>=0; d--) {
+      if (!sim.schedule[d]) { sim.schedule[d] = job; placed = true; sim.log.push(`Forced included ${job.name} at slot ${d+1}`); break; }
+    }
+    if (!placed) {
+      // replace smallest profit job in earlier slots if any
+      let minP = Infinity, pos = -1;
+      for (let d=0; d<sim.maxDeadline; d++) if (sim.schedule[d] && sim.schedule[d].profit < minP) { minP = sim.schedule[d].profit; pos = d; }
+      if (pos>=0 && minP < job.profit) {
+        sim.log.push(`Forced include: replaced job ${sim.schedule[pos].name} with ${job.name} at slot ${pos+1}.`);
+        sim.schedule[pos] = job;
+      } else sim.log.push(`Forced include could not place ${job.name}.`);
+    }
+  } else {
+    // standard greedy: find latest available slot before deadline
+    for (let d=Math.min(sim.maxDeadline, job.deadline)-1; d>=0; d--) {
+      if (!sim.schedule[d]) { sim.schedule[d] = job; sim.log.push(`Scheduled ${job.name} at slot ${d+1}.`); break; }
+    }
+  }
+  sim.index++;
+  setStateView(sim);
+}
+
+function runJobSeqFull() {
+  while (state.sim && state.sim.index < state.sim.items.length) stepJobSeq();
+  const scheduled = state.sim.schedule.filter(x=>x).map(x=>x.name);
+  setResult('Scheduled: ' + scheduled.join(', '));
+}
+
+function computeJobOptimalBrute() {
+  const items = state.items.slice();
+  const maxD = Number(document.getElementById('jobMaxDeadline').value) || 1;
+  // brute force assign each job to a slot or leave out; exponential; restrict n<=12
+  if (items.length > 12) { setResult('Too many jobs for brute force optimal search (>12).'); return null; }
+  const n = items.length;
+  let best = {profit: -Infinity, schedule: null};
+  // represent assignment as array of length n: slot index 0..maxD-1 or -1 for not scheduled
+  function validAndProfit(assign) {
+    const slotUsed = Array(maxD).fill(false);
+    let total = 0;
+    for (let i=0;i<n;i++) {
+      const a = assign[i];
+      if (a === -1) continue;
+      if (a < 0 || a >= maxD) return null;
+      if (items[i].deadline < a+1) return null; // misses deadline
+      if (slotUsed[a]) return null;
+      slotUsed[a] = true;
+      total += items[i].profit;
+    }
+    return total;
+  }
+  // iterate assignments recursively
+  const assign = Array(n).fill(-1);
+  function dfs(i) {
+    if (i===n) {
+      const p = validAndProfit(assign);
+      if (p !== null && p > best.profit) best = {profit:p, schedule: assign.slice()};
+      return;
+    }
+    // try leaving job out
+    assign[i] = -1; dfs(i+1);
+    // try each slot 0..maxD-1
+    for (let s=0;s<maxD;s++) {
+      assign[i] = s;
+      dfs(i+1);
+    }
+  }
+  dfs(0);
+  if (best.profit === -Infinity) setResult('No feasible schedule found.');
+  else {
+    // map schedule to job names per slot
+    const slots = Array(maxD).fill(null);
+    for (let i=0;i<n;i++) if (best.schedule[i] !== -1) slots[best.schedule[i]] = items[i];
+    setResult('Optimal profit: ' + best.profit + '\nSchedule slots: ' + slots.map((s,i)=>s?`${i+1}:${s.name}`:`${i+1}:(empty)`).join(', '));
+    return {profit: best.profit, slots: slots};
+  }
+}
+
+// 7) Huffman coding
+function initHuffmanSim() {
+  if (!state.items || state.items.length===0) {
+    state.items = [
+      {id:id(), name:'a', freq:45, forced:null},
+      {id:id(), name:'b', freq:13, forced:null},
+      {id:id(), name:'c', freq:12, forced:null},
+      {id:id(), name:'d', freq:16, forced:null},
+      {id:id(), name:'e', freq:9, forced:null},
+      {id:id(), name:'f', freq:5, forced:null},
+    ];
+    renderDatasetEditor();
+  }
+  // nodes: {id, weight, symbols: [...], left, right}
+  const nodes = state.items.map(it => ({nodeId: id(), weight: it.freq, symbols: [it.name], left: null, right: null}));
+  nodes.sort((a,b)=>a.weight - b.weight);
+  state.sim = {
+    algo: 'huffman',
+    nodes: nodes,
+    index: 0,
+    built: false,
+    tree: null,
+    log: []
+  };
+  log('Huffman simulation initialized. Step will merge two smallest nodes each time.');
+}
+
+function stepHuffman() {
+  const sim = state.sim;
+  if (!sim) return;
+  if (sim.nodes.length <= 1) { sim.built = true; sim.tree = sim.nodes[0] || null; log('Huffman tree complete.'); setStateView(sim); return; }
+  pushHistory();
+  // pop two smallest
+  const a = sim.nodes.shift();
+  const b = sim.nodes.shift();
+  const merged = {nodeId: id(), weight: a.weight + b.weight, symbols: a.symbols.concat(b.symbols), left: a, right: b};
+  // push back maintaining sorted order
+  let pos = 0; while (pos < sim.nodes.length && sim.nodes[pos].weight <= merged.weight) pos++;
+  sim.nodes.splice(pos, 0, merged);
+  sim.log.push(`Merged nodes [${a.symbols.join(',')}](${a.weight}) + [${b.symbols.join(',')}](${b.weight}) -> ${merged.weight}`);
+  setStateView(sim);
+}
+
+// Run full greedy for current algorithm
+function runFullGreedy() {
+  const algo = state.algo;
+  if (!state.sim) initSimForAlgo();
+  if (algo === 'coin') runCoinFull();
+  else if (algo === 'fractional_knapsack') runFracFull();
+  else if (algo === 'zero_one_knapsack') runZeroOneFull();
+  else if (algo === 'activity') runActivityFull();
+  else if (algo === 'weighted_interval') runWeightedGreedyFull();
+  else if (algo === 'job_seq') runJobSeqFull();
+  else if (algo === 'huffman') {
+    while (state.sim && state.sim.nodes.length > 1) stepHuffman();
+    // compute codes
+    if (state.sim && state.sim.nodes.length===1) {
+      const codes = {};
+      function buildCodes(node, prefix) {
+        if (!node.left && !node.right) {
+          // leaf
+          for (const s of node.symbols) codes[s]=prefix;
+          return;
+        }
+        if (node.left) buildCodes(node.left, prefix+'0');
+        if (node.right) buildCodes(node.right, prefix+'1');
+      }
+      buildCodes(state.sim.nodes[0], '');
+      setResult('Huffman codes:\n' + JSON.stringify(codes, null, 2));
+    }
+  }
+}
+
+// Step simulation forward or backward (1 for forward, -1 for back)
+function stepSimulation(dir) {
+  const sim = state.sim;
+  if (!sim) { log('No simulation.'); return; }
+  if (dir === -1) {
+    // step back using history
+    const prev = state.history.pop();
+    if (!prev) { log('No earlier history.'); return; }
+    state.future.push(JSON.parse(JSON.stringify(sim)));
+    state.sim = prev;
+    setStateView(state.sim);
+    log('Stepped back.');
+  } else {
+    // forward: call specific step
+    const algo = state.algo;
+    if (algo === 'coin') stepCoin();
+    else if (algo === 'fractional_knapsack') stepFrac();
+    else if (algo === 'zero_one_knapsack') stepZeroOne();
+    else if (algo === 'activity') stepActivity();
+    else if (algo === 'weighted_interval') stepWeightedIntervalGreedy();
+    else if (algo === 'job_seq') stepJobSeq();
+    else if (algo === 'huffman') stepHuffman();
+  }
+}
+
+// Play/Pause
+function togglePlay() {
+  if (state.playTimer) {
+    clearInterval(state.playTimer);
+    state.playTimer = null;
+    document.getElementById('playPause').textContent = 'Play';
+    log('Playback paused.');
+  } else {
+    const ms = Math.max(50, Number(document.getElementById('playSpeed').value) || 600);
+    state.playTimer = setInterval(() => {
+      // stop if finished for algorithm
+      const sim = state.sim;
+      if (!sim) { clearInterval(state.playTimer); state.playTimer=null; document.getElementById('playPause').textContent='Play'; return; }
+      const algo = state.algo;
+      let finished = false;
+      if (algo === 'coin') finished = (sim.remaining <= 0 || sim.index >= sim.coins.length);
+      else if (algo === 'fractional_knapsack') finished = (sim.index >= sim.items.length || sim.remaining <= 0);
+      else if (algo === 'zero_one_knapsack') finished = (sim.index >= sim.items.length || sim.remaining <= 0);
+      else if (algo === 'activity') finished = (sim.index >= sim.items.length);
+      else if (algo === 'weighted_interval') finished = (sim.index >= sim.items.length);
+      else if (algo === 'job_seq') finished = (sim.index >= sim.items.length);
+      else if (algo === 'huffman') finished = (sim.nodes.length <= 1);
+      if (finished) {
+        clearInterval(state.playTimer);
+        state.playTimer = null;
+        document.getElementById('playPause').textContent = 'Play';
+        log('Playback finished.');
+        return;
+      }
+      stepSimulation(1);
+    }, ms);
+    document.getElementById('playPause').textContent = 'Pause';
+    log('Playback started.');
+  }
+}
+
+// Overrides recomputation: rebuild sim respecting current forced flags from scratch
+function recomputeFromOverrides() {
+  const prev = JSON.parse(JSON.stringify(state.sim));
+  resetSimulation(); // will call initSimForAlgo via resetSimulation -> initSimForAlgo
+  // We want to apply forced flags by stepping until finished; but keep forced flags active.
+  // For simplicity run full greedy which respects forced in step functions.
+  runFullGreedy();
+  log('Recomputed using current overrides.');
+  // preserve history
+  state.history.push(prev);
+}
+
+// Compute optimal depending on algorithm
+function computeOptimal() {
+  const algo = state.algo;
+  if (!state.sim) initSimForAlgo();
+  if (algo === 'coin') computeCoinOptimal();
+  else if (algo === 'fractional_knapsack') {
+    // fractional greedy is optimal; compute by runFull and report
+    runFracFull();
+  }
+  else if (algo === 'zero_one_knapsack') computeZeroOneOptimal();
+  else if (algo === 'activity') {
+    // activity greedy is optimal; compute full greedy and report
+    runActivityFull();
+  }
+  else if (algo === 'weighted_interval') computeWeightedOptimal();
+  else if (algo === 'job_seq') computeJobOptimalBrute();
+  else if (algo === 'huffman') {
+    // Huffman is greedy-optimal; run it
+    runFullGreedy();
+  }
+}
+
+// Compare greedy vs optimal for current dataset (if optimal available)
+function compareGreedyOptimal() {
+  if (!state.sim) initSimForAlgo();
+  // backup sim
+  const simBackup = JSON.parse(JSON.stringify(state.sim));
+  // run greedy
+  resetSimulation();
+  initSimForAlgo();
+  runFullGreedy();
+  const greedyResult = document.getElementById('resultView').textContent;
+  // compute optimal
+  const opt = (function() {
+    if (state.algo === 'coin') return computeCoinOptimal();
+    if (state.algo === 'fractional_knapsack') { runFracFull(); return null; }
+    if (state.algo === 'zero_one_knapsack') return computeZeroOneOptimal();
+    if (state.algo === 'activity') { runActivityFull(); return null; }
+    if (state.algo === 'weighted_interval') return computeWeightedOptimal();
+    if (state.algo === 'job_seq') return computeJobOptimalBrute();
+    if (state.algo === 'huffman') { runFullGreedy(); return null; }
+    return null;
+  })();
+  // restore sim to backup
+  state.sim = simBackup;
+  setStateView(state.sim);
+  log('Compared greedy vs optimal (see result view for optimal). Greedy result was:\n' + greedyResult);
+}
+
+// Batch testing many random instances to detect counterexamples (for heuristics)
+// For certain algorithms where DP optimal is available, run trials.
+async function batchTest() {
+  const trials = Number(document.getElementById('batchTrials').value) || 100;
+  const algo = state.algo;
+  if (!['coin','zero_one_knapsack','weighted_interval','job_seq'].includes(algo)) {
+    setResult('Batch test currently supports coin, 0/1 knapsack, weighted interval scheduling, job sequencing.');
+    return;
+  }
+  let wins = 0;
+  const counterExamples = [];
+  for (let t=0;t<trials;t++) {
+    // generate random dataset
+    document.getElementById('randSeed').value = Math.random().toString();
+    generateRandomItems();
+    initSimForAlgo();
+    // run greedy
+    resetSimulation(); initSimForAlgo();
+    runFullGreedy();
+    const greedyRes = document.getElementById('resultView').textContent;
+    let greedyValue = extractNumericValueFromResult(greedyRes);
+    // compute optimal
+    initSimForAlgo();
+    let optObj = null;
+    if (algo === 'coin') {
+      optObj = computeCoinOptimal();
+      // For coin, prefer to compare number of coins (min coins is optimal)
+      // greedyResult is coin counts; compute number of coins
+      const greedyObj = parseGreedyCoinOutput(state.sim);
+      const greedyCount = greedyObj ? Object.values(greedyObj).reduce((a,b)=>a+b,0) : Infinity;
+      const optCount = optObj ? Object.values(optObj).reduce((a,b)=>a+b,0) : Infinity;
+      if (greedyCount === optCount) wins++;
+      else counterExamples.push({trial:t, greedyCount, optCount, coins: state.sim.coins.slice(), target: state.sim.target});
+    } else if (algo === 'zero_one_knapsack') {
+      const g = computeGreedyValueForZeroOne(); // recompute
+      const opt = computeZeroOneOptimal();
+      if (!opt) { /* skip */ }
+      else {
+        const gv = g.value || g;
+        const ov = opt.value;
+        if (gv === ov) wins++; else counterExamples.push({trial:t, greedy:gv, optimal:ov, items: JSON.parse(JSON.stringify(state.items)), cap: state.sim.capacity});
+      }
+    } else if (algo === 'weighted_interval') {
+      const g = computeGreedyValueForWeightedInterval();
+      const opt = computeWeightedOptimal();
+      if (opt && g === opt.value) wins++; else counterExamples.push({trial:t, greedy:g, optimal:opt?opt.value:null, items: JSON.parse(JSON.stringify(state.items))});
+    } else if (algo === 'job_seq') {
+      // greedy profit:
+      initSimForAlgo(); runFullGreedy();
+      const greedyProfit = state.sim.schedule.filter(x=>x).reduce((s,x)=>s+x.profit,0);
+      const opt = computeJobOptimalBrute();
+      const optProfit = opt ? opt.profit : null;
+      if (greedyProfit === optProfit) wins++; else counterExamples.push({trial:t, greedy:greedyProfit, optimal:optProfit, items: JSON.parse(JSON.stringify(state.items))});
+    }
+    // slight delay to keep UI responsive
+    if (t % 20 === 0) await new Promise(r => setTimeout(r,1));
+  }
+  setResult(`Batch results over ${trials} trials: Greedy matched optimal ${wins} times. Counterexamples found: ${counterExamples.length}\nExample: ${JSON.stringify(counterExamples[0]||{}, null, 2)}`);
+}
+
+// Helper extract numeric
+function extractNumericValueFromResult(text) {
+  if (!text) return null;
+  const m = text.match(/(-?\d+(\.\d+)?)/);
+  return m ? Number(m[0]) : null;
+}
+
+// parse greedy coin output from current sim
+function parseGreedyCoinOutput(sim) {
+  try {
+    if (!sim || sim.algo !== 'coin') return null;
+    return sim.chosen;
+  } catch (e){ return null; }
+}
+
+// compute greedy result for zero_one after running greedy simulation
+function computeGreedyValueForZeroOne() {
+  // run greedy on current dataset
+  initZeroOneSim();
+  runZeroOneFull();
+  const val = state.sim.taken.reduce((s,x)=>s+x.value,0);
+  return {value:val, taken: state.sim.taken};
+}
+
+// compute greedy total for weighted interval
+function computeGreedyValueForWeightedInterval() {
+  initWeightedIntervalSim();
+  runWeightedGreedyFull();
+  const val = state.sim.chosenGreedy.reduce((s,x)=>s + (x.weight||0), 0);
+  return val;
+}
+
+// Samples
+function loadSample() {
+  const algo = state.algo;
+  if (algo === 'coin') {
+    document.getElementById('coinsInput').value = '25,10,5,1';
+    document.getElementById('coinTarget').value = 63;
+    document.getElementById('applyCoins').click();
+  } else if (algo === 'fractional_knapsack') {
+    document.getElementById('fracCap').value = 50;
+    document.getElementById('applyFrac').click();
+  } else if (algo === 'zero_one_knapsack') {
+    document.getElementById('kpCap').value = 50;
+    document.getElementById('applyKP').click();
+  } else if (algo === 'activity') {
+    document.getElementById('applyAct').click();
+  } else if (algo === 'weighted_interval') {
+    document.getElementById('applyWIS').click();
+  } else if (algo === 'job_seq') {
+    document.getElementById('jobMaxDeadline').value = 4;
+    document.getElementById('applyJob').click();
+  } else if (algo === 'huffman') {
+    document.getElementById('applyHuff').click();
+  }
+}
+
+// Initialize first time
+resetDatasetForAlgo();
+renderDatasetEditor();
+resetSimulation();
+
+// Helper to set initial dataset when algorithm changes
+function resetDatasetForAlgo() {
+  // minimal reset; keep items only if fields compatible - else reset
+  const algo = state.algo;
+  if (!state.items || state.items.length===0) return;
+  // try to detect compatibility: check first item fields
+  const first = state.items[0];
+  if (!first) return;
+  const needs = {
+    coin: ['coin'],
+    fractional_knapsack: ['weight','value'],
+    zero_one_knapsack: ['weight','value'],
+    activity: ['start','end'],
+    weighted_interval: ['start','end','weight'],
+    job_seq: ['profit','deadline'],
+    huffman: ['freq']
+  }[algo];
+  if (!needs) { state.items = []; return; }
+  const ok = needs.every(k => first.hasOwnProperty(k));
+  if (!ok) state.items = [];
+}
+
+// On load: attach apply buttons created dynamically: use event delegation for datasetArea
+document.getElementById('datasetArea').addEventListener('click', (e) => {
+  // no-op for now
+});
+
+// END of script
+</script>
+</body>
+</html>

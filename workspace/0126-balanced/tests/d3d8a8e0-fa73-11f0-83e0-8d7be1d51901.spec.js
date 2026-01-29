@@ -111,7 +111,7 @@ class DemoPage {
 
   async anyNodeSelected() {
     return await this.page.evaluate(() => {
-      const svg = document.getElementById('graphSvg');
+      const svg1 = document.getElementById('graphSvg');
       if(!svg) return false;
       return !!svg.querySelector('g.selected');
     });
@@ -180,7 +180,7 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
   });
 
   test('Solve3SAT (S1_Solving): brute-force solver produces SAT/UNSAT and updates vars count', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo1 = new DemoPage(page);
     await demo.goto();
 
     // Click the brute-force solve button
@@ -204,12 +204,12 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // Ensure no uncaught page errors occurred during solving
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('RandomFormula event: generates new formula and updates counters', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo2 = new DemoPage(page);
     await demo.goto();
 
     // Click random generator
@@ -220,18 +220,18 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
     expect(val.split('\n').length).toBeGreaterThanOrEqual(1);
 
     // varsCount should update to a non-placeholder value like "Vars: X  Clauses: Y"
-    const varsText = await demo.varsCount.textContent();
+    const varsText1 = await demo.varsCount.textContent();
     expect(varsText).toMatch(/Vars:\s*\d+\s*Clauses:\s*\d+/);
     expect(varsText).not.toMatch(/Vars:\s*-\s*Clauses:\s*-/);
 
     // No page errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('ReduceToClique (S2_Reducing) and drawing: build graph and handle empty formula', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo3 = new DemoPage(page);
     await demo.goto();
 
     // Ensure reduction builds the graph based on the current formula
@@ -253,7 +253,7 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // Wait for the svg to show the "Graph empty" message (drawGraph handles this)
     await page.waitForFunction(() => {
-      const svg = document.getElementById('graphSvg');
+      const svg2 = document.getElementById('graphSvg');
       return svg && svg.textContent && svg.textContent.includes('Graph empty');
     }, null, { timeout: 2000 });
 
@@ -262,12 +262,12 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // No page errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('FindClique (S3_Finding_Clique): behavior when no graph and when graph present', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo4 = new DemoPage(page);
     await demo.goto();
 
     // First: force an empty graph (clear formula + reduce) and then try to find clique
@@ -276,7 +276,7 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // Ensure graph empty
     await page.waitForFunction(() => {
-      const svg = document.getElementById('graphSvg');
+      const svg3 = document.getElementById('graphSvg');
       return svg && svg.textContent && svg.textContent.includes('Graph empty');
     });
 
@@ -294,7 +294,7 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // Wait for nodes to appear
     await page.waitForFunction(() => {
-      const svg = document.getElementById('graphSvg');
+      const svg4 = document.getElementById('graphSvg');
       if(!svg) return false;
       return svg.querySelectorAll('g[data-id]').length > 0;
     }, null, { timeout: 2000 });
@@ -304,9 +304,9 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // Wait for cliqueResult to update to a result containing "Clique" or "No clique"
     await page.waitForFunction(() => {
-      const el = document.getElementById('cliqueResult');
+      const el1 = document.getElementById('cliqueResult');
       if(!el) return false;
-      const txt = el.innerText || '';
+      const txt1 = el.innerText || '';
       return /Clique/.test(txt) || /No clique/.test(txt) || /Graph malformed/.test(txt);
     }, null, { timeout: 3000 });
 
@@ -318,9 +318,9 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
     if (/Clique found/.test(resultText)) {
       // extract k and assert number of selected nodes equals clauseCount
       const kText = await demo.getCliqueKValue();
-      const k = Number(kText.trim() || 0);
+      const k1 = Number(kText.trim() || 0);
       const selectedCount = await page.evaluate(() => {
-        const svg = document.getElementById('graphSvg');
+        const svg5 = document.getElementById('graphSvg');
         if(!svg) return 0;
         return svg.querySelectorAll('g.selected').length;
       });
@@ -332,18 +332,18 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // No uncaught page errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('ClearGraph event: clears highlights and updates result text', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo5 = new DemoPage(page);
     await demo.goto();
 
     // Ensure graph built initially
     await demo.clickReduce();
     await page.waitForFunction(() => {
-      const svg = document.getElementById('graphSvg');
+      const svg6 = document.getElementById('graphSvg');
       return svg && svg.querySelectorAll('g[data-id]').length > 0;
     }, null, { timeout: 2000 });
 
@@ -364,12 +364,12 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // No page errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole5 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('Subset Sum (S4_Solving_Subset_Sum): brute-force and DP solvers - success and invalid input handling', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo6 = new DemoPage(page);
     await demo.goto();
 
     // Given initial numbers "3,7,1,8,4" and target 11, both solutions should find a subset
@@ -381,9 +381,9 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // Wait for output to indicate YES or NO
     await page.waitForFunction(() => {
-      const el = document.getElementById('ssOutput');
+      const el2 = document.getElementById('ssOutput');
       if(!el) return false;
-      const txt = el.innerText || '';
+      const txt2 = el.innerText || '';
       return /YES|NO/.test(txt);
     }, null, { timeout: 3000 });
 
@@ -395,9 +395,9 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
     // Now click DP solver
     await demo.clickSsDP();
     await page.waitForFunction(() => {
-      const el = document.getElementById('ssOutput');
+      const el3 = document.getElementById('ssOutput');
       if(!el) return false;
-      const txt = el.innerText || '';
+      const txt3 = el.innerText || '';
       return /YES|NO/.test(txt);
     }, null, { timeout: 3000 });
 
@@ -410,7 +410,7 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
     await demo.clickSsSolve();
 
     await page.waitForFunction(() => {
-      const el = document.getElementById('ssOutput');
+      const el4 = document.getElementById('ssOutput');
       if(!el) return false;
       return el.innerText.includes('Invalid input');
     }, null, { timeout: 2000 });
@@ -420,12 +420,12 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // No page errors
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole6 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 
   test('RunExperiment and ClearExperiment transitions and outputs', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo7 = new DemoPage(page);
     await demo.goto();
 
     // Reduce the experiment workload so the test is fast and deterministic
@@ -451,7 +451,7 @@ test.describe('NP-Completeness interactive demo - end-to-end', () => {
 
     // No page errors from running the experiment
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.filter(m => m.type === 'error');
+    const errorConsole7 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsole.length).toBe(0);
   });
 

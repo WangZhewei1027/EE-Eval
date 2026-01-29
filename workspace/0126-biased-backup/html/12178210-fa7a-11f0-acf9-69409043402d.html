@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive SVM Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    background: white;
+    color: black;
+  }
+  button, input[type=range], input[type=number], select {
+    font-family: monospace, monospace;
+    margin: 2px 0;
+  }
+  canvas {
+    border: 1px solid black;
+    margin-top: 10px;
+  }
+  textarea {
+    width: 100%;
+    height: 100px;
+  }
+</style>
+</head>
+<body>
+<h1>Support Vector Machine Interactive Explorer</h1>
+
+<p>
+  This demonstration lets you:
+</p>
+<ul>
+<li>Generate and manipulate datasets (2D points) from various classes.</li>
+<li>Train SVM classifiers with different kernels, parameters, and hyperparameter tuning.</li>
+<li>Visualize the data points, decision boundary, margins, and support vectors.</li>
+<li>Manually add, move, or remove points to explore the effects on the SVM.</li>
+<li>Examine hinge loss and margins per point.</li>
+<li>Perform batch training, save/load datasets and models in JSON.</li>
+<li>Explore multi-class classification via one-vs-one or one-vs-rest approaches.</li>
+<li>Compare custom linear solver and simplified SMO solver implementations.</li>
+</ul>
+
+<hr />
+
+<h2>Dataset Management</h2>
+<label>Choose Dataset Type:
+<select id="datasetType">
+  <option value="randomLinearlySeparable">Random Linearly Separable</option>
+  <option value="randomNonSeparable">Random Non-Separable</option>
+  <option value="randomClusters">Random Clusters</option>
+  <option value="custom">Custom (Add points manually)</option>
+</select>
+</label>
+<br />
+<label>Number of Points per Class: <input type="number" id="pointsPerClass" min="2" max="200" value="20" /></label>
+&nbsp;
+<button id="btnGenerateData">Generate Data</button>
+<button id="btnClearAll">Clear All Points</button>
+<br /><br />
+<label>Add Point Class:
+<select id="addPointClass">
+  <option value="1">Class 1</option>
+  <option value="-1">Class -1</option>
+  <option value="2">Class 2</option>
+  <option value="3">Class 3</option>
+</select>
+</label>
+<button id="btnAddPointMode">Toggle Add Point Mode (OFF)</button>
+<p>
+  <small>Click on canvas to add points with selected class.</small>
+</p>
+
+<hr />
+
+<h2>SVM Training Parameters</h2>
+<form id="svmParamForm" onsubmit="return false;">
+<label>Regularization (C): <input type="number" step="any" id="paramC" value="1" min="0.01" max="1000" /></label><br />
+<label>Kernel:
+  <select id="paramKernel">
+    <option value="linear">Linear</option>
+    <option value="poly">Polynomial</option>
+    <option value="rbf">RBF (Gaussian)</option>
+    <option value="sigmoid">Sigmoid</option>
+  </select>
+</label><br />
+<div id="kernelParamsContainer">
+  <!-- dynamically filled -->
+</div>
+<br />
+<label>Solver:
+<select id="paramSolver">
+  <option value="customQP">Custom Linear QP (simplified)</option>
+  <option value="simplifiedSMO">Simplified SMO (linear only)</option>
+</select>
+</label>
+<br /><br />
+<button id="btnTrainSVM">Train SVM</button>
+<button id="btnClearModel">Clear Model</button>
+<br /><br />
+
+<label><input type="checkbox" id="checkboxShowMargins" checked /> Show Margins</label><br />
+<label><input type="checkbox" id="checkboxShowSupportVectors" checked /> Highlight Support Vectors</label><br />
+<label><input type="checkbox" id="checkboxShowDecisionBoundary" checked /> Show Decision Boundary</label>
+</form>
+
+<hr />
+
+<h2>Visualization & Interaction</h2>
+<p>
+  Use mouse interaction in canvas:
+</p>
+<ul>
+<li><b>Left Click:</b> Add points (if Add Point Mode ON) or Select nearest point.</li>
+<li><b>Drag Selected Point:</b> Move its position and retrain SVM automatically.</li>
+<li><b>Delete Selected Point:</b> Press Del key to remove selected point and retrain.</li>
+<li><b>Mouse Wheel:</b> Zoom in/out centered on mouse pointer.</li>
+<li><b>Right Click + Drag:</b> Pan canvas.</li>
+</ul>
+<div>
+<canvas id="svmCanvas" width="700" height="500" tabindex="0"></canvas>
+</div>
+
+<hr />
+
+<h2>State Info, Losses, and Model Export/Import</h2>
+<div>
+<b>Selected Point Info:</b> <span id="selectedPointInfo">(None)</span><br />
+<b>Current Model & Dataset JSON:</b><br />
+<textarea id="exportImportData" placeholder="Model and dataset JSON appears here after training or loading..."></textarea><br />
+<button id="btnExportJSON">Export Current Model & Dataset to JSON</button>
+<button id="btnImportJSON">Import Model & Dataset from JSON</button>
+<button id="btnClearImportExport">Clear JSON Textarea</button>
+</div>
+
+<hr />
+
+<h2>Hyperparameter Grid Search / Cross-Validation</h2>
+<label>Grid C from <input type="number" step="any" id="gridCMin" value="0.1" min="0.001" /> to <input type="number" step="any" id="gridCMax" value="10" /> with <input type="number" id="gridCCount" value="5" min="1" max="50" /> steps</label><br />
+<label>Kernel:
+  <select id="gridKernel">
+    <option value="linear">Linear</option>
+    <option value="poly">Polynomial</option>
+    <option value="rbf">RBF (Gaussian)</option>
+    <option value="sigmoid">Sigmoid</option>
+  </select>
+</label><br />
+<div id="gridKernelParamsContainer"></div>
+<br />
+<button id="btnRunGridSearch">Run Grid Search (5-fold CV)</button><br />
+<p><b>Grid Search Results:</b></p>
+<pre id="gridSearchResults" style="max-height:150px;overflow-y:auto;"></pre>
+
+<hr />
+
+<h2>Multi-Class Settings</h2>
+<label><input type="checkbox" id="checkboxEnableMultiClass" /> Enable Multi-Class Classification (up to 4 classes)</label><br />
+<label>Multi-Class Strategy:
+<select id="multiClassStrategy" disabled>
+  <option value="oneVsOne">One-vs-One</option>
+  <option value="oneVsRest">One-vs-Rest</option>
+</select>
+</label><br />
+<p><small>Note: Multi-class only available for linear kernel and simplified SMO solver (for demo).</small></p>
+
+<script>
+(() => {
+
+  // --- Global State ---
+  const canvas = document.getElementById("svmCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Coordinate system (canvas coords to data coords)
+  // We implement zoom and pan with scaling and translation
+
+  let view = {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0
+  };
+
+  // Data: points as objects {x:number,y:number,class:number}
+  // Class labels: number, typically -1,1 for binary; multi-class can have 1..N
+  let points = [];
+
+  // Selected point (for moving/removal)
+  let selectedPointIndex = -1;
+
+  // Add Point Mode (when ON, clicking canvas adds point of selected class)
+  let addPointMode = false;
+
+  // Current SVM model parameters and state
+  let svmModel = null; // object filled after train
+
+  // Current SVM training parameters
+  let svmParams = {
+    C: 1,
+    kernel: "linear",
+    kernelParams: {}, // poly_degree, rbf_sigma, sigmoid_alpha,beta
+    solver: "customQP"
+  };
+
+  // Multi-class mode
+  let multiClassEnabled = false;
+  let multiClassStrategy = "oneVsOne";
+
+  // For dragging canvas (right click + drag)
+  let isPanning = false;
+  let panStart = {x:0,y:0};
+  let panViewStart = {offsetX:0,offsetY:0};
+
+  // For dragging points (left click + drag)
+  let isDraggingPoint = false;
+  let dragStartMouse = {x:0,y:0};
+  let dragStartPoint = {x:0,y:0};
+
+  // Utility Functions --------------------------------
+
+  // Convert data point {x,y} to canvas coords
+  function dataToCanvas(x,y){
+    return {
+      x: (x * view.scale) + view.offsetX,
+      y: ( -y * view.scale) + view.offsetY + H // invert y axis
+    };
+  }
+
+  // Convert canvas coords to data coords
+  function canvasToData(cx,cy){
+    return {
+      x: (cx - view.offsetX)/view.scale,
+      y: -(cy - view.offsetY - H)/view.scale
+    };
+  }
+
+  // Distance squared between two points
+  function distSquared(p1,p2){
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    return dx*dx + dy*dy;
+  }
+
+  // Find nearest point within radius (data coords), return index or -1
+  function findNearestPoint(pos, radius=0.15){
+    // radius: in data coords distance
+    let minDist = radius*radius;
+    let nearest = -1;
+    for(let i=0;i<points.length;i++){
+      let p = points[i];
+      let d = distSquared(pos,p);
+      if(d < minDist){
+        minDist = d;
+        nearest = i;
+      }
+    }
+    return nearest;
+  }
+
+  // Clamp number between min,max
+  function clamp(x,min,max){
+    return Math.min(Math.max(x,min),max);
+  }
+
+  // Sum array
+  function sum(arr){
+    return arr.reduce((a,b)=>a+b,0);
+  }
+
+  // Mean array
+  function mean(arr){
+    return sum(arr)/arr.length;
+  }
+
+  // --- Kernel Functions ---
+
+  function kernelLinear(x1,x2){
+    // x1,x2 are arrays of numbers
+    let s = 0;
+    for(let i=0;i<x1.length;i++){
+      s += x1[i]*x2[i];
+    }
+    return s;
+  }
+
+  function kernelPoly(x1,x2,degree=3){
+    return Math.pow(1 + kernelLinear(x1,x2), degree);
+  }
+
+  function kernelRBF(x1,x2,sigma=1){
+    let s = 0;
+    for(let i=0;i<x1.length;i++){
+      let d = x1[i]-x2[i];
+      s += d*d;
+    }
+    return Math.exp(-s/(2*sigma*sigma));
+  }
+
+  function kernelSigmoid(x1,x2,alpha=0.01,beta=0){
+    return Math.tanh(alpha*kernelLinear(x1,x2) + beta);
+  }
+
+  function kernelFunction(name, x1,x2, params){
+    switch(name){
+      case "linear": return kernelLinear(x1,x2);
+      case "poly": return kernelPoly(x1,x2, params.degree || 3);
+      case "rbf": return kernelRBF(x1,x2, Math.max(1e-5,params.sigma || 1));
+      case "sigmoid": return kernelSigmoid(x1,x2, params.alpha || 0.01, params.beta || 0);
+      default: return kernelLinear(x1,x2);
+    }
+  }
+
+  // --- SVM Implementations ---
+
+  // For simplicity, input features are 2D points [x,y]
+  // labels are +1 or -1 (binary)
+  // Multi-class supported as one-vs-one or one-vs-rest with multiple binary classifiers
+
+  // Simplified SMO solver (linear only)
+  function simplifiedSMO(points, labels, C, tol=1e-3, maxPasses=100){
+    // points: array of [x,y], labels: +1/-1
+    // Returns: {w:[],b:number,alphas:[],supportVectorIndices:[]}
+
+    let m = points.length;
+    let alphas = new Array(m).fill(0);
+    let b = 0;
+    let passes = 0;
+    const E = new Array(m);
+    // Precompute dot products
+    const dot = (a,b) => a[0]*b[0] + a[1]*b[1];
+
+    function f(i){
+      let s = 0;
+      for(let j=0;j<m;j++){
+        s += alphas[j]*labels[j]*dot(points[j],points[i]);
+      }
+      return s + b;
+    }
+
+    while(passes < maxPasses){
+      let numChangedAlphas = 0;
+      for(let i=0;i<m;i++){
+        let Ei = f(i) - labels[i];
+        if( (labels[i]*Ei < -tol && alphas[i]<C) || (labels[i]*Ei > tol && alphas[i]>0)){
+          let j = i;
+          while(j===i) j = Math.floor(Math.random()*m);
+          let Ej = f(j) - labels[j];
+          let alphaIold = alphas[i];
+          let alphaJold = alphas[j];
+
+          let L,H;
+          if(labels[i] !== labels[j]){
+            L = Math.max(0, alphas[j] - alphas[i]);
+            H = Math.min(C, C + alphas[j] - alphas[i]);
+          } else {
+            L = Math.max(0, alphas[i] + alphas[j] - C);
+            H = Math.min(C, alphas[i] + alphas[j]);
+          }
+          if(L === H) continue;
+
+          let kii = dot(points[i],points[i]);
+          let kjj = dot(points[j],points[j]);
+          let kij = dot(points[i],points[j]);
+          let eta = 2*kij - kii - kjj;
+          if(eta >= 0) continue;
+          alphas[j] = alphas[j] - (labels[j]*(Ei - Ej))/eta;
+          alphas[j] = clamp(alphas[j],L,H);
+
+          if(Math.abs(alphas[j] - alphaJold) < 1e-5) continue;
+
+          alphas[i] = alphas[i] + labels[i]*labels[j]*(alphaJold - alphas[j]);
+
+          // Compute b
+          let b1 = b - Ei - labels[i]*(alphas[i]-alphaIold)*kii - labels[j]*(alphas[j] - alphaJold)*kij;
+          let b2 = b - Ej - labels[i]*(alphas[i]-alphaIold)*kij - labels[j]*(alphas[j] - alphaJold)*kjj;
+          if(0 < alphas[i] && alphas[i] < C) b = b1;
+          else if(0 < alphas[j] && alphas[j] < C) b = b2;
+          else b = (b1 + b2)/2;
+
+          numChangedAlphas++;
+        }
+      }
+      if(numChangedAlphas === 0){
+        passes++;
+      } else {
+        passes = 0;
+      }
+    }
+
+    // Compute w for linear kernel
+    let w = [0,0];
+    for(let i=0;i<m;i++){
+      w[0] += alphas[i]*labels[i]*points[i][0];
+      w[1] += alphas[i]*labels[i]*points[i][1];
+    }
+
+    // Support vectors: points with alpha > 1e-5
+    let supportVectorIndices = [];
+    for(let i=0;i<m;i++){
+      if(alphas[i] > 1e-5) supportVectorIndices.push(i);
+    }
+
+    return {w,b,alphas,supportVectorIndices};
+  }
+
+
+
+  // Custom Linear QP Solver (very simplified and approximate)
+  // Minimizes 0.5*w.w + C * sum(xi)
+  // constraints: yi(w.xi + b) >= 1 - xi, xi >=0
+  //
+  // We approximate by fitting a hard-margin SVM on linearly separable or soft margin by iterative procedure
+  // Since full QP is complicated, use gradient descent on primal objective with hinge loss
+  //
+  // Returns {w:[], b:number, supportVectorIndices:[], alphas:null}
+  function customLinearQP(points, labels, C, options={}){
+    // points: [[x,y],...]
+    // labels: [+1,-1,...]
+    let maxIter = options.maxIter || 5000;
+    let lr = options.lr || 0.001;
+    let w = [0,0];
+    let b = 0;
+
+    // Hinge loss = max(0,1 - y(w.x+b))
+    for(let iter=0;iter<maxIter;iter++){
+      let dw = [0,0];
+      let db = 0;
+      for(let i=0;i<points.length;i++){
+        let xi = points[i];
+        let yi = labels[i];
+        let dist = yi*(w[0]*xi[0]+w[1]*xi[1] + b);
+        if(dist >= 1){
+          dw[0] += 0;
+          dw[1] += 0;
+          db += 0;
+        } else {
+          dw[0] += -yi*xi[0];
+          dw[1] += -yi*xi[1];
+          db += -yi;
+        }
+      }
+      // Average gradients and add regularization gradient
+      dw[0] = w[0] + C*dw[0]/points.length;
+      dw[1] = w[1] + C*dw[1]/points.length;
+      db = C*db/points.length;
+
+      // Gradient Descent step
+      w[0] -= lr*dw[0];
+      w[1] -= lr*dw[1];
+      b -= lr*db;
+
+      if(iter%100 === 0){
+        // Check convergence by norm of gradient
+        if(Math.sqrt(dw[0]*dw[0]+dw[1]*dw[1]) < 0.001) break;
+      }
+    }
+
+    // Calculate alphas approximation:
+    // Points on margin ~ support vectors, within tolerance to dist=1
+    let supportVectorIndices = [];
+    for(let i=0;i<points.length;i++){
+      let xi = points[i];
+      let yi = labels[i];
+      let dist = yi*(w[0]*xi[0]+w[1]*xi[1] + b);
+      if(dist <= 1.05) supportVectorIndices.push(i);
+    }
+
+    return {w,b,alphas:null,supportVectorIndices};
+  }
+
+  // Kernel SVM classifier predict function
+  // Given a trained model {alphas, points, labels, kernelName, kernelParams, b}
+  // Output sign of sum_i alpha_i * y_i * K(x_i, x) + b
+  // Also return raw decision function value
+
+  function predictKernelSVM(model, x){
+    const {alphas, points, labels, kernelName, kernelParams, b} = model;
+    let s = 0;
+    for(let i=0;i<alphas.length;i++){
+      if(alphas[i] > 1e-8){
+        s += alphas[i]*labels[i]*kernelFunction(kernelName, [points[i][0], points[i][1]], x, kernelParams);
+      }
+    }
+    s += b;
+    return s;
+  }
+
+  // Binary Predict (using w,b linear) for linear models
+  function predictLinear(w,b,x){
+    return w[0]*x[0] + w[1]*x[1] + b;
+  }
+
+  // --- Multi-class handling (only for linear kernel + simplifiedSMO for demo) ---
+  // one-vs-one: train k(k-1)/2 classifiers between each pair, predict by voting
+  // one-vs-rest: train k classifiers, each class vs rest
+
+  function trainMultiClassSVM(points, classes, C, strategy, solver){
+    // classes: array of integer class labels, e.g. [1,-1,2,3,...]
+    // strategy: "oneVsOne" or "oneVsRest"
+    // solver: currently only "simplifiedSMO" linear kernel supported
+
+    let uniqueClasses = Array.from(new Set(classes));
+    uniqueClasses.sort((a,b)=>a-b);
+    // Convert points to arrays [x,y]
+    let xs = points.map(p => [p.x, p.y]);
+
+    if(uniqueClasses.length < 2){
+      return null;
+    }
+    if(solver !== "simplifiedSMO"){
+      alert("Multi-class only supported for simplifiedSMO solver with linear kernel (demo limitation)");
+      return null;
+    }
+    if(!(svmParams.kernel === "linear")){
+      alert("Multi-class only supported for linear kernel (demo limitation)");
+      return null;
+    }
+
+    let classifiers = [];
+
+    if(strategy === "oneVsOne"){
+      // Train classifier for each pair
+      for(let i=0;i<uniqueClasses.length;i++){
+        for(let j=i+1;j<uniqueClasses.length;j++){
+          let c1 = uniqueClasses[i];
+          let c2 = uniqueClasses[j];
+          let subPoints = [];
+          let subLabels = [];
+          for(let k=0;k<classes.length;k++){
+            if(classes[k] === c1){
+              subPoints.push(xs[k]);
+              subLabels.push(1);
+            } else if(classes[k] === c2){
+              subPoints.push(xs[k]);
+              subLabels.push(-1);
+            }
+          }
+          let model = simplifiedSMO(subPoints, subLabels, C);
+          classifiers.push({c1,c2,model});
+        }
+      }
+    } else if(strategy === "oneVsRest"){
+      for(let i=0;i<uniqueClasses.length;i++){
+        let c = uniqueClasses[i];
+        let subPoints = [];
+        let subLabels = [];
+        for(let k=0;k<classes.length;k++){
+          subPoints.push(xs[k]);
+          subLabels.push(classes[k] === c ? 1 : -1);
+        }
+        let model = simplifiedSMO(subPoints, subLabels, C);
+        classifiers.push({class:c, model});
+      }
+    }
+
+    return {uniqueClasses, strategy, classifiers};
+  }
+
+  // Predict multi-class label
+  function predictMultiClass(model, x){
+    if(!model) return 0;
+    if(model.strategy === "oneVsOne"){
+      // Voting: each classifier votes for c1 or c2 based on sign
+      let votes = {};
+      for(let cls of model.uniqueClasses) votes[cls] = 0;
+      for(let cl of model.classifiers){
+        let s = predictKernelSVM(cl.model, x);
+        if(s > 0) votes[cl.c1]++;
+        else votes[cl.c2]++;
+      }
+      let maxVotes = -Infinity;
+      let prediction = null;
+      for(let c in votes){
+        if(votes[c] > maxVotes){
+          maxVotes = votes[c];
+          prediction = Number(c);
+        }
+      }
+      return prediction;
+    } else if(model.strategy === "oneVsRest"){
+      let maxScore = -Infinity;
+      let prediction = null;
+      for(let cl of model.classifiers){
+        let s = predictKernelSVM(cl.model, x);
+        if(s > maxScore){
+          maxScore = s;
+          prediction = cl.class;
+        }
+      }
+      return prediction;
+    } else {
+      return 0;
+    }
+  }
+
+  // --- Drawing and Interaction ---
+
+  // Clear canvas
+  function clearCanvas(){
+    ctx.clearRect(0,0,W,H);
+  }
+
+  // Draw grid
+  function drawGrid(step=1){
+    ctx.save();
+    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = "#ccc";
+    const minX = canvasToData(0,H).x;
+    const maxX = canvasToData(W,0).x;
+    const minY = canvasToData(0,H).y;
+    const maxY = canvasToData(W,0).y;
+
+    // Vertical lines
+    for(let x=Math.floor(minX); x<=Math.ceil(maxX); x+=step){
+      const cx = dataToCanvas(x,0).x;
+      ctx.beginPath();
+      ctx.moveTo(cx,0);
+      ctx.lineTo(cx,H);
+      ctx.stroke();
+    }
+    // Horizontal lines
+    for(let y=Math.floor(minY); y<=Math.ceil(maxY); y+=step){
+      const cy = dataToCanvas(0,y).y;
+      ctx.beginPath();
+      ctx.moveTo(0,cy);
+      ctx.lineTo(W,cy);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Draw origin axes (x=0,y=0)
+  function drawAxes(){
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#000";
+
+    // Y axis line x=0
+    let x0 = dataToCanvas(0,0).x;
+    ctx.beginPath();
+    ctx.moveTo(x0,0);
+    ctx.lineTo(x0,H);
+    ctx.stroke();
+
+    // X axis line y=0
+    let y0 = dataToCanvas(0,0).y;
+    ctx.beginPath();
+    ctx.moveTo(0,y0);
+    ctx.lineTo(W,y0);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Draw points
+  // options: highlightSupportVectors:boolean, selectedIndex:int
+  function drawPoints(options={}){
+    const {highlightSupportVectors=false, selectedIndex=-1} = options;
+
+    for(let i=0;i<points.length;i++){
+      let p = points[i];
+      const pos = dataToCanvas(p.x,p.y);
+      const r = 6;
+      ctx.beginPath();
+
+      // Support vector highlight
+      let isSupport = false;
+      if(svmModel){
+        if(Array.isArray(svmModel.supportVectorIndices)){
+          isSupport = svmModel.supportVectorIndices.includes(i);
+        } else if(multiClassEnabled && svmModel){
+          // multi-class: aggregate all support vectors:
+          // Here just approximate by checking all binary classifiers
+          isSupport = false;
+        }
+      }
+
+      ctx.lineWidth = 1;
+      if(i === selectedIndex){
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(pos.x,pos.y,r+3,0,2*Math.PI);
+        ctx.stroke();
+      }
+
+      if(highlightSupportVectors && isSupport){
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(pos.x,pos.y,r+4,0,2*Math.PI);
+        ctx.stroke();
+      }
+
+      // Color and shape by class label
+      // Since no colors, use shapes and fills:
+      // class 1: circle filled
+      // class -1: circle outline
+      // class 2: square filled
+      // class 3: square outline
+
+      if(p.class === 1){
+        ctx.fillStyle = "black";
+        ctx.beginPath();
+        ctx.arc(pos.x,pos.y,r,0,2*Math.PI);
+        ctx.fill();
+      } else if(p.class === -1){
+        ctx.strokeStyle = "black";
+        ctx.beginPath();
+        ctx.arc(pos.x,pos.y,r,0,2*Math.PI);
+        ctx.stroke();
+      } else if(p.class === 2){
+        ctx.fillStyle = "black";
+        ctx.fillRect(pos.x-r,pos.y-r, 2*r, 2*r);
+      } else if(p.class === 3){
+        ctx.strokeStyle = "black";
+        ctx.strokeRect(pos.x-r,pos.y-r, 2*r, 2*r);
+      } else {
+        // unknown class: diagonal cross
+        ctx.beginPath();
+        ctx.moveTo(pos.x-r,pos.y-r);
+        ctx.lineTo(pos.x+r,pos.y+r);
+        ctx.moveTo(pos.x-r,pos.y+r);
+        ctx.lineTo(pos.x+r,pos.y-r);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw decision boundary for linear kernel:
+  // line w.x + b = 0 corresponds to y = -(w0*x + b)/w1
+  // Draw line across canvas visible range
+  function drawLinearDecisionBoundary(model){
+    if(!model) return;
+    const w = model.w;
+    const b = model.b;
+    ctx.save();
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "black";
+
+    if(Math.abs(w[1]) > 1e-6){
+      // Find intersection with left and right sides (minX,maxX data coords)
+      const minX = canvasToData(0,H).x;
+      const maxX = canvasToData(W,0).x;
+      let y1 = -(w[0]*minX + b)/w[1];
+      let y2 = -(w[0]*maxX + b)/w[1];
+
+      const p1 = dataToCanvas(minX,y1);
+      const p2 = dataToCanvas(maxX,y2);
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x,p1.y);
+      ctx.lineTo(p2.x,p2.y);
+      ctx.stroke();
+
+      // Margins: lines for w.x + b = ±1
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([5,5]);
+      let y1plus = -(w[0]*minX + b - 1)/w[1];
+      let y2plus = -(w[0]*maxX + b - 1)/w[1];
+      let y1minus = -(w[0]*minX + b + 1)/w[1];
+      let y2minus = -(w[0]*maxX + b + 1)/w[1];
+
+      ctx.beginPath();
+      ctx.moveTo(dataToCanvas(minX,y1plus).x, dataToCanvas(minX,y1plus).y);
+      ctx.lineTo(dataToCanvas(maxX,y2plus).x, dataToCanvas(maxX,y2plus).y);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(dataToCanvas(minX,y1minus).x, dataToCanvas(minX,y1minus).y);
+      ctx.lineTo(dataToCanvas(maxX,y2minus).x, dataToCanvas(maxX,y2minus).y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if(Math.abs(w[0]) > 1e-6){
+      // Vertical line x = -b/w0
+      let x = -b/w[0];
+      let p1 = dataToCanvas(x, canvasToData(0,H).y);
+      let p2 = dataToCanvas(x, canvasToData(0,0).y);
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x,p1.y);
+      ctx.lineTo(p2.x,p2.y);
+      ctx.stroke();
+
+      // Margins ±1/w0 offsets
+      ctx.setLineDash([5,5]);
+      let xplus = (1 - b)/w[0];
+      let xminus = (-1 - b)/w[0];
+      let pm1 = dataToCanvas(xplus, canvasToData(0,H).y);
+      let pm2 = dataToCanvas(xplus, canvasToData(0,0).y);
+      let pm3 = dataToCanvas(xminus, canvasToData(0,H).y);
+      let pm4 = dataToCanvas(xminus, canvasToData(0,0).y);
+
+      ctx.beginPath();
+      ctx.moveTo(pm1.x, pm1.y);
+      ctx.lineTo(pm2.x, pm2.y);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(pm3.x, pm3.y);
+      ctx.lineTo(pm4.x, pm4.y);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+
+  // Draw decision boundary for kernel SVM by sampling grid and contouring zero-crossing (approximate)
+  function drawKernelDecisionBoundary(model){
+    if(!model) return;
+    // We'll draw by sampling a grid of pixels and find points near decision boundary (abs value small)
+
+    // For performance, grid sampling every 8 pixels
+    const stepPx = 8;
+
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "black";
+
+    // Collect boundary points (edges between grid cells with different sign)
+    let grid = [];
+    const cols = Math.ceil(W/stepPx) + 1;
+    const rows = Math.ceil(H/stepPx) + 1;
+
+    for(let r=0;r<rows;r++){
+      grid[r] = [];
+      for(let c=0;c<cols;c++){
+        let cx = c*stepPx;
+        let cy = r*stepPx;
+        let pt = canvasToData(cx,cy);
+        let val = predictKernelSVM(model, [pt.x, pt.y]);
+        grid[r][c] = val;
+      }
+    }
+
+    ctx.beginPath();
+
+    // Marching squares simple detection: draw points where sign changes
+    for(let r=0;r<rows-1;r++){
+      for(let c=0;c<cols-1;c++){
+        let vals = [
+          grid[r][c],
+          grid[r][c+1],
+          grid[r+1][c+1],
+          grid[r+1][c]
+        ];
+        let signs = vals.map(v=>v>=0);
+        let allPos = signs.every(s=>s===true);
+        let allNeg = signs.every(s=>s===false);
+        if(allPos || allNeg) continue; // no crossing
+
+        // Draw points inside this cell near boundary
+        for(let i=0;i<4;i++) {
+          let v1 = vals[i];
+          let v2 = vals[(i+1)%4];
+          if((v1 >= 0) !== (v2 >= 0)){
+            // approximate zero crossing between corners i and i+1
+            let x1 = (c + (i===1||i===2?1:0)) * stepPx;
+            let y1 = (r + (i>=2?1:0)) * stepPx;
+            let x2 = (c + ((i+1)===1|| (i+1)===2?1:0)) * stepPx;
+            let y2 = (r + ((i+1)>=2?1:0)) * stepPx;
+
+            let t = Math.abs(v1)/(Math.abs(v1)+Math.abs(v2));
+            let x = x1 + t*(x2 - x1);
+            let y = y1 + t*(y2 - y1);
+
+            ctx.moveTo(x,y);
+            ctx.arc(x,y,1,0,2*Math.PI);
+          }
+        }
+      }
+    }
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // Update selected point info display
+  function updateSelectedPointInfo(){
+    const el = document.getElementById("selectedPointInfo");
+    if(selectedPointIndex < 0 || selectedPointIndex >= points.length){
+      el.textContent = "(None)";
+    } else {
+      let p = points[selectedPointIndex];
+      let info = `Index: ${selectedPointIndex}, Class: ${p.class}, Position: (${p.x.toFixed(3)}, ${p.y.toFixed(3)})`;
+      if(svmModel){
+        if(multiClassEnabled && svmModel){
+          let pred = predictMultiClass(svmModel, [p.x, p.y]);
+          info += `, Multi-class Prediction: ${pred}`;
+        } else if(svmParams.kernel === "linear" && svmModel.w){
+          let dist = predictLinear(svmModel.w, svmModel.b, [p.x,p.y]);
+          info += `, Decision value: ${dist.toFixed(3)}, Hinge Loss: ${Math.max(0,1 - p.class*dist).toFixed(3)}`;
+        } else if(svmModel.alphas && svmModel.points && svmModel.labels){
+          let dist = predictKernelSVM(svmModel, [p.x,p.y]);
+          info += `, Decision value: ${dist.toFixed(3)}, Hinge Loss: ${Math.max(0,1 - p.class*dist).toFixed(3)}`;
+        }
+      }
+      el.textContent = info;
+    }
+  }
+
+  // Generate random linearly separable data
+  function generateRandomLinearlySeparable(nPerClass){
+    points = [];
+    // Class 1 centered at (2,2)
+    // Class -1 centered at (-2,-2)
+    function rndNormal(mu,sigma){
+      let u=0,v=0;
+      while(u===0) u=Math.random();
+      while(v===0) v=Math.random();
+      return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+    for(let i=0;i<nPerClass;i++){
+      points.push({x: rndNormal(2,0.8), y: rndNormal(2,0.8), class: 1});
+      points.push({x: rndNormal(-2,0.8), y: rndNormal(-2,0.8), class: -1});
+    }
+  }
+
+  // Generate random non-separable data (overlapping classes)
+  function generateRandomNonSeparable(nPerClass){
+    points=[];
+    function rndNormal(mu,sigma){
+      let u=0,v=0;
+      while(u===0) u=Math.random();
+      while(v===0) v=Math.random();
+      return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+    for(let i=0;i<nPerClass;i++){
+      points.push({x: rndNormal(1,1.2), y: rndNormal(1,1.2), class: 1});
+      points.push({x: rndNormal(0,1.2), y: rndNormal(0,1.2), class: -1});
+    }
+  }
+
+  // Generate random clusters for multi-class (3 classes)
+  function generateRandomClusters(nPerClass){
+    points = [];
+    function rndNormal(mu,sigma){
+      let u=0,v=0;
+      while(u===0) u=Math.random();
+      while(v===0) v=Math.random();
+      return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+    // Center 1: (3,0), class 1
+    // Center 2: (-3,0), class -1
+    // Center 3: (0,3), class 2
+    for(let i=0;i<nPerClass;i++){
+      points.push({x: rndNormal(3,0.7), y: rndNormal(0,0.7), class: 1});
+      points.push({x: rndNormal(-3,0.7), y: rndNormal(0,0.7), class: -1});
+      points.push({x: rndNormal(0,0.7), y: rndNormal(3,0.7), class: 2});
+    }
+  }
+
+  // Clear all points and model
+  function clearAll(){
+    points = [];
+    selectedPointIndex = -1;
+    svmModel = null;
+    updateSelectedPointInfo();
+  }
+
+  // Prepare training data in numeric arrays for SVM
+  function prepareSVMTrainingData(){
+    // Only classes 1 and -1 used for now (binary)
+    let xs = [];
+    let ys = [];
+    if(multiClassEnabled){
+      for(let p of points){
+        xs.push([p.x,p.y]);
+        ys.push(p.class);
+      }
+      return {xs,ys};
+    }
+    for(let p of points){
+      if(p.class === 1 || p.class === -1){
+        xs.push([p.x,p.y]);
+        ys.push(p.class);
+      }
+    }
+    return {xs,ys};
+  }
+
+  // Train SVM based on current parameters and points
+  function trainSVM(){
+    if(points.length === 0){
+      svmModel = null;
+      redraw();
+      return;
+    }
+    if(multiClassEnabled){
+      let classesArr = points.map(p=>p.class);
+      svmModel = trainMultiClassSVM(points, classesArr, svmParams.C, multiClassStrategy, svmParams.solver);
+      redraw();
+      return;
+    }
+
+    const {xs,ys} = prepareSVMTrainingData();
+    if(xs.length === 0){
+      svmModel = null;
+      redraw();
+      return;
+    }
+    if(svmParams.kernel === "linear"){
+      if(svmParams.solver === "simplifiedSMO"){
+        svmModel = simplifiedSMO(xs, ys, svmParams.C);
+      } else if(svmParams.solver === "customQP"){
+        svmModel = customLinearQP(xs, ys, svmParams.C);
+      }
+      svmModel.kernelName = "linear";
+      svmModel.kernelParams = {};
+      svmModel.points = xs;
+      svmModel.labels = ys;
+    } else {
+      // Kernel SVM with custom QP solver not implemented
+      alert("Only linear kernel supported for training with chosen solver");
+      svmModel = null;
+    }
+    redraw();
+  }
+
+  // Prepare kernel params inputs on UI
+  function updateKernelParamsInputs(containerId, kernelName, params){
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    if(kernelName === "poly"){
+      let degree = params.degree || 3;
+      let inp = document.createElement("input");
+      inp.type = "number";
+      inp.min = "1";
+      inp.value = degree;
+      inp.style.width = "60px";
+      inp.id = containerId + "_degree";
+      let label = document.createElement("label");
+      label.textContent = "Degree: ";
+      label.appendChild(inp);
+      container.appendChild(label);
+    } else if(kernelName === "rbf"){
+      let sigma = params.sigma || 1;
+      let inp = document.createElement("input");
+      inp.type = "number";
+      inp.min = "0.01";
+      inp.step = "0.01";
+      inp.value = sigma;
+      inp.style.width = "60px";
+      inp.id = containerId + "_sigma";
+      let label = document.createElement("label");
+      label.textContent = "Sigma: ";
+      label.appendChild(inp);
+      container.appendChild(label);
+    } else if(kernelName === "sigmoid"){
+      let alpha = params.alpha || 0.01;
+      let beta = params.beta || 0;
+      let alphaInp = document.createElement("input");
+      alphaInp.type = "number";
+      alphaInp.step = "0.001";
+      alphaInp.value = alpha;
+      alphaInp.style.width = "60px";
+      alphaInp.id = containerId + "_alpha";
+      let betaInp = document.createElement("input");
+      betaInp.type = "number";
+      betaInp.step = "0.001";
+      betaInp.value = beta;
+      betaInp.style.width = "60px";
+      betaInp.id = containerId + "_beta";
+      let alphaLabel = document.createElement("label");
+      alphaLabel.textContent = "Alpha: ";
+      alphaLabel.appendChild(alphaInp);
+      let betaLabel = document.createElement("label");
+      betaLabel.textContent = " Beta: ";
+      betaLabel.appendChild(betaInp);
+      container.appendChild(alphaLabel);
+      container.appendChild(betaLabel);
+    }
+  }
+
+  // Read kernel params inputs from UI
+  function readKernelParamsFromUI(containerId){
+    const container = document.getElementById(containerId);
+    let params = {};
+    if(containerId === "kernelParamsContainer"){
+      const kernel = document.getElementById("paramKernel").value;
+      if(kernel === "poly"){
+        let input = document.getElementById(containerId + "_degree");
+        params.degree = Math.max(1, Math.floor(Number(input.value) || 3));
+      } else if(kernel === "rbf"){
+        let input = document.getElementById(containerId + "_sigma");
+        params.sigma = Math.max(0.01, Number(input.value) || 1);
+      } else if(kernel === "sigmoid"){
+        let alphaInput = document.getElementById(containerId + "_alpha");
+        let betaInput = document.getElementById(containerId + "_beta");
+        params.alpha = Number(alphaInput.value) || 0.01;
+        params.beta = Number(betaInput.value) || 0;
+      }
+    } else if(containerId === "gridKernelParamsContainer"){
+      const kernel = document.getElementById("gridKernel").value;
+      if(kernel === "poly"){
+        let input = document.getElementById(containerId + "_degree");
+        params.degree = Math.max(1, Math.floor(Number(input.value) || 3));
+      } else if(kernel === "rbf"){
+        let input = document.getElementById(containerId + "_sigma");
+        params.sigma = Math.max(0.01, Number(input.value) || 1);
+      } else if(kernel === "sigmoid"){
+        let alphaInput = document.getElementById(containerId + "_alpha");
+        let betaInput = document.getElementById(containerId + "_beta");
+        params.alpha = Number(alphaInput.value) || 0.01;
+        params.beta = Number(betaInput.value) || 0;
+      }
+    }
+    return params;
+  }
+
+  // Redraw all: points, model decision boundary etc
+  function redraw(){
+    clearCanvas();
+    drawGrid(1);
+    drawAxes();
+
+    // Draw decision boundary first
+    if(svmModel){
+      const showDB = document.getElementById("checkboxShowDecisionBoundary").checked;
+      if(showDB){
+        if(multiClassEnabled && svmModel){
+          // decision boundary drawing for multi-class not implemented (too complex)
+          ctx.save();
+          ctx.font = "10px monospace";
+          ctx.fillText("Decision boundary not available for multi-class", 10, 10);
+          ctx.restore();
+        } else if(svmParams.kernel === "linear" && svmModel.w){
+          drawLinearDecisionBoundary(svmModel);
+        } else if(svmModel.alphas){
+          drawKernelDecisionBoundary(svmModel);
+        }
+      }
+    }
+    // Draw points next, highlighting support vectors optionally
+    const highlightSV = document.getElementById("checkboxShowSupportVectors").checked;
+    drawPoints({highlightSupportVectors: highlightSV, selectedIndex: selectedPointIndex});
+    updateSelectedPointInfo();
+  }
+
+
+  // --- Event handlers ---
+
+  // Data generation button
+  document.getElementById("btnGenerateData").addEventListener("click", ()=>{
+    const type = document.getElementById("datasetType").value;
+    const n = Math.max(2, Math.min(200, Number(document.getElementById("pointsPerClass").value) || 20));
+    switch(type){
+      case "randomLinearlySeparable": generateRandomLinearlySeparable(n); break;
+      case "randomNonSeparable": generateRandomNonSeparable(n); break;
+      case "randomClusters": generateRandomClusters(n); break;
+      case "custom": points = []; break;
+    }
+    selectedPointIndex = -1;
+    svmModel = null;
+    redraw();
+  });
+
+  // Clear all
+  document.getElementById("btnClearAll").addEventListener("click", ()=>{
+    clearAll();
+    redraw();
+  });
+
+  // Add Point Mode toggle
+  const btnAddPointMode = document.getElementById("btnAddPointMode");
+  btnAddPointMode.addEventListener("click", ()=>{
+    addPointMode = !addPointMode;
+    btnAddPointMode.textContent = "Toggle Add Point Mode (" + (addPointMode?"ON":"OFF") + ")";
+    if(addPointMode){
+      selectedPointIndex = -1;
+      updateSelectedPointInfo();
+      redraw();
+    }
+  });
+
+  // Kernel selection change triggers kernel param UI update
+  document.getElementById("paramKernel").addEventListener("change", e=>{
+    let kernelName = e.target.value;
+    updateKernelParamsInputs("kernelParamsContainer", kernelName, {});
+  });
+
+  // On page load, fill kernel params UI
+  updateKernelParamsInputs("kernelParamsContainer", "linear", {});
+
+  // Solver selection change: sometimes restrict kernel options
+  document.getElementById("paramSolver").addEventListener("change", e=>{
+    let sv = e.target.value;
+    const kernelSel = document.getElementById("paramKernel");
+    if(sv === "simplifiedSMO"){
+      // Restrict kernel to linear only for demo
+      if(kernelSel.value !== "linear"){
+        kernelSel.value = "linear";
+        updateKernelParamsInputs("kernelParamsContainer", "linear", {});
+      }
+      kernelSel.disabled = true;
+    } else {
+      kernelSel.disabled = false;
+    }
+  });
+
+  // Train SVM button
+  document.getElementById("btnTrainSVM").addEventListener("click", ()=>{
+    // Gather params
+    let c = Number(document.getElementById("paramC").value);
+    if(c <= 0 || isNaN(c)) {
+      alert("C must be a positive number");
+      return;
+    }
+    svmParams.C = c;
+    svmParams.kernel = document.getElementById("paramKernel").value;
+    svmParams.solver = document.getElementById("paramSolver").value;
+    svmParams.kernelParams = readKernelParamsFromUI("kernelParamsContainer");
+    trainSVM();
+  });
+
+  // Clear Model button
+  document.getElementById("btnClearModel").addEventListener("click", ()=>{
+    svmModel = null;
+    redraw();
+  });
+
+  // Checkbox multi-class toggle
+  document.getElementById("checkboxEnableMultiClass").addEventListener("change", e=>{
+    multiClassEnabled = e.target.checked;
+    document.getElementById("multiClassStrategy").disabled = !multiClassEnabled;
+  });
+
+  document.getElementById("multiClassStrategy").addEventListener("change", e=>{
+    multiClassStrategy = e.target.value;
+  });
+
+  // Visualization toggles just redraw
+  document.getElementById("checkboxShowMargins").addEventListener("change", redraw);
+  document.getElementById("checkboxShowSupportVectors").addEventListener("change", redraw);
+  document.getElementById("checkboxShowDecisionBoundary").addEventListener("change", redraw);
+
+  // Canvas interaction: click, drag, wheel, right drag for pan
+
+  function canvasMouseToData(evt){
+    const rect = canvas.getBoundingClientRect();
+    return canvasToData(evt.clientX - rect.left, evt.clientY - rect.top);
+  }
+
+  canvas.addEventListener("mousedown", evt=>{
+    if(evt.button === 0){
+      // Left click
+      const pos = canvasMouseToData(evt);
+      if(addPointMode){
+        // Add point of selected class
+        let cls = Number(document.getElementById("addPointClass").value);
+        points.push({x: pos.x, y: pos.y, class: cls});
+        selectedPointIndex = points.length-1;
+        trainSVM();
+        redraw();
+      } else {
+        // Select nearest point within radius
+        const idx = findNearestPoint(pos, 0.2);
+        if(idx >= 0){
+          selectedPointIndex = idx;
+          isDraggingPoint = true;
+          dragStartMouse = {x:evt.clientX, y:evt.clientY};
+          dragStartPoint = {x: points[idx].x, y: points[idx].y};
+          updateSelectedPointInfo();
+          redraw();
+        } else {
+          selectedPointIndex = -1;
+          updateSelectedPointInfo();
+          redraw();
+        }
+      }
+    } else if(evt.button === 2) {
+      // Right click - pan start
+      isPanning = true;
+      panStart = {x: evt.clientX, y: evt.clientY};
+      panViewStart = {offsetX: view.offsetX, offsetY: view.offsetY};
+    }
+  });
+
+  canvas.addEventListener("contextmenu", evt=>{ evt.preventDefault(); });
+
+  canvas.addEventListener("mouseup", evt=>{
+    if(evt.button === 0 && isDraggingPoint){
+      isDraggingPoint = false;
+      trainSVM();
+    }
+    if(evt.button === 2 && isPanning){
+      isPanning = false;
+    }
+  });
+
+  canvas.addEventListener("mousemove", evt=>{
+    if(isDraggingPoint && selectedPointIndex >= 0){
+      // Move selected point with mouse delta in data coords
+      const dx = (evt.clientX - dragStartMouse.x)/view.scale;
+      const dy = -(evt.clientY - dragStartMouse.y)/view.scale;
+      points[selectedPointIndex].x = dragStartPoint.x + dx;
+      points[selectedPointIndex].y = dragStartPoint.y + dy;
+      updateSelectedPointInfo();
+      redraw();
+    } else if(isPanning){
+      const dx = evt.clientX - panStart.x;
+      const dy = evt.clientY - panStart.y;
+      view.offsetX = panViewStart.offsetX + dx;
+      view.offsetY = panViewStart.offsetY + dy;
+      redraw();
+    }
+  });
+
+  canvas.addEventListener("wheel", evt=>{
+    evt.preventDefault();
+    let delta = evt.deltaY > 0 ? 1/1.2 : 1.2;
+    // Zoom with focus on mouse pos
+    const rect = canvas.getBoundingClientRect();
+    const mx = evt.clientX - rect.left;
+    const my = evt.clientY - rect.top;
+    const before = canvasToData(mx,my);
+    view.scale *= delta;
+    view.scale = clamp(view.scale, 5, 200);
+    const after = canvasToData(mx,my);
+    view.offsetX += (after.x - before.x)*view.scale;
+    view.offsetY += (after.y - before.y)*view.scale;
+    redraw();
+  }, {passive:false});
+
+
+  // Keyboard for deleting point (Del or Backspace)
+  document.addEventListener("keydown", evt=>{
+    if(selectedPointIndex >= 0 && (evt.key === "Delete" || evt.key === "Backspace")){
+      points.splice(selectedPointIndex,1);
+      selectedPointIndex = -1;
+      trainSVM();
+      redraw();
+    }
+  });
+
+  // Export/Import JSON model and data
+  document.getElementById("btnExportJSON").addEventListener("click", ()=>{
+    let exportData = {points, svmParams, svmModel, multiClassEnabled, multiClassStrategy};
+    document.getElementById("exportImportData").value = JSON.stringify(exportData, null, 2);
+  });
+
+  document.getElementById("btnImportJSON").addEventListener("click", ()=>{
+    let text = document.getElementById("exportImportData").value;
+    if(!text) return;
+    try{
+      let data = JSON.parse(text);
+      if(data.points) points = data.points;
+      if(data.svmParams) svmParams = data.svmParams;
+      if(data.svmModel) svmModel = data.svmModel;
+      if(typeof data.multiClassEnabled === "boolean") multiClassEnabled = data.multiClassEnabled;
+      if(data.multiClassStrategy) multiClassStrategy = data.multiClassStrategy;
+
+      // Update UI from loaded params
+      document.getElementById("paramC").value = svmParams.C;
+      document.getElementById("paramKernel").value = svmParams.kernel;
+      updateKernelParamsInputs("kernelParamsContainer", svmParams.kernel, svmParams.kernelParams);
+      if(svmParams.kernel === "poly"){
+        document.getElementById("kernelParamsContainer_degree").value = svmParams.kernelParams.degree || 3;
+      } else if(svmParams.kernel === "rbf"){
+        document.getElementById("kernelParamsContainer_sigma").value = svmParams.kernelParams.sigma || 1;
+      } else if(svmParams.kernel === "sigmoid"){
+        document.getElementById("kernelParamsContainer_alpha").value = svmParams.kernelParams.alpha || 0.01;
+        document.getElementById("kernelParamsContainer_beta").value = svmParams.kernelParams.beta || 0;
+      }
+      document.getElementById("paramSolver").value = svmParams.solver;
+
+      document.getElementById("checkboxEnableMultiClass").checked = multiClassEnabled;
+      document.getElementById("multiClassStrategy").disabled = !multiClassEnabled;
+      document.getElementById("multiClassStrategy").value = multiClassStrategy;
+
+      selectedPointIndex = -1;
+      updateSelectedPointInfo();
+      redraw();
+    } catch(e){
+      alert("Invalid JSON data");
+    }
+  });
+
+  document.getElementById("btnClearImportExport").addEventListener("click", ()=>{
+    document.getElementById("exportImportData").value = "";
+  });
+
+
+  // Hyperparameter Grid Search ---------------------------------------
+
+  function getCVFolds(points, folds=5){
+    // Simple round robin division
+    let indices = points.map((_,i) => i);
+    // Shuffle indices
+    for(let i=indices.length-1; i>0; i--){
+      let j = Math.floor(Math.random()*(i+1));
+      [indices[i],indices[j]] = [indices[j],indices[i]];
+    }
+
+    let foldIndices = [];
+    for(let i=0;i<folds;i++) foldIndices[i] = [];
+    for(let i=0;i<indices.length;i++){
+      foldIndices[i%folds].push(indices[i]);
+    }
+    return foldIndices;
+  }
+
+  function subsetPoints(points, indices){
+    return indices.map(i => points[i]);
+  }
+
+  function subsetLabels(labels, indices){
+    return indices.map(i => labels[i]);
+  }
+
+  // Accuracy evaluation helper
+  function accuracySVM(model, pointsTest, labelsTest){
+    let correct = 0;
+    for(let i=0;i<pointsTest.length;i++){
+      let x = [pointsTest[i].x, pointsTest[i].y];
+      let ytrue = labelsTest[i];
+      let ypred;
+      if(multiClassEnabled && model.strategy){
+        ypred = predictMultiClass(model, x);
+        if(ypred === ytrue) correct++;
+      } else {
+        if(svmParams.kernel === "linear" && model.w){
+          ypred = predictLinear(model.w, model.b, x) >= 0 ? 1 : -1;
+          if(ypred === ytrue) correct++;
+        } else if(model.alphas){
+          ypred = predictKernelSVM(model, x) >= 0 ? 1 : -1;
+          if(ypred === ytrue) correct++;
+        }
+      }
+    }
+    return correct / pointsTest.length;
+  }
+
+  // Run Grid Search button
+  document.getElementById("btnRunGridSearch").addEventListener("click", ()=>{
+    const outEl = document.getElementById("gridSearchResults");
+    if(points.length < 2){
+      outEl.textContent = "Not enough points for grid search\n";
+      return;
+    }
+    const cMin = Number(document.getElementById("gridCMin").value);
+    const cMax = Number(document.getElementById("gridCMax").value);
+    let cCount = Math.max(1, Math.min(50, Number(document.getElementById("gridCCount").value)));
+    const kernel = document.getElementById("gridKernel").value;
+    const kernelParamsGrid = readKernelParamsFromUI("gridKernelParamsContainer");
+
+    // Prepare points and labels (binary only for now)
+    const classesArr = points.map(p=>p.class);
+    const uniqueClasses = Array.from(new Set(classesArr));
+    if(uniqueClasses.length<2){
+      outEl.textContent = "Not enough classes for grid search\n";
+      return;
+    }
+    if(multiClassEnabled){
+      outEl.textContent = "Grid search not supported for multi-class mode\n";
+      return;
+    }
+    const xs = points.map(p => [p.x,p.y]);
+    const ys = points.map(p => p.class === 1 ? 1 : (p.class === -1 ? -1 : 0));
+    if(ys.includes(0)){
+      outEl.textContent = "Grid search supports only classes 1 and -1 in this demo.\n";
+      return;
+    }
+
+    // Compute array of C values for grid
+    let cValues = [];
+    if(cCount === 1) cValues = [(cMin + cMax) / 2];
+    else {
+      for(let i=0;i<cCount;i++){
+        let val = cMin + (cMax - cMin)*i/(cCount-1);
+        cValues.push(val);
+      }
+    }
+
+    outEl.textContent = "Running grid search...\n";
+
+    // CV folds
+    let folds = 5;
+    if(points.length < folds*2){
+      folds = Math.max(2, Math.floor(points.length/2));
+    }
+    let foldIndices = getCVFolds(points, folds);
+
+    // Disable UI during search
+    document.getElementById("btnRunGridSearch").disabled = true;
+
+    (async function runGrid(){
+      let results = [];
+      for(let cval of cValues){
+        await new Promise(r => setTimeout(r,10)); // yield UI
+
+        let accSum = 0;
+
+        for(let f=0;f<folds;f++){
+          // Train on all but fold f
+          let trainIdx = [];
+          let testIdx = foldIndices[f];
+          for(let i=0;i<folds;i++){
+            if(i!==f) trainIdx = trainIdx.concat(foldIndices[i]);
+          }
+
+          // Prepare train sets
+          let trainPts = trainIdx.map(i => points[i]);
+          let trainLabels = trainIdx.map(i => ys[i]);
+
+          // Train model
+          let model = null;
+          if(kernel === "linear"){
+            if(svmParams.solver === "simplifiedSMO"){
+              model = simplifiedSMO(trainPts.map(p=>[p.x,p.y]), trainLabels, cval);
+            } else if(svmParams.solver === "customQP"){
+              model = customLinearQP(trainPts.map(p=>[p.x,p.y]), trainLabels, cval);
+            }
+            model.kernelName = "linear";
+            model.kernelParams = {};
+            model.points = trainPts.map(p=>[p.x,p.y]);
+            model.labels = trainLabels;
+          } else {
+            outEl.textContent += "Grid search kernel currently only linear supported.\n";
+            document.getElementById("btnRunGridSearch").disabled = false;
+            return;
+          }
+          // Test
+          let testPts = testIdx.map(i => points[i]);
+          let testLabels = testIdx.map(i => ys[i]);
+          let acc = accuracySVM(model, testPts, testLabels);
+          accSum += acc;
+        }
+        let avgAcc = accSum / folds;
+        results.push({C:cval, accuracy: avgAcc});
+        outEl.textContent += `C=${cval.toFixed(3)}  Accuracy=${avgAcc.toFixed(4)}\n`;
+      }
+      outEl.textContent += "--- Grid Search Complete ---\n";
+      document.getElementById("btnRunGridSearch").disabled = false;
+    })();
+  });
+
+  // Populate grid kernel params UI initially
+  updateKernelParamsInputs("gridKernelParamsContainer", "linear", {});
+
+  // Update grid kernel params on kernel change
+  document.getElementById("gridKernel").addEventListener("change", e=>{
+    let kernelName = e.target.value;
+    updateKernelParamsInputs("gridKernelParamsContainer", kernelName, {});
+  });
+
+  // Initialize multi-class disabled by default
+  document.getElementById("checkboxEnableMultiClass").checked = false;
+  multiClassEnabled = false;
+  document.getElementById("multiClassStrategy").disabled = true;
+  multiClassStrategy = "oneVsOne";
+
+  // Initial draw
+  redraw();
+
+
+})();
+</script>
+
+</body>
+</html>

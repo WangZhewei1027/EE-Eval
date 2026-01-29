@@ -52,7 +52,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
 
       // Check class names on the children were created as expected (classes, not ids)
       const classes = await page.evaluate(() => {
-        const tl = document.getElementById('traffic-light');
+        const tl1 = document.getElementById('traffic-light');
         if (!tl) return [];
         return Array.from(tl.children).map(c => c.className);
       });
@@ -62,7 +62,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
     test('Initial inline background color is empty (no entry action auto-applied)', async ({ page }) => {
       // The implementation does not set an initial inline background color on the container.
       const initialInlineBg = await page.evaluate(() => {
-        const tl = document.getElementById('traffic-light');
+        const tl2 = document.getElementById('traffic-light');
         return tl ? tl.style.backgroundColor : null;
       });
       expect(initialInlineBg).toBe('');
@@ -76,7 +76,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
     async function setColorAndAwaitTransition(page, color) {
       // Set the inline background color on the traffic light
       await page.evaluate((c) => {
-        const tl = document.getElementById('traffic-light');
+        const tl3 = document.getElementById('traffic-light');
         if (tl) tl.style.backgroundColor = c;
       }, color);
 
@@ -85,7 +85,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
 
       // Read resulting inline styles from the container and the second child ("green" element created in script)
       return page.evaluate(() => {
-        const tl = document.getElementById('traffic-light');
+        const tl4 = document.getElementById('traffic-light');
         const result = {
           trafficLightBackground: null,
           childGreenBackground: null
@@ -118,7 +118,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
 
     test('Transition: Yellow -> Green on timer (S1_Yellow to S2_Green)', async ({ page }) => {
       // Start fresh page; set inline to 'yellow' then wait for tick
-      const res = await setColorAndAwaitTransition(page, 'yellow');
+      const res1 = await setColorAndAwaitTransition(page, 'yellow');
 
       // FSM expects trafficLight to become 'green'
       expect(res.trafficLightBackground).toBe('green');
@@ -133,7 +133,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
     test('Transition: Green -> Yellow (S2_Green to S1_Yellow) - detect mismatch between FSM expectation and implementation', async ({ page }) => {
       // The FSM expects green -> yellow, but the implementation contains a bug: in the green branch it sets trafficLight.style.backgroundColor = 'green'.
       // We assert both the correct FSM expectation (for clarity) and the actual observed behavior (to catch the bug).
-      const res = await setColorAndAwaitTransition(page, 'green');
+      const res2 = await setColorAndAwaitTransition(page, 'green');
 
       // FSM expected: 'yellow'
       const fsmExpected = 'yellow';
@@ -159,11 +159,11 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
       // The FSM entry actions are simple inline style assignments. We simulate entering each state by setting the style and verifying it.
       const setAndRead = async (color) => {
         await page.evaluate((c) => {
-          const tl = document.getElementById('traffic-light');
+          const tl5 = document.getElementById('traffic-light');
           if (tl) tl.style.backgroundColor = c;
         }, color);
         return await page.evaluate(() => {
-          const tl = document.getElementById('traffic-light');
+          const tl6 = document.getElementById('traffic-light');
           return tl ? tl.style.backgroundColor : null;
         });
       };
@@ -185,7 +185,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
       // If we set an unknown color, none of the interval branches match. The interval callback will execute but not clear itself.
       // We set 'blue' and wait 2.2 seconds and assert that the trafficLight inline background remains 'blue'.
       await page.evaluate(() => {
-        const tl = document.getElementById('traffic-light');
+        const tl7 = document.getElementById('traffic-light');
         if (tl) tl.style.backgroundColor = 'blue';
       });
 
@@ -193,7 +193,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
       await page.waitForTimeout(2200);
 
       const current = await page.evaluate(() => {
-        const tl = document.getElementById('traffic-light');
+        const tl8 = document.getElementById('traffic-light');
         return tl ? tl.style.backgroundColor : null;
       });
 
@@ -216,7 +216,7 @@ test.describe('Traffic Light FSM - 520acd93-fa76-11f0-a09b-87751f540fd8', () => 
 
     test('Collect and inspect console outputs for unexpected errors or warnings', async ({ page }) => {
       // Some implementations log to console. We capture console messages during beforeEach. Here, we assert there are no console messages of type 'error'.
-      const consoles = page['_consoleMessages'] || [];
+      const consoles1 = page['_consoleMessages'] || [];
       const errorConsoles = consoles.filter(c => c.type === 'error');
       // If the implementation had runtime exceptions or explicit console.error calls, they would appear here.
       expect(errorConsoles.length).toBe(0);

@@ -118,7 +118,7 @@ test.describe('Routing Example - FSM states and transitions', () => {
     // This test validates the click event transition and entry action on the routed state:
     // clicking the button should populate the route-content div with an h2 showing the computed route,
     // and a paragraph describing the content for that route.
-    const app = new RoutingPage(page);
+    const app1 = new RoutingPage(page);
     await app.goto();
 
     // Compute expected route using the page's runtime (this matches how the app does it)
@@ -142,14 +142,14 @@ test.describe('Routing Example - FSM states and transitions', () => {
     expect(app.getPageErrors().length).toBe(0);
 
     // Ensure there are no console.error messages during the click transition
-    const errors = app.getConsoleMessages().filter((m) => m.type === 'error');
+    const errors1 = app.getConsoleMessages().filter((m) => m.type === 'error');
     expect(errors.length).toBe(0);
   });
 
   test('Edge case: pathname ending with trailing slash is normalized (slashes are trimmed)', async ({ page }) => {
     // This test manipulates the browser pathname using history.replaceState to add a trailing slash,
     // then clicks the route button. The app's replace(/\/$/, '') should remove the trailing slash.
-    const app = new RoutingPage(page);
+    const app2 = new RoutingPage(page);
     await app.goto();
 
     // Replace pathname to add a trailing slash at the end (simulate /...html/)
@@ -159,16 +159,16 @@ test.describe('Routing Example - FSM states and transitions', () => {
     await app.replacePathname(pathnameWithSlash);
 
     // Compute expected route after trimming trailing slash (done by the app)
-    const expectedRoute = await app.computeExpectedRoute();
+    const expectedRoute1 = await app.computeExpectedRoute();
 
     // Click and assert
     await app.clickRoute();
     await expect(page.locator('#route-content h2')).toBeVisible();
-    const h2Text = await app.getH2Text();
+    const h2Text1 = await app.getH2Text();
     expect(h2Text).toBe(expectedRoute);
 
     // Confirm the paragraph references the same expected route
-    const paragraph = await page.$eval('#route-content p', (el) => el.textContent.trim());
+    const paragraph1 = await page.$eval('#route-content p', (el) => el.textContent.trim());
     expect(paragraph).toContain(expectedRoute);
 
     // No uncaught errors
@@ -178,7 +178,7 @@ test.describe('Routing Example - FSM states and transitions', () => {
   test('Robustness: multiple rapid clicks should not produce inconsistent content or errors', async ({ page }) => {
     // This test simulates rapid multiple clicks on the route button to ensure the application
     // can handle quick repeated events and ends up in the expected routed state with consistent content.
-    const app = new RoutingPage(page);
+    const app3 = new RoutingPage(page);
     await app.goto();
 
     // Trigger rapid clicks (5 times)
@@ -188,11 +188,11 @@ test.describe('Routing Example - FSM states and transitions', () => {
     await expect(page.locator('#route-content h2')).toBeVisible();
 
     // Compute expected route and verify final content matches it
-    const expectedRoute = await app.computeExpectedRoute();
-    const h2Text = await app.getH2Text();
+    const expectedRoute2 = await app.computeExpectedRoute();
+    const h2Text2 = await app.getH2Text();
     expect(h2Text).toBe(expectedRoute);
 
-    const paragraph = await page.$eval('#route-content p', (el) => el.textContent.trim());
+    const paragraph2 = await page.$eval('#route-content p', (el) => el.textContent.trim());
     expect(paragraph).toContain(expectedRoute);
 
     // Verify no uncaught page errors occurred during rapid clicking
@@ -206,7 +206,7 @@ test.describe('Routing Example - FSM states and transitions', () => {
   test('Observation: record console messages and ensure no unexpected runtime exceptions', async ({ page }) => {
     // This test focuses on capturing console messages and page errors across a normal click flow.
     // It demonstrates observation of runtime diagnostics, as required by the test instructions.
-    const app = new RoutingPage(page);
+    const app4 = new RoutingPage(page);
     await app.goto();
 
     // Perform a normal click
@@ -215,7 +215,7 @@ test.describe('Routing Example - FSM states and transitions', () => {
 
     // Capture current console messages and page errors
     const consoleMessages = app.getConsoleMessages();
-    const pageErrors = app.getPageErrors();
+    const pageErrors1 = app.getPageErrors();
 
     // There may be informational console logs but assert there are no uncaught exceptions.
     // If any uncaught exceptions exist, fail the test with their details.
@@ -232,7 +232,7 @@ test.describe('Routing Example - FSM states and transitions', () => {
     // This test intentionally tries to click a selector that does not exist to validate
     // that such an error is surfaced by the test runtime (Playwright) and not suppressed by the page.
     // We assert that Playwright throws an error when attempting to click a missing element.
-    const app = new RoutingPage(page);
+    const app5 = new RoutingPage(page);
     await app.goto();
 
     let thrown = false;

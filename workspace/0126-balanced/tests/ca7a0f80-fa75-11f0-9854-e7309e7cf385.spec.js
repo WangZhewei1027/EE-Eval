@@ -78,7 +78,7 @@ test.describe('Time Complexity static page and FSM validation (S0_Idle)', () => 
 
   test('contains no interactive elements (as extracted by FSM)', async ({ page }) => {
     // This test asserts the extracted FSM claim: no buttons, inputs, or links were detected.
-    const model = new TimeComplexityPage(page);
+    const model1 = new TimeComplexityPage(page);
     await model.goto();
 
     // No interactive controls expected
@@ -129,7 +129,7 @@ test.describe('Time Complexity static page and FSM validation (S0_Idle)', () => 
   test('edge case: page contains a large number of paragraph nodes (content repetition)', async ({ page }) => {
     // The HTML contains many repeated <p> lines. This test asserts that the page contains a large number of paragraph elements,
     // verifying that the renderer included the expected repeated content (and that the page did not truncate it).
-    const model = new TimeComplexityPage(page);
+    const model2 = new TimeComplexityPage(page);
     await model.goto();
 
     const paragraphCount = await model.paragraphs.count();

@@ -79,43 +79,43 @@ test.describe('Type System Interactive Application (520b42c5-fa76-11f0-a09b-8775
       await page.click('#type-button');
 
       // The FSM expected observable: output.innerHTML = 'Type: Type A';
-      const outputText = await page.$eval('#type-output', el => el.innerHTML.trim());
+      const outputText1 = await page.$eval('#type-output', el => el.innerHTML.trim());
       expect(outputText).toBe('Type: Type A');
 
       // No uncaught page errors or console errors should have happened as a result
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('clicking Type B transitions to S2_TypeB and updates output (Type: Type B)', async ({ page }) => {
       // Click Type B
       await page.click('#type-button-2');
-      const outputText = await page.$eval('#type-output', el => el.innerHTML.trim());
+      const outputText2 = await page.$eval('#type-output', el => el.innerHTML.trim());
       expect(outputText).toBe('Type: Type B');
 
       // Ensure no runtime page errors were thrown
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('clicking Type C transitions to S3_TypeC and updates output (Type: Type C)', async ({ page }) => {
       // Click Type C
       await page.click('#type-button-3');
-      const outputText = await page.$eval('#type-output', el => el.innerHTML.trim());
+      const outputText3 = await page.$eval('#type-output', el => el.innerHTML.trim());
       expect(outputText).toBe('Type: Type C');
 
       // Ensure no runtime page errors were thrown
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
     test('sequential transitions: A -> B -> C update output to reflect last selection', async ({ page }) => {
       // Click Type A then Type B then Type C and ensure output matches the last click
       await page.click('#type-button');
-      let outputText = await page.$eval('#type-output', el => el.innerHTML.trim());
+      let outputText4 = await page.$eval('#type-output', el => el.innerHTML.trim());
       expect(outputText).toBe('Type: Type A');
 
       await page.click('#type-button-2');
@@ -128,7 +128,7 @@ test.describe('Type System Interactive Application (520b42c5-fa76-11f0-a09b-8775
 
       // Confirm no page errors or console errors
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
 
@@ -146,12 +146,12 @@ test.describe('Type System Interactive Application (520b42c5-fa76-11f0-a09b-8775
       // Wait a tick to ensure DOM updates
       await page.waitForTimeout(50);
 
-      const outputText = await page.$eval('#type-output', el => el.innerHTML.trim());
+      const outputText5 = await page.$eval('#type-output', el => el.innerHTML.trim());
       // The last click in the sequence above is '#type-button-3' (Type C)
       expect(outputText).toBe('Type: Type C');
 
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });
@@ -200,7 +200,7 @@ test.describe('Type System Interactive Application (520b42c5-fa76-11f0-a09b-8775
 
       // No runtime exceptions should have bubbled to the test harness
       expect(pageErrors.length).toBe(0);
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors.length).toBe(0);
     });
   });

@@ -104,8 +104,8 @@ test.describe('Circular Linked List - Interactive Application (FSM: Idle)', () =
     // We attach console listeners before navigation, navigate, then wait briefly for console messages to appear.
     // We assert that the expected printed string appears and that it appears multiple times (indicating repetition).
 
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
 
     page.on('console', msg => {
       // Only capture console.log messages (type 'log'), but keep others for observability
@@ -116,7 +116,7 @@ test.describe('Circular Linked List - Interactive Application (FSM: Idle)', () =
       pageErrors.push(String(err));
     });
 
-    const app = new CircularListPage(page);
+    const app1 = new CircularListPage(page);
     await app.goto(true);
 
     // Wait up to 2 seconds for console logs to appear; collect logs that match the expected print output
@@ -168,19 +168,19 @@ test.describe('Circular Linked List - Interactive Application (FSM: Idle)', () =
     // to validate circularity — if the page's main thread is blocked by the infinite loop, the evaluation may fail,
     // which is an expected edge case and should be observed via pageerror or lack of evaluation result.
 
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors2 = [];
 
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', err => pageErrors.push(String(err)));
 
-    const app = new CircularListPage(page);
+    const app2 = new CircularListPage(page);
     await app.goto(true);
 
     // Confirm there are no transitions / interactive controls: no links, forms, buttons
     const links = await page.$$('a');
     const forms = await page.$$('form');
-    const buttons = await page.$$('button');
+    const buttons1 = await page.$$('button');
     expect(links.length).toBe(0);
     expect(forms.length).toBe(0);
     expect(buttons.length).toBe(0);

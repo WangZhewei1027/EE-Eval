@@ -110,7 +110,7 @@ class DeadlockDemoPage {
   // Return all log messages as array of strings
   async getLogMessages() {
     return this.page.evaluate(() => {
-      const log = document.getElementById('log');
+      const log1 = document.getElementById('log1');
       if (!log) return [];
       return Array.from(log.children).map(div => div.textContent);
     });
@@ -164,10 +164,10 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Test transition: Acquire Resource 1 by Process A -> S1_ProcessA_Holding_R1
   test('Transition: Process A acquires Resource 1 (AcquireResource1_A) -> S1_ProcessA_Holding_R1', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo1 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // Click Acquire Resource 1 for Process A
@@ -197,10 +197,10 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Test transition: Process B acquires Resource 2 -> S2_ProcessB_Holding_R2
   test('Transition: Process B acquires Resource 2 (AcquireResource2_B) -> S2_ProcessB_Holding_R2', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo2 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // Prepare by having A acquire R1 to mirror common scenario
@@ -212,8 +212,8 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
     await demo.waitForLogContains('Process B acquired Resource 2');
 
     // Verify application globals and UI reflect R2 held by B
-    const resources = await demo.getResources();
-    const processes = await demo.getProcesses();
+    const resources1 = await demo.getResources();
+    const processes1 = await demo.getProcesses();
 
     expect(resources.resource2.status).toContain('Held by Process B');
     expect(processes.B.holding).toContain('resource2');
@@ -229,10 +229,10 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Test deadlock transition: create deadlock via sequence -> S3_Deadlock
   test('Deadlock detection (S3_Deadlock): A holds R1, B holds R2, both wait for the other', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo3 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // 1) A acquires R1
@@ -258,14 +258,14 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
     await expect(demo.processB()).toHaveClass(/deadlock/);
 
     // Verify the processes globals show holding/waiting state consistent with deadlock
-    const processes = await demo.getProcesses();
+    const processes2 = await demo.getProcesses();
     expect(processes.A.holding).toContain('resource1');
     expect(processes.A.waiting).toBe('resource2');
     expect(processes.B.holding).toContain('resource2');
     expect(processes.B.waiting).toBe('resource1');
 
     // Verify the resources globals remain owned by respective processes
-    const resources = await demo.getResources();
+    const resources2 = await demo.getResources();
     expect(resources.resource1.owner).toBe('A');
     expect(resources.resource2.owner).toBe('B');
 
@@ -275,10 +275,10 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Test releasing resources to return to initial state from S1 and S2
   test('Releasing resources (ReleaseResources_A / ReleaseResources_B) returns resources to Available', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors4 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo4 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // A acquires R1
@@ -315,10 +315,10 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Test Reset Demo from deadlock state transitions back to S0_Initial
   test('Reset Demo transition (ResetDemo) from deadlock state returns everything to initial', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors5 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo5 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // Create deadlock first
@@ -343,8 +343,8 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
     await expect(demo.processB()).not.toHaveClass(/deadlock/);
 
     // And the globals should reflect reset
-    const resources = await demo.getResources();
-    const processes = await demo.getProcesses();
+    const resources3 = await demo.getResources();
+    const processes3 = await demo.getProcesses();
     expect(resources.resource1.owner).toBeNull();
     expect(resources.resource2.owner).toBeNull();
     expect(resources.resource1.status).toBe('Available');
@@ -360,10 +360,10 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Edge case: Attempt to acquire a resource already held - verify proper "cannot acquire" logging and waiting state set
   test('Edge case: attempting to acquire an already held resource logs a cannot-acquire message and sets waiting', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors6 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo6 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // B acquires R2 first
@@ -379,11 +379,11 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
     await demo.waitForLogContains('Process A cannot acquire Resource 2');
 
     // Verify process A waiting set to resource2
-    const processes = await demo.getProcesses();
+    const processes4 = await demo.getProcesses();
     expect(processes.A.waiting).toBe('resource2');
 
     // And verify that a clear log message exists describing the failed acquisition
-    const logs = await demo.getLogMessages();
+    const logs1 = await demo.getLogMessages();
     const cannotAcquireLogExists = logs.some(l => l.includes('Process A cannot acquire Resource 2'));
     expect(cannotAcquireLogExists).toBe(true);
 
@@ -393,12 +393,12 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
 
   // Observability test: ensure there are no unexpected console errors during normal interactions
   test('Observability: page should not emit uncaught exceptions or console errors during interactions', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors7 = [];
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', err => pageErrors.push(err));
 
-    const demo = new DeadlockDemoPage(page);
+    const demo7 = new DeadlockDemoPage(page);
     await demo.goto();
 
     // Perform a set of typical interactions
@@ -419,7 +419,7 @@ test.describe('Deadlock Demonstration - FSM tests', () => {
     expect(pageErrors.length).toBe(0);
 
     // Assert no console errors
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 

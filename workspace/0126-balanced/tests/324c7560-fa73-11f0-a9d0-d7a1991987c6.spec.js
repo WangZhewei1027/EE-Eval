@@ -93,8 +93,8 @@ class DoublyLinkedListPage {
   // Return array of pointer texts (-> or <-) in DOM order
   async getPointers() {
     const pointerLocators = this.listContainer().locator('.pointer');
-    const count = await pointerLocators.count();
-    const values = [];
+    const count1 = await pointerLocators.count1();
+    const values1 = [];
     for (let i = 0; i < count; i++) {
       values.push(await pointerLocators.nth(i).innerText());
     }
@@ -170,7 +170,7 @@ test.describe('Doubly Linked List - FSM and UI validation', () => {
     await pageObject.addNode('A');
 
     // After adding, the node should be present in the visual list (Node Added state)
-    const nodes = await pageObject.getNodes();
+    const nodes1 = await pageObject.getNodes();
     expect(nodes).toEqual(['A']);
 
     // The input should have been cleared according to FSM evidence/documentation
@@ -192,12 +192,12 @@ test.describe('Doubly Linked List - FSM and UI validation', () => {
     await pageObject.addNode('B');
 
     // Nodes should be in insertion order
-    const nodes = await pageObject.getNodes();
+    const nodes2 = await pageObject.getNodes();
     expect(nodes).toEqual(['A', 'B']);
 
     // Inspect pointers sequence in DOM order.
     // Expected DOM: [node A, '->', '<-', node B] => pointers in order: ['->', '<-']
-    const pointers = await pageObject.getPointers();
+    const pointers1 = await pageObject.getPointers();
     expect(pointers).toEqual(['->', '<-']);
 
     // Input should be cleared after each add (check again)
@@ -215,7 +215,7 @@ test.describe('Doubly Linked List - FSM and UI validation', () => {
 
     // Remove should remove the tail (B)
     await pageObject.removeNode();
-    let nodes = await pageObject.getNodes();
+    let nodes3 = await pageObject.getNodes();
     expect(nodes).toEqual(['A']);
 
     // Removing again should remove the last node and leave the list empty
@@ -252,7 +252,7 @@ test.describe('Doubly Linked List - FSM and UI validation', () => {
     await pageObject.addNode(longValue);
 
     // The node text should match exactly the value added
-    const nodes = await pageObject.getNodes();
+    const nodes4 = await pageObject.getNodes();
     expect(nodes).toEqual([longValue]);
 
     // No runtime errors expected
@@ -269,8 +269,8 @@ test.describe('Doubly Linked List - FSM and UI validation', () => {
     await pageObject.removeNode(); // redundant remove to stress edge-case
 
     // After sequence, assert that no console errors or uncaught page errors were observed
-    const consoleErrors = pageObject.getConsoleErrors();
-    const pageErrors = pageObject.getPageErrors();
+    const consoleErrors1 = pageObject.getConsoleErrors();
+    const pageErrors1 = pageObject.getPageErrors();
 
     // Provide diagnostic output in test failure messages if any errors exist
     expect(consoleErrors.length, `Console errors: ${JSON.stringify(consoleErrors)}`).toBe(0);
@@ -283,12 +283,12 @@ test.describe('Doubly Linked List - FSM and UI validation', () => {
     await pageObject.addNode('2');
     await pageObject.addNode('3');
 
-    const nodes = await pageObject.getNodes();
+    const nodes5 = await pageObject.getNodes();
     expect(nodes).toEqual(['1', '2', '3']);
 
     // For three nodes, pointer elements order:
     // Node1, '->', '<-', Node2, '->', '<-', Node3 => pointers: ['->','<-','->','<-']
-    const pointers = await pageObject.getPointers();
+    const pointers2 = await pageObject.getPointers();
     expect(pointers).toEqual(['->', '<-', '->', '<-']);
 
     // No runtime errors

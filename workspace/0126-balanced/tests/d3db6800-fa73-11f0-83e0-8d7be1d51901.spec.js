@@ -80,7 +80,7 @@ class LogisticDemoPage {
   }
 
   async getNPoints() {
-    const txt = await this.getText(this.selectors.nPoints);
+    const txt1 = await this.getText(this.selectors.nPoints);
     return Number(txt);
   }
 
@@ -166,14 +166,14 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
     });
 
     test('Running and Paused transitions: Click Run -> animate -> Click Pause', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo1 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Generate a small dataset so training does something
       await demo.click(demo.selectors.generateSep);
       // ensure points generated
       await page.waitForFunction(selector => {
-        const el = document.querySelector(selector);
+        const el1 = document.querySelector(selector);
         return el && el.textContent.trim() !== '0';
       }, demo.selectors.nPoints);
 
@@ -208,7 +208,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
     });
 
     test('Paused -> Run (resume) and Step behaviour', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo2 = new LogisticDemoPage(page);
       await demo.goto();
 
       // generate points
@@ -242,7 +242,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
 
   test.describe('Events & Transitions: Add/Clear/Generate/Reset/Parameters', () => {
     test('Add point via canvas click and ChangeClass radio selection', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo3 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Choose class 0 (red)
@@ -252,7 +252,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
 
       // Expect nPoints to be 1
       await page.waitForFunction(selector => document.querySelector(selector).textContent.trim() === '1', demo.selectors.nPoints);
-      const nPoints = await demo.getNPoints();
+      const nPoints1 = await demo.getNPoints();
       expect(nPoints).toBe(1);
 
       // Add another as class 1
@@ -264,7 +264,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
     });
 
     test('Click Clear removes points and resets epoch/loss', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo4 = new LogisticDemoPage(page);
       await demo.goto();
 
       // generate and then clear
@@ -277,16 +277,16 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
       await demo.click(demo.selectors.clear);
       // nPoints should be 0, epoch should be 0, loss must be '-'
       await page.waitForFunction(selector => document.querySelector(selector).textContent.trim() === '0', demo.selectors.nPoints);
-      const nPoints = await demo.getNPoints();
+      const nPoints2 = await demo.getNPoints();
       expect(nPoints).toBe(0);
-      const epochs = await demo.getEpochs();
+      const epochs1 = await demo.getEpochs();
       expect(epochs).toBe(0);
       const lossText = await demo.getText(demo.selectors.loss);
       expect(lossText).toBe('-');
     });
 
     test('Generate separable and mixed datasets produce points', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo5 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Separable
@@ -304,7 +304,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
     });
 
     test('Reset weights updates displayed weights and bias', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo6 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Read initial weight and bias strings
@@ -325,7 +325,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
     });
 
     test('Adjust learning rate and regularization sliders update labels', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo7 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Set learning rate to a new value and ensure lrVal updates
@@ -343,7 +343,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
 
   test.describe('Edge cases & error observations', () => {
     test('Step with no points does nothing and triggers no runtime errors', async ({ page }) => {
-      const demo = new LogisticDemoPage(page);
+      const demo8 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Ensure no points exist
@@ -353,7 +353,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
       // Click step (edge case) - should not throw and should keep epochs at 0
       await demo.click(demo.selectors.step);
       await page.waitForTimeout(100);
-      const epochs = await demo.getEpochs();
+      const epochs2 = await demo.getEpochs();
       expect(epochs).toBe(0);
 
       // Ensure no runtime errors captured (pageErrors/consoleErrors will be checked in afterEach)
@@ -361,7 +361,7 @@ test.describe('Interactive Logistic Regression Demo - FSM & UI tests', () => {
 
     test('Observe console and page errors during a full interaction scenario', async ({ page }) => {
       // This test performs many interactions while we capture any errors that arise.
-      const demo = new LogisticDemoPage(page);
+      const demo9 = new LogisticDemoPage(page);
       await demo.goto();
 
       // Generate data, add couple points, run a few steps, pause, reset, clear

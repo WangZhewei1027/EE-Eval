@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>K-Nearest Neighbors Interactive Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        canvas {
+            border: 1px solid #000;
+            margin: 10px 0;
+        }
+        .control-panel {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        button, select, input {
+            margin: 5px;
+        }
+        .data-table {
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        .data-table td, .data-table th {
+            border: 1px solid #000;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>K-Nearest Neighbors Interactive Demo</h1>
+    
+    <div class="control-panel">
+        <h2>Controls</h2>
+        
+        <div class="control-group">
+            <label for="kValue">K value: </label>
+            <input type="range" id="kValue" min="1" max="15" value="3" oninput="updateKValue()">
+            <span id="kValueDisplay">3</span>
+        </div>
+        
+        <div class="control-group">
+            <label for="distanceMetric">Distance Metric: </label>
+            <select id="distanceMetric" onchange="updateDistanceMetric()">
+                <option value="euclidean">Euclidean</option>
+                <option value="manhattan">Manhattan</option>
+                <option value="chebyshev">Chebyshev</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Dataset: </label>
+            <button onclick="generateRandomData()">Generate Random Data</button>
+            <button onclick="clearData()">Clear Data</button>
+            <button onclick="loadSampleData()">Load Sample Data</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Class to add: </label>
+            <select id="classToAdd">
+                <option value="0">Class 0</option>
+                <option value="1">Class 1</option>
+                <option value="2">Class 2</option>
+            </select>
+            <button onclick="addRandomPoint()">Add Random Point</button>
+            <button onclick="enableManualPlacement()">Add Point Manually</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Test Point: </label>
+            <input type="number" id="testX" placeholder="X" step="0.1" value="0.5">
+            <input type="number" id="testY" placeholder="Y" step="0.1" value="0.5">
+            <button onclick="classifyPoint()">Classify</button>
+            <button onclick="addTestPointToData()">Add to Dataset</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Visualization: </label>
+            <button onclick="toggleDecisionBoundary()">Toggle Decision Boundary</button>
+            <button onclick="toggleNeighbors()">Toggle Neighbors</button>
+        </div>
+    </div>
+    
+    <div>
+        <h2>Visualization</h2>
+        <canvas id="canvas" width="600" height="400" onclick="handleCanvasClick(event)"></canvas>
+    </div>
+    
+    <div>
+        <h2>Dataset</h2>
+        <table class="data-table" id="dataTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>X</th>
+                    <th>Y</th>
+                    <th>Class</th>
+                    <th>Distance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="dataTableBody">
+            </tbody>
+        </table>
+    </div>
+    
+    <div>
+        <h2>Classification Results</h2>
+        <div id="results"></div>
+    </div>
+    
+    <script>
+        // Global variables
+        let dataPoints = [];
+        let testPoint = {x: 0.5, y: 0.5, class: null};
+        let k = 3;
+        let distanceMetric = 'euclidean';
+        let showDecisionBoundary = false;
+        let showNeighbors = false;
+        let manualPlacementMode = false;
+        let nextId = 1;
+        
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Color mapping for classes
+        const classColors = ['#FF0000', '#00FF00', '#0000FF'];
+        
+        // Initialize
+        function init() {
+            drawCanvas();
+            updateDataTable();
+        }
+        
+        // Drawing functions
+        function drawCanvas() {
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#DDD';
+            for (let x = 0; x <= width; x += width / 10) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= height; y += height / 10) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            
+            // Draw decision boundary if enabled
+            if (showDecisionBoundary) {
+                drawDecisionBoundary();
+            }
+            
+            // Draw data points
+            dataPoints.forEach(point => {
+                drawPoint(point.x, point.y, point.class, false);
+            });
+            
+            // Draw test point
+            if (testPoint) {
+                drawPoint(testPoint.x, testPoint.y, testPoint.class, true);
+            }
+            
+            // Highlight neighbors if enabled
+            if (showNeighbors && testPoint) {
+                highlightNeighbors();
+            }
+        }
+        
+        function drawPoint(x, y, pointClass, isTestPoint) {
+            const canvasX = x * width;
+            const canvasY = y * height;
+            const radius = isTestPoint ? 8 : 6;
+            const borderWidth = isTestPoint ? 2 : 1;
+            
+            ctx.beginPath();
+            ctx.arc(canvasX, canvasY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = pointClass !== null ? classColors[pointClass] : '#FFFFFF';
+            ctx.fill();
+            ctx.lineWidth = borderWidth;
+            ctx.strokeStyle = '#000000';
+            ctx.stroke();
+        }
+        
+        function drawDecisionBoundary() {
+            const resolution = 20;
+            const cellWidth = width / resolution;
+            const cellHeight = height / resolution;
+            
+            for (let i = 0; i < resolution; i++) {
+                for (let j = 0; j < resolution; j++) {
+                    const x = (i + 0.5) / resolution;
+                    const y = (j + 0.5) / resolution;
+                    
+                    const neighbors = findNearestNeighbors(x, y, k);
+                    const predictedClass = predictClass(neighbors);
+                    
+                    ctx.fillStyle = classColors[predictedClass] + '40'; // Add transparency
+                    ctx.fillRect(i * cellWidth, j * cellHeight, cellWidth, cellHeight);
+                }
+            }
+        }
+        
+        function highlightNeighbors() {
+            const neighbors = findNearestNeighbors(testPoint.x, testPoint.y, k);
+            
+            neighbors.forEach(neighbor => {
+                const point = dataPoints[neighbor.index];
+                const canvasX = point.x * width;
+                const canvasY = point.y * height;
+                
+                ctx.beginPath();
+                ctx.arc(canvasX, canvasY, 10, 0, Math.PI * 2);
+                ctx.strokeStyle = '#FF00FF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Draw line to test point
+                ctx.beginPath();
+                ctx.moveTo(canvasX, canvasY);
+                ctx.lineTo(testPoint.x * width, testPoint.y * height);
+                ctx.strokeStyle = '#FF00FF';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+        }
+        
+        // KNN functions
+        function calculateDistance(x1, y1, x2, y2) {
+            switch (distanceMetric) {
+                case 'euclidean':
+                    return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+                case 'manhattan':
+                    return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+                case 'chebyshev':
+                    return Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
+                default:
+                    return 0;
+            }
+        }
+        
+        function findNearestNeighbors(x, y, k) {
+            const distances = dataPoints.map((point, index) => ({
+                index,
+                distance: calculateDistance(x, y, point.x, point.y),
+                class: point.class
+            }));
+            
+            distances.sort((a, b) => a.distance - b.distance);
+            return distances.slice(0, k);
+        }
+        
+        function predictClass(neighbors) {
+            const classCounts = {};
+            
+            neighbors.forEach(neighbor => {
+                const cls = neighbor.class;
+                classCounts[cls] = (classCounts[cls] || 0) + 1;
+            });
+            
+            let maxCount = 0;
+            let predictedClass = 0;
+            
+            for (const cls in classCounts) {
+                if (classCounts[cls] > maxCount) {
+                    maxCount = classCounts[cls];
+                    predictedClass = parseInt(cls);
+                }
+            }
+            
+            return predictedClass;
+        }
+        
+        // Data management
+        function addPoint(x, y, cls) {
+            dataPoints.push({
+                id: nextId++,
+                x: x,
+                y: y,
+                class: cls
+            });
+            updateDataTable();
+            drawCanvas();
+        }
+        
+        function addRandomPoint() {
+            const cls = parseInt(document.getElementById('classToAdd').value);
+            const x = Math.random();
+            const y = Math.random();
+            addPoint(x, y, cls);
+        }
+        
+        function generateRandomData() {
+            clearData();
+            const classCount = 3;
+            const pointsPerClass = 10;
+            
+            for (let c = 0; c < classCount; c++) {
+                for (let i = 0; i < pointsPerClass; i++) {
+                    // Cluster points around different centers
+                    const centerX = 0.2 + c * 0.3;
+                    const centerY = 0.2 + c * 0.3;
+                    
+                    const x = Math.max(0, Math.min(1, centerX + (Math.random() - 0.5) * 0.3));
+                    const y = Math.max(0, Math.min(1, centerY + (Math.random() - 0.5) * 0.3));
+                    
+                    addPoint(x, y, c);
+                }
+            }
+        }
+        
+        function loadSampleData() {
+            clearData();
+            // Linearly separable data
+            addPoint(0.1, 0.1, 0);
+            addPoint(0.2, 0.1, 0);
+            addPoint(0.1, 0.2, 0);
+            addPoint(0.2, 0.2, 0);
+            addPoint(0.3, 0.3, 0);
+            
+            addPoint(0.7, 0.7, 1);
+            addPoint(0.8, 0.7, 1);
+            addPoint(0.7, 0.8, 1);
+            addPoint(0.8, 0.8, 1);
+            addPoint(0.9, 0.9, 1);
+            
+            // Some overlapping points
+            addPoint(0.4, 0.4, 2);
+            addPoint(0.5, 0.5, 2);
+            addPoint(0.6, 0.6, 2);
+            addPoint(0.4, 0.6, 2);
+            addPoint(0.6, 0.4, 2);
+        }
+        
+        function clearData() {
+            dataPoints = [];
+            nextId = 1;
+            updateDataTable();
+            drawCanvas();
+        }
+        
+        function removePoint(id) {
+            dataPoints = dataPoints.filter(point => point.id !== id);
+            updateDataTable();
+            drawCanvas();
+        }
+        
+        // UI functions
+        function updateKValue() {
+            k = parseInt(document.getElementById('kValue').value);
+            document.getElementById('kValueDisplay').textContent = k;
+            drawCanvas();
+        }
+        
+        function updateDistanceMetric() {
+            distanceMetric = document.getElementById('distanceMetric').value;
+            drawCanvas();
+        }
+        
+        function toggleDecisionBoundary() {
+            showDecisionBoundary = !showDecisionBoundary;
+            drawCanvas();
+        }
+        
+        function toggleNeighbors() {
+            showNeighbors = !showNeighbors;
+            drawCanvas();
+        }
+        
+        function enableManualPlacement() {
+            manualPlacementMode = true;
+            alert('Click on the canvas to place a point. Current class: ' + 
+                  document.getElementById('classToAdd').options[document.getElementById('classToAdd').selectedIndex].text);
+        }
+        
+        function classifyPoint() {
+            testPoint.x = parseFloat(document.getElementById('testX').value);
+            testPoint.y = parseFloat(document.getElementById('testY').value);
+            
+            if (dataPoints.length === 0) {
+                document.getElementById('results').innerHTML = 'No data points available';
+                return;
+            }
+            
+            const neighbors = findNearestNeighbors(testPoint.x, testPoint.y, k);
+            const predictedClass = predictClass(neighbors);
+            testPoint.class = predictedClass;
+            
+            let resultHTML = `<p>Predicted class: <strong>Class ${predictedClass}</strong></p>`;
+            resultHTML += '<p>Nearest neighbors:</p><ul>';
+            
+            neighbors.forEach(neighbor => {
+                const point = dataPoints[neighbor.index];
+                resultHTML += `<li>Point ${neighbor.index + 1}: Class ${point.class}, Distance: ${neighbor.distance.toFixed(3)}</li>`;
+            });
+            
+            resultHTML += '</ul>';
+            document.getElementById('results').innerHTML = resultHTML;
+            
+            drawCanvas();
+        }
+        
+        function addTestPointToData() {
+            if (testPoint.class === null) {
+                alert('Please classify the point first');
+                return;
+            }
+            
+            addPoint(testPoint.x, testPoint.y, testPoint.class);
+            testPoint = {x: 0.5, y: 0.5, class: null};
+            document.getElementById('testX').value = 0.5;
+            document.getElementById('testY').value = 0.5;
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        function updateDataTable() {
+            const tableBody = document.getElementById('dataTableBody');
+            tableBody.innerHTML = '';
+            
+            dataPoints.forEach(point => {
+                const row = document.createElement('tr');
+                
+                row.innerHTML = `
+                    <td>${point.id}</td>
+                    <td>${point.x.toFixed(3)}</td>
+                    <td>${point.y.toFixed(3)}</td>
+                    <td>Class ${point.class}</td>
+                    <td>${testPoint ? calculateDistance(point.x, point.y, testPoint.x, testPoint.y).toFixed(3) : '-'}</td>
+                    <td><button onclick="removePoint(${point.id})">Remove</button></td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+        
+        function handleCanvasClick(event) {
+            if (!manualPlacementMode) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = (event.clientX - rect.left) / width;
+            const y = (event.clientY - rect.top) / height;
+            const cls = parseInt(document.getElementById('classToAdd').value);
+            
+            addPoint(x, y, cls);
+            manualPlacementMode = false;
+        }
+        
+        // Initialize the app
+        init();
+    </script>
+</body>
+</html>

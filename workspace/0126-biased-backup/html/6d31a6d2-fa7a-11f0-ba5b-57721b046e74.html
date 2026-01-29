@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Version Control Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .panel {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        button, select, input {
+            margin: 5px;
+            padding: 5px;
+        }
+        .file {
+            border: 1px solid #999;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #f5f5f5;
+        }
+        .commit {
+            border-left: 3px solid #666;
+            padding: 5px;
+            margin: 5px 0;
+        }
+        .branch {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .active {
+            font-weight: bold;
+        }
+        .conflict {
+            background-color: #ffdddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Version Control System</h1>
+    
+    <div class="panel">
+        <h2>Working Directory</h2>
+        <div>
+            <button id="newFile">Create New File</button>
+            <input type="text" id="fileName" placeholder="filename.txt">
+        </div>
+        <div id="filesContainer"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>Staging Area</h2>
+        <div id="stagedFiles"></div>
+        <button id="unstageAll">Unstage All</button>
+    </div>
+    
+    <div class="panel">
+        <h2>Commit</h2>
+        <input type="text" id="commitMessage" placeholder="Commit message">
+        <button id="commit">Commit Changes</button>
+        <div id="commitHistory"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>Branching</h2>
+        <div>
+            <input type="text" id="newBranchName" placeholder="branch-name">
+            <button id="createBranch">Create Branch</button>
+            <button id="mergeBranch">Merge Branch</button>
+        </div>
+        <div id="branches"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>Remote Operations</h2>
+        <button id="fetch">Fetch</button>
+        <button id="pull">Pull</button>
+        <button id="push">Push</button>
+        <div id="remoteStatus"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>Conflict Resolution</h2>
+        <div id="conflictArea"></div>
+        <div>
+            <button id="resolveMine">Use My Changes</button>
+            <button id="resolveTheirs">Use Their Changes</button>
+            <button id="resolveBoth">Combine Changes</button>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Log Explorer</h2>
+        <div id="logContainer"></div>
+        <button id="showGraph">Show Commit Graph</button>
+        <div id="graphContainer"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>Reset Options</h2>
+        <select id="resetType">
+            <option value="soft">Soft Reset</option>
+            <option value="mixed">Mixed Reset</option>
+            <option value="hard">Hard Reset</option>
+        </select>
+        <button id="reset">Reset</button>
+    </div>
+    
+    <script>
+        // State
+        let state = {
+            files: {},
+            stagedFiles: {},
+            commits: [],
+            branches: ['main'],
+            currentBranch: 'main',
+            remoteCommits: [],
+            remoteBranches: ['main'],
+            HEAD: null,
+            conflict: null
+        };
+        
+        // DOM Elements
+        const elements = {
+            filesContainer: document.getElementById('filesContainer'),
+            stagedFiles: document.getElementById('stagedFiles'),
+            commitHistory: document.getElementById('commitHistory'),
+            branches: document.getElementById('branches'),
+            remoteStatus: document.getElementById('remoteStatus'),
+            conflictArea: document.getElementById('conflictArea'),
+            logContainer: document.getElementById('logContainer'),
+            graphContainer: document.getElementById('graphContainer')
+        };
+        
+        // Initialize
+        function init() {
+            // Create initial commit
+            const initialCommit = {
+                hash: generateHash(),
+                message: "Initial commit",
+                parent: null,
+                branch: 'main',
+                files: {},
+                timestamp: new Date()
+            };
+            state.commits.push(initialCommit);
+            state.HEAD = initialCommit.hash;
+            state.remoteCommits.push(JSON.parse(JSON.stringify(initialCommit)));
+            
+            renderAll();
+            
+            // Event listeners
+            document.getElementById('newFile').addEventListener('click', createNewFile);
+            document.getElementById('commit').addEventListener('click', createCommit);
+            document.getElementById('unstageAll').addEventListener('click', unstageAll);
+            document.getElementById('createBranch').addEventListener('click', createBranch);
+            document.getElementById('mergeBranch').addEventListener('click', mergeBranch);
+            document.getElementById('fetch').addEventListener('click', fetchRemote);
+            document.getElementById('pull').addEventListener('click', pullRemote);
+            document.getElementById('push').addEventListener('click', pushToRemote);
+            document.getElementById('resolveMine').addEventListener('click', () => resolveConflict('mine'));
+            document.getElementById('resolveTheirs').addEventListener('click', () => resolveConflict('theirs'));
+            document.getElementById('resolveBoth').addEventListener('click', () => resolveConflict('both'));
+            document.getElementById('showGraph').addEventListener('click', renderGraph);
+            document.getElementById('reset').addEventListener('click', performReset);
+        }
+        
+        // Rendering
+        function renderAll() {
+            renderFiles();
+            renderStagedFiles();
+            renderCommitHistory();
+            renderBranches();
+            renderRemoteStatus();
+            renderConflict();
+            renderLog();
+        }
+        
+        function renderFiles() {
+            elements.filesContainer.innerHTML = '';
+            for (const [filename, content] of Object.entries(state.files)) {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'file';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = filename;
+                
+                const contentTextarea = document.createElement('textarea');
+                contentTextarea.value = content;
+                contentTextarea.addEventListener('change', (e) => {
+                    state.files[filename] = e.target.value;
+                });
+                
+                const stageBtn = document.createElement('button');
+                stageBtn.textContent = 'Stage';
+                stageBtn.addEventListener('click', () => stageFile(filename));
+                
+                fileDiv.appendChild(nameSpan);
+                fileDiv.appendChild(document.createElement('br'));
+                fileDiv.appendChild(contentTextarea);
+                fileDiv.appendChild(stageBtn);
+                
+                elements.filesContainer.appendChild(fileDiv);
+            }
+        }
+        
+        function renderStagedFiles() {
+            elements.stagedFiles.innerHTML = '';
+            for (const [filename, content] of Object.entries(state.stagedFiles)) {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'file';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = filename;
+                
+                const contentTextarea = document.createElement('textarea');
+                contentTextarea.value = content;
+                contentTextarea.addEventListener('change', (e) => {
+                    state.stagedFiles[filename] = e.target.value;
+                });
+                
+                const unstageBtn = document.createElement('button');
+                unstageBtn.textContent = 'Unstage';
+                unstageBtn.addEventListener('click', () => unstageFile(filename));
+                
+                fileDiv.appendChild(nameSpan);
+                fileDiv.appendChild(document.createElement('br'));
+                fileDiv.appendChild(contentTextarea);
+                fileDiv.appendChild(unstageBtn);
+                
+                elements.stagedFiles.appendChild(fileDiv);
+            }
+        }
+        
+        function renderCommitHistory() {
+            elements.commitHistory.innerHTML = '';
+            state.commits.forEach(commit => {
+                const commitDiv = document.createElement('div');
+                commitDiv.className = 'commit';
+                if (commit.hash === state.HEAD) {
+                    commitDiv.style.fontWeight = 'bold';
+                }
+                
+                const hashSpan = document.createElement('span');
+                hashSpan.textContent = commit.hash.substring(0, 7) + ' ';
+                
+                const messageSpan = document.createElement('span');
+                messageSpan.textContent = commit.message;
+                
+                const branchSpan = document.createElement('span');
+                branchSpan.textContent = ' (' + commit.branch + ')';
+                branchSpan.style.color = '#666';
+                
+                const checkoutBtn = document.createElement('button');
+                checkoutBtn.textContent = 'Checkout';
+                checkoutBtn.addEventListener('click', () => checkoutCommit(commit.hash));
+                
+                commitDiv.appendChild(hashSpan);
+                commitDiv.appendChild(messageSpan);
+                commitDiv.appendChild(branchSpan);
+                commitDiv.appendChild(checkoutBtn);
+                
+                elements.commitHistory.appendChild(commitDiv);
+            });
+        }
+        
+        function renderBranches() {
+            elements.branches.innerHTML = '';
+            state.branches.forEach(branch => {
+                const branchDiv = document.createElement('div');
+                branchDiv.className = 'branch';
+                if (branch === state.currentBranch) {
+                    branchDiv.className += ' active';
+                }
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = branch;
+                
+                const checkoutBtn = document.createElement('button');
+                checkoutBtn.textContent = 'Checkout';
+                checkoutBtn.addEventListener('click', () => checkoutBranch(branch));
+                
+                branchDiv.appendChild(nameSpan);
+                branchDiv.appendChild(checkoutBtn);
+                
+                elements.branches.appendChild(branchDiv);
+            });
+        }
+        
+        function renderRemoteStatus() {
+            elements.remoteStatus.innerHTML = '';
+            const div = document.createElement('div');
+            
+            const localAhead = state.commits.length - state.remoteCommits.length;
+            const remoteAhead = state.remoteCommits.length - state.commits.length;
+            
+            if (localAhead > 0) {
+                div.textContent = `Local is ${localAhead} commit(s) ahead of remote`;
+            } else if (remoteAhead > 0) {
+                div.textContent = `Local is ${remoteAhead} commit(s) behind remote`;
+            } else {
+                div.textContent = 'Local and remote are in sync';
+            }
+            
+            elements.remoteStatus.appendChild(div);
+        }
+        
+        function renderConflict() {
+            elements.conflictArea.innerHTML = '';
+            if (!state.conflict) return;
+            
+            const div = document.createElement('div');
+            div.className = 'conflict';
+            
+            const p = document.createElement('p');
+            p.textContent = `Conflict in ${state.conflict.file} between ${state.conflict.ours.hash.substring(0,7)} and ${state.conflict.theirs.hash.substring(0,7)}`;
+            
+            const oursDiv = document.createElement('div');
+            oursDiv.textContent = 'Our version: ' + state.conflict.ours.content;
+            
+            const theirsDiv = document.createElement('div');
+            theirsDiv.textContent = 'Their version: ' + state.conflict.theirs.content;
+            
+            div.appendChild(p);
+            div.appendChild(oursDiv);
+            div.appendChild(theirsDiv);
+            
+            elements.conflictArea.appendChild(div);
+        }
+        
+        function renderLog() {
+            elements.logContainer.innerHTML = '';
+            state.commits.forEach(commit => {
+                const div = document.createElement('div');
+                div.className = 'commit';
+                
+                const hashSpan = document.createElement('span');
+                hashSpan.textContent = commit.hash.substring(0, 7) + ' ';
+                
+                const messageSpan = document.createElement('span');
+                messageSpan.textContent = commit.message;
+                
+                const branchSpan = document.createElement('span');
+                branchSpan.textContent = ' (' + commit.branch + ')';
+                
+                const parentSpan = document.createElement('span');
+                parentSpan.textContent = ' ← ' + (commit.parent ? commit.parent.substring(0,7) : 'ROOT');
+                
+                div.appendChild(hashSpan);
+                div.appendChild(messageSpan);
+                div.appendChild(branchSpan);
+                div.appendChild(parentSpan);
+                
+                elements.logContainer.appendChild(div);
+            });
+        }
+        
+        function renderGraph() {
+            elements.graphContainer.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = state.commits.length * 30;
+            elements.graphContainer.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            ctx.font = '12px Arial';
+            
+            const commitPositions = {};
+            const branchColors = {};
+            const branches = [...new Set(state.commits.map(c => c.branch))];
+            const colors = ['#000', '#f00', '#0a0', '#00f', '#a0a', '#0aa', '#a50'];
+            
+            branches.forEach((branch, i) => {
+                branchColors[branch] = colors[i % colors.length];
+            });
+            
+            // Draw commits
+            state.commits.forEach((commit, i) => {
+                const y = 20 + i * 30;
+                const x = 100 + branches.indexOf(commit.branch) * 50;
+                commitPositions[commit.hash] = {x, y};
+                
+                // Draw commit circle
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = branchColors[commit.branch];
+                ctx.fill();
+                
+                // Draw commit info
+                ctx.fillStyle = '#000';
+                ctx.fillText(commit.hash.substring(0,7) + ' ' + commit.message, x + 15, y + 5);
+                
+                // Draw branch label for first commit on branch
+                if (commit.parent && state.commits.find(c => c.hash === commit.parent).branch !== commit.branch) {
+                    ctx.fillStyle = branchColors[commit.branch];
+                    ctx.fillText(commit.branch, x - 30, y - 10);
+                }
+            });
+            
+            // Draw lines between commits
+            state.commits.forEach(commit => {
+                if (commit.parent) {
+                    const parent = commitPositions[commit.parent];
+                    const child = commitPositions[commit.hash];
+                    
+                    if (parent && child) {
+                        ctx.beginPath();
+                        ctx.moveTo(parent.x, parent.y);
+                        ctx.lineTo(child.x, child.y);
+                        ctx.strokeStyle = branchColors[commit.branch];
+                        ctx.stroke();
+                    }
+                }
+            });
+        }
+        
+        // Core functions
+        function createNewFile() {
+            const filename = document.getElementById('fileName').value || `file${Object.keys(state.files).length + 1}.txt`;
+            if (!state.files[filename]) {
+                state.files[filename] = '';
+                renderFiles();
+            }
+        }
+        
+        function stageFile(filename) {
+            if (state.files[filename] !== undefined) {
+                state.stagedFiles[filename] = state.files[filename];
+                delete state.files[filename];
+                renderFiles();
+                renderStagedFiles();
+            }
+        }
+        
+        function unstageFile(filename) {
+            if (state.stagedFiles[filename] !== undefined) {
+                state.files[filename] = state.stagedFiles[filename];
+                delete state.stagedFiles[filename];
+                renderFiles();
+                renderStagedFiles();
+            }
+        }
+        
+        function unstageAll() {
+            for (const [filename, content] of Object.entries(state.stagedFiles)) {
+                state.files[filename] = content;
+            }
+            state.stagedFiles = {};
+            renderFiles();
+            renderStagedFiles();
+        }
+        
+        function createCommit() {
+            if (Object.keys(state.stagedFiles).length === 0) return;
+            
+            const message = document.getElementById('commitMessage').value || 'No message';
+            const newCommit = {
+                hash: generateHash(),
+                message: message,
+                parent: state.HEAD,
+                branch: state.currentBranch,
+                files: {...state.stagedFiles},
+                timestamp: new Date()
+            };
+            
+            state.commits.push(newCommit);
+            state.HEAD = newCommit.hash;
+            state.stagedFiles = {};
+            document.getElementById('commitMessage').value = '';
+            
+            renderAll();
+        }
+        
+        function createBranch() {
+            const branchName = document.getElementById('newBranchName').value;
+            if (branchName && !state.branches.includes(branchName)) {
+                state.branches.push(branchName);
+                renderBranches();
+            }
+        }
+        
+        function checkoutBranch(branch) {
+            if (state.branches.includes(branch)) {
+                state.currentBranch = branch;
+                
+                // Find the latest commit on this branch
+                const branchCommits = state.commits.filter(c => c.branch === branch);
+                if (branchCommits.length > 0) {
+                    const latestCommit = branchCommits.reduce((latest, current) => 
+                        current.timestamp > latest.timestamp ? current : latest
+                    );
+                    state.HEAD = latestCommit.hash;
+                    
+                    // Update working directory
+                    state.files = {};
+                    state.stagedFiles = {};
+                    for (const [filename, content] of Object.entries(latestCommit.files)) {
+                        state.files[filename] = content;
+                    }
+                } else {
+                    state.files = {};
+                    state.stagedFiles = {};
+                }
+                
+                renderAll();
+            }
+        }
+        
+        function checkoutCommit(hash) {
+            const commit = state.commits.find(c => c.hash === hash);
+            if (commit) {
+                state.HEAD = commit.hash;
+                // Detached HEAD state - not on any branch
+                state.currentBranch = null;
+                
+                // Update working directory
+                state.files = {};
+                state.stagedFiles = {};
+                for (const [filename, content] of Object.entries(commit.files)) {
+                    state.files[filename] = content;
+                }
+                
+                renderAll();
+            }
+        }
+        
+        function mergeBranch() {
+            const branchName = document.getElementById('newBranchName').value;
+            if (!branchName || !state.branches.includes(branchName) || branchName === state.currentBranch) return;
+            
+            // Find the latest commit on the other branch
+            const otherBranchCommits = state.commits.filter(c => c.branch === branchName);
+            if (otherBranchCommits.length === 0) return;
+            
+            const otherCommit = otherBranchCommits.reduce((latest, current) => 
+                current.timestamp > latest.timestamp ? current : latest
+            );
+            
+            // Find the latest commit on current branch
+            const currentBranchCommits = state.commits.filter(c => c.branch === state.currentBranch);
+            const currentCommit = currentBranchCommits.reduce((latest, current) => 
+                current.timestamp > latest.timestamp ? current : latest
+            );
+            
+            // Check for conflicts
+            const conflicts = [];
+            for (const [filename, theirContent] of Object.entries(otherCommit.files)) {
+                if (currentCommit.files[filename] && currentCommit.files[filename] !== theirContent) {
+                    conflicts.push({
+                        file: filename,
+                        ours: {
+                            hash: currentCommit.hash,
+                            content: currentCommit.files[filename]
+                        },
+                        theirs: {
+                            hash: otherCommit.hash,
+                            content: theirContent
+                        }
+                    });
+                }
+            }
+            
+            if (conflicts.length > 0) {
+                state.conflict = conflicts[0];
+                renderConflict();
+                return;
+            }
+            
+            // No conflicts - perform merge
+            const mergeCommit = {
+                hash: generateHash(),
+                message: `Merge branch '${branchName}' into ${state.currentBranch}`,
+                parent: state.HEAD,
+                branch: state.currentBranch,
+                files: {...currentCommit.files, ...otherCommit.files},
+                timestamp: new Date(),
+                mergeParent: otherCommit.hash
+            };
+            
+            state.commits.push(mergeCommit);
+            state.HEAD = mergeCommit.hash;
+            state.files = {...mergeCommit.files};
+            state.stagedFiles = {};
+            
+            renderAll();
+        }
+        
+        function resolveConflict(choice) {
+            if (!state.conflict) return;
+            
+            const filename = state.conflict.file;
+            let resolvedContent = '';
+            
+            switch (choice) {
+                case 'mine':
+                    resolvedContent = state.conflict.ours.content;
+                    break;
+                case 'theirs':
+                    resolvedContent = state.conflict.theirs.content;
+                    break;
+                case 'both':
+                    resolvedContent = `<<<<<<< HEAD\n${state.conflict.ours.content}\n=======\n${state.conflict.theirs.content}\n>>>>>>> ${state.conflict.theirs.hash.substring(0,7)}`;
+                    break;
+            }
+            
+            state.files[filename] = resolvedContent;
+            state.conflict = null;
+            
+            renderAll();
+        }
+        
+        function fetchRemote() {
+            // Simulate remote changes
+            if (Math.random() > 0.5) {
+                const newRemoteCommit = {
+                    hash: generateHash(),
+                    message: 'Remote change ' + (state.remoteCommits.length + 1),
+                    parent: state.remoteCommits[state.remoteCommits.length - 1]?.hash || null,
+                    branch: 'main',
+                    files: { 'remote.txt': 'Remote content ' + (state.remoteCommits.length + 1) },
+                    timestamp: new Date()
+                };
+                state.remoteCommits.push(newRemoteCommit);
+            }
+            
+            renderRemoteStatus();
+        }
+        
+        function pullRemote() {
+            fetchRemote();
+            
+            // If local is behind, fast-forward
+            if (state.remoteCommits.length > state.commits.length) {
+                for (let i = state.commits.length; i < state.remoteCommits.length; i++) {
+                    state.commits.push(JSON.parse(JSON.stringify(state.remoteCommits[i])));
+                }
+                state.HEAD = state.remoteCommits[state.remoteCommits.length - 1].hash;
+                // Update working directory
+                state.files = {};
+                state.stagedFiles = {};
+                for (const [filename, content] of Object.entries(state.commits[state.commits.length - 1].files)) {
+                    state.files[filename] = content;
+                }
+            }
+            
+            renderAll();
+        }
+        
+        function pushToRemote() {
+            // If local is ahead, push changes
+            if (state.commits.length > state.remoteCommits.length) {
+                for (let i = state.remoteCommits.length; i < state.commits.length; i++) {
+                    state.remoteCommits.push(JSON.parse(JSON.stringify(state.commits[i])));
+                }
+            }
+            
+            renderRemoteStatus();
+        }
+        
+        function performReset() {
+            const resetType = document.getElementById('resetType').value;
+            const currentCommit = state.commits.find(c => c.hash === state.HEAD);
+            
+            switch (resetType) {
+                case 'soft':
+                    // Only moves HEAD, keeps index and working dir
+                    if (currentCommit.parent) {
+                        state.HEAD = currentCommit.parent;
+                    }
+                    break;
+                    
+                case 'mixed':
+                    // Moves HEAD and resets index, keeps working dir
+                    if (currentCommit.parent) {
+                        state.HEAD = currentCommit.parent;
+                        state.stagedFiles = {};
+                    }
+                    break;
+                    
+                case 'hard':
+                    // Moves HEAD, resets index and working dir
+                    if (currentCommit.parent) {
+                        const parentCommit = state.commits.find(c => c.hash === currentCommit.parent);
+                        state.HEAD = currentCommit.hash;
+                        state.stagedFiles = {};
+                        state.files = {...parentCommit.files};
+                    }
+                    break;
+            }
+            
+            renderAll();
+        }
+        
+        // Helper functions
+        function generateHash() {
+            return Math.random().toString(36).substring(2, 9);
+        }
+        
+        // Initialize
+        init();
+    </script>
+</body>
+</html>

@@ -93,7 +93,7 @@ test.describe('Bubble Sort Visualization (FSM) - 63b0d913-fa74-11f0-bb9a-db7e6ec
 
     test('S1 -> S2: After sorting completes, button is enabled, highlights cleared, and final array is sorted', async ({ page }) => {
       // Capture an initial snapshot of numbers
-      const initialNumbers = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
+      const initialNumbers1 = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
       expect(initialNumbers.length).toBe(20);
 
       // Start sorting
@@ -130,7 +130,7 @@ test.describe('Bubble Sort Visualization (FSM) - 63b0d913-fa74-11f0-bb9a-db7e6ec
   test.describe('Edge cases and error scenarios', () => {
     test('Click while disabled: Start button should prevent repeated starts (button remains disabled while sorting)', async ({ page }) => {
       // Start sorting
-      const initialNumbers = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
+      const initialNumbers2 = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
       await page.click('#start-btn');
 
       // Confirm the button is disabled
@@ -152,7 +152,7 @@ test.describe('Bubble Sort Visualization (FSM) - 63b0d913-fa74-11f0-bb9a-db7e6ec
       await page.waitForFunction(() => !document.getElementById('start-btn').disabled, { timeout: 110000 });
 
       // After completion, button is enabled again
-      const finalDisabled = await page.$eval('#start-btn', btn => btn.disabled);
+      const finalDisabled1 = await page.$eval('#start-btn', btn => btn.disabled);
       expect(finalDisabled).toBe(false);
 
       // No runtime errors occurred
@@ -161,7 +161,7 @@ test.describe('Bubble Sort Visualization (FSM) - 63b0d913-fa74-11f0-bb9a-db7e6ec
 
     test('Edge behavior when initial array is already sorted: algorithm may not produce .swapped visuals', async ({ page }) => {
       // Capture initial array
-      const initialNumbers = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
+      const initialNumbers3 = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
 
       // Helper to determine if an array is already non-decreasing
       const isSorted = (arr) => {
@@ -189,7 +189,7 @@ test.describe('Bubble Sort Visualization (FSM) - 63b0d913-fa74-11f0-bb9a-db7e6ec
         expect(isSorted(initialNumbers)).toBe(true);
       } else {
         // If swaps occurred, final array must be sorted
-        const finalNumbers = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
+        const finalNumbers1 = await page.$$eval('#array-container .bar', nodes => nodes.map(n => Number(n.textContent.trim())));
         for (let i = 1; i < finalNumbers.length; i++) {
           expect(finalNumbers[i - 1]).toBeLessThanOrEqual(finalNumbers[i]);
         }

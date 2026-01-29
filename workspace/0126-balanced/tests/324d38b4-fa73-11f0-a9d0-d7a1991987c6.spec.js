@@ -106,7 +106,7 @@ test.describe('Merge Sort Visualization FSM - Application ID 324d38b4-fa73-11f0-
     // This test validates the transition from Idle to Sorting:
     // - Clicking the button triggers startMergeSort()
     // - The array becomes sorted and drawArray() is called to render the sorted array
-    const ui = new MergeSortPage(page);
+    const ui1 = new MergeSortPage(page);
     await ui.goto();
 
     // Click the Start Merge Sort button to trigger the sorting transition
@@ -133,7 +133,7 @@ test.describe('Merge Sort Visualization FSM - Application ID 324d38b4-fa73-11f0-
     // This test validates the transition from Sorting back to Idle:
     // - Clicking the same button when the array is already sorted should call drawArray() again
     // - No change in order but DOM should be re-drawn; no errors should occur
-    const ui = new MergeSortPage(page);
+    const ui2 = new MergeSortPage(page);
     await ui.goto();
 
     // First click to sort
@@ -141,7 +141,7 @@ test.describe('Merge Sort Visualization FSM - Application ID 324d38b4-fa73-11f0-
     await page.waitForTimeout(100);
 
     const heightsAfterFirstSort = await ui.getBarHeights();
-    const expectedSorted = [3, 9, 10, 27, 38, 43, 82].map(n => `${n * 5}px`);
+    const expectedSorted1 = [3, 9, 10, 27, 38, 43, 82].map(n => `${n * 5}px`);
     expect(heightsAfterFirstSort).toEqual(expectedSorted);
 
     // Click again to exercise the transition back to Idle (drawArray() on exit)
@@ -160,7 +160,7 @@ test.describe('Merge Sort Visualization FSM - Application ID 324d38b4-fa73-11f0-
   test('Edge case: Rapid multiple clicks do not crash the page and result in a sorted array', async ({ page }) => {
     // This test exercises an edge case: clicking the Start button many times quickly
     // We assert no runtime errors occur and the final result is a correctly sorted array
-    const ui = new MergeSortPage(page);
+    const ui3 = new MergeSortPage(page);
     await ui.goto();
 
     // Rapidly click the button multiple times
@@ -173,7 +173,7 @@ test.describe('Merge Sort Visualization FSM - Application ID 324d38b4-fa73-11f0-
     await page.waitForTimeout(200);
 
     // Final state should be sorted
-    const expectedSorted = [3, 9, 10, 27, 38, 43, 82].map(n => `${n * 5}px`);
+    const expectedSorted2 = [3, 9, 10, 27, 38, 43, 82].map(n => `${n * 5}px`);
     const finalHeights = await ui.getBarHeights();
     expect(finalHeights).toEqual(expectedSorted, 'Final array after rapid clicks should be sorted');
 
@@ -186,7 +186,7 @@ test.describe('Merge Sort Visualization FSM - Application ID 324d38b4-fa73-11f0-
     // This test intentionally collects runtime errors (if any) and asserts on them.
     // Per instructions we must observe console logs and page errors and let any ReferenceError/SyntaxError/TypeError happen naturally.
     // Because the provided implementation is syntactically correct and self-contained, we expect no such errors.
-    const ui = new MergeSortPage(page);
+    const ui4 = new MergeSortPage(page);
     await ui.goto();
 
     // Perform a normal operation to potentially trigger runtime issues

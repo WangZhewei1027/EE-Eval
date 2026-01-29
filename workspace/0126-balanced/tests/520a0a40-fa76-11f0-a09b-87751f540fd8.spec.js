@@ -125,7 +125,7 @@ test.describe('520a0a40-fa76-11f0-a09b-87751f540fd8 - P vs NP page (FSM: S0_Idle
     // The implementation contains 10 <p> tags. We assert at least 9 to be tolerant to small changes.
     expect(paraCount).toBeGreaterThanOrEqual(9);
 
-    const texts = await app.paragraphTexts();
+    const texts1 = await app.paragraphTexts();
     // Validate that at least one paragraph mentions "P vs NP" as a sanity check of content.
     const mentionsPvsNP = texts.some(t => t && t.includes('P vs NP'));
     expect(mentionsPvsNP).toBeTruthy();
@@ -133,7 +133,7 @@ test.describe('520a0a40-fa76-11f0-a09b-87751f540fd8 - P vs NP page (FSM: S0_Idle
 
   test('page contains no interactive elements (buttons, inputs, anchors, scripts)', async ({ page }) => {
     // This test asserts that the FSM's extraction notes (no interactive elements) match the DOM.
-    const app = new PvsNPPage(page);
+    const app1 = new PvsNPPage(page);
 
     const buttons = await app.countButtons();
     expect(buttons).toBe(0);
@@ -154,7 +154,7 @@ test.describe('520a0a40-fa76-11f0-a09b-87751f540fd8 - P vs NP page (FSM: S0_Idle
     // The FSM mentions an entry action "renderPage()". The HTML does not define such a function.
     // Per instructions, we must NOT patch or define it, and must allow the error to happen naturally.
     // This test calls the identifier in the page context and asserts that a ReferenceError occurs.
-    const app = new PvsNPPage(page);
+    const app2 = new PvsNPPage(page);
 
     // Ensure there are no page errors prior to our intentional invocation.
     expect(pageErrors.length).toBe(0);
@@ -203,7 +203,7 @@ test.describe('520a0a40-fa76-11f0-a09b-87751f540fd8 - P vs NP page (FSM: S0_Idle
   test('attempting to $eval a non-existent selector throws an informative error (edge case)', async ({ page }) => {
     // Validate behavior when consumers attempt to query and operate on selectors that do not exist.
     // We expect Playwright's $eval to throw with a helpful message indicating the selector was not found.
-    const app = new PvsNPPage(page);
+    const app3 = new PvsNPPage(page);
     const selector = 'button#i-do-not-exist';
 
     let caught = null;
@@ -231,7 +231,7 @@ test.describe('520a0a40-fa76-11f0-a09b-87751f540fd8 - P vs NP page (FSM: S0_Idle
     // Since the FSM declares no events/transitions, user interactions should not change the DOM.
     // We'll attempt some benign interactions (click on body, type into a non-existent input via locator) and
     // assert the DOM's core static content remains unchanged.
-    const app = new PvsNPPage(page);
+    const app4 = new PvsNPPage(page);
 
     const originalTitle = await app.title();
     const originalHeader = (await app.headerText())?.trim();

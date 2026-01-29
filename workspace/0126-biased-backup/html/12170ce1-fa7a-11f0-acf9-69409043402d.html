@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Static Typing Interactive Exploration</title>
+<style>
+  body {
+    background: white;
+    color: black;
+    font-family: monospace, monospace;
+    margin: 1em;
+  }
+  textarea, input[type=text], input[type=number], select {
+    font-family: monospace, monospace;
+    font-size: 1em;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  label {
+    display: block;
+    margin-top: 1em;
+  }
+  button {
+    margin-top: 0.5em;
+  }
+  #log {
+    white-space: pre-wrap;
+    font-family: monospace, monospace;
+    border: 1px solid black;
+    padding: 0.5em;
+    max-height: 300px;
+    overflow-y: scroll;
+    margin-top: 1em;
+  }
+  #stateView {
+    font-family: monospace, monospace;
+    white-space: pre-wrap;
+    border: 1px solid black;
+    padding: 0.5em;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+<h1>Static Typing Interactive Exploration</h1>
+
+<p>
+This interactive demonstration lets you experiment with a simplified static typing system. Define custom types, declare variables, assign values, and check whether assignments are valid according to static typing rules. Explore different type definitions, parametric generics, type compatibility, and complex user-driven workflows.
+</p>
+
+<hr />
+
+<label for="typeNameInput">1. Define a New Type</label>
+<input type="text" id="typeNameInput" placeholder="Type name, e.g. Number, String, Person, List" />
+<label for="typeDefSelect">Type kind:</label>
+<select id="typeDefSelect">
+  <option value="primitive">Primitive (int, string, boolean)</option>
+  <option value="alias">Alias to existing type</option>
+  <option value="object">Object type (properties)</option>
+  <option value="generic">Generic type (1 param)</option>
+  <option value="union">Union type</option>
+</select>
+
+<div id="typeDefDetails" style="margin-top:0.5em;">
+  <!-- Dynamic details area -->
+</div>
+
+<button id="addTypeBtn">Add / Update Type</button>
+
+<hr />
+
+<label for="varNameInput">2. Declare Variable</label>
+<input type="text" id="varNameInput" placeholder="Variable name" />
+<label for="varTypeSelect">Select variable type:</label>
+<select id="varTypeSelect" style="width: 100%;"></select>
+<button id="declareVarBtn">Declare Variable</button>
+
+<hr />
+
+<label for="assignmentVarSelect">3. Assign a Value</label>
+<select id="assignmentVarSelect" style="width: 100%;"></select>
+
+<div id="assignmentValueInputArea" style="margin-top:0.5em;">
+  <label>Input assignment value:</label>
+  <textarea id="assignmentValueInput" rows="4" placeholder="For primitive: just input value. For object: JSON object. For generic types: see docs below."></textarea>
+</div>
+
+<button id="assignValueBtn">Assign Value</button>
+
+<hr />
+
+<label>
+  <input type="checkbox" id="enableTypeChecking" checked />
+  Enable static type checking (enforce assignments must be type compatible)
+</label>
+
+<hr />
+
+<label>4. View Current Types</label>
+<pre id="typeView" style="border:1px solid black; padding:0.5em; max-height: 150px; overflow-y:auto;"></pre>
+
+<label>5. View Declared Variables and Values</label>
+<pre id="varView" style="border:1px solid black; padding:0.5em; max-height: 150px; overflow-y:auto;"></pre>
+
+<label>6. Activity Log</label>
+<div id="log"></div>
+
+<hr />
+
+<h2>Documentation & Usage Notes:</h2>
+<ul>
+  <li><b>Primitive:</b> define basic types (int, string, boolean). Assign primitive JS values.</li>
+  <li><b>Alias:</b> Define a type as an alias to an existing type name (e.g. "MyInt" alias of "int").</li>
+  <li><b>Object:</b> Define a type with property names and their types. E.g. {name: string, age: int}</li>
+  <li><b>Generic:</b> Define a generic base type with one type parameter T (e.g. List&lt;T&gt;). Use <code>T</code> as type variable inside properties. Instantiate concrete generics by aliasing with parameters (e.g. ListString is an alias of List&lt;string&gt;).</li>
+  <li><b>Union:</b> Define a type as a union of existing types (e.g. int | string).</li>
+  <li>You cannot redefine built-in primitives (int, string, boolean).</li>
+  <li>Assigning a value tries to parse the input: primitives parse automatically, objects expect JSON, generics expect JSON with correct inner types.</li>
+  <li>If static checking is enabled, assignment rejection will prevent data update.</li>
+</ul>
+
+<script>
+(() => {
+  // Static typing system simulation
+
+  // Primitive built-in types: int, string, boolean
+  // Let's represent types as:
+  // { kind: 'primitive', name: 'int' }
+  // { kind: 'alias', name: 'MyInt', target: Type }
+  // { kind: 'object', props: { propName: Type, ... } }
+  // { kind: 'generic', param: 'T', props: { propName: Type (may use param) } }
+  // { kind: 'union', types: [Type, ...] }
+
+  // Types cache by name
+  const types = {
+    int: { kind: 'primitive', name: 'int' },
+    string: { kind: 'primitive', name: 'string' },
+    boolean: { kind: 'primitive', name: 'boolean' },
+  };
+
+  // Variables are { name, type: Type, value: any }
+  const variables = {};
+
+  // Helper functions
+
+  function log(msg) {
+    const logEl = document.getElementById('log');
+    logEl.textContent += msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // Deep clone type structure (avoid mutation)
+  function cloneType(t) {
+    if (!t) return null;
+    if (t.kind === 'primitive') return {...t};
+    if (t.kind === 'alias') return {kind: 'alias', name: t.name, target: cloneType(t.target)};
+    if (t.kind === 'object') {
+      const props = {};
+      for (const k in t.props) {
+        props[k] = cloneType(t.props[k]);
+      }
+      return {kind:'object', props};
+    }
+    if (t.kind === 'generic') {
+      const props = {};
+      for (const k in t.props) {
+        props[k] = cloneType(t.props[k]);
+      }
+      return {kind:'generic', param: t.param, props};
+    }
+    if (t.kind === 'union') {
+      return {kind:'union', types: t.types.map(cloneType)};
+    }
+    return null;
+  }
+  
+  // Expand alias types recursively
+  function expandAliases(type) {
+    if (!type) return null;
+    if (type.kind === 'alias') return expandAliases(type.target);
+    if (type.kind === 'object') {
+      const newProps = {};
+      for (const p in type.props) newProps[p] = expandAliases(type.props[p]);
+      return {kind:'object', props:newProps};
+    }
+    if (type.kind === 'generic') {
+      const newProps = {};
+      for (const p in type.props) newProps[p] = expandAliases(type.props[p]);
+      return {kind:'generic', param:type.param, props:newProps};
+    }
+    if (type.kind === 'union') {
+      return {kind:'union', types: type.types.map(expandAliases)};
+    }
+    // primitive or unknown
+    return type;
+  }
+
+  // Helper: check if two types are equal (structural equality, aliases expanded)
+  function typesEqual(t1, t2) {
+    t1 = expandAliases(t1);
+    t2 = expandAliases(t2);
+    if (!t1 || !t2) return false;
+    if (t1.kind !== t2.kind) return false;
+    if (t1.kind === 'primitive') return t1.name === t2.name;
+    if (t1.kind === 'object') {
+      const keys1 = Object.keys(t1.props);
+      const keys2 = Object.keys(t2.props);
+      if (keys1.length !== keys2.length) return false;
+      keys1.sort();
+      keys2.sort();
+      for(let i=0; i<keys1.length; i++) {
+        if(keys1[i]!==keys2[i]) return false;
+        if(!typesEqual(t1.props[keys1[i]], t2.props[keys2[i]])) return false;
+      }
+      return true;
+    }
+    if (t1.kind === 'generic') {
+      if (t1.param !== t2.param) return false;
+      const keys1 = Object.keys(t1.props);
+      const keys2 = Object.keys(t2.props);
+      if (keys1.length !== keys2.length) return false;
+      keys1.sort();
+      keys2.sort();
+      for(let i=0; i<keys1.length; i++) {
+        if(keys1[i]!==keys2[i]) return false;
+        if(!typesEqual(t1.props[keys1[i]], t2.props[keys2[i]])) return false;
+      }
+      return true;
+    }
+    if (t1.kind === 'union') {
+      if (t1.types.length !== t2.types.length) return false;
+      // order-insensitive equal (set equality)
+      const sorted1 = t1.types.map(expandAliases).sort((a,b)=>typeToString(a).localeCompare(typeToString(b)));
+      const sorted2 = t2.types.map(expandAliases).sort((a,b)=>typeToString(a).localeCompare(typeToString(b)));
+      for(let i=0;i<sorted1.length;i++) {
+        if(!typesEqual(sorted1[i], sorted2[i])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Check if value matches the type (type checking)
+  // Value is JS value parsed from user input
+  // For generic types with param, param should be substituted with concrete types beforehand
+  function checkValueMatchesType(value, type) {
+    type = expandAliases(type);
+
+    if (!type) return false;
+
+    if (type.kind === 'primitive') {
+      switch(type.name) {
+        case 'int': return (typeof value === 'number') && Number.isInteger(value);
+        case 'string': return (typeof value === 'string');
+        case 'boolean': return (typeof value === 'boolean');
+        default: return false;
+      }
+    }
+    if (type.kind === 'object') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+      for (const prop in type.props) {
+        if (!(prop in value)) return false;
+        if(!checkValueMatchesType(value[prop], type.props[prop])) return false;
+      }
+      return true;
+    }
+    if (type.kind === 'union') {
+      return type.types.some(t => checkValueMatchesType(value, t));
+    }
+    // Generics in concrete form should never exist here ideally
+    return false;
+  }
+
+  // Parse user input string for value according to selected variable type
+  // Primitives: parse int, boolean or string (raw)
+  // object or generic: parse JSON
+  function parseValueFromInput(inputStr, type) {
+    const t = expandAliases(type);
+
+    try {
+      if (t.kind === 'primitive') {
+        if (t.name === 'int') {
+          const n = Number(inputStr.trim());
+          if (!Number.isInteger(n)) throw new Error('Invalid int');
+          return n;
+        }
+        if (t.name === 'boolean') {
+          const s = inputStr.trim().toLowerCase();
+          if (s === 'true') return true;
+          if (s === 'false') return false;
+          throw new Error('Invalid boolean');
+        }
+        if (t.name === 'string') {
+          return inputStr;
+        }
+        throw new Error('Unknown primitive');
+      }
+      // For objects, generics, unions parse JSON and check later
+      const parsed = JSON.parse(inputStr);
+      return parsed;
+    } catch(e) {
+      throw new Error('Failed to parse input as required type: ' + e.message);
+    }
+  }
+
+  // Validate type name string for allowed characters
+  function validTypeName(name) {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
+  }
+
+  // Validate property name string
+  function validPropName(name) {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
+  }
+
+  // Given string with generics placeholders, parse to type
+  // We do NOT support full generics parsing here - only used to parse alias generic instantiation "List<string>"
+  // Returns { success: true, type } or { success: false, error }
+
+  function parseGenericInstantiation(str) {
+    // Example: List<string>
+    // Parse name, then parse param inside <>
+
+    let typeName = str.trim();
+    let paramTypeName = null;
+    const leftAngle = str.indexOf('<');
+    const rightAngle = str.lastIndexOf('>');
+    if(leftAngle >= 0 && rightAngle > leftAngle) {
+      typeName = str.substring(0,leftAngle).trim();
+      paramTypeName = str.substring(leftAngle+1,rightAngle).trim();
+    }
+
+    if (!types[typeName]) return {success:false, error: 'Base generic type "'+typeName+'" not found.'};
+    const baseType = types[typeName];
+    if(baseType.kind !== 'generic') return { success:false, error: 'Type "'+typeName+'" is not a generic type.'};
+
+    if (!paramTypeName) return {success:false, error:'Generic type missing type parameter.'};
+    const paramType = types[paramTypeName];
+    if(!paramType) return {success:false, error:'Generic parameter type "'+paramTypeName+'" not found.'};
+
+    // Construct concrete type by substituting param T with paramType in props
+    function substituteParam(typeNode) {
+      if(typeNode.kind === 'primitive') return typeNode;
+      if(typeNode.kind === 'alias') {
+        return {...typeNode, target: substituteParam(typeNode.target)};
+      }
+      if(typeNode.kind === 'object') {
+        const newProps = {};
+        for(const k in typeNode.props) {
+          newProps[k] = substituteParam(typeNode.props[k]);
+        }
+        return {kind:'object', props:newProps};
+      }
+      if(typeNode.kind === 'generic') {
+        if(typeNode.param === baseType.param) {
+          // Substitute with paramType
+          return cloneType(paramType); // deep clone param
+        }
+        // Different param? Recursively substitute props
+        const newProps = {};
+        for(const k in typeNode.props) {
+          newProps[k] = substituteParam(typeNode.props[k]);
+        }
+        return {kind:'generic', param: typeNode.param, props: newProps};
+      }
+      if(typeNode.kind === 'union') {
+        return {kind:'union', types: typeNode.types.map(substituteParam)};
+      }
+      return typeNode;
+    }
+
+    const concreteProps = {};
+    for(const p in baseType.props) {
+      concreteProps[p] = substituteParam(baseType.props[p]);
+    }
+
+    // Return concrete object type as a new object-type clone
+    return {success:true, type:{kind:'object', props: concreteProps}};
+  }
+
+  // Update UI select elements for type and vars
+  function refreshVarTypeSelects() {
+    const varTypeSelect = document.getElementById('varTypeSelect');
+    const assignmentVarSelect = document.getElementById('assignmentVarSelect');
+    varTypeSelect.innerHTML = '';
+    assignmentVarSelect.innerHTML = '';
+
+    // Show all types, sort
+    const typeNames = Object.keys(types).sort();
+
+    for(const typeName of typeNames) {
+      const opt1 = document.createElement('option');
+      opt1.value = typeName;
+      opt1.textContent = typeName;
+      varTypeSelect.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = typeName;
+      opt2.textContent = typeName;
+      assignmentVarSelect.appendChild(opt2);
+    }
+  }
+  function refreshVarSelectForAssignment() {
+    const assignmentVarSelect = document.getElementById('assignmentVarSelect');
+    assignmentVarSelect.innerHTML = '';
+    const varNames = Object.keys(variables).sort();
+    for(const varName of varNames) {
+      const opt = document.createElement('option');
+      opt.value = varName;
+      opt.textContent = varName + ' : ' + typeToString(variables[varName].type);
+      assignmentVarSelect.appendChild(opt);
+    }
+  }
+
+  // Display current types in text
+  function refreshTypeView() {
+    const typeView = document.getElementById('typeView');
+    const lines = [];
+    const typeNames = Object.keys(types).sort();
+    for(const name of typeNames) {
+      lines.push(name+ ' = ' + typeToString(types[name]));
+    }
+    typeView.textContent = lines.join('\n');
+  }
+  // Display current vars with values
+  function refreshVarView() {
+    const varView = document.getElementById('varView');
+    const lines = [];
+    const varNames = Object.keys(variables).sort();
+    for(const name of varNames) {
+      const v = variables[name];
+      lines.push(name+ ' : '+ typeToString(v.type) + ' = ' + JSON.stringify(v.value,null,0));
+    }
+    varView.textContent = lines.join('\n');
+  }
+  // Type to string representation (human-readable)
+  function typeToString(t) {
+    if(!t) return 'unknown';
+    t = expandAliases(t);
+    if(t.kind === 'primitive') return t.name;
+    if(t.kind === 'alias') return t.name;
+    if(t.kind === 'object') {
+      const props = [];
+      for(const p in t.props) {
+        props.push(p+': '+typeToString(t.props[p]));
+      }
+      return '{'+ props.join(', ') +'}';
+    }
+    if(t.kind === 'generic') {
+      // Show generic param with props
+      const props = [];
+      for(const p in t.props) {
+        props.push(p+ ': '+typeToString(t.props[p]));
+      }
+      return 'Generic<' + t.param + '> {' + props.join(', ') + '}';
+    }
+    if(t.kind === 'union') {
+      return t.types.map(typeToString).join(' | ');
+    }
+    return 'unknown';
+  }
+
+  // UI: Dynamic details area for type definition kind
+  const typeDefSelect = document.getElementById('typeDefSelect');
+  const typeDefDetails = document.getElementById('typeDefDetails');
+
+  function createPrimitiveDetails() {
+    typeDefDetails.textContent = 'Select primitive type name: int, string, boolean (predefined; you cannot redefine or add others).';
+  }
+  function createAliasDetails() {
+    typeDefDetails.innerHTML = '';
+    const label = document.createElement('label');
+    label.textContent = 'Alias target type:';
+    const select = document.createElement('select');
+    select.id = 'aliasTargetTypeSelect';
+    typeDefDetails.appendChild(label);
+    typeDefDetails.appendChild(select);
+    refreshTypeOptionsForAlias(select);
+  }
+  function refreshTypeOptionsForAlias(select) {
+    select.innerHTML = '';
+    const typeNames = Object.keys(types).sort();
+    for(const name of typeNames) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+  }
+
+  function createObjectDetails() {
+    typeDefDetails.innerHTML = '';
+    const info = document.createElement('div');
+    info.textContent = 'Define properties as: name:type, one per line. Example:\nname:string\nage:int';
+    typeDefDetails.appendChild(info);
+    const textarea = document.createElement('textarea');
+    textarea.id = 'objectPropsInput';
+    textarea.rows = 6;
+    textarea.style.width = '100%';
+    typeDefDetails.appendChild(textarea);
+  }
+
+  function createGenericDetails() {
+    typeDefDetails.innerHTML = '';
+    const info = document.createElement('div');
+    info.textContent = 'Define properties using the generic param T as a type. One per line: prop:type\nExample:\nitems: T[] (for array) — but array not supported; only T\nTo define List<T> with one prop "item: T" write:\nitem: T';
+    typeDefDetails.appendChild(info);
+    const textarea = document.createElement('textarea');
+    textarea.id = 'genericPropsInput';
+    textarea.rows = 6;
+    textarea.style.width = '100%';
+    typeDefDetails.appendChild(textarea);
+    const paramLabel = document.createElement('label');
+    paramLabel.textContent = 'Generic type parameter name:';
+    const paramInput = document.createElement('input');
+    paramInput.id = 'genericParamInput';
+    paramInput.type = 'text';
+    paramInput.value = 'T';
+    typeDefDetails.appendChild(paramLabel);
+    typeDefDetails.appendChild(paramInput);
+  }
+
+  function createUnionDetails() {
+    typeDefDetails.innerHTML = '';
+    const info = document.createElement('div');
+    info.textContent = 'Define union of existing types, comma-separated. Example: int, string';
+    typeDefDetails.appendChild(info);
+    const input = document.createElement('input');
+    input.id = 'unionTypesInput';
+    input.type = 'text';
+    input.style.width = '100%';
+    typeDefDetails.appendChild(input);
+  }
+
+  function onTypeDefKindChange() {
+    const kind = typeDefSelect.value;
+    if(kind === 'primitive') createPrimitiveDetails();
+    else if(kind === 'alias') createAliasDetails();
+    else if(kind === 'object') createObjectDetails();
+    else if(kind === 'generic') createGenericDetails();
+    else if(kind === 'union') createUnionDetails();
+  }
+  typeDefSelect.addEventListener('change', onTypeDefKindChange);
+  onTypeDefKindChange();
+
+  const typeNameInput = document.getElementById('typeNameInput');
+  const addTypeBtn = document.getElementById('addTypeBtn');
+
+  addTypeBtn.addEventListener('click', () => {
+    const typeName = typeNameInput.value.trim();
+    if (!typeName) {
+      alert('Type name cannot be empty');
+      return;
+    }
+    if (!validTypeName(typeName)) {
+      alert('Invalid type name. Use letters, digits, underscore, not starting with digits.');
+      return;
+    }
+    if (typeName === 'int' || typeName === 'string' || typeName === 'boolean') {
+      alert('Cannot redefine built-in primitive types.');
+      return;
+    }
+    const kind = typeDefSelect.value;
+
+    if (kind === 'primitive') {
+      alert('Cannot add new primitive types. Built-in: int, string, boolean.');
+      return;
+    }
+    if (kind === 'alias') {
+      const aliasSelect = document.getElementById('aliasTargetTypeSelect');
+      const targetName = aliasSelect.value;
+      if (!types[targetName]) {
+        alert('Alias target type not found: ' + targetName);
+        return;
+      }
+      // Add or update alias type
+      types[typeName] = {
+        kind: 'alias',
+        name: typeName,
+        target: types[targetName]
+      };
+      log('Defined alias type ' + typeName + ' = ' + targetName);
+    }
+    else if (kind === 'object') {
+      const ta = document.getElementById('objectPropsInput');
+      const lines = ta.value.trim().split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length === 0) {
+        alert('Object type must have at least one property.');
+        return;
+      }
+      const props = {};
+      for(const line of lines) {
+        // parse: name:type
+        const parts = line.split(':');
+        if(parts.length !== 2) {
+          alert('Bad property definition: ' + line);
+          return;
+        }
+        const pn = parts[0].trim();
+        const pt = parts[1].trim();
+        if(!validPropName(pn)) {
+          alert('Invalid property name: ' + pn);
+          return;
+        }
+        if(!types[pt]) {
+          alert('Property type not found: ' + pt);
+          return;
+        }
+        props[pn] = types[pt];
+      }
+      types[typeName] = {kind:'object', props};
+      log('Defined object type ' + typeName + ' with props: ' + Object.keys(props).join(', '));
+    }
+    else if (kind === 'generic') {
+      const paramInput = document.getElementById('genericParamInput');
+      const paramName = paramInput.value.trim();
+      if(!validTypeName(paramName)) {
+        alert('Invalid generic param name.');
+        return;
+      }
+      const ta = document.getElementById('genericPropsInput');
+      const lines = ta.value.trim().split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length === 0) {
+        alert('Generic type must have at least one property.');
+        return;
+      }
+      const props = {};
+      for(const line of lines) {
+        const parts = line.split(':');
+        if(parts.length !== 2) {
+          alert('Bad property definition: ' + line);
+          return;
+        }
+        const pn = parts[0].trim();
+        let pt = parts[1].trim();
+        // pt must be either a known type name or the generic param name itself
+        if(pt === paramName){
+          // special marker for generic param usage
+          props[pn] = {kind:'generic', param:paramName, props:{}}; // mark as generic param placeholder
+        } else if(types[pt]){
+          props[pn] = types[pt];
+        } else {
+          alert('Property type not found or not generic param: ' + pt);
+          return;
+        }
+      }
+      types[typeName] = {kind:'generic', param:paramName, props};
+      log('Defined generic type ' + typeName + '<' + paramName + '> with props: ' + Object.keys(props).join(', '));
+    }
+    else if (kind === 'union') {
+      const input = document.getElementById('unionTypesInput');
+      const parts = input.value.split(',').map(p=>p.trim()).filter(p=>p);
+      if(parts.length < 2) {
+        alert('Union type must have at least two types.');
+        return;
+      }
+      const unionTypes = [];
+      for(const p of parts) {
+        if(!types[p]) {
+          alert('Union subtype not found: '+p);
+          return;
+        }
+        unionTypes.push(types[p]);
+      }
+      types[typeName] = {kind:'union', types: unionTypes};
+      log('Defined union type ' + typeName + ' = ' + parts.join(' | '));
+    }
+    else {
+      alert('Unknown type kind: ' + kind);
+      return;
+    }
+    refreshTypeView();
+    refreshVarTypeSelects();
+  });
+
+  // Variable declarations
+
+  const varNameInput = document.getElementById('varNameInput');
+  const varTypeSelect = document.getElementById('varTypeSelect');
+  const declareVarBtn = document.getElementById('declareVarBtn');
+
+  declareVarBtn.addEventListener('click', () => {
+    const varName = varNameInput.value.trim();
+    if (!varName) {
+      alert('Variable name cannot be empty');
+      return;
+    }
+    if(!validTypeName(varName)) {
+      alert('Invalid variable name.');
+      return;
+    }
+    if (variables[varName]) {
+      alert('Variable already declared.');
+      return;
+    }
+    const typeName = varTypeSelect.value;
+    if(!types[typeName]) {
+      alert('Selected type not found.');
+      return;
+    }
+    if(types[typeName].kind === 'generic') {
+      alert('Cannot declare variables of generic uninstantiated type. Instantiate with alias generic.');
+      return;
+    }
+    variables[varName] = {
+      name: varName,
+      type: types[typeName],
+      value: null,
+    };
+    log('Declared variable ' + varName + ' of type ' + typeName);
+    refreshVarView();
+    refreshVarSelectForAssignment();
+  });
+
+  // Assign values
+
+  const assignmentVarSelect = document.getElementById('assignmentVarSelect');
+  const assignmentValueInput = document.getElementById('assignmentValueInput');
+  const assignValueBtn = document.getElementById('assignValueBtn');
+  const enableTypeChecking = document.getElementById('enableTypeChecking');
+
+
+  assignValueBtn.addEventListener('click', () => {
+    const varName = assignmentVarSelect.value;
+    if (!varName || !variables[varName]) {
+      alert('No variable selected or variable not found.');
+      return;
+    }
+    const variable = variables[varName];
+    const rawInput = assignmentValueInput.value;
+
+    let parsedValue;
+    try {
+      parsedValue = parseValueFromInput(rawInput, variable.type);
+    } catch(e) {
+      alert('Input parsing error: ' + e.message);
+      return;
+    }
+
+    const check = enableTypeChecking.checked;
+
+    if(check) {
+      if(!checkValueMatchesType(parsedValue, variable.type)) {
+        alert('Type check failed: Value does not match variable type.');
+        return;
+      }
+    }
+    // Assign
+    variable.value = parsedValue;
+    log('Assigned value to variable '+varName);
+    refreshVarView();
+  });
+
+  // When user switches variable selection for assignment, prompt for input example accordingly
+  assignmentVarSelect.addEventListener('change', () => {
+    const varName = assignmentVarSelect.value;
+    const inputArea = assignmentValueInput;
+    if(!varName || !variables[varName]) {
+      inputArea.value = '';
+      inputArea.placeholder = 'Select a variable first.';
+      return;
+    }
+    const variable = variables[varName];
+    const t = expandAliases(variable.type);
+    if(t.kind === 'primitive') {
+      if(t.name==='int') inputArea.placeholder = 'Enter integer value (e.g. 42)';
+      else if(t.name==='string') inputArea.placeholder = 'Enter string value (raw text)';
+      else if(t.name==='boolean') inputArea.placeholder = 'Enter boolean value: true or false';
+      else inputArea.placeholder = 'Enter value for primitive type';
+    }
+    else if (t.kind === 'object') {
+      inputArea.placeholder = 'Enter JSON object with properties:\n' + Object.entries(t.props).map(([k,v])=>k + ': ' + typeToString(v)).join('\n');
+    }
+    else if (t.kind === 'union') {
+      inputArea.placeholder = 'Enter value matching one of: ' + t.types.map(typeToString).join(' | ');
+    }
+    else {
+      inputArea.placeholder = 'Enter JSON representation of value';
+    }
+    inputArea.value = '';
+  });
+
+  // Initialize selects
+  refreshTypeView();
+  refreshVarTypeSelects();
+  refreshVarSelectForAssignment();
+
+})();
+</script>
+
+</body>
+</html>

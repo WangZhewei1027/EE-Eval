@@ -79,9 +79,9 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
 
   test('Entering 16-char key transitions to S1_KeyEntered and enabling conditions', async ({ page }) => {
     // Validate that when a valid 16-char key is entered the internal UI state updates
-    const keyInput = page.locator('#keyInput');
-    const encryptBtn = page.locator('#encryptBtn');
-    const plaintextInput = page.locator('#plaintextInput');
+    const keyInput1 = page.locator('#keyInput1');
+    const encryptBtn1 = page.locator('#encryptBtn1');
+    const plaintextInput1 = page.locator('#plaintextInput1');
 
     // Enter only key (16 characters), plaintext empty => encrypt must remain disabled
     await keyInput.fill('1234567890ABCDEF'); // 16 chars
@@ -100,12 +100,12 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
 
   test('Encrypt cycle: S2_PlaintextEntered -> S3_Encrypted (ciphertext output updated)', async ({ page }) => {
     // This test validates encryption produces a non-empty base64 ciphertext and updates UI accordingly
-    const keyInput = page.locator('#keyInput');
-    const plaintextInput = page.locator('#plaintextInput');
-    const encryptBtn = page.locator('#encryptBtn');
-    const ciphertextOutput = page.locator('#ciphertextOutput');
-    const decryptBtn = page.locator('#decryptBtn');
-    const decryptedOutput = page.locator('#decryptedOutput');
+    const keyInput2 = page.locator('#keyInput2');
+    const plaintextInput2 = page.locator('#plaintextInput2');
+    const encryptBtn2 = page.locator('#encryptBtn2');
+    const ciphertextOutput1 = page.locator('#ciphertextOutput1');
+    const decryptBtn1 = page.locator('#decryptBtn1');
+    const decryptedOutput1 = page.locator('#decryptedOutput1');
 
     const plaintext = 'This is a secret message.';
 
@@ -131,14 +131,14 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
 
   test('Decrypt cycle: S3_Encrypted -> S4_Decrypted (decrypted output equals plaintext)', async ({ page }) => {
     // Full encrypt & decrypt flow with the same key should return the original plaintext
-    const keyInput = page.locator('#keyInput');
-    const plaintextInput = page.locator('#plaintextInput');
-    const encryptBtn = page.locator('#encryptBtn');
-    const ciphertextOutput = page.locator('#ciphertextOutput');
-    const decryptBtn = page.locator('#decryptBtn');
-    const decryptedOutput = page.locator('#decryptedOutput');
+    const keyInput3 = page.locator('#keyInput3');
+    const plaintextInput3 = page.locator('#plaintextInput3');
+    const encryptBtn3 = page.locator('#encryptBtn3');
+    const ciphertextOutput2 = page.locator('#ciphertextOutput2');
+    const decryptBtn2 = page.locator('#decryptBtn2');
+    const decryptedOutput2 = page.locator('#decryptedOutput2');
 
-    const plaintext = 'Restore this message after encryption.';
+    const plaintext1 = 'Restore this message after encryption.';
 
     // Enter key and plaintext
     await keyInput.fill('ABCDEFGHIJKLMNOP'); // 16 chars
@@ -164,12 +164,12 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
   test('Decryption with wrong key triggers error dialog (edge case)', async ({ page }) => {
     // This test verifies an error scenario: encrypt with one key, then change key before decrypting
     // Expect decryption to fail and an alert dialog to be shown with 'Decryption failed'
-    const keyInput = page.locator('#keyInput');
-    const plaintextInput = page.locator('#plaintextInput');
-    const encryptBtn = page.locator('#encryptBtn');
-    const decryptBtn = page.locator('#decryptBtn');
-    const ciphertextOutput = page.locator('#ciphertextOutput');
-    const decryptedOutput = page.locator('#decryptedOutput');
+    const keyInput4 = page.locator('#keyInput4');
+    const plaintextInput4 = page.locator('#plaintextInput4');
+    const encryptBtn4 = page.locator('#encryptBtn4');
+    const decryptBtn3 = page.locator('#decryptBtn3');
+    const ciphertextOutput3 = page.locator('#ciphertextOutput3');
+    const decryptedOutput3 = page.locator('#decryptedOutput3');
 
     // Use first key to encrypt
     await keyInput.fill('firstfirstfirstf'); // 16 chars
@@ -205,10 +205,10 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
   test('Invalid key / plaintext combinations keep buttons disabled and produce alerts when triggered incorrectly', async ({ page }) => {
     // This test checks edge cases: short key and trying to cause invalid states.
     // Note: Buttons are disabled in these states, so we verify they remain disabled.
-    const keyInput = page.locator('#keyInput');
-    const plaintextInput = page.locator('#plaintextInput');
-    const encryptBtn = page.locator('#encryptBtn');
-    const decryptBtn = page.locator('#decryptBtn');
+    const keyInput5 = page.locator('#keyInput5');
+    const plaintextInput5 = page.locator('#plaintextInput5');
+    const encryptBtn5 = page.locator('#encryptBtn5');
+    const decryptBtn4 = page.locator('#decryptBtn4');
 
     // Enter plaintext without valid key -> encrypt should remain disabled
     await plaintextInput.fill('Some plaintext with no valid key');
@@ -251,12 +251,12 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
     // This test provides an end-to-end logical validation of FSM transitions in a single scenario:
     // S0_Idle -> S1_KeyEntered -> S2_PlaintextEntered -> S3_Encrypted -> S4_Decrypted
 
-    const keyInput = page.locator('#keyInput');
-    const plaintextInput = page.locator('#plaintextInput');
-    const encryptBtn = page.locator('#encryptBtn');
-    const decryptBtn = page.locator('#decryptBtn');
-    const ciphertextOutput = page.locator('#ciphertextOutput');
-    const decryptedOutput = page.locator('#decryptedOutput');
+    const keyInput6 = page.locator('#keyInput6');
+    const plaintextInput6 = page.locator('#plaintextInput6');
+    const encryptBtn6 = page.locator('#encryptBtn6');
+    const decryptBtn5 = page.locator('#decryptBtn5');
+    const ciphertextOutput4 = page.locator('#ciphertextOutput4');
+    const decryptedOutput4 = page.locator('#decryptedOutput4');
 
     const key = 'ZYXWVUTSRQPONMLK'; // 16 chars
     const message = 'FSM end-to-end message';
@@ -275,7 +275,7 @@ test.describe('Symmetric Cryptography Demo - FSM validation (63b4a9a1-fa74-11f0-
     // S2 -> S3: encrypt
     await encryptBtn.click();
     await expect(ciphertextOutput).not.toHaveValue('');
-    const ciphertext = await ciphertextOutput.inputValue();
+    const ciphertext1 = await ciphertextOutput.inputValue();
     expect(ciphertext).toMatch(/^[A-Za-z0-9+/=]+$/);
 
     // Ensure decrypt button enabled

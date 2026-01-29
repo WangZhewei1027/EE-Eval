@@ -94,7 +94,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     // This test validates the Idle state (S0) per FSM:
     // - Entry rendering shows Run Simulation and Clear Output buttons
     // - Output div contains the placeholder text
-    const pageObj = new AmortizedPage(page);
+    const pageObj1 = new AmortizedPage(page);
 
     // Validate presence and labels of interactive controls
     await expect(pageObj.runButton).toBeVisible();
@@ -117,7 +117,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     // - Verify "Running dynamic array simulation..." text appears
     // - Verify resizing logs and simulation results table are appended
     // - Verify final amortized cost message is present
-    const pageObj = new AmortizedPage(page);
+    const pageObj2 = new AmortizedPage(page);
 
     // Click Run Simulation and wait for it to render core pieces
     await pageObj.runSimulation();
@@ -148,7 +148,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     // This test validates the ClearOutput event:
     // - Click Clear Output
     // - Verify output text is reset to "Results will appear here..."
-    const pageObj = new AmortizedPage(page);
+    const pageObj3 = new AmortizedPage(page);
 
     // Perform the clear action
     await pageObj.clearOutput();
@@ -165,7 +165,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     // This test checks robustness:
     // - Click Run Simulation twice in a row quickly
     // - Ensure the output updates and no exceptions are raised
-    const pageObj = new AmortizedPage(page);
+    const pageObj4 = new AmortizedPage(page);
 
     // First run
     await pageObj.runSimulation();
@@ -180,7 +180,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     expect(secondRunText).toContain('Simulation Results:');
 
     // The second run should produce a table as well
-    const rowCount = await pageObj.getTableRowCount();
+    const rowCount1 = await pageObj.getTableRowCount();
     expect(rowCount).toBeGreaterThanOrEqual(21);
 
     // Ensure there are still no console/page errors after repeated runs
@@ -193,7 +193,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     // - Run Simulation
     // - Then Clear Output
     // - Verify final state is S2 with placeholder text and no errors
-    const pageObj = new AmortizedPage(page);
+    const pageObj5 = new AmortizedPage(page);
 
     // Trigger simulation
     await pageObj.runSimulation();
@@ -213,7 +213,7 @@ test.describe('Amortized Analysis Demonstration - FSM and UI Tests', () => {
     // This test cross-validates the FSM-detected components with the actual DOM:
     // - Buttons exist with the expected onclick attributes
     // - Output element exists with the expected id and class
-    const pageObj = new AmortizedPage(page);
+    const pageObj6 = new AmortizedPage(page);
 
     // Verify run button has the onclick attribute exactly as in the FSM
     const runOnclick = await page.locator("button[onclick='runSimulation()']").evaluate(btn => btn.getAttribute('onclick'));

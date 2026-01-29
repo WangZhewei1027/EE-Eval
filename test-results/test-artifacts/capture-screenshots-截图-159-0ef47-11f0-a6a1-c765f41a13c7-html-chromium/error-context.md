@@ -1,0 +1,46 @@
+# Page snapshot
+
+```yaml
+- main "Topological Sort visualization" [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: TS
+        - generic [ref=e7]:
+          - heading "Topological Sort" [level=1] [ref=e8]
+          - paragraph [ref=e9]: Order the tasks of a directed acyclic graph so each edge u → v has u before v.
+      - generic [ref=e10]: DAG illustration • Smooth step-by-step reveal
+    - img "Graph visualization" [ref=e12]:
+      - generic [ref=e21]:
+        - img "Node A" [ref=e22]:
+          - generic: A
+        - img "Node B" [ref=e25]:
+          - generic: B
+        - img "Node C" [ref=e28]:
+          - generic: C
+        - img "Node D" [ref=e31]:
+          - generic: D
+        - img "Node E" [ref=e34]:
+          - generic: E
+        - img "Node F" [ref=e37]:
+          - generic: F
+        - img "Node G" [ref=e40]:
+          - generic: G
+        - img "Node H" [ref=e43]:
+          - generic: H
+  - complementary "Information panel" [ref=e46]:
+    - generic [ref=e47]:
+      - heading "How it works" [level=2] [ref=e48]
+      - generic [ref=e49]: Kahn's algorithm (step-by-step)
+      - generic [ref=e50]:
+        - button "▶ Animate" [ref=e51] [cursor=pointer]
+        - generic [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e57]: Zero indegree set
+      - generic [ref=e58]: Click "Animate" to watch Kahn's algorithm gradually reveal a valid topological order. Nodes with zero incoming edges are highlighted, then removed, and their outgoing edges are relaxed. The order appears on the strip below.
+    - generic [ref=e59]:
+      - generic [ref=e60]: Graph (example)
+      - generic [ref=e61]: A → C, A → D, B → D, C → E, D → F, E → F, E → G, F → H, G → H
+    - generic [ref=e63]: Order
+    - generic [ref=e64]: "This demonstration focuses on clarity and aesthetics. Interaction is intentionally minimal: press play to observe the algorithm."
+```

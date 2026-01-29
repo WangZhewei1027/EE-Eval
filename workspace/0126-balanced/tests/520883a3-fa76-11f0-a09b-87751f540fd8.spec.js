@@ -33,8 +33,8 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
     // Click Add and assert that the DOM reflects the addition
     await page.click('#add-queue');
 
-    // The implementation appends a <p> with "Alpha (Priority: 1)"
-    await expect(page.locator('#priority-queue')).toContainText('Alpha (Priority: 1)');
+    // The implementation appends a <p> with "Alpha (Priority)"
+    await expect(page.locator('#priority-queue')).toContainText('Alpha (Priority)');
   });
 
   // Edge case: Add element - user cancels prompt (should not change state or throw)
@@ -49,7 +49,7 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
     await page.click('#add-queue');
 
     // Ensure queue remains empty and no page errors are produced
-    const content = await page.locator('#priority-queue').textContent();
+    const content1 = await page.locator('#priority-queue').textContent();
     expect(content?.trim()).toBe('', 'Queue should remain empty after cancelling Add');
 
     // There should be no uncaught exceptions from this action
@@ -97,7 +97,7 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
     // Add an element first
     page.once('dialog', async dialog => await dialog.accept('Gamma'));
     await page.click('#add-queue');
-    await expect(page.locator('#priority-queue')).toContainText('Gamma (Priority: 1)');
+    await expect(page.locator('#priority-queue')).toContainText('Gamma (Priority)');
 
     // Now remove: provide same element in prompt so removed[0] === element branch will append "Removed: Gamma"
     page.once('dialog', async dialog => {
@@ -114,7 +114,7 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
   // PEEK when queue is empty should append "No elements in the queue" - no errors
   test('Peek Element (S3_Peeked) - peek on empty queue displays friendly message', async ({ page }) => {
     // Ensure empty
-    const initial = await page.locator('#priority-queue').textContent();
+    const initial1 = await page.locator('#priority-queue').textContent();
     expect(initial?.trim()).toBe('', 'Queue should be empty at test start');
 
     // Click peek - no dialog involved
@@ -131,7 +131,7 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
     // Add "Zeta"
     page.once('dialog', async dialog => await dialog.accept('Zeta'));
     await page.click('#add-queue');
-    await expect(page.locator('#priority-queue')).toContainText('Zeta (Priority: 1)');
+    await expect(page.locator('#priority-queue')).toContainText('Zeta (Priority)');
 
     // Click peek - will append something like "Zeta (undefined)" given the current implementation
     await page.click('#peek-queue');
@@ -150,8 +150,8 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
     await page.click('#add-queue');
 
     // Sanity: ensure both appear in appended form
-    await expect(page.locator('#priority-queue')).toContainText('One (Priority: 1)');
-    await expect(page.locator('#priority-queue')).toContainText('Two (Priority: 1)');
+    await expect(page.locator('#priority-queue')).toContainText('One (Priority)');
+    await expect(page.locator('#priority-queue')).toContainText('Two (Priority)');
 
     // Click display - this sets innerHTML to the string returned by display(), which uses array->string conversions
     await page.click('#display-queue');
@@ -186,14 +186,14 @@ test.describe('Priority Queue FSM - 520883a3-fa76-11f0-a09b-87751f540fd8', () =>
     // Add element "Delta"
     page.once('dialog', async d => d.accept('Delta'));
     await page.click('#add-queue');
-    await expect(page.locator('#priority-queue')).toContainText('Delta (Priority: 1)');
+    await expect(page.locator('#priority-queue')).toContainText('Delta (Priority)');
 
     // Now remove using a different prompt value
     page.once('dialog', async d => d.accept('Different'));
     await page.click('#remove-queue');
 
     // The "Removed: Delta" text should NOT be appended because removed[0] !== prompt value
-    const content = await page.locator('#priority-queue').textContent();
+    const content2 = await page.locator('#priority-queue').textContent();
     expect(content).not.toContain('Removed: Different');
   });
 });

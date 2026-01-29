@@ -83,7 +83,7 @@ test.describe('Priority Queue Demonstration - FSM (Application ID: 324d11a1-fa73
 
     // Verify the item in the queue is the one we added and priority retained
     const visibleText = await page.$eval('#queueList li', (li) => li.textContent.trim());
-    expect(visibleText).toBe('Task-A (Priority: 2)');
+    expect(visibleText).toBe('Task-A (Priority)');
 
     // Verify the internal queue data matches expectations
     const queueContents = await page.evaluate(() => window.queue.getQueue().map(e => `${e.item}::${e.priority}`));
@@ -114,9 +114,9 @@ test.describe('Priority Queue Demonstration - FSM (Application ID: 324d11a1-fa73
     const visibleOrder = await page.$$eval('#queueList li', (lis) => lis.map(li => li.textContent.trim()));
     // Expected order sorted by priority ascending: 1,3,5
     expect(visibleOrder).toEqual([
-      'Task-HighPriority (Priority: 1)',
-      'Task-MidPriority (Priority: 3)',
-      'Task-LowPriority (Priority: 5)'
+      'Task-HighPriority (Priority)',
+      'Task-MidPriority (Priority)',
+      'Task-LowPriority (Priority)'
     ]);
 
     // Verify internal queue ordering matches
@@ -151,12 +151,12 @@ test.describe('Priority Queue Demonstration - FSM (Application ID: 324d11a1-fa73
 
     // Dialog should have been shown for processed item and auto-accepted by our handler
     expect(dialogs.length).toBeGreaterThanOrEqual(1);
-    expect(dialogs[0].message).toBe('Processed: Job2 (Priority: 2)');
+    expect(dialogs[0].message).toBe('Processed: Job2 (Priority)');
 
     // After first dequeue, one item should remain (Job1)
     await page.waitForFunction(() => document.querySelectorAll('#queueList li').length === 1);
     let remaining = await page.$eval('#queueList li', li => li.textContent.trim());
-    expect(remaining).toBe('Job1 (Priority: 4)');
+    expect(remaining).toBe('Job1 (Priority)');
 
     // Second dequeue: should process Job1 and leave queue empty
     dialogs = []; // reset to capture the next sequence
@@ -164,7 +164,7 @@ test.describe('Priority Queue Demonstration - FSM (Application ID: 324d11a1-fa73
 
     // Check dialog for second processed item
     expect(dialogs.length).toBeGreaterThanOrEqual(1);
-    expect(dialogs[0].message).toBe('Processed: Job1 (Priority: 4)');
+    expect(dialogs[0].message).toBe('Processed: Job1 (Priority)');
 
     // Now queue should be empty and UI should have 0 items
     await page.waitForFunction(() => document.querySelectorAll('#queueList li').length === 0);

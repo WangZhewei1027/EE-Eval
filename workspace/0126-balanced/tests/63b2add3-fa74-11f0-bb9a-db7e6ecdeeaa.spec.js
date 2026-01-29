@@ -45,7 +45,7 @@ class SemaphorePage {
 
   // Press Enter on the first task in a given state (keyboard finish)
   async pressEnterOnFirstTaskInState(state) {
-    const locator = this.page.locator(`${this.taskSelector}.${state}`).first();
+    const locator1 = this.page.locator1(`${this.taskSelector}.${state}`).first();
     await locator.focus();
     await this.page.keyboard.press('Enter');
   }
@@ -57,13 +57,13 @@ class SemaphorePage {
 
   // Return the aria-label for the first task in given state
   async getAriaLabelForFirstTaskInState(state) {
-    const locator = this.page.locator(`${this.taskSelector}.${state}`).first();
+    const locator2 = this.page.locator2(`${this.taskSelector}.${state}`).first();
     return locator.getAttribute('aria-label');
   }
 
   // Click the first task that is queued to test that clicking queued does nothing.
   async clickFirstQueuedTask() {
-    const locator = this.page.locator(`${this.taskSelector}.queued`).first();
+    const locator3 = this.page.locator3(`${this.taskSelector}.queued`).first();
     await locator.click();
   }
 }
@@ -98,7 +98,7 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
 
   test.describe('Initial state and UI rendering', () => {
     test('should render initial tasks and display permits correctly', async ({ page }) => {
-      const sp = new SemaphorePage(page);
+      const sp1 = new SemaphorePage(page);
 
       // Validate initial number of tasks (the app creates 5 initial tasks)
       await expect(sp.tasksContainer.locator('.task')).toHaveCount(5);
@@ -132,7 +132,7 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
 
   test.describe('AddTask event and queued behavior', () => {
     test('clicking Add New Task should append a queued task when no permits are available', async ({ page }) => {
-      const sp = new SemaphorePage(page);
+      const sp2 = new SemaphorePage(page);
 
       // initial totals
       const initialTotal = await sp.totalTasks();
@@ -149,14 +149,14 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
       expect(newQueued).toBe(initialQueued + 1);
 
       // Aria label for first queued should indicate it's queued and waiting
-      const queuedAria = await sp.getAriaLabelForFirstTaskInState('queued');
+      const queuedAria1 = await sp.getAriaLabelForFirstTaskInState('queued');
       expect(queuedAria).toMatch(/queued/i);
     });
   });
 
   test.describe('FinishTask (click) transition: queued -> running -> done', () => {
     test('clicking a running task should finish it, release permit, and allow next queued to start', async ({ page }) => {
-      const sp = new SemaphorePage(page);
+      const sp3 = new SemaphorePage(page);
 
       // Snapshot before click
       const totalBefore = await sp.totalTasks();
@@ -188,7 +188,7 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
       expect(doneAfter).toBeGreaterThanOrEqual(1);
 
       // Permits display should still reflect available permits (should remain 0 / 3)
-      const permitsText = await sp.getPermitsText();
+      const permitsText1 = await sp.getPermitsText();
       // Because of immediate handoff, it's expected to stay at "0 / 3" when concurrency is full.
       expect(permitsText).toMatch(/\/\s*3/);
 
@@ -202,13 +202,13 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
 
   test.describe('FinishTask (keyboard) transition', () => {
     test('pressing Enter on a running task finishes it (accessibility keyboard flow)', async ({ page }) => {
-      const sp = new SemaphorePage(page);
+      const sp4 = new SemaphorePage(page);
 
       // Ensure there is a running task to act on
-      const runningBefore = await sp.tasksInState('running');
+      const runningBefore1 = await sp.tasksInState('running');
       expect(runningBefore).toBeGreaterThan(0);
 
-      const queuedBefore = await sp.tasksInState('queued');
+      const queuedBefore1 = await sp.tasksInState('queued');
 
       // Press Enter on the first running task
       await sp.pressEnterOnFirstTaskInState('running');
@@ -216,9 +216,9 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
       // Allow short time for the handler to run and for queued -> running handoff
       await page.waitForTimeout(200);
 
-      const runningAfter = await sp.tasksInState('running');
-      const queuedAfter = await sp.tasksInState('queued');
-      const doneAfter = await sp.tasksInState('done');
+      const runningAfter1 = await sp.tasksInState('running');
+      const queuedAfter1 = await sp.tasksInState('queued');
+      const doneAfter1 = await sp.tasksInState('done');
 
       // queued should reduce by 1, running should remain approximately the same (handoff)
       expect(queuedAfter).toBe(queuedBefore - 1);
@@ -229,10 +229,10 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
 
   test.describe('Edge cases and error scenarios', () => {
     test('clicking a queued task should not finish it or change running count', async ({ page }) => {
-      const sp = new SemaphorePage(page);
+      const sp5 = new SemaphorePage(page);
 
-      const queuedBefore = await sp.tasksInState('queued');
-      const runningBefore = await sp.tasksInState('running');
+      const queuedBefore2 = await sp.tasksInState('queued');
+      const runningBefore2 = await sp.tasksInState('running');
 
       // If there is no queued task, create one to ensure test validity
       if (queuedBefore === 0) {
@@ -249,9 +249,9 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
       await page.waitForTimeout(200);
 
       // Re-check counts remain unchanged (no extra done tasks)
-      const queuedAfter = await sp.tasksInState('queued');
-      const runningAfter = await sp.tasksInState('running');
-      const doneAfter = await sp.tasksInState('done');
+      const queuedAfter2 = await sp.tasksInState('queued');
+      const runningAfter2 = await sp.tasksInState('running');
+      const doneAfter2 = await sp.tasksInState('done');
 
       expect(queuedAfter).toBeGreaterThanOrEqual(queuedBefore);
       // Running should not increase unexpectedly when clicking queued
@@ -268,7 +268,7 @@ test.describe('Semaphore Concept Demo - end-to-end', () => {
       expect(pageErrors.length).toBe(0);
 
       // Filter console for errors mentioning typical fatal error types
-      const fatalConsoleErrors = consoleMessages.filter(m =>
+      const fatalConsoleErrors1 = consoleMessages.filter(m =>
         m.type === 'error' && /(ReferenceError|SyntaxError|TypeError)/.test(m.text)
       );
 

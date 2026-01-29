@@ -129,7 +129,7 @@ test.describe('Heap Sort Visualization - FSM validation and error observation', 
 
   // Test clicking the controls when the script failed - transitions should not occur.
   test('Transitions: Clicking Generate / Start / Step does not produce state transitions due to broken script', async ({ page }) => {
-    const heapPage = new HeapSortPage(page);
+    const heapPage1 = new HeapSortPage(page);
 
     await heapPage.goto();
 
@@ -174,12 +174,12 @@ test.describe('Heap Sort Visualization - FSM validation and error observation', 
 
   // Edge cases and error scenario assertions
   test('Edge cases: Confirm functions/handlers are absent and page reports errors as expected', async ({ page }) => {
-    const heapPage = new HeapSortPage(page);
+    const heapPage2 = new HeapSortPage(page);
 
     await heapPage.goto();
 
     // Confirm that calling heapSort is not possible from page context
-    const heapSortType = await heapPage.typeofGlobal('heapSort');
+    const heapSortType1 = await heapPage.typeofGlobal('heapSort');
     expect(heapSortType).toBe('undefined');
 
     // Attempt to invoke a clearly nonexistent function in page context and ensure it fails naturally.
@@ -210,7 +210,7 @@ test.describe('Heap Sort Visualization - FSM validation and error observation', 
 
   // Validate that the application did not reach any of the non-initial FSM states
   test('FSM states: Ensure S1..S4 transitions cannot be taken when inline script fails', async ({ page }) => {
-    const heapPage = new HeapSortPage(page);
+    const heapPage3 = new HeapSortPage(page);
 
     await heapPage.goto();
 
@@ -221,15 +221,15 @@ test.describe('Heap Sort Visualization - FSM validation and error observation', 
     expect(count).toBe(0);
 
     // S1_ArrayGenerated -> S2_Sorting requires heapSort - confirm not defined
-    const heapSortType = await heapPage.typeofGlobal('heapSort');
+    const heapSortType2 = await heapPage.typeofGlobal('heapSort');
     expect(heapSortType).toBe('undefined');
 
     // S2_Sorting -> S3_StepThrough requires executeStep - confirm not defined
-    const executeStepType = await heapPage.typeofGlobal('executeStep');
+    const executeStepType1 = await heapPage.typeofGlobal('executeStep');
     expect(executeStepType).toBe('undefined');
 
     // S4_Sorted would mark elements with 'sorted' class - none should be present
-    const sortedCount = await heapPage.sortedElementCount();
+    const sortedCount1 = await heapPage.sortedElementCount();
     expect(sortedCount).toBe(0);
   });
 });

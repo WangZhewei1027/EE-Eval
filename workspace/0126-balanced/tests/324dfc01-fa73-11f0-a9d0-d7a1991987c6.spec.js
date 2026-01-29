@@ -176,7 +176,7 @@ test.describe("Prim's Algorithm Visualization (FSM) - 324dfc01-fa73-11f0-a9d0-d7
     await page.click('#startBtn');
 
     // After two clicks, vertices length should be double numVertices (10 * 2 = 20)
-    const graphState = await page.evaluate(() => {
+    const graphState1 = await page.evaluate(() => {
       return {
         verticesLength: (typeof vertices !== 'undefined') ? vertices.length : 0,
         edgesLength: (typeof edges !== 'undefined') ? edges.length : 0,
@@ -190,7 +190,7 @@ test.describe("Prim's Algorithm Visualization (FSM) - 324dfc01-fa73-11f0-a9d0-d7
     expect(graphState.edgesLength).toBeGreaterThan(0);
 
     // Wait for at least one MST console log (algorithm(s) should complete)
-    const mstConsole = await page.waitForEvent('console', {
+    const mstConsole1 = await page.waitForEvent('console', {
       predicate: msg => msg.type() === 'log' && msg.text().startsWith('MST:'),
       timeout: 30000,
     });

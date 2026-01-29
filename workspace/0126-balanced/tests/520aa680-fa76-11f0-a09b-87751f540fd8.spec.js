@@ -122,7 +122,7 @@ test.describe('Application 520aa680-fa76-11f0-a09b-87751f540fd8 - Transaction Ex
     });
 
     // Verify the first .transaction still contains the expected details after re-run
-    const firstTransaction = page.locator('.transaction').first();
+    const firstTransaction1 = page.locator('.transaction').first();
     await expect(firstTransaction).toContainText('Transaction Details');
     await expect(firstTransaction).toContainText('Transaction ID: 12345');
     await expect(firstTransaction).toContainText('Transaction Amount: $100.00');
@@ -161,7 +161,7 @@ test.describe('Application 520aa680-fa76-11f0-a09b-87751f540fd8 - Transaction Ex
     // Wait briefly to ensure messages are captured
     await page.waitForTimeout(50);
 
-    const consoleTexts = consoleErrors.map(m => m.text()).join('\n');
+    const consoleTexts1 = consoleErrors.map(m => m.text()).join('\n');
     const pageErrTexts = pageErrors.map(e => e?.message || '').join('\n');
 
     // At least one of the aggregated logs should reference the failing function or method

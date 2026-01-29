@@ -54,7 +54,7 @@ class ProcessPage {
 
   // Get an array of texts of all processes
   async getAllProcessTexts() {
-    const count = await this.countProcesses();
+    const count1 = await this.countProcesses();
     const results = [];
     for (let i = 0; i < count; i++) {
       results.push(await this.getProcessText(i));
@@ -115,7 +115,7 @@ test.describe('Context Switching Demo - FSM Validation', () => {
     expect(await app.isSwitchEnabled()).toBeTruthy();
 
     // There should be exactly 4 process elements rendered
-    const count = await app.countProcesses();
+    const count2 = await app.countProcesses();
     expect(count).toBe(4);
 
     // Validate textual content of each process matches the HTML's initial data
@@ -137,14 +137,14 @@ test.describe('Context Switching Demo - FSM Validation', () => {
 
   test('Single SwitchContext click transitions from Process 1 to Process 2', async ({ page }) => {
     // Validate transition S0 -> S1: clicking the switch button should set Process 1 to Waiting and Process 2 to Running and highlight Process 2
-    const app = new ProcessPage(page);
+    const app1 = new ProcessPage(page);
     await app.goto();
 
     // Click once to switch context
     await app.clickSwitch();
 
     // After one click, Process 2 should be highlighted and show Running
-    const boldIndex = await app.getBoldProcessIndex();
+    const boldIndex1 = await app.getBoldProcessIndex();
     expect(boldIndex).toBe(1);
 
     // Check textual states for Process 1 and Process 2
@@ -160,12 +160,12 @@ test.describe('Context Switching Demo - FSM Validation', () => {
 
   test('Multiple sequential switches cycle through processes and wrap back to Process 1', async ({ page }) => {
     // Validate transitions S1 -> S2 -> S3 -> S0 via repeated clicks
-    const app = new ProcessPage(page);
+    const app2 = new ProcessPage(page);
     await app.goto();
 
     // Click sequence: 1 -> 2, 2 -> 3, 3 -> 4, 4 -> 1
     await app.clickSwitch(); // Now at Process 2
-    let boldIndex = await app.getBoldProcessIndex();
+    let boldIndex2 = await app.getBoldProcessIndex();
     expect(boldIndex).toBe(1);
 
     await app.clickSwitch(); // Now at Process 3
@@ -183,14 +183,14 @@ test.describe('Context Switching Demo - FSM Validation', () => {
     // Validate textual states that were directly involved in the last transition:
     // After wrapping, Process 4 should be Waiting and Process 1 Running
     const p4 = await app.getProcessText(3);
-    const p1 = await app.getProcessText(0);
+    const p11 = await app.getProcessText(0);
     expect(p4).toContain('Process 4 - State: Waiting');
     expect(p1).toContain('Process 1 - State: Running');
   });
 
   test('Rapid clicks cycle correctly modulo number of processes (edge case)', async ({ page }) => {
     // Edge case: many rapid clicks should still result in a valid cycle (index modulo process length)
-    const app = new ProcessPage(page);
+    const app3 = new ProcessPage(page);
     await app.goto();
 
     // Perform 10 rapid clicks. Starting index 0. 10 % 4 = 2 => should end at Process 3 (index 2)
@@ -200,7 +200,7 @@ test.describe('Context Switching Demo - FSM Validation', () => {
       await app.clickSwitch();
     }
 
-    const boldIndex = await app.getBoldProcessIndex();
+    const boldIndex3 = await app.getBoldProcessIndex();
     expect(boldIndex).toBe(2);
 
     // Assert the process text at that index shows Running
@@ -210,7 +210,7 @@ test.describe('Context Switching Demo - FSM Validation', () => {
 
   test('UI accessibility and stability checks: button label and no runtime errors', async ({ page }) => {
     // Validate the button's accessible name and that the page does not produce runtime errors during these interactions
-    const app = new ProcessPage(page);
+    const app4 = new ProcessPage(page);
     await app.goto();
 
     // Confirm the button's accessible name (inner text) is as expected
@@ -228,20 +228,20 @@ test.describe('Context Switching Demo - FSM Validation', () => {
 
   test('Behavioral invariants: only one element is highlighted at any time', async ({ page }) => {
     // Ensure exactly one process element is visually highlighted (font-weight bold) at any time
-    const app = new ProcessPage(page);
+    const app5 = new ProcessPage(page);
     await app.goto();
 
     // Check initially
-    let boldIndex = await app.getBoldProcessIndex();
+    let boldIndex4 = await app.getBoldProcessIndex();
     expect(boldIndex).toBe(0);
 
     // After each click, ensure one highlighted element
     for (let i = 0; i < 8; i++) {
       await app.clickSwitch();
-      const count = await app.countProcesses();
+      const count3 = await app.countProcesses();
       let highlightedCount = 0;
       for (let j = 0; j < count; j++) {
-        const handle = await app.processesLocator.nth(j).elementHandle();
+        const handle1 = await app.processesLocator.nth(j).elementHandle();
         const fw = await handle.evaluate((el) => window.getComputedStyle(el).fontWeight);
         if (fw === 'bold' || fw === '700' || parseInt(fw, 10) >= 600) highlightedCount++;
       }
@@ -252,7 +252,7 @@ test.describe('Context Switching Demo - FSM Validation', () => {
   test('Observability: validate expected observable strings after a transition (FSM evidence)', async ({ page }) => {
     // This test checks that the expected human-readable observables (strings) outlined by the FSM appear in the DOM after transitions.
     // Note: the implementation may allow multiple "Running" states initially; we assert the two observables that FSM expects for each transition.
-    const app = new ProcessPage(page);
+    const app6 = new ProcessPage(page);
     await app.goto();
 
     // Transition S0 -> S1 expected observables:
@@ -260,8 +260,8 @@ test.describe('Context Switching Demo - FSM Validation', () => {
     // "Process 2 - State: Running"
     await app.clickSwitch();
 
-    const p1 = await app.getProcessText(0);
-    const p2 = await app.getProcessText(1);
+    const p12 = await app.getProcessText(0);
+    const p21 = await app.getProcessText(1);
     expect(p1).toContain('Process 1 - State: Waiting');
     expect(p2).toContain('Process 2 - State: Running');
 
@@ -278,7 +278,7 @@ test.describe('Context Switching Demo - FSM Validation', () => {
   test('No unintended global modifications or leaked globals during page life cycle', async ({ page }) => {
     // Ensure we do not unintentionally find common globals that application shouldn't define.
     // We only read, do not modify the page environment.
-    const app = new ProcessPage(page);
+    const app7 = new ProcessPage(page);
     await app.goto();
 
     // Check for presence of expected global variables (should exist per implementation)

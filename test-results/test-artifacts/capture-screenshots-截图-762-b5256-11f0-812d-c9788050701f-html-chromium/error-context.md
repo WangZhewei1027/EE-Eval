@@ -1,0 +1,45 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: Cosmic Router
+    - navigation [ref=e5]:
+      - link "Home" [ref=e6] [cursor=pointer]:
+        - /url: "#"
+      - link "About" [ref=e7] [cursor=pointer]:
+        - /url: "#"
+      - link "Services" [ref=e8] [cursor=pointer]:
+        - /url: "#"
+      - link "Contact" [ref=e9] [cursor=pointer]:
+        - /url: "#"
+  - generic [ref=e10]:
+    - heading "Cosmic Routing" [level=1] [ref=e11]
+    - paragraph [ref=e12]: A visual exploration of elegant pathfinding through your digital universe. Watch as data traverses the celestial pathways.
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]: 🌌
+        - generic [ref=e16]: Central Hub
+        - generic [ref=e17]: All routes originate from this nexus point
+      - generic [ref=e18]:
+        - generic [ref=e19]: 🪐
+        - generic [ref=e20]: About
+        - generic [ref=e21]: Learn about our cosmic journey
+      - generic [ref=e22]:
+        - generic [ref=e23]: 🚀
+        - generic [ref=e24]: Services
+        - generic [ref=e25]: Explore our stellar offerings
+      - generic [ref=e26]:
+        - generic [ref=e27]: 📡
+        - generic [ref=e28]: Contact
+        - generic [ref=e29]: Transmit your message through the void
+      - generic [ref=e30]:
+        - generic [ref=e31]: 🛰️
+        - generic [ref=e32]: Dashboard
+        - generic [ref=e33]: Monitor the cosmic network
+    - generic [ref=e38]:
+      - button "Animate Routes" [ref=e39] [cursor=pointer]
+      - button "Reset" [ref=e40] [cursor=pointer]
+  - contentinfo [ref=e41]:
+    - paragraph [ref=e42]: Cosmic Routing Visualization | Journey through the digital cosmos
+```

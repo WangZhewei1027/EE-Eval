@@ -90,7 +90,7 @@ test.describe('Big-O Notation Demo - FSM validation (Application ID: 63b238a1-fa
   });
 
   test('Transition S0 -> S1: clicking Run Tests triggers testing state and starts running (shows "Running tests...")', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo1 = new DemoPage(page);
 
     // Click the Run Tests button to trigger the RunTests event
     await demo.clickRun();
@@ -112,7 +112,7 @@ test.describe('Big-O Notation Demo - FSM validation (Application ID: 63b238a1-fa
   });
 
   test('S1 -> S2: verify results table and plotting are NOT created due to runtime error (observing error prevents transition)', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo2 = new DemoPage(page);
 
     // Trigger the run; due to the ReferenceError inside runAll, the function should abort before createTable()/plotResults()
     await demo.clickRun();
@@ -125,7 +125,7 @@ test.describe('Big-O Notation Demo - FSM validation (Application ID: 63b238a1-fa
 
     // Because createTable() is invoked only after the loop completes successfully,
     // and that loop is interrupted by the ReferenceError, the results <table> should NOT be present.
-    const resultsHtml = await demo.getResultsInnerHTML();
+    const resultsHtml1 = await demo.getResultsInnerHTML();
     expect(resultsHtml).not.toContain('<table>');
     // Additionally, the canvas plotting function plotResults() should not have been executed,
     // so while we cannot directly inspect the drawing operations, lack of a table is strong evidence
@@ -136,7 +136,7 @@ test.describe('Big-O Notation Demo - FSM validation (Application ID: 63b238a1-fa
   });
 
   test('Error handling and repeated interactions: clicking Run Tests multiple times continues to surface the same runtime error', async ({ page }) => {
-    const demo = new DemoPage(page);
+    const demo3 = new DemoPage(page);
 
     // First click
     await demo.clickRun();

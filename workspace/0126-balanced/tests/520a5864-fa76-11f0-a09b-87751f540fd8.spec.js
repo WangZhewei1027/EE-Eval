@@ -44,11 +44,11 @@ class DatabasePage {
 
   // Fill the updating form (form 1) with provided values
   async fillUpdateForm({ studentId, name, age, grade }) {
-    const form = this.formAt(1);
-    const studentInput = form.locator("input[type='number']#studentId");
-    const nameInput = form.locator("input[type='text']#name");
-    const ageInput = form.locator("input[type='number']#age");
-    const gradeSelect = form.locator("select#grade");
+    const form1 = this.formAt(1);
+    const studentInput1 = form.locator("input[type='number']#studentId");
+    const nameInput1 = form.locator("input[type='text']#name");
+    const ageInput1 = form.locator("input[type='number']#age");
+    const gradeSelect1 = form.locator("select#grade");
 
     if (studentId !== undefined) await studentInput.fill(String(studentId));
     if (name !== undefined) await nameInput.fill(name);
@@ -58,14 +58,14 @@ class DatabasePage {
 
   // Fill the deleting form (form 2) with provided values
   async fillDeleteForm({ studentId }) {
-    const form = this.formAt(2);
-    const studentInput = form.locator("input[type='number']#studentId");
+    const form2 = this.formAt(2);
+    const studentInput2 = form.locator("input[type='number']#studentId");
     if (studentId !== undefined) await studentInput.fill(String(studentId));
   }
 
   // Submit a form and wait for navigation (the forms submit to same page, so navigation expected)
   async submitFormAndWaitForReload(formIndex) {
-    const form = this.formAt(formIndex);
+    const form3 = this.formAt(formIndex);
     const submit = form.locator("input[type='submit']");
     // Many forms in this page do not have JS handlers, so a submit triggers a navigation (reload).
     await Promise.all([
@@ -160,7 +160,7 @@ test.describe('Relational Database FSM - states and transitions', () => {
   });
 
   test('FSM Transition: InsertData (submit Insert form) reloads the page and preserves visible forms', async ({ page }) => {
-    const db = new DatabasePage(page);
+    const db1 = new DatabasePage(page);
 
     // Fill inserting form and submit. Because the app does not implement server-side DB changes
     // we only assert navigation (reload) happens and page still renders the forms afterward.
@@ -182,7 +182,7 @@ test.describe('Relational Database FSM - states and transitions', () => {
   });
 
   test('FSM Transition: UpdateData (submit Update form) reloads the page and keeps structure intact', async ({ page }) => {
-    const db = new DatabasePage(page);
+    const db2 = new DatabasePage(page);
 
     // Fill updating form (form 1) and submit
     await db.fillUpdateForm({ studentId: 1, name: 'John Updated', age: 22, grade: 'C' });
@@ -196,12 +196,12 @@ test.describe('Relational Database FSM - states and transitions', () => {
   });
 
   test('FSM Transition: DeleteData (submit Delete form) reloads the page; edge case: missing studentId', async ({ page }) => {
-    const db = new DatabasePage(page);
+    const db3 = new DatabasePage(page);
 
     // Edge case 1: submit delete form without providing studentId (empty)
     // Ensure the input is empty first (it may be empty by default)
-    const deleteForm = db.formAt(2);
-    const studentInput = deleteForm.locator("input[type='number']#studentId");
+    const deleteForm1 = db.formAt(2);
+    const studentInput3 = deleteForm.locator("input[type='number']#studentId");
     await expect(studentInput).toHaveValue('');
 
     // Submit and wait for navigation/reload
@@ -220,7 +220,7 @@ test.describe('Relational Database FSM - states and transitions', () => {
   });
 
   test('DOM Anomalies: duplicate IDs detected (edge-case the page contains duplicate id attributes)', async ({ page }) => {
-    const db = new DatabasePage(page);
+    const db4 = new DatabasePage(page);
 
     // The HTML intentionally duplicates ids across forms.
     // Verify the counts to surface this anomaly.
@@ -277,7 +277,7 @@ test.describe('Relational Database FSM - states and transitions', () => {
   });
 
   test('Robustness: sequentially exercise all transitions to ensure consistent behavior across reloads', async ({ page }) => {
-    const db = new DatabasePage(page);
+    const db5 = new DatabasePage(page);
 
     // 1) Insert, 2) Update, 3) Delete - sequentially submit each form and wait for reload each time
     await db.fillInsertForm({ studentId: 1234, name: 'Seq Test', age: 18, grade: 'A' });

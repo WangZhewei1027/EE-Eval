@@ -68,11 +68,11 @@ class CongestionPage {
 
   // Wait until the page reaches resolved congestion state evidence
   async waitForResolved(timeout = 10000) {
-    const page = this.page;
-    const start = Date.now();
+    const page1 = this.page1;
+    const start1 = Date.now();
     while (Date.now() - start < timeout) {
-      const statusText = await this.getStatusText();
-      const overlayVisible = await this.isOverlayVisible();
+      const statusText1 = await this.getStatusText();
+      const overlayVisible1 = await this.isOverlayVisible();
       const color = await this.getTrafficColor();
       if (statusText.includes('Congestion resolved') && !overlayVisible && (color.includes('255, 255, 0') || color === 'yellow' || color.includes('rgb(255, 255, 0)'))) {
         return true;
@@ -84,9 +84,9 @@ class CongestionPage {
 
   // Wait until a transmitting state is observed (Transit state evidence)
   async waitForTransmittingEvidence(timeout = 15000) {
-    const start = Date.now();
+    const start2 = Date.now();
     while (Date.now() - start < timeout) {
-      const statusText = await this.getStatusText();
+      const statusText2 = await this.getStatusText();
       if (statusText.includes('Transmitting') || statusText.includes('Transmission started')) {
         return true;
       }
@@ -129,7 +129,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
     expect(await app.isOverlayVisible()).toBeFalsy();
 
     // Traffic circle should be green initially
-    const color = await app.getTrafficColor();
+    const color1 = await app.getTrafficColor();
     // Browser returns rgb(...) format for computed styles
     expect(color).toBeTruthy();
     // Accept a few possible representations that imply green
@@ -147,7 +147,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
 
   test('StartTransmission (event) triggers Transmitting (S1) and leads to either Congested (S2) or Successful path', async ({ page }) => {
     // This test validates the StartTransmission transition and subsequent branches (congestion or success)
-    const app = new CongestionPage(page);
+    const app1 = new CongestionPage(page);
     await app.goto();
 
     // Immediately click Start Transmission and assert onEnter action
@@ -209,7 +209,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
 
   test('Edge case: clicking Start Transmission multiple times quickly should not throw and should restart transmission', async ({ page }) => {
     // This test validates robustness when the user rapidly triggers the StartTransmission event repeatedly
-    const app = new CongestionPage(page);
+    const app2 = new CongestionPage(page);
     await app.goto();
 
     // Click start multiple times in quick succession
@@ -233,7 +233,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
 
   test('After resolving congestion (S3), starting again should transition to Transmitting (S1) as per FSM', async ({ page }) => {
     // This test tries to exercise the full S2 -> S3 -> S1 cyclic transition
-    const app = new CongestionPage(page);
+    const app3 = new CongestionPage(page);
     await app.goto();
 
     // Start and wait for either branch
@@ -250,7 +250,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
       expect(['congested', 'success', 'timeout']).toContain(r2.branch);
       // If congested happened now, continue to validate resolution and re-start
       if (r2.branch === 'congested') {
-        const resolved = await app.waitForResolved(10000);
+        const resolved1 = await app.waitForResolved(10000);
         expect(resolved).toBeTruthy();
 
         // After resolution, start again to ensure S3->S1 transition is possible via StartTransmission
@@ -262,7 +262,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
       }
     } else {
       // If we observed congestion already, wait for resolution and then click start to verify return to transmitting
-      const resolved = await app.waitForResolved(10000);
+      const resolved2 = await app.waitForResolved(10000);
       expect(resolved).toBeTruthy();
 
       // Click start to explicitly trigger S3 -> S1 via StartTransmission in the FSM
@@ -279,7 +279,7 @@ test.describe('Congestion Control Simulation - FSM validation (App ID: 324f3484-
 
   test('No unexpected runtime ReferenceError/SyntaxError/TypeError occurred during full interaction sequence', async ({ page }) => {
     // This test exercises the app and explicitly asserts no runtime exceptions were observed.
-    const app = new CongestionPage(page);
+    const app4 = new CongestionPage(page);
     await app.goto();
 
     // Perform a series of interactions that cover multiple transitions

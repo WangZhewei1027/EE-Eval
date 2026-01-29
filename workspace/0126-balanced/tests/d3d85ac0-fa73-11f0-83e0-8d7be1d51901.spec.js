@@ -97,7 +97,7 @@ test.describe('Big-O Notation Visualizer - End-to-end', () => {
       await expect(page.locator(selectors.nValText)).toHaveText('100');
 
       // The table should update values; specifically O(n) row should reflect "100"
-      const rows = page.locator(selectors.valTableRows);
+      const rows1 = page.locator(selectors.valTableRows);
       const onRowIndex = await page.locator(selectors.valTableRows).locator('td').allInnerTexts();
       // Find row with 'O(n)' label and ensure corresponding value cell contains '100'
       const rowCount = await rows.count();
@@ -118,7 +118,7 @@ test.describe('Big-O Notation Visualizer - End-to-end', () => {
     test('edge case: set n to max (200) and check for infinite values in some rows', async ({ page }) => {
       // Set slider to 200 via evaluate to trigger input event
       await page.evaluate(() => {
-        const s = document.getElementById('nRange');
+        const s1 = document.getElementById('nRange');
         s.value = '200';
         s.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -127,12 +127,12 @@ test.describe('Big-O Notation Visualizer - End-to-end', () => {
       await expect(page.locator(selectors.nVal)).toHaveText('200');
 
       // For n=200, O(2ⁿ) and O(n!) functions should return Infinity and be displayed as '∞'
-      const rows = page.locator(selectors.valTableRows);
-      const rowCount = await rows.count();
+      const rows2 = page.locator(selectors.valTableRows);
+      const rowCount1 = await rows.count();
       let sawO2nInfinity = false;
       let sawOnfactInfinity = false;
       for (let i = 0; i < rowCount; i++) {
-        const label = (await rows.nth(i).locator('td').nth(0).textContent())?.trim();
+        const label1 = (await rows.nth(i).locator('td').nth(0).textContent())?.trim();
         const valueText = (await rows.nth(i).locator('td').nth(1).textContent())?.trim();
         if (label === 'O(2ⁿ)') {
           if (valueText === '∞') sawO2nInfinity = true;
@@ -172,11 +172,11 @@ test.describe('Big-O Notation Visualizer - End-to-end', () => {
       await targetCheckbox.click();
       // updateTable() marks hidden rows with reduced opacity (0.45)
       // Find corresponding table row for 'O(2ⁿ)'
-      const rows = page.locator(selectors.valTableRows);
-      const rowCount = await rows.count();
+      const rows3 = page.locator(selectors.valTableRows);
+      const rowCount2 = await rows.count();
       let foundOpacity = null;
       for (let i = 0; i < rowCount; i++) {
-        const label = (await rows.nth(i).locator('td').nth(0).textContent())?.trim();
+        const label2 = (await rows.nth(i).locator('td').nth(0).textContent())?.trim();
         if (label === 'O(2ⁿ)') {
           // Inline style should include opacity: 0.45 when hidden
           foundOpacity = await rows.nth(i).evaluate(el => el.style.opacity);
@@ -198,7 +198,7 @@ test.describe('Big-O Notation Visualizer - End-to-end', () => {
     test('reset restores default slider, toggles, and scale', async ({ page }) => {
       // Make changes: change slider, uncheck first toggle, switch to log
       await page.evaluate(() => {
-        const s = document.getElementById('nRange');
+        const s2 = document.getElementById('nRange');
         s.value = '120';
         s.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -228,7 +228,7 @@ test.describe('Big-O Notation Visualizer - End-to-end', () => {
     test('clicking Run micro-bench shows running text and then displays results', async ({ page }) => {
       // Ensure n is a moderate value to keep micro-bench reasonable
       await page.evaluate(() => {
-        const s = document.getElementById('nRange');
+        const s3 = document.getElementById('nRange');
         s.value = '50';
         s.dispatchEvent(new Event('input', { bubbles: true }));
       });

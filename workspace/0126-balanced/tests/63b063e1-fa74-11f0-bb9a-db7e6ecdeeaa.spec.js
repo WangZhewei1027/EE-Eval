@@ -130,9 +130,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
   test.describe('InsertNode interactions and S1_NodeInserted state', () => {
     // We'll reuse console/page/dialog collectors for each test to assert no unexpected errors
     test('Clicking Insert with empty input shows alert and keeps tree empty', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs1 = [];
+      const pageErrors1 = [];
+      const consoleErrors1 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -143,7 +143,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree1 = new TreePage(page);
       await tree.goto();
 
       // Ensure input is empty
@@ -163,9 +163,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
     });
 
     test('Inserting non-numeric value shows numeric alert and no nodes are created', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs2 = [];
+      const pageErrors2 = [];
+      const consoleErrors2 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -176,7 +176,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree2 = new TreePage(page);
       await tree.goto();
 
       await tree.fillInput('abc');
@@ -193,9 +193,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
     });
 
     test('Valid insertion via click creates a node and transitions to S1_NodeInserted', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs3 = [];
+      const pageErrors3 = [];
+      const consoleErrors3 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -206,7 +206,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree3 = new TreePage(page);
       await tree.goto();
 
       // Insert a numeric node (10)
@@ -229,8 +229,8 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
       expect(await tree.inputValue()).toBe('');
 
       // Width/height should now be adjusted (since drawTree sets width/height when nodes exist)
-      const w = await tree.svgWidth();
-      const h = await tree.svgHeight();
+      const w1 = await tree.svgWidth();
+      const h1 = await tree.svgHeight();
       // width should no longer be the literal "100%" because drawTree sets numeric width; check for not-100%
       expect(w).not.toBe('100%');
       expect(Number(h)).toBeGreaterThanOrEqual(0);
@@ -240,9 +240,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
     });
 
     test('Insertion via Enter key triggers same behavior as button click (adds node)', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs4 = [];
+      const pageErrors4 = [];
+      const consoleErrors4 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -253,7 +253,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree4 = new TreePage(page);
       await tree.goto();
 
       // Ensure we start fresh and insert first a base node for consistent count
@@ -268,7 +268,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
       // Two nodes should be present now
       await expect(page.locator(tree.nodeSelector)).toHaveCount(2);
 
-      const texts = (await tree.getAllNodeTexts()).map(t => t.trim());
+      const texts1 = (await tree.getAllNodeTexts()).map(t => t.trim());
       expect(texts).toEqual(expect.arrayContaining(['20', '10']));
 
       // There should be one edge connecting parent and child
@@ -280,9 +280,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
     });
 
     test('Duplicate insertion triggers alert and does not increase node count', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs5 = [];
+      const pageErrors5 = [];
+      const consoleErrors5 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -293,7 +293,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree5 = new TreePage(page);
       await tree.goto();
 
       // Insert a node
@@ -324,9 +324,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
    */
   test.describe('ClearTree interactions and S2_TreeCleared state', () => {
     test('Clicking Clear on a populated tree clears the SVG (transition to S2_TreeCleared)', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs6 = [];
+      const pageErrors6 = [];
+      const consoleErrors6 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -337,7 +337,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree6 = new TreePage(page);
       await tree.goto();
 
       // Populate the tree with a couple nodes
@@ -364,15 +364,15 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
     });
 
     test('Clicking Clear on an already cleared tree keeps it cleared (idempotent ClearTree)', async ({ page }) => {
-      const pageErrors = [];
-      const consoleErrors = [];
+      const pageErrors7 = [];
+      const consoleErrors7 = [];
 
       page.on('pageerror', e => pageErrors.push(String(e)));
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree7 = new TreePage(page);
       await tree.goto();
 
       // Ensure tree is empty first
@@ -390,9 +390,9 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
     });
 
     test('After clearing, inserting a node transitions back to S1_NodeInserted and draws node', async ({ page }) => {
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
+      const dialogs7 = [];
+      const pageErrors8 = [];
+      const consoleErrors8 = [];
 
       page.on('dialog', async dialog => {
         dialogs.push(dialog.message());
@@ -403,7 +403,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
 
-      const tree = new TreePage(page);
+      const tree8 = new TreePage(page);
       await tree.goto();
 
       // Insert a node, clear, then insert again to ensure transition S2 -> S0 -> S1
@@ -420,7 +420,7 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
 
       // Should render the new node
       await expect(page.locator(tree.nodeSelector)).toHaveCount(1);
-      const texts = await tree.getAllNodeTexts();
+      const texts2 = await tree.getAllNodeTexts();
       expect(texts.map(t => t.trim())).toContain('15');
 
       expect(dialogs).toEqual(expect.not.arrayContaining(['Please enter a value to insert.', 'Please enter a numeric value.']));
@@ -434,15 +434,15 @@ test.describe('Binary Tree Visualization - FSM tests', () => {
    * occurred during the interactions in this test file. This verifies that the page executed without uncaught exceptions.
    */
   test('No unexpected runtime errors occurred during interactions', async ({ page }) => {
-    const pageErrors = [];
-    const consoleErrors = [];
+    const pageErrors9 = [];
+    const consoleErrors9 = [];
 
     page.on('pageerror', e => pageErrors.push(String(e)));
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    const tree = new TreePage(page);
+    const tree9 = new TreePage(page);
     await tree.goto();
 
     // Perform a sequence of safe interactions: insert, clear, insert via Enter

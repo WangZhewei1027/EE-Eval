@@ -186,7 +186,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     expect(arrayText).toContain('TaskA');
 
     // Log should contain 'Inserted at index' or 'Settled at index'
-    const log = await heap.getLogText();
+    const log1 = await heap.getLogText();
     expect(log).toMatch(/Inserted at index|Settled at index/);
 
     // No runtime page errors produced by enqueue
@@ -210,7 +210,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     expect(await heap.getSize()).toBe(1);
 
     // Log should include 'Dequeued top:'
-    let log = await heap.getLogText();
+    let log2 = await heap.getLogText();
     expect(log).toMatch(/Dequeued top:/);
 
     // Now remove remaining and then call dequeue on empty to test edge-case
@@ -236,7 +236,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     await page.waitForFunction(() => document.getElementById('size').textContent.trim() === '0', null, { timeout: 3000 });
 
     await heap.peek();
-    let log = await heap.getLogText();
+    let log3 = await heap.getLogText();
     expect(log).toContain('Peek: heap empty');
 
     // Enqueue an item and peek should show it
@@ -261,7 +261,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     await heap.changePriorityOf('C1', 10);
 
     // Log should include changed priority message
-    let log = await heap.getLogText();
+    let log4 = await heap.getLogText();
     expect(log).toMatch(/Changed priority of "C1", new index \d+/);
 
     // Changing a non-existing value should log not found
@@ -292,7 +292,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     // Remove 'RemMe'
     await heap.removeValue('RemMe');
     // Log should include Removed ...
-    let log = await heap.getLogText();
+    let log5 = await heap.getLogText();
     expect(log).toMatch(/Removed RemMe \(prio 7\)/);
 
     // Attempt removing a non-existent value should log not found
@@ -305,7 +305,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     await heap.removeBtn.click();
     // dialog captured and accepted
     expect(dialogs.length).toBeGreaterThanOrEqual(1);
-    const lastDialog = dialogs[dialogs.length - 1];
+    const lastDialog1 = dialogs[dialogs.length - 1];
     expect(lastDialog.message).toContain('Enter value to remove (first match)');
 
     expect(pageErrors.length).toBe(0);
@@ -325,7 +325,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     expect(size).toBeGreaterThanOrEqual(6);
 
     // Log should include several 'Inserted at index' entries
-    const log = await heap.getLogText();
+    const log6 = await heap.getLogText();
     expect(/Inserted at index/.test(log)).toBeTruthy();
 
     expect(pageErrors.length).toBe(0);
@@ -346,7 +346,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     expect(await heap.getSize()).toBe(0);
     expect(await heap.getTopText()).toBe('—');
 
-    const log = await heap.getLogText();
+    const log7 = await heap.getLogText();
     expect(log).toContain('Cleared heap');
 
     expect(pageErrors.length).toBe(0);
@@ -364,13 +364,13 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     await heap.switchHeapType('max');
 
     // The log should include Switching and a rebuild log (rebuild message includes uppercased type)
-    const log = await heap.getLogText();
+    const log8 = await heap.getLogText();
     expect(log).toMatch(/Switching to MAX/);
     // Rebuild logs "Heap rebuilt with MAX"
     expect(log).toMatch(/Heap rebuilt with MAX/);
 
     // After rebuild, top should correspond to max priority among inserted items (Y priority 20)
-    const top = await heap.getTopText();
+    const top1 = await heap.getTopText();
     expect(top).toContain('Y');
     expect(top).toContain('prio 20');
 
@@ -402,7 +402,7 @@ test.describe('Priority Queue Interactive Demo (FSM states & transitions)', () =
     expect(consoleErrors.length).toBe(0);
 
     // Optionally assert that we observed the Ready message initially and other action logs
-    const log = await heap.getLogText();
+    const log9 = await heap.getLogText();
     expect(log).toContain('Ready — use the controls to interact with the priority queue.');
     expect(log).toMatch(/Inserted at index|Removed|Dequeued|Peek:|Cleared heap|Heap rebuilt/);
   });

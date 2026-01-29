@@ -43,7 +43,7 @@ class DecisionTreePage {
   }
 
   async clickStartOver() {
-    const btn = this.page.locator('#result button[onclick="resetDemo()"]');
+    const btn1 = this.page.locator('#result button[onclick="resetDemo()"]');
     if (await btn.count() > 0) {
       await btn.click();
     } else {
@@ -109,14 +109,14 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
   // Group: State transitions and decision flows
   test.describe('State transitions and decisions', () => {
     test('From S0_Initial -> S2_NextQuestion when answering Yes (root yes -> "Does it bark?")', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt1 = new DecisionTreePage(page);
       await dt.goto();
 
       // Click Yes on the initial question
       await dt.clickYes();
 
       // After answering, the question should update to next node's question
-      const question = await dt.getQuestionText();
+      const question1 = await dt.getQuestionText();
       // Implementation's root.yes.question is "Does it bark?"
       expect(question).toBe('Does it bark?');
 
@@ -125,21 +125,21 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
     });
 
     test('From S0_Initial -> S2_NextQuestion when answering No (root no -> "Does it have feathers?")', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt2 = new DecisionTreePage(page);
       await dt.goto();
 
       // Click No on the initial question
       await dt.clickNo();
 
       // Question should update to the 'no' branch question
-      const question = await dt.getQuestionText();
+      const question2 = await dt.getQuestionText();
       expect(question).toBe('Does it have feathers?');
 
       expect(await dt.getResultText()).toBe('');
     });
 
     test('Reach a decision (S1_Decision): root yes -> yes = "It\'s likely a dog"', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt3 = new DecisionTreePage(page);
       await dt.goto();
 
       // Navigate: root (Does the animal have fur?) -> Yes -> Does it bark? -> Yes -> decision
@@ -160,7 +160,7 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
     });
 
     test('Reach deeper decision (cat): root Yes -> No -> Yes -> "It\'s likely a cat"', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt4 = new DecisionTreePage(page);
       await dt.goto();
 
       // Traverse: root Yes -> Does it bark? -> No -> Does it purr? -> Yes -> cat
@@ -171,13 +171,13 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
 
       await dt.clickYes(); // decision "It's likely a cat"
 
-      const result = await dt.getResultText();
+      const result1 = await dt.getResultText();
       expect(result).toContain("It's likely a cat");
       expect(await dt.hasStartOverButton()).toBe(true);
     });
 
     test('Nonexistent branch leads to Unknown (S3_Unknown) after clicking on a leaf (edge case)', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt5 = new DecisionTreePage(page);
       await dt.goto();
 
       // Reach a decision first
@@ -188,11 +188,11 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
       await dt.clickYes();
 
       // The implementation sets resultDiv.textContent = "I'm not sure what animal that is!" when result is null
-      const result = await dt.getResultText();
+      const result2 = await dt.getResultText();
       expect(result).toContain("I'm not sure what animal that is!");
 
       // Background color for unknown path should be set to the error color
-      const bg = await page.$eval('#result', el => window.getComputedStyle(el).backgroundColor);
+      const bg1 = await page.$eval('#result', el => window.getComputedStyle(el).backgroundColor);
       expect(bg).not.toBe('');
       // Start Over button should also be present for unknown case
       expect(await dt.hasStartOverButton()).toBe(true);
@@ -202,7 +202,7 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
   // Group: Reset and robustness
   test.describe('Reset behavior and robustness', () => {
     test('ResetDemo resets tree to initial state and clears results', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt6 = new DecisionTreePage(page);
       await dt.goto();
 
       // Navigate to decision (dog)
@@ -222,7 +222,7 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
     });
 
     test('Edge case: multiple rapid clicks do not throw unhandled exceptions', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt7 = new DecisionTreePage(page);
       await dt.goto();
 
       // Rapid sequence of clicks across buttons to stress-test transitions
@@ -243,7 +243,7 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
   // Group: Console & runtime diagnostics
   test.describe('Console and runtime error observations', () => {
     test('No uncaught ReferenceError/SyntaxError/TypeError by default (observe runtime)', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt8 = new DecisionTreePage(page);
 
       await dt.goto();
 
@@ -269,7 +269,7 @@ test.describe('Decision Tree Demonstration - de3dfc82-fa74-11f0-a1b6-4b9b8151441
     });
 
     test('If runtime errors occur naturally they are captured and accessible via listeners', async ({ page }) => {
-      const dt = new DecisionTreePage(page);
+      const dt9 = new DecisionTreePage(page);
       await dt.goto();
 
       // This test demonstrates that any natural errors would be captured.

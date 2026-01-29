@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Process (OS) — Interactive Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1724; --panel:#0b1220; --accent:#2dd4bf; --muted:#94a3b8; --card:#0e1622;
+      --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; color-scheme: dark;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
+    body{background:linear-gradient(180deg,#061025 0%, #071029 40%, #051020 100%); color:#e6eef6; padding:18px;}
+    h1{margin:0 0 8px;font-size:20px;}
+    p.lead{margin:0 0 12px;color:var(--muted);font-size:13px;}
+    .wrap{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start;}
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); padding:12px; border-radius:8px;}
+    .controls{position:sticky;top:18px;}
+    label{display:block;font-size:12px;color:var(--muted);margin-top:8px;}
+    input[type="number"], select, input[type="text"]{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;font-size:13px;}
+    button{padding:8px 10px;margin-top:10px;border-radius:8px;border:0;background:linear-gradient(90deg,var(--accent),#60a5fa);color:#021226;font-weight:600;cursor:pointer;}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);font-weight:600;}
+    .small{font-size:12px;color:var(--muted);}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .status-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+    .pill{padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);font-size:13px}
+    .pill .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+    .dot.ready{background:#60a5fa}
+    .dot.running{background:var(--accent)}
+    .dot.blocked{background:var(--warn)}
+    .dot.terminated{background:#94a3b8}
+    .main-panel{display:flex;flex-direction:column;gap:12px;}
+    .row{display:flex;gap:12px;align-items:center;}
+    .display-area{display:grid;grid-template-columns:1fr 360px;gap:12px;}
+    .canvas{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border-radius:8px;padding:12px;min-height:260px;border:1px solid rgba(255,255,255,0.03);}
+    .list{max-height:240px;overflow:auto;}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:8px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.02);color:#e6eef6}
+    th{font-size:12px;color:var(--muted)}
+    .gantt{height:120px;overflow:auto;padding:8px;border-radius:6px;background:transparent;border:1px dashed rgba(255,255,255,0.02)}
+    .proc-bar{height:18px;border-radius:6px;margin-bottom:6px;display:flex;align-items:center;gap:8px;padding:0 6px;color:#021226;font-weight:700}
+    .log{max-height:180px;overflow:auto;background:rgba(0,0,0,0.12);padding:8px;border-radius:6px;font-family:monospace;font-size:12px;color:#dbeafe}
+    .footer{font-size:12px;color:var(--muted);margin-top:6px}
+    .diagram{width:100%;height:140px}
+    .muted{color:var(--muted)}
+    .kbd{background:rgba(255,255,255,0.02);padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);font-weight:600}
+    .mini{font-size:12px}
+    .legend{display:flex;gap:8px;flex-wrap:wrap}
+    .legend span{display:flex;gap:6px;align-items:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.015);font-size:12px}
+    .legend .s{width:12px;height:12px;border-radius:3px}
+    .s-ready{background:#60a5fa} .s-running{background:var(--accent)} .s-blocked{background:var(--warn)} .s-term{background:#94a3b8}
+    /* small screen */
+    @media (max-width:920px){
+      .wrap{grid-template-columns:1fr; }
+      .display-area{grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel controls">
+      <h1>Process — interactive concept demo</h1>
+      <p class="lead">Visualize an operating system process: its lifecycle, scheduling, blocking (I/O), and termination. Create processes, run a scheduler, and watch state transitions.</p>
+
+      <div class="grid-2">
+        <div>
+          <label>Scheduler</label>
+          <select id="scheduler">
+            <option value="rr">Round Robin (time quantum)</option>
+            <option value="priority">Preemptive Priority</option>
+            <option value="fcfs">First-Come First-Served</option>
+          </select>
+        </div>
+        <div>
+          <label>Time quantum (ticks)</label>
+          <input type="number" id="quantum" value="4" min="1" />
+        </div>
+      </div>
+
+      <label>New process name</label>
+      <input id="pname" type="text" placeholder="ProcessA" />
+
+      <div class="grid-2">
+        <div>
+          <label>CPU bursts total (1–5)</label>
+          <input id="bursts" type="number" min="1" max="10" value="2" />
+        </div>
+        <div>
+          <label>Avg CPU time per burst (ticks)</label>
+          <input id="burstlen" type="number" min="1" value="6" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label>IO chance after CPU (%)</label>
+          <input id="iochance" type="number" min="0" max="100" value="60" />
+        </div>
+        <div>
+          <label>Avg IO time (ticks)</label>
+          <input id="iolength" type="number" min="1" value="4" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label>Priority (0 high → 10 low)</label>
+          <input id="priority" type="number" min="0" max="10" value="5" />
+        </div>
+        <div>
+          <label>Color (visual)</label>
+          <input id="color" type="text" value="#60a5fa" />
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button id="createBtn">Create process</button>
+        <button id="forkBtn" class="secondary">Fork selected</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn" class="secondary">Pause</button>
+        <button id="stepBtn" class="secondary">Step</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+      </div>
+
+      <div class="status-row">
+        <div class="pill"><span class="dot running"></span> Running</div>
+        <div class="pill"><span class="dot ready"></span> Ready</div>
+        <div class="pill"><span class="dot blocked"></span> Blocked (I/O)</div>
+        <div class="pill"><span class="dot terminated"></span> Terminated</div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="mini muted">Legend</div>
+        <div class="legend" style="margin-top:6px">
+          <span><i class="s s-ready"></i> Ready</span>
+          <span><i class="s s-running"></i> Running</span>
+          <span><i class="s s-blocked"></i> Blocked</span>
+          <span><i class="s s-term"></i> Terminated</span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div style="margin-top:10px"><strong>Process definition (short):</strong></div>
+        <div class="muted" style="margin-top:6px">A process is an instance of a running program with its own memory space, registers, and OS bookkeeping. Processes go through states (new → ready → running → waiting/blocked → terminated). This demo simulates scheduling, blocking for I/O, and context switching at tick granularity.</div>
+      </div>
+    </div>
+
+    <div class="main-panel">
+      <div class="display-area">
+        <div class="canvas panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div class="small">Simulation tick: <span id="tick">0</span></div>
+              <div class="small">CPU: <span id="cpuDisplay">idle</span></div>
+            </div>
+            <div>
+              <div class="small">Scheduler mode: <span id="modeDisplay">RR</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <div style="flex:1">
+              <div style="display:flex;gap:6px;align-items:center">
+                <div class="small">Ready queue</div>
+                <div id="readyCount" class="pill" style="padding:4px 8px"></div>
+              </div>
+              <div id="readyList" class="list" style="margin-top:8px"></div>
+            </div>
+            <div style="width:200px">
+              <div class="small">Blocked (I/O)</div>
+              <div id="blockedList" class="list" style="margin-top:8px"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="small">Process table</div>
+            <div style="margin-top:8px;max-height:180px;overflow:auto">
+              <table id="ptable">
+                <thead><tr><th>PID</th><th>Name</th><th>State</th><th>Prio</th><th>Rem CPU</th><th>Bursts</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>Gantt / History</strong></div>
+            <div class="small muted">Bars show CPU bursts executed over time</div>
+          </div>
+
+          <div class="gantt" id="gantt"></div>
+
+          <div style="margin-top:10px" class="small muted">Event log</div>
+          <div id="log" class="log" style="margin-top:6px"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="flex:1">
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+            <div><strong>Process lifecycle diagram</strong></div>
+            <div class="small muted">Animated token shows state transitions</div>
+          </div>
+          <svg id="diagram" class="diagram" viewBox="0 0 800 180" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+
+        <div style="width:360px">
+          <div><strong>Selected process controls</strong></div>
+          <div class="small muted" style="margin-top:6px">Click a process in the table to select it. You can send it to I/O, kill it, or change priority.</div>
+
+          <div style="margin-top:8px">
+            <label>Selected PID</label>
+            <input id="selPid" type="text" disabled />
+            <label>Set priority</label>
+            <input id="setPrio" type="number" min="0" max="10" />
+            <div style="display:flex;gap:8px;">
+              <button id="prioBtn" class="secondary">Set</button>
+              <button id="ioBtn" class="secondary">Send to I/O</button>
+              <button id="killBtn" class="secondary">Kill</button>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <strong>Concept notes</strong>
+            <div class="muted mini" style="margin-top:6px">
+              - Processes have private memory and kernel bookkeeping. Threads share memory within a process.<br/>
+              - Scheduling decides which process runs next; preemption may interrupt running process.<br/>
+              - Blocking occurs when process performs I/O and waits — it cannot run until I/O completes.<br/>
+              - Fork creates a child process with (simulated) copied state.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+/*
+  Interactive Process Simulator
+  - Single-file demo that simulates OS process lifecycle, scheduler (RR, Priority, FCFS),
+    blocking for I/O, forking, and termination.
+  - Ticks advance in discrete steps; each tick the running process consumes CPU time.
+*/
+
+const state = {
+  tick: 0,
+  nextPid: 1,
+  ready: [],      // queue of PIDs (for RR/FCFS). For priority, it's sorted.
+  blocked: [],    // { pid, remainingIO }
+  running: null,  // pid
+  processes: {},  // pid -> process object
+  terminated: [],
+  history: [],    // {tick, pid}
+  runningSlice: 0,
+  runningUsedQuantum: 0,
+  runningQuantum: 4,
+  scheduler: 'rr',
+  runningInterval: null,
+  runningSpeedMs: 700
+};
+
+const elements = {
+  pname: document.getElementById('pname'),
+  bursts: document.getElementById('bursts'),
+  burstlen: document.getElementById('burstlen'),
+  iochance: document.getElementById('iochance'),
+  iolength: document.getElementById('iolength'),
+  priority: document.getElementById('priority'),
+  color: document.getElementById('color'),
+  createBtn: document.getElementById('createBtn'),
+  forkBtn: document.getElementById('forkBtn'),
+  startBtn: document.getElementById('startBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  stepBtn: document.getElementById('stepBtn'),
+  resetBtn: document.getElementById('resetBtn'),
+  scheduler: document.getElementById('scheduler'),
+  quantum: document.getElementById('quantum'),
+
+  tick: document.getElementById('tick'),
+  cpuDisplay: document.getElementById('cpuDisplay'),
+  modeDisplay: document.getElementById('modeDisplay'),
+  readyList: document.getElementById('readyList'),
+  blockedList: document.getElementById('blockedList'),
+  readyCount: document.getElementById('readyCount'),
+  ptable: document.getElementById('ptable').querySelector('tbody'),
+  gantt: document.getElementById('gantt'),
+  log: document.getElementById('log'),
+  diagram: document.getElementById('diagram'),
+
+  selPid: document.getElementById('selPid'),
+  setPrio: document.getElementById('setPrio'),
+  prioBtn: document.getElementById('prioBtn'),
+  ioBtn: document.getElementById('ioBtn'),
+  killBtn: document.getElementById('killBtn'),
+  forkBtnEl: document.getElementById('forkBtn')
+};
+
+function randInt(mean){
+  // small random around mean
+  const v = Math.max(1, Math.round(Math.max(1, mean) * (0.6 + Math.random()*0.8)));
+  return v;
+}
+
+function logEvent(msg){
+  const s = `[t=${state.tick}] ${msg}`;
+  const el = document.createElement('div');
+  el.textContent = s;
+  elements.log.prepend(el);
+}
+
+function createProcess(opts = {}) {
+  const pid = state.nextPid++;
+  const name = opts.name || `P${pid}`;
+  const bursts = Math.max(1, parseInt(opts.bursts || 1));
+  const avgBurst = Math.max(1, parseInt(opts.burstlen || 4));
+  const ioChance = Math.min(100, Math.max(0, parseInt(opts.iochance || 50)));
+  const avgIO = Math.max(1, parseInt(opts.iolength || 3));
+  const prio = Math.max(0, Math.min(10, parseInt(opts.priority || 5)));
+  const color = opts.color || '#60a5fa';
+
+  // generate CPU bursts as array of lengths. After each CPU burst (except last) there may be IO.
+  const cpuBursts = [];
+  for(let i=0;i<bursts;i++){
+    cpuBursts.push(randInt(avgBurst));
+  }
+
+  const p = {
+    pid, name, color, priority: prio,
+    state: 'new',              // new, ready, running, blocked, terminated
+    cpuBursts,                // array of remaining cpu burst lengths
+    burstIndex: 0,
+    remainingInBurst: cpuBursts[0],
+    ioChance, avgIO,
+    arrivalTick: state.tick,
+    createdAt: Date.now()
+  };
+
+  state.processes[pid] = p;
+  // New processes immediately go to ready (simulating admission)
+  p.state = 'ready';
+  enqueueReady(pid);
+  logEvent(`Created ${name}(pid=${pid}) bursts=${cpuBursts.join(',')}`);
+
+  renderAll();
+  return pid;
+}
+
+function enqueueReady(pid){
+  const p = state.processes[pid];
+  if(!p) return;
+  p.state = 'ready';
+  if(state.scheduler === 'priority'){
+    // insert by priority (lower value = higher priority)
+    state.ready.push(pid);
+    state.ready.sort((a,b) => {
+      const pa = state.processes[a], pb = state.processes[b];
+      if(pa.priority !== pb.priority) return pa.priority - pb.priority;
+      return pa.arrivalTick - pb.arrivalTick;
+    });
+  } else {
+    state.ready.push(pid);
+  }
+}
+
+function pickNext(){
+  if(state.ready.length === 0) return null;
+  if(state.scheduler === 'rr' || state.scheduler === 'fcfs'){
+    // FCFS same as FIFO for our purposes (no preemption unless RR)
+    return state.ready.shift();
+  } else if(state.scheduler === 'priority'){
+    // already sorted
+    return state.ready.shift();
+  }
+  return state.ready.shift();
+}
+
+function startRunningLoop(){
+  if(state.runningInterval) return;
+  state.runningInterval = setInterval(()=> tick(), state.runningSpeedMs);
+}
+
+function pauseRunningLoop(){
+  if(state.runningInterval){
+    clearInterval(state.runningInterval);
+    state.runningInterval = null;
+  }
+}
+
+function stepOnce(){
+  tick();
+}
+
+function resetSim(){
+  pauseRunningLoop();
+  state.tick = 0;
+  state.nextPid = 1;
+  state.ready = [];
+  state.blocked = [];
+  state.running = null;
+  state.processes = {};
+  state.terminated = [];
+  state.history = [];
+  state.runningSlice = 0;
+  state.runningUsedQuantum = 0;
+  elements.log.innerHTML = '';
+  elements.gantt.innerHTML = '';
+  renderAll();
+}
+
+function tick(){
+  // Advance time by one tick
+  state.tick += 1;
+  elements.tick.textContent = state.tick;
+  // Update blocked processes
+  for(let i=state.blocked.length-1;i>=0;i--){
+    const b = state.blocked[i];
+    b.remainingIO -= 1;
+    if(b.remainingIO <= 0){
+      // IO complete — enqueue ready
+      const pid = b.pid;
+      state.blocked.splice(i,1);
+      enqueueReady(pid);
+      logEvent(`I/O complete for pid=${pid} — moved to READY`);
+    }
+  }
+
+  // If nothing is running, pick next
+  if(state.running == null){
+    const next = pickNext();
+    if(next != null){
+      state.running = next;
+      const p = state.processes[next];
+      p.state = 'running';
+      state.runningUsedQuantum = 0;
+      logEvent(`Context switch — pid=${next} starts running`);
+    }
+  }
+
+  // If a running process exists, run one tick of CPU
+  if(state.running != null){
+    const pid = state.running;
+    const p = state.processes[pid];
+    if(!p){
+      state.running = null;
+    } else {
+      p.remainingInBurst -= 1;
+      state.runningUsedQuantum += 1;
+      state.history.push({tick: state.tick, pid});
+      // record in gantt: extend or create bar
+      addGantt(pid, p.color);
+
+      // Check if CPU burst finished
+      if(p.remainingInBurst <= 0){
+        p.burstIndex += 1;
+        if(p.burstIndex >= p.cpuBursts.length){
+          // process terminates
+          p.state = 'terminated';
+          state.terminated.push(pid);
+          logEvent(`pid=${pid} terminated`);
+          state.running = null;
+        } else {
+          // Decide if I/O occurs (probabilistic)
+          const doIO = Math.random()*100 < p.ioChance;
+          if(doIO){
+            const iolen = randInt(p.avgIO);
+            p.state = 'blocked';
+            state.blocked.push({pid, remainingIO: iolen});
+            // prepare next CPU burst
+            p.remainingInBurst = p.cpuBursts[p.burstIndex];
+            logEvent(`pid=${pid} finished CPU burst → BLOCKED for IO (${iolen} ticks)`);
+            state.running = null;
+          } else {
+            // immediate ready (no IO)
+            p.remainingInBurst = p.cpuBursts[p.burstIndex];
+            p.state = 'ready';
+            enqueueReady(pid);
+            logEvent(`pid=${pid} finished CPU burst → READY (no I/O)`);
+            state.running = null;
+          }
+        }
+      } else {
+        // If scheduler is preemptive (RR or priority with tie), handle quantum or preemption
+        if(state.scheduler === 'rr'){
+          const q = parseInt(elements.quantum.value) || 4;
+          if(state.runningUsedQuantum >= q){
+            // preempt
+            p.state = 'ready';
+            enqueueReady(pid);
+            state.running = null;
+            logEvent(`Time quantum expired — preempt pid=${pid}`);
+          }
+        } else if(state.scheduler === 'priority'){
+          // preempt if a higher priority process is in ready queue
+          if(state.ready.length > 0){
+            const topReady = state.processes[state.ready[0]];
+            if(topReady && topReady.priority < p.priority){
+              // preempt current
+              p.state = 'ready';
+              enqueueReady(pid);
+              state.running = null;
+              logEvent(`Preempt by higher priority pid=${topReady.pid} — preempted pid=${pid}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // update visuals
+  renderAll();
+}
+
+function renderAll(){
+  elements.modeDisplay.textContent = state.scheduler.toUpperCase();
+  elements.cpuDisplay.textContent = state.running ? `${state.processes[state.running].name}(pid=${state.running})` : 'idle';
+  // ready list
+  elements.readyList.innerHTML = '';
+  for(const pid of state.ready){
+    const p = state.processes[pid];
+    const el = document.createElement('div');
+    el.style.display = 'flex';
+    el.style.justifyContent = 'space-between';
+    el.style.padding = '6px';
+    el.style.borderRadius = '6px';
+    el.style.marginBottom = '6px';
+    el.style.background = 'linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005))';
+    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:${p.color}"></div><div>${p.name} (pid:${pid})</div></div><div class="mini muted">pr:${p.priority}</div>`;
+    elements.readyList.appendChild(el);
+  }
+  elements.readyCount.textContent = state.ready.length;
+
+  elements.blockedList.innerHTML = '';
+  for(const b of state.blocked){
+    const p = state.processes[b.pid];
+    const el = document.createElement('div');
+    el.style.padding = '6px';
+    el.style.borderRadius = '6px';
+    el.style.marginBottom = '6px';
+    el.style.display = 'flex';
+    el.style.justifyContent = 'space-between';
+    el.style.alignItems = 'center';
+    el.style.background = 'linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005))';
+    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:${p.color}"></div><div>${p.name} (pid:${b.pid})</div></div><div class="mini muted">${b.remainingIO}t</div>`;
+    elements.blockedList.appendChild(el);
+  }
+
+  // process table
+  elements.ptable.innerHTML = '';
+  for(const pidStr of Object.keys(state.processes).sort((a,b)=>a-b)){
+    const pid = parseInt(pidStr);
+    const p = state.processes[pid];
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.onclick = ()=> selectPid(pid);
+    const stateText = p.state;
+    tr.innerHTML = `<td>${pid}</td><td>${p.name}</td><td>${stateText}</td><td>${p.priority}</td><td>${p.remainingInBurst}</td><td>${p.burstIndex+1}/${p.cpuBursts.length}</td>`;
+    elements.ptable.appendChild(tr);
+  }
+
+  // gantt: compress history to bars per pid rows
+  renderGantt();
+
+  // diagram animation token update
+  renderDiagram();
+}
+
+function addGantt(pid, color){
+  // append a tiny segment for this tick (grouped by pid)
+  // We'll track by building history and then render grouped bars
+  // elements.gantt will be rebuilt in renderGantt
+}
+
+function renderGantt(){
+  // Build rows per process that has history
+  elements.gantt.innerHTML = '';
+  const grouped = {};
+  for(const h of state.history){
+    grouped[h.pid] = grouped[h.pid] || [];
+    grouped[h.pid].push(h.tick);
+  }
+  // For deterministic ordering, list active+terminated processes
+  const pids = Array.from(new Set(Object.keys(grouped).map(x=>parseInt(x)).concat(Object.keys(state.processes).map(x=>parseInt(x)))));
+  pids.sort((a,b)=>a-b);
+
+  for(const pid of pids){
+    const p = state.processes[pid];
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.marginBottom = '6px';
+    const label = document.createElement('div');
+    label.textContent = p ? `${p.name}(pid:${pid})` : `pid:${pid}`;
+    label.style.width = '130px';
+    label.style.fontSize = '12px';
+    label.style.color = 'var(--muted)';
+    row.appendChild(label);
+
+    const barWrapper = document.createElement('div');
+    barWrapper.style.flex = '1';
+    barWrapper.style.display = 'flex';
+    barWrapper.style.alignItems = 'center';
+    barWrapper.style.gap = '2px';
+    barWrapper.style.overflowX = 'auto';
+    barWrapper.style.padding = '6px';
+    barWrapper.style.borderRadius = '6px';
+    barWrapper.style.background = 'rgba(255,255,255,0.01)';
+
+    const ticks = grouped[pid] || [];
+    // compress consecutive ticks into blocks
+    ticks.sort((a,b)=>a-b);
+    let i=0;
+    while(i < ticks.length){
+      let j = i+1;
+      while(j < ticks.length && ticks[j] === ticks[j-1]+1) j++;
+      const start = ticks[i];
+      const len = j - i;
+      const seg = document.createElement('div');
+      seg.style.minWidth = Math.max(8, len*10) + 'px';
+      seg.style.height = '18px';
+      seg.style.background = (p && p.color) ? p.color : '#94a3b8';
+      seg.style.borderRadius = '6px';
+      seg.title = `pid:${pid} ticks ${start}..${start+len-1}`;
+      seg.style.display = 'inline-block';
+      barWrapper.appendChild(seg);
+      i = j;
+    }
+
+    row.appendChild(barWrapper);
+    elements.gantt.appendChild(row);
+  }
+}
+
+function selectPid(pid){
+  const p = state.processes[pid];
+  if(!p) return;
+  elements.selPid.value = pid;
+  elements.setPrio.value = p.priority;
+}
+
+function setPriority(){
+  const pid = parseInt(elements.selPid.value);
+  const val = parseInt(elements.setPrio.value);
+  if(!state.processes[pid]) return;
+  state.processes[pid].priority = val;
+  // if it's in ready queue and scheduler is priority, re-sort
+  if(state.scheduler === 'priority'){
+    state.ready.sort((a,b) => {
+      const pa = state.processes[a], pb = state.processes[b];
+      if(pa.priority !== pb.priority) return pa.priority - pb.priority;
+      return pa.arrivalTick - pb.arrivalTick;
+    });
+  }
+  logEvent(`Set priority of pid=${pid} to ${val}`);
+  renderAll();
+}
+
+function sendToIO(){
+  const pid = parseInt(elements.selPid.value);
+  const p = state.processes[pid];
+  if(!p) return;
+  // If running, remove from CPU
+  if(state.running === pid){
+    state.running = null;
+    logEvent(`pid=${pid} forced to I/O (from running)`);
+  } else {
+    // remove from ready queue if present
+    const idx = state.ready.indexOf(pid);
+    if(idx >= 0) state.ready.splice(idx,1);
+    logEvent(`pid=${pid} forced to I/O (from ready)`);
+  }
+  // push to blocked with avg IO
+  const iolen = randInt(p.avgIO || parseInt(elements.iolength.value || 3));
+  p.state = 'blocked';
+  state.blocked.push({pid, remainingIO: iolen});
+  renderAll();
+}
+
+function killPid(){
+  const pid = parseInt(elements.selPid.value);
+  if(!state.processes[pid]) return;
+  // remove from all structures
+  delete state.processes[pid];
+  const ridx = state.ready.indexOf(pid);
+  if(ridx >= 0) state.ready.splice(ridx,1);
+  for(let i=state.blocked.length-1;i>=0;i--) if(state.blocked[i].pid === pid) state.blocked.splice(i,1);
+  if(state.running === pid) state.running = null;
+  state.terminated.push(pid);
+  logEvent(`pid=${pid} killed`);
+  renderAll();
+}
+
+function forkSelected(){
+  const pid = parseInt(elements.selPid.value);
+  if(!state.processes[pid]) return;
+  const parent = state.processes[pid];
+  const childName = `${parent.name}-child`;
+  // child inherits remaining bursts (copy)
+  const childBursts = parent.cpuBursts.slice(parent.burstIndex);
+  // split remaining of current burst into two halves (simple simulation)
+  const remaining = parent.remainingInBurst;
+  const childRemaining = Math.max(1, Math.floor(remaining/2));
+  const parentRem = Math.max(1, remaining - childRemaining);
+  const childObj = {
+    name: childName,
+    bursts: childBursts,
+  };
+  const childPid = createProcess({
+    name: childName,
+    bursts: childBursts.length,
+    burstlen: 2 + childRemaining,
+    iochance: parent.ioChance,
+    iolength: parent.avgIO,
+    priority: parent.priority,
+    color: parent.color
+  });
+  // adjust parent's remaining
+  parent.remainingInBurst = parentRem;
+  state.processes[childPid].remainingInBurst = childRemaining;
+  logEvent(`pid=${pid} forked → child pid=${childPid}`);
+  renderAll();
+}
+
+function setupDiagram(){
+  const svg = elements.diagram;
+  svg.innerHTML = '';
+  const w = 800, h = 180;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  // positions
+  const positions = {
+    new: {x:80,y:90}, ready:{x:260,y:40}, running:{x:420,y:90}, blocked:{x:260,y:140}, terminated:{x:620,y:90}
+  };
+  // draw boxes and arrows
+  for(const [k,pos] of Object.entries(positions)){
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x', pos.x-70);
+    rect.setAttribute('y', pos.y-28);
+    rect.setAttribute('rx',10);
+    rect.setAttribute('width',140);
+    rect.setAttribute('height',56);
+    rect.setAttribute('fill','rgba(255,255,255,0.02)');
+    rect.setAttribute('stroke','rgba(255,255,255,0.04)');
+    g.appendChild(rect);
+    const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x', pos.x);
+    text.setAttribute('y', pos.y+4);
+    text.setAttribute('text-anchor','middle');
+    text.setAttribute('fill','#cfe9f6');
+    text.setAttribute('font-size','14');
+    text.textContent = k.toUpperCase();
+    g.appendChild(text);
+    svg.appendChild(g);
+  }
+  // arrows: new->ready, ready->running, running->blocked, running->terminated, blocked->ready
+  function arrow(x1,y1,x2,y2){
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    const dx = x2-x1, dy = y2-y1;
+    const mx = x1 + dx*0.5;
+    const my = y1 + dy*0.5;
+    const d = `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`;
+    path.setAttribute('d',d);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke','rgba(255,255,255,0.03)');
+    path.setAttribute('marker-end','url(#arrowhead)');
+    svg.appendChild(path);
+  }
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  const marker = document.createElementNS('http://www.w3.org/2000/svg','marker');
+  marker.setAttribute('id','arrowhead');
+  marker.setAttribute('markerWidth','10');
+  marker.setAttribute('markerHeight','7');
+  marker.setAttribute('refX','0');
+  marker.setAttribute('refY','3.5');
+  marker.setAttribute('orient','auto');
+  const arrowPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+  arrowPath.setAttribute('d','M0,0 L0,7 L10,3.5 z');
+  arrowPath.setAttribute('fill','rgba(255,255,255,0.04)');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  arrow(150,90,190,90); // new->ready (short)
+  arrow(330,50,400,70); // ready->running
+  arrow(450,110,300,140); // running->blocked
+  arrow(470,70,600,70); // running->terminated
+  arrow(290,140,300,90); // blocked->ready
+
+  // add token (circle) to animate
+  const token = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  token.setAttribute('id','diagramToken');
+  token.setAttribute('r','10');
+  token.setAttribute('fill', 'url(#gradToken)');
+  token.setAttribute('cx', positions.new.x);
+  token.setAttribute('cy', positions.new.y);
+  svg.appendChild(token);
+
+  // gradient for token
+  const grad = document.createElementNS('http://www.w3.org/2000/svg','radialGradient');
+  grad.setAttribute('id','gradToken');
+  const s1 = document.createElementNS('http://www.w3.org/2000/svg','stop'); s1.setAttribute('offset','0%'); s1.setAttribute('stop-color','#2dd4bf');
+  const s2 = document.createElementNS('http://www.w3.org/2000/svg','stop'); s2.setAttribute('offset','100%'); s2.setAttribute('stop-color','#60a5fa');
+  grad.appendChild(s1); grad.appendChild(s2);
+  const gdefs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  gdefs.appendChild(grad);
+  svg.appendChild(gdefs);
+
+  // store positions on the element for animation
+  svg.__positions = positions;
+}
+setupDiagram();
+
+function renderDiagram(){
+  // Move the token depending on a representative process state:
+  const svg = elements.diagram;
+  const pos = svg.__positions;
+  const token = svg.querySelector('#diagramToken');
+  // pick a pid to show: prefer running, else ready else blocked else new
+  let dest = 'new';
+  if(state.running) dest = 'running';
+  else if(state.ready.length>0) dest = 'ready';
+  else if(state.blocked.length>0) dest = 'blocked';
+  else dest = 'new';
+  if(state.terminated.length > 0) dest = 'terminated';
+
+  const p = pos[dest];
+  if(!p) return;
+  // animate by direct set (smooth via CSS transition)
+  token.style.transition = 'cx 0.5s linear, cy 0.5s linear';
+  token.setAttribute('cx', p.x);
+  token.setAttribute('cy', p.y);
+}
+
+// wire up buttons
+elements.createBtn.addEventListener('click', ()=> {
+  createProcess({
+    name: elements.pname.value || undefined,
+    bursts: elements.bursts.value,
+    burstlen: elements.burstlen.value,
+    iochance: elements.iochance.value,
+    iolength: elements.iolength.value,
+    priority: elements.priority.value,
+    color: elements.color.value
+  });
+});
+elements.startBtn.addEventListener('click', ()=> {
+  state.scheduler = elements.scheduler.value;
+  state.runningQuantum = parseInt(elements.quantum.value) || 4;
+  startRunningLoop();
+  logEvent(`Simulation started (scheduler=${state.scheduler})`);
+});
+elements.pauseBtn.addEventListener('click', ()=> {
+  pauseRunningLoop();
+  logEvent('Simulation paused');
+});
+elements.stepBtn.addEventListener('click', ()=> {
+  state.scheduler = elements.scheduler.value;
+  state.runningQuantum = parseInt(elements.quantum.value) || 4;
+  stepOnce();
+});
+elements.resetBtn.addEventListener('click', ()=> {
+  if(confirm('Reset simulation?')) resetSim();
+});
+elements.scheduler.addEventListener('change', ()=> {
+  state.scheduler = elements.scheduler.value;
+  renderAll();
+});
+elements.quantum.addEventListener('change', ()=> {
+  state.runningQuantum = parseInt(elements.quantum.value) || 4;
+});
+elements.prioBtn.addEventListener('click', setPriority);
+elements.ioBtn.addEventListener('click', sendToIO);
+elements.killBtn.addEventListener('click', killPid);
+elements.forkBtnEl.addEventListener('click', forkSelected);
+
+// initial demo processes
+createProcess({name:'Init', bursts:2, burstlen:5, iochance:60, iolength:3, priority:2, color:'#60a5fa'});
+createProcess({name:'Worker', bursts:3, burstlen:7, iochance:70, iolength:4, priority:5, color:'#a78bfa'});
+createProcess({name:'IO-bound', bursts:4, burstlen:3, iochance:90, iolength:2, priority:7, color:'#f59e0b'});
+
+renderAll();
+
+/* Tips shown in the UI:
+ - Use Start to run the simulation; Pause to stop; Step to advance by one tick.
+ - Try Round Robin with small quantum to see frequent context switches.
+ - Use Priority scheduler to see higher-priority processes preempting lower-priority ones.
+ - Fork selected process to simulate process creation.
+*/
+
+</script>
+</body>
+</html>

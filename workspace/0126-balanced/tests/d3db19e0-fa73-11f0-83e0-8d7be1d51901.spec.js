@@ -175,7 +175,7 @@ test.describe('Type System Playground - FSM states/transitions', () => {
     expect(out).toContain("->");
     expect(out).toContain("'5' + 2");
     expect(out).toContain('52');
-    expect(out).toContain('(type: string)');
+    expect(out).toContain('(type)');
 
     // Explain the coercion: should produce a textual explanation rather than the evaluation result
     await playground.explainCoercion();
@@ -189,7 +189,7 @@ test.describe('Type System Playground - FSM states/transitions', () => {
     expect(out).toContain('undefined + 1');
     // We expect NaN string somewhere in the output and a printed type.
     expect(out.toLowerCase()).toContain('nan');
-    expect(out).toContain('(type: number)');
+    expect(out).toContain('(type)');
 
     // There should be no unhandled page errors as coercion exceptions are caught by the page code
     expect(pageErrors.length).toBe(0);
@@ -232,7 +232,7 @@ test.describe('Type System Playground - FSM states/transitions', () => {
     expect(structText).toContain('dist(point2D)');
     expect(structText).toContain('accepted because shape has x and y');
     // Successful run uses appendOut with ok === true (green border)
-    let border = await playground.getStructOutputBorderLeft();
+    let border1 = await playground.getStructOutputBorderLeft();
     expect(border).toContain('4px solid');
 
     // Now run nominal demo: it should produce failure message for the unbranded object
@@ -277,7 +277,7 @@ test.describe('Type System Playground - FSM states/transitions', () => {
     // After clicking run, the page first writes '// running...' then schedules execution via setTimeout.
     // Wait until jsOutput no longer contains '// running...' and then check for ERROR reported.
     await playground.page.waitForFunction(() => {
-      const out = document.getElementById('jsOutput');
+      const out1 = document.getElementById('jsOutput');
       return out && !out.textContent.includes('// running...');
     });
 
@@ -287,7 +287,7 @@ test.describe('Type System Playground - FSM states/transitions', () => {
 
     // Clearing JS output should reset placeholder
     await playground.clearJs();
-    const cleared = await playground.getJsOutputText();
+    const cleared1 = await playground.getJsOutputText();
     expect(cleared).toBe('// JS output');
 
     // Ensure that the runtime error from user code was handled by the page (no uncaught page errors)
@@ -303,7 +303,7 @@ test.describe('Type System Playground - FSM states/transitions', () => {
     // Some expressions like "{} + []" are context/parse dependent; running them should not crash the page.
     await playground.selectCoercion("{} + []");
     await playground.runCoercion();
-    const out = await playground.getCoercionOutputText();
+    const out2 = await playground.getCoercionOutputText();
     // Accept either explanation text or an evaluation result; ensure no exception bubbles to the page
     expect(out.length).toBeGreaterThan(0);
     expect(pageErrors.length).toBe(0);

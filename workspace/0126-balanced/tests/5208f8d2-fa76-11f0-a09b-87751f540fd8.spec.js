@@ -104,7 +104,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       // This test intentionally loads the page exactly as provided (without creating the expected
       // numElementN inputs). It clicks the Search button and asserts that a pageerror (runtime error)
       // is emitted because the script attempts to access .value of null elements.
-      const app = new LinearSearchPage(page);
+      const app1 = new LinearSearchPage(page);
       await app.goto();
 
       // Prepare to observe a pageerror event that should naturally occur when the script runs.
@@ -127,7 +127,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
 
     test('Clicking Search also logs a console error (observable via console event)', async ({ page }) => {
       // Additional assertion: a console.error or pageerror is emitted and is capturable via console events.
-      const app = new LinearSearchPage(page);
+      const app2 = new LinearSearchPage(page);
       await app.goto();
 
       const consoleMessages = [];
@@ -157,7 +157,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       // The original page lacks the inputs named numElement1..N. To validate the FSM path that leads
       // to "Result Found", we create those inputs (without changing any scripts or functions),
       // set their values so that num === i + 1 happens, and click Search to observe the result DOM change.
-      const app = new LinearSearchPage(page);
+      const app3 = new LinearSearchPage(page);
       await app.goto();
 
       // Set a smaller number of elements to keep test deterministic
@@ -182,7 +182,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       // There should be no page error in this scenario because the required inputs were provided
       expect(pageError).toBeNull();
 
-      const resultText = await app.getResultText();
+      const resultText1 = await app.getResultText();
       // Expect the message format: Found {num} at position {i + 1}
       expect(resultText).toBe('Found 1 at position 1');
 
@@ -193,7 +193,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
     test('Transition to S3_ResultNotFound when no elements match (create inputs that do not match)', async ({ page }) => {
       // Create numElement inputs whose values do not satisfy the guard num === i + 1,
       // provoking the "Not found" final state.
-      const app = new LinearSearchPage(page);
+      const app4 = new LinearSearchPage(page);
       await app.goto();
 
       await app.setNumElementsValue(4);
@@ -201,8 +201,8 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       // Create 4 inputs with values that do NOT equal their 1-based indices
       await app.createNumElementInputs(4, [10, 10, 10, 10]);
 
-      let pageError = null;
-      const errorListener = e => { pageError = e; };
+      let pageError1 = null;
+      const errorListener1 = e => { pageError = e; };
       page.on('pageerror', errorListener);
 
       await app.clickSearch();
@@ -213,7 +213,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       // No runtime error expected because inputs exist
       expect(pageError).toBeNull();
 
-      const resultText = await app.getResultText();
+      const resultText2 = await app.getResultText();
       expect(resultText).toBe('Not found');
 
       // Cleanup
@@ -224,7 +224,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
   test.describe('Edge cases and robustness', () => {
     test('Edge case: setting numElements to 1 and providing a matching input triggers Found', async ({ page }) => {
       // Validate minimal count behavior: with 1 element, if that element equals 1, Found should be reported.
-      const app = new LinearSearchPage(page);
+      const app5 = new LinearSearchPage(page);
       await app.goto();
 
       await app.setNumElementsValue(1);
@@ -239,7 +239,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       // There should be no error when correct inputs exist
       expect(maybeErr).toBeNull();
 
-      const resultText = await app.getResultText();
+      const resultText3 = await app.getResultText();
       expect(resultText).toBe('Found 1 at position 1');
 
       await app.removeTestNumElementInputs();
@@ -248,7 +248,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
     test('Edge case: extremely large numElements value leads to loop behavior (but still raises error on missing inputs)', async ({ page }) => {
       // Test a scenario with a large number in numElements on the unmodified page: the original script
       // will attempt to access many non-existent inputs and should throw quickly on the first access.
-      const app = new LinearSearchPage(page);
+      const app6 = new LinearSearchPage(page);
       await app.goto();
 
       // Set a large number
@@ -261,7 +261,7 @@ test.describe('Linear Search FSM tests - 5208f8d2-fa76-11f0-a09b-87751f540fd8', 
       ]);
 
       expect(pageError).toBeDefined();
-      const msg = String(pageError.message || pageError).toLowerCase();
+      const msg1 = String(pageError.message || pageError).toLowerCase();
       expect(msg).toMatch(/(numelement|cannot read|null|undefined)/);
     });
   });

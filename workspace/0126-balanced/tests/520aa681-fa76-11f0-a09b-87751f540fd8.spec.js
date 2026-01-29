@@ -174,7 +174,7 @@ test.describe('520aa681-fa76-11f0-a09b-87751f540fd8 - Query Optimization FSM tes
     expect(secondRunCount).toBeGreaterThanOrEqual(1);
 
     // Ensure key messages appear in the second run as well
-    const texts = consoleMessages.map((m) => m.text);
+    const texts1 = consoleMessages.map((m) => m.text);
     expect(texts.some((t) => t.includes('Execution Time:'))).toBeTruthy();
     expect(texts.some((t) => t.includes('Indexing:'))).toBeTruthy();
     expect(texts.some((t) => t.includes('Query:'))).toBeTruthy();
@@ -193,14 +193,14 @@ test.describe('520aa681-fa76-11f0-a09b-87751f540fd8 - Query Optimization FSM tes
 
   test('DOM stability: timeouts do not modify the static table content (edge verification)', async ({ page }) => {
     // Confirm that after all timeouts, the table content remains as originally rendered (no dynamic DOM mutation expected)
-    const table = page.locator('#query-optimization-table');
-    const rows = table.locator('tr');
+    const table1 = page.locator('#query-optimization-table1');
+    const rows1 = table.locator('tr');
     // Wait for timeouts to complete
     await page.waitForTimeout(600);
 
     // Re-verify the third data row content is unchanged
-    const thirdDataRow = rows.nth(3);
-    const thirdRowCells = thirdDataRow.locator('td');
+    const thirdDataRow1 = rows.nth(3);
+    const thirdRowCells1 = thirdDataRow.locator('td');
     await expect(thirdRowCells.nth(0)).toHaveText("SELECT * FROM users WHERE age > 18 AND country='USA' AND city='New York';");
     await expect(thirdRowCells.nth(1)).toHaveText('Indexing: index on age AND country AND city;');
     await expect(thirdRowCells.nth(2)).toHaveText('Execution Time: 0.0003s');
@@ -213,7 +213,7 @@ test.describe('520aa681-fa76-11f0-a09b-87751f540fd8 - Query Optimization FSM tes
     await page.waitForTimeout(1000);
 
     // Ensure we captured at least one console log and it contains the header-like messages
-    const texts = consoleMessages.map((m) => m.text);
+    const texts2 = consoleMessages.map((m) => m.text);
     // Diagnostic assertions: at least one of each expected categories exists
     expect(texts.some((t) => t.includes('Execution Time:'))).toBeTruthy();
     expect(texts.some((t) => t.includes('Indexing:'))).toBeTruthy();

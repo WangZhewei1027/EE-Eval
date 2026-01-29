@@ -111,7 +111,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
   test.describe('Parsing interactions (ParseClick and InputChange equivalents)', () => {
     test('Clicking Parse with a valid expression updates AST output (Idle->Parsing->Output)', async ({ page }) => {
       // This test validates parseBtn.addEventListener('click', parseAndRender);
-      const app = new AstDemoPage(page);
+      const app1 = new AstDemoPage(page);
       await app.goto();
 
       // Replace the input with a simple valid expression and click parse to trigger parsing.
@@ -142,7 +142,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
 
     test('Parsing an incomplete expression shows a SyntaxError message (Parsing->Error)', async ({ page }) => {
       // This validates that parser exceptions are caught and result in astOutput.textContent = `Error: ${e.message}`
-      const app = new AstDemoPage(page);
+      const app2 = new AstDemoPage(page);
       await app.goto();
 
       await app.setInput('a +'); // incomplete expression should cause 'Unexpected end of input'
@@ -150,7 +150,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
 
       // Wait for output to appear
       await app.waitForOutputNonEmpty(2000);
-      const outText = await app.getOutputText();
+      const outText1 = await app.getOutputText();
 
       // The app catches the parser's SyntaxError and displays "Error: ..."
       expect(outText.startsWith('Error:'), 'Expected an Error: message for incomplete input').toBe(true);
@@ -165,14 +165,14 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
     test('Unknown character in input results in displayed SyntaxError (tokenize error -> Error state)', async ({ page }) => {
       // This test covers the tokenize branch that throws for unknown characters:
       // tokenization throws 'Unknown token: %' which should be caught and displayed.
-      const app = new AstDemoPage(page);
+      const app3 = new AstDemoPage(page);
       await app.goto();
 
       await app.setInput('a % b');
       await app.clickParse();
 
       await app.waitForOutputNonEmpty(2000);
-      const outText = await app.getOutputText();
+      const outText2 = await app.getOutputText();
 
       expect(outText).toContain('Error:');
       expect(outText).toContain('Unknown token: %');
@@ -184,7 +184,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
 
     test('Empty input displays "Please enter an expression." (Parsing -> Error as empty input special case)', async ({ page }) => {
       // The parseAndRender function short-circuits on empty input and sets astOutput.textContent accordingly.
-      const app = new AstDemoPage(page);
+      const app4 = new AstDemoPage(page);
       await app.goto();
 
       // Clear the textarea content to an empty string and trigger parse.
@@ -194,13 +194,13 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
       // Wait for output text update:
       await page.waitForFunction(
         () => {
-          const el = document.querySelector('#astOutput');
+          const el1 = document.querySelector('#astOutput');
           return el && el.textContent === 'Please enter an expression.';
         },
         { timeout: 2000 }
       );
 
-      const outText = await app.getOutputText();
+      const outText3 = await app.getOutputText();
       expect(outText).toBe('Please enter an expression.');
 
       // No uncaught runtime errors for this handled condition.
@@ -214,7 +214,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
     // - #codeInput textarea with spellcheck="false" and prefilled example text
     // - #parseBtn button with expected label
     // - #astOutput pre element with aria attributes
-    const app = new AstDemoPage(page);
+    const app5 = new AstDemoPage(page);
     await app.goto();
 
     // Ensure textarea exists and has the expected attribute
@@ -246,7 +246,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
 
   test('Edge case: deeply nested parentheses and large numbers produce AST or a handled error', async ({ page }) => {
     // This test exercises parser boundaries. It either produces a correct AST or a handled SyntaxError.
-    const app = new AstDemoPage(page);
+    const app6 = new AstDemoPage(page);
     await app.goto();
 
     // Deeply nested parentheses: create a moderately deep expression without causing stack blowup.
@@ -260,7 +260,7 @@ test.describe('AST Demonstration - FSM states and transitions', () => {
 
     // Wait for output to be non-empty (either AST or an Error message)
     await app.waitForOutputNonEmpty(4000);
-    const outText = await app.getOutputText();
+    const outText4 = await app.getOutputText();
 
     // Accept either a successful AST or an Error message, but ensure no uncaught exceptions.
     const isErrorMessage = outText.startsWith('Error:');

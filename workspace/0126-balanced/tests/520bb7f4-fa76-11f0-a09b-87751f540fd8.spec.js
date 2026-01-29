@@ -121,7 +121,7 @@ test.describe('Neural Networks FSM and Interactive Canvas', () => {
 
   test('Idle state entry action: trainNetwork() is attempted and produces a runtime error (biasInput missing)', async ({ page }) => {
     // This test ensures the S0_Idle entry action trainNetwork() runs and we observe expected runtime errors.
-    const nn = new NeuralNetworkPage(page);
+    const nn1 = new NeuralNetworkPage(page);
 
     // Navigate and allow script to run enough to trigger errors that occur during trainNetwork().
     await nn.goto();
@@ -146,7 +146,7 @@ test.describe('Neural Networks FSM and Interactive Canvas', () => {
     // Because the page code may throw during initialization (trainNetwork), we will:
     // - Attempt a user-like click
     // - Also directly invoke the handleMouseClick function exposed by the page to assert its behavior
-    const nn = new NeuralNetworkPage(page);
+    const nn2 = new NeuralNetworkPage(page);
     await nn.goto();
 
     // Try a Playwright click. This simulates the user event defined in the FSM.
@@ -187,7 +187,7 @@ test.describe('Neural Networks FSM and Interactive Canvas', () => {
 
   test('Predict function: calling predict() returns output and is callable despite earlier errors', async ({ page }) => {
     // This test verifies the predict() action referenced in the FSM transition exists and returns the output value.
-    const nn = new NeuralNetworkPage(page);
+    const nn3 = new NeuralNetworkPage(page);
     await nn.goto();
 
     const res = await nn.callPredict();
@@ -198,13 +198,13 @@ test.describe('Neural Networks FSM and Interactive Canvas', () => {
     expect(res.returnValue).toBe(0);
 
     // Confirm the page's output variable is still consistent.
-    const out = await nn.getOutputVariable();
+    const out1 = await nn.getOutputVariable();
     expect(out).toBe(0);
   });
 
   test('Edge case: multiple rapid calls to handleMouseClick do not produce additional undefined-variable errors', async ({ page }) => {
     // This tests stability under rapid repeated interactions (edge case).
-    const nn = new NeuralNetworkPage(page);
+    const nn4 = new NeuralNetworkPage(page);
     await nn.goto();
 
     // Capture current number of page errors reported.
@@ -240,7 +240,7 @@ test.describe('Neural Networks FSM and Interactive Canvas', () => {
 
   test('Error scenarios: pageError includes ReferenceError and console messages can be observed', async ({ page }) => {
     // This test explicitly verifies that runtime exceptions are observable via Playwright APIs.
-    const nn = new NeuralNetworkPage(page);
+    const nn5 = new NeuralNetworkPage(page);
     await nn.goto();
 
     // Wait for at least one pageerror (the trainNetwork ReferenceError).

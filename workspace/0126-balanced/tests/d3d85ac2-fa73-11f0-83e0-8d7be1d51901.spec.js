@@ -133,15 +133,15 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
   });
 
   test('Transition S0 -> S1: clicking Test shows result and updates code box & plot', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors1 = [];
     const dialogs = [];
     page.on('console', m => consoleMessages.push({type: m.type(), text: m.text()}));
     page.on('pageerror', e => pageErrors.push(e));
     page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
 
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p1 = new OmegaPage(page);
 
     // Ensure presets have known values (precondition)
     const presetFVal = await p.getPresetFValue();
@@ -163,7 +163,7 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
     ).toBeTruthy();
 
     // Code box should have been updated to the expressions used
-    const codeText = await (await p.codeBox()).innerText();
+    const codeText1 = await (await p.codeBox()).innerText();
     expect(codeText).toContain('f(n) =');
     expect(codeText).toContain('g(n) =');
 
@@ -174,7 +174,7 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
 
     // No page runtime errors expected as a result of normal operation
     expect(pageErrors.length).toBe(0);
-    const errors = consoleMessages.filter(m => m.type === 'error');
+    const errors1 = consoleMessages.filter(m => m.type === 'error');
     expect(errors.length).toBe(0);
 
     // No unexpected dialogs should have been shown for a valid run
@@ -182,10 +182,10 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
   });
 
   test('Transition S0 -> S2 and back via WindowLoad: reset clears custom inputs and hides result, reload returns to idle', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', e => pageErrors.push(e));
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p2 = new OmegaPage(page);
 
     // Fill custom fields and run test to show the result (enter Testing state)
     await p.setCustomF('4*n + 10');
@@ -201,12 +201,12 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
     expect(custom.f).toBe('');
     expect(custom.g).toBe('');
 
-    const resultStyle = await p.getResultDisplayStyle();
+    const resultStyle1 = await p.getResultDisplayStyle();
     expect(resultStyle).toBe('none');
 
     // Presets should be reset to first option
-    const presetFVal = await p.getPresetFValue();
-    const presetGVal = await p.getPresetGValue();
+    const presetFVal1 = await p.getPresetFValue();
+    const presetGVal1 = await p.getPresetGValue();
     expect(presetFVal).toBeTruthy();
     expect(presetGVal).toBeTruthy();
 
@@ -222,7 +222,7 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
 
   test('S1 Testing: changing presetF and presetG while in Testing updates code box and clears corresponding custom fields', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p3 = new OmegaPage(page);
 
     // Run a test to enter Testing state
     await p.clickTest();
@@ -256,17 +256,17 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
   });
 
   test('Edge case: invalid custom f(n) expression triggers alert and prevents test (no uncaught errors)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors3 = [];
     page.on('pageerror', e => pageErrors.push(e));
 
-    const dialogMessages = [];
+    const dialogMessages1 = [];
     page.on('dialog', async dialog => {
       dialogMessages.push(dialog.message());
       await dialog.accept();
     });
 
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p4 = new OmegaPage(page);
 
     // Put an invalid expression into customF that makeFunc will reject
     await p.setCustomF('bad$$expr');
@@ -280,7 +280,7 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
     expect(foundInvalidMsg).toBe(true);
 
     // Ensure result is still hidden (no transition to S1)
-    const resultStyle = await p.getResultDisplayStyle();
+    const resultStyle2 = await p.getResultDisplayStyle();
     expect(resultStyle).toBe('none');
 
     // No uncaught page errors expected
@@ -288,11 +288,11 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
   });
 
   test('Edge case: nMax <= nStart triggers an alert and prevents test', async ({ page }) => {
-    const dialogMessages = [];
+    const dialogMessages2 = [];
     page.on('dialog', async d => { dialogMessages.push(d.message()); await d.accept(); });
 
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p5 = new OmegaPage(page);
 
     // Provide valid expressions but set nMax <= nStart to trigger the validation alert
     await p.setCustomF('n');
@@ -307,13 +307,13 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
     expect(dialogMessages.some(m => m.includes('n max must be greater than n start'))).toBe(true);
 
     // Result should still be hidden
-    const resultStyle = await p.getResultDisplayStyle();
+    const resultStyle3 = await p.getResultDisplayStyle();
     expect(resultStyle).toBe('none');
   });
 
   test('S1 -> S0 via WindowLoad: after testing, reload hides result and plots defaults', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p6 = new OmegaPage(page);
 
     // Run test to enter Testing state
     await p.clickTest();
@@ -326,25 +326,25 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
     await expect(page.locator('#result')).toHaveCSS('display', 'none');
 
     // Code box should have been reset/initialized for presets
-    const codeText = await (await p.codeBox()).innerText();
+    const codeText2 = await (await p.codeBox()).innerText();
     expect(codeText).toContain('f(n) =');
     expect(codeText).toContain('g(n) =');
 
     // Canvas should have data
-    const dataUrl = await p.getCanvasDataUrl();
+    const dataUrl1 = await p.getCanvasDataUrl();
     expect(typeof dataUrl).toBe('string');
     expect(dataUrl.length).toBeGreaterThan(100);
   });
 
   // Final test to assert that no unexpected console errors or page errors occurred during a series of typical interactions
   test('Observe console and page errors across interactions (should be none)', async ({ page }) => {
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages2 = [];
+    const pageErrors4 = [];
     page.on('console', m => consoleMessages.push({type: m.type(), text: m.text()}));
     page.on('pageerror', e => pageErrors.push(e));
 
     await page.goto(APP_URL, { waitUntil: 'load' });
-    const p = new OmegaPage(page);
+    const p7 = new OmegaPage(page);
 
     // Perform some typical interactions
     await p.clickTest();
@@ -361,7 +361,7 @@ test.describe('Big-Omega (Ω) Notation — Interactive Demonstration (FSM driven
     expect(pageErrors.length).toBe(0);
 
     // Assert no console.error messages (warnings/info may exist, but no errors)
-    const errors = consoleMessages.filter(m => m.type === 'error');
+    const errors2 = consoleMessages.filter(m => m.type === 'error');
     expect(errors.length).toBe(0);
   });
 });

@@ -75,7 +75,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
     await page.click("button[onclick='makeRequest()']");
 
     // Wait for the result area to reflect the successful response
-    const result = page.locator('pre#result');
+    const result1 = page.locator('pre#result1');
     await expect(result).toHaveText(/Title: Hello Test/, { timeout: 5000 });
     await expect(result).toHaveText(/Body: This is a response body/, { timeout: 5000 });
 
@@ -103,7 +103,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
     await page.click("button[onclick='makeRequest()']");
 
     // The code's onload handler should set the pre#result to "Error: 500 - Internal Server Error"
-    const result = page.locator('pre#result');
+    const result2 = page.locator('pre#result2');
     await expect(result).toHaveText(/Error: 500 - Internal Server Error/, { timeout: 5000 });
 
     // No uncaught page errors expected for this handled error path
@@ -112,7 +112,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
 
   test('Transition: SendHttpRequest -> Network Error (S1 -> S4) when fetch is aborted', async ({ page }) => {
     // Simulate a network error by aborting the route
-    let routeHit = 0;
+    let routeHit1 = 0;
     await page.route(RESOURCE_URL, async route => {
       routeHit++;
       await route.abort();
@@ -124,7 +124,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
     await page.click("button[onclick='makeRequest()']");
 
     // The code's onerror handler should set the pre#result to "Network Error"
-    const result = page.locator('pre#result');
+    const result3 = page.locator('pre#result3');
     await expect(result).toHaveText('Network Error', { timeout: 5000 });
 
     // Ensure route was attempted
@@ -164,7 +164,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
 
     // Because a SyntaxError happened inside the onload handler, the script may not have set the result text.
     // The implementation does not catch JSON.parse errors, so pre#result should not contain the expected "Title:" text.
-    const result = page.locator('pre#result');
+    const result4 = page.locator('pre#result4');
     const resultText = (await result.innerText()).trim();
     // Either empty or not containing "Title:"
     expect(resultText.includes('Title:')).toBeFalsy();
@@ -196,7 +196,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
     ]);
 
     // Wait for the result to show 'Response #' (one of the responses). We expect the latest response to be displayed.
-    const result = page.locator('pre#result');
+    const result5 = page.locator('pre#result5');
     await expect(result).toHaveText(/Response #\d+/, { timeout: 5000 });
 
     const text = await result.innerText();
@@ -214,7 +214,7 @@ test.describe('HTTP Demonstration (FSM) - 324f3480-fa73-11f0-a9d0-d7a1991987c6',
     expect(hasReferenceError).toBeFalsy();
 
     // Also ensure pre#result is still empty (renderPage would have changed state if it existed)
-    const result = page.locator('pre#result');
+    const result6 = page.locator('pre#result6');
     await expect(result).toHaveText('', { timeout: 2000 });
   });
 });

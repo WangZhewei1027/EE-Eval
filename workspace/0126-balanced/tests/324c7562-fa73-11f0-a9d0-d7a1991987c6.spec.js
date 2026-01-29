@@ -143,7 +143,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
 
   test('Push transition: from Idle to StackUpdated updates stack display and clears input', async ({ page }) => {
     // This test validates the PushEvent transition to S1_StackUpdated and entry action updateStackDisplay().
-    const app = new StackPage(page);
+    const app1 = new StackPage(page);
     await app.goto();
 
     // Push a value "First"
@@ -155,7 +155,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
     expect(inputAfter).toBe('', 'Input should be cleared after successful push');
 
     // Stack display should contain the pushed element
-    const items = await app.getStackItems();
+    const items1 = await app.getStackItems();
     expect(items).toEqual(['First']);
 
     // Push another value to ensure stack maintains LIFO ordering visually
@@ -173,7 +173,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
     // This test validates the PopEvent transition in S1_StackUpdated and expected observables:
     // - Stack contents updated
     // - Alert with popped value
-    const app = new StackPage(page);
+    const app2 = new StackPage(page);
     await app.goto();
 
     // Prepare stack with two values
@@ -215,11 +215,11 @@ test.describe('Stack Implementation (FSM verification)', () => {
 
   test('Pop on empty stack: edge case shows Underflow alert and stack remains empty', async ({ page }) => {
     // This test validates the edge case behavior when popping from an empty stack.
-    const app = new StackPage(page);
+    const app3 = new StackPage(page);
     await app.goto();
 
     // Ensure stack is empty
-    const items = await app.getStackItems();
+    const items2 = await app.getStackItems();
     expect(items.length).toBe(0);
 
     // Clear any previous dialogs
@@ -242,7 +242,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
 
   test('Push empty input shows validation alert (edge case)', async ({ page }) => {
     // This test validates that attempting to push with empty input triggers an alert and does not modify stack.
-    const app = new StackPage(page);
+    const app4 = new StackPage(page);
     await app.goto();
 
     // Ensure input is empty
@@ -270,7 +270,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
 
   test('ViewStack event: shows alert with current stack contents and UI remains coherent', async ({ page }) => {
     // This test validates the ViewStackEvent which should trigger an alert showing current stack.
-    const app = new StackPage(page);
+    const app5 = new StackPage(page);
     await app.goto();
 
     // Populate stack with some items
@@ -280,7 +280,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
     await app.clickPush();
 
     // Confirm items
-    const beforeItems = await app.getStackItems();
+    const beforeItems1 = await app.getStackItems();
     expect(beforeItems).toEqual(['Alpha', 'Beta']);
 
     // Clear any prior dialogs
@@ -293,7 +293,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
     expect(app.dialogMessages.pop()).toBe('Current Stack: Alpha,Beta');
 
     // UI stack display should remain unchanged after viewing
-    const afterItems = await app.getStackItems();
+    const afterItems1 = await app.getStackItems();
     expect(afterItems).toEqual(['Alpha', 'Beta']);
 
     // No uncaught page errors or console errors
@@ -303,7 +303,7 @@ test.describe('Stack Implementation (FSM verification)', () => {
 
   test('Combined flows: multiple pushes and pops across transitions maintain correct LIFO behavior', async ({ page }) => {
     // This end-to-end test drives through multiple transitions and validates stack invariants.
-    const app = new StackPage(page);
+    const app6 = new StackPage(page);
     await app.goto();
 
     // Push 1,2,3

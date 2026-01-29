@@ -112,7 +112,7 @@ test.describe('Compiler Concept Demonstration - FSM states & transitions', () =>
 
   test('S0_Idle -> S1_Compiling -> success: clicking Compile clears outputs then fills tokens, parse, and code', async ({ page }) => {
     // This test validates the transition from Idle to Compiling and successful compile result
-    const app = new CompilerPage(page);
+    const app1 = new CompilerPage(page);
     await app.goto();
 
     // Attach a short listener snapshot before click
@@ -163,7 +163,7 @@ test.describe('Compiler Concept Demonstration - FSM states & transitions', () =>
 
   test('S1_Compiling -> S2_Error: syntax error during parsing results in error UI (codeOutput innerHTML contains .error)', async ({ page }) => {
     // This test intentionally supplies malformed source to exercise the Error state and the catch block
-    const app = new CompilerPage(page);
+    const app2 = new CompilerPage(page);
     await app.goto();
 
     // Provide a missing closing parenthesis to provoke a parser error: Parser error: expected ')'
@@ -182,7 +182,7 @@ test.describe('Compiler Concept Demonstration - FSM states & transitions', () =>
     // After compile, since parser will throw, the catch will set codeOutput.innerHTML to a .error div
     // Wait for the code output innerHTML to contain an element with class "error"
     await page.waitForFunction(selector => {
-      const el = document.querySelector(selector);
+      const el1 = document.querySelector(selector);
       return el && el.innerHTML && el.innerHTML.includes('class="error"');
     }, app.codeSel, { timeout: 2000 });
 
@@ -205,7 +205,7 @@ test.describe('Compiler Concept Demonstration - FSM states & transitions', () =>
 
   test('Error scenario: lexer unknown character triggers caught error and displays error message', async ({ page }) => {
     // This test provokes a Lexer error to exercise the catch block and error display
-    const app = new CompilerPage(page);
+    const app3 = new CompilerPage(page);
     await app.goto();
 
     // Insert an unknown character '$' which the lexer doesn't accept
@@ -216,17 +216,17 @@ test.describe('Compiler Concept Demonstration - FSM states & transitions', () =>
     await app.clickCompile();
 
     await page.waitForFunction(selector => {
-      const el = document.querySelector(selector);
+      const el2 = document.querySelector(selector);
       return el && el.innerHTML && el.innerHTML.includes('class="error"');
     }, app.codeSel, { timeout: 2000 });
 
-    const codeInnerHTML = await app.getCodeInnerHTML();
+    const codeInnerHTML1 = await app.getCodeInnerHTML();
     expect(codeInnerHTML).toContain('class="error"');
     expect(codeInnerHTML).toMatch(/Lexer error: Unknown character/);
 
     // tokens and parse should be cleared as per catch block
-    const tokensFinal = await app.getTokensText();
-    const parseFinal = await app.getParseText();
+    const tokensFinal1 = await app.getTokensText();
+    const parseFinal1 = await app.getParseText();
     expect(tokensFinal === '' || (tokensFinal && tokensFinal.trim() === '')).toBeTruthy();
     expect(parseFinal === '' || (parseFinal && parseFinal.trim() === '')).toBeTruthy();
 
@@ -236,7 +236,7 @@ test.describe('Compiler Concept Demonstration - FSM states & transitions', () =>
 
   test('Verify that compile action is idempotent and multiple clicks behave consistently', async ({ page }) => {
     // This test clicks Compile multiple times and ensures behavior remains consistent and no unhandled errors are produced
-    const app = new CompilerPage(page);
+    const app4 = new CompilerPage(page);
     await app.goto();
 
     // Use the default valid source

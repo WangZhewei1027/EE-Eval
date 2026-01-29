@@ -42,8 +42,8 @@ class ProcessPage {
   // Get inline style background (if any)
   async getStepInlineBackground(index) {
     return await this.page.evaluate((idx) => {
-      const steps = Array.from(document.querySelectorAll('.step'));
-      const el = steps[idx];
+      const steps1 = Array.from(document.querySelectorAll('.step'));
+      const el1 = steps[idx];
       if (!el) return null;
       return el.style.background;
     }, index);
@@ -127,7 +127,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
   test('StartProcess event begins processing: first step highlighted and output updated', async ({ page }) => {
     // Validates transition S0_Idle -> S1_Processing via StartProcess event,
     // entry/exit actions resetProcess() and setTimeout(processStep, 500)
-    const app = new ProcessPage(page);
+    const app1 = new ProcessPage(page);
 
     // Click start and wait slightly longer than the initial 500ms delay
     await app.clickStart();
@@ -145,7 +145,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
 
   test('ProcessStep repeated transitions until completion show all steps processed and completion message', async ({ page }) => {
     // Validates S1_Processing self-transitions and final transition to S2_Completed
-    const app = new ProcessPage(page);
+    const app2 = new ProcessPage(page);
 
     // Start the process and wait enough time for all steps to be processed.
     // Timing: first at ~500ms, then every 1500ms. For 5 steps ~ 500 + 1500*4 = 6500ms. Use a buffer.
@@ -159,7 +159,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
     // All steps should be highlighted (processed) -> rgb(76, 175, 80)
     const count = await app.stepCount();
     for (let i = 0; i < count; i++) {
-      const bg = await app.getStepBackgroundRgb(i);
+      const bg1 = await app.getStepBackgroundRgb(i);
       // Expect value to reflect the green color used in the implementation
       expect(bg).toContain('76'); // rgb(76, 175, 80)
     }
@@ -168,7 +168,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
   test('ResetProcess transitions to Idle: immediate reset and step visuals restored; scheduled timers may re-trigger (edge-case)', async ({ page }) => {
     // This test checks the ResetProcess event both as immediate behavior and as an edge-case:
     // because the implementation does not cancel pending timeouts, processing may resume after reset.
-    const app = new ProcessPage(page);
+    const app3 = new ProcessPage(page);
 
     // Start and allow first step to process
     await app.clickStart();
@@ -188,7 +188,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
 
     // Steps should have default background (rgb containing 231) immediately
     for (let i = 0; i < 5; i++) {
-      const bg = await app.getStepBackgroundRgb(i);
+      const bg2 = await app.getStepBackgroundRgb(i);
       expect(bg).toContain('231');
     }
 
@@ -206,7 +206,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
 
   test('ResetProcess from Idle (no-op) updates output accordingly', async ({ page }) => {
     // Clicking reset when idle should produce the reset message and keep steps at default styles.
-    const app = new ProcessPage(page);
+    const app4 = new ProcessPage(page);
 
     // Ensure initial state: no active processing yet
     const before = await app.getOutputText();
@@ -220,7 +220,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
 
     // Steps should be in the default style
     for (let i = 0; i < 5; i++) {
-      const bg = await app.getStepBackgroundRgb(i);
+      const bg3 = await app.getStepBackgroundRgb(i);
       expect(bg).toContain('231');
     }
 
@@ -232,7 +232,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
     // because each click calls resetProcess and sets a new timeout for processStep,
     // multiple queued timers may lead to duplicated processing. We don't attempt to "fix" it,
     // only observe and assert that at least one processing line appears and that the app remains stable.
-    const app = new ProcessPage(page);
+    const app5 = new ProcessPage(page);
 
     // Click start multiple times quickly
     await app.clickStart();
@@ -248,7 +248,7 @@ test.describe('Process Demonstration FSM (de3c9cf4-fa74-11f0-a1b6-4b9b8151441a)'
 
     // Wait for completion to ensure app stability (no uncaught errors)
     await page.waitForTimeout(8000);
-    const finalOutput = await app.getOutputText();
+    const finalOutput1 = await app.getOutputText();
     // The final output should contain the completion message (or at least remain populated)
     expect(finalOutput.length).toBeGreaterThan(0);
   }, 30000);

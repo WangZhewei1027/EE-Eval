@@ -79,7 +79,7 @@ test.describe('520a7f72-fa76-11f0-a09b-87751f540fd8 - Indexing Example (FSM: Idl
   // Validate that FSM entry action renderPage() is mentioned but not implemented;
   // calling it should produce a ReferenceError in the page context.
   test('entry action renderPage() is not defined -> calling it results in ReferenceError (observed as pageerror)', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', (err) => {
       pageErrors.push(err);
     });
@@ -149,7 +149,7 @@ test.describe('520a7f72-fa76-11f0-a09b-87751f540fd8 - Indexing Example (FSM: Idl
 
   // Edge-case test: deliberately invoke another undefined function to observe multiple ReferenceErrors
   test('error scenario: invoking another undefined function results in ReferenceError and is captured', async ({ page }) => {
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', (err) => {
       pageErrors.push(err);
     });

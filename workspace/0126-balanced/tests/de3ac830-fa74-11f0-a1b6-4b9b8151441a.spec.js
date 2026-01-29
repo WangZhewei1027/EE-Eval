@@ -154,7 +154,7 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
   test.describe('Mutating operations (Prepend, Append, Remove)', () => {
     test('Prepend from empty transitions to non-empty (S0 -> S1)', async ({ page }) => {
       // This test validates Prepend event: adds node, updates output and visualization.
-      const dllPage = new DllPage(page);
+      const dllPage1 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       await dllPage.setInput(10);
@@ -168,50 +168,50 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
       // Visualization should contain one node showing [10]
       const nodeCount = await dllPage.getVisualizationNodeCount();
       expect(nodeCount).toBe(1);
-      const values = await dllPage.getVisualizationNodeValues();
+      const values1 = await dllPage.getVisualizationNodeValues();
       expect(values).toEqual(['10']);
 
       // Input should be cleared after operation
       expect(await dllPage.isInputEmpty()).toBe(true);
 
       // dll state should reflect non-empty list
-      const dllState = await dllPage.getDllState();
+      const dllState1 = await dllPage.getDllState();
       expect(dllState.headIsNull).toBe(false);
       expect(dllState.tailIsNull).toBe(false);
       expect(dllState.length).toBe(1);
 
       // Ensure no unexpected errors
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs1 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
 
     test('Append from empty transitions to non-empty (S0 -> S1)', async ({ page }) => {
       // Validate Append event works when starting from empty list.
-      const dllPage = new DllPage(page);
+      const dllPage2 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       await dllPage.setInput(20);
       await dllPage.clickAppend();
 
-      const output = await dllPage.getOutputText();
+      const output1 = await dllPage.getOutputText();
       expect(output).toContain('Appended 20 to the list.');
       expect(output).toContain('Current list (forward): 20');
 
-      const values = await dllPage.getVisualizationNodeValues();
+      const values2 = await dllPage.getVisualizationNodeValues();
       expect(values).toEqual(['20']);
 
-      const dllState = await dllPage.getDllState();
+      const dllState2 = await dllPage.getDllState();
       expect(dllState.length).toBe(1);
 
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs2 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
 
     test('Prepend and Append produce correct forward and backward structure', async ({ page }) => {
       // Validate multiple mutations: prepend, append produce correct traversal results.
-      const dllPage = new DllPage(page);
+      const dllPage3 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       // Start from empty: prepend 1, append 2, prepend 0 => expected order [0,1,2]
@@ -240,13 +240,13 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
 
       // Confirm no runtime errors
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs3 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
 
     test('Remove existing node and attempt to remove non-existing node', async ({ page }) => {
       // Validate Remove event removes nodes and updateOutput handles both success and failure.
-      const dllPage = new DllPage(page);
+      const dllPage4 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       // Create list [5,6,7]
@@ -278,7 +278,7 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
 
       // No runtime errors expected
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs4 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
   });
@@ -287,7 +287,7 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
   test.describe('Traversal and Clear (S1_NonEmpty and Clear to S0)', () => {
     test('Traverse forward/backward reflect the current list contents', async ({ page }) => {
       // Ensure traversals produce correct output strings after mutations.
-      const dllPage = new DllPage(page);
+      const dllPage5 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       // Build list [A,B,C] using numbers to keep things simple
@@ -309,13 +309,13 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
       expect(bwd).toContain('List traversed backward: 300 ⇄ 200 ⇄ 100');
 
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs5 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
 
     test('Clear transitions from non-empty to empty (S1 -> S0) and visual evidence', async ({ page }) => {
       // Validate Clear event empties the dll and updates UI accordingly.
-      const dllPage = new DllPage(page);
+      const dllPage6 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       // Create non-empty list
@@ -328,21 +328,21 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
 
       // Clear the list
       await dllPage.clickClear();
-      const output = await dllPage.getOutputText();
+      const output2 = await dllPage.getOutputText();
       expect(output).toContain('List cleared. List is now empty.');
 
       // Visualization should show the empty placeholder
-      const visText = await dllPage.getVisualizationText();
+      const visText1 = await dllPage.getVisualizationText();
       expect(visText).toContain('List is empty');
 
       // dll internal state should be reset
-      const dllState = await dllPage.getDllState();
+      const dllState3 = await dllPage.getDllState();
       expect(dllState.headIsNull).toBe(true);
       expect(dllState.tailIsNull).toBe(true);
       expect(dllState.length).toBe(0);
 
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs6 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
   });
@@ -351,7 +351,7 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
   test.describe('Edge cases and error scenarios', () => {
     test('Prepend without value shows validation message', async ({ page }) => {
       // Clicking prepend with empty input should prompt the user to enter a value.
-      const dllPage = new DllPage(page);
+      const dllPage7 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       // Ensure input is empty
@@ -362,44 +362,44 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
       expect(out).toContain('Please enter a value');
 
       // No mutation should have occurred
-      const dllState = await dllPage.getDllState();
+      const dllState4 = await dllPage.getDllState();
       expect(dllState.length).toBe(0);
 
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs7 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
 
     test('Append without value shows validation message', async ({ page }) => {
-      const dllPage = new DllPage(page);
+      const dllPage8 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       await dllPage.input.fill('');
       await dllPage.clickAppend();
 
-      const out = await dllPage.getOutputText();
+      const out1 = await dllPage.getOutputText();
       expect(out).toContain('Please enter a value');
 
-      const dllState = await dllPage.getDllState();
+      const dllState5 = await dllPage.getDllState();
       expect(dllState.length).toBe(0);
 
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs8 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
 
     test('Remove without value shows validation message', async ({ page }) => {
-      const dllPage = new DllPage(page);
+      const dllPage9 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       await dllPage.input.fill('');
       await dllPage.clickRemove();
 
-      const out = await dllPage.getOutputText();
+      const out2 = await dllPage.getOutputText();
       expect(out).toContain('Please enter a value to remove');
 
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs9 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
     });
   });
@@ -408,7 +408,7 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
   test.describe('Console and runtime error observations', () => {
     test('No pageerrors or console.error messages emitted during normal operations', async ({ page }) => {
       // This test performs a sequence of interactions and finally asserts the captured console/page errors.
-      const dllPage = new DllPage(page);
+      const dllPage10 = new DllPage(page);
       await dllPage.goto(APP_URL);
 
       // Perform a few interactions
@@ -426,7 +426,7 @@ test.describe('Doubly Linked List Demo - FSM coverage tests', () => {
       expect(pageErrors.length).toBe(0);
 
       // Also assert there were no console.error messages emitted
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs10 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length).toBe(0);
 
       // If any console warnings exist, allow but record them (not failing the test)

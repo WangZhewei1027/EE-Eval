@@ -143,7 +143,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
 
   test('Generate New Array transition (S0_Idle -> S1_ArrayGenerated) - clicking generateBtn re-renders and sets controls', async ({ page }) => {
     // Validate clicking "Generate New Array" re-renders array, enables sortBtn and disables stepBtn
-    const bs = new BubbleSortPage(page);
+    const bs1 = new BubbleSortPage(page);
     await bs.goto();
 
     // Capture current array values to compare
@@ -169,7 +169,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
     expect(await bs.isButtonDisabled(bs.stepBtn)).toBe(true);
 
     // Status should be reset to the Ready message
-    const statusText = await bs.getStatusText();
+    const statusText1 = await bs.getStatusText();
     expect(statusText).toBe('Ready to sort! Click "Start Sorting" to begin.');
 
     // No page errors introduced by clicking generate
@@ -182,7 +182,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
     // - stepBtn disabled while sorting
     // - status reflects comparisons or swaps
     // - array elements show "comparing" class when comparisons occur
-    const bs = new BubbleSortPage(page);
+    const bs2 = new BubbleSortPage(page);
     await bs.goto();
 
     // Ensure we are in Array Generated state
@@ -199,7 +199,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
     // The code writes "Comparing X and Y" or "Swapped X and Y" or "Element ... is now in its correct position"
     await bs.waitForStatusToContain(/Comparing|Swapped|Element/, 7000);
 
-    const statusText = await bs.getStatusText();
+    const statusText2 = await bs.getStatusText();
     expect(/Comparing|Swapped|Element/.test(statusText)).toBe(true);
 
     // When comparing, at least two elements should have the 'comparing' class at some point.
@@ -221,7 +221,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
     // This test validates two things:
     // 1) Attempting to click the disabled "Next Step" button normally does nothing (edge case)
     // 2) For testing the FSM transition we can force a click to invoke stepThroughSort and observe a single step execution
-    const bs = new BubbleSortPage(page);
+    const bs3 = new BubbleSortPage(page);
     await bs.goto();
 
     // Normal click should be a no-op because the button is disabled
@@ -255,7 +255,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
   test('Sorting completion (S2_Sorting -> S3_Sorted) - perform repeated steps until "Sorting complete!"', async ({ page }) => {
     // We will use forced step clicks repeatedly to progress the algorithm to completion.
     // This avoids waiting for the 1s interval of the automatic sorter and keeps the test fast.
-    const bs = new BubbleSortPage(page);
+    const bs4 = new BubbleSortPage(page);
     await bs.goto();
 
     // Ensure we have an array to sort
@@ -271,7 +271,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
       await page.waitForTimeout(10);
 
       // Check for completion status
-      const statusText = await bs.getStatusText();
+      const statusText3 = await bs.getStatusText();
       if (statusText === 'Sorting complete!') {
         completed = true;
         break;
@@ -302,7 +302,7 @@ test.describe('Bubble Sort Visualization FSM (de3b8b80-fa74-11f0-a1b6-4b9b815144
 
   test('Robustness: clicking Start Sorting while sorting is active should have no adverse effects', async ({ page }) => {
     // Validate that clicking Start Sorting while sorting is already in progress does nothing harmful.
-    const bs = new BubbleSortPage(page);
+    const bs5 = new BubbleSortPage(page);
     await bs.goto();
 
     // Start sorting automatically

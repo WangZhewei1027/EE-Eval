@@ -36,7 +36,7 @@ class ExponentialSearchPage {
   }
 
   async setTarget(value) {
-    // value as string or number
+    // value or number
     await this.targetInput.fill(String(value));
   }
 
@@ -71,7 +71,7 @@ class ExponentialSearchPage {
   async waitForStepsContain(expectedSubstring, timeout = 20000) {
     await this.page.waitForFunction(
       (expected) => {
-        const el = document.getElementById('steps');
+        const el1 = document.getElementById('steps');
         return el && el.textContent.includes(expected);
       },
       expectedSubstring,
@@ -145,7 +145,7 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
   test.describe('Successful search (S0_Idle -> S1_Searching -> S2_Completed)', () => {
     test('searches for default target 27 and completes with found state and visual highlight', async ({ page }) => {
       // This test validates the transition Idle -> Searching (on button click) -> Completed (when found).
-      const app = new ExponentialSearchPage(page);
+      const app1 = new ExponentialSearchPage(page);
       await app.goto();
 
       // Start search and wait for completion result text
@@ -174,7 +174,7 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
 
     test('search for target at index 0 resolves immediately and marks index 0 as found', async ({ page }) => {
       // Validate exponentialSearch early-return when arr[0] === target
-      const app = new ExponentialSearchPage(page);
+      const app2 = new ExponentialSearchPage(page);
       await app.goto();
 
       await app.setTarget('1'); // first element in default array
@@ -186,11 +186,11 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
       await app.waitForStepsContain('Target is at index 0.');
 
       // The array visualization should mark index 0 as found
-      const classes = await app.getArrayItemClasses();
+      const classes1 = await app.getArrayItemClasses();
       expect(classes[0]).toMatch(/found/);
 
       // Depending on implementation, resultEl might not be updated in early return; ensure either steps or result indicates success.
-      const stepsText = await app.getStepsText();
+      const stepsText1 = await app.getStepsText();
       expect(stepsText).toContain('Target is at index 0.');
 
       // Confirm no page errors
@@ -201,7 +201,7 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
   test.describe('Not found scenario and steps verification', () => {
     test('search for a missing target displays not-found message and logs steps', async ({ page }) => {
       // Validate Searching -> Completed when target is not present
-      const app = new ExponentialSearchPage(page);
+      const app3 = new ExponentialSearchPage(page);
       await app.goto();
 
       await app.setTarget('999'); // value not in default array
@@ -210,15 +210,15 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
       // Wait until result text reflects not found
       await app.waitForResultText('Target 999 not found in the array.');
 
-      const result = (await app.getResultText()).trim();
+      const result1 = (await app.getResultText()).trim();
       expect(result).toBe('Target 999 not found in the array.');
 
       // Steps should include a "not found" message from binary search path
-      const stepsText = await app.getStepsText();
+      const stepsText2 = await app.getStepsText();
       expect(stepsText).toMatch(/not found/i);
 
       // Ensure no array item is marked as 'found'
-      const classes = await app.getArrayItemClasses();
+      const classes2 = await app.getArrayItemClasses();
       const anyFound = classes.some(c => /found/.test(c));
       expect(anyFound).toBe(false);
 
@@ -230,7 +230,7 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
   test.describe('Edge cases and input validation (alerts and error paths)', () => {
     test('empty array input triggers an alert and does not throw page errors', async ({ page }) => {
       // When array is empty, startSearch onclick should alert "Please enter a valid sorted array."
-      const app = new ExponentialSearchPage(page);
+      const app4 = new ExponentialSearchPage(page);
       await app.goto();
 
       await app.setArray(''); // empty array
@@ -250,15 +250,15 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
 
     test('unsorted array input triggers an alert about sorting', async ({ page }) => {
       // When array is not ascending, should alert user
-      const app = new ExponentialSearchPage(page);
+      const app5 = new ExponentialSearchPage(page);
       await app.goto();
 
       await app.setArray('5,3,1'); // unsorted
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise1 = page.waitForEvent('dialog');
 
       await app.clickStart();
 
-      const dialog = await dialogPromise;
+      const dialog1 = await dialogPromise;
       expect(dialog.message()).toBe('Array must be sorted in ascending order for Exponential Search.');
       await dialog.accept();
 
@@ -267,15 +267,15 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
 
     test('invalid target (non-numeric) triggers an alert', async ({ page }) => {
       // Clear target input to make it invalid (NaN)
-      const app = new ExponentialSearchPage(page);
+      const app6 = new ExponentialSearchPage(page);
       await app.goto();
 
       await app.setTarget(''); // empty -> NaN
-      const dialogPromise = page.waitForEvent('dialog');
+      const dialogPromise2 = page.waitForEvent('dialog');
 
       await app.clickStart();
 
-      const dialog = await dialogPromise;
+      const dialog2 = await dialogPromise;
       expect(dialog.message()).toBe('Please enter a valid number for the target.');
       await dialog.accept();
 
@@ -285,7 +285,7 @@ test.describe('Exponential Search Demo - FSM validation and UI behavior', () => 
 
   test.describe('Instrumentation: observe console logs and page errors during a normal search', () => {
     test('collects console logs and ensures no unexpected page errors during search', async ({ page }) => {
-      const app = new ExponentialSearchPage(page);
+      const app7 = new ExponentialSearchPage(page);
       await app.goto();
 
       // Run a normal search

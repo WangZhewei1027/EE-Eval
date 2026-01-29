@@ -168,7 +168,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
 
   test('S0 Idle: Initial UI setup runs setMaxNNote() and updateCodeSnippet()', async ({ page }) => {
     // Validate entry actions of initial state: code snippet populated, nnote set appropriately, initial stats set
-    const app = new TimeComplexityPage(page);
+    const app1 = new TimeComplexityPage(page);
 
     // Code snippet should be non-empty and reflect default algorithm (linear)
     const code = await app.getCodeText();
@@ -194,13 +194,13 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
 
   test('Transition S0 -> S1: Algorithm change updates nnote, code snippet, and statAlgo', async ({ page }) => {
     // Change algorithm to exponential and verify entry actions in S1 (setMaxNNote, updateCodeSnippet)
-    const app = new TimeComplexityPage(page);
+    const app2 = new TimeComplexityPage(page);
 
     // Select exponential algorithm
     await app.selectAlgorithm('exponential');
 
     // nnote should recommend small n for exponential
-    const nnote = await app.getNnoteText();
+    const nnote1 = await app.getNnoteText();
     expect(nnote.toLowerCase()).toContain('recommended');
 
     // maxNRange.max should be clamped to a small value (30) for exponential
@@ -208,12 +208,12 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     expect(Number(maxRangeMax)).toBeLessThanOrEqual(30);
 
     // code snippet should be updated to show fibonacci / exponential pseudocode
-    const code = await app.getCodeText();
+    const code1 = await app.getCodeText();
     expect(code.toLowerCase()).toContain('fib');
     expect(code.toLowerCase()).toContain('2^n');
 
     // statAlgo text should update to an algorithm name mentioning '2^n' or 'Fibonacci'
-    const statAlgo = await app.getStatAlgo();
+    const statAlgo1 = await app.getStatAlgo();
     expect(statAlgo.toLowerCase()).toContain('fib') || expect(statAlgo.toLowerCase()).toContain('2^n');
 
     // Ensure no uncaught page errors due to change handler
@@ -221,7 +221,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
   });
 
   test('Transition S1 -> S2: Plotting produces SVG paths and updates statOps (from calculating... to final)', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app3 = new TimeComplexityPage(page);
 
     // Ensure an algorithm is selected (use linear)
     await app.selectAlgorithm('linear');
@@ -249,7 +249,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
   });
 
   test('Transition S1 -> S3: Run single test (runOnce) measures ops and elapsed time and plots single point', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app4 = new TimeComplexityPage(page);
 
     // Choose a safe algorithm (linear) and a known singleN
     await app.selectAlgorithm('linear');
@@ -271,7 +271,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     expect(statTime).toMatch(/\d+\.\d{3}\s*ms/);
 
     // A plot should be generated with one point (children > 0)
-    const childCount = await app.getPlotChildCount();
+    const childCount1 = await app.getPlotChildCount();
     expect(childCount).toBeGreaterThan(0);
 
     // Ensure no uncaught page errors during single run
@@ -279,7 +279,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
   });
 
   test('Transition S1 -> S3 (edge case): Exponential runOnce clamps large n and still returns stats', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app5 = new TimeComplexityPage(page);
 
     // Select exponential algorithm (which recommends small n)
     await app.selectAlgorithm('exponential');
@@ -297,8 +297,8 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     // The script clamps exponential singleN to at most 40
     expect(Number(singleNVal)).toBeLessThanOrEqual(40);
 
-    const statOps = await app.getStatOps();
-    const statTime = await app.getStatTime();
+    const statOps1 = await app.getStatOps();
+    const statTime1 = await app.getStatTime();
     expect(statOps.toLowerCase()).toContain('ops');
     expect(statTime).toMatch(/\d+\.\d{3}\s*ms/);
 
@@ -306,7 +306,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
   });
 
   test('Run button (S1 -> S2-like): clicking Run for several ns populates stats and plot', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app6 = new TimeComplexityPage(page);
 
     // Use quadratic but small size to avoid long runtimes
     await app.selectAlgorithm('quadratic');
@@ -328,14 +328,14 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     expect(postTime).toMatch(/ms/);
 
     // Plot should be updated with children's content
-    const childCount = await app.getPlotChildCount();
+    const childCount2 = await app.getPlotChildCount();
     expect(childCount).toBeGreaterThan(0);
 
     expect(pageErrors.length).toBe(0);
   });
 
   test('S4 Reset: Modify controls then Reset reverts to defaults and clears plot & stats', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app7 = new TimeComplexityPage(page);
 
     // Make some changes
     await app.selectAlgorithm('quadratic');
@@ -363,7 +363,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     expect(await app.getScaleValue()).toBe('linear');
 
     // Algorithm should be set back to 'linear'
-    const statAlgo = await app.getStatAlgo();
+    const statAlgo2 = await app.getStatAlgo();
     expect(statAlgo.toLowerCase()).toContain('linear');
 
     // Stats cleared
@@ -373,7 +373,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     // Plot cleared: implementation calls clearPlot() which removes svg children
     // Give a short delay for DOM update
     await page.waitForTimeout(50);
-    const childCount = await app.getPlotChildCount();
+    const childCount3 = await app.getPlotChildCount();
     // After reset it tries to clear; depending on later code the initial plot may have re-run,
     // assert that child count is a number and not negative; better to assert a reset action occurred:
     expect(typeof childCount).toBe('number');
@@ -382,7 +382,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
   });
 
   test('Copy snippet: clicking code box triggers copy click and button text changes (Copied!/Failed) and reverts', async ({ page }) => {
-    const app = new TimeComplexityPage(page);
+    const app8 = new TimeComplexityPage(page);
 
     // Click the code area (which triggers copyBtn.click())
     await app.locators.codeBox.click();
@@ -416,7 +416,7 @@ test.describe('Time Complexity Interactive Demo — FSM states & transitions', (
     // This test focuses on collecting and asserting console messages and page errors observed during prior interactions.
     // We perform a lightweight interaction to produce console output (plot) and then inspect captured logs.
 
-    const app = new TimeComplexityPage(page);
+    const app9 = new TimeComplexityPage(page);
 
     // Trigger a plot to generate console output if any
     await app.selectAlgorithm('linear');

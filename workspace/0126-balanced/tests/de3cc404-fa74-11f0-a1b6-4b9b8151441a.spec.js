@@ -117,7 +117,7 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
 
   test('Start Without Mutex: transitions to running state and produces read/write logs', async ({ page }) => {
     // This test validates the S0_Idle -> S1_WithoutMutexRunning transition and its observable outputs.
-    const app = new MutexApp(page);
+    const app1 = new MutexApp(page);
     await app.goto();
 
     // Start without mutex
@@ -151,13 +151,13 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
 
     // Confirm no runtime page errors occurred during the operation
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.find(m => m.type === 'error');
+    const errorConsole1 = consoleMessages.find(m => m.type === 'error');
     expect(errorConsole).toBeUndefined();
   }, 15000);
 
   test('Start With Mutex: transitions to running state, produces ordered read/write logs and final value 5', async ({ page }) => {
     // This test validates the S0_Idle -> S2_WithMutexRunning transition and that the mutex enforces serialized access.
-    const app = new MutexApp(page);
+    const app2 = new MutexApp(page);
     await app.goto();
 
     // Start with mutex
@@ -174,9 +174,9 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
     expect(await app.locators.startWithMutex.isEnabled()).toBeTruthy();
     expect(await app.locators.startWithoutMutex.isEnabled()).toBeTruthy();
 
-    const html = await app.getOutputHTML('#outputWithMutex');
-    const readMatches = (html.match(/Thread with mutex read:/g) || []).length;
-    const wroteMatches = (html.match(/Thread with mutex wrote:/g) || []).length;
+    const html1 = await app.getOutputHTML('#outputWithMutex');
+    const readMatches1 = (html.match(/Thread with mutex read:/g) || []).length;
+    const wroteMatches1 = (html.match(/Thread with mutex wrote:/g) || []).length;
 
     // With a proper mutex, we expect exactly 5 reads and 5 writes (one per operation)
     expect(readMatches).toBe(5);
@@ -191,13 +191,13 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
 
     // Confirm no runtime page errors occurred during the operation
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.find(m => m.type === 'error');
+    const errorConsole2 = consoleMessages.find(m => m.type === 'error');
     expect(errorConsole).toBeUndefined();
   }, 15000);
 
   test('Reset transition: clears outputs and resets shared state', async ({ page }) => {
     // This test validates S1/S2 -> S0_Reset transition behaviour via the Reset button.
-    const app = new MutexApp(page);
+    const app3 = new MutexApp(page);
     await app.goto();
 
     // Run both modes to populate outputs and change sharedCounter
@@ -226,18 +226,18 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
     expect(await app.locators.startWithMutex.isEnabled()).toBeTruthy();
 
     // sharedCounter should be reset to 0
-    const counter = await app.getSharedCounter();
+    const counter1 = await app.getSharedCounter();
     expect(counter).toBe(0);
 
     // Confirm no runtime errors occurred during reset
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.find(m => m.type === 'error');
+    const errorConsole3 = consoleMessages.find(m => m.type === 'error');
     expect(errorConsole).toBeUndefined();
   });
 
   test('Edge case: Start buttons disabled during execution (no double-start)', async ({ page }) => {
     // Validate that when an operation is running the start buttons are disabled preventing reentrancy
-    const app = new MutexApp(page);
+    const app4 = new MutexApp(page);
     await app.goto();
 
     // Start the With Mutex operation
@@ -259,9 +259,9 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
     expect(await app.locators.startWithMutex.isEnabled()).toBeTruthy();
     expect(await app.locators.startWithoutMutex.isEnabled()).toBeTruthy();
 
-    const html = await app.getOutputHTML('#outputWithMutex');
-    const readMatches = (html.match(/Thread with mutex read:/g) || []).length;
-    const wroteMatches = (html.match(/Thread with mutex wrote:/g) || []).length;
+    const html2 = await app.getOutputHTML('#outputWithMutex');
+    const readMatches2 = (html.match(/Thread with mutex read:/g) || []).length;
+    const wroteMatches2 = (html.match(/Thread with mutex wrote:/g) || []).length;
 
     // Ensure counts equal exactly 5 (single run)
     expect(readMatches).toBe(5);
@@ -269,13 +269,13 @@ test.describe('Mutex Demonstration - FSM states and transitions', () => {
 
     // Confirm no runtime page errors occurred during the edge-case
     expect(pageErrors.length).toBe(0);
-    const errorConsole = consoleMessages.find(m => m.type === 'error');
+    const errorConsole4 = consoleMessages.find(m => m.type === 'error');
     expect(errorConsole).toBeUndefined();
   }, 15000);
 
   test('Observability: capture console and page errors while running both scenarios', async ({ page }) => {
     // This test purposefully collects console and pageerror events while running both scenarios.
-    const app = new MutexApp(page);
+    const app5 = new MutexApp(page);
     await app.goto();
 
     // Run without mutex

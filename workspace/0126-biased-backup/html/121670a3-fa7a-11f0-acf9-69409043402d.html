@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Load Balancing Interactive Simulator</title>
+</head>
+<body>
+<h1>Load Balancing Simulator</h1>
+
+<p>
+This simulator lets you create servers, add tasks with customizable loads, and explore how different load balancing algorithms distribute the workload.
+</p>
+
+<section>
+<h2>Servers Setup</h2>
+<label>New Server Name: <input type="text" id="newServerName" /></label>
+<button id="addServerBtn">Add Server</button>
+<button id="removeServerBtn">Remove Selected Server</button>
+<br /><br />
+<label>Servers:</label>
+<select id="serversList" size="5" style="width: 200px;"></select>
+<p>
+<span><b>Server Details:</b></span><br />
+ID: <span id="serverId">-</span><br />
+Name: <span id="serverName">-</span><br />
+Capacity (Max Load): <input type="number" id="serverCapacity" min="1" value="10" style="width: 60px;" />
+<button id="updateServerCapacity">Update Capacity</button><br />
+Current Load: <span id="serverLoad">0</span><br />
+Number of Tasks: <span id="serverTasksCount">0</span><br />
+<button id="clearServerTasksBtn">Clear Tasks on Server</button>
+</p>
+<hr />
+</section>
+
+<section>
+<h2>Tasks Setup</h2>
+<label>Task Name: <input type="text" id="newTaskName" /></label>
+<label>Load (Integer >0): <input type="number" id="newTaskLoad" min="1" value="1" style="width: 60px;" /></label>
+<button id="addTaskBtn">Add Task</button>
+<button id="removeTaskBtn">Remove Selected Task</button>
+<br /><br />
+<label>Tasks:</label>
+<select id="tasksList" size="5" style="width: 200px;"></select>
+<p>
+<span><b>Task Details:</b></span><br />
+ID: <span id="taskId">-</span><br />
+Name: <span id="taskName">-</span><br />
+Load: <span id="taskLoad">-</span><br />
+Assigned Server: <span id="taskAssignedServer">-</span><br />
+<button id="assignTaskToServerBtn">Assign to Selected Server</button>
+<button id="unassignTaskBtn">Unassign Task</button>
+</p>
+<hr />
+</section>
+
+<section>
+<h2>Load Balancing Algorithms</h2>
+<label><input type="radio" name="algorithm" value="roundrobin" checked /> Round Robin</label><br />
+<label><input type="radio" name="algorithm" value="leastconn" /> Least Connections (Least Load)</label><br />
+<label><input type="radio" name="algorithm" value="random" /> Random</label><br />
+<label><input type="radio" name="algorithm" value="custom" /> Custom Weights</label><br />
+<div id="customWeightsContainer" style="display:none; max-height:100px; overflow:auto; border:1px solid black; margin-top:4px; padding:4px;">
+<p>Enter server weights (positive integers). Leave blank for default weight 1.</p>
+<div id="weightsInputs"></div>
+<button id="updateWeightsBtn">Update Weights</button>
+</div>
+<button id="autoBalanceBtn">Auto Balance Tasks Using Selected Algorithm</button>
+</section>
+
+<hr />
+
+<section>
+<h2>Current State Overview</h2>
+<button id="showSummaryBtn">Show Summary Report</button>
+<pre id="summaryReport" style="white-space: pre-wrap; border:1px solid black; padding:5px; max-height:300px; overflow:auto;"></pre>
+</section>
+
+<hr />
+
+<section>
+<h2>Manual Load Balancing Controls</h2>
+<label>Select Task: <select id="manualTaskSelector" style="width: 220px;"></select></label>
+<label>Select Server: <select id="manualServerSelector" style="width: 220px;"></select></label>
+<button id="manualAssignBtn">Assign Task to Server</button>
+<button id="manualUnassignBtn">Unassign Task</button>
+<p>
+<span><b>Manual Assignment Feedback:</b></span><br />
+<span id="manualAssignFeedback">-</span>
+</p>
+</section>
+
+<hr />
+
+<section>
+<h2>Simulation Controls</h2>
+<label>Simulate Incoming Tasks (count): <input type="number" id="simTaskCount" min="1" value="5" style="width: 60px;" /></label>
+<label>Min Load: <input type="number" id="simTaskMinLoad" min="1" value="1" style="width: 60px;" /></label>
+<label>Max Load: <input type="number" id="simTaskMaxLoad" min="1" value="5" style="width: 60px;" /></label>
+<button id="simulateTasksBtn">Simulate & Auto Balance</button>
+</section>
+
+<hr />
+
+<section>
+<h2>Reset Controls</h2>
+<button id="resetAllBtn">Reset All (Servers & Tasks)</button>
+<button id="clearTaskAssignmentsBtn">Clear All Task Assignments</button>
+</section>
+
+<script>
+(() => {
+  // Data structures
+  let servers = [];
+  let tasks = [];
+  
+  // To assign unique IDs
+  let serverIdCounter = 1;
+  let taskIdCounter = 1;
+
+  // For Round Robin
+  let roundRobinIndex = 0;
+
+  // Current algorithm
+  let currentAlgorithm = 'roundrobin';
+  
+  // Custom weights map: serverId -> weight
+  let customWeights = {};
+
+  // Utility
+  function $(id) { return document.getElementById(id); }
+
+  // Server functions
+  function addServer(name, capacity) {
+    if(!name.trim()) {
+      alert('Server name cannot be empty.');
+      return false;
+    }
+    if(servers.some(s=>s.name===name)) {
+      alert('Server name must be unique.');
+      return false;
+    }
+    const server = {
+      id: serverIdCounter++,
+      name: name.trim(),
+      capacity: capacity || 10,
+      tasks: []
+    };
+    servers.push(server);
+    updateServersList();
+    updateWeightsInputs();
+    return true;
+  }
+
+  function removeServer(serverId) {
+    const idx = servers.findIndex(s=>s.id===serverId);
+    if(idx === -1) return false;
+    const server = servers[idx];
+    if(server.tasks.length > 0){
+      if(!confirm("Server has assigned tasks. Removing will unassign all these tasks. Proceed?")){
+        return false;
+      }
+      // unassign tasks assigned to this server
+      server.tasks.forEach(tid => {
+        let t = tasks.find(tsk => tsk.id === tid);
+        if(t) t.assignedServer = null;
+      });
+    }
+    servers.splice(idx,1);
+    updateServersList();
+    updateWeightsInputs();
+    return true;
+  }
+
+  function updateServersList() {
+    const sel = $('serversList');
+    const manualServerSel = $('manualServerSelector');
+    const weightsDiv = $('weightsInputs');
+    sel.innerHTML = '';
+    manualServerSel.innerHTML = '';
+    servers.forEach(s => {
+      let opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name + ' (Cap:' + s.capacity + ')';
+      sel.appendChild(opt);
+      // Manual selector
+      let opt2 = document.createElement('option');
+      opt2.value = s.id;
+      opt2.textContent = s.name;
+      manualServerSel.appendChild(opt2);
+    });
+    // If something selected previously, keep selection or select first
+    if(servers.length > 0) {
+      if(!sel.value || !servers.find(s=>s.id==sel.value)) sel.value = servers[0].id;
+      if(!manualServerSel.value || !servers.find(s=>s.id==manualServerSel.value)) manualServerSel.value = servers[0].id;
+    }
+    updateServerDetails();
+    updateWeightsInputs();
+  }
+
+  function updateServerDetails() {
+    const sel = $('serversList');
+    const idSpan = $('serverId');
+    const nameSpan = $('serverName');
+    const capacityInput = $('serverCapacity');
+    const loadSpan = $('serverLoad');
+    const tasksCountSpan = $('serverTasksCount');
+
+    if(!sel.value) {
+      idSpan.textContent = '-';
+      nameSpan.textContent = '-';
+      capacityInput.value = 10;
+      loadSpan.textContent = '0';
+      tasksCountSpan.textContent = '0';
+      return;
+    }
+    const server = servers.find(s=> s.id == sel.value);
+    if(!server) return;
+    idSpan.textContent = server.id;
+    nameSpan.textContent = server.name;
+    capacityInput.value = server.capacity;
+    let load = server.tasks.reduce((acc, tid) => {
+      const tsk = tasks.find(t => t.id === tid);
+      return acc + (tsk ? tsk.load : 0);
+    },0);
+    loadSpan.textContent = load;
+    tasksCountSpan.textContent = server.tasks.length;
+  }
+
+  function updateServerCapacity(serverId, capacity) {
+    const server = servers.find(s=>s.id==serverId);
+    if(!server) return false;
+    if(capacity<1) return false;
+    server.capacity = capacity;
+    updateServersList();
+    return true;
+  }
+
+  function clearTasksOnServer(serverId) {
+    const server = servers.find(s=>s.id==serverId);
+    if(!server) return false;
+    server.tasks.forEach(tid => {
+      const t = tasks.find(task => task.id === tid);
+      if(t) t.assignedServer = null;
+    });
+    server.tasks = [];
+    updateServersList();
+    updateTasksList();
+    return true;
+  }
+
+  // Task functions
+  function addTask(name, load) {
+    if(!name.trim()) {
+      alert('Task name cannot be empty.');
+      return false;
+    }
+    if(tasks.some(t=>t.name===name)) {
+      alert('Task name must be unique.');
+      return false;
+    }
+    if(!Number.isInteger(load) || load < 1) {
+      alert('Task load must be an integer >= 1.');
+      return false;
+    }
+    const task = {
+      id: taskIdCounter++,
+      name: name.trim(),
+      load: load,
+      assignedServer: null
+    };
+    tasks.push(task);
+    updateTasksList();
+    return true;
+  }
+
+  function removeTask(taskId) {
+    const idx = tasks.findIndex(t=>t.id === taskId);
+    if(idx === -1) return false;
+    const task = tasks[idx];
+    if(task.assignedServer !== null) {
+      const server = servers.find(s=>s.id===task.assignedServer);
+      if(server){
+        server.tasks = server.tasks.filter(tid => tid !== task.id);
+      }
+    }
+    tasks.splice(idx,1);
+    updateTasksList();
+    return true;
+  }
+
+  function updateTasksList() {
+    const sel = $('tasksList');
+    const manualTaskSel = $('manualTaskSelector');
+    sel.innerHTML = '';
+    manualTaskSel.innerHTML = '';
+    tasks.forEach(t => {
+      let opt = document.createElement('option');
+      opt.value = t.id;
+      let assignedName = t.assignedServer ? servers.find(s=>s.id===t.assignedServer)?.name || '?' : 'Unassigned';
+      opt.textContent = `${t.name} (Load:${t.load}) [${assignedName}]`;
+      sel.appendChild(opt);
+      // manual selector
+      let opt2 = document.createElement('option');
+      opt2.value = t.id;
+      opt2.textContent = t.name + ' (Load:' + t.load + ')';
+      manualTaskSel.appendChild(opt2);
+    });
+    // Maintain selection when possible:
+    if(tasks.length > 0){
+      if(!sel.value || !tasks.find(t=>t.id==sel.value)) sel.value = tasks[0].id;
+      if(!manualTaskSel.value || !tasks.find(t=>t.id==manualTaskSel.value)) manualTaskSel.value = tasks[0].id;
+    }
+    updateTaskDetails();
+  }
+
+  function updateTaskDetails() {
+    const sel = $('tasksList');
+    const idSpan = $('taskId');
+    const nameSpan = $('taskName');
+    const loadSpan = $('taskLoad');
+    const assignedSpan = $('taskAssignedServer');
+    if(!sel.value) {
+      idSpan.textContent = '-';
+      nameSpan.textContent = '-';
+      loadSpan.textContent = '-';
+      assignedSpan.textContent = '-';
+      return;
+    }
+    const task = tasks.find(t=>t.id == sel.value);
+    if(!task) return;
+    idSpan.textContent = task.id;
+    nameSpan.textContent = task.name;
+    loadSpan.textContent = task.load;
+    assignedSpan.textContent = task.assignedServer ? (servers.find(s=>s.id===task.assignedServer)?.name || '?') : 'Unassigned';
+  }
+
+  function assignTaskToServer(taskId, serverId) {
+    const task = tasks.find(t=>t.id==taskId);
+    const server = servers.find(s=>s.id==serverId);
+    if(!task || !server) return false;
+    // Check capacity
+    const currentLoad = server.tasks.reduce((acc, tid) => {
+      const tsk = tasks.find(t => t.id === tid);
+      return acc + (tsk ? tsk.load : 0);
+    },0);
+    if(currentLoad + task.load > server.capacity) {
+      return { success:false, message:"Server capacity exceeded! Task cannot be assigned."};
+    }
+    // Remove task from previous server's tasks if assigned
+    if(task.assignedServer !== null) {
+      const oldServer = servers.find(s=>s.id===task.assignedServer);
+      if(oldServer) {
+        oldServer.tasks = oldServer.tasks.filter(tid => tid !== task.id);
+      }
+    }
+    // Assign
+    task.assignedServer = server.id;
+    server.tasks.push(task.id);
+    updateTasksList();
+    updateServersList();
+    return {success:true};
+  }
+
+  function unassignTask(taskId) {
+    const task = tasks.find(t=>t.id==taskId);
+    if(!task || task.assignedServer === null) return false;
+    const server = servers.find(s=>s.id===task.assignedServer);
+    if(server) {
+      server.tasks = server.tasks.filter(tid => tid !== task.id);
+    }
+    task.assignedServer = null;
+    updateTasksList();
+    updateServersList();
+    return true;
+  }
+
+  // Load Balancing Algorithms
+
+  // Round Robin: assign tasks one by one cycling through servers in order
+  function lbRoundRobin(tasksToAssign) {
+    if(servers.length === 0) {
+      alert("No servers available.");
+      return;
+    }
+    let idx = roundRobinIndex % servers.length;
+    tasksToAssign.forEach(task => {
+      // Try assign with wrap around if capacity exceeded
+      let assigned = false;
+      for(let i = 0; i < servers.length; i++){
+        const server = servers[(idx + i) % servers.length];
+        const currentLoad = server.tasks.reduce((acc, tid) => {
+          const tsk = tasks.find(t => t.id === tid);
+          return acc + (tsk ? tsk.load : 0);
+        },0);
+        if(currentLoad + task.load <= server.capacity){
+          assignTaskToServer(task.id, server.id);
+          assigned = true;
+          idx = ((idx + i) + 1) % servers.length;
+          break;
+        }
+      }
+      if(!assigned){
+        // cannot assign task because no servers have capacity
+        // remain unassigned
+      }
+    });
+    roundRobinIndex = idx;
+  }
+
+  // Least Connections (Least Load): assign task to server with least total load (that can take it)
+  function lbLeastConnections(tasksToAssign) {
+    if(servers.length === 0) {
+      alert("No servers available.");
+      return;
+    }
+    tasksToAssign.forEach(task=>{
+      // candidates: servers with capacity
+      let candidates = servers.filter(server => {
+        let load = server.tasks.reduce((acc, tid) => {
+          const tsk = tasks.find(t => t.id === tid);
+          return acc + (tsk ? tsk.load : 0);
+        },0);
+        return load + task.load <= server.capacity;
+      });
+      if(candidates.length === 0) {
+        // cannot assign task
+        return;
+      }
+      // Find least load server
+      candidates.sort((a,b) => {
+        let loadA = a.tasks.reduce((acc, tid) => {
+          const tsk = tasks.find(t => t.id === tid);
+          return acc + (tsk ? tsk.load : 0);
+        },0);
+        let loadB = b.tasks.reduce((acc, tid) => {
+          const tsk = tasks.find(t => t.id === tid);
+          return acc + (tsk ? tsk.load : 0);
+        },0);
+        return loadA - loadB;
+      });
+      assignTaskToServer(task.id, candidates[0].id);
+    });
+  }
+
+  // Random: assign task to random server that has capacity
+  function lbRandom(tasksToAssign) {
+    if(servers.length === 0) {
+      alert("No servers available.");
+      return;
+    }
+    tasksToAssign.forEach(task => {
+      const candidates = servers.filter(server => {
+        let load = server.tasks.reduce((acc, tid) => {
+          const tsk = tasks.find(t => t.id === tid);
+          return acc + (tsk ? tsk.load : 0);
+        },0);
+        return load + task.load <= server.capacity;
+      });
+      if(candidates.length === 0) {
+        return;
+      }
+      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+      assignTaskToServer(task.id, chosen.id);
+    });
+  }
+
+  // Custom Weights: assign task to server randomly weighted by user-defined weights (if any), considering capacity
+  // If no weights, default 1 each
+  function lbCustomWeights(tasksToAssign) {
+    if(servers.length === 0) {
+      alert("No servers available.");
+      return;
+    }
+    // Build weighted list of servers repeated by their weight
+    tasksToAssign.forEach(task => {
+      // filter servers that can accept task
+      let candidates = servers.filter(server => {
+        let load = server.tasks.reduce((acc, tid) => {
+          const tsk = tasks.find(t => t.id === tid);
+          return acc + (tsk ? tsk.load : 0);
+        },0);
+        return load + task.load <= server.capacity;
+      });
+      if(candidates.length === 0) return;
+      let weightedServers = [];
+      candidates.forEach(s => {
+        let w = customWeights[s.id];
+        w = (w && w > 0) ? w : 1;
+        for(let i=0;i<w;i++){
+          weightedServers.push(s);
+        }
+      });
+      if(weightedServers.length === 0) return;
+      let chosen = weightedServers[Math.floor(Math.random() * weightedServers.length)];
+      assignTaskToServer(task.id, chosen.id);
+    });
+  }
+
+  function autoBalance() {
+    if(tasks.length === 0) {
+      alert("No tasks to assign.");
+      return;
+    }
+    if(servers.length === 0) {
+      alert("No servers available.");
+      return;
+    }
+    // First unassign all tasks
+    clearAllTaskAssignments(false);
+
+    // Get all tasks
+    let tasksToAssign = tasks.slice();
+
+    switch(currentAlgorithm) {
+      case 'roundrobin':
+        lbRoundRobin(tasksToAssign);
+        break;
+      case 'leastconn':
+        lbLeastConnections(tasksToAssign);
+        break;
+      case 'random':
+        lbRandom(tasksToAssign);
+        break;
+      case 'custom':
+        lbCustomWeights(tasksToAssign);
+        break;
+      default:
+        alert("Unknown algorithm.");
+    }
+    updateTasksList();
+    updateServersList();
+  }
+
+  function clearAllTaskAssignments(updateUI=true) {
+    tasks.forEach(task => task.assignedServer = null);
+    servers.forEach(server => server.tasks = []);
+    if(updateUI) {
+      updateServersList();
+      updateTasksList();
+    }
+  }
+
+  // Handling inputs for custom weights
+  function updateWeightsInputs() {
+    const container = $('weightsInputs');
+    container.innerHTML = '';
+    if(currentAlgorithm !== 'custom') {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'block';
+    servers.forEach(s => {
+      let id = 'weight_' + s.id;
+      let label = document.createElement('label');
+      label.htmlFor = id;
+      label.textContent = s.name + ': ';
+      let input = document.createElement('input');
+      input.type = 'number';
+      input.min = '1';
+      input.value = customWeights[s.id] || 1;
+      input.id = id;
+      input.style.width = '60px';
+      label.appendChild(input);
+      container.appendChild(label);
+      container.appendChild(document.createElement('br'));
+    });
+  }
+
+  function handleAlgorithmChange() {
+    const radios = document.querySelectorAll('input[name="algorithm"]');
+    radios.forEach(r => {
+      if(r.checked) currentAlgorithm = r.value;
+    });
+    updateWeightsInputs();
+  }
+
+  // Summary report
+  function showSummaryReport() {
+    const area = $('summaryReport');
+    let report = '';
+    report += 'Servers Summary:\n';
+    servers.forEach(server => {
+      let load = server.tasks.reduce((acc, tid) => {
+        const tsk = tasks.find(t => t.id === tid);
+        return acc + (tsk ? tsk.load : 0);
+      },0);
+      report += `ID: ${server.id} | Name: ${server.name} | Capacity: ${server.capacity} | Current Load: ${load} | Tasks: ${server.tasks.length}\n`;
+    });
+    report += '\nTasks Summary:\n';
+    tasks.forEach(task => {
+      let srvName = task.assignedServer ? (servers.find(s=>s.id === task.assignedServer)?.name || '?') : 'Unassigned';
+      report += `ID: ${task.id} | Name: ${task.name} | Load: ${task.load} | Assigned Server: ${srvName}\n`;
+    });
+    area.textContent = report;
+  }
+
+  // Simulation: create random tasks and auto balance
+  function simulateIncomingTasks(count, minLoad, maxLoad) {
+    if(servers.length === 0){
+      alert("No servers available.");
+      return;
+    }
+    if(count < 1) {
+      alert("Task count must be >= 1.");
+      return;
+    }
+    if(minLoad > maxLoad) {
+      alert("Min Load cannot be greater than Max Load.");
+      return;
+    }
+    for(let i=0; i<count; i++){
+      let load = Math.floor(Math.random()*(maxLoad - minLoad +1)) + minLoad;
+      let name;
+      // Make sure name is unique
+      do {
+        name = 'SimTask' + (taskIdCounter);
+      } while(tasks.some(t=>t.name === name));
+      addTask(name, load);
+    }
+    autoBalance();
+  }
+
+  // Event handlers
+
+  // Servers add/remove/update
+  $('addServerBtn').addEventListener('click', () => {
+    const name = $('newServerName').value;
+    const capacity = parseInt($('serverCapacity').value) || 10;
+    if(addServer(name, capacity)) {
+      $('newServerName').value = '';
+      // reset capacity input for new server to default 10
+      $('serverCapacity').value = 10;
+    }
+  });
+
+  $('removeServerBtn').addEventListener('click', () => {
+    const sel = $('serversList');
+    if(!sel.value) {
+      alert('Select a server to remove.');
+      return;
+    }
+    if(removeServer(parseInt(sel.value))) {
+      updateServerDetails();
+    }
+  });
+
+  $('serversList').addEventListener('change', updateServerDetails);
+
+  $('updateServerCapacity').addEventListener('click', () => {
+    const sel = $('serversList');
+    if(!sel.value) {
+      alert('Select a server first.');
+      return;
+    }
+    const val = parseInt($('serverCapacity').value);
+    if(isNaN(val) || val < 1) {
+      alert('Capacity must be an integer >= 1.');
+      return;
+    }
+    updateServerCapacity(parseInt(sel.value), val);
+  });
+
+  $('clearServerTasksBtn').addEventListener('click', () => {
+    const sel = $('serversList');
+    if(!sel.value) {
+      alert('Select a server first.');
+      return;
+    }
+    clearTasksOnServer(parseInt(sel.value));
+  });
+
+  // Tasks add/remove/update
+  $('addTaskBtn').addEventListener('click', () => {
+    const name = $('newTaskName').value;
+    const load = parseInt($('newTaskLoad').value);
+    if(addTask(name, load)) {
+      $('newTaskName').value = '';
+      $('newTaskLoad').value = 1;
+    }
+  });
+
+  $('removeTaskBtn').addEventListener('click', () => {
+    const sel = $('tasksList');
+    if(!sel.value) {
+      alert('Select a task to remove.');
+      return;
+    }
+    removeTask(parseInt(sel.value));
+  });
+
+  $('tasksList').addEventListener('change', updateTaskDetails);
+
+  // Assign task to selected server (from task details)
+  $('assignTaskToServerBtn').addEventListener('click', () => {
+    const taskSel = $('tasksList');
+    const serverSel = $('serversList');
+    if(!taskSel.value) {
+      alert('Select a task first.');
+      return;
+    }
+    if(!serverSel.value) {
+      alert('Select a server first.');
+      return;
+    }
+    const result = assignTaskToServer(parseInt(taskSel.value), parseInt(serverSel.value));
+    if(result.success === false) {
+      alert(result.message);
+    }
+  });
+
+  $('unassignTaskBtn').addEventListener('click', () => {
+    const taskSel = $('tasksList');
+    if(!taskSel.value) {
+      alert('Select a task first.');
+      return;
+    }
+    unassignTask(parseInt(taskSel.value));
+  });
+
+  // Algorithm selection
+  const algRadios = document.querySelectorAll('input[name="algorithm"]');
+  algRadios.forEach(r => {
+    r.addEventListener('change', handleAlgorithmChange);
+  });
+
+  // Update weights button
+  $('updateWeightsBtn').addEventListener('click', () => {
+    // gather weights
+    let newWeights = {};
+    let valid = true;
+    servers.forEach(server => {
+      let val = parseInt($('weight_' + server.id).value);
+      if(isNaN(val) || val < 1) {
+        alert(`Invalid weight for server '${server.name}'. Must be >=1.`);
+        valid = false;
+      } else {
+        newWeights[server.id] = val;
+      }
+    });
+    if(valid) {
+      customWeights = newWeights;
+      alert("Custom weights updated.");
+    }
+  });
+
+  // Auto Balance button
+  $('autoBalanceBtn').addEventListener('click', () => {
+    autoBalance();
+  });
+
+  // Show summary
+  $('showSummaryBtn').addEventListener('click', () => {
+    showSummaryReport();
+  });
+
+  // Manual load balancing controls
+  $('manualAssignBtn').addEventListener('click', () => {
+    const taskSel = $('manualTaskSelector');
+    const serverSel = $('manualServerSelector');
+    const feedback = $('manualAssignFeedback');
+
+    if(!taskSel.value || !serverSel.value) {
+      feedback.textContent = 'Select both task and server.';
+      return;
+    }
+    const result = assignTaskToServer(parseInt(taskSel.value), parseInt(serverSel.value));
+    if(result.success) {
+      feedback.textContent = `Task assigned to server successfully.`;
+    } else {
+      feedback.textContent = result.message || 'Failed to assign the task.';
+    }
+  });
+
+  $('manualUnassignBtn').addEventListener('click', () => {
+    const taskSel = $('manualTaskSelector');
+    const feedback = $('manualAssignFeedback');
+    if(!taskSel.value) {
+      feedback.textContent = 'Select a task.';
+      return;
+    }
+    if(unassignTask(parseInt(taskSel.value))) {
+      feedback.textContent = 'Task unassigned successfully.';
+    } else {
+      feedback.textContent = 'Task was not assigned to any server.';
+    }
+  });
+
+  // Simulation
+  $('simulateTasksBtn').addEventListener('click', () => {
+    const count = parseInt($('simTaskCount').value);
+    const minLoad = parseInt($('simTaskMinLoad').value);
+    const maxLoad = parseInt($('simTaskMaxLoad').value);
+    simulateIncomingTasks(count, minLoad, maxLoad);
+  });
+
+  // Reset buttons
+  $('resetAllBtn').addEventListener('click', () => {
+    if(!confirm("This will delete all servers and tasks. Proceed?")) return;
+    servers = [];
+    tasks = [];
+    serverIdCounter = 1;
+    taskIdCounter = 1;
+    roundRobinIndex = 0;
+    customWeights = {};
+    updateServersList();
+    updateTasksList();
+    $('summaryReport').textContent = '';
+    $('manualAssignFeedback').textContent = '-';
+  });
+
+  $('clearTaskAssignmentsBtn').addEventListener('click', () => {
+    clearAllTaskAssignments();
+    $('manualAssignFeedback').textContent = '-';
+  });
+
+  // Update details when servers/tasks list change
+  $('serversList').addEventListener('change', () => {
+    updateServerDetails();
+    updateWeightsInputs();
+  });
+  $('tasksList').addEventListener('change', updateTaskDetails);
+
+  // Initialize
+  updateServersList();
+  updateTasksList();
+  handleAlgorithmChange();
+
+  // Add some defaults for initial exploration
+  addServer('ServerA', 10);
+  addServer('ServerB', 15);
+  addServer('ServerC', 20);
+
+  addTask('Task1', 4);
+  addTask('Task2', 3);
+  addTask('Task3', 7);
+  addTask('Task4', 6);
+  addTask('Task5', 2);
+})();
+</script>
+</body>
+</html>

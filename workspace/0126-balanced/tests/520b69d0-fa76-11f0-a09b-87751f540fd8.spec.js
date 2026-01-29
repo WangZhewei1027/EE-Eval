@@ -87,7 +87,7 @@ test.describe('Static Typing Example - FSM S0_Idle', () => {
     expect(heading).toBe('Static Typing Example');
 
     // Verify paragraphs - FSM evidence lists two paragraph strings
-    const paragraphs = await app.paragraphTexts();
+    const paragraphs1 = await app.paragraphTexts();
     expect(paragraphs.length).toBeGreaterThanOrEqual(2);
     expect(paragraphs).toContain('This is a static typing example.');
     // Note: The HTML contains a second paragraph "This paragraph will not be rendered."
@@ -97,7 +97,7 @@ test.describe('Static Typing Example - FSM S0_Idle', () => {
 
   test('No interactive elements or event handlers exist as per extraction notes', async ({ page }) => {
     // This test asserts there are no interactive elements inside the main container.
-    const app = new StaticTypingPage(page);
+    const app1 = new StaticTypingPage(page);
 
     const interactiveCount = await app.interactiveElementCount();
     expect(interactiveCount).toBe(0);
@@ -127,11 +127,11 @@ test.describe('Static Typing Example - FSM S0_Idle', () => {
     // The FSM entry_actions mention renderPage(). The implementation does not define renderPage.
     // We intentionally attempt to call it in-page and assert that this produces a ReferenceError.
     // We capture the error via evaluate so it does not surface as an uncaught page error event.
-    const app = new StaticTypingPage(page);
+    const app2 = new StaticTypingPage(page);
 
-    const result = await app.callGlobalFunctionAndCatchError('renderPage');
+    const result1 = await app.callGlobalFunctionAndCatchError('renderPage');
 
-    // We expect the call to fail (ok: false) and to report a ReferenceError referring to renderPage
+    // We expect the call to fail (ok) and to report a ReferenceError referring to renderPage
     expect(result.ok).toBe(false);
     expect(result.errorName).toBe('ReferenceError');
 

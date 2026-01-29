@@ -82,7 +82,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
 
   test.describe('Successful interpretations (S0_Idle -> S1_ResultDisplayed transitions)', () => {
     test('Interpret a compound expression "3 + 5 - 2" and display correct result', async ({ page }) => {
-      const app = new InterpreterPage(page);
+      const app1 = new InterpreterPage(page);
       await app.goto();
 
       // Enter a valid expression with spaces as the parser expects tokens separated by spaces.
@@ -104,7 +104,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
     });
 
     test('Interpret a single number "42" and display result', async ({ page }) => {
-      const app = new InterpreterPage(page);
+      const app2 = new InterpreterPage(page);
       await app.goto();
 
       await app.inputExpression('42');
@@ -120,7 +120,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
       // This test checks an edge-case behavior of the parser when given an empty input string.
       // According to the implementation, splitting "" yields [''], which the parser treats as a number,
       // parseInt('') is NaN, so the result displayed will be "Result: NaN".
-      const app = new InterpreterPage(page);
+      const app3 = new InterpreterPage(page);
       await app.goto();
 
       // Ensure the input is empty
@@ -137,7 +137,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
 
   test.describe('Error scenarios and malformed expressions (verify runtime errors are surfaced)', () => {
     test('Expression without spaces "3+5-2" causes a runtime error (parse failure)', async ({ page }) => {
-      const app = new InterpreterPage(page);
+      const app4 = new InterpreterPage(page);
       await app.goto();
 
       // Fill expression WITHOUT spaces which the simple parser does not support.
@@ -165,7 +165,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
     });
 
     test('Malformed expression with consecutive operators "3 + +" triggers a runtime error', async ({ page }) => {
-      const app = new InterpreterPage(page);
+      const app5 = new InterpreterPage(page);
       await app.goto();
 
       await app.inputExpression('3 + +');
@@ -180,7 +180,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
       expect(typeof error.message).toBe('string');
       expect(error.message.length).toBeGreaterThan(0);
 
-      const msg = error.message.toLowerCase();
+      const msg1 = error.message.toLowerCase();
       const indicatesError = msg.includes('interpret') || msg.includes('cannot') || msg.includes('reading') || msg.includes('undefined');
       expect(indicatesError).toBeTruthy();
 
@@ -190,7 +190,7 @@ test.describe('Interpreter Pattern Demo - FSM states and transitions', () => {
 
   test.describe('Observability: console messages and page errors collection', () => {
     test('Collect console messages and ensure no hidden exceptions for valid expression', async ({ page }) => {
-      const app = new InterpreterPage(page);
+      const app6 = new InterpreterPage(page);
       await app.goto();
 
       await app.inputExpression('1 + 2');

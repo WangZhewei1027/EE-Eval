@@ -71,7 +71,7 @@ class QueryExplorerPage {
   }
 
   async setPredicatePushdown(checked) {
-    const isChecked = await this.predicatePushdown.isChecked();
+    const isChecked1 = await this.predicatePushdown.isChecked1();
     if (isChecked !== checked) {
       await this.predicatePushdown.click();
     }
@@ -164,7 +164,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
 
   test.describe('Running queries and QueryRunning state (S1_QueryRunning)', () => {
     test('Run Query disables buttons (onEnter) and re-enables (onExit) and updates output & metrics', async ({ page }) => {
-      const app = new QueryExplorerPage(page);
+      const app1 = new QueryExplorerPage(page);
       await app.goto();
 
       // Configure small dataset for quick execution
@@ -184,7 +184,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
 
       // Output should show the "Executing query..." message while running
       await page.waitForFunction(() => {
-        const out = document.getElementById('output');
+        const out1 = document.getElementById('output');
         return out && out.textContent && out.textContent.includes('Executing query... (measuring performance)');
       });
 
@@ -212,7 +212,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
     });
 
     test('Changing inputs during a running query does not prematurely re-enable buttons (S1 -> S0 behavior verified)', async ({ page }) => {
-      const app = new QueryExplorerPage(page);
+      const app2 = new QueryExplorerPage(page);
       await app.goto();
 
       // Configure a moderate dataset to ensure a short but observable run window
@@ -253,7 +253,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
 
   test.describe('Explain view and ExplainShowing state (S2_ExplainShowing)', () => {
     test('Clicking Show Explain produces a textual plan reflecting selected options', async ({ page }) => {
-      const app = new QueryExplorerPage(page);
+      const app3 = new QueryExplorerPage(page);
       await app.goto();
 
       // Configure to use hash join and toggle pushdown and index to validate different branches
@@ -265,7 +265,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
       await app.clickExplain();
 
       // The generated explain text should mention Hash Join and predicate pushdown enabled
-      const explainText = await app.getExplainText();
+      const explainText1 = await app.getExplainText();
       expect(explainText).toMatch(/Hash Join/);
       expect(explainText).toMatch(/Predicate pushdown: ENABLED/);
       expect(explainText).toMatch(/Estimated work:/);
@@ -278,7 +278,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
     });
 
     test('Explain reflects index disabled when Indexed algorithm selected', async ({ page }) => {
-      const app = new QueryExplorerPage(page);
+      const app4 = new QueryExplorerPage(page);
       await app.goto();
 
       // Select indexed algorithm but disable the index to trigger the explanatory note
@@ -287,7 +287,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
 
       await app.clickExplain();
 
-      const explainText = await app.getExplainText();
+      const explainText2 = await app.getExplainText();
       expect(explainText).toMatch(/Indexed Nested Loop requested, but index is DISABLED/);
       expect(explainText).toMatch(/Estimated work:/);
       expect(pageErrors).toHaveLength(0);
@@ -296,7 +296,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
 
   test.describe('Edge cases and error scenarios', () => {
     test('Run with minimal values and very low selectivity produces valid output and metrics', async ({ page }) => {
-      const app = new QueryExplorerPage(page);
+      const app5 = new QueryExplorerPage(page);
       await app.goto();
 
       // Minimal values from inputs: customers minimum 100, orders minimum 500, selectivity 1
@@ -318,7 +318,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
       await app.waitForExecutionFinish(7000);
 
       // After completion, validate output contains rows scanned and execution time
-      const out = await app.getOutputText();
+      const out2 = await app.getOutputText();
       expect(out).toMatch(/Rows matched \(join result\)|Rows matched/); // flexible check for presence of Rows matched line
       expect(out).toMatch(/Execution time \(measured\):/);
 
@@ -331,7 +331,7 @@ test.describe('Query Optimization Explorer — end-to-end FSM validation', () =>
     });
 
     test('Console and page error monitoring: ensure expected console tip exists and no uncaught exceptions', async ({ page }) => {
-      const app = new QueryExplorerPage(page);
+      const app6 = new QueryExplorerPage(page);
       await app.goto();
 
       // The page script logs a tip—ensure it exists in the captured console messages

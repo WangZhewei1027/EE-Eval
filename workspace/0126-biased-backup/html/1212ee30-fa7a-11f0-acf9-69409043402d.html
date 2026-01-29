@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Hash Map Demonstration</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    margin: 1em;
+  }
+  label {
+    display: block;
+    margin-top: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 7em;
+    font-family: monospace, monospace;
+  }
+  input[type="number"], input[type="text"] {
+    font-family: monospace, monospace;
+  }
+  button {
+    margin-right: 0.4em;
+    margin-top: 0.4em;
+  }
+  .section {
+    margin-top: 2em;
+    border-top: 1px solid black;
+    padding-top: 1em;
+  }
+  .inline-group > * {
+    margin-right: 0.5em;
+    margin-bottom: 0.3em;
+  }
+  select {
+    font-family: monospace, monospace;
+  }
+  #log {
+    background-color: #eee;
+    border: 1px solid #ccc;
+    padding: 0.5em;
+    max-height: 12em;
+    overflow-y: auto;
+    margin-top: 0.5em;
+    white-space: pre-wrap;
+  }
+  #hashFunctionDescription {
+    min-height: 3em;
+    font-family: monospace, monospace;
+    white-space: pre-wrap;
+  }
+  #mapDisplay {
+    font-family: monospace, monospace;
+    max-height: 15em;
+    overflow-y: auto;
+    border: 1px solid black;
+    padding: 0.5em;
+    margin-top: 0.5em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Interactive Hash Map Demonstration</h1>
+
+<p>
+This demonstration lets you explore the internal workings of a hash map data structure.
+You can add, delete, update, and find keys. You can experiment with the hash function,
+the table size, collision resolution strategies, and load factor resizing.
+This is a fully interactive tool to deepen your understanding of hash maps.
+</p>
+
+<div class="section" id="config-section">
+  <h2>1. Hash Map Configuration</h2>
+  <label>
+    Table Size (number of buckets): <input type="number" id="tableSize" value="8" min="1" max="1024" step="1" />
+  </label>
+  <label>
+    Collision Resolution Strategy:
+    <select id="collisionStrategy">
+      <option value="chaining" selected>Separate Chaining (Linked Lists)</option>
+      <option value="linear">Open Addressing - Linear Probing</option>
+      <option value="quadratic">Open Addressing - Quadratic Probing</option>
+      <option value="double">Open Addressing - Double Hashing</option>
+    </select>
+  </label>
+  <label>
+    Load factor threshold for resize (0.1 - 0.95):
+    <input type="number" id="loadFactorThreshold" value="0.75" min="0.1" max="0.95" step="0.01" />
+  </label>
+
+  <label>
+    Hash Function:
+    <select id="hashFunctionChoice">
+      <option value="simpleSum" selected>Simple sum of char codes mod table size</option>
+      <option value="djb2">DJB2 hash of string mod table size</option>
+      <option value="jsHash">Java String hashCode mod table size</option>
+      <option value="custom">Custom function (edit below)</option>
+    </select>
+  </label>
+  <textarea id="customHashFunction" style="display:none;" spellcheck="false">// Function must be named "hashFunc" and return integer ≥ 0
+// Parameter: key (string)
+// Example:
+// function hashFunc(key) {
+//   let h=0; for(let i=0;i<key.length;++i) h+=key.charCodeAt(i);
+//   return h;
+// }
+</textarea>
+
+  <button id="createMapBtn">Create / Reset Hash Map</button>
+  <div id="hashFunctionDescription"></div>
+</div>
+
+<div class="section" id="operations-section" style="display:none;">
+  <h2>2. Hash Map Operations</h2>
+  <div>
+    <label>
+      Key: <input type="text" id="opKey" />
+    </label>
+    <label>
+      Value: <input type="text" id="opValue" />
+    </label>
+  </div>
+  <div class="inline-group">
+    <button id="insertBtn">Insert / Update</button>
+    <button id="deleteBtn">Delete</button>
+    <button id="searchBtn">Search</button>
+    <button id="clearBtn">Clear All</button>
+  </div>
+  <div>
+    <label>
+      Bulk Insert (JSON Array of [key,value] pairs):
+      <textarea id="bulkInsertText">[["apple","fruit"],["car","vehicle"],["name","chat"]]</textarea>
+    </label>
+    <button id="bulkInsertBtn">Bulk Insert from JSON</button>
+  </div>
+</div>
+
+<div class="section" id="state-section" style="display:none;">
+  <h2>3. Hash Map Internal State</h2>
+  <label>
+    Resize Table: <input type="number" id="resizeTableSize" value="16" min="1" max="2048" step="1" />
+    <button id="resizeBtn">Resize Table (rehash)</button>
+  </label>
+  <label>
+    Load Factor: <input type="range" id="loadFactorSlider" min="0" max="100" value="75" />
+    <span id="loadFactorDisplay">0.75</span>
+  </label>
+  <button id="toggleAutoResizeBtn">Toggle Auto-Resize: ON</button>
+  <button id="stepRehashBtn">Step Rehash (demo)</button>
+
+  <h3>Map Buckets</h3>
+  <select id="bucketSelect" size="8" style="width:100%; max-width: 600px;"></select>
+
+  <div id="mapDisplay"></div>
+</div>
+
+<div class="section" id="log-section">
+  <h2>4. Log / Console</h2>
+  <div id="log"></div>
+  <button id="clearLogBtn">Clear Log</button>
+</div>
+
+<script>
+(() => {
+  // Hash map internal representation and behavior
+
+  // ----------- Hash functions -----------
+
+  // All hash functions receive (key:string, tableSize:number) and return int >=0 < tableSize
+
+  function simpleSumHash(key, tableSize) {
+    let sum = 0;
+    for(let i=0; i<key.length; i++) sum += key.charCodeAt(i);
+    return sum % tableSize;
+  }
+
+  function djb2Hash(key, tableSize) {
+    // classic DJB2 hash
+    let hash = 5381;
+    for(let i=0; i<key.length; i++) {
+      hash = ((hash << 5) + hash) + key.charCodeAt(i);
+      hash = hash & 0xFFFFFFFF;
+    }
+    return (hash >>> 0) % tableSize;
+  }
+
+  function javaHashCode(key, tableSize) {
+    // Java String hashCode algorithm
+    let h = 0;
+    for(let i=0; i<key.length; i++) {
+      h = (31 * h + key.charCodeAt(i)) | 0;
+    }
+    return (h >>> 0) % tableSize;
+  }
+
+  // global for custom function
+  let customHashFunc = null;
+
+  // -------------- HashMap Class --------------
+
+  class HashMap {
+    constructor(tableSize = 8, collisionStrategy = "chaining", hashFunc = simpleSumHash, loadFactorThreshold = 0.75){
+      this.tableSize = tableSize;
+      this.collisionStrategy = collisionStrategy;
+      this.hashFunc = hashFunc;
+      this.loadFactorThreshold = loadFactorThreshold;
+      this.autoResize = true;
+
+      this.count = 0; // number of entries
+
+      // buckets structure differs:
+      // chaining: array of arrays [ [ {k,v},... ], ...]
+      // open addressing (linear, quadratic, double): array of { key, value, deleted:boolean } or null
+      
+      if(this.collisionStrategy === "chaining"){
+        this.buckets = new Array(tableSize);
+        for(let i=0; i<tableSize; i++) this.buckets[i] = [];
+      } else {
+        this.buckets = new Array(tableSize).fill(null);
+      }
+
+      // For open addressing, we must define secondary hash for double hashing
+      if(this.collisionStrategy === "double"){
+        // secondary hash function for double hashing (must not be zero)
+        this.secondaryHash = function(key){
+          let h = 0;
+          for(let i=0; i<key.length; i++){
+            h = (h*37 + key.charCodeAt(i)) & 0x7FFFFFFF;
+          }
+          return (h % (this.tableSize -1)) +1;
+        }.bind(this);
+      }
+    }
+
+    _probeSequence(key, i){
+      // Returns bucket index for ith probe for key
+      const h1 = this.hashFunc(key, this.tableSize);
+      if(this.collisionStrategy === "linear"){
+        return (h1 + i) % this.tableSize;
+      } else if(this.collisionStrategy === "quadratic"){
+        return (h1 + i*i) % this.tableSize;
+      } else if(this.collisionStrategy === "double"){
+        const h2 = this.secondaryHash(key);
+        return (h1 + i * h2) % this.tableSize;
+      } else {
+        return h1;
+      }
+    }
+
+    insert(key, value) {
+      if(typeof key !== "string") key = String(key);
+      if(this.collisionStrategy === "chaining"){
+        const idx = this.hashFunc(key, this.tableSize);
+        let bucket = this.buckets[idx];
+        for(let entry of bucket){
+          if(entry.key === key){
+            entry.value = value;
+            logMessage(`Updated existing key "${key}" in bucket ${idx}`);
+            return;
+          }
+        }
+        bucket.push({key,value});
+        this.count++;
+        logMessage(`Inserted key "${key}" into bucket ${idx} (chaining)`);
+      } else {
+        // open addressing insert
+        for(let i=0; i<this.tableSize; i++){
+          const idx = this._probeSequence(key, i);
+          const slot = this.buckets[idx];
+          if(slot === null || slot.deleted){
+            this.buckets[idx] = {key,value,deleted:false};
+            this.count++;
+            logMessage(`Inserted key "${key}" at bucket ${idx} (open addressing, attempt ${i})`);
+            if(this.autoResize) this._checkResize();
+            return;
+          } else if(slot.key === key && !slot.deleted){
+            this.buckets[idx].value = value;
+            logMessage(`Updated existing key "${key}" at bucket ${idx} (open addressing, attempt ${i})`);
+            return;
+          }
+        }
+        // table full
+        logMessage(`ERROR: Table full, cannot insert key "${key}"`);
+        throw new Error("Hash Map is full.");
+      }
+
+      if(this.autoResize) this._checkResize();
+    }
+
+    find(key){
+      if(typeof key !== "string") key = String(key);
+      if(this.collisionStrategy === "chaining"){
+        const idx = this.hashFunc(key, this.tableSize);
+        const bucket = this.buckets[idx];
+        for(let entry of bucket){
+          if(entry.key === key){
+            logMessage(`Found key "${key}" in bucket ${idx} (chaining)`);
+            return entry.value;
+          }
+        }
+        logMessage(`Key "${key}" not found in bucket ${idx} (chaining)`);
+        return undefined;
+      } else {
+        // open addressing search
+        for(let i=0; i<this.tableSize; i++){
+          const idx = this._probeSequence(key, i);
+          const slot = this.buckets[idx];
+          if(slot === null) {
+            logMessage(`Key "${key}" not found - empty slot at bucket ${idx} (open addressing, attempt ${i})`);
+            return undefined; // stop at first never used slot
+          }
+          if(!slot.deleted && slot.key === key){
+            logMessage(`Found key "${key}" at bucket ${idx} (open addressing, attempt ${i})`);
+            return slot.value;
+          }
+          // else try next probe
+        }
+        logMessage(`Key "${key}" not found in table (open addressing full search)`);
+        return undefined;
+      }
+    }
+
+    delete(key){
+      if(typeof key !== "string") key = String(key);
+      if(this.collisionStrategy === "chaining"){
+        const idx = this.hashFunc(key, this.tableSize);
+        let bucket = this.buckets[idx];
+        for(let i=0; i<bucket.length; i++){
+          if(bucket[i].key === key){
+            bucket.splice(i,1);
+            this.count--;
+            logMessage(`Deleted key "${key}" from bucket ${idx} (chaining)`);
+            return true;
+          }
+        }
+        logMessage(`Key "${key}" not found to delete (chaining)`);
+        return false;
+      } else {
+        for(let i=0; i<this.tableSize; i++){
+          const idx = this._probeSequence(key, i);
+          const slot = this.buckets[idx];
+          if(slot === null) {
+            logMessage(`Key "${key}" not found for deletion (empty slot at bucket ${idx})`);
+            return false;
+          }
+          if(!slot.deleted && slot.key === key){
+            slot.deleted = true;
+            this.count--;
+            logMessage(`Deleted key "${key}" at bucket ${idx} (open addressing)`);
+            return true;
+          }
+        }
+        logMessage(`Key "${key}" not found for deletion (full search)`);
+        return false;
+      }
+    }
+
+    clear(){
+      // reset all buckets
+      if(this.collisionStrategy === "chaining"){
+        for(let i=0; i<this.tableSize; i++){
+          this.buckets[i] = [];
+        }
+      } else {
+        this.buckets.fill(null);
+      }
+      this.count = 0;
+      logMessage("Cleared entire hash map");
+    }
+
+    loadFactor(){
+      return this.count / this.tableSize;
+    }
+
+    _checkResize(){
+      const lf = this.loadFactor();
+      if(lf > this.loadFactorThreshold){
+        logMessage(`Load factor ${lf.toFixed(3)} exceeded threshold ${this.loadFactorThreshold.toFixed(3)} - resizing...`);
+        this._resize(this.tableSize * 2);
+      }
+    }
+
+    _resize(newTableSize){
+      logMessage(`Resizing from ${this.tableSize} to ${newTableSize} and rehashing all entries...`);
+      // Save old entries
+      let entries = [];
+      if(this.collisionStrategy === "chaining"){
+        for(let bucket of this.buckets){
+          for(let e of bucket){
+            entries.push(e);
+          }
+        }
+      } else {
+        for(let slot of this.buckets){
+          if(slot !== null && !slot.deleted) {
+            entries.push({key:slot.key, value:slot.value});
+          }
+        }
+      }
+      // Reinitialize
+      this.tableSize = newTableSize;
+      if(this.collisionStrategy === "chaining"){
+        this.buckets = new Array(this.tableSize);
+        for(let i=0; i<this.tableSize; i++) this.buckets[i] = [];
+      } else {
+        this.buckets = new Array(this.tableSize).fill(null);
+      }
+      this.count = 0;
+      // Re-insert entries
+      for(let e of entries){
+        this.insert(e.key, e.value);
+      }
+      logMessage("Rehash complete.");
+      updateBucketList();
+      updateMapDisplay();
+      updateLoadFactorDisplay();
+    }
+
+    resizeManual(newSize){
+      if(newSize < 1) throw new Error("Resize size must be positive integer.");
+      this._resize(newSize);
+    }
+  }
+
+  // ----------------- UI and state -----------------
+
+  // Global variables
+  let hashMap = null;
+
+  // UI elements
+  const tableSizeInput = document.getElementById("tableSize");
+  const collisionStrategySelect = document.getElementById("collisionStrategy");
+  const loadFactorThresholdInput = document.getElementById("loadFactorThreshold");
+  const hashFunctionChoiceSelect = document.getElementById("hashFunctionChoice");
+  const customHashArea = document.getElementById("customHashFunction");
+  const createMapBtn = document.getElementById("createMapBtn");
+
+  const opKeyInput = document.getElementById("opKey");
+  const opValueInput = document.getElementById("opValue");
+  const insertBtn = document.getElementById("insertBtn");
+  const deleteBtn = document.getElementById("deleteBtn");
+  const searchBtn = document.getElementById("searchBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const bulkInsertText = document.getElementById("bulkInsertText");
+  const bulkInsertBtn = document.getElementById("bulkInsertBtn");
+
+  const resizeTableSizeInput = document.getElementById("resizeTableSize");
+  const resizeBtn = document.getElementById("resizeBtn");
+  const loadFactorSlider = document.getElementById("loadFactorSlider");
+  const loadFactorDisplay = document.getElementById("loadFactorDisplay");
+  const toggleAutoResizeBtn = document.getElementById("toggleAutoResizeBtn");
+  const stepRehashBtn = document.getElementById("stepRehashBtn");
+
+  const bucketSelect = document.getElementById("bucketSelect");
+  const mapDisplay = document.getElementById("mapDisplay");
+
+  const logBox = document.getElementById("log");
+  const clearLogBtn = document.getElementById("clearLogBtn");
+
+  const operationsSection = document.getElementById("operations-section");
+  const stateSection = document.getElementById("state-section");
+  const hashFunctionDescriptionDiv = document.getElementById("hashFunctionDescription");
+
+  // Helpers
+
+  function logMessage(msg){
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    logBox.textContent += `[${timeStr}] ${msg}\n`;
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function clearLog(){
+    logBox.textContent = "";
+  }
+
+  function parseNumberInput(input){
+    let n = Number(input);
+    if(Number.isNaN(n)) return null;
+    return n;
+  }
+
+  function updateHashFunctionDescription(choice){
+    let desc = "";
+    if(choice === "simpleSum"){
+      desc = "Hash Function: sum of character codes modulo table size.\nExample: key='abc' → hash = ('a'+ 'b' + 'c') % tableSize";
+    } else if(choice === "djb2"){
+      desc = "Hash Function: DJB2 algorithm by Dan Bernstein.\nUses bit-shifting and addition, then modulo table size.";
+    } else if(choice === "jsHash"){
+      desc = "Hash Function: Java String hashCode algorithm.\nPolynomial accumulation with multiplier 31, then modulo table size.";
+    } else if(choice === "custom"){
+      desc = "Custom hash function provided below.\nFunction must be named 'hashFunc(key)' and return integer≥0.";
+    } else {
+      desc = "";
+    }
+    hashFunctionDescriptionDiv.textContent = desc;
+  }
+
+  function getHashFunction(){
+    const choice = hashFunctionChoiceSelect.value;
+    if(choice === "simpleSum") return simpleSumHash;
+    if(choice === "djb2") return djb2Hash;
+    if(choice === "jsHash") return javaHashCode;
+    if(choice === "custom"){
+      // try to evaluate custom hash func
+      try {
+        const code = customHashArea.value;
+        // eslint-disable-next-line no-new-func
+        const func = new Function(code + "\n return hashFunc;");
+        const fn = func();
+        if(typeof fn !== "function") throw new Error("No function named 'hashFunc' found.");
+        // test calling with string
+        const testCall = fn("test");
+        if(!Number.isInteger(testCall) || testCall < 0) throw new Error("hashFunc must return a non-negative integer.");
+        return fn;
+      } catch(e){
+        alert("Error in custom hash function:\n" + e.message);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function createNewHashMap(){
+    clearLog();
+    const size = parseNumberInput(tableSizeInput.value);
+    if(!Number.isInteger(size) || size < 1 || size > 1024){
+      alert("Invalid table size. Must be integer between 1 and 1024.");
+      return;
+    }
+    const collisionStrategy = collisionStrategySelect.value;
+    const loadFactorThreshold = parseNumberInput(loadFactorThresholdInput.value);
+    if(typeof loadFactorThreshold !== "number" || loadFactorThreshold < 0.1 || loadFactorThreshold > 0.95){
+      alert("Load factor threshold must be between 0.1 and 0.95.");
+      return;
+    }
+    const hf = getHashFunction();
+    if(hf === null){
+      alert("Select a valid hash function before creating map.");
+      return;
+    }
+    hashMap = new HashMap(size, collisionStrategy, hf, loadFactorThreshold);
+    logMessage(`Hash map created: size=${size}, collision=${collisionStrategy}, loadFactorThreshold=${loadFactorThreshold.toFixed(3)}`);
+
+    operationsSection.style.display = "block";
+    stateSection.style.display = "block";
+    updateBucketList();
+    updateMapDisplay();
+    updateLoadFactorSlider();
+    updateLoadFactorDisplay();
+    updateToggleAutoResizeBtn();
+  }
+
+  function updateBucketList(){
+    if(!hashMap) return;
+    // Show bucket indices with basic summary
+    const n = hashMap.tableSize;
+    bucketSelect.innerHTML = "";
+    for(let i=0; i<n; i++){
+      let text = `Bucket ${i}: `;
+      if(hashMap.collisionStrategy === "chaining"){
+        let bucket = hashMap.buckets[i];
+        if(bucket.length === 0) text += "(empty)";
+        else {
+          text += bucket.map(e=>`["${e.key}":${e.value}]`).join(", ");
+        }
+      } else {
+        const slot = hashMap.buckets[i];
+        if(slot === null) text += "(empty)";
+        else if(slot.deleted) text += '(deleted)';
+        else text += `["${slot.key}":${slot.value}]`;
+      }
+      let option = document.createElement("option");
+      option.value = i;
+      option.textContent = text;
+      bucketSelect.appendChild(option);
+    }
+  }
+  
+  function updateMapDisplay(){
+    if(!hashMap) return;
+    let text = "";
+    const n = hashMap.tableSize;
+    if(hashMap.collisionStrategy === "chaining"){
+      for(let i=0; i<n; i++){
+        text += `Bucket ${i}:\n`;
+        let bucket = hashMap.buckets[i];
+        if(bucket.length === 0) {
+          text += "  (empty)\n";
+        } else {
+          for(let e of bucket){
+            text += `  key: "${e.key}"  value: "${e.value}"\n`;
+          }
+        }
+      }
+    } else {
+      for(let i=0; i<n; i++){
+        const slot = hashMap.buckets[i];
+        text += `Bucket ${i}: `;
+        if(slot === null) text += "(empty)\n";
+        else if(slot.deleted) text += "(deleted)\n";
+        else text += `key: "${slot.key}", value: "${slot.value}"\n`;
+      }
+    }
+    text += `\nEntries count: ${hashMap.count}\nTable size: ${hashMap.tableSize}\nLoad factor: ${hashMap.loadFactor().toFixed(3)}\n`;
+    mapDisplay.textContent = text;
+  }
+
+  function updateLoadFactorSlider(){
+    const val = Math.round(hashMap.loadFactorThreshold * 100);
+    loadFactorSlider.value = val;
+  }
+
+  function updateLoadFactorDisplay(){
+    if(!hashMap) return;
+    loadFactorDisplay.textContent = hashMap.loadFactorThreshold.toFixed(2);
+  }
+
+  function toggleAutoResize(){
+    if(!hashMap) return;
+    hashMap.autoResize = !hashMap.autoResize;
+    updateToggleAutoResizeBtn();
+    logMessage("Auto-resize set to " + (hashMap.autoResize ? "ON" : "OFF"));
+  }
+
+  function updateToggleAutoResizeBtn(){
+    if(!hashMap) return;
+    toggleAutoResizeBtn.textContent = "Toggle Auto-Resize: " + (hashMap.autoResize ? "ON" : "OFF");
+  }
+
+  function stepRehashDemo(){
+    // Demonstrate incremental rehashing step (only conceptual; this simple impl does full rehash)
+    // So just run a resize with smaller table increase to visualize process in log
+    if(!hashMap) return;
+    const newSize = hashMap.tableSize + 2;
+    logMessage(`Demo incremental resize to ${newSize}... (conceptual)`);
+    hashMap.resizeManual(newSize);
+  }
+
+  // Event listeners
+
+  createMapBtn.addEventListener("click", () => {
+    createNewHashMap();
+  });
+
+  hashFunctionChoiceSelect.addEventListener("change", () => {
+    updateHashFunctionDescription(hashFunctionChoiceSelect.value);
+    if(hashFunctionChoiceSelect.value === "custom"){
+      customHashArea.style.display = "block";
+    } else {
+      customHashArea.style.display = "none";
+    }
+  });
+
+  insertBtn.addEventListener("click", () => {
+    if(!hashMap) {
+      alert("Create hash map first.");
+      return;
+    }
+    const key = opKeyInput.value;
+    let value = opValueInput.value;
+    if(key === "") { alert("Key cannot be empty."); return; }
+    if(value === "") value = null;
+    try {
+      hashMap.insert(key, value);
+      updateBucketList();
+      updateMapDisplay();
+    } catch(e){
+      alert("Error: " + e.message);
+    }
+  });
+
+  deleteBtn.addEventListener("click", () => {
+    if(!hashMap) {
+      alert("Create hash map first.");
+      return;
+    }
+    const key = opKeyInput.value;
+    if(key === "") { alert("Key cannot be empty."); return; }
+    const success = hashMap.delete(key);
+    if(success) logMessage(`Deleted key "${key}"`);
+    else logMessage(`Key "${key}" not found to delete`);
+    updateBucketList();
+    updateMapDisplay();
+  });
+
+  searchBtn.addEventListener("click", () => {
+    if(!hashMap) {
+      alert("Create hash map first.");
+      return;
+    }
+    const key = opKeyInput.value;
+    if(key === "") { alert("Key cannot be empty."); return; }
+    const value = hashMap.find(key);
+    if(value === undefined) alert(`Key "${key}" not found.`);
+    else alert(`Key "${key}" found with value: "${value}"`);
+  });
+
+  clearBtn.addEventListener("click", () => {
+    if(!hashMap) {
+      alert("Create hash map first.");
+      return;
+    }
+    if(confirm("Are you sure you want to clear entire map?")){
+      hashMap.clear();
+      updateBucketList();
+      updateMapDisplay();
+    }
+  });
+
+  bulkInsertBtn.addEventListener("click", () => {
+    if(!hashMap) {
+      alert("Create hash map first.");
+      return;
+    }
+    let arr;
+    try{
+      arr = JSON.parse(bulkInsertText.value);
+      if(!Array.isArray(arr)){
+        alert("Input must be a JSON array of [key,value] pairs.");
+        return;
+      }
+      for(let pair of arr){
+        if(!Array.isArray(pair) || pair.length !== 2){
+          alert("Each entry must be an array with exactly two elements: [key, value]");
+          return;
+        }
+      }
+    }catch(e){
+      alert("Invalid JSON input: " + e.message);
+      return;
+    }
+    for(let [k,v] of arr){
+      try {
+        hashMap.insert(String(k), String(v));
+      } catch(e){
+        alert("Insert error: " + e.message);
+        break;
+      }
+    }
+    updateBucketList();
+    updateMapDisplay();
+    logMessage(`Bulk inserted ${arr.length} entries.`);
+  });
+
+  resizeBtn.addEventListener("click", () => {
+    if(!hashMap) return;
+    const n = parseNumberInput(resizeTableSizeInput.value);
+    if(!Number.isInteger(n) || n < 1 || n > 2048){
+      alert("Resize table size must be integer between 1 and 2048");
+      return;
+    }
+    try {
+      hashMap.resizeManual(n);
+      updateBucketList();
+      updateMapDisplay();
+      updateLoadFactorDisplay();
+    } catch(e) {
+      alert("Resize error: " + e.message);
+    }
+  });
+
+  loadFactorThresholdInput.addEventListener("change", () => {
+    if(!hashMap) return;
+    let v = parseFloat(loadFactorThresholdInput.value);
+    if(v < 0.1) v = 0.1;
+    if(v > 0.95) v = 0.95;
+    hashMap.loadFactorThreshold = v;
+    loadFactorDisplay.textContent = v.toFixed(2);
+  });
+
+  loadFactorSlider.addEventListener("input", () => {
+    if(!hashMap) return;
+    let v = loadFactorSlider.value/100;
+    hashMap.loadFactorThreshold = v;
+    loadFactorThresholdInput.value = v.toFixed(2);
+    loadFactorDisplay.textContent = v.toFixed(2);
+  });
+
+  toggleAutoResizeBtn.addEventListener("click", () => {
+    if(!hashMap) return;
+    toggleAutoResize();
+  });
+
+  stepRehashBtn.addEventListener("click", () => {
+    if(!hashMap) return;
+    stepRehashDemo();
+  });
+
+  clearLogBtn.addEventListener("click", () => {
+    clearLog();
+  });
+
+  // Initialize descriptions and default hash function display
+  updateHashFunctionDescription(hashFunctionChoiceSelect.value);
+
+  // Accessibility notes:
+  // tab order is natural, labels connected with inputs, minimal complexity but full keyboard support
+
+})();
+</script>
+
+</body>
+</html>

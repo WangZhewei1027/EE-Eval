@@ -111,7 +111,7 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
     });
 
     test('clicking "Display List" in Idle should show "List is empty." (transition to S2_ListDisplayed)', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app1 = new CircularListPage(page);
 
       // Click display list
       await app.displayList();
@@ -127,7 +127,7 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
 
   test.describe('Adding nodes (S1_NodeAdded transitions)', () => {
     test('adding a single node triggers an alert and clears input (S0_Idle -> S1_NodeAdded -> S0_Idle)', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app2 = new CircularListPage(page);
 
       // Add a node with value 'A' and capture alert
       await app.addNode('A');
@@ -149,7 +149,7 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
     });
 
     test('adding multiple nodes preserves insertion order and display shows circular list', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app3 = new CircularListPage(page);
 
       // Add three nodes in order
       await app.addNode('Node1');
@@ -162,12 +162,12 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
 
       // Display the list and verify expected order with circular suffix
       await app.displayList();
-      const output = await app.getOutputText();
+      const output1 = await app.getOutputText();
       expect(output).toBe('Node1 -> Node2 -> Node3 (circular)', 'Expected nodes displayed in insertion order separated by -> and suffixed with (circular)');
     });
 
     test('adding whitespace-only value is accepted (code uses truthiness) and becomes part of the list', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app4 = new CircularListPage(page);
 
       // Add a whitespace-only value - in this implementation whitespace is truthy and will be accepted
       await app.addNode('   ');
@@ -179,7 +179,7 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
 
       // Display and ensure whitespace node is present; it will appear as spaces between arrows
       await app.displayList();
-      const output = await app.getOutputText();
+      const output2 = await app.getOutputText();
       // Since this could be the first node or combined with previous tests, check that the output contains the whitespace marker (we match substring)
       expect(output.includes('(circular)')).toBeTruthy();
     });
@@ -187,20 +187,20 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
 
   test.describe('Edge cases and error scenarios', () => {
     test('clicking Add Node with empty input triggers an alert asking for valid input', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app5 = new CircularListPage(page);
 
       // Ensure input is empty and click Add Node
       await app.clickAddButtonWithoutTyping();
 
       // Expect an alert indicating invalid input
       expect(dialogs.length).toBeGreaterThanOrEqual(1);
-      const lastDialog = dialogs[dialogs.length - 1];
+      const lastDialog1 = dialogs[dialogs.length - 1];
       expect(lastDialog.type).toBe('alert');
       expect(lastDialog.message).toBe('Please enter a valid node value.');
     });
 
     test('buttons should include the onclick attributes as evidence from the FSM', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app6 = new CircularListPage(page);
 
       // Validate that the add and display buttons have the inline onclick attributes (evidence strings in FSM)
       const addButtonOnclick = await page.locator('button').filter({ hasText: 'Add Node' }).getAttribute('onclick');
@@ -211,7 +211,7 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
     });
 
     test('display when list has elements should set #output.innerText (evidence verification)', async ({ page }) => {
-      const app = new CircularListPage(page);
+      const app7 = new CircularListPage(page);
 
       // Add items
       await app.addNode('X');
@@ -222,7 +222,7 @@ test.describe('Circular Linked List Demo - FSM and UI tests', () => {
 
       // Click display and verify innerText was set on #output
       await app.displayList();
-      const output = await app.getOutputText();
+      const output3 = await app.getOutputText();
       expect(output).toBe('X -> Y (circular)');
 
       // Ensure displayList did not emit additional alerts

@@ -130,7 +130,7 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
   });
 
   test('Transition S0 -> S1: Generate Keys enables encrypt/decrypt and populates keys (and shows alert)', async ({ page }) => {
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
     await app.goto();
 
     // Click "Generate Keys" and accept alert (captured by generateKeysAndAcceptAlert)
@@ -151,10 +151,10 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
 
     // No unexpected page errors produced by key generation
     expect(pageErrors.length).toBe(0);
-  }).timeout(60000); // key generation may take some time
+  }); // key generation may take some time
 
   test('Transition S1 -> S2: Encrypt Message produces an encrypted output', async ({ page }) => {
-    const app = new AppPage(page);
+    const app2 = new AppPage(page);
     await app.goto();
 
     // Generate keys first
@@ -175,24 +175,24 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
 
     // Ensure that encrypt did not produce runtime page errors
     expect(pageErrors.length).toBe(0);
-  }).timeout(60000);
+  });
 
   test('Transition S2 -> S3: Decrypt Message recovers original plaintext', async ({ page }) => {
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
     await app.goto();
 
     // Generate keys
     await app.generateKeysAndAcceptAlert();
 
     // Write message
-    const original = 'This is a secret message.';
+    const original1 = 'This is a secret message.';
     await app.typeMessage(original);
 
     // Encrypt
     await app.clickEncrypt();
 
     // Ensure encrypted present
-    const encrypted = await app.getEncryptedText();
+    const encrypted1 = await app.getEncryptedText();
     expect(encrypted.length).toBeGreaterThan(0);
 
     // Decrypt
@@ -207,10 +207,10 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
 
     // No unhandled runtime errors expected here
     expect(pageErrors.length).toBe(0);
-  }).timeout(60000);
+  });
 
   test('Edge case: Encrypt and Decrypt buttons are disabled before keys generated and direct click fails or is inert', async ({ page }) => {
-    const app = new AppPage(page);
+    const app4 = new AppPage(page);
     await app.goto();
 
     // Buttons should be disabled
@@ -230,7 +230,7 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
   });
 
   test('Edge case: Corrupted encrypted message yields a runtime error during decryption (observe pageerror)', async ({ page }) => {
-    const app = new AppPage(page);
+    const app5 = new AppPage(page);
     await app.goto();
 
     // Generate keys so decrypt button is enabled
@@ -260,7 +260,7 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
   });
 
   test('Generate keys multiple times produces different key material (public key changes)', async ({ page }) => {
-    const app = new AppPage(page);
+    const app6 = new AppPage(page);
     await app.goto();
 
     // First generation
@@ -282,5 +282,5 @@ test.describe('Asymmetric Cryptography Demo (FSM verification)', () => {
 
     // No unexpected page errors
     expect(pageErrors.length).toBe(0);
-  }).timeout(120000); // allow more time for repeated key generation
+  }); // allow more time for repeated key generation
 });

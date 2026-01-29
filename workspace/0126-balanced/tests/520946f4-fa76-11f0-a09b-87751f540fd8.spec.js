@@ -101,7 +101,7 @@ test.describe('Kruskal\'s Algorithm Interactive - FSM validation', () => {
     // This test validates the GenerateGraph event/transition.
     // According to the implementation, clicking the button runs generateGraph(),
     // but the implementation contains bugs that produce runtime errors.
-    const app = new KruskalPage(page);
+    const app1 = new KruskalPage(page);
 
     // Ensure preconditions
     expect(await app.isGenerateVisible()).toBe(true);
@@ -132,16 +132,16 @@ test.describe('Kruskal\'s Algorithm Interactive - FSM validation', () => {
     // This test validates the RunAlgorithm event/transition.
     // The implementation adds a click listener for runKMP but no runKMP function is defined,
     // so clicking should raise a ReferenceError for runKMP.
-    const app = new KruskalPage(page);
+    const app2 = new KruskalPage(page);
 
     // Ensure preconditions
     expect(await app.isRunVisible()).toBe(true);
 
-    const errorPromise = page.waitForEvent('pageerror', { timeout: 2000 }).catch(() => null);
+    const errorPromise1 = page.waitForEvent('pageerror', { timeout: 2000 }).catch(() => null);
 
     await app.clickRun();
 
-    const pageError = await errorPromise;
+    const pageError1 = await errorPromise;
 
     // We expect a ReferenceError due to missing runKMP function.
     expect(pageError).not.toBeNull();
@@ -156,7 +156,7 @@ test.describe('Kruskal\'s Algorithm Interactive - FSM validation', () => {
 
   test('End-to-end: Click Generate then Run -> both runtime errors captured and graph not correctly rendered', async ({ page }) => {
     // This test performs both transitions in sequence to simulate the full FSM flow.
-    const app = new KruskalPage(page);
+    const app3 = new KruskalPage(page);
 
     // Click generate and expect an error (as per buggy implementation)
     const genErrorPromise = page.waitForEvent('pageerror', { timeout: 2000 }).catch(() => null);
@@ -174,13 +174,13 @@ test.describe('Kruskal\'s Algorithm Interactive - FSM validation', () => {
     expect(pageErrors.length).toBeGreaterThanOrEqual(2);
 
     // Graph content remains invalid / not the expected MST table rows
-    const html = await app.graphHtml();
+    const html1 = await app.graphHtml();
     expect(html.includes('<tr>')).toBe(false);
   });
 
   test('Edge cases: Multiple rapid clicks on Generate Graph produce runtime errors (robustness test)', async ({ page }) => {
     // Rapidly click the generate button multiple times and ensure at least one error occurs.
-    const app = new KruskalPage(page);
+    const app4 = new KruskalPage(page);
 
     // Start multiple clicks without awaiting errors individually
     const clickCount = 3;

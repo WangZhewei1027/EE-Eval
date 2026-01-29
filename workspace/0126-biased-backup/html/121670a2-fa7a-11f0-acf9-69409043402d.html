@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Congestion Control Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 10px;
+  }
+  textarea {
+    width: 100%;
+    height: 100px;
+    font-family: monospace;
+    margin-top: 5px;
+  }
+  input[type=number] {
+    width: 80px;
+  }
+  select {
+    font-family: monospace;
+  }
+  button {
+    font-family: monospace;
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+  }
+  .panel {
+    border-top: 1px solid #000;
+    margin-top: 15px;
+    padding-top: 10px;
+  }
+  .log {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    height: 200px;
+    overflow-y: scroll;
+    font-size: 13px;
+  }
+  .inline {
+    display: inline-block;
+    margin-right: 10px;
+  }
+</style>
+</head>
+<body>
+<h1>Congestion Control Interactive Demo</h1>
+
+<p>
+This demo models TCP-like congestion control (Additive Increase Multiplicative Decrease).
+You can configure network parameters, manually send/send ACKs/loss events, and explore how congestion window and other state variables respond.
+</p>
+
+<div class="panel" id="configPanel">
+  <b>Network & Algorithm Configuration</b>
+  <label>Propagation Delay (ms):
+    <input type="number" id="inputDelay" min="1" max="1000" value="100" />
+  </label>
+  <label>Link Capacity (pps: packets per second):
+    <input type="number" id="inputCapacity" min="10" max="10000" value="1000" />
+  </label>
+  <label>Packet Loss Probability (0.0 - 1.0):
+    <input type="number" id="inputLossProb" step="0.01" min="0" max="1" value="0.01" />
+  </label>
+  <label>Maximum Segment Size (MSS in bytes):
+    <input type="number" id="inputMSS" min="1" max="1460" value="1460" />
+  </label>
+  <label>Initial Congestion Window (cwnd in MSS):
+    <input type="number" id="inputInitCwnd" min="1" max="100" value="1" />
+  </label>
+  <label>Slow Start Threshold (ssthresh in MSS):
+    <input type="number" id="inputSsthresh" min="1" max="1000" value="64" />
+  </label>
+  <label>Algorithm:
+    <select id="selectAlgorithm">
+      <option value="reno" selected>TCP Reno</option>
+      <option value="cubic">TCP Cubic (simplified)</option>
+      <option value="newreno">TCP NewReno</option>
+      <option value="vegas">TCP Vegas (simplified)</option>
+    </select>
+  </label>
+  <button id="btnApplyConfig">Apply Configuration</button>
+</div>
+
+<div class="panel" id="statePanel">
+  <b>State Variables</b>
+  <div>CWND (congestion window in MSS): <span id="stateCwnd">1</span></div>
+  <div>SSTHRESH (MSS): <span id="stateSsthresh">64</span></div>
+  <div>Flight Size (in-flight packets): <span id="stateFlight">0</span></div>
+  <div>Algorithm State: <span id="statePhase">Slow Start</span></div>
+  <div>Current Round-Trip Time (RTT ms): <span id="stateRtt">0</span></div>
+  <div>Packets Sent: <span id="statePacketsSent">0</span></div>
+  <div>Packets Acked: <span id="statePacketsAcked">0</span></div>
+  <div>Packets Lost: <span id="statePacketsLost">0</span></div>
+  <div>Duplicate ACK count: <span id="stateDupAcks">0</span></div>
+</div>
+
+<div class="panel" id="manualControlPanel">
+  <b>Manual Packet Operations</b>
+  <div>
+    <button id="btnSendPacket">Send One Packet</button>
+    <button id="btnSendBurst">Send Burst (send cwnd packets)</button>
+  </div>
+  <div>
+    <label>Receive ACK for Packet #:
+      <input type="number" id="inputAckPacket" min="1" />
+      <button id="btnRecvAck">Receive ACK</button>
+    </label>
+  </div>
+  <div>
+    <label>Report Packet Loss for Packet #:
+      <input type="number" id="inputLossPacket" min="1" />
+      <button id="btnReportLoss">Report Loss</button>
+    </label>
+  </div>
+  <div>
+    <button id="btnAutoRun" title="Auto-simulate 100 packets sent with network loss">Auto Run 100 Packets</button>
+    <button id="btnReset">Reset State</button>
+  </div>
+</div>
+
+<div class="panel" id="timePanel">
+  <b>Timing Control (Simulated Time)</b>
+  <label>Time Per Packet Transmission (ms):
+    <input type="number" id="inputPacketTime" min="1" max="1000" value="10" />
+  </label>
+  <label>Time Per ACK (ms):
+    <input type="number" id="inputAckTime" min="1" max="1000" value="10" />
+  </label>
+  <label>Round Trip Time (RTT) Estimation Uses EWMA alpha:
+    <input type="number" step="0.01" min="0" max="1" id="inputRttAlpha" value="0.125" />
+  </label>
+</div>
+
+<div class="panel" id="logsPanel">
+  <b>Activity Log</b>
+  <div class="log" id="logOutput" tabindex="0"></div>
+</div>
+
+<script>
+(() => {
+  // State variables and constants for TCP Reno (simple baseline)
+  const MSS_DEFAULT = 1460;
+
+  // Maintain simulation state
+  let state = {
+    cwnd: 1, // in MSS units
+    ssthresh: 64,
+    flight: 0,
+    packetsSent: 0,
+    packetsAcked: 0,
+    packetsLost: 0,
+    dupAcks: 0,
+    lastAck: 0,
+    phase: "Slow Start",
+    rtt: 100, // ms, initial estimate (propagation delay x2 for RTT?)
+    rttAlpha: 0.125,
+    rttVar: 0,
+    rto: 3000,
+    lastPacketSentTime: 0,
+    lastAckedPacketTime: 0,
+    sendTimes: {}, // packetNum: sendTime(ms)
+    ackedPackets: new Set(),
+    algo: "reno",
+    mss: MSS_DEFAULT,
+    delay: 100,
+    capacity: 1000,
+    lossProb: 0.01,
+    maxPacketNum: 0,
+    dupAckCountForPacket: 0,
+    cubicState: null,
+  };
+
+  // Cubic control (simplified)
+  class CubicState {
+    constructor() {
+      this.W_max = 0;
+      this.K = 0;
+      this.epochStart = null;
+      this.cwnd = 1;
+      this.lastUpdateTime = 0;
+      this.C = 0.4; // cubic scaling constant
+    }
+    updateCwnd(t) {
+      const K = this.K;
+      const C = this.C;
+      const tSec = (t - this.epochStart) / 1000;
+      const cubicWindow = C * Math.pow(tSec - K, 3) + this.W_max;
+      if (cubicWindow > 0) {
+        this.cwnd = cubicWindow;
+      }
+    }
+    onLoss(t) {
+      this.W_max = this.cwnd;
+      this.K = Math.cbrt(this.W_max / this.C);
+      this.epochStart = t;
+      this.cwnd *= 0.7; // multiplicative decrease
+      if (this.cwnd < 1) this.cwnd = 1;
+    }
+    onAck(t) {
+      if (!this.epochStart) this.epochStart = t;
+      this.updateCwnd(t);
+    }
+  }
+
+  // Vegas control (simplified)
+  class VegasState {
+    constructor() {
+      this.alpha = 1;
+      this.beta = 3;
+      this.baseRTT = null;
+      this.diff = 0;
+      this.phase = "Slow Start"; // or "Cong Avoidance"
+      this.cwnd = 1;
+    }
+    updateRTT(rtt) {
+      if (this.baseRTT === null || rtt < this.baseRTT) this.baseRTT = rtt;
+      this.diff = this.cwnd * (1 - this.baseRTT / rtt);
+      if (this.diff < this.alpha) {
+        // increase cwnd
+        this.cwnd += 1;
+        this.phase = "Slow Start";
+      } else if (this.diff > this.beta) {
+        // decrease cwnd
+        this.cwnd -= 1;
+        this.phase = "Congestion Avoidance";
+        if (this.cwnd < 1) this.cwnd = 1;
+      }
+    }
+  }
+
+  // DOM shortcuts
+  const el = {
+    inputDelay: document.getElementById("inputDelay"),
+    inputCapacity: document.getElementById("inputCapacity"),
+    inputLossProb: document.getElementById("inputLossProb"),
+    inputMSS: document.getElementById("inputMSS"),
+    inputInitCwnd: document.getElementById("inputInitCwnd"),
+    inputSsthresh: document.getElementById("inputSsthresh"),
+    selectAlgorithm: document.getElementById("selectAlgorithm"),
+    btnApplyConfig: document.getElementById("btnApplyConfig"),
+
+    stateCwnd: document.getElementById("stateCwnd"),
+    stateSsthresh: document.getElementById("stateSsthresh"),
+    stateFlight: document.getElementById("stateFlight"),
+    statePhase: document.getElementById("statePhase"),
+    stateRtt: document.getElementById("stateRtt"),
+    statePacketsSent: document.getElementById("statePacketsSent"),
+    statePacketsAcked: document.getElementById("statePacketsAcked"),
+    statePacketsLost: document.getElementById("statePacketsLost"),
+    stateDupAcks: document.getElementById("stateDupAcks"),
+
+    btnSendPacket: document.getElementById("btnSendPacket"),
+    btnSendBurst: document.getElementById("btnSendBurst"),
+    inputAckPacket: document.getElementById("inputAckPacket"),
+    btnRecvAck: document.getElementById("btnRecvAck"),
+    inputLossPacket: document.getElementById("inputLossPacket"),
+    btnReportLoss: document.getElementById("btnReportLoss"),
+    btnAutoRun: document.getElementById("btnAutoRun"),
+    btnReset: document.getElementById("btnReset"),
+
+    inputPacketTime: document.getElementById("inputPacketTime"),
+    inputAckTime: document.getElementById("inputAckTime"),
+    inputRttAlpha: document.getElementById("inputRttAlpha"),
+
+    logOutput: document.getElementById("logOutput"),
+  };
+
+  // Utility: log output and keep scroll bottom
+  function log(msg) {
+    const now = new Date();
+    const t = now.toLocaleTimeString();
+    el.logOutput.textContent += `[${t}] ${msg}\n`;
+    el.logOutput.scrollTop = el.logOutput.scrollHeight;
+  }
+
+  // Update displayed state values
+  function updateDisplay() {
+    el.stateCwnd.textContent = state.cwnd.toFixed(2);
+    el.stateSsthresh.textContent = state.ssthresh.toFixed(2);
+    el.stateFlight.textContent = state.flight;
+    el.statePhase.textContent = state.phase;
+    el.stateRtt.textContent = state.rtt.toFixed(1);
+    el.statePacketsSent.textContent = state.packetsSent;
+    el.statePacketsAcked.textContent = state.packetsAcked;
+    el.statePacketsLost.textContent = state.packetsLost;
+    el.stateDupAcks.textContent = state.dupAcks;
+  }
+
+  // RTT measurement & update with EWMA, update RTO (RFC stuff simplified)
+  function updateRTTEstimate(sampleRTT) {
+    if (!sampleRTT || sampleRTT <= 0) return;
+    const alpha = state.rttAlpha;
+    if (!state.rtt) {
+      state.rtt = sampleRTT;
+      state.rttVar = sampleRTT / 2;
+    } else {
+      state.rttVar = (1 - 0.25) * state.rttVar + 0.25 * Math.abs(state.rtt - sampleRTT);
+      state.rtt = (1 - alpha) * state.rtt + alpha * sampleRTT;
+    }
+    // Simplified RTO
+    state.rto = state.rtt + 4 * state.rttVar;
+  }
+
+  // Congestion window increase on ACK (by algorithm)
+  function onPacketAcked(packetNum, recvTime) {
+    log(`ACK received for Packet #${packetNum}`);
+
+    // Ensure packet was sent and is not duplicate ACK
+    if (!state.ackedPackets.has(packetNum)) {
+      state.ackedPackets.add(packetNum);
+      state.packetsAcked++;
+
+      // Flight size decrement: one packet acknowledged
+      if (state.flight > 0) state.flight--;
+
+      // Calculate sample RTT if possible
+      if (state.sendTimes[packetNum]) {
+        const sendTime = state.sendTimes[packetNum];
+        let sampleRTT = recvTime - sendTime;
+        if (sampleRTT < 0) sampleRTT = state.rtt; // fallback
+        updateRTTEstimate(sampleRTT);
+      }
+
+      state.dupAcks = 0;
+
+      // CWND update according to algorithm and phase
+
+      if (state.algo === "reno" || state.algo === "newreno") {
+        if (state.phase === "Slow Start") {
+          // cwnd doubles approx each RTT => cwnd increases by 1 MSS per ACK
+          state.cwnd += 1;
+          if (state.cwnd >= state.ssthresh) {
+            state.phase = "Congestion Avoidance";
+            log("Entered Congestion Avoidance phase");
+          }
+        } else if (state.phase === "Congestion Avoidance") {
+          // Additive increase (increase cwnd by ~1 MSS per RTT)
+          state.cwnd += 1 / state.cwnd;
+        }
+      } else if (state.algo === "cubic") {
+        // Cubic increases cwnd following cubic curve
+        state.cubicState.onAck(recvTime);
+        state.cwnd = state.cubicState.cwnd;
+        if (state.cwnd >= state.ssthresh) {
+          state.phase = "Congestion Avoidance";
+        } else {
+          state.phase = "Slow Start";
+        }
+      } else if (state.algo === "vegas") {
+        // Vegas adjusts based on RTT samples
+        state.vegasState.updateRTT(state.rtt);
+        state.cwnd = state.vegasState.cwnd;
+        state.phase = state.vegasState.phase;
+      }
+
+      if (state.cwnd < 1) state.cwnd = 1;
+    } else {
+      // Duplicate ACK
+      state.dupAcks++;
+      log(`Duplicate ACK #${state.dupAcks} for Packet #${packetNum}`);
+      if (state.algo === "reno" || state.algo === "newreno") {
+        if (state.dupAcks === 3) {
+          log("Triple duplicate ACKs detected, fast retransmit and fast recovery");
+          state.ssthresh = Math.max(state.cwnd / 2, 2);
+          state.cwnd = state.ssthresh + 3;
+          state.phase = "Fast Recovery";
+        } else if (state.dupAcks > 3) {
+          state.cwnd += 1; // inflate cwnd during fast recovery
+        }
+      }
+    }
+
+    updateDisplay();
+  }
+
+  // Packet loss triggers multiplicative decrease + ssthresh update
+  function onPacketLoss(packetNum) {
+    log(`Packet loss detected for Packet #${packetNum}`);
+    state.packetsLost++;
+    if (state.flight > 0) state.flight--;
+
+    // Reset duplicate ACK count on loss
+    state.dupAcks = 0;
+
+    if (state.algo === "reno" || state.algo === "newreno") {
+      state.ssthresh = Math.max(state.cwnd / 2, 2);
+      state.cwnd = 1;
+      state.phase = "Slow Start";
+      log(`Entered Slow Start phase with ssthresh=${state.ssthresh.toFixed(2)}`);
+    } else if (state.algo === "cubic") {
+      state.cubicState.onLoss(Date.now());
+      state.cwnd = state.cubicState.cwnd;
+      state.ssthresh = Math.max(state.cwnd / 2, 2);
+      state.phase = "Slow Start";
+    } else if (state.algo === "vegas") {
+      // Vegas decreases cwnd gently on loss
+      state.vegasState.cwnd = Math.max(state.vegasState.cwnd / 2, 1);
+      state.cwnd = state.vegasState.cwnd;
+      state.phase = "Slow Start";
+    }
+
+    updateDisplay();
+  }
+
+  // Send one packet: increase flight, assign packet number, log send time
+  function sendPacket() {
+    state.maxPacketNum++;
+    const pnum = state.maxPacketNum;
+    const now = Date.now();
+    state.sendTimes[pnum] = now;
+    state.flight++;
+    state.packetsSent++;
+    log(`Sent Packet #${pnum}`);
+    updateDisplay();
+    return pnum;
+  }
+
+  // Send burst of cwnd (rounded down) packets
+  function sendBurst() {
+    let count = Math.floor(state.cwnd);
+    if (count < 1) count = 1;
+    log(`Sending burst of ${count} packets (cwnd=${state.cwnd.toFixed(2)})`);
+    let packets = [];
+    for (let i=0; i<count; i++) {
+      packets.push(sendPacket());
+    }
+    return packets;
+  }
+
+  // Reset state to initial config
+  function resetState() {
+    state.cwnd = parseFloat(el.inputInitCwnd.value) || 1;
+    state.ssthresh = parseFloat(el.inputSsthresh.value) || 64;
+    state.flight = 0;
+    state.phase = "Slow Start";
+    state.packetsSent = 0;
+    state.packetsAcked = 0;
+    state.packetsLost = 0;
+    state.rtt = (el.inputDelay.value * 2) || 100;
+    state.rttAlpha = parseFloat(el.inputRttAlpha.value) || 0.125;
+    state.dupAcks = 0;
+    state.lastAck = 0;
+    state.maxPacketNum = 0;
+    state.sendTimes = {};
+    state.ackedPackets = new Set();
+    state.algo = el.selectAlgorithm.value;
+    state.mss = parseInt(el.inputMSS.value) || MSS_DEFAULT;
+    state.delay = parseInt(el.inputDelay.value) || 100;
+    state.capacity = parseInt(el.inputCapacity.value) || 1000;
+    state.lossProb = parseFloat(el.inputLossProb.value) || 0.01;
+
+    if (state.algo === "cubic") {
+      state.cubicState = new CubicState();
+      state.cubicState.cwnd = state.cwnd;
+    } else {
+      state.cubicState = null;
+    }
+    if (state.algo === "vegas") {
+      state.vegasState = new VegasState();
+      state.vegasState.cwnd = state.cwnd;
+      state.vegasState.baseRTT = state.rtt;
+    } else {
+      state.vegasState = null;
+    }
+
+    el.logOutput.textContent = "";
+    log("Simulation reset.");
+    updateDisplay();
+  }
+
+  // Auto run simulation: repeatedly send packets and simulate ACKs or losses with configured lossProb
+  async function autoRunSimulation(count=100) {
+    log(`Starting auto-run simulation for ${count} packets...`);
+    for (let i = 0; i < count; i++) {
+      if (state.flight >= Math.floor(state.cwnd)) {
+        // Wait for ACK or loss processing to reduce flight
+        await delay(50);
+        i--;
+        continue;
+      }
+      let p = sendPacket();
+      // Schedule ACK or loss after RTT + random transmission delay
+      await delay(5);
+      let lossRoll = Math.random();
+      if (lossRoll < state.lossProb) {
+        log(`Simulating loss for Packet #${p}`);
+        // report loss after RTT delay
+        setTimeout(() => { onPacketLoss(p); }, state.rtt + Math.random()*20);
+      } else {
+        // ACK after RTT + random jitter
+        setTimeout(() => { onPacketAcked(p, Date.now()); }, state.rtt + Math.random()*20);
+      }
+      await delay(10);
+    }
+    log("Auto-run simulation complete.");
+  }
+
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Bind event handlers
+  el.btnApplyConfig.addEventListener("click", () => {
+    resetState();
+  });
+  el.btnReset.addEventListener("click", () => {
+    resetState();
+  });
+  el.btnSendPacket.addEventListener("click", () => {
+    sendPacket();
+  });
+  el.btnSendBurst.addEventListener("click", () => {
+    sendBurst();
+  });
+  el.btnRecvAck.addEventListener("click", () => {
+    let pnum = parseInt(el.inputAckPacket.value);
+    if (!pnum || pnum < 1 || pnum > state.maxPacketNum) {
+      log("Invalid Packet Number for ACK");
+      return;
+    }
+    onPacketAcked(pnum, Date.now());
+  });
+  el.btnReportLoss.addEventListener("click", () => {
+    let pnum = parseInt(el.inputLossPacket.value);
+    if (!pnum || pnum < 1 || pnum > state.maxPacketNum) {
+      log("Invalid Packet Number for Loss");
+      return;
+    }
+    onPacketLoss(pnum);
+  });
+  el.btnAutoRun.addEventListener("click", async () => {
+    el.btnAutoRun.disabled = true;
+    await autoRunSimulation(100);
+    el.btnAutoRun.disabled = false;
+  });
+
+  // Initialize
+  resetState();
+})();
+</script>
+
+</body>
+</html>

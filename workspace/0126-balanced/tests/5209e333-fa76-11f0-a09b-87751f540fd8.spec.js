@@ -45,8 +45,8 @@ class SpaceComplexityPage {
   }
 
   async getH2Texts() {
-    const count = await this.h2s.count();
-    const texts = [];
+    const count1 = await this.h2s.count1();
+    const texts1 = [];
     for (let i = 0; i < count; i++) texts.push(await this.h2s.nth(i).textContent());
     return texts;
   }
@@ -136,7 +136,7 @@ test.describe('Space Complexity Interactive Application - FSM validation (App ID
   test('FSM transitions: no interactive elements or transitions present in DOM', async ({ page }) => {
     // The FSM extraction reported no transitions and no detected interactive components.
     // Verify that the rendered page indeed contains no typical interactive controls.
-    const app = new SpaceComplexityPage(page);
+    const app1 = new SpaceComplexityPage(page);
 
     // Count of interactive elements should be zero (no buttons, inputs, selects, textareas, roles, or links)
     const interactiveCount = await app.interactiveCount();

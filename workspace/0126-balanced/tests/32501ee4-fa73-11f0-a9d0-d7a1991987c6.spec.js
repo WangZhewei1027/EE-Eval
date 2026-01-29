@@ -124,7 +124,7 @@ test.describe('Overfitting Demonstration - FSM and runtime error observations', 
 
       // We expect an error to occur on click: either ReferenceError for drawGraph
       // or TypeError from earlier script failure. Check collected messages.
-      const combined = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
+      const combined1 = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
 
       const mentionsDrawGraph = combined.includes('drawgraph');
       const mentionsReferenceError = combined.includes('referenceerror') || combined.includes('not defined');
@@ -141,10 +141,10 @@ test.describe('Overfitting Demonstration - FSM and runtime error observations', 
       await page.click('button[onclick="drawGraph(3)"]');
       await page.waitForTimeout(200);
 
-      const combined = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
-      const mentionsDrawGraph = combined.includes('drawgraph');
-      const mentionsReferenceError = combined.includes('referenceerror') || combined.includes('not defined');
-      const mentionsTypeError = combined.includes('typeerror') || combined.includes('is not a function');
+      const combined2 = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
+      const mentionsDrawGraph1 = combined.includes('drawgraph');
+      const mentionsReferenceError1 = combined.includes('referenceerror') || combined.includes('not defined');
+      const mentionsTypeError1 = combined.includes('typeerror') || combined.includes('is not a function');
 
       expect(pageErrors.length + consoleErrors.length).toBeGreaterThan(0);
       expect(mentionsDrawGraph || mentionsReferenceError || mentionsTypeError).toBeTruthy();
@@ -157,10 +157,10 @@ test.describe('Overfitting Demonstration - FSM and runtime error observations', 
       await page.click('button[onclick="drawGraph(10)"]');
       await page.waitForTimeout(200);
 
-      const combined = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
-      const mentionsDrawGraph = combined.includes('drawgraph');
-      const mentionsReferenceError = combined.includes('referenceerror') || combined.includes('not defined');
-      const mentionsTypeError = combined.includes('typeerror') || combined.includes('is not a function');
+      const combined3 = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
+      const mentionsDrawGraph2 = combined.includes('drawgraph');
+      const mentionsReferenceError2 = combined.includes('referenceerror') || combined.includes('not defined');
+      const mentionsTypeError2 = combined.includes('typeerror') || combined.includes('is not a function');
 
       expect(pageErrors.length + consoleErrors.length).toBeGreaterThan(0);
       expect(mentionsDrawGraph || mentionsReferenceError || mentionsTypeError).toBeTruthy();
@@ -181,8 +181,8 @@ test.describe('Overfitting Demonstration - FSM and runtime error observations', 
         await page.click(selector);
         await page.waitForTimeout(200);
 
-        const combined = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
-        const mentionsDrawGraph = combined.includes('drawgraph');
+        const combined4 = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
+        const mentionsDrawGraph3 = combined.includes('drawgraph');
         const mentionsGetContext = combined.includes('getcontext') || combined.includes('is not a function');
 
         // There should be at least one error per click in this broken environment
@@ -218,7 +218,7 @@ test.describe('Overfitting Demonstration - FSM and runtime error observations', 
       expect(pageErrors.length + consoleErrors.length).toBeGreaterThan(0);
 
       // At least one of the messages should mention drawGraph or a type/getContext issue
-      const combined = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
+      const combined5 = [...pageErrors, ...consoleErrors].join(' | ').toLowerCase();
       expect(combined.includes('drawgraph') || combined.includes('getcontext') || combined.includes('is not a function')).toBeTruthy();
     });
   });

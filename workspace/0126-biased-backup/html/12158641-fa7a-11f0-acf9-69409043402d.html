@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CPU Scheduling Interactive Simulator</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 10px;
+    white-space: pre-wrap;
+  }
+  button, input, select {
+    font-family: monospace, monospace;
+    font-size: 12px;
+  }
+  textarea {
+    font-family: monospace, monospace;
+    font-size: 12px;
+  }
+  table {
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+  td, th {
+    padding: 2px 5px;
+    border: 1px solid black;
+    text-align: center;
+    font-size: 12px;
+  }
+  label {
+    font-weight: bold;
+  }
+  #log {
+    width: 100%;
+    height: 120px;
+  }
+  #ganttChart td {
+    padding: 2px 8px;
+    border: 1px solid black;
+    vertical-align: middle;
+  }
+  #ganttChart td.process {
+    border-left: none;
+    border-right: none;
+  }
+</style>
+</head>
+<body>
+<h1>CPU Scheduling Simulator</h1>
+
+<div>
+<label for="strategy">Select Scheduling Algorithm:</label>
+<select id="strategy" title="Choose scheduling algorithm">
+  <option value="fcfs">First-Come, First-Served (FCFS)</option>
+  <option value="sjf">Shortest Job First (SJF) - Non-preemptive</option>
+  <option value="srtf">Shortest Remaining Time First (SRTF) - Preemptive SJF</option>
+  <option value="priority_np">Priority (Non-preemptive)</option>
+  <option value="priority_p">Priority (Preemptive)</option>
+  <option value="roundrobin">Round Robin (RR)</option>
+</select>
+</div>
+
+<br />
+<div>
+<label>Add Process:</label><br />
+<table>
+<tr>
+  <td><label for="pid">PID: </label></td>
+  <td><input type="text" id="pid" size="3" title="Process ID (unique)"/></td>
+  <td><label for="arrival">Arrival Time:</label></td>
+  <td><input type="number" id="arrival" min="0" size="3" value="0" title="Time the process arrives on ready queue"/></td>
+  <td><label for="burst">CPU Burst Time:</label></td>
+  <td><input type="number" id="burst" min="1" size="3" value="1" title="CPU time needed"/></td>
+  <td><label for="priority">Priority:</label></td>
+  <td><input type="number" id="priority" min="0" size="3" value="0" title="Lower number = higher priority"/></td>
+  <td><button id="addProcess">Add Process</button></td>
+</tr>
+</table>
+<div>
+<span id="addProcessError" style="color:red;"></span>
+</div>
+</div>
+
+<br />
+<div>
+<label>Set Quantum (for Round Robin):</label>
+<input type="number" id="quantum" min="1" value="2" size="3" title="Time quantum unit"/>
+<button id="setQuantum">Set Quantum</button>
+<span id="quantumStatus"></span>
+</div>
+
+<br />
+<div>
+<button id="startSim">Start Simulation</button>
+<button id="stepSim" disabled>Step</button>
+<button id="autoSim" disabled>Auto Run</button>
+<button id="pauseSim" disabled>Pause</button>
+<button id="resetSim">Reset</button>
+</div>
+
+<br />
+<div>
+<label>Processes Table:</label>
+<table id="processTable">
+  <thead><tr><th>PID</th><th>Arrival</th><th>Burst</th><th>Remaining</th><th>Priority</th></tr></thead>
+  <tbody>
+  </tbody>
+</table>
+</div>
+
+<br />
+<div>
+<label>Simulation Time: <span id="currentTime">0</span></label>
+</div>
+
+<div>
+<label>CPU State:</label> <span id="cpuState">Idle</span>
+</div>
+
+<div>
+<label>Ready Queue (by PID):</label> <span id="readyQueue">Empty</span>
+</div>
+
+<div>
+<label>Log:</label><br />
+<textarea id="log" readonly spellcheck="false"></textarea>
+</div>
+
+<div>
+<label>Gantt Chart (Timeline):</label><br />
+<table id="ganttChart">
+  <thead><tr id="ganttHeader"></tr></thead>
+  <tbody><tr id="ganttProcess"></tr></tbody>
+</table>
+</div>
+
+<script>
+(function(){
+  // State and variables
+  let processes = []; // array of {pid, arrival, burst, remaining, priority, startTime, finishTime, waitingTime, turnaroundTime}
+  let readyQueue = [];
+  let currentTime = 0;
+  let cpu = null; // process currently running (pid)
+  let logElem = document.getElementById('log');
+  let strategySelect = document.getElementById('strategy');
+  let quantumInput = document.getElementById('quantum');
+  let quantumValue = parseInt(quantumInput.value, 10) || 2;
+  let autoInterval = null;
+  let isRunning = false;
+  let ganttData = []; // [{pid, start, end}]
+  let rrQueue = []; // for Round Robin queue management
+ 
+  // Elements references
+  const processTableBody = document.querySelector('#processTable tbody');
+  const currentTimeElem = document.getElementById('currentTime');
+  const cpuStateElem = document.getElementById('cpuState');
+  const readyQueueElem = document.getElementById('readyQueue');
+  const addProcessErrorElem = document.getElementById('addProcessError');
+
+  const startSimButton = document.getElementById('startSim');
+  const stepSimButton = document.getElementById('stepSim');
+  const autoSimButton = document.getElementById('autoSim');
+  const pauseSimButton = document.getElementById('pauseSim');
+  const resetSimButton = document.getElementById('resetSim');
+  const setQuantumButton = document.getElementById('setQuantum');
+  const quantumStatusElem = document.getElementById('quantumStatus');
+
+  // Gantt chart elements
+  const ganttHeader = document.getElementById('ganttHeader');
+  const ganttProcessRow = document.getElementById('ganttProcess');
+
+  // Input fields
+  const pidInput = document.getElementById('pid');
+  const arrivalInput = document.getElementById('arrival');
+  const burstInput = document.getElementById('burst');
+  const priorityInput = document.getElementById('priority');
+
+  // ---------- Utility Functions ----------
+
+  // Logs a message with timestamp
+  function log(message) {
+    logElem.value += `[Time ${currentTime}] ${message}\n`;
+    logElem.scrollTop = logElem.scrollHeight;
+  }
+
+  // Update all UI elements reflecting current state
+  function updateUI() {
+    // Update process table
+    processTableBody.innerHTML = '';
+    for(let p of processes) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${p.pid}</td><td>${p.arrival}</td><td>${p.burst}</td><td>${p.remaining}</td><td>${p.priority}</td>`;
+      processTableBody.appendChild(tr);
+    }
+
+    // Update current time
+    currentTimeElem.textContent = currentTime;
+
+    // Update CPU state
+    cpuStateElem.textContent = cpu ? cpu.pid : 'Idle';
+
+    // Update ready queue display (by PID)
+    if(readyQueue.length === 0) {
+      readyQueueElem.textContent = 'Empty';
+    } else {
+      readyQueueElem.textContent = readyQueue.map(p => p.pid).join(', ');
+    }
+
+    // Update quantum status
+    quantumStatusElem.textContent = `(Quantum = ${quantumValue})`;
+
+    // Update gantt chart
+    updateGanttChart();
+  }
+
+  // Compare function for sorting arrival first, then PID lex order
+  function compareArrival(a,b) {
+    if(a.arrival !== b.arrival) return a.arrival - b.arrival;
+    if(a.pid < b.pid) return -1;
+    if(a.pid > b.pid) return 1;
+    return 0;
+  }
+
+  // Find next processes to add to ready queue at currentTime
+  function addReadyProcesses() {
+    let added = false;
+    for(let p of processes) {
+      if(p.arrival <= currentTime && !readyQueue.includes(p) && p.remaining > 0 && (!cpu || cpu.pid !== p.pid)) {
+        // Add to ready queue according to strategy
+        readyQueue.push(p);
+        added = true;
+      }
+    }
+    if(added) reorderReadyQueue();
+  }
+
+  // Reorder ready queue according to current strategy
+  function reorderReadyQueue() {
+    let strat = strategySelect.value;
+    if(strat === 'fcfs') {
+      // Sort by arrival time, then PID
+      readyQueue.sort((a,b) => {
+        if(a.arrival !== b.arrival) return a.arrival - b.arrival;
+        if(a.pid < b.pid) return -1;
+        if(a.pid > b.pid) return 1;
+        return 0;
+      });
+    } else if(strat === 'sjf') {
+      // Non-preemptive SJF: sort by burst time, then arrival, then PID
+      readyQueue.sort((a,b) => {
+        if(a.burst !== b.burst) return a.burst - b.burst;
+        if(a.arrival !== b.arrival) return a.arrival - b.arrival;
+        if(a.pid < b.pid) return -1;
+        if(a.pid > b.pid) return 1;
+        return 0;
+      });
+    } else if(strat === 'srtf') {
+      // Preemptive SJF: sort by remaining burst time, then arrival, then PID
+      readyQueue.sort((a,b) => {
+        if(a.remaining !== b.remaining) return a.remaining - b.remaining;
+        if(a.arrival !== b.arrival) return a.arrival - b.arrival;
+        if(a.pid < b.pid) return -1;
+        if(a.pid > b.pid) return 1;
+        return 0;
+      });
+    } else if(strat === 'priority_np' || strat === 'priority_p') {
+      // Sort by priority (lower is higher priority), then arrival, then PID
+      readyQueue.sort((a,b) => {
+        if(a.priority !== b.priority) return a.priority - b.priority;
+        if(a.arrival !== b.arrival) return a.arrival - b.arrival;
+        if(a.pid < b.pid) return -1;
+        if(a.pid > b.pid) return 1;
+        return 0;
+      });
+    } else if(strat === 'roundrobin') {
+      // RR uses rrQueue management, so this function does not modify readyQueue order
+      // But ensure readyQueue copy for display is consistent with rrQueue order:
+      readyQueue = rrQueue.slice();
+    }
+  }
+
+  // Get next process to run according to strategy (if CPU idle)
+  function selectNextProcess() {
+    let strat = strategySelect.value;
+    if(strat === 'roundrobin') {
+      // RR: get next process from rrQueue, if CPU idle or quantum expired
+      if(rrQueue.length === 0) return null;
+      return rrQueue[0]; // the front of RR queue
+    }
+    if(readyQueue.length === 0) return null;
+    if(strat === 'fcfs') return readyQueue[0];
+    if(strat === 'sjf') return readyQueue[0];
+    if(strat === 'srtf') return readyQueue[0];
+    if(strat === 'priority_np' || strat === 'priority_p') return readyQueue[0];
+    return null;    
+  }
+
+  // Remove process from readyQueue and rrQueue if present
+  function removeFromQueues(process) {
+    readyQueue = readyQueue.filter(p => p.pid !== process.pid);
+    rrQueue = rrQueue.filter(p => p.pid !== process.pid);
+  }
+
+  // Add to RR queue (if not already present), keeping order
+  function pushToRRQueue(process) {
+    if(!rrQueue.find(p => p.pid === process.pid)) {
+      rrQueue.push(process);
+      reorderReadyQueue(); // keep readyQueue synchronized for display
+    }
+  }
+
+  // Advance the simulation one time unit (step)
+  // Returns true if simulation is still active, false if ended
+  function stepSimulation() {
+    if(!isRunning) return false;
+
+    // Add new arrivals to ready queue
+    addReadyProcesses();
+
+    // For preemptive strategies, always check preemption before running
+    let strat = strategySelect.value;
+    if(cpu) {
+      // Preemptive check
+      if(strat === 'srtf') {
+        reorderReadyQueue();
+        if(readyQueue.length > 0 && readyQueue[0].remaining < cpu.remaining) {
+          // Preempt current process, push CPU to ready queue
+          log(`Preempting process ${cpu.pid} for ${readyQueue[0].pid} (Shorter remaining time found)`);
+          // Save gantt chart segment end time
+          endGanttSegment(currentTime);
+          // Put cpu back in ready queue
+          pushToRRQueue(cpu);
+          cpu = readyQueue.shift();
+          startGanttSegment(cpu.pid, currentTime);
+          removeFromQueues(cpu);
+        }
+      } else if(strat === 'priority_p') {
+        reorderReadyQueue();
+        if(readyQueue.length > 0 && readyQueue[0].priority < cpu.priority) {
+          // Higher priority process arrived - preempt cpu
+          log(`Preempting process ${cpu.pid} for ${readyQueue[0].pid} (Higher priority arrived)`);
+          endGanttSegment(currentTime);
+          pushToRRQueue(cpu);
+          cpu = readyQueue.shift();
+          startGanttSegment(cpu.pid, currentTime);
+          removeFromQueues(cpu);
+        }
+      }
+    }
+
+    // Choose process if none running
+    if(!cpu) {
+      reorderReadyQueue();
+      if(strat === 'roundrobin') {
+        if(rrQueue.length === 0) {
+          cpu = null;
+        } else {
+          cpu = rrQueue.shift();
+          startGanttSegment(cpu.pid, currentTime);
+        }
+      } else {
+        cpu = selectNextProcess();
+        if(cpu) {
+          startGanttSegment(cpu.pid, currentTime);
+          removeFromQueues(cpu);
+        }
+      }
+      if(cpu) log(`Process ${cpu.pid} started/resumed execution`);
+    }
+
+    if(!cpu) {
+      log(`CPU idle at time ${currentTime}`);
+      currentTime++;
+      updateUI();
+      return true;
+    }
+
+    // Run CPU process for one time unit
+    cpu.remaining--;
+    log(`Running process ${cpu.pid}: remaining time is ${cpu.remaining}`);
+
+    // For Round Robin track quantum
+    if(strat === 'roundrobin') {
+      rrQuantumCount++;
+      if(cpu.remaining === 0) {
+        log(`Process ${cpu.pid} finished at time ${currentTime + 1}`);
+        finishProcess(cpu);
+        endGanttSegment(currentTime + 1);
+        cpu = null;
+        rrQuantumCount = 0;
+      } else if(rrQuantumCount >= quantumValue) {
+        // Time slice exhausted - preempt
+        log(`Quantum expired for process ${cpu.pid} at time ${currentTime + 1}`);
+        endGanttSegment(currentTime + 1);
+        pushToRRQueue(cpu);
+        cpu = null;
+        rrQuantumCount = 0;
+      }
+    } else {
+      // Other strategies: check process completion
+      if(cpu.remaining === 0) {
+        log(`Process ${cpu.pid} finished at time ${currentTime + 1}`);
+        finishProcess(cpu);
+        endGanttSegment(currentTime + 1);
+        cpu = null;
+      }
+    }
+
+    currentTime++;
+    addReadyProcesses();
+    updateUI();
+
+    // Check if all finished
+    if(processes.every(p => p.remaining === 0)) {
+      log('All processes completed execution');
+      isRunning = false;
+      stepSimButton.disabled = true;
+      autoSimButton.disabled = true;
+      pauseSimButton.disabled = true;
+      startSimButton.disabled = false;
+      return false;
+    }
+
+    return true;
+  }
+
+  // Finish process: set finish time etc
+  function finishProcess(p) {
+    p.finishTime = currentTime + 1;
+    p.turnaroundTime = p.finishTime - p.arrival;
+    p.waitingTime = p.turnaroundTime - p.burst;
+    removeFromQueues(p);
+  }
+
+  // Reset simulation state
+  function resetSimulation(fullReset = false) {
+    currentTime = 0;
+    cpu = null;
+    readyQueue = [];
+    rrQueue = [];
+    logElem.value = '';
+    ganttData = [];
+    rrQuantumCount = 0;
+    stepSimButton.disabled = true;
+    autoSimButton.disabled = true;
+    pauseSimButton.disabled = true;
+    startSimButton.disabled = false;
+    isRunning = false;
+    if(fullReset) {
+      processes = [];
+      processTableBody.innerHTML = '';
+      readyQueueElem.textContent = 'Empty';
+      cpuStateElem.textContent = 'Idle';
+      currentTimeElem.textContent = '0';
+      ganttHeader.innerHTML = '';
+      ganttProcessRow.innerHTML = '';
+    }
+    updateUI();
+  }
+
+  // Build/update gantt chart DOM from ganttData
+  function updateGanttChart() {
+    // If no segments - clear
+    if(ganttData.length === 0) {
+      ganttHeader.innerHTML = '';
+      ganttProcessRow.innerHTML = '';
+      return;
+    }
+    // Determine total length and timemarks
+    let times = [];
+    for(let s of ganttData) {
+      times.push(s.start,s.end);
+    }
+    let uniqueTimes = [...new Set(times)].sort((a,b)=>a-b);
+    
+    // Clear header and process row
+    ganttHeader.innerHTML = '';
+    ganttProcessRow.innerHTML = '';
+
+    // Header cells: time marks
+    for(let t of uniqueTimes) {
+      let th = document.createElement('th');
+      th.textContent = t;
+      ganttHeader.appendChild(th);
+    }
+
+    // Prepare a map of intervals to PIDs for each time unit
+    let timeline = [];
+    let maxTime = uniqueTimes[uniqueTimes.length - 1];
+    for(let time = 0; time < maxTime; time++) {
+      timeline.push('Idle');
+    }
+    for(let seg of ganttData) {
+      for(let i=seg.start; i < seg.end; i++) {
+        timeline[i] = seg.pid;
+      }
+    }
+
+    // Generate process row cells grouping contiguous blocks of same PID for clarity
+    let cells = [];
+    for(let i = 0; i < timeline.length;) {
+      let currentPid = timeline[i];
+      let start = i;
+      while(i < timeline.length && timeline[i] === currentPid) i++;
+      let cell = document.createElement('td');
+      cell.colSpan = i - start;
+      cell.textContent = currentPid === 'Idle' ? '' : currentPid;
+      cell.className = currentPid === 'Idle' ? '' : 'process';
+      cells.push(cell);
+    }
+    // Append cells
+    for(let c of cells) {
+      ganttProcessRow.appendChild(c);
+    }
+  }
+
+  // Start a new gantt segment (process execution interval)
+  function startGanttSegment(pid, start) {
+    // If last segment is same pid and touching, extend rather than new segment
+    let lastSeg = ganttData.length > 0 ? ganttData[ganttData.length -1] : null;
+    if(lastSeg && lastSeg.pid === pid && lastSeg.end === start) {
+      // continue segment
+      return;
+    }
+    ganttData.push({pid: pid, start: start, end: start});
+  }
+  // End the current gantt segment at time
+  function endGanttSegment(time) {
+    if(ganttData.length === 0) return;
+    let lastSeg = ganttData[ganttData.length -1];
+    if(lastSeg.end < time) {
+      lastSeg.end = time;
+    }
+  }
+
+  // Validate process input:
+  function validateProcessInput(pid, arrival, burst, priority) {
+    if(!pid) return 'PID must not be empty';
+    if(processes.find(p=>p.pid===pid)) return 'PID must be unique';
+    if(arrival === '' || isNaN(arrival) || arrival < 0) return 'Arrival time must be a number >= 0';
+    if(burst === '' || isNaN(burst) || burst < 1) return 'Burst time must be number >= 1';
+    if(priority === '' || isNaN(priority)) return 'Priority must be a number';
+    return null;
+  }
+
+  // ---------- Event Handlers ----------
+
+  // Add process button
+  document.getElementById('addProcess').addEventListener('click', function(){
+    let pid = pidInput.value.trim();
+    let arrival = Number(arrivalInput.value);
+    let burst = Number(burstInput.value);
+    let priority = Number(priorityInput.value);
+    let err = validateProcessInput(pid, arrival, burst, priority);
+    if(err) {
+      addProcessErrorElem.textContent = err;
+      return;
+    }
+    addProcessErrorElem.textContent = '';
+    let newProc = {
+      pid: pid,
+      arrival: arrival,
+      burst: burst,
+      remaining: burst,
+      priority: priority,
+      startTime: null,
+      finishTime: null,
+      waitingTime: null,
+      turnaroundTime: null
+    };
+    processes.push(newProc);
+    processes.sort(compareArrival);
+    updateUI();
+    pidInput.value = '';
+    arrivalInput.value = '0';
+    burstInput.value = '1';
+    priorityInput.value = '0';
+    log(`Added process ${newProc.pid} (Arrival: ${newProc.arrival}, Burst: ${newProc.burst}, Priority: ${newProc.priority})`);
+  });
+
+  // Set quantum button
+  setQuantumButton.addEventListener('click', function(){
+    let q = Number(quantumInput.value);
+    if(isNaN(q) || q < 1) {
+      quantumStatusElem.textContent = 'Invalid quantum value';
+      return;
+    }
+    quantumValue = q;
+    quantumStatusElem.textContent = `(Quantum = ${quantumValue})`;
+    log(`Quantum time set to ${quantumValue}`);
+  });
+
+  // Start simulation
+  startSimButton.addEventListener('click', function(){
+    if(processes.length === 0) {
+      alert('Add at least one process before starting simulation.');
+      return;
+    }
+    // Reset simulation variables for fresh start
+    currentTime = 0;
+    cpu = null;
+    readyQueue = [];
+    rrQueue = [];
+    ganttData = [];
+    rrQuantumCount = 0;
+    isRunning = true;
+
+    // Reset all processes' remaining etc
+    for(let p of processes) {
+      p.remaining = p.burst;
+      p.startTime = null;
+      p.finishTime = null;
+      p.waitingTime = null;
+      p.turnaroundTime = null;
+    }
+    logElem.value = '';
+    log(`Simulation started with ${processes.length} processes.`);
+    stepSimButton.disabled = false;
+    autoSimButton.disabled = false;
+    pauseSimButton.disabled = true;
+    startSimButton.disabled = true;
+
+    // Prepare readyQueue for RR: round robin queue is initially empty, add processes when they arrive
+    if(strategySelect.value === 'roundrobin') {
+      rrQueue = [];
+      readyQueue = [];
+    }
+
+    updateUI();
+  });
+
+  // Step simulation
+  stepSimButton.addEventListener('click', function(){
+    if(!isRunning) return;
+    let active = stepSimulation();
+    if(!active) {
+      stepSimButton.disabled = true;
+      autoSimButton.disabled = true;
+      pauseSimButton.disabled = true;
+      startSimButton.disabled = false;
+    }
+  });
+
+  // Auto run interval variable
+  let autoIntervalId = null;
+  let rrQuantumCount = 0;
+
+  // Auto run simulation
+  autoSimButton.addEventListener('click', function(){
+    if(!isRunning) return;
+    autoSimButton.disabled = true;
+    stepSimButton.disabled = true;
+    pauseSimButton.disabled = false;
+    autoIntervalId = setInterval(function(){
+      let active = stepSimulation();
+      if(!active) {
+        clearInterval(autoIntervalId);
+        pauseSimButton.disabled = true;
+        startSimButton.disabled = false;
+        stepSimButton.disabled = true;
+        autoSimButton.disabled = true;
+      }
+    }, 250);
+  });
+
+  // Pause auto run
+  pauseSimButton.addEventListener('click', function(){
+    clearInterval(autoIntervalId);
+    pauseSimButton.disabled = true;
+    autoSimButton.disabled = false;
+    stepSimButton.disabled = false;
+  });
+
+  // Reset simulation (only state but keep process list)
+  resetSimButton.addEventListener('click', function(){
+    if(isRunning) {
+      if(!confirm('Simulation is running. Reset and stop simulation?')) return;
+    }
+    clearInterval(autoIntervalId);
+    resetSimulation(false);
+  });
+
+  // Strategy change disables simulation controls and resets simulation
+  strategySelect.addEventListener('change', function(){
+    if(isRunning) {
+      if(!confirm('Changing scheduling algorithm resets simulation and stops it. Continue?')) {
+        // revert select to previous
+        strategySelect.value = previousStrategy;
+        return;
+      }
+      clearInterval(autoIntervalId);
+      resetSimulation(false);
+      stepSimButton.disabled = true;
+      autoSimButton.disabled = true;
+      pauseSimButton.disabled = true;
+      startSimButton.disabled = false;
+    }
+    previousStrategy = strategySelect.value;
+    if(strategySelect.value === 'roundrobin') {
+      quantumInput.disabled = false;
+      setQuantumButton.disabled = false;
+    }
+    else {
+      quantumInput.disabled = true;
+      setQuantumButton.disabled = true;
+    }
+  });
+
+  let previousStrategy = strategySelect.value;
+  if(strategySelect.value !== 'roundrobin') {
+    quantumInput.disabled = true;
+    setQuantumButton.disabled = true;
+  }
+
+  // Allow enter key adds process
+  document.getElementById('pid').addEventListener('keydown', function(e){
+    if(e.key==='Enter') document.getElementById('addProcess').click();
+  });
+  document.getElementById('arrival').addEventListener('keydown', function(e){
+    if(e.key==='Enter') document.getElementById('addProcess').click();
+  });
+  document.getElementById('burst').addEventListener('keydown', function(e){
+    if(e.key==='Enter') document.getElementById('addProcess').click();
+  });
+  document.getElementById('priority').addEventListener('keydown', function(e){
+    if(e.key==='Enter') document.getElementById('addProcess').click();
+  });
+
+  // Initial UI update
+  updateUI();
+
+})();
+</script>
+
+</body>
+</html>

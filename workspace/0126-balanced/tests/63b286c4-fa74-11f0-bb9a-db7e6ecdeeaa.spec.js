@@ -136,7 +136,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
 
   test.describe('Task 1 interactions and transitions (S1_Task1_Running -> S2_Task1_Paused)', () => {
     test('Start Task 1 should run one step (entry action runTask1Once) and then result in a paused state', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo1 = new ContextSwitchingPage(page);
 
       // Click Start Task 1 - this will create the generator, set running true,
       // enable pause button, then call runTask1Once which advances generator once and auto-pauses
@@ -150,7 +150,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
       expect(Number(countText)).toBeGreaterThanOrEqual(1);
 
       // Log should indicate Task 1 started and the counting log
-      const logText = await demo.getLogText();
+      const logText1 = await demo.getLogText();
       expect(logText).toContain('Task 1 started.');
       expect(logText).toMatch(/Task 1: counted to \d+/);
 
@@ -167,14 +167,14 @@ test.describe('Context Switching Demo - FSM validation', () => {
     });
 
     test('Edge: invoking Pause Task 1 should disable pause and enable start (observed via auto-click during start)', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo2 = new ContextSwitchingPage(page);
 
       // Ensure starting once produces the pause log (pause happens by runTask1Once calling pause button)
       await demo.clickStartTask1();
       await page.waitForTimeout(200);
 
       // Confirm pause log exists - this validates the PauseTask1 event handler was executed
-      const logText = await demo.getLogText();
+      const logText2 = await demo.getLogText();
       expect(logText).toContain('Task 1 paused.');
 
       // There should be no page errors
@@ -184,7 +184,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
 
   test.describe('Task 2 interactions and transitions (S3_Task2_Running -> S4_Task2_Paused)', () => {
     test('Start Task 2 should run one step (entry action runTask2Once) and then result in a paused state', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo3 = new ContextSwitchingPage(page);
 
       // Start Task 2; like Task 1, it runs one step and auto-pauses
       await demo.clickStartTask2();
@@ -197,7 +197,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
       expect(Number(fact2Text)).toBeGreaterThanOrEqual(1);
 
       // Logs should show Task 2 started and a factorial entry
-      const logText = await demo.getLogText();
+      const logText3 = await demo.getLogText();
       expect(logText).toContain('Task 2 started.');
       expect(logText).toMatch(/Task 2: factorial\(\d+\) = \d+/);
 
@@ -210,12 +210,12 @@ test.describe('Context Switching Demo - FSM validation', () => {
     });
 
     test('Edge: Pause Task 2 event was triggered by auto-step and recorded in logs', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo4 = new ContextSwitchingPage(page);
 
       await demo.clickStartTask2();
       await page.waitForTimeout(200);
 
-      const logText = await demo.getLogText();
+      const logText4 = await demo.getLogText();
       expect(logText).toContain('Task 2 paused.');
 
       expect(pageErrors.length).toBe(0);
@@ -224,7 +224,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
 
   test.describe('Context switching (S5_Context_Switching) and transitions', () => {
     test('Attempting to start context switching with only one task started should trigger an alert', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo5 = new ContextSwitchingPage(page);
 
       // Start only Task 1
       await demo.clickStartTask1();
@@ -244,7 +244,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
     });
 
     test('Starting context switching after both tasks started should run scheduler and alternate task execution', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo6 = new ContextSwitchingPage(page);
 
       // Start both tasks (each step will auto-pause but generators will be created)
       await demo.clickStartTask1();
@@ -260,7 +260,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
       await page.waitForTimeout(1300);
 
       // The log should contain entries indicating the scheduler started and that it ran each task
-      const logText = await demo.getLogText();
+      const logText5 = await demo.getLogText();
       expect(logText).toContain('Context switching started.');
       expect(logText).toContain('Scheduler: Running Task 1');
       expect(logText).toContain('Scheduler: Running Task 2');
@@ -293,7 +293,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
     });
 
     test('Edge: while scheduler running, pause buttons are disabled and cannot be used to directly pause (observed behavior)', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo7 = new ContextSwitchingPage(page);
 
       // Start both tasks first
       await demo.clickStartTask1();
@@ -320,7 +320,7 @@ test.describe('Context Switching Demo - FSM validation', () => {
 
   test.describe('Logging and runtime error observation', () => {
     test('should not produce uncaught ReferenceError/SyntaxError/TypeError during normal flows', async ({ page }) => {
-      const demo = new ContextSwitchingPage(page);
+      const demo8 = new ContextSwitchingPage(page);
 
       // Perform a set of typical interactions exercising the main flows
       await demo.clickStartTask1();

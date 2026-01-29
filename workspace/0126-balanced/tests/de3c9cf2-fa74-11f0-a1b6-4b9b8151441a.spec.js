@@ -29,12 +29,12 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
       return btn.innerText();
     }
     async clickButton() {
-      const btn = await this.getButton();
+      const btn1 = await this.getButton();
       if (!btn) throw new Error('Demonstrate button not found');
       await btn.click();
     }
     async isButtonVisible() {
-      const btn = await this.getButton();
+      const btn2 = await this.getButton();
       if (!btn) return false;
       return btn.isVisible();
     }
@@ -80,7 +80,7 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
     expect(title).toBe('P vs NP Demonstration');
 
     // Assert button exists and has the expected text
-    const btn = await app.getButton();
+    const btn3 = await app.getButton();
     expect(btn).not.toBeNull();
     const btnText = await app.getButtonText();
     // The FSM extraction specified "<button>Demonstrate</button>"
@@ -98,7 +98,7 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
   test('Clicking "Demonstrate" button: no functional handlers expected (no state transitions)', async ({ page }) => {
     // This test validates that clicking the button (the only interactive component) does not cause transitions
     // because the FSM/extraction indicated there were no event handlers associated.
-    const app = new PvNPPage(page);
+    const app1 = new PvNPPage(page);
     await app.goto();
 
     // Snapshot counts before click
@@ -114,9 +114,9 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
     await page.waitForTimeout(200);
 
     // After clicking, ensure the button still exists and text is intact
-    const btn = await app.getButton();
+    const btn4 = await app.getButton();
     expect(btn).not.toBeNull();
-    const btnText = await app.getButtonText();
+    const btnText1 = await app.getButtonText();
     expect(btnText).toBe('Demonstrate');
 
     // Verify that clicking did not introduce new page errors (uncaught exceptions)
@@ -135,14 +135,14 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
 
   test('Rapid multiple clicks: edge case - app remains stable and does not throw', async ({ page }) => {
     // Edge case: clicking the button many times in quick succession should not crash the page
-    const app = new PvNPPage(page);
+    const app2 = new PvNPPage(page);
     await app.goto();
 
     const initialPageErrors = pageErrors.length;
     const initialConsoleErrors = consoleErrors.length;
 
     // Perform rapid clicks
-    const btn = await app.getButton();
+    const btn5 = await app.getButton();
     expect(btn).not.toBeNull();
 
     // Try clicking 10 times quickly
@@ -166,7 +166,7 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
   test('Console and page errors (if any) are of expected kinds: allow natural JS errors but assert their types', async ({ page }) => {
     // This test inspects captured errors that may have been produced when loading the incomplete/truncated HTML.
     // Per the instructions, do NOT patch or inject code; simply observe and assert on the errors that happen naturally.
-    const app = new PvNPPage(page);
+    const app3 = new PvNPPage(page);
     await app.goto();
 
     // Wait briefly to ensure any errors are captured
@@ -201,14 +201,14 @@ test.describe('P vs NP Demonstration - FSM: S0_Idle checks and interactions', ()
 
     // Also assert that the page renders the expected evidence despite any errors
     expect(await app.title()).toBe('P vs NP Demonstration');
-    const btn = await app.getButton();
+    const btn6 = await app.getButton();
     expect(btn).not.toBeNull();
   });
 
   test('No hidden event handlers were detected: clicking does not produce console logs', async ({ page }) => {
     // The extraction summary indicated no event handlers were detected.
     // This test ensures clicking the button does not produce console.log style messages.
-    const app = new PvNPPage(page);
+    const app4 = new PvNPPage(page);
     await app.goto();
 
     // Filter out non-log console messages, record initial logs count

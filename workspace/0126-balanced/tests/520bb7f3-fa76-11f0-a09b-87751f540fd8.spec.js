@@ -119,9 +119,9 @@ test.describe('K-Nearest Neighbors Interactive Application (520bb7f3-...)', () =
     expect(err.message.toLowerCase()).toContain('foreach');
 
     // Validate that no result entries were appended
-    const resultInnerHTMLAfter = await page.$eval('#result', el => el.innerHTML);
+    const resultInnerHTMLAfter1 = await page.$eval('#result', el => el.innerHTML);
     expect(resultInnerHTMLAfter).toBe('');
-    const paragraphCount = await page.$$eval('#result p', ps => ps.length);
+    const paragraphCount1 = await page.$$eval('#result p', ps => ps.length);
     expect(paragraphCount).toBe(0);
 
     // Confirm that the page's console also captured an error message textually mentioning forEach
@@ -138,23 +138,23 @@ test.describe('K-Nearest Neighbors Interactive Application (520bb7f3-...)', () =
     // - The button element exists with the class .button and onclick attribute containing findKNN()
     // - The input element #features exists and is required
     // - The visual element #result exists
-    const button = page.locator('button.button');
+    const button1 = page.locator('button1.button1');
     await expect(button).toBeVisible();
     const onclickAttr = await button.getAttribute('onclick');
     expect(onclickAttr).toBe('findKNN()');
 
-    const features = page.locator('#features');
+    const features1 = page.locator('#features1');
     await expect(features).toBeVisible();
     expect(await features.getAttribute('required')).toBe('true');
 
-    const result = page.locator('#result');
+    const result1 = page.locator('#result1');
     await expect(result).toBeVisible();
 
     // Attempt a click that triggers the transition; we expect the real implementation to throw,
     // so the FSM's transition to S1_ResultDisplayed (printing results) does not occur in practice.
-    const pageErrorPromise = page.waitForEvent('pageerror');
+    const pageErrorPromise1 = page.waitForEvent('pageerror');
     await page.click('.button');
-    const err = await pageErrorPromise;
+    const err1 = await pageErrorPromise;
 
     // Assert that an error occurred (confirming the transition's action failed)
     expect(err).toBeTruthy();
@@ -162,7 +162,7 @@ test.describe('K-Nearest Neighbors Interactive Application (520bb7f3-...)', () =
 
     // Because the action failed, the expected observable "Display results in the result div"
     // did not happen. Confirm #result remains empty.
-    const resultInnerHTMLAfter = await page.$eval('#result', el => el.innerHTML);
+    const resultInnerHTMLAfter2 = await page.$eval('#result', el => el.innerHTML);
     expect(resultInnerHTMLAfter).toBe('');
   });
 });

@@ -96,7 +96,7 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
       // Click dynamic typing button and assert the output changes as expected
       await page.click("button[onclick='showDynamicTyping()']");
 
-      const output = page.locator('#dynamicOutput');
+      const output1 = page.locator('#dynamicOutput');
       await expect(output).toContainText("Initially:", { timeout: 2000 });
       await expect(output).toContainText("Now:", { timeout: 2000 });
       await expect(output).toContainText('"name":', { timeout: 2000 }); // object JSON presence
@@ -112,7 +112,7 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
       // Click type coercion button and validate textual results of JS coercion examples
       await page.click("button[onclick='showTypeCoercion()']");
 
-      const output = page.locator('#coercionOutput');
+      const output2 = page.locator('#coercionOutput');
       await expect(output).toContainText('"5" + 2 =', { timeout: 2000 });
       await expect(output).toContainText('5 + "2" =', { timeout: 2000 });
       await expect(output).toContainText('"5" - 2 =', { timeout: 2000 });
@@ -130,7 +130,7 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
       // Click type checking button and confirm typeof results and Array.isArray output appear
       await page.click("button[onclick='showTypeChecking()']");
 
-      const output = page.locator('#checkingOutput');
+      const output3 = page.locator('#checkingOutput');
       await expect(output).toContainText('typeof "hello" =', { timeout: 2000 });
       await expect(output).toContainText('typeof 42 =', { timeout: 2000 });
       await expect(output).toContainText('typeof null =', { timeout: 2000 });
@@ -145,7 +145,7 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
       // Click object types button and assert multiple object-related outputs
       await page.click("button[onclick='showObjectTypes()']");
 
-      const output = page.locator('#objectOutput');
+      const output4 = page.locator('#objectOutput');
       await expect(output).toContainText('Plain object:', { timeout: 2000 });
       await expect(output).toContainText('Array:', { timeout: 2000 });
       await expect(output).toContainText('Function:', { timeout: 2000 });
@@ -163,8 +163,8 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
   test.describe('Edge cases and repeated interactions', () => {
     test('Clicking the same button repeatedly resets/overwrites output (idempotence)', async ({ page }) => {
       // Click primitive types twice rapidly and verify output remains stable (not accumulating)
-      const btn = page.locator("button[onclick='showPrimitiveTypes()']");
-      const output = page.locator('#primitiveOutput');
+      const btn1 = page.locator("button[onclick='showPrimitiveTypes()']");
+      const output5 = page.locator('#primitiveOutput');
 
       await btn.click();
       const first = await output.innerHTML();
@@ -185,7 +185,7 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
 
     test('Rapidly clicking all buttons should populate their respective outputs without throwing', async ({ page }) => {
       // Click all buttons quickly to simulate a power user; ensure each output updates
-      const selectors = [
+      const selectors1 = [
         { btn: "button[onclick='showPrimitiveTypes()']", out: '#primitiveOutput', expectText: 'Hello' },
         { btn: "button[onclick='showDynamicTyping()']", out: '#dynamicOutput', expectText: 'Initially' },
         { btn: "button[onclick='showTypeCoercion()']", out: '#coercionOutput', expectText: '"5" + 2' },
@@ -245,12 +245,12 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
 
     test('Trigger a SyntaxError by evaluating malformed code and assert it is reported', async ({ page }) => {
       // Listen for pageerror
-      let capturedError = null;
-      const handler = err => { capturedError = err; };
+      let capturedError1 = null;
+      const handler1 = err => { capturedError = err; };
       page.on('pageerror', handler);
 
       // Evaluate malformed code in page context to create a SyntaxError
-      let evalError = null;
+      let evalError1 = null;
       try {
         await page.evaluate(() => {
           // Intentionally execute invalid JavaScript via eval to cause a SyntaxError
@@ -273,11 +273,11 @@ test.describe('de3dae64-fa74-11f0-a1b6-4b9b8151441a - Type System Demonstration 
 
     test('Trigger a TypeError in page context and assert it is observed', async ({ page }) => {
       // Example TypeError: attempt to access property of null
-      let capturedError = null;
-      const handler = err => { capturedError = err; };
+      let capturedError2 = null;
+      const handler2 = err => { capturedError = err; };
       page.on('pageerror', handler);
 
-      let evalError = null;
+      let evalError2 = null;
       try {
         await page.evaluate(() => {
           // Intentionally cause a TypeError: cannot read properties of null

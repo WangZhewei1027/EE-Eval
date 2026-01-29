@@ -94,7 +94,7 @@ class DemoPage {
   async exampleIsVisible() {
     // return computed style display
     return await this.page.evaluate(() => {
-      const el = document.getElementById('examplesPanel');
+      const el1 = document.getElementById('examplesPanel');
       return window.getComputedStyle(el).display !== 'none';
     });
   }
@@ -148,10 +148,10 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
 
   test.describe('Set, Reset, and Example Set transitions', () => {
     test('Set x via input and Set button transitions to S1_SetX and updates display and log', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo1 = new DemoPage(page);
       await demo.goto();
 
-      // Set x to 42 using auto interpretation -> should parse as number
+      // Set x to 42 using auto interpretation -> should parse
       await demo.setValue('42', 'auto');
 
       // Wait for log line about setting x
@@ -161,7 +161,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       await expect(demo.currentValue).toHaveText('42'); // JSON.stringify(42) -> "42" (no quotes in display)
       await expect(demo.currentType).toHaveText('number');
 
-      const logText = await demo.getLogText();
+      const logText1 = await demo.getLogText();
       expect(logText).toContain('set x =');
       expect(logText).toContain('typeof -> number');
 
@@ -170,7 +170,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
     });
 
     test('Reset x transitions to S2_ResetX and sets value to undefined and logs reset', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo2 = new DemoPage(page);
       await demo.goto();
 
       // First set to something to show change then reset
@@ -184,13 +184,13 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       await expect(demo.currentValue).toHaveText('undefined');
       await expect(demo.currentType).toHaveText('undefined');
 
-      const logText = await demo.getLogText();
+      const logText2 = await demo.getLogText();
       expect(logText).toContain('x reset to undefined');
       expect(pageErrors).toEqual([]);
     });
 
     test('Example button sets x (S5_ExampleSetX) and updateDisplay reflects example value', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo3 = new DemoPage(page);
       await demo.goto();
 
       // Toggle examples to make buttons visible
@@ -208,13 +208,13 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       const valText = await demo.getCurrentValueText();
       expect(valText).toContain('[1,2,3]');
 
-      const logText = await demo.getLogText();
+      const logText3 = await demo.getLogText();
       expect(logText).toContain('example set x =');
       expect(pageErrors).toEqual([]);
     });
 
     test('Toggle examples (S6_ToggleExamples) shows and hides panel', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo4 = new DemoPage(page);
       await demo.goto();
 
       // Initially hidden
@@ -234,7 +234,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
 
   test.describe('RunOperation transitions and behaviors (S3_RunOperation)', () => {
     test('String "5" + 3 produces concatenation whereas "5" - 3 produces numeric subtraction', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo5 = new DemoPage(page);
       await demo.goto();
 
       // Set x to string "5" via example
@@ -246,7 +246,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       await demo.runOperation('+', '3');
       await demo.waitForLogContaining('operation: x + y');
 
-      let logText = await demo.getLogText();
+      let logText4 = await demo.getLogText();
       // Expect concatenation result "53" (preview wraps string values with quotes)
       expect(logText).toContain('"53"');
       // x itself should remain the original string "5"
@@ -264,7 +264,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
     });
 
     test('Equality operations: == can coerce while === does not', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo6 = new DemoPage(page);
       await demo.goto();
 
       // Set x to string "0"
@@ -289,7 +289,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
     });
 
     test('Add property to object and push into array demonstrate mutation operations and updateDisplay', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo7 = new DemoPage(page);
       await demo.goto();
 
       // Set x to object {a:1}
@@ -320,7 +320,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
     });
 
     test('Call operation handles functions and logs call results, or logs failure when not a function', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo8 = new DemoPage(page);
       await demo.goto();
 
       // Ensure call on non-function logs a failure message
@@ -328,7 +328,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       await demo.waitForLogContaining('set x =');
       await demo.runOperation('call', '"Sam"');
       await demo.waitForLogContaining('call failed');
-      let logText = await demo.getLogText();
+      let logText5 = await demo.getLogText();
       expect(logText).toContain('call failed: x is not a function');
 
       // Now set x to a function using demoFunctions button (S3 demo)
@@ -347,7 +347,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
 
   test.describe('Inspect and demos (S4_InspectX and demo transitions)', () => {
     test('Inspect x shows detailed type information and object keys when applicable', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo9 = new DemoPage(page);
       await demo.goto();
 
       // Set x to object via demoObjects (this demo also sets state.x)
@@ -358,7 +358,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       await demo.inspectX();
       await demo.waitForLogContaining('inspect: typeof ->');
 
-      const logText = await demo.getLogText();
+      const logText6 = await demo.getLogText();
       expect(logText).toContain('inspect: typeof ->');
       expect(logText).toContain('object keys ->');
 
@@ -366,13 +366,13 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
     });
 
     test('Predefined demos log illustrative messages without throwing', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo10 = new DemoPage(page);
       await demo.goto();
 
       // Coercion demo
       await demo.clickDemo(demo.demoCoercion);
       await demo.waitForLogContaining('--- Coercion demo ---');
-      let logText = await demo.getLogText();
+      let logText7 = await demo.getLogText();
       expect(logText).toContain('a + b ->');
       expect(logText).toContain('a - b ->');
 
@@ -388,7 +388,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
 
   test.describe('Edge cases and error scenarios', () => {
     test('Numeric interpret mode falls back to string when value is not a number', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo11 = new DemoPage(page);
       await demo.goto();
 
       // Force interpretMode to 'number' but input 'abc' which is NaN -> parseInput should return original text
@@ -398,13 +398,13 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       // Because parsing failed, the stored value should be the raw text, so type should be 'string'
       await expect(demo.currentType).toHaveText('string');
 
-      const logText = await demo.getLogText();
+      const logText8 = await demo.getLogText();
       expect(logText).toContain('set x =');
       expect(pageErrors).toEqual([]);
     });
 
     test('Operations that fail (e.g., addProp on non-object, push on non-array) produce user-facing log messages rather than uncaught exceptions', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo12 = new DemoPage(page);
       await demo.goto();
 
       // Ensure x is undefined and try addProp -> should log failure, not throw
@@ -414,7 +414,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
       await demo.runOperation('addProp', 'k');
       await demo.waitForLogContaining('addProp failed', 2000).catch(() => {}); // Some messages are different; we'll inspect overall log
 
-      const logText = await demo.getLogText();
+      const logText9 = await demo.getLogText();
       expect(logText).toMatch(/addProp failed:|addProp failed|addProp failed:/i)
         .or(expect(logText).toContain('addProp failed: x is not an object').not); // flexible check
 
@@ -430,7 +430,7 @@ test.describe('Dynamic Typing — FSM states and transitions', () => {
     });
 
     test('No uncaught runtime errors should be present for typical flows (observe pageerror array)', async ({ page }) => {
-      const demo = new DemoPage(page);
+      const demo13 = new DemoPage(page);
       await demo.goto();
 
       // Execute a typical sequence of interactions that covers many branches

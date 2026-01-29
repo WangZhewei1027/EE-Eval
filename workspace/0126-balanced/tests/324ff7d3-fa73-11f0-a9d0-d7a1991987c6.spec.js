@@ -69,7 +69,7 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
   });
 
   test('RunSimulation event transitions to SimulationRunning: model summary and chart are produced', async ({ page }) => {
-    const app = new AppPage(page);
+    const app1 = new AppPage(page);
 
     // Capture console messages and page errors for later assertions
     const consoleMessages = [];
@@ -90,7 +90,7 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
     await expect(app.modelSummary).toHaveText(/Number of Trees:/, { timeout: 5000 });
 
     // Validate model summary mentions the expected number of trees (onEnter action used nTrees=10)
-    const summaryText = await app.getModelSummaryText();
+    const summaryText1 = await app.getModelSummaryText();
     expect(summaryText).toContain('Number of Trees: 10');
 
     // Parse predictions and ensure the number of predictions matches the data length (200 points)
@@ -116,10 +116,10 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
   });
 
   test('Repeated runs: chart is replaced and model summary updates on each Run click', async ({ page }) => {
-    const app = new AppPage(page);
+    const app2 = new AppPage(page);
 
     // Track page errors to ensure none occur during repeated interactions
-    const pageErrors = [];
+    const pageErrors1 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
     await app.goto();
@@ -143,7 +143,7 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
     expect(secondCanvasCount).toBe(1);
 
     // Validate predictions count still matches expected data length after second run
-    const predictions = await app.parsePredictionsFromSummary();
+    const predictions1 = await app.parsePredictionsFromSummary();
     expect(predictions.length).toBe(200);
 
     // No uncaught page errors should have occurred
@@ -151,9 +151,9 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
   });
 
   test('Edge case: rapid double-click should still result in one chart and valid model summary', async ({ page }) => {
-    const app = new AppPage(page);
+    const app3 = new AppPage(page);
 
-    const pageErrors = [];
+    const pageErrors2 = [];
     page.on('pageerror', err => pageErrors.push(err));
 
     await app.goto();
@@ -166,7 +166,7 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
 
     // Ensure model summary appears and contains expected information
     await expect(app.modelSummary).toHaveText(/Number of Trees:/, { timeout: 5000 });
-    const summaryText = await app.getModelSummaryText();
+    const summaryText2 = await app.getModelSummaryText();
     expect(summaryText).toContain('Number of Trees: 10');
 
     // Chart should contain exactly one canvas (the drawChart function clears previous content)
@@ -174,7 +174,7 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
     expect(canvasCount).toBe(1);
 
     // Predictions should still be complete
-    const predictions = await app.parsePredictionsFromSummary();
+    const predictions2 = await app.parsePredictionsFromSummary();
     expect(predictions.length).toBe(200);
 
     // No runtime page errors observed
@@ -182,11 +182,11 @@ test.describe('Random Forest Demonstration - FSM tests', () => {
   });
 
   test('Observability: capture console and page errors while loading and interacting', async ({ page }) => {
-    const app = new AppPage(page);
+    const app4 = new AppPage(page);
 
     // Collect console messages and page errors
-    const consoleMessages = [];
-    const pageErrors = [];
+    const consoleMessages1 = [];
+    const pageErrors3 = [];
     page.on('console', msg => consoleMessages.push({ type: msg.type(), text: msg.text() }));
     page.on('pageerror', err => pageErrors.push(err));
 

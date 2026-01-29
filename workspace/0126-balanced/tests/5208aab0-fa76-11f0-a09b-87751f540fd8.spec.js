@@ -123,7 +123,7 @@ test.describe('Suffix Tree FSM - Full E2E validations', () => {
     // - The nested #tree element (duplicate id) that the script intentionally injects exists.
     // - No unexpected console/page errors occur during click.
 
-    const app = new SuffixTreePage(page);
+    const app1 = new SuffixTreePage(page);
     await app.goto();
 
     // After initial load the script has already attempted to populate #tree.
@@ -165,7 +165,7 @@ test.describe('Suffix Tree FSM - Full E2E validations', () => {
     // - Calling with regular inputs returns a string (or nested HTML string), and does not throw.
     // - Ensure that calling it from the test harness is allowed and any thrown exceptions are observed.
 
-    const app = new SuffixTreePage(page);
+    const app2 = new SuffixTreePage(page);
     await app.goto();
 
     // Edge case 1: empty word and suffix - should return empty string ''
@@ -193,7 +193,7 @@ test.describe('Suffix Tree FSM - Full E2E validations', () => {
     // The implementation's onclick returns a value but does not mutate the DOM further, so repeated clicks
     // should not throw or cause inconsistent DOM states.
 
-    const app = new SuffixTreePage(page);
+    const app3 = new SuffixTreePage(page);
     await app.goto();
 
     const beforeSpanCount = await app.countHeaderSpans();
@@ -206,7 +206,7 @@ test.describe('Suffix Tree FSM - Full E2E validations', () => {
     // small wait to allow any potential errors to surface
     await page.waitForTimeout(100);
 
-    const afterSpanCount = await app.countHeaderSpans();
+    const afterSpanCount1 = await app.countHeaderSpans();
     expect(afterSpanCount).toBe(beforeSpanCount);
 
     // Ensure no page errors or console errors occurred
@@ -216,7 +216,7 @@ test.describe('Suffix Tree FSM - Full E2E validations', () => {
 
   test('FSM completeness checks: existence of expected components and evidence strings', async ({ page }) => {
     // This test checks that the elements described in the FSM exist and match the evidence text.
-    const app = new SuffixTreePage(page);
+    const app4 = new SuffixTreePage(page);
     await app.goto();
 
     // Evidence: button HTML should include the exact clickable text "Generate Suffix Tree"

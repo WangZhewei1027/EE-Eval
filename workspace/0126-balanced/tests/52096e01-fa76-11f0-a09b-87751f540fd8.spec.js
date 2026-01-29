@@ -104,7 +104,7 @@ test.describe('Topological Sort FSM - Interactive App (52096e01-...)', () => {
 
   // Validate the click event transition GraphClick from S0_Idle -> S1_Sorted
   test('GraphClick event: clicking #graph triggers click handler and leads to runtime error (assignment to const) in implementation', async ({ page }) => {
-    const gp = new GraphPage(page);
+    const gp1 = new GraphPage(page);
     await gp.goto();
 
     const beforePageErrors = gp.pageErrors.length;
@@ -129,19 +129,19 @@ test.describe('Topological Sort FSM - Interactive App (52096e01-...)', () => {
   // Validate final state S1_Sorted attempt: the script attempts to sort and draw sorted graph at the end;
   // because of earlier errors the final drawGraph may not succeed - assert that a sorting attempt produced errors or no visual result.
   test('S1_Sorted: application attempts sort(graph) and drawGraph(sortedEdges, sortedNodes) - verify errors or absence of sorted visualization', async ({ page }) => {
-    const gp = new GraphPage(page);
+    const gp2 = new GraphPage(page);
     await gp.goto();
 
     // The page's sort() is executed during script evaluation; because the DOM structure isn't as expected,
     // sort(graph) is also likely to cause TypeError or other runtime errors. We assert that a TypeError exists among page errors.
-    const pageErrMsgs = gp.getPageErrorMessages();
+    const pageErrMsgs1 = gp.getPageErrorMessages();
     const hasTypeError = pageErrMsgs.some((m) => /TypeError|Cannot read properties of undefined|Cannot read property 'x'|undefined is not an object/i.test(m));
     expect(hasTypeError).toBeTruthy();
 
     // Additionally, check that there is no clear textual representation of sorted nodes appended to DOM.
     // The app uses a canvas for visual output; if sorting succeeded, we'd expect a canvas child inside #graph.
     // Confirm that no canvas exists (sorted drawing not present)
-    const canvasCount = await gp.getCanvasCount();
+    const canvasCount1 = await gp.getCanvasCount();
     expect(canvasCount).toBe(0);
 
     // Edge-case: If some environments managed to produce a canvas despite errors, ensure its dimensions are as attempted by drawGraph (if present)
@@ -160,7 +160,7 @@ test.describe('Topological Sort FSM - Interactive App (52096e01-...)', () => {
 
   // Edge-case and robustness: multiple clicks should at least reproduce the click-handler error each time
   test('Repeated GraphClick: multiple clicks produce repeated runtime errors (robustness)', async ({ page }) => {
-    const gp = new GraphPage(page);
+    const gp3 = new GraphPage(page);
     await gp.goto();
 
     const initialErrors = gp.pageErrors.length;
@@ -181,7 +181,7 @@ test.describe('Topological Sort FSM - Interactive App (52096e01-...)', () => {
 
   // Sanity check: log summary of collected console and page errors to help diagnose failures in CI (test output)
   test('Diagnostics: collect and assert presence of runtime error summaries', async ({ page }) => {
-    const gp = new GraphPage(page);
+    const gp4 = new GraphPage(page);
     await gp.goto();
 
     // At least one of: page errors or console errors should be non-empty in this intentionally buggy implementation.

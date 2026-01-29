@@ -87,7 +87,7 @@ class HashTablePage {
   // Get all log texts in order (newest first)
   async allLogTexts() {
     return await this.page.evaluate(() => {
-      const log = document.getElementById('operationLog');
+      const log1 = document.getElementById('operationLog');
       if (!log) return [];
       return Array.from(log.children).map(c => c.textContent);
     });
@@ -150,7 +150,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
 
   test.describe('Insert (S1_ItemInserted) and related behaviors', () => {
     test('Insert a key-value pair: state transitions to Item Inserted and UI updates', async () => {
-      const ht = new HashTablePage(page);
+      const ht1 = new HashTablePage(page);
 
       // Insert a pair
       await ht.insert('apple', 'red');
@@ -166,7 +166,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       expect(visible).toBe(true);
 
       // Stats should report 1 item
-      const stats = await ht.readStatsText();
+      const stats1 = await ht.readStatsText();
       expect(stats).toContain('Items: 1');
 
       // Inputs should be cleared after insertion
@@ -177,11 +177,11 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
     });
 
     test('Inserting without key or value logs an error (edge case)', async () => {
-      const ht = new HashTablePage(page);
+      const ht2 = new HashTablePage(page);
 
       // Attempt to insert with missing key
       await ht.insert('', 'someValue');
-      let latest = await ht.readLatestLog();
+      let latest1 = await ht.readLatestLog();
       expect(latest.text).toBe('Please enter both key and value');
       expect(latest.color).toBe('red');
 
@@ -192,14 +192,14 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       expect(latest.color).toBe('red');
 
       // No items should have been added
-      const stats = await ht.readStatsText();
+      const stats2 = await ht.readStatsText();
       expect(stats).toContain('Items: 0');
     });
   });
 
   test.describe('Get (S2_ItemRetrieved) behaviors', () => {
     test('Get existing key logs found value (Item Retrieved)', async () => {
-      const ht = new HashTablePage(page);
+      const ht3 = new HashTablePage(page);
 
       // Pre-insert an item
       await ht.insert('banana', 'yellow');
@@ -207,34 +207,34 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       // Use get on existing key
       await ht.get('banana');
 
-      const latest = await ht.readLatestLog();
+      const latest2 = await ht.readLatestLog();
       expect(latest.text).toBe('Found value for key "banana": yellow');
       expect(latest.color).toBe('green');
 
       // Ensure item still visible and count unchanged
-      const visible = await ht.isPairVisible('banana', 'yellow');
+      const visible1 = await ht.isPairVisible('banana', 'yellow');
       expect(visible).toBe(true);
-      const stats = await ht.readStatsText();
+      const stats3 = await ht.readStatsText();
       expect(stats).toContain('Items: 1');
     });
 
     test('Get non-existent key logs not found (error scenario)', async () => {
-      const ht = new HashTablePage(page);
+      const ht4 = new HashTablePage(page);
 
       // Ensure searching for unknown key emits not found message
       await ht.get('nonexistent');
 
-      const latest = await ht.readLatestLog();
+      const latest3 = await ht.readLatestLog();
       expect(latest.text).toBe('Key "nonexistent" not found in hash table');
       expect(latest.color).toBe('red');
     });
 
     test('Get with empty key logs validation error', async () => {
-      const ht = new HashTablePage(page);
+      const ht5 = new HashTablePage(page);
 
       await page.locator('#keyInput').fill('');
       await ht.get('');
-      const latest = await ht.readLatestLog();
+      const latest4 = await ht.readLatestLog();
       expect(latest.text).toBe('Please enter a key to search');
       expect(latest.color).toBe('red');
     });
@@ -242,7 +242,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
 
   test.describe('Remove (S3_ItemRemoved) behaviors', () => {
     test('Remove existing key updates UI and logs removal', async () => {
-      const ht = new HashTablePage(page);
+      const ht6 = new HashTablePage(page);
 
       // Insert and then remove
       await ht.insert('cherry', 'darkred');
@@ -253,31 +253,31 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       await ht.remove('cherry');
 
       // Latest log should indicate removal
-      const latest = await ht.readLatestLog();
+      const latest5 = await ht.readLatestLog();
       expect(latest.text).toBe('Removed key: cherry');
       expect(latest.color).toBe('green');
 
       // Pair should no longer be visible and items count should be 0
       expect(await ht.isPairVisible('cherry', 'darkred')).toBe(false);
-      const stats = await ht.readStatsText();
+      const stats4 = await ht.readStatsText();
       expect(stats).toContain('Items: 0');
     });
 
     test('Remove non-existent key logs not found (error scenario)', async () => {
-      const ht = new HashTablePage(page);
+      const ht7 = new HashTablePage(page);
 
       await ht.remove('ghost');
-      const latest = await ht.readLatestLog();
+      const latest6 = await ht.readLatestLog();
       expect(latest.text).toBe('Key "ghost" not found');
       expect(latest.color).toBe('red');
     });
 
     test('Remove with empty key logs validation error', async () => {
-      const ht = new HashTablePage(page);
+      const ht8 = new HashTablePage(page);
 
       await page.locator('#keyInput').fill('');
       await ht.remove('');
-      const latest = await ht.readLatestLog();
+      const latest7 = await ht.readLatestLog();
       expect(latest.text).toBe('Please enter a key to remove');
       expect(latest.color).toBe('red');
     });
@@ -285,7 +285,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
 
   test.describe('Clear (S4_TableCleared) behavior', () => {
     test('Clear removes all items and logs hash table cleared', async () => {
-      const ht = new HashTablePage(page);
+      const ht9 = new HashTablePage(page);
 
       // Insert multiple items
       await ht.insert('a', '1');
@@ -293,14 +293,14 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       await ht.insert('c', '3');
 
       // Ensure items count > 0
-      let stats = await ht.readStatsText();
+      let stats5 = await ht.readStatsText();
       expect(stats).toContain('Items: 3');
 
       // Clear the table
       await ht.clear();
 
       // Latest log should report clearing
-      const latest = await ht.readLatestLog();
+      const latest8 = await ht.readLatestLog();
       expect(latest.text).toBe('Hash table cleared');
       expect(latest.color).toBe('green');
 
@@ -321,7 +321,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
 
   test.describe('Resize (S5_TableResized) and rehashing behaviors', () => {
     test('Resize toggles table size and preserves items (rehashing)', async () => {
-      const ht = new HashTablePage(page);
+      const ht10 = new HashTablePage(page);
 
       // Insert items that will require rehashing correctness across resize
       await ht.insert('one', '1');
@@ -329,7 +329,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       await ht.insert('three', '3');
 
       // Confirm initial size 8
-      let stats = await ht.readStatsText();
+      let stats6 = await ht.readStatsText();
       expect(stats).toContain('Table size: 8');
       expect(stats).toContain('Items: 3');
 
@@ -337,7 +337,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
       await ht.resize();
 
       // Latest log should indicate resizing
-      let latest = await ht.readLatestLog();
+      let latest9 = await ht.readLatestLog();
       expect(latest.text).toBe('Resized hash table to 16 buckets');
       expect(latest.color).toBe('green');
 
@@ -368,7 +368,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
   });
 
   test('Operational logs order and styling sanity check', async () => {
-    const ht = new HashTablePage(page);
+    const ht11 = new HashTablePage(page);
 
     // Trigger a sequence: invalid insert -> valid insert -> get missing -> get existing
     await ht.insert('', ''); // invalid
@@ -377,7 +377,7 @@ test.describe('Hash Table Demonstration — FSM state and transition tests', () 
     await ht.get('k1'); // found
 
     // Retrieve all logs (newest first)
-    const logs = await ht.allLogTexts();
+    const logs1 = await ht.allLogTexts();
 
     // Ensure the last four messages correspond to our actions in reverse order (prepend behavior)
     expect(logs[0]).toBe('Found value for key "k1": v1');

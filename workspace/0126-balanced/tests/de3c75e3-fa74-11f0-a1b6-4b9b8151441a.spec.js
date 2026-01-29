@@ -129,7 +129,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
   test.describe('Transition: CalculateGrowth (S0_Idle -> S1_GrowthCalculated)', () => {
     test('clicking "Calculate Growth Rates" updates #output with Growth Rate Comparison (entry action = calculateGrowth())', async ({ page }) => {
       // This test validates the transition from Idle to GrowthCalculated and the entry action effect.
-      const app = new BigThetaPage(page);
+      const app1 = new BigThetaPage(page);
       await app.goto();
 
       // Click the calculate button (this triggers calculateGrowth())
@@ -153,15 +153,15 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
       expect(countNAfterSecondClick).toBe(10);
 
       // No console or page errors should have been produced by this interaction
-      const consoleErrors = page.context()._observedConsoleErrors;
-      const pageErrors = page.context()._observedPageErrors;
+      const consoleErrors1 = page.context()._observedConsoleErrors;
+      const pageErrors1 = page.context()._observedPageErrors;
       expect(consoleErrors.length, `console.error messages after calculateGrowth: ${JSON.stringify(consoleErrors)}`).toBe(0);
       expect(pageErrors.length, `page errors after calculateGrowth: ${JSON.stringify(pageErrors)}`).toBe(0);
     });
 
     test('edge case: clicking calculateGrowth multiple times remains stable (idempotent update)', async ({ page }) => {
       // This test checks stability on repeated invocations of calculateGrowth (edge case).
-      const app = new BigThetaPage(page);
+      const app2 = new BigThetaPage(page);
       await app.goto();
 
       // Click multiple times in quick succession
@@ -169,7 +169,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
 
       // Output should still have exactly 10 n-lines and a single heading
       await expect(app.output.locator('h3')).toHaveCount(1);
-      const countN = await app.countOutputLinesContaining('n = ');
+      const countN1 = await app.countOutputLinesContaining('n = ');
       expect(countN).toBe(10);
 
       // Ensure no JS errors occurred
@@ -181,7 +181,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
   test.describe('Transition: ShowGrowthRates (S0_Idle -> S2_GraphDrawn)', () => {
     test('clicking "Show Growth Rates" draws bars in #graph and appends a legend (entry action = drawGraph())', async ({ page }) => {
       // This test validates the transition from Idle to GraphDrawn and the DOM manipulations performed.
-      const app = new BigThetaPage(page);
+      const app3 = new BigThetaPage(page);
       await app.goto();
 
       // Ensure graph is initially empty
@@ -191,7 +191,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
       await app.clickDrawGraph();
 
       // Bars should be created: 10 n values * 5 growth rates = 50 bars
-      const bars = await app.countBars();
+      const bars1 = await app.countBars();
       expect(bars).toBe(50);
 
       // There should be at least one legend inserted after graph
@@ -209,7 +209,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
 
     test('edge case: clicking drawGraph multiple times appends additional legends but resets bars each time', async ({ page }) => {
       // This test validates behavior when drawGraph is invoked repeatedly.
-      const app = new BigThetaPage(page);
+      const app4 = new BigThetaPage(page);
       await app.goto();
 
       // First draw
@@ -238,7 +238,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
   test.describe('Combined interactions and FSM coverage', () => {
     test('invoke calculateGrowth then drawGraph and verify both regions updated independently', async ({ page }) => {
       // Validate combined transitions and that S1 and S2 states can both be observed in sequence.
-      const app = new BigThetaPage(page);
+      const app5 = new BigThetaPage(page);
       await app.goto();
 
       // Calculate growth first
@@ -247,7 +247,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
 
       // Then show graph
       await app.clickDrawGraph();
-      const bars = await app.countBars();
+      const bars2 = await app.countBars();
       expect(bars).toBe(50);
 
       // Ensure calculateGrowth output remains present after drawing graph
@@ -260,7 +260,7 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
 
     test('robustness: check for runtime errors (ReferenceError, SyntaxError, TypeError) during normal interactions', async ({ page }) => {
       // This test monitors runtime errors that might surface during normal usage.
-      const app = new BigThetaPage(page);
+      const app6 = new BigThetaPage(page);
       await app.goto();
 
       // Perform interactions that exercise the code paths
@@ -269,8 +269,8 @@ test.describe('Big-Theta Notation Interactive Application - FSM Validation', () 
       await app.clickCalculate();
 
       // Collect observed errors
-      const consoleErrors = page.context()._observedConsoleErrors || [];
-      const pageErrors = page.context()._observedPageErrors || [];
+      const consoleErrors2 = page.context()._observedConsoleErrors || [];
+      const pageErrors2 = page.context()._observedPageErrors || [];
 
       // We assert that there are no ReferenceError/SyntaxError/TypeError occurrences in this healthy implementation.
       // If such errors occur naturally, this assertion will fail and surface them as required by the observation policy.

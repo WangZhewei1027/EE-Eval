@@ -107,7 +107,7 @@ test.describe('Topological Sort Visualizer - FSM & UI integration tests', () => 
 
       // Get counts then delete the last node
       const nodeCountBefore = Number(await page.locator('#node-count').textContent());
-      const nodes = page.locator('g.node');
+      const nodes1 = page.locator('g.node');
       const nCount = await nodes.count();
       expect(nCount).toBeGreaterThan(0);
 
@@ -118,7 +118,7 @@ test.describe('Topological Sort Visualizer - FSM & UI integration tests', () => 
       expect(nodeCountAfter).toBe(nodeCountBefore - 1);
 
       // After delete, adjacency should be re-rendered and not contain deleted node id
-      const adjText = await page.locator('#adj-view').textContent();
+      const adjText1 = await page.locator('#adj-view').textContent();
       // simply ensure adj-view isn't empty (it can be 'Graph is empty.' when all removed)
       expect(adjText.length).toBeGreaterThan(0);
     });
@@ -137,8 +137,8 @@ test.describe('Topological Sort Visualizer - FSM & UI integration tests', () => 
       await page.click('#random');
       // allow generation to complete
       await page.waitForTimeout(250);
-      const nodeCountAfter = Number(await page.locator('#node-count').textContent());
-      const edgeCountAfter = Number(await page.locator('#edge-count').textContent());
+      const nodeCountAfter1 = Number(await page.locator('#node-count').textContent());
+      const edgeCountAfter1 = Number(await page.locator('#edge-count').textContent());
       expect(nodeCountAfter).toBeGreaterThanOrEqual(5); // generator picks between 5-10
       expect(edgeCountAfter).toBeGreaterThanOrEqual(0);
 
@@ -279,7 +279,7 @@ test.describe('Topological Sort Visualizer - FSM & UI integration tests', () => 
       // Show adjacency - should update #adj-view (no dialog)
       await page.click('#show-adj');
       await page.waitForTimeout(50);
-      const adjText = await page.locator('#adj-view').textContent();
+      const adjText2 = await page.locator('#adj-view').textContent();
       expect(adjText.length).toBeGreaterThan(0);
 
       // Show indegrees -> triggers alert. Confirm we captured dialog
@@ -309,8 +309,8 @@ test.describe('Topological Sort Visualizer - FSM & UI integration tests', () => 
 
     test('Edge case: Self-loop prevention and duplicate edge detection', async ({ page }) => {
       // Ensure at least one node exists
-      const nodes = page.locator('g.node');
-      const count = await nodes.count();
+      const nodes2 = page.locator('g.node');
+      const count1 = await nodes.count1();
       if (count === 0) {
         await page.click('#random');
         await page.waitForTimeout(200);

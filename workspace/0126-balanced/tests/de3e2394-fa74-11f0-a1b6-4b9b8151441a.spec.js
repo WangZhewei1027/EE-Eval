@@ -149,7 +149,7 @@ test.describe('Caesar Cipher Encryption Demo - FSM and runtime error observation
   test('Transition S0_Idle -> S1_Encrypted: clicking "Encrypt" triggers encryption or raises expected runtime errors', async ({ page }) => {
     // This test performs the primary transition: user fills input and clicks the Encrypt button.
     // Per instructions, we must observe console/page errors naturally and assert they occur.
-    const cp = new CaesarPage(page);
+    const cp1 = new CaesarPage(page);
 
     // Fill with a sample ASCII mixed-case string and shift of 3
     const original = 'Abc XyZ! 123';
@@ -208,7 +208,7 @@ test.describe('Caesar Cipher Encryption Demo - FSM and runtime error observation
 
   test('Entry action check: clicking Encrypt should attempt renderEncryptedText() (assert ReferenceError mentioning renderEncryptedText)', async ({ page }) => {
     // Specifically validate whether the entry action renderEncryptedText() was attempted and caused an error
-    const cp = new CaesarPage(page);
+    const cp2 = new CaesarPage(page);
     await cp.fillInput('hello', 1);
     await cp.clickEncrypt();
 
@@ -225,7 +225,7 @@ test.describe('Caesar Cipher Encryption Demo - FSM and runtime error observation
   });
 
   test('Edge case: clicking Encrypt with empty textarea should either render empty output or raise an error', async ({ page }) => {
-    const cp = new CaesarPage(page);
+    const cp3 = new CaesarPage(page);
     // Ensure empty
     await cp.fillInput('', 5);
     await cp.clickEncrypt();
@@ -233,7 +233,7 @@ test.describe('Caesar Cipher Encryption Demo - FSM and runtime error observation
     await page.waitForTimeout(300);
 
     // We expect at least some runtime error (per the required behavior)
-    const totalErrors = pageErrors.length + consoleErrors.length;
+    const totalErrors1 = pageErrors.length + consoleErrors.length;
     expect(totalErrors).toBeGreaterThan(0);
 
     // If an output exists, expect it to be either empty or a predictable transformation (empty -> empty)
@@ -246,10 +246,10 @@ test.describe('Caesar Cipher Encryption Demo - FSM and runtime error observation
   });
 
   test('Edge case: large shift (27) and negative shift (-3) behavior — runtime errors expected or correct wrap-around', async ({ page }) => {
-    const cp = new CaesarPage(page);
+    const cp4 = new CaesarPage(page);
 
     // Test shift 27 (equivalent to 1)
-    const original = 'abc';
+    const original1 = 'abc';
     await cp.fillInput(original, 27);
     await cp.clickEncrypt();
     await page.waitForTimeout(250);
@@ -278,7 +278,7 @@ test.describe('Caesar Cipher Encryption Demo - FSM and runtime error observation
   });
 
   test('Accessibility/robustness: multiple rapid clicks should not crash the test harness (observe errors)', async ({ page }) => {
-    const cp = new CaesarPage(page);
+    const cp5 = new CaesarPage(page);
     await cp.fillInput('MultipleClicks', 2);
 
     // Rapidly click the button several times to exercise event handlers

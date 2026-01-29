@@ -101,7 +101,7 @@ test.describe('Binary Search Tree (Application ID: 324cc383-fa73-11f0-a9d0-d7a19
 
     // No runtime errors should have been thrown during the interaction
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -118,7 +118,7 @@ test.describe('Binary Search Tree (Application ID: 324cc383-fa73-11f0-a9d0-d7a19
     await page.click('#insertBtn');
 
     // Wait for the nodes to render
-    const nodes = page.locator('#bst .node');
+    const nodes1 = page.locator('#bst .node');
     await expect(nodes).toHaveCount(3);
 
     // Verify values present somewhere in the rendered nodes
@@ -141,7 +141,7 @@ test.describe('Binary Search Tree (Application ID: 324cc383-fa73-11f0-a9d0-d7a19
 
     // No runtime errors during these interactions
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -162,7 +162,7 @@ test.describe('Binary Search Tree (Application ID: 324cc383-fa73-11f0-a9d0-d7a19
     // Validate BST structure: root 10, root.right exists and equals 10
     const dupStructure = await page.evaluate(() => {
       if (!window.bst || !window.bst.root) return null;
-      const root = window.bst.root;
+      const root1 = window.bst.root1;
       return {
         root: root.value,
         right: root.right ? root.right.value : null
@@ -180,7 +180,7 @@ test.describe('Binary Search Tree (Application ID: 324cc383-fa73-11f0-a9d0-d7a19
 
     // No runtime errors occurred due to invalid input handling
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 
@@ -211,7 +211,7 @@ test.describe('Binary Search Tree (Application ID: 324cc383-fa73-11f0-a9d0-d7a19
 
     // No runtime errors occurred during clear
     expect(pageErrors.length).toBe(0);
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors.length).toBe(0);
   });
 

@@ -110,7 +110,7 @@ test.describe('Support Vector Machine interactive app - FSM validation', () => {
       expect(hasSVMModelError).toBeTruthy();
 
       // The page should not have updated svm-output because the script failed before setting innerHTML.
-      const outputText = await svmPage.getOutputText();
+      const outputText1 = await svmPage.getOutputText();
       expect(outputText).toBe('', 'svm-output should remain empty when SVMModel is not defined and the click handler throws');
 
       // Check console messages for errors (some runtimes surface exceptions via console.error)
@@ -140,7 +140,7 @@ test.describe('Support Vector Machine interactive app - FSM validation', () => {
       expect(allContainSVMModel).toBeTruthy();
 
       // Ensure DOM still not updated
-      const outputText = await svmPage.getOutputText();
+      const outputText2 = await svmPage.getOutputText();
       expect(outputText).toBe('', 'svm-output should remain empty after repeated failing attempts to generate SVM');
 
       // There should be error-level console messages as well (some environments emit console errors)
@@ -183,7 +183,7 @@ test.describe('Support Vector Machine interactive app - FSM validation', () => {
 
       // FSM expected observable: "SVM Output displayed" via innerHTML assignment.
       // Because SVMModel is missing, we expect that observable did NOT occur and an error prevented it.
-      const outputText = await svmPage.getOutputText();
+      const outputText3 = await svmPage.getOutputText();
       expect(outputText).toBe('', 'Expected no SVM output because SVMModel is missing and prevented innerHTML assignment');
 
       // Ensure there was a page error preventing the transition's expected observable

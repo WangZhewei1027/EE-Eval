@@ -98,7 +98,7 @@ test.describe('Runtime Environment FSM - Interactive Application', () => {
   test('Clicking Show Runtime Info transitions to InfoDisplayed and displays JSON runtime info', async ({ page }) => {
     // This test validates the ShowInfo event and the S1_InfoDisplayed state.
     // It ensures that clicking the button updates #runtimeInfo with formatted JSON including the expected keys.
-    const runtimePage = new RuntimePage(page);
+    const runtimePage1 = new RuntimePage(page);
 
     // Click the button to trigger the transition
     await runtimePage.clickShowInfo();
@@ -175,7 +175,7 @@ test.describe('Runtime Environment FSM - Interactive Application', () => {
     // This test exercises edge cases:
     // - Querying a non-existent selector should return null
     // - The page should handle multiple rapid clicks without throwing page errors
-    const runtimePage = new RuntimePage(page);
+    const runtimePage2 = new RuntimePage(page);
 
     // Query non-existent element
     const nonExistent = await page.$('#nonExistentSelector_does_not_exist');
@@ -201,7 +201,7 @@ test.describe('Runtime Environment FSM - Interactive Application', () => {
   test('Observes console messages and page errors during normal usage (diagnostic)', async ({ page }) => {
     // This diagnostic test ensures we can capture console messages and page errors while interacting.
     // It verifies that normal usage does not produce console.error messages or unhandled page errors.
-    const runtimePage = new RuntimePage(page);
+    const runtimePage3 = new RuntimePage(page);
 
     // Clear any previously captured messages for a clean check
     consoleMessages = [];

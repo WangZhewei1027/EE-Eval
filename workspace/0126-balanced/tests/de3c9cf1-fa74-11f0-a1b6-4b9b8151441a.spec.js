@@ -119,7 +119,7 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
   test.describe('SAT interactions and state transition (S0 -> S1)', () => {
     test('Clicking "Find Solution" displays SAT solutions and visualization', async ({ page }) => {
       // This test validates the SolveSAT event and transition to S1_SAT_Solved.
-      const app = new NPCompletenessPage(page);
+      const app1 = new NPCompletenessPage(page);
       await app.goto();
 
       // Clear SAT result so we can observe the effect of clicking
@@ -149,7 +149,7 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
       expect(pageErrorsNow).toBe(0);
 
       // No console error messages should have occurred
-      const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMessages1 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
   });
@@ -157,7 +157,7 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
   test.describe('TSP interactions and transitions (S0 -> S2 -> S3) with edge cases', () => {
     test('Generate TSP problem shows visualization, distances table, and reveals solve button', async ({ page }) => {
       // This validates the GenerateTSP event and transition to S2_TSP_Problem_Generated.
-      const app = new NPCompletenessPage(page);
+      const app2 = new NPCompletenessPage(page);
       await app.goto();
 
       // Set number of cities to 5 and generate
@@ -179,13 +179,13 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
 
       // No page errors or console errors
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMessages2 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
     test('Solve TSP for small problem displays shortest route and distance (S2 -> S3)', async ({ page }) => {
       // This test validates SolveTSP transition from S2_TSP_Problem_Generated to S3_TSP_Solved.
-      const app = new NPCompletenessPage(page);
+      const app3 = new NPCompletenessPage(page);
       await app.goto();
 
       // Use 4 cities (default). Ensure generateTSP has been called by onload; but re-generate to ensure known state.
@@ -204,13 +204,13 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
 
       // No page errors or console errors
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMessages3 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
     test('Edge case: generating >7 cities and attempting to solve displays the "too many cities" message', async ({ page }) => {
       // This test validates the guard for large inputs in solveTSP (edge case).
-      const app = new NPCompletenessPage(page);
+      const app4 = new NPCompletenessPage(page);
       await app.goto();
 
       // Set the input to 8 (beyond the demo limit) and generate problem
@@ -231,14 +231,14 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
 
       // Ensure that no heavy computation crashed the page and no uncaught errors occurred
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMessages4 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
 
     test('Edge case: small number of cities (1) should still handle and return a route', async ({ page }) => {
       // This validates behavior when the number of cities is smaller than 2 (input min is 2, but programmatically we can set 1).
       // The application logic should still produce an answer (route and distance 0) rather than crashing.
-      const app = new NPCompletenessPage(page);
+      const app5 = new NPCompletenessPage(page);
       await app.goto();
 
       // Set to 1 and generate
@@ -257,7 +257,7 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
 
       // No uncaught errors
       expect(pageErrors.length).toBe(0);
-      const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMessages5 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMessages.length).toBe(0);
     });
   });
@@ -265,7 +265,7 @@ test.describe('NP-Completeness Interactive App (de3c9cf1-fa74-11f0-a1b6-4b9b8151
   test('Observes console and page errors through the lifecycle', async ({ page }) => {
     // This test ensures we observe console messages and page errors and assert their expected absence.
     // It also demonstrates capturing console output while interacting with the app.
-    const app = new NPCompletenessPage(page);
+    const app6 = new NPCompletenessPage(page);
 
     await app.goto();
 

@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ternary Search Interactive Explorer</title>
+<style>
+  /* Extremely minimal visual design: plain black text on white background */
+  html,body { font-family: Arial, Helvetica, sans-serif; margin: 8px; padding: 0; color: #000; background: #fff; }
+  h1,h2 { font-size: 16px; margin: 6px 0; }
+  label { display: inline-block; margin: 4px 0; }
+  input[type="text"], input[type="number"], textarea, select { padding: 4px; margin: 2px 0; }
+  button { margin: 4px 4px 4px 0; padding: 6px; }
+  .row { display: flex; gap: 12px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .panel { border: 1px solid #000; padding: 8px; max-height: 720px; overflow: auto; }
+  canvas { border: 1px solid #000; display: block; }
+  table { border-collapse: collapse; }
+  table td, table th { border: 1px solid #000; padding: 4px; }
+  pre { background: #fff; border: 1px solid #000; padding: 8px; white-space: pre-wrap; }
+  .small { font-size: 12px; }
+  .controls-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+</style>
+</head>
+<body>
+<h1>Ternary Search Explorer (Maximum Finder)</h1>
+
+<div class="row">
+  <div class="col" style="flex: 1;">
+    <div class="panel">
+      <h2>Mode and Problem Setup</h2>
+      <label>
+        Mode:
+        <select id="modeSelect">
+          <option value="continuous">Continuous Unimodal Function (real domain)</option>
+          <option value="discrete">Discrete Array (integer indices)</option>
+        </select>
+      </label>
+      <div id="continuousControls">
+        <label>Function expression in x (use Math functions):</label>
+        <input type="text" id="funcExpr" value="-(x-2)*(x-2)+5" style="width:100%">
+        <div class="small">Examples: "Math.sin(x)*x", "-(x-2)*(x-2)+5", "Math.exp(-x*x)"</div>
+        <label>Left (L): <input type="number" id="leftInput" value="-5" step="any"></label>
+        <label>Right (R): <input type="number" id="rightInput" value="5" step="any"></label>
+        <label>Sample points for graph: <input id="sampleCount" type="number" value="400" min="50" max="2000"></label>
+      </div>
+
+      <div id="discreteControls" style="display:none;">
+        <label>Array length: <input id="arrayLength" type="number" value="21" min="3" max="500"></label>
+        <label>Unimodal generator:
+          <select id="arrayGen">
+            <option value="singlePeak">single peak with noise</option>
+            <option value="symmetricPeak">symmetric triangular peak</option>
+            <option value="manual">manual edit</option>
+          </select>
+        </label>
+        <div>
+          <button id="genArrayBtn">Generate Array</button>
+          <button id="randomizeArrayBtn">Randomize Values</button>
+          <button id="clearArrayBtn">Clear</button>
+        </div>
+        <div id="arrayEditorContainer"></div>
+      </div>
+
+      <hr>
+
+      <h2>Search Parameters</h2>
+      <label>Goal:
+        <select id="goalSelect">
+          <option value="max">Find maximum</option>
+          <option value="min">Find minimum</option>
+        </select>
+      </label>
+      <label>Epsilon / tolerance: <input id="epsInput" type="number" value="0.001" step="any"></label>
+      <label>Max iterations: <input id="maxIter" type="number" value="200" min="1"></label>
+      <label>Auto-run speed (ms per step): <input id="speedInput" type="number" value="250" min="10"></label>
+      <label>Comparison override:
+        <select id="compareMode">
+          <option value="auto">Automatic compare (f(m1) ? f(m2))</option>
+          <option value="manual">Manual override (choose direction)</option>
+        </select>
+      </label>
+      <div id="manualDecision" style="display:none">
+        <button id="decideLeftBtn">Decide: m1 better (move right boundary)</button>
+        <button id="decideRightBtn">Decide: m2 better (move left boundary)</button>
+      </div>
+
+      <hr>
+
+      <h2>Controls</h2>
+      <div>
+        <button id="initBtn">Initialize</button>
+        <button id="stepBtn">Step</button>
+        <button id="backBtn">Back</button>
+        <button id="runBtn">Run</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="finishBtn">Run to Completion</button>
+        <button id="resetBtn">Reset</button>
+        <button id="bruteforceBtn">Brute-force (global check)</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="saveSnapshotBtn">Save Snapshot</button>
+        <button id="listSnapshotsBtn">List Snapshots</button>
+        <button id="clearSnapshotsBtn">Clear Snapshots</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label><input type="checkbox" id="showPartitionBox" checked> Show partitions on graph</label>
+        <label><input type="checkbox" id="traceHistoryBox"> Trace interval history</label>
+      </div>
+
+      <hr>
+      <h2>State & Info</h2>
+      <div id="stateInfo" class="small">Not initialized.</div>
+      <div id="bestInfo" class="small"></div>
+    </div>
+
+    <div class="panel" style="margin-top:8px;">
+      <h2>Snapshots / Branches</h2>
+      <div id="snapshotsList"></div>
+      <div class="small">Snapshots capture full algorithm state and allow branching. Click a snapshot to load or fork from it.</div>
+    </div>
+  </div>
+
+  <div class="col" style="flex: 2;">
+    <div class="panel">
+      <h2>Visualization (Canvas)</h2>
+      <canvas id="plot" width="800" height="320"></canvas>
+      <div class="small">Canvas shows function/array and current ternary partition points. Very minimal rendering.</div>
+      <div style="margin-top:8px;">
+        <label>Zoom / pan: change L and R inputs then click "Initialize" to update plot.</label>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:8px;">
+      <h2>Execution Log</h2>
+      <pre id="log"></pre>
+      <div class="small">Logs show each step, comparisons, and decisions. You can edit earlier snapshots and fork alternate runs.</div>
+    </div>
+
+    <div class="panel" style="margin-top:8px;">
+      <h2>Explain / Manual Explore</h2>
+      <div>
+        <button id="explainStepBtn">Explain Next Step</button>
+        <button id="explainHistoryBtn">Explain History (all steps)</button>
+      </div>
+      <div style="margin-top:8px;">
+        <textarea id="explainOutput" rows="6" style="width:100%"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Ternary Search Explorer
+  - Supports continuous unimodal functions and discrete arrays
+  - Many interactive controls: step, back, run, pause, save snapshots, branch, manual decision
+  - Minimal visual design, plain black on white
+*/
+
+/* ------------------------
+   Utility Functions
+   ------------------------ */
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function idGen(prefix) { return prefix + '_' + Math.random().toString(36).substr(2,9); }
+function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+/* ------------------------
+   Global State
+   ------------------------ */
+const S = {
+  mode: 'continuous', // continuous | discrete
+  initialized: false,
+  running: false,
+  intervalId: null,
+  states: [], // history stack of states for stepping back
+  currentIndex: -1, // index into states
+  snapshots: {}, // id -> snapshot
+  rootStateId: null,
+  traceHistory: [],
+};
+
+/* ------------------------
+   DOM references
+   ------------------------ */
+const modeSelect = document.getElementById('modeSelect');
+const continuousControls = document.getElementById('continuousControls');
+const discreteControls = document.getElementById('discreteControls');
+
+const funcExprInput = document.getElementById('funcExpr');
+const leftInput = document.getElementById('leftInput');
+const rightInput = document.getElementById('rightInput');
+const sampleCountInput = document.getElementById('sampleCount');
+
+const arrayLengthInput = document.getElementById('arrayLength');
+const arrayGenSelect = document.getElementById('arrayGen');
+const genArrayBtn = document.getElementById('genArrayBtn');
+const randomizeArrayBtn = document.getElementById('randomizeArrayBtn');
+const clearArrayBtn = document.getElementById('clearArrayBtn');
+const arrayEditorContainer = document.getElementById('arrayEditorContainer');
+
+const goalSelect = document.getElementById('goalSelect');
+const epsInput = document.getElementById('epsInput');
+const maxIterInput = document.getElementById('maxIter');
+const speedInput = document.getElementById('speedInput');
+
+const compareMode = document.getElementById('compareMode');
+const manualDecision = document.getElementById('manualDecision');
+const decideLeftBtn = document.getElementById('decideLeftBtn');
+const decideRightBtn = document.getElementById('decideRightBtn');
+
+const initBtn = document.getElementById('initBtn');
+const stepBtn = document.getElementById('stepBtn');
+const backBtn = document.getElementById('backBtn');
+const runBtn = document.getElementById('runBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const finishBtn = document.getElementById('finishBtn');
+const resetBtn = document.getElementById('resetBtn');
+const bruteforceBtn = document.getElementById('bruteforceBtn');
+
+const saveSnapshotBtn = document.getElementById('saveSnapshotBtn');
+const listSnapshotsBtn = document.getElementById('listSnapshotsBtn');
+const clearSnapshotsBtn = document.getElementById('clearSnapshotsBtn');
+const snapshotsList = document.getElementById('snapshotsList');
+
+const showPartitionBox = document.getElementById('showPartitionBox');
+const traceHistoryBox = document.getElementById('traceHistoryBox');
+
+const stateInfo = document.getElementById('stateInfo');
+const bestInfo = document.getElementById('bestInfo');
+
+const plot = document.getElementById('plot');
+const ctx = plot.getContext('2d');
+
+const logEl = document.getElementById('log');
+
+const explainStepBtn = document.getElementById('explainStepBtn');
+const explainHistoryBtn = document.getElementById('explainHistoryBtn');
+const explainOutput = document.getElementById('explainOutput');
+
+const saveSnapshotListBtn = document.getElementById('saveSnapshotBtn'); // alias
+
+/* ------------------------
+   Algorithm State Representation
+   state = {
+     id, parent, step, mode,
+     L, R, m1, m2, f_m1, f_m2,
+     iterations, done, reason,
+     array (for discrete mode),
+     samples (for plotting),
+     history: [{L,R,m1,m2,f_m1,f_m2}] for trace
+   }
+-------------------------*/
+
+function defaultState() {
+  return {
+    id: idGen('state'),
+    parent: null,
+    step: 0,
+    mode: S.mode,
+    L: 0,
+    R: 1,
+    m1: null,
+    m2: null,
+    f_m1: null,
+    f_m2: null,
+    iterations: 0,
+    done: false,
+    reason: null,
+    array: null,
+    samples: null,
+    history: [],
+  };
+}
+
+/* ------------------------
+   Function parsing and evaluation
+-------------------------*/
+function parseFunction(expr) {
+  // return function f(x)
+  try {
+    const body = 'with(Math){return (' + expr + '); }';
+    const f = new Function('x', body);
+    // test
+    const t = f(0);
+    return f;
+  } catch (e) {
+    throw new Error('Invalid function expression: ' + e.message);
+  }
+}
+
+/* ------------------------
+   Array editor
+-------------------------*/
+function renderArrayEditor(arr) {
+  const len = arr.length;
+  const table = document.createElement('table');
+  const header = table.insertRow();
+  for (let i = 0; i < len; i++) {
+    const th = document.createElement('th');
+    th.textContent = i;
+    header.appendChild(th);
+  }
+  const row = table.insertRow();
+  for (let i = 0; i < len; i++) {
+    const cell = row.insertCell();
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.value = arr[i];
+    inp.style.width = '60px';
+    inp.addEventListener('change', ()=> {
+      arr[i] = Number(inp.value);
+      redraw();
+    });
+    cell.appendChild(inp);
+  }
+  arrayEditorContainer.innerHTML = '';
+  arrayEditorContainer.appendChild(table);
+}
+
+/* ------------------------
+   Generators for unimodal arrays
+-------------------------*/
+function generateUnimodalArray(type, length) {
+  const arr = new Array(length).fill(0);
+  if (type === 'singlePeak') {
+    const peak = Math.floor(Math.random()*(length-2)) + 1;
+    for (let i=0;i<length;i++) {
+      const dist = Math.abs(i - peak);
+      arr[i] = Math.max(0, 100 - dist*5 + (Math.random()*10-5));
+    }
+  } else if (type === 'symmetricPeak') {
+    const peak = Math.floor(length/2);
+    for (let i=0;i<length;i++) {
+      const dist = Math.abs(i - peak);
+      arr[i] = Math.max(0, 100 - dist*8);
+    }
+  } else {
+    for (let i=0;i<length;i++) arr[i] = 0;
+  }
+  return arr;
+}
+
+/* ------------------------
+   Initialize state
+-------------------------*/
+function initialize() {
+  S.mode = modeSelect.value;
+  // clear running
+  stopRun();
+
+  const st = defaultState();
+  st.mode = S.mode;
+  st.parent = null;
+  st.step = 0;
+  st.iterations = 0;
+  st.done = false;
+  st.reason = null;
+  st.history = [];
+
+  if (S.mode === 'continuous') {
+    const L = Number(leftInput.value);
+    const R = Number(rightInput.value);
+    if (!(isFinite(L) && isFinite(R) && R > L)) {
+      alert('Invalid L/R');
+      return;
+    }
+    st.L = L;
+    st.R = R;
+    st.samples = sampleFunctionForPlot();
+    st.array = null;
+  } else {
+    const len = Math.max(3, Math.floor(Number(arrayLengthInput.value) || 0));
+    // if user has edited array, reuse it
+    if (st.array && st.array.length === len) {
+      // keep
+    }
+    let arr;
+    // If array editor has existing, parse
+    const ed = arrayEditorContainer.querySelector('input[type=number]');
+    if (ed) {
+      // try to read entire table
+      const inputs = Array.from(arrayEditorContainer.querySelectorAll('input[type=number]'));
+      arr = inputs.map(i=>Number(i.value));
+    } else {
+      arr = generateUnimodalArray(arrayGenSelect.value, len);
+    }
+    st.array = arr;
+    st.L = 0;
+    st.R = arr.length - 1;
+  }
+
+  S.states = [deepCopy(st)];
+  S.currentIndex = 0;
+  S.initialized = true;
+  S.rootStateId = st.id;
+  S.traceHistory = [];
+  log('Initialized. Mode: ' + S.mode + '. Iterations reset.');
+  updateUI();
+  redraw();
+}
+
+/* ------------------------
+   Sampling for plot (continuous)
+-------------------------*/
+function sampleFunctionForPlot() {
+  const expr = funcExprInput.value;
+  let f;
+  try {
+    f = parseFunction(expr);
+  } catch (e) {
+    log('Function parse error: ' + e.message);
+    f = x => 0;
+  }
+  const L = Number(leftInput.value);
+  const R = Number(rightInput.value);
+  const count = Math.max(50, Math.min(2000, Number(sampleCountInput.value) || 400));
+  const samples = [];
+  for (let i=0;i<count;i++) {
+    const t = i/(count-1);
+    const x = L + t*(R-L);
+    let y;
+    try { y = Number(f(x)); if (!isFinite(y)) y = NaN; } catch(e) { y = NaN; }
+    samples.push({x,y});
+  }
+  return {samples, L, R};
+}
+
+/* ------------------------
+   Helper: current state
+-------------------------*/
+function currentState() {
+  if (!S.initialized || S.currentIndex < 0) return null;
+  return S.states[S.currentIndex];
+}
+
+/* ------------------------
+   Logging
+-------------------------*/
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent = `[${t}] ${msg}\n` + logEl.textContent;
+}
+
+/* ------------------------
+   Step of ternary search (single iteration)
+-------------------------*/
+function stepOnce(autoDecision) {
+  if (!S.initialized) {
+    log('Not initialized. Click Initialize first.');
+    return;
+  }
+  const prev = deepCopy(currentState());
+  if (!prev) return;
+  if (prev.done) {
+    log('Search already completed: ' + prev.reason);
+    return;
+  }
+
+  const goal = goalSelect.value; // max | min
+  const eps = Number(epsInput.value);
+  const maxIter = Math.max(1, Number(maxIterInput.value));
+
+  // Create new state as copy
+  const st = deepCopy(prev);
+  st.parent = prev.id;
+  st.id = idGen('state');
+  st.step = prev.step + 1;
+  st.iterations = prev.iterations + 1;
+
+  // discrete vs continuous behaviors
+  if (st.mode === 'continuous') {
+    // termination
+    if (Math.abs(st.R - st.L) <= eps) {
+      st.done = true;
+      st.reason = 'Interval width <= eps';
+      pushState(st);
+      log(`Terminated: interval width ${Math.abs(st.R - st.L)} <= eps`);
+      return;
+    }
+    if (st.iterations > maxIter) {
+      st.done = true;
+      st.reason = 'Exceeded max iterations';
+      pushState(st);
+      log('Terminated: exceeded max iterations');
+      return;
+    }
+
+    // choose m1,m2
+    const len = st.R - st.L;
+    const m1 = st.L + len/3;
+    const m2 = st.R - len/3;
+    st.m1 = m1; st.m2 = m2;
+
+    // evaluate function
+    const f = (() => {
+      try { return parseFunction(funcExprInput.value); } catch(e) { log('Error parsing function: '+e.message); return x=>NaN; }
+    })();
+
+    let f_m1 = NaN, f_m2 = NaN;
+    try { f_m1 = Number(f(m1)); } catch(e) { f_m1 = NaN; }
+    try { f_m2 = Number(f(m2)); } catch(e) { f_m2 = NaN; }
+    st.f_m1 = f_m1; st.f_m2 = f_m2;
+
+    // make decision: auto or manual
+    const compare = compareMode.value;
+    let decision = null; // 'left' means discard left third? we'll define precisely below
+    // For maximum: if f(m1) < f(m2) => m1 worse => move L=m1 (keep right part)
+    if (compare === 'auto' || autoDecision) {
+      if (!isFinite(f_m1) || !isFinite(f_m2)) {
+        st.done = true; st.reason = 'Function evaluation produced non-finite values';
+        pushState(st);
+        log('Terminated due to non-finite function values at midpoints.');
+        return;
+      }
+      if (goal === 'max') {
+        if (f_m1 < f_m2) {
+          decision = 'keepRight'; // move L to m1
+        } else {
+          decision = 'keepLeft'; // move R to m2
+        }
+      } else {
+        if (f_m1 > f_m2) {
+          decision = 'keepRight';
+        } else {
+          decision = 'keepLeft';
+        }
+      }
+    } else {
+      // manual mode: we wait for user action and should not auto-proceed
+      // push this state and wait for manual button to call continueManualDecision(st, 'left'|'right')
+      pushState(st);
+      log(`Paused for manual decision. f(m1)=${f_m1}, f(m2)=${f_m2}`);
+      return;
+    }
+
+    // apply decision
+    if (decision === 'keepRight') {
+      st.L = st.m1;
+      log(`Iter ${st.iterations}: f(m1)=${f_m1} < f(m2)=${f_m2} -> move L to m1 (${st.L})`);
+    } else if (decision === 'keepLeft') {
+      st.R = st.m2;
+      log(`Iter ${st.iterations}: f(m1)=${f_m1} >= f(m2)=${f_m2} -> move R to m2 (${st.R})`);
+    }
+
+    st.history = st.history || [];
+    st.history.push({L:st.L,R:st.R,m1:st.m1,m2:st.m2,f_m1:st.f_m1,f_m2:st.f_m2});
+
+    // check termination
+    if (Math.abs(st.R - st.L) <= eps) {
+      st.done = true;
+      st.reason = 'Interval width <= eps';
+      // compute best approximate
+      const xbest = (st.L + st.R)/2;
+      const ffun = parseFunction(funcExprInput.value);
+      let ybest = NaN;
+      try { ybest = Number(ffun(xbest)); } catch(e){ ybest = NaN; }
+      log(`Converged. Approximate best x=${xbest}, f(x)=${ybest}`);
+    } else if (st.iterations >= maxIter) {
+      st.done = true;
+      st.reason = 'Exceeded max iterations';
+      log('Stopped: reached max iterations');
+    }
+
+    pushState(st);
+
+  } else {
+    // discrete array mode
+    const arr = st.array;
+    if (!Array.isArray(arr) || arr.length < 3) {
+      st.done = true;
+      st.reason = 'Array invalid or too small';
+      pushState(st);
+      log('Array invalid or too small');
+      return;
+    }
+    let L = Math.floor(st.L);
+    let R = Math.floor(st.R);
+    if (R - L < 2) {
+      st.done = true;
+      st.reason = 'Interval length < 2 (no more ternary choices)';
+      pushState(st);
+      log('Terminated: discrete interval too small');
+      return;
+    }
+    if (st.iterations > maxIter) {
+      st.done = true;
+      st.reason = 'Exceeded max iterations';
+      pushState(st);
+      log('Terminated: exceeded max iterations');
+      return;
+    }
+
+    // Compute integer m1,m2
+    const third = Math.floor((R - L) / 3);
+    const m1 = L + third;
+    const m2 = R - third;
+    st.m1 = m1; st.m2 = m2;
+    st.f_m1 = arr[m1];
+    st.f_m2 = arr[m2];
+
+    // decision
+    const compare = compareMode.value;
+    let decision = null;
+    if (compare === 'auto' || autoDecision) {
+      if (goalSelect.value === 'max') {
+        if (st.f_m1 < st.f_m2) {
+          decision = 'keepRight';
+        } else {
+          decision = 'keepLeft';
+        }
+      } else {
+        if (st.f_m1 > st.f_m2) {
+          decision = 'keepRight';
+        } else {
+          decision = 'keepLeft';
+        }
+      }
+    } else {
+      pushState(st);
+      log(`Discrete mode paused for manual decision. arr[m1]=${st.f_m1}, arr[m2]=${st.f_m2}`);
+      return;
+    }
+
+    if (decision === 'keepRight') {
+      st.L = st.m1;
+      log(`Iter ${st.iterations} (discrete): arr[m1]=${st.f_m1} < arr[m2]=${st.f_m2} -> move L to m1 (${st.L})`);
+    } else {
+      st.R = st.m2;
+      log(`Iter ${st.iterations} (discrete): arr[m1]=${st.f_m1} >= arr[m2]=${st.f_m2} -> move R to m2 (${st.R})`);
+    }
+
+    st.history = st.history || [];
+    st.history.push({L:st.L,R:st.R,m1:st.m1,m2:st.m2,f_m1:st.f_m1,f_m2:st.f_m2});
+
+    // termination after narrowing if small interval
+    if (st.R - st.L <= 2) {
+      // check brute in final range
+      let bestIdx = st.L;
+      let bestVal = st.array[st.L];
+      for (let i = st.L+1;i<=st.R;i++) {
+        const v = st.array[i];
+        if (goalSelect.value==='max') {
+          if (v > bestVal) { bestVal = v; bestIdx = i; }
+        } else {
+          if (v < bestVal) { bestVal = v; bestIdx = i; }
+        }
+      }
+      st.done = true;
+      st.reason = 'Final brute force over small discrete interval';
+      log(`Discrete final brute force: best index ${bestIdx}, value ${bestVal}`);
+    } else if (st.iterations >= maxIter) {
+      st.done = true;
+      st.reason = 'Exceeded max iterations';
+      log('Terminated: exceeded max iterations for discrete');
+    }
+
+    pushState(st);
+  }
+}
+
+/* ------------------------
+   State stack operations
+-------------------------*/
+function pushState(st) {
+  // If we've stepped back and then create a new branch, trim forward states
+  if (S.currentIndex < S.states.length - 1) {
+    S.states = S.states.slice(0, S.currentIndex + 1);
+  }
+  S.states.push(deepCopy(st));
+  S.currentIndex = S.states.length - 1;
+  updateUI();
+  redraw();
+}
+
+function stepBack() {
+  if (!S.initialized) { log('Not initialized'); return; }
+  if (S.currentIndex > 0) {
+    S.currentIndex--;
+    updateUI();
+    redraw();
+    log('Stepped back to index ' + S.currentIndex);
+  } else {
+    log('Already at initial state');
+  }
+}
+
+/* ------------------------
+   Run / Pause
+-------------------------*/
+function runAuto() {
+  if (!S.initialized) { log('Initialize first'); return; }
+  if (S.running) return;
+  S.running = true;
+  const speed = Math.max(10, Number(speedInput.value) || 250);
+  S.intervalId = setInterval(()=> {
+    const st = currentState();
+    if (!st) { stopRun(); return; }
+    if (st.done) { stopRun(); log('Run stopped: algorithm completed'); return; }
+    // If compare mode is manual and we are paused for a decision, stop the run
+    if (compareMode.value === 'manual') {
+      // if last state has m1/m2 but no decision applied, detect and pause:
+      const hasPending = (st.m1 !== null && st.m2 !== null && st.f_m1 !== null && st.f_m2 !== null && !st.done && st.iterations === S.states[S.currentIndex].iterations);
+      // In practice, we just do one automatic step per loop if manual mode: so pause
+      stopRun();
+      log('Run paused due to manual compare mode. Use manual decision buttons.');
+      return;
+    }
+    stepOnce(true);
+  }, speed);
+}
+
+function stopRun() {
+  if (S.intervalId) {
+    clearInterval(S.intervalId); S.intervalId = null;
+  }
+  S.running = false;
+}
+
+function runToCompletion() {
+  if (!S.initialized) { log('Initialize first'); return; }
+  stopRun();
+  // perform synchronous steps until done or max iterations
+  const maxSteps = 5000;
+  let steps = 0;
+  while(true) {
+    const st = currentState();
+    if (!st) break;
+    if (st.done) break;
+    if (compareMode.value === 'manual') { log('Stopped because manual compare mode active'); break; }
+    stepOnce(true);
+    steps++;
+    if (steps > maxSteps) { log('Stopped: reached runtime safety limit'); break; }
+  }
+}
+
+/* ------------------------
+   Snapshot management & branching
+-------------------------*/
+function saveSnapshot() {
+  const st = currentState();
+  if (!st) { alert('Nothing to snapshot'); return; }
+  const sid = idGen('snap');
+  S.snapshots[sid] = {
+    id: sid,
+    timestamp: new Date().toISOString(),
+    state: deepCopy(st),
+    note: 'Snapshot at step ' + st.step
+  };
+  renderSnapshots();
+  log('Saved snapshot ' + sid);
+}
+
+function renderSnapshots() {
+  snapshotsList.innerHTML = '';
+  const keys = Object.keys(S.snapshots);
+  if (keys.length === 0) {
+    snapshotsList.textContent = 'No snapshots saved.';
+    return;
+  }
+  const ul = document.createElement('div');
+  keys.forEach(k => {
+    const snap = S.snapshots[k];
+    const d = document.createElement('div');
+    d.textContent = k + ' | ' + snap.note + ' | ' + snap.timestamp;
+    d.style.cursor = 'pointer';
+    d.addEventListener('click', () => {
+      // Load snapshot replace current history (option to fork)
+      const action = confirm('Load this snapshot into current state? (OK = load as current, Cancel = fork and append state after snapshot)');
+      if (action) {
+        S.states = [deepCopy(snap.state)];
+        S.currentIndex = 0;
+        S.initialized = true;
+        log('Loaded snapshot ' + k + ' as current root');
+        updateUI(); redraw();
+      } else {
+        // Fork: replace current tail with snapshot then continue
+        S.states = S.states.slice(0, S.currentIndex+1);
+        const newSt = deepCopy(snap.state);
+        newSt.parent = S.states[S.currentIndex].id;
+        S.states.push(newSt);
+        S.currentIndex = S.states.length - 1;
+        S.initialized = true;
+        log('Forked from snapshot ' + k + ' into current history');
+        updateUI(); redraw();
+      }
+    });
+    const del = document.createElement('button');
+    del.textContent = 'Delete';
+    del.addEventListener('click', (ev)=> {
+      ev.stopPropagation();
+      delete S.snapshots[k];
+      renderSnapshots();
+      log('Deleted snapshot ' + k);
+    });
+    d.appendChild(document.createTextNode(' '));
+    d.appendChild(del);
+    ul.appendChild(d);
+  });
+  snapshotsList.appendChild(ul);
+}
+
+function clearSnapshots() {
+  if (confirm('Clear all snapshots?')) {
+    S.snapshots = {};
+    renderSnapshots();
+    log('Cleared all snapshots');
+  }
+}
+
+/* ------------------------
+   UI updates
+-------------------------*/
+function updateUI() {
+  const st = currentState();
+  if (!st) {
+    stateInfo.textContent = 'Not initialized';
+    bestInfo.textContent = '';
+    return;
+  }
+  stateInfo.textContent = `Step: ${st.step}, Iterations: ${st.iterations}, L=${st.L}, R=${st.R}, done=${st.done ? st.reason : 'no'}`;
+  if (st.mode === 'continuous') {
+    if (st.done) {
+      // compute best approximate
+      const xbest = (st.L + st.R)/2;
+      let ybest = NaN;
+      try { ybest = Number(parseFunction(funcExprInput.value)(xbest)); } catch(e) { ybest = NaN; }
+      bestInfo.textContent = `Approx best x ≈ ${xbest}, f(x) ≈ ${ybest}`;
+    } else {
+      bestInfo.textContent = `m1=${st.m1}, f(m1)=${st.f_m1}, m2=${st.m2}, f(m2)=${st.f_m2}`;
+    }
+  } else {
+    if (st.array) {
+      if (st.done) {
+        // final brute
+        let bestIdx = st.L;
+        let bestVal = st.array[st.L];
+        for (let i=st.L+1;i<=st.R;i++) {
+          if (goalSelect.value==='max') {
+            if (st.array[i] > bestVal) { bestVal = st.array[i]; bestIdx = i; }
+          } else {
+            if (st.array[i] < bestVal) { bestVal = st.array[i]; bestIdx = i; }
+          }
+        }
+        bestInfo.textContent = `Discrete best index ≈ ${bestIdx}, value ≈ ${bestVal}`;
+      } else {
+        bestInfo.textContent = `m1=${st.m1}, arr[m1]=${st.f_m1}, m2=${st.m2}, arr[m2]=${st.f_m2}`;
+      }
+    } else {
+      bestInfo.textContent = 'Array not set';
+    }
+  }
+  renderSnapshots();
+}
+
+/* ------------------------
+   Redraw plot/canvas
+-------------------------*/
+function redraw() {
+  ctx.clearRect(0,0,plot.width, plot.height);
+  const st = currentState();
+  if (!st) {
+    // draw axes
+    ctx.beginPath();
+    ctx.moveTo(0, plot.height/2);
+    ctx.lineTo(plot.width, plot.height/2);
+    ctx.stroke();
+    return;
+  }
+
+  if (st.mode === 'continuous') {
+    // sample data
+    let samp = st.samples;
+    if (!samp || samp.L !== st.L || samp.R !== st.R) {
+      samp = sampleFunctionForPlot();
+      st.samples = samp;
+    }
+    // compute y range among finite samples
+    const pts = samp.samples.filter(p=>isFinite(p.y));
+    let ymin = 0;
+    let ymax = 1;
+    if (pts.length > 0) {
+      ymin = Math.min(...pts.map(p=>p.y));
+      ymax = Math.max(...pts.map(p=>p.y));
+      if (ymin === ymax) { ymin -= 1; ymax += 1; }
+    } else {
+      ymin = -1; ymax = 1;
+    }
+    const pad = 0.05*(ymax - ymin);
+    ymin -= pad; ymax += pad;
+
+    // map function
+    const mapX = x => (x - samp.L) / (samp.R - samp.L) * plot.width;
+    const mapY = y => plot.height - (y - ymin) / (ymax - ymin) * plot.height;
+
+    // draw polyline
+    ctx.beginPath();
+    let started = false;
+    for (let i=0;i<samp.samples.length;i++) {
+      const p = samp.samples[i];
+      if (!isFinite(p.y)) { started = false; continue; }
+      const x = mapX(p.x), y = mapY(p.y);
+      if (!started) { ctx.moveTo(x,y); started = true; } else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // draw partitions if enabled
+    if (showPartitionBox.checked) {
+      // draw L,R,m1,m2
+      const cur = st;
+      if (cur.L !== null && cur.R !== null) {
+        // L
+        ctx.beginPath();
+        ctx.moveTo(mapX(cur.L), 0); ctx.lineTo(mapX(cur.L), plot.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(mapX(cur.R), 0); ctx.lineTo(mapX(cur.R), plot.height);
+        ctx.stroke();
+      }
+      if (cur.m1 !== null) {
+        ctx.beginPath();
+        ctx.moveTo(mapX(cur.m1), 0); ctx.lineTo(mapX(cur.m1), plot.height);
+        ctx.stroke();
+      }
+      if (cur.m2 !== null) {
+        ctx.beginPath();
+        ctx.moveTo(mapX(cur.m2), 0); ctx.lineTo(mapX(cur.m2), plot.height);
+        ctx.stroke();
+      }
+    }
+
+    // point at mid values
+    if (st.m1 !== null) {
+      const f = parseFunction(funcExprInput.value);
+      let y1 = NaN, y2 = NaN;
+      try { y1 = Number(f(st.m1)); } catch(e) { y1 = NaN; }
+      try { y2 = Number(f(st.m2)); } catch(e) { y2 = NaN; }
+      if (isFinite(y1)) {
+        const x = mapX(st.m1), y = mapY(y1);
+        ctx.fillRect(x-3,y-3,6,6);
+      }
+      if (isFinite(y2)) {
+        const x = mapX(st.m2), y = mapY(y2);
+        ctx.fillRect(x-3,y-3,6,6);
+      }
+    }
+
+    // trace history intervals lightly (just draw thin lines)
+    if (traceHistoryBox.checked && st.history && st.history.length>0) {
+      st.history.forEach(h=>{
+        ctx.beginPath();
+        ctx.moveTo(mapX(h.L), 0); ctx.lineTo(mapX(h.L), plot.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(mapX(h.R), 0); ctx.lineTo(mapX(h.R), plot.height);
+        ctx.stroke();
+      });
+    }
+
+  } else {
+    // discrete: draw bar chart of array
+    const arr = st.array || [];
+    if (arr.length === 0) {
+      ctx.fillText('No array to display', 10, 20);
+      return;
+    }
+    const n = arr.length;
+    const barW = plot.width / n;
+    let ymin = Math.min(...arr), ymax = Math.max(...arr);
+    if (ymin === ymax) { ymin -= 1; ymax += 1; }
+    const mapY = v => plot.height - (v - ymin)/(ymax-ymin) * plot.height;
+    for (let i=0;i<n;i++) {
+      const x = i*barW;
+      const y = mapY(arr[i]);
+      const h = plot.height - y;
+      ctx.fillRect(x+1, y, barW-2, h);
+    }
+    // draw L,R,m1,m2 lines
+    if (showPartitionBox.checked) {
+      if (st.L !== null) {
+        ctx.beginPath();
+        ctx.moveTo(st.L*barW,0); ctx.lineTo(st.L*barW,plot.height); ctx.stroke();
+      }
+      if (st.R !== null) {
+        ctx.beginPath();
+        ctx.moveTo((st.R+1)*barW,0); ctx.lineTo((st.R+1)*barW,plot.height); ctx.stroke();
+      }
+      if (st.m1 !== null) {
+        ctx.beginPath();
+        ctx.moveTo((st.m1+0.5)*barW,0); ctx.lineTo((st.m1+0.5)*barW,plot.height); ctx.stroke();
+      }
+      if (st.m2 !== null) {
+        ctx.beginPath();
+        ctx.moveTo((st.m2+0.5)*barW,0); ctx.lineTo((st.m2+0.5)*barW,plot.height); ctx.stroke();
+      }
+    }
+
+    // highlight current interval
+    if (traceHistoryBox.checked && st.history && st.history.length>0) {
+      st.history.forEach(h=>{
+        ctx.beginPath();
+        ctx.moveTo((h.L+0.5)*barW,0); ctx.lineTo((h.L+0.5)*barW,plot.height); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo((h.R+0.5)*barW,0); ctx.lineTo((h.R+0.5)*barW,plot.height); ctx.stroke();
+      });
+    }
+  }
+}
+
+/* ------------------------
+   Manual decision handlers
+-------------------------*/
+function manualDecisionApply(choice) {
+  // choice: 'leftBetter' means m1 is better? we defined earlier: 'keepRight' if m1 < m2 for max
+  // We'll directly apply: if user chooses "m1 better", then we move R to m2; if "m2 better", move L to m1
+  if (!S.initialized) { alert('Initialize first'); return; }
+  const stOld = currentState();
+  if (!stOld) return;
+  // create a copy and apply decision
+  const st = deepCopy(stOld);
+  st.id = idGen('state');
+  st.parent = stOld.id;
+  st.step = stOld.step + 1;
+  st.iterations = stOld.iterations + 1;
+
+  if (st.mode === 'continuous') {
+    if (choice === 'm1Better') {
+      st.R = st.m2;
+      log('Manual decision: m1 considered better -> move R to m2');
+    } else {
+      st.L = st.m1;
+      log('Manual decision: m2 considered better -> move L to m1');
+    }
+    st.history = st.history || [];
+    st.history.push({L:st.L,R:st.R,m1:st.m1,m2:st.m2,f_m1:st.f_m1,f_m2:st.f_m2});
+    // check termination
+    if (Math.abs(st.R - st.L) <= Number(epsInput.value)) {
+      st.done = true; st.reason = 'Interval <= eps (manual)';
+    }
+  } else {
+    if (choice === 'm1Better') {
+      st.R = st.m2;
+      log('Manual decision (discrete): m1 better -> move R to m2');
+    } else {
+      st.L = st.m1;
+      log('Manual decision (discrete): m2 better -> move L to m1');
+    }
+    st.history = st.history || [];
+    st.history.push({L:st.L,R:st.R,m1:st.m1,m2:st.m2,f_m1:st.f_m1,f_m2:st.f_m2});
+    if (st.R - st.L <= 2) {
+      // do final brute
+      let bestIdx = st.L; let bestVal = st.array[st.L];
+      for (let i=st.L+1;i<=st.R;i++) {
+        const v = st.array[i];
+        if (goalSelect.value==='max') {
+          if (v > bestVal) { bestVal = v; bestIdx = i; }
+        } else {
+          if (v < bestVal) { bestVal = v; bestIdx = i; }
+        }
+      }
+      st.done = true;
+      st.reason = 'Final brute force after manual decision';
+      log(`Manual final brute: best index ${bestIdx} val ${bestVal}`);
+    }
+  }
+  pushState(st);
+}
+
+/* ------------------------
+   Explain functions
+-------------------------*/
+function explainNext() {
+  const st = currentState();
+  if (!st) { explainOutput.value = 'Not initialized'; return; }
+  if (st.done) { explainOutput.value = 'Algorithm done: ' + st.reason; return; }
+  let out = '';
+  if (st.mode === 'continuous') {
+    out += `Interval [${st.L}, ${st.R}]\n`;
+    const len = st.R - st.L;
+    const m1 = st.L + len/3, m2 = st.R - len/3;
+    out += `Compute m1 = L + (R-L)/3 = ${m1}\n`;
+    out += `Compute m2 = R - (R-L)/3 = ${m2}\n`;
+    out += `Evaluate f(m1), f(m2). If maximizing and f(m1) < f(m2) -> discard left third (L=m1). Otherwise discard right third (R=m2).\n`;
+    out += `This reduces the interval guaranteed to contain the unimodal maximum.\n`;
+    explainOutput.value = out;
+  } else {
+    out += `Discrete array indices L=${st.L}, R=${st.R}.\nCompute integer m1 and m2: m1 = L + floor((R-L)/3), m2 = R - floor((R-L)/3)\nCompare arr[m1] and arr[m2]; narrow interval accordingly.\nWhen R-L <= 2, inspect the small interval directly.\n`;
+    explainOutput.value = out;
+  }
+}
+
+function explainHistory() {
+  const st = currentState();
+  if (!st) { explainOutput.value = 'Not initialized'; return; }
+  if (!st.history || st.history.length === 0) {
+    explainOutput.value = 'No history (no steps yet).';
+    return;
+  }
+  let out = '';
+  st.history.forEach((h,i)=>{
+    out += `Step ${i+1}: L=${h.L}, R=${h.R}, m1=${h.m1} (f=${h.f_m1}), m2=${h.m2} (f=${h.f_m2})\n`;
+  });
+  explainOutput.value = out;
+}
+
+/* ------------------------
+   Brute force verification
+-------------------------*/
+function bruteForceCheck() {
+  if (!S.initialized) { log('Initialize first'); return; }
+  const st = currentState();
+  if (!st) return;
+  if (st.mode === 'continuous') {
+    // sample densely to find approximate global maximum on [L,R]
+    const f = parseFunction(funcExprInput.value);
+    const L = st.L, R = st.R;
+    const N = 1001;
+    let bestX = L; let bestY = -Infinity;
+    for (let i=0;i<N;i++) {
+      const x = L + (R-L)*i/(N-1);
+      let y = NaN;
+      try { y = Number(f(x)); } catch(e) { y = NaN; }
+      if (!isFinite(y)) continue;
+      if (goalSelect.value === 'max') {
+        if (y > bestY) { bestY = y; bestX = x; }
+      } else {
+        if (y < bestY || bestY===-Infinity) { bestY = y; bestX = x; }
+      }
+    }
+    log(`Brute-force sample best at x≈${bestX}, f≈${bestY}`);
+    alert('Brute-force sample best at x≈' + bestX + ', f≈' + bestY);
+  } else {
+    // discrete brute check entire array
+    const arr = st.array;
+    if (!arr) { log('No array'); return; }
+    let best = 0; let bestIdx = 0;
+    for (let i=0;i<arr.length;i++) {
+      if (i===0) { best = arr[i]; bestIdx = i; }
+      if (goalSelect.value==='max') {
+        if (arr[i] > best) { best = arr[i]; bestIdx = i; }
+      } else {
+        if (arr[i] < best) { best = arr[i]; bestIdx = i; }
+      }
+    }
+    log(`Brute-force discrete best index ${bestIdx}, value ${best}`);
+    alert('Brute-force discrete best index ' + bestIdx + ', value ' + best);
+  }
+}
+
+/* ------------------------
+   Event bindings
+-------------------------*/
+modeSelect.addEventListener('change', ()=> {
+  if (modeSelect.value === 'continuous') {
+    continuousControls.style.display = '';
+    discreteControls.style.display = 'none';
+  } else {
+    continuousControls.style.display = 'none';
+    discreteControls.style.display = '';
+  }
+});
+
+genArrayBtn.addEventListener('click', ()=> {
+  const len = Math.max(3, Math.floor(Number(arrayLengthInput.value) || 0));
+  const arr = generateUnimodalArray(arrayGenSelect.value, len);
+  renderArrayEditor(arr);
+});
+
+randomizeArrayBtn.addEventListener('click', ()=> {
+  // randomize existing array slightly
+  const inputs = Array.from(arrayEditorContainer.querySelectorAll('input[type=number]'));
+  if (inputs.length === 0) {
+    alert('No array in editor. Generate one first.');
+    return;
+  }
+  inputs.forEach(inp=>{
+    const v = Number(inp.value);
+    inp.value = Math.round((v + (Math.random()*20-10))*10)/10;
+  });
+  // update state
+  const arr = inputs.map(i=>Number(i.value));
+  const st = currentState();
+  if (st && st.mode==='discrete') {
+    const newSt = deepCopy(st);
+    newSt.array = arr;
+    pushState(newSt);
+    log('Randomized array and pushed new state.');
+  }
+});
+
+clearArrayBtn.addEventListener('click', ()=> {
+  arrayEditorContainer.innerHTML = '';
+});
+
+initBtn.addEventListener('click', initialize);
+stepBtn.addEventListener('click', ()=> stepOnce(false));
+backBtn.addEventListener('click', stepBack);
+runBtn.addEventListener('click', runAuto);
+pauseBtn.addEventListener('click', stopRun);
+finishBtn.addEventListener('click', runToCompletion);
+resetBtn.addEventListener('click', ()=> {
+  S.states = [];
+  S.currentIndex = -1;
+  S.initialized = false;
+  stopRun();
+  log('Reset explorer.');
+  updateUI();
+  redraw();
+});
+bruteforceBtn.addEventListener('click', bruteForceCheck);
+
+saveSnapshotBtn.addEventListener('click', saveSnapshot);
+listSnapshotsBtn.addEventListener('click', renderSnapshots);
+clearSnapshotsBtn.addEventListener('click', clearSnapshots);
+
+compareMode.addEventListener('change', ()=> {
+  if (compareMode.value === 'manual') manualDecision.style.display = '';
+  else manualDecision.style.display = 'none';
+});
+
+decideLeftBtn.addEventListener('click', ()=> manualDecisionApply('m1Better'));
+decideRightBtn.addEventListener('click', ()=> manualDecisionApply('m2Better'));
+
+explainStepBtn.addEventListener('click', explainNext);
+explainHistoryBtn.addEventListener('click', explainHistory);
+
+/* Hotkeys for power users */
+document.addEventListener('keydown', (e)=> {
+  if (e.key === ' ') { e.preventDefault(); stepOnce(false); } // space = step
+  if (e.key === 'r' && e.ctrlKey) { runAuto(); } // ctrl+r run
+});
+
+/* ------------------------
+   Initial setup: render default array editor
+-------------------------*/
+(function initialSetup() {
+  // generate default array editor for discrete mode
+  const arr = generateUnimodalArray('singlePeak', Number(arrayLengthInput.value));
+  renderArrayEditor(arr);
+  renderSnapshots();
+  redraw();
+})();
+</script>
+</body>
+</html>

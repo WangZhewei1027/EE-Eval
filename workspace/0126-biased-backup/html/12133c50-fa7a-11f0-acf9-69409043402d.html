@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>B+ Tree Interactive Explorer</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    white-space: pre;
+  }
+  input, button, select {
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  #treeDisplay {
+    overflow-x: auto;
+    max-height: 400px;
+    border: 1px solid #000;
+    padding: 6px;
+    margin-top: 6px;
+    white-space: pre-wrap;
+  }
+  #log {
+    max-height: 100px;
+    overflow-y: scroll;
+    white-space: pre-wrap;
+    border: 1px solid #000;
+    margin-top: 6px;
+    padding: 4px;
+    font-size: 12px;
+  }
+  #controls > div {
+    margin-bottom: 12px;
+  }
+  label {
+    display: inline-block;
+    width: 90px;
+  }
+</style>
+</head>
+<body>
+<h1>B+ Tree Interactive Explorer</h1>
+
+<div id="setupSection">
+  <div>
+    <label>Order (M):</label>
+    <input type="number" id="inputOrder" value="4" min="3" max="10" /> (Max children per node)
+  </div>
+  <div>
+    <button id="btnCreateTree">Create New B+ Tree</button>
+    <button id="btnResetTree" disabled>Reset Tree</button>
+  </div>
+</div>
+
+<hr />
+
+<div id="controls" style="display:none;">
+  <div>
+    <label for="inputInsert">Insert key:</label>
+    <input type="number" id="inputInsert" />
+    <button id="btnInsert">Insert</button>
+  </div>
+  <div>
+    <label for="inputDelete">Delete key:</label>
+    <input type="number" id="inputDelete" />
+    <button id="btnDelete">Delete</button>
+  </div>
+  <div>
+    <label for="inputSearch">Search key:</label>
+    <input type="number" id="inputSearch" />
+    <button id="btnSearch">Search</button>
+  </div>
+  <div>
+    <label>Traverse:</label>
+    <button id="btnTraverseForward">Forward</button>
+    <button id="btnTraverseBackward">Backward</button>
+    <input type="number" id="inputTraversePos" min="1" placeholder="Pos" style="width: 50px;" />
+    <button id="btnTraversePos">Go</button>
+  </div>
+  <div>
+    <label>Bulk Insert:</label>
+    <input id="inputBulkInsert" placeholder="Comma spaced keys" style="width: 220px;" />
+    <button id="btnBulkInsert">Insert All</button>
+  </div>
+  <div>
+    <label>Bulk Delete:</label>
+    <input id="inputBulkDelete" placeholder="Comma spaced keys" style="width: 220px;" />
+    <button id="btnBulkDelete">Delete All</button>
+  </div>
+  <div>
+    <label>Load From JSON:</label>
+    <textarea id="inputLoadJSON" rows="3" cols="40" placeholder='{"order":4,"keys":[...],"tree":{...}}'></textarea><br/>
+    <button id="btnLoadJSON">Load Tree</button>
+  </div>
+  <div>
+    <label>Export Tree JSON:</label>
+    <button id="btnExportJSON">Export</button>
+    <textarea id="outputExportJSON" rows="4" cols="60" readonly></textarea>
+  </div>
+  <div>
+    <label>Current Tree Height:</label><span id="treeHeight">N/A</span>
+  </div>
+</div>
+
+<h2>Tree Visualization (Textual / Structural)</h2>
+<div id="treeDisplay"></div>
+
+<h2>Operational Log</h2>
+<div id="log"></div>
+
+<script>
+(() => {
+  // B+ Tree Node class
+  class BPlusTreeNode {
+    constructor(order, isLeaf = false) {
+      this.order = order;
+      this.isLeaf = isLeaf;
+      this.keys = [];
+      this.children = [];
+      this.next = null; // For leaves, points to next leaf for linked list traversal
+      this.parent = null; // reference to parent node, for convenience (not required)
+    }
+
+    // Find child index for a key
+    findChildIndex(key) {
+      // Returns child index to follow for key
+      for (let i = 0; i < this.keys.length; i++) {
+        if (key < this.keys[i]) return i;
+      }
+      return this.keys.length;
+    }
+  }
+
+  class BPlusTree {
+    constructor(order) {
+      if (order < 3) throw new Error('Order must be at least 3');
+      this.order = order;
+      this.root = new BPlusTreeNode(order, true);
+      this.leafHead = this.root; // facilitate traversal
+      this.size = 0;
+    }
+
+    // Search for a key. Returns {found:boolean, node:BPlusTreeNode, index:number} with position
+    search(key) {
+      let current = this.root;
+      while (!current.isLeaf) {
+        let idx = current.findChildIndex(key);
+        current = current.children[idx];
+      }
+      const idx = current.keys.indexOf(key);
+      return {
+        found: idx !== -1,
+        node: current,
+        index: idx
+      };
+    }
+
+    // Insert a single key (non-duplicate)
+    insert(key) {
+      if (this.search(key).found) {
+        return false; // duplicate keys not allowed
+      }
+      let leaf = this._findLeafNode(key);
+      this._insertIntoLeaf(leaf, key);
+      this.size++;
+      return true;
+    }
+
+    // Delete a key
+    delete(key) {
+      let s = this.search(key);
+      if (!s.found) return false;
+      this._deleteEntry(s.node, key);
+      this.size--;
+      return true;
+    }
+
+    // Find leaf node for a key
+    _findLeafNode(key) {
+      let current = this.root;
+      while (!current.isLeaf) {
+        let idx = current.findChildIndex(key);
+        current = current.children[idx];
+      }
+      return current;
+    }
+
+    _insertIntoLeaf(leaf, key) {
+      let pos = 0;
+      while (pos < leaf.keys.length && leaf.keys[pos] < key) pos++;
+      leaf.keys.splice(pos, 0, key);
+
+      if (leaf.keys.length < this.order) {
+        return;
+      }
+      // Need to split leaf
+      this._splitLeaf(leaf);
+    }
+
+    _splitLeaf(leaf) {
+      const mid = Math.ceil(this.order / 2);
+      const newLeaf = new BPlusTreeNode(this.order, true);
+      newLeaf.keys = leaf.keys.splice(mid);
+      // Insert newLeaf into leaf linked list
+      newLeaf.next = leaf.next;
+      leaf.next = newLeaf;
+
+      // Promote first key of newLeaf upwards
+      const promoteKey = newLeaf.keys[0];
+
+      this._insertIntoParent(leaf, promoteKey, newLeaf);
+    }
+
+    _insertIntoParent(leftNode, key, rightNode) {
+      if (leftNode === this.root) {
+        // Create new root
+        const root = new BPlusTreeNode(this.order, false);
+        root.keys = [key];
+        root.children = [leftNode, rightNode];
+        this.root = root;
+        leftNode.parent = root;
+        rightNode.parent = root;
+        return;
+      }
+
+      const parent = leftNode.parent;
+      let pos = 0;
+      while (pos < parent.children.length && parent.children[pos] !== leftNode) pos++;
+      parent.keys.splice(pos, 0, key);
+      parent.children.splice(pos + 1, 0, rightNode);
+      rightNode.parent = parent;
+
+      if (parent.keys.length < this.order) {
+        return;
+      }
+      this._splitInternal(parent);
+    }
+
+    _splitInternal(node) {
+      const midIndex = Math.floor(this.order / 2);
+      const promoteKey = node.keys[midIndex];
+
+      const newNode = new BPlusTreeNode(this.order, false);
+
+      newNode.keys = node.keys.splice(midIndex + 1);
+      newNode.children = node.children.splice(midIndex + 1);
+      newNode.children.forEach(c => { c.parent = newNode; });
+
+      node.keys.splice(midIndex, 1); // remove promoteKey from node
+
+      this._insertIntoParent(node, promoteKey, newNode);
+    }
+
+    _deleteEntry(node, key) {
+      if (node.isLeaf) {
+        // Remove key from leaf
+        const idx = node.keys.indexOf(key);
+        if (idx === -1) return;
+        node.keys.splice(idx, 1);
+      } else {
+        // Internal node: key is separator
+        let idx = node.keys.indexOf(key);
+        if (idx === -1) return;
+        node.keys.splice(idx, 1);
+        // The child link at idx+1 remains (we don't delete children here explicitly)
+      }
+
+      if (node === this.root) {
+        this._adjustRoot();
+        return;
+      }
+
+      const minKeys = Math.ceil((this.order - 1) / 2);
+      if (node.keys.length >= minKeys) {
+        return; // no underflow
+      }
+
+      this._rebalance(node);
+    }
+
+    _adjustRoot() {
+      const root = this.root;
+      if (!root.isLeaf && root.children.length === 1) {
+        this.root = root.children[0];
+        this.root.parent = null;
+      } else if (root.isLeaf && root.keys.length === 0) {
+        this.root = new BPlusTreeNode(this.order, true);
+        this.leafHead = this.root;
+        this.size = 0;
+      }
+    }
+
+    _rebalance(node) {
+      const parent = node.parent;
+      if (!parent) return;
+      const idx = parent.children.indexOf(node);
+
+      const minKeys = Math.ceil((this.order - 1) / 2);
+
+      // Try the left sibling
+      let leftSibling = null;
+      if (idx > 0) leftSibling = parent.children[idx - 1];
+      // Try the right sibling
+      let rightSibling = null;
+      if (idx < parent.children.length - 1) rightSibling = parent.children[idx + 1];
+
+      // Try to borrow from left sibling
+      if (leftSibling && leftSibling.keys.length > minKeys) {
+        if (node.isLeaf) {
+          const borrowKey = leftSibling.keys.pop();
+          node.keys.unshift(borrowKey);
+          parent.keys[idx - 1] = node.keys[0];
+        } else {
+          // Internal case
+          const borrowKey = parent.keys[idx - 1];
+          const borrowChild = leftSibling.children.pop();
+          node.children.unshift(borrowChild);
+          borrowChild.parent = node;
+
+          parent.keys[idx - 1] = leftSibling.keys.pop();
+          node.keys.unshift(borrowKey);
+        }
+        return;
+      }
+      // Try to borrow from right sibling
+      if (rightSibling && rightSibling.keys.length > minKeys) {
+        if (node.isLeaf) {
+          const borrowKey = rightSibling.keys.shift();
+          node.keys.push(borrowKey);
+          parent.keys[idx] = rightSibling.keys[0];
+        } else {
+          const borrowKey = parent.keys[idx];
+          const borrowChild = rightSibling.children.shift();
+          node.children.push(borrowChild);
+          borrowChild.parent = node;
+
+          parent.keys[idx] = rightSibling.keys.shift();
+          node.keys.push(borrowKey);
+        }
+        return;
+      }
+
+      // Merge with sibling if borrowing not possible
+      if (leftSibling) {
+        this._mergeNodes(leftSibling, node, idx - 1);
+      } else if (rightSibling) {
+        this._mergeNodes(node, rightSibling, idx);
+      }
+    }
+
+    _mergeNodes(leftNode, rightNode, parentKeyIndex) {
+      const parent = leftNode.parent;
+      if (leftNode.isLeaf) {
+        // Merge keys and link
+        leftNode.keys = leftNode.keys.concat(rightNode.keys);
+        leftNode.next = rightNode.next;
+      } else {
+        const mergeKey = parent.keys[parentKeyIndex];
+        leftNode.keys.push(mergeKey);
+        leftNode.keys = leftNode.keys.concat(rightNode.keys);
+        leftNode.children = leftNode.children.concat(rightNode.children);
+        leftNode.children.forEach(c => {c.parent = leftNode;});
+      }
+      // Remove rightNode from parent's children
+      parent.keys.splice(parentKeyIndex, 1);
+      parent.children.splice(parentKeyIndex + 1, 1);
+
+      // If parent is root and empty, adjust root
+      if (parent === this.root && parent.keys.length === 0) {
+        this.root = leftNode;
+        leftNode.parent = null;
+        return;
+      }
+      if (parent.keys.length < Math.ceil((this.order - 1) / 2)) {
+        this._rebalance(parent);
+      }
+    }
+
+    // Traverse all keys in order from left to right leaf-linked list
+    traverseForward() {
+      const result = [];
+      let curr = this.leafHead;
+      while (curr) {
+        for (let key of curr.keys) {
+          result.push(key);
+        }
+        curr = curr.next;
+      }
+      return result;
+    }
+    // Traverse all keys from tail backwards (not directly stored) so we must get forward and reverse
+    traverseBackward() {
+      const keys = this.traverseForward();
+      return keys.reverse();
+    }
+
+    // Get tree height
+    height() {
+      let height = 0;
+      let node = this.root;
+      while (node) {
+        height++;
+        if (node.isLeaf) break;
+        node = node.children[0];
+      }
+      return height;
+    }
+
+    // Return JSON-ready serialized structure of tree for export
+    serialize() {
+      function nodeToObj(node) {
+        const obj = {
+          isLeaf: node.isLeaf,
+          keys: node.keys.slice(),
+          children: []
+        };
+        if (!node.isLeaf) {
+          for (const c of node.children) {
+            obj.children.push(nodeToObj(c));
+          }
+        }
+        return obj;
+      }
+      return {
+        order: this.order,
+        size: this.size,
+        root: nodeToObj(this.root)
+      };
+    }
+
+    // Load tree from serialized JSON object (should be validated before)
+    static deserialize(obj) {
+      function objToNode(o) {
+        const node = new BPlusTreeNode(o.keys.length > 0 ? o.keys.length + 1 : 2, o.isLeaf);
+        // We cannot use keys length for order here, so we have to keep order from top.
+        node.isLeaf = o.isLeaf;
+        node.keys = o.keys.slice();
+        if (!o.isLeaf) {
+          node.children = o.children.map(c => {
+            const childNode = objToNode(c);
+            childNode.parent = node;
+            return childNode;
+          });
+        }
+        return node;
+      }
+      const tree = new BPlusTree(obj.order);
+      tree.root = objToNode(obj.root);
+
+      // fix parents for root is already done during loading
+
+      // rebuild leaf linked list
+      const leaves = [];
+      function collectLeaves(n) {
+        if (n.isLeaf) {
+          leaves.push(n);
+        } else {
+          n.children.forEach(c => collectLeaves(c));
+        }
+      }
+      collectLeaves(tree.root);
+      leaves.sort((a, b) => a.keys[0] - b.keys[0]); // rough ascending order based on first key
+      for (let i = 0; i < leaves.length - 1; i++) {
+        leaves[i].next = leaves[i + 1];
+      }
+      if(leaves.length>0) {
+        leaves[leaves.length - 1].next = null;
+        tree.leafHead = leaves[0];
+      } else {
+        // no leaves in tree means empty tree
+        tree.leafHead = tree.root;
+      }
+
+      // size count can be approximated by summing leaf keys
+      function countLeafKeys(n) {
+        if (n.isLeaf) return n.keys.length;
+        return n.children.reduce((acc, c) => acc + countLeafKeys(c), 0);
+      }
+      tree.size = countLeafKeys(tree.root);
+
+      return tree;
+    }
+  }
+
+  // --------- UI and interaction logic ---------
+  let bptree = null;
+
+  // DOM elements
+  const inputOrder = document.getElementById('inputOrder');
+  const btnCreateTree = document.getElementById('btnCreateTree');
+  const btnResetTree = document.getElementById('btnResetTree');
+
+  const controlsDiv = document.getElementById('controls');
+  const inputInsert = document.getElementById('inputInsert');
+  const btnInsert = document.getElementById('btnInsert');
+  const inputDelete = document.getElementById('inputDelete');
+  const btnDelete = document.getElementById('btnDelete');
+  const inputSearch = document.getElementById('inputSearch');
+  const btnSearch = document.getElementById('btnSearch');
+  const btnTraverseForward = document.getElementById('btnTraverseForward');
+  const btnTraverseBackward = document.getElementById('btnTraverseBackward');
+  const inputTraversePos = document.getElementById('inputTraversePos');
+  const btnTraversePos = document.getElementById('btnTraversePos');
+
+  const inputBulkInsert = document.getElementById('inputBulkInsert');
+  const btnBulkInsert = document.getElementById('btnBulkInsert');
+  const inputBulkDelete = document.getElementById('inputBulkDelete');
+  const btnBulkDelete = document.getElementById('btnBulkDelete');
+
+  const inputLoadJSON = document.getElementById('inputLoadJSON');
+  const btnLoadJSON = document.getElementById('btnLoadJSON');
+  const btnExportJSON = document.getElementById('btnExportJSON');
+  const outputExportJSON = document.getElementById('outputExportJSON');
+
+  const treeDisplay = document.getElementById('treeDisplay');
+  const logDiv = document.getElementById('log');
+  const treeHeightSpan = document.getElementById('treeHeight');
+
+  function log(msg) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    logDiv.textContent += `[${timeStr}] ${msg}\n`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  function clearLog() {
+    logDiv.textContent = '';
+  }
+
+  function renderTree() {
+    if (!bptree) {
+      treeDisplay.textContent = 'No tree.';
+      return;
+    }
+    // Textual printing of tree structure level by level
+    const lines = [];
+    // BFS
+    const queue = [];
+    queue.push(bptree.root);
+    let level = 0;
+    while (queue.length > 0) {
+      const levelSize = queue.length;
+      let line = `Level ${level}: `;
+      const nodeInfos = [];
+      for (let i = 0; i < levelSize; i++) {
+        const node = queue.shift();
+        const keysStr = node.keys.length === 0 ? '[∅]' : `[${node.keys.join(',')}]`;
+        const leafMark = node.isLeaf ? 'L' : 'I';
+        nodeInfos.push(`${leafMark}${keysStr}`);
+        if (!node.isLeaf) {
+          for (const c of node.children) {
+            queue.push(c);
+          }
+        }
+      }
+      line += nodeInfos.join(' | ');
+      lines.push(line);
+      level++;
+    }
+
+    // Also show leaf linked list keys
+    let leafLine = 'Leaves: ';
+    let leafNode = bptree.leafHead;
+    const leafKeys = [];
+    while (leafNode) {
+      leafKeys.push(`[${leafNode.keys.join(',')}]`);
+      leafNode = leafNode.next;
+    }
+    leafLine += leafKeys.join(' -> ');
+    lines.push('');
+    lines.push(leafLine);
+
+    // Tree height and size
+    lines.push('');
+    lines.push(`Tree order (M): ${bptree.order}`);
+    lines.push(`Tree height: ${bptree.height()}`);
+    lines.push(`Total keys stored: ${bptree.size}`);
+
+    treeDisplay.textContent = lines.join('\n');
+    treeHeightSpan.textContent = bptree.height();
+  }
+
+  function createTreeFromOrder() {
+    const order = parseInt(inputOrder.value, 10);
+    if (isNaN(order) || order < 3 || order > 10) {
+      alert('Order must be an integer between 3 and 10.');
+      return null;
+    }
+    return new BPlusTree(order);
+  }
+
+  function parseNumbersFromInput(text) {
+    if (!text) return [];
+    // Split comma, space, semicolon separated
+    return text.split(/[\s,;]+/).map(s => s.trim()).filter(s => s.length>0).map(x => {
+      const n = parseInt(x,10);
+      return isNaN(n)?null:n;
+    }).filter(x => x !== null);
+  }
+
+  // BUTTON event handlers
+
+  btnCreateTree.addEventListener('click', () => {
+    const tree = createTreeFromOrder();
+    if (!tree) return;
+    bptree = tree;
+    btnResetTree.disabled = false;
+    controlsDiv.style.display = 'block';
+    log(`Created new B+ tree of order ${bptree.order}.`);
+    renderTree();
+  });
+
+  btnResetTree.addEventListener('click', () => {
+    if (!bptree) return;
+    bptree = createTreeFromOrder();
+    if (!bptree) return;
+    log(`Tree reset to empty B+ tree of order ${bptree.order}.`);
+    renderTree();
+  });
+
+  btnInsert.addEventListener('click', () => {
+    if (!bptree) return;
+    const key = parseInt(inputInsert.value, 10);
+    if (isNaN(key)) {
+      alert('Please enter a valid integer key to insert.');
+      return;
+    }
+    const ok = bptree.insert(key);
+    if (ok) {
+      log(`Inserted key ${key}.`);
+    } else {
+      log(`Insert failed: Key ${key} already exists.`);
+      alert('Key already exists in the tree (no duplicates allowed).');
+    }
+    renderTree();
+  });
+
+  btnDelete.addEventListener('click', () => {
+    if (!bptree) return;
+    const key = parseInt(inputDelete.value, 10);
+    if (isNaN(key)) {
+      alert('Please enter a valid integer key to delete.');
+      return;
+    }
+    const ok = bptree.delete(key);
+    if (ok) {
+      log(`Deleted key ${key}.`);
+    } else {
+      log(`Delete failed: Key ${key} not found.`);
+      alert('Key not found in the tree.');
+    }
+    renderTree();
+  });
+
+  btnSearch.addEventListener('click', () => {
+    if (!bptree) return;
+    const key = parseInt(inputSearch.value, 10);
+    if (isNaN(key)) {
+      alert('Please enter a valid integer key to search.');
+      return;
+    }
+    const res = bptree.search(key);
+    if (res.found) {
+      log(`Key ${key} found in leaf node at index ${res.index}.`);
+      alert(`Key ${key} FOUND in the tree.`);
+    } else {
+      log(`Key ${key} NOT found.`);
+      alert(`Key ${key} NOT found in the tree.`);
+    }
+  });
+
+  btnTraverseForward.addEventListener('click', () => {
+    if (!bptree) return;
+    const allKeys = bptree.traverseForward();
+    log(`Traverse forward: ${allKeys.length} keys: ${allKeys.join(', ')}`);
+    alert(`Traverse forward:\n${allKeys.join(', ')}`);
+  });
+
+  btnTraverseBackward.addEventListener('click', () => {
+    if (!bptree) return;
+    const allKeys = bptree.traverseBackward();
+    log(`Traverse backward: ${allKeys.length} keys: ${allKeys.join(', ')}`);
+    alert(`Traverse backward:\n${allKeys.join(', ')}`);
+  });
+
+  btnTraversePos.addEventListener('click', () => {
+    if (!bptree) return;
+    const pos = parseInt(inputTraversePos.value, 10);
+    if (isNaN(pos) || pos < 1) {
+      alert('Please enter a valid positive position to traverse to.');
+      return;
+    }
+    const allKeys = bptree.traverseForward();
+    if (pos > allKeys.length) {
+      alert('Position exceeds number of keys in the tree.');
+      return;
+    }
+    log(`Traverse position ${pos}: Key ${allKeys[pos -1]}`);
+    alert(`Key at position ${pos}: ${allKeys[pos -1]}`);
+  });
+
+  btnBulkInsert.addEventListener('click', () => {
+    if (!bptree) return;
+    const keys = parseNumbersFromInput(inputBulkInsert.value);
+    if (keys.length === 0) {
+      alert('Enter at least one valid integer key for bulk insertion.');
+      return;
+    }
+    let insertedCount = 0;
+    let skippedCount = 0;
+    for (const k of keys) {
+      if (bptree.insert(k)) insertedCount++;
+      else skippedCount++;
+    }
+    log(`Bulk insert: ${insertedCount} keys inserted, ${skippedCount} skipped (duplicates).`);
+    alert(`Bulk Insert complete.\nInserted: ${insertedCount}\nSkipped duplicates: ${skippedCount}`);
+    renderTree();
+  });
+
+  btnBulkDelete.addEventListener('click', () => {
+    if (!bptree) return;
+    const keys = parseNumbersFromInput(inputBulkDelete.value);
+    if (keys.length === 0) {
+      alert('Enter at least one valid integer key for bulk deletion.');
+      return;
+    }
+    let deletedCount = 0;
+    let notFoundCount = 0;
+    for (const k of keys) {
+      if (bptree.delete(k)) deletedCount++;
+      else notFoundCount++;
+    }
+    log(`Bulk delete: ${deletedCount} keys deleted, ${notFoundCount} keys not found.`);
+    alert(`Bulk Delete complete.\nDeleted: ${deletedCount}\nNot found: ${notFoundCount}`);
+    renderTree();
+  });
+
+  btnLoadJSON.addEventListener('click', () => {
+    let obj = null;
+    try {
+      obj = JSON.parse(inputLoadJSON.value);
+    } catch(e) {
+      alert('Invalid JSON input.');
+      return;
+    }
+    try {
+      const tree = BPlusTree.deserialize(obj);
+      bptree = tree;
+      controlsDiv.style.display = 'block';
+      btnResetTree.disabled = false;
+      log('B+ Tree loaded from JSON.');
+      renderTree();
+    } catch(e) {
+      alert('Failed to load tree from JSON. Check data format.');
+    }
+  });
+
+  btnExportJSON.addEventListener('click', () => {
+    if (!bptree) {
+      alert('No tree to export.');
+      return;
+    }
+    const obj = bptree.serialize();
+    const jsonStr = JSON.stringify(obj, null, 2);
+    outputExportJSON.value = jsonStr;
+    log('Exported tree to JSON.');
+  });
+
+  // Keyboard shortcuts to speed up testing
+  document.addEventListener('keydown', e => {
+    if (!bptree || controlsDiv.style.display === 'none') return;
+    // Insert key - Enter on insert input
+    if (e.target === inputInsert && e.key === 'Enter') {
+      btnInsert.click();
+    }
+    // Delete key - Enter on delete input
+    if (e.target === inputDelete && e.key === 'Enter') {
+      btnDelete.click();
+    }
+    // Search key - Enter on search input
+    if (e.target === inputSearch && e.key === 'Enter') {
+      btnSearch.click();
+    }
+    // Bulk Insert - ctrl+Enter triggers bulk insert if focus on bulkInsert
+    if ((e.target === inputBulkInsert) && e.ctrlKey && e.key.toLowerCase() === 'enter') {
+      btnBulkInsert.click();
+    }
+    // Bulk Delete - ctrl+Enter triggers bulk delete if focus on bulkDelete
+    if ((e.target === inputBulkDelete) && e.ctrlKey && e.key.toLowerCase() === 'enter') {
+      btnBulkDelete.click();
+    }
+  });
+
+  // Initial page state
+  controlsDiv.style.display = 'none';
+  btnResetTree.disabled = true;
+
+  // For deep exploration, add a detailed node info popup on tree display click
+
+  treeDisplay.addEventListener('click', e => {
+    if (!bptree) return;
+    // Let user click on text to get nodes info (approximate)
+    // We will ask for a key input to inspect node containing that key
+    const keyInput = prompt('Enter a key to inspect its leaf node:');
+    if (keyInput === null) return;
+    const key = parseInt(keyInput, 10);
+    if (isNaN(key)) {
+      alert('Invalid number entered.');
+      return;
+    }
+    const s = bptree.search(key);
+    if (!s.found) {
+      alert(`Key ${key} not found in tree.`);
+      return;
+    }
+    // Display detailed node info
+    const node = s.node;
+    const idx = s.index;
+    let msg = `Leaf node containing key ${key}:\n\n`;
+    msg += `Keys in node: ${node.keys.join(', ')}\n`;
+    msg += `Index of key in node: ${idx}\n`;
+    const nextKeys = node.next ? node.next.keys.join(', ') : 'None (no next leaf)';
+    msg += `Next leaf node keys: ${nextKeys}\n`;
+    alert(msg);
+  });
+})();
+</script>
+
+</body>
+</html>

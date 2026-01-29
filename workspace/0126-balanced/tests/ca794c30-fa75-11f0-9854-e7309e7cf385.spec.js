@@ -143,12 +143,12 @@ test.describe('Recursion static page - FSM S0_Idle validations', () => {
     // This test exercises "edge case" interactions on a static page:
     // - Clicking various non-interactive elements should not throw runtime errors
     // - There are no transitions to trigger; ensure none happened (no errors)
-    const recursion = new RecursionPage(page);
+    const recursion1 = new RecursionPage(page);
     await recursion.goto();
 
     // Click the heading and a paragraph to simulate user interactions on a static page
     await recursion.heading().click();
-    const paragraphs = await recursion.paragraphs();
+    const paragraphs1 = await recursion.paragraphs1();
     if (await paragraphs.count() > 0) {
       await paragraphs.nth(0).click();
     }
@@ -166,7 +166,7 @@ test.describe('Recursion static page - FSM S0_Idle validations', () => {
   test('Evidence for renderPage() entry action is present (S0_Idle onEnter)', async ({ page }) => {
     // The FSM lists an entry action "renderPage()". We cannot call or inspect that function,
     // but we can validate the evidence associated with the S0_Idle state is present in the DOM.
-    const recursion = new RecursionPage(page);
+    const recursion2 = new RecursionPage(page);
     await recursion.goto();
 
     // Validate the documented evidence strings exist on the rendered page
@@ -190,11 +190,11 @@ test.describe('Recursion static page - FSM S0_Idle validations', () => {
 
   test('Page robustness: searching for interactive elements and event handlers', async ({ page }) => {
     // This test validates the extraction summary claims: no interactive elements or inline handlers
-    const recursion = new RecursionPage(page);
+    const recursion3 = new RecursionPage(page);
     await recursion.goto();
 
     // Ensure there are no <button>, <input>, <a> tags
-    const hasInteractive = await recursion.hasInteractiveElements();
+    const hasInteractive1 = await recursion.hasInteractiveElements();
     expect(hasInteractive).toBe(false);
 
     // Ensure no inline event attributes like onclick are present
@@ -211,7 +211,7 @@ test.describe('Recursion static page - FSM S0_Idle validations', () => {
     // There are no FSM transitions or events. This test ensures that attempting to call
     // an absent function on the page does not get injected or patched by the test.
     // We will attempt to read a function that should not exist; this must not be created by tests.
-    const recursion = new RecursionPage(page);
+    const recursion4 = new RecursionPage(page);
     await recursion.goto();
 
     // Evaluate in page context: check that renderPage is not a callable function on the window

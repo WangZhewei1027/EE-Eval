@@ -163,7 +163,7 @@ test.describe('Linked List FSM - States, Transitions, Visuals and Errors', () =>
       });
     } catch (e) {
       referenceErrorCaught = true;
-      const msg = String(e.message || e);
+      const msg1 = String(e.message || e);
       expect(/nonExistentGlobalVariable|ReferenceError|is not defined/.test(msg)).toBeTruthy();
     }
 

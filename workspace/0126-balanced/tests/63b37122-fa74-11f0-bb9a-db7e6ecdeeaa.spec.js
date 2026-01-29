@@ -135,7 +135,7 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
 
   test('StartSimulation event: clicking Start begins simulation and updates stats and controls', async ({ page }) => {
     // Purpose: Test Start button triggers simulation start (isRunning true) and UI updates
-    const cc = new CongestionControlPage(page);
+    const cc1 = new CongestionControlPage(page);
     await cc.goto();
 
     // Click Start
@@ -165,14 +165,14 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
     expect(statsAfterRun.sendRate).toMatch(/^\d+\.\d{2}$/);
 
     // Assert still no uncaught errors or console.error messages from running the simulation
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
 
   test('PauseSimulation event: clicking Pause stops simulation updates', async ({ page }) => {
     // Purpose: Clicking Pause should stop the running simulation and freeze stats
-    const cc = new CongestionControlPage(page);
+    const cc2 = new CongestionControlPage(page);
     await cc.goto();
 
     // Start, wait, then Pause
@@ -204,14 +204,14 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
     expect(recvAfter).toBe(recvBefore);
 
     // Assert no uncaught errors or console.error messages
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
 
   test('ResetSimulation event: clicking Reset clears buffers and returns to initial state', async ({ page }) => {
     // Purpose: Validate Reset returns UI and stats to initial baseline regardless of prior activity
-    const cc = new CongestionControlPage(page);
+    const cc3 = new CongestionControlPage(page);
     await cc.goto();
 
     // Start and run briefly to change state
@@ -243,14 +243,14 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
     expect(buttonsAfterReset.resetDisabled).toBeTruthy();
 
     // Assert no uncaught exceptions or console.errors during reset
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
 
   test('Edge cases: repeated clicks and disabled control behavior', async ({ page }) => {
     // Purpose: Ensure interacting with buttons in unexpected ways does not throw and UI honors disabled states
-    const cc = new CongestionControlPage(page);
+    const cc4 = new CongestionControlPage(page);
     await cc.goto();
 
     // Clicking Pause when disabled should not change anything and should not cause errors
@@ -260,7 +260,7 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
     });
 
     // Still paused and not started
-    let stats = await cc.getStats();
+    let stats1 = await cc.getStats();
     expect(stats.currentState).toBe('Slow Start');
 
     // Start simulation
@@ -290,7 +290,7 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
     expect(stats.packetsReceived).toBe('0');
 
     // Validate that no uncaught exceptions or console.error messages were emitted during these edge interactions
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors4 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });
@@ -298,22 +298,22 @@ test.describe('Congestion Control Demonstration - UI and FSM interactions', () =
   test('FSM state label presence and sanity checks (Slow Start, Congestion Avoidance, Fast Recovery)', async ({ page }) => {
     // Purpose: Although the underlying JS implements transitions internally, ensure the UI and explanatory text exposes the three conceptual FSM states.
     // We validate that the labels are present, and that the UI's currentState element uses one of the expected labels.
-    const cc = new CongestionControlPage(page);
+    const cc5 = new CongestionControlPage(page);
     await cc.goto();
 
-    const explanationText = await cc.explanationText();
+    const explanationText1 = await cc.explanationText1();
     // Confirm the three major FSM state labels exist somewhere descriptive in the page
     expect(explanationText).toContain('Slow Start');
     expect(explanationText).toContain('Congestion Avoidance');
     expect(explanationText).toContain('Fast Recovery');
 
     // The currentState element should contain one of these states (initially Slow Start)
-    const stats = await cc.getStats();
+    const stats2 = await cc.getStats();
     const validStates = ['Slow Start', 'Congestion Avoidance', 'Fast Recovery'];
     expect(validStates).toContain(stats.currentState);
 
     // Assert there were no page errors during these sanity checks
-    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    const consoleErrors5 = consoleMessages.filter((m) => m.type === 'error');
     expect(pageErrors.length).toBe(0);
     expect(consoleErrors.length).toBe(0);
   });

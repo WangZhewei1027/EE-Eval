@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTTP Interactive Explorer</title>
+    <script>
+        let requestHistory = [];
+        let currentRequest = {
+            method: 'GET',
+            url: 'https://jsonplaceholder.typicode.com/posts/1',
+            headers: [
+                {name: 'Content-Type', value: 'application/json'},
+                {name: 'Accept', value: 'application/json'}
+            ],
+            body: '',
+            auth: {username: '', password: ''}
+        };
+
+        function init() {
+            updateRequestDisplay();
+            document.getElementById('sendRequest').addEventListener('click', sendRequest);
+            document.getElementById('addHeader').addEventListener('click', addHeader);
+            document.getElementById('methodSelect').addEventListener('change', updateMethod);
+            document.getElementById('urlInput').addEventListener('change', updateUrl);
+            document.getElementById('bodyInput').addEventListener('input', updateBody);
+            document.getElementById('authUsername').addEventListener('input', updateAuth);
+            document.getElementById('authPassword').addEventListener('input', updateAuth);
+            document.getElementById('historyList').addEventListener('click', loadFromHistory);
+        }
+
+        function updateRequestDisplay() {
+            document.getElementById('methodSelect').value = currentRequest.method;
+            document.getElementById('urlInput').value = currentRequest.url;
+            document.getElementById('bodyInput').value = currentRequest.body;
+            document.getElementById('authUsername').value = currentRequest.auth.username;
+            document.getElementById('authPassword').value = currentRequest.auth.password;
+            
+            const headersContainer = document.getElementById('headersContainer');
+            headersContainer.innerHTML = '';
+            currentRequest.headers.forEach((header, index) => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <input type="text" value="${header.name}" class="header-name" data-index="${index}">
+                    <input type="text" value="${header.value}" class="header-value" data-index="${index}">
+                    <button class="remove-header" data-index="${index}">Remove</button>
+                `;
+                headersContainer.appendChild(div);
+                
+                div.querySelector('.header-name').addEventListener('change', updateHeader);
+                div.querySelector('.header-value').addEventListener('change', updateHeader);
+                div.querySelector('.remove-header').addEventListener('click', removeHeader);
+            });
+        }
+
+        function updateMethod(e) {
+            currentRequest.method = e.target.value;
+            if (currentRequest.method === 'GET' || currentRequest.method === 'HEAD') {
+                document.getElementById('bodyInput').disabled = true;
+            } else {
+                document.getElementById('bodyInput').disabled = false;
+            }
+        }
+
+        function updateUrl(e) {
+            currentRequest.url = e.target.value;
+        }
+
+        function updateBody(e) {
+            currentRequest.body = e.target.value;
+        }
+
+        function updateAuth(e) {
+            if (e.target.id === 'authUsername') {
+                currentRequest.auth.username = e.target.value;
+            } else {
+                currentRequest.auth.password = e.target.value;
+            }
+        }
+
+        function addHeader() {
+            currentRequest.headers.push({name: '', value: ''});
+            updateRequestDisplay();
+        }
+
+        function updateHeader(e) {
+            const index = parseInt(e.target.dataset.index);
+            if (e.target.classList.contains('header-name')) {
+                currentRequest.headers[index].name = e.target.value;
+            } else {
+                currentRequest.headers[index].value = e.target.value;
+            }
+        }
+
+        function removeHeader(e) {
+            const index = parseInt(e.target.dataset.index);
+            currentRequest.headers.splice(index, 1);
+            updateRequestDisplay();
+        }
+
+        function sendRequest() {
+            const startTime = Date.now();
+            const requestOptions = {
+                method: currentRequest.method,
+                headers: {}
+            };
+
+            // Add headers
+            currentRequest.headers.forEach(header => {
+                if (header.name && header.value) {
+                    requestOptions.headers[header.name] = header.value;
+                }
+            });
+
+            // Add auth if provided
+            if (currentRequest.auth.username || currentRequest.auth.password) {
+                requestOptions.headers['Authorization'] = 'Basic ' + btoa(currentRequest.auth.username + ':' + currentRequest.auth.password);
+            }
+
+            // Add body for applicable methods
+            if (currentRequest.method !== 'GET' && currentRequest.method !== 'HEAD' && currentRequest.body) {
+                requestOptions.body = currentRequest.body;
+            }
+
+            // Display request details
+            const requestDetails = document.getElementById('requestDetails');
+            requestDetails.innerHTML = `
+                <h3>Request</h3>
+                <pre>${currentRequest.method} ${currentRequest.url}</pre>
+                <pre>Headers:\n${JSON.stringify(requestOptions.headers, null, 2)}</pre>
+                ${currentRequest.body ? `<pre>Body:\n${currentRequest.body}</pre>` : ''}
+            `;
+
+            // Make the request
+            fetch(currentRequest.url, requestOptions)
+                .then(response => {
+                    const endTime = Date.now();
+                    const duration = endTime - startTime;
+                    
+                    return response.text().then(text => ({
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: [...response.headers].reduce((obj, [key, value]) => {
+                            obj[key] = value;
+                            return obj;
+                        }, {}),
+                        body: text,
+                        duration: duration
+                    }));
+                })
+                .then(data => {
+                    // Display response
+                    const responseDetails = document.getElementById('responseDetails');
+                    responseDetails.innerHTML = `
+                        <h3>Response (${data.duration}ms)</h3>
+                        <pre>Status: ${data.status} ${data.statusText}</pre>
+                        <pre>Headers:\n${JSON.stringify(data.headers, null, 2)}</pre>
+                        <pre>Body:\n${data.body}</pre>
+                    `;
+
+                    // Add to history
+                    const historyItem = {
+                        ...currentRequest,
+                        response: data,
+                        timestamp: new Date().toISOString()
+                    };
+                    requestHistory.unshift(historyItem);
+                    updateHistoryList();
+                })
+                .catch(error => {
+                    const responseDetails = document.getElementById('responseDetails');
+                    responseDetails.innerHTML = `
+                        <h3>Error</h3>
+                        <pre>${error.toString()}</pre>
+                    `;
+                });
+        }
+
+        function updateHistoryList() {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '';
+            requestHistory.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.dataset.index = index;
+                li.textContent = `${item.method} ${item.url} - ${item.response?.status || 'Error'} (${new Date(item.timestamp).toLocaleTimeString()})`;
+                historyList.appendChild(li);
+            });
+        }
+
+        function loadFromHistory(e) {
+            if (e.target.tagName === 'LI') {
+                const index = parseInt(e.target.dataset.index);
+                currentRequest = {...requestHistory[index]};
+                updateRequestDisplay();
+            }
+        }
+    </script>
+</head>
+<body onload="init()">
+    <h1>HTTP Interactive Explorer</h1>
+    
+    <div>
+        <h2>Request Builder</h2>
+        <div>
+            <label>Method:
+                <select id="methodSelect">
+                    <option>GET</option>
+                    <option>POST</option>
+                    <option>PUT</option>
+                    <option>PATCH</option>
+                    <option>DELETE</option>
+                    <option>HEAD</option>
+                    <option>OPTIONS</option>
+                </select>
+            </label>
+        </div>
+        
+        <div>
+            <label>URL: <input type="text" id="urlInput" size="50"></label>
+        </div>
+        
+        <div>
+            <h3>Headers</h3>
+            <div id="headersContainer"></div>
+            <button id="addHeader">Add Header</button>
+        </div>
+        
+        <div>
+            <h3>Body</h3>
+            <textarea id="bodyInput" rows="10" cols="80"></textarea>
+        </div>
+        
+        <div>
+            <h3>Authentication</h3>
+            <label>Username: <input type="text" id="authUsername"></label>
+            <label>Password: <input type="password" id="authPassword"></label>
+        </div>
+        
+        <button id="sendRequest">Send Request</button>
+    </div>
+    
+    <div>
+        <h2>Request/Response</h2>
+        <div id="requestDetails"></div>
+        <div id="responseDetails"></div>
+    </div>
+    
+    <div>
+        <h2>History</h2>
+        <ul id="historyList"></ul>
+    </div>
+    
+    <div>
+        <h2>HTTP Concepts</h2>
+        <div>
+            <h3>Methods</h3>
+            <ul>
+                <li><strong>GET</strong> - Retrieve a resource</li>
+                <li><strong>POST</strong> - Create a resource</li>
+                <li><strong>PUT</strong> - Replace a resource</li>
+                <li><strong>PATCH</strong> - Partially update a resource</li>
+                <li><strong>DELETE</strong> - Remove a resource</li>
+                <li><strong>HEAD</strong> - Like GET but without body</li>
+                <li><strong>OPTIONS</strong> - Discover available methods</li>
+            </ul>
+        </div>
+        
+        <div>
+            <h3>Status Codes</h3>
+            <ul>
+                <li><strong>1xx</strong> - Informational</li>
+                <li><strong>2xx</strong> - Success (200 OK, 201 Created, 204 No Content)</li>
+                <li><strong>3xx</strong> - Redirection (301 Moved, 304 Not Modified)</li>
+                <li><strong>4xx</strong> - Client errors (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found)</li>
+                <li><strong>5xx</strong> - Server errors (500 Internal Server Error, 503 Service Unavailable)</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

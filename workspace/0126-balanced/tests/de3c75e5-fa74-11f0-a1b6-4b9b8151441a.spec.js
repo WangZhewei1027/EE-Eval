@@ -126,7 +126,7 @@ test.describe('Time Complexity Demonstration - FSM tests', () => {
       pageError = await pageObject.clickAndWaitForPageError(selector, 2000);
     } catch (err) {
       // No pageerror occurred within timeout. In that case, check whether the complexity box was updated.
-      const content = await pageObject.complexityBoxContent();
+      const content1 = await pageObject.complexityBoxContent();
       // If the function is defined, we expect the box to display 'O(1)'
       expect(content).toBe('O(1)');
       return;
@@ -147,14 +147,14 @@ test.describe('Time Complexity Demonstration - FSM tests', () => {
 
   test('Click "Show Linear Time" triggers transition or raises an error (expected ReferenceError if JS missing)', async () => {
     // Validate the transition for linear complexity button.
-    const selector = pageObject.selectors.showLinear;
+    const selector1 = pageObject.selectors.showLinear;
 
-    let pageError = null;
+    let pageError1 = null;
     try {
       pageError = await pageObject.clickAndWaitForPageError(selector, 2000);
     } catch (err) {
       // If no error, expect the DOM to have updated accordingly
-      const content = await pageObject.complexityBoxContent();
+      const content2 = await pageObject.complexityBoxContent();
       expect(content).toBe('O(n)');
       return;
     }
@@ -164,20 +164,20 @@ test.describe('Time Complexity Demonstration - FSM tests', () => {
       /ReferenceError|is not defined|displayComplexity/i.test(pageError.message)
     ).toBeTruthy();
 
-    const contentAfterError = await pageObject.complexityBoxContent();
+    const contentAfterError1 = await pageObject.complexityBoxContent();
     expect(contentAfterError !== 'O(n)').toBeTruthy();
   });
 
   test('Click "Show Quadratic Time" triggers transition or raises an error (expected ReferenceError if JS missing)', async () => {
     // Validate the transition for quadratic complexity button.
-    const selector = pageObject.selectors.showQuadratic;
+    const selector2 = pageObject.selectors.showQuadratic;
 
-    let pageError = null;
+    let pageError2 = null;
     try {
       pageError = await pageObject.clickAndWaitForPageError(selector, 2000);
     } catch (err) {
       // If no error, expect the DOM to have updated accordingly
-      const content = await pageObject.complexityBoxContent();
+      const content3 = await pageObject.complexityBoxContent();
       expect(content).toBe('O(n^2)');
       return;
     }
@@ -187,7 +187,7 @@ test.describe('Time Complexity Demonstration - FSM tests', () => {
       /ReferenceError|is not defined|displayComplexity/i.test(pageError.message)
     ).toBeTruthy();
 
-    const contentAfterError = await pageObject.complexityBoxContent();
+    const contentAfterError2 = await pageObject.complexityBoxContent();
     expect(contentAfterError !== 'O(n^2)').toBeTruthy();
   });
 
@@ -228,11 +228,11 @@ test.describe('Time Complexity Demonstration - FSM tests', () => {
         expect(/ReferenceError|is not defined|displayComplexity/i.test(err.message)).toBeTruthy();
       }
       // And ensure the complexity box is not set to one of the expected values (since calls errored)
-      const content = await pageObject.complexityBoxContent();
+      const content4 = await pageObject.complexityBoxContent();
       expect(['O(1)', 'O(n)', 'O(n^2)'].includes(content)).toBeFalsy();
     } else {
       // If no errors occurred, assert final state corresponds to last click (quadratic)
-      const content = await pageObject.complexityBoxContent();
+      const content5 = await pageObject.complexityBoxContent();
       expect(content).toBe('O(n^2)');
     }
   });
@@ -252,7 +252,7 @@ test.describe('Time Complexity Demonstration - FSM tests', () => {
     expect(failed).toBeTruthy();
 
     // Ensure the complexity box remains in a stable state (string or null)
-    const content = await pageObject.complexityBoxContent();
+    const content6 = await pageObject.complexityBoxContent();
     expect(typeof content === 'string' || content === null).toBeTruthy();
   });
 });

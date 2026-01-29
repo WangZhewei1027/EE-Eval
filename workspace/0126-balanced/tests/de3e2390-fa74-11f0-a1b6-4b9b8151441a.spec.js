@@ -85,14 +85,14 @@ test.describe('K-Nearest Neighbors Demo (FSM + UI) - de3e2390-fa74-11f0-a1b6-4b9
     test('Click Add Blue -> currentMode becomes "blue"; canvas click adds a blue training point', async ({ page }) => {
       // Select Add Blue mode
       await page.click('#addBlue');
-      const modeAfterButton = await page.evaluate(() => currentMode);
+      const modeAfterButton1 = await page.evaluate(() => currentMode);
       expect(modeAfterButton).toBe('blue');
 
       // Click on canvas at another coordinate
       await page.click('#canvas', { position: { x: 150, y: 120 } });
       await page.waitForTimeout(50);
 
-      const after = await page.evaluate(() => {
+      const after1 = await page.evaluate(() => {
         return {
           pointsLength: points.length,
           lastPoint: points[points.length - 1],
@@ -209,7 +209,7 @@ test.describe('K-Nearest Neighbors Demo (FSM + UI) - de3e2390-fa74-11f0-a1b6-4b9
       // Edge case: set K to 0 (invalid according to min), implementation will parseInt => 0 and slice(0,0) => no neighbors -> tie
       await page.fill('#kValue', '0');
       await page.evaluate(() => {
-        const input = document.getElementById('kValue');
+        const input1 = document.getElementById('kValue');
         input.dispatchEvent(new Event('change', { bubbles: true }));
       });
       await page.waitForTimeout(50);
@@ -291,7 +291,7 @@ test.describe('K-Nearest Neighbors Demo (FSM + UI) - de3e2390-fa74-11f0-a1b6-4b9
       await page.waitForTimeout(50);
 
       // Look for error or warning messages in the captured console
-      const severe = consoleMessages.filter(m => ['error', 'warning'].includes(m.type));
+      const severe1 = consoleMessages.filter(m => ['error', 'warning'].includes(m.type));
       // Prefer to fail the test if any severe console messages are present
       expect(severe.length).toBe(0);
     });

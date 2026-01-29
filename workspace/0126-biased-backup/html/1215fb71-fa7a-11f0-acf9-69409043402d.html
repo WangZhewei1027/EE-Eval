@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>B-Tree Index Interactive Demo</title>
+<style>
+  /* Extremely minimal styling: just ensure monospace font for code-like display */
+  body {
+    font-family: monospace, monospace;
+  }
+  button, input, select {
+    font-family: monospace;
+  }
+  #tree-display {
+    white-space: pre;
+    border: 1px solid black;
+    padding: 4px;
+    min-height: 200px;
+    max-height: 400px;
+    overflow: auto;
+  }
+  #log {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    padding: 4px;
+    min-height: 80px;
+    max-height: 150px;
+    overflow: auto;
+  }
+</style>
+</head>
+<body>
+<h1>B-Tree Index Interactive Demo</h1>
+
+<p>
+<b>Concept:</b> A B-Tree is a balanced tree data structure optimized for systems that read and write large blocks of data. It maintains sorted data and allows searches, sequential access, insertions, and deletions in logarithmic time.
+</p>
+
+<p>Use the controls below to build, modify, and explore a B-Tree Index. The current degree can be set. Keys are integers only.</p>
+
+<label for="degree-input">Degree (minimum degree t ≥ 2): </label>
+<input type="number" id="degree-input" min="2" value="3" />
+<button id="init-tree">Initialize New Empty B-Tree</button>
+
+<hr />
+
+<h2>Insert Keys</h2>
+<label for="insert-key">Key to insert:</label>
+<input type="number" id="insert-key" />
+<button id="insert-btn">Insert Key</button>
+
+<h2>Delete Keys</h2>
+<label for="delete-key">Key to delete:</label>
+<input type="number" id="delete-key" />
+<button id="delete-btn">Delete Key</button>
+
+<h2>Search Keys</h2>
+<label for="search-key">Key to search:</label>
+<input type="number" id="search-key" />
+<button id="search-btn">Search</button>
+
+<h2>Tree Visualization and Info</h2>
+<label for="display-mode">Display mode:</label>
+<select id="display-mode">
+  <option value="tree">Indented Tree</option>
+  <option value="list">All keys in-order (sorted list)</option>
+  <option value="paths">All Root-to-Leaf Paths</option>
+</select>
+<button id="refresh-display">Refresh Display</button>
+<div id="tree-display" tabindex="0" aria-label="B-Tree visualization area"></div>
+
+<h2>Advanced Operations and Controls</h2>
+
+<label for="bulk-keys">Bulk Insert (comma-separated integers):</label><br />
+<input type="text" id="bulk-keys" style="width:98%" />
+<button id="bulk-insert-btn">Bulk Insert</button>
+
+<button id="clear-tree">Clear Tree</button>
+
+<h3>Statistics and Analysis</h3>
+<button id="tree-stats-btn">Show Tree Statistics</button>
+<div id="stats-display" style="white-space: pre-wrap; border:1px solid black; padding:4px; min-height:50px; max-height:150px; overflow:auto;"></div>
+
+<h3>Step-By-Step Walkthrough</h3>
+<p>
+You can perform step-by-step insertion simulation. Enter keys, then advance one step at a time to see node splits and changes.
+</p>
+
+<label for="step-keys">Keys for Step Insert (comma-separated):</label><br />
+<input type="text" id="step-keys" style="width:98%" />
+<button id="step-start-btn">Start Step-By-Step Insert</button>
+<button id="step-next-btn" disabled>Next Step</button>
+<button id="step-reset-btn" disabled>Reset Step Insert</button>
+<div id="step-instructions" style="white-space: pre-wrap; border:1px solid black; padding:4px; min-height:70px; max-height:100px; overflow:auto;"></div>
+
+<hr />
+
+<h3>Raw B-Tree Data Access</h3>
+<button id="download-json">Download Tree Data (JSON)</button>
+<button id="load-json-btn">Load Tree Data (Paste JSON below)</button><br />
+<textarea id="json-input" rows="8" style="width:98%;"></textarea>
+<button id="load-json-confirm-btn" disabled>Load JSON Tree</button>
+
+<hr />
+
+<h3>Log (Operation History)</h3>
+<div id="log" tabindex="0" aria-label="Operation log"></div>
+<button id="clear-log-btn">Clear Log</button>
+
+<script>
+(function() {
+  // --- B-Tree Implementation based on minimum degree t ---
+  // A B-Tree node
+  function BTreeNode(t, leaf = false) {
+    this.t = t;            // Minimum degree
+    this.keys = [];        // Array of keys
+    this.children = [];    // Array of child pointers
+    this.leaf = leaf;      // Is true when node is leaf
+  }
+
+  BTreeNode.prototype.findKeyIndex = function(k) {
+    // Find the first key >= k
+    let idx = 0;
+    while (idx < this.keys.length && this.keys[idx] < k) idx++;
+    return idx;
+  };
+
+  BTreeNode.prototype.traverseIndent = function(level=0, lines=[]) {
+    // Display node keys + recursive children with indentation
+    let prefix = '  '.repeat(level);
+    let line = prefix + "[";
+    line += this.keys.join(' ');
+    line += "]";
+    lines.push(line);
+    for (let i = 0; i < this.children.length; i++) {
+      this.children[i].traverseIndent(level+1, lines);
+    }
+    return lines;
+  };
+
+  BTreeNode.prototype.traverseInOrder = function(arr=[]) {
+    // Inorder traversal
+    for (let i = 0; i < this.keys.length; i++) {
+      if (!this.leaf) this.children[i].traverseInOrder(arr);
+      arr.push(this.keys[i]);
+    }
+    if (!this.leaf) this.children[this.keys.length].traverseInOrder(arr);
+    return arr;
+  };
+
+  BTreeNode.prototype.traversePaths = function(currentPath=[], allPaths=[]) {
+    // Return all root to leaf paths as arrays of keys per node
+    let path = currentPath.slice();
+    path.push(this.keys.slice());
+    if(this.leaf) {
+      allPaths.push(path);
+    } else {
+      for(let i=0; i < this.children.length; i++) {
+        this.children[i].traversePaths(path, allPaths);
+      }
+    }
+    return allPaths;
+  };
+
+  // Search key k in subtree rooted with this node
+  BTreeNode.prototype.search = function(k) {
+    let i = 0;
+    while (i < this.keys.length && k > this.keys[i]) i++;
+
+    if (i < this.keys.length && this.keys[i] === k) {
+      return {node: this, index: i};
+    }
+
+    if (this.leaf) {
+      return null;
+    }
+
+    return this.children[i].search(k);
+  };
+
+  // Insert a key in a non-full node (assumes node is non-full)
+  BTreeNode.prototype.insertNonFull = function(k, logFn = ()=>{}) {
+    let i = this.keys.length - 1;
+
+    if (this.leaf) {
+      // Insert into leaf node in sorted order
+      while (i >=0 && this.keys[i] > k) i--;
+      if (this.keys[i] === k) {
+        logFn(`Warning: key ${k} already exists; ignoring duplicate insert.`);
+        return false;
+      }
+      this.keys.splice(i+1, 0, k);
+      logFn(`Inserted key ${k} in leaf node.`);
+      return true;
+    } else {
+      // Find child that will receive the key
+      while (i >=0 && this.keys[i] > k) i--;
+      i++;
+      // Check if child full
+      if (this.children[i].keys.length === 2*this.t -1) {
+        logFn(`Child ${i} full; need to split before insertion.`);
+        this.splitChild(i, logFn);
+        if (this.keys[i] < k) i++;
+      }
+      return this.children[i].insertNonFull(k, logFn);
+    }
+  };
+
+  // Split the child y of this node at index i.
+  BTreeNode.prototype.splitChild = function(i, logFn = ()=>{}) {
+    let t = this.t;
+    let y = this.children[i];
+    let z = new BTreeNode(t, y.leaf);
+
+    // z gets t-1 keys from y
+    z.keys = y.keys.splice(t);
+    if (!y.leaf) {
+      z.children = y.children.splice(t);
+    }
+
+    this.children.splice(i+1, 0, z);
+    let middleKey = y.keys.splice(t-1,1)[0];
+    this.keys.splice(i, 0, middleKey);
+
+    logFn(`Split child index ${i}. Promoted key ${middleKey}.`);
+  };
+
+  // Remove a key from the subtree rooted with this node
+  // Returns true if key removed, false if not found
+  BTreeNode.prototype.remove = function(k, logFn = ()=>{}) {
+    let idx = this.findKeyIndex(k);
+
+    if (idx < this.keys.length && this.keys[idx] === k) {
+      // Case 1: key is in this node (internal or leaf)
+      if (this.leaf) {
+        this.keys.splice(idx,1);
+        logFn(`Removed key ${k} from leaf node.`);
+        return true;
+      } else {
+        logFn(`Remove key ${k} from internal node - complex case.`);
+        return this.removeFromInternalNode(idx, logFn);
+      }
+    } else {
+      // Key not in this node
+      if (this.leaf) {
+        logFn(`Key ${k} not found in leaf node.`);
+        return false;
+      }
+
+      // Flag to know if key exists in subtree or not
+      let flag = (idx === this.keys.length);
+
+      if (this.children[idx].keys.length < this.t) {
+        this.fill(idx, logFn);
+      }
+
+      if (flag && idx > this.keys.length) {
+        return this.children[idx-1].remove(k, logFn);
+      } else {
+        return this.children[idx].remove(k, logFn);
+      }
+    }
+  };
+
+  // Remove key from internal node at idx
+  BTreeNode.prototype.removeFromInternalNode = function(idx, logFn = ()=>{}) {
+    let k = this.keys[idx];
+
+    if (this.children[idx].keys.length >= this.t) {
+      let pred = this.getPredecessor(idx);
+      this.keys[idx] = pred;
+      this.children[idx].remove(pred, logFn);
+      logFn(`Replaced key ${k} with predecessor ${pred}.`);
+      return true;
+    } else if (this.children[idx+1].keys.length >= this.t) {
+      let succ = this.getSuccessor(idx);
+      this.keys[idx] = succ;
+      this.children[idx+1].remove(succ, logFn);
+      logFn(`Replaced key ${k} with successor ${succ}.`);
+      return true;
+    } else {
+      this.merge(idx, logFn);
+      this.children[idx].remove(k, logFn);
+      logFn(`Merged children around key ${k} and removed key recursively.`);
+      return true;
+    }
+  };
+
+  BTreeNode.prototype.getPredecessor = function(idx) {
+    let cur = this.children[idx];
+    while (!cur.leaf) cur = cur.children[cur.keys.length];
+    return cur.keys[cur.keys.length -1];
+  };
+
+  BTreeNode.prototype.getSuccessor = function(idx) {
+    let cur = this.children[idx+1];
+    while (!cur.leaf) cur = cur.children[0];
+    return cur.keys[0];
+  };
+
+  BTreeNode.prototype.fill = function(idx, logFn = ()=>{}) {
+    if (idx !==0 && this.children[idx-1].keys.length >= this.t) {
+      this.borrowFromPrev(idx, logFn);
+    } else if (idx !== this.keys.length && this.children[idx+1].keys.length >= this.t) {
+      this.borrowFromNext(idx, logFn);
+    } else {
+      if (idx !== this.keys.length) {
+        this.merge(idx, logFn);
+      } else {
+        this.merge(idx-1, logFn);
+      }
+    }
+  };
+
+  BTreeNode.prototype.borrowFromPrev = function(idx, logFn = ()=>{}) {
+    let child = this.children[idx];
+    let sibling = this.children[idx-1];
+
+    child.keys.unshift(this.keys[idx-1]);
+    if (!child.leaf) {
+      child.children.unshift(sibling.children.pop());
+    }
+    this.keys[idx-1] = sibling.keys.pop();
+    logFn(`Borrowed key from previous sibling for child ${idx}.`);
+  };
+
+  BTreeNode.prototype.borrowFromNext = function(idx, logFn = ()=>{}) {
+    let child = this.children[idx];
+    let sibling = this.children[idx+1];
+
+    child.keys.push(this.keys[idx]);
+    if (!child.leaf) {
+      child.children.push(sibling.children.shift());
+    }
+    this.keys[idx] = sibling.keys.shift();
+    logFn(`Borrowed key from next sibling for child ${idx}.`);
+  };
+
+  BTreeNode.prototype.merge = function(idx, logFn = ()=>{}) {
+    let child = this.children[idx];
+    let sibling = this.children[idx+1];
+
+    child.keys.push(this.keys[idx]);
+    for (let k of sibling.keys) child.keys.push(k);
+    if (!child.leaf) {
+      for (let c of sibling.children) child.children.push(c);
+    }
+    this.keys.splice(idx, 1);
+    this.children.splice(idx+1, 1);
+    logFn(`Merged child ${idx} with sibling ${idx+1}.`);
+  };
+
+  // B-Tree main class
+  function BTree(t) {
+    this.t = t;
+    this.root = new BTreeNode(t, true);
+  }
+
+  BTree.prototype.search = function(k) {
+    if (!this.root) return null;
+    return this.root.search(k);
+  };
+
+  BTree.prototype.insert = function(k, logFn = ()=>{}) {
+    if (this.root.keys.length === 2*this.t -1) {
+      let s = new BTreeNode(this.t, false);
+      s.children.push(this.root);
+      this.root = s;
+      logFn("Root full, created new root and split.");
+      s.splitChild(0, logFn);
+      return s.insertNonFull(k, logFn);
+    } else {
+      return this.root.insertNonFull(k, logFn);
+    }
+  };
+
+  BTree.prototype.remove = function(k, logFn = ()=>{}) {
+    if (!this.root) {
+      logFn("The tree is empty.");
+      return false;
+    }
+    let res = this.root.remove(k, logFn);
+    if (this.root.keys.length === 0) {
+      if (this.root.leaf) {
+        this.root = null;
+        logFn("Tree is now empty after removal.");
+      } else {
+        this.root = this.root.children[0];
+        logFn("Changed root after removal.");
+      }
+    }
+    return res;
+  };
+
+  BTree.prototype.traverseIndent = function() {
+    if (!this.root) return ["(empty tree)"];
+    return this.root.traverseIndent();
+  };
+
+  BTree.prototype.traverseInOrder = function() {
+    if (!this.root) return [];
+    return this.root.traverseInOrder();
+  };
+
+  BTree.prototype.traversePaths = function() {
+    if (!this.root) return [];
+    return this.root.traversePaths();
+  };
+
+  BTree.prototype.size = function() {
+    function countKeys(node) {
+      if (!node) return 0;
+      let sum = node.keys.length;
+      for (let c of node.children) sum += countKeys(c);
+      return sum;
+    }
+    return countKeys(this.root);
+  };
+
+  BTree.prototype.height = function() {
+    function nodeHeight(node) {
+      if (!node) return 0;
+      if (node.leaf) return 1;
+      return 1 + nodeHeight(node.children[0]);
+    }
+    return nodeHeight(this.root);
+  };
+
+  // Expose BTree for use inside closure
+  let btree = null;
+  let logDiv = document.getElementById("log");
+  function log(...args) {
+    let msg = args.join(' ');
+    let d = new Date();
+    let ts = d.toLocaleTimeString();
+    logDiv.textContent += `[${ts}] ${msg}\n`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+  function clearLog() {
+    logDiv.textContent = "";
+  }
+
+  function validateDegreeInput() {
+    let degInput = document.getElementById("degree-input");
+    let val = parseInt(degInput.value);
+    if (isNaN(val) || val < 2) {
+      alert("Degree t must be an integer ≥ 2");
+      return null;
+    }
+    return val;
+  }
+
+  function refreshTreeDisplay() {
+    if (!btree) {
+      document.getElementById("tree-display").textContent = "(no tree initialized)";
+      return;
+    }
+    let mode = document.getElementById("display-mode").value;
+    let out = "";
+    if (mode === "tree") {
+      out = btree.traverseIndent().join("\n");
+    } else if (mode === "list") {
+      out = btree.traverseInOrder().join(", ");
+      if (out === "") out = "(tree empty)";
+    } else if (mode === "paths") {
+      let paths = btree.traversePaths();
+      if (paths.length === 0) {
+        out = "(tree empty)";
+      } else {
+        // Show all root to leaf paths: one per line, nodes keys separated by " -> "
+        // Each node displayed as [k1 k2 k3]
+        out = "";
+        for (let i=0;i<paths.length;i++) {
+          let p = paths[i].map(nodeKeys => "[" + nodeKeys.join(" ") + "]").join(" -> ");
+          out += `Path ${i+1}: ${p}\n`;
+        }
+      }
+    }
+    document.getElementById("tree-display").textContent = out;
+  }
+
+  // Clear the entire tree and reset
+  function clearTree() {
+    btree = null;
+    document.getElementById("tree-display").textContent = "(no tree initialized)";
+    document.getElementById("stats-display").textContent = "";
+    clearLog();
+    disableStepInsertControls(true);
+  }
+
+  // Show statistics
+  function showStats() {
+    if (!btree) {
+      document.getElementById("stats-display").textContent = "(no tree initialized)";
+      return;
+    }
+    let n = btree.size();
+    let h = btree.height();
+    let maxKeys = Math.pow(2*btree.t-1, h);
+    let s = `Tree statistics:\n`;
+    s += `Minimum degree (t): ${btree.t}\n`;
+    s += `Height: ${h}\n`;
+    s += `Number of keys stored: ${n}\n`;
+    s += `Max keys possible at height: ${maxKeys}\n`;
+    s += `Root keys count: ${btree.root ? btree.root.keys.length : 0}\n`;
+    document.getElementById("stats-display").textContent = s;
+  }
+
+  // Bulk insert keys: parse string as comma separated integers
+  function bulkInsertKeys(str) {
+    if (!btree) {
+      alert("Initialize the B-Tree first.");
+      return;
+    }
+    if (!str.trim()) {
+      alert("Input is empty");
+      return;
+    }
+    let parts = str.split(",");
+    let inserted = 0;
+    for(let p of parts) {
+      let k = parseInt(p.trim());
+      if (!isNaN(k)) {
+        if (btree.insert(k, log)) inserted++;
+      } else {
+        log(`Skipping invalid input: "${p.trim()}"`);
+      }
+    }
+    log(`Bulk inserted ${inserted} keys.`);
+    refreshTreeDisplay();
+  }
+
+  // Step-by-step insertion controls
+  let stepKeysBuffer = [];
+  let stepIndex = 0;
+  let stepBTree = null;
+  let stepLogLines = [];
+  let stepInProgress = false;
+  const stepInstructionsDiv = document.getElementById("step-instructions");
+  // Deep copy function for BTree - for resetting step insert
+  // Since structure is dynamic, and for simplicity, we rebuild a fresh BTree for steps
+
+  function disableStepInsertControls(disable) {
+    document.getElementById("step-next-btn").disabled = disable;
+    document.getElementById("step-reset-btn").disabled = disable;
+  }
+
+  // Step insert: Insert one key at a time, with logs
+  function stepStart() {
+    if (stepInProgress) {
+      alert("Step insert already in progress. Reset first.");
+      return;
+    }
+    let str = document.getElementById("step-keys").value;
+    if (!str.trim()) {
+      alert("Enter keys to insert for step-by-step.");
+      return;
+    }
+    let parts = str.split(",");
+    stepKeysBuffer = [];
+    for(let p of parts) {
+      let k = parseInt(p.trim());
+      if (isNaN(k)) {
+        alert(`Invalid integer in input: "${p.trim()}"`);
+        return;
+      }
+      stepKeysBuffer.push(k);
+    }
+    if(stepKeysBuffer.length === 0) {
+      alert("No valid keys to insert.");
+      return;
+    }
+    let t = validateDegreeInput();
+    if (t === null) return;
+    stepBTree = new BTree(t);
+    stepIndex = 0;
+    stepLogLines = [];
+    stepInProgress = true;
+    document.getElementById("tree-display").textContent = "(empty tree)";
+    stepInstructionsDiv.textContent = "Step-by-step insertion started.\nPress 'Next Step' to insert the first key.";
+    disableStepInsertControls(false);
+  }
+
+  // Step insert next key
+  function stepNext() {
+    if (!stepInProgress) {
+      alert("No step insertion in progress.");
+      return;
+    }
+    if (stepIndex >= stepKeysBuffer.length) {
+      stepInstructionsDiv.textContent += "\nAll keys inserted.";
+      disableStepInsertControls(true);
+      stepInProgress = false;
+      // Update the global btree to the step btree after completion
+      btree = stepBTree;
+      refreshTreeDisplay();
+      log("Step-by-step insert finished; tree updated.");
+      return;
+    }
+
+    let key = stepKeysBuffer[stepIndex];
+    stepLogLines.length = 0;
+    function stepLog(s) {
+      stepLogLines.push(s);
+    }
+    stepLog(`Inserting key ${key}...`);
+    stepBTree.insert(key, stepLog);
+
+    // Display tree under current step
+    let visual = stepBTree.traverseIndent().join("\n");
+
+    document.getElementById("tree-display").textContent = visual;
+    stepInstructionsDiv.textContent = stepLogLines.join("\n") + `\n\nInserted ${stepIndex+1} / ${stepKeysBuffer.length} keys.`;
+
+    stepIndex++;
+  }
+
+  // Reset step insertion session
+  function stepReset() {
+    stepBTree = null;
+    stepKeysBuffer = [];
+    stepIndex = 0;
+    stepLogLines = [];
+    stepInProgress = false;
+    stepInstructionsDiv.textContent = "Step-by-step insertion reset.";
+    document.getElementById("tree-display").textContent = "(no tree initialized)";
+    disableStepInsertControls(true);
+  }
+
+  // JSON download and load tree
+  function downloadJSON() {
+    if (!btree) {
+      alert("Initialize the tree first.");
+      return;
+    }
+    // Simple serialization function
+    function serializeNode(node) {
+      if (!node) return null;
+      return {
+        t: node.t,
+        keys: node.keys,
+        leaf: node.leaf,
+        children: node.children.map(serializeNode)
+      };
+    }
+    let data = {
+      t: btree.t,
+      root: serializeNode(btree.root)
+    };
+    let jsonStr = JSON.stringify(data, null, 2);
+    let blob = new Blob([jsonStr], {type: "application/json"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "btree.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function enableLoadJSONBtn() {
+    let txt = document.getElementById("json-input").value.trim();
+    document.getElementById("load-json-confirm-btn").disabled = (txt.length===0);
+  }
+
+  function loadJSONTree() {
+    let txt = document.getElementById("json-input").value.trim();
+    if (txt.length === 0) {
+      alert("No JSON data provided");
+      return;
+    }
+    let obj = null;
+    try {
+      obj = JSON.parse(txt);
+    } catch(e) {
+      alert("Invalid JSON: " + e.message);
+      return;
+    }
+    if (!obj.t || !obj.root) {
+      alert("Invalid B-Tree JSON data; missing 't' or 'root'");
+      return;
+    }
+    function deserializeNode(data) {
+      if (!data) return null;
+      let node = new BTreeNode(data.t, data.leaf);
+      node.keys = data.keys;
+      node.children = [];
+      if (!data.leaf) {
+        for (let c of data.children) {
+          node.children.push(deserializeNode(c));
+        }
+      }
+      return node;
+    }
+    btree = new BTree(obj.t);
+    btree.root = deserializeNode(obj.root);
+    log("Loaded B-Tree from JSON input.");
+    refreshTreeDisplay();
+    showStats();
+  }
+
+  // Event Listeners and Initialization
+
+  document.getElementById("init-tree").addEventListener("click", function() {
+    let t = validateDegreeInput();
+    if (t === null) return;
+    btree = new BTree(t);
+    document.getElementById("tree-display").textContent = "(empty tree)";
+    document.getElementById("stats-display").textContent = "";
+    log(`Initialized new empty B-Tree with degree t=${t}`);
+    disableStepInsertControls(true);
+  });
+
+  document.getElementById("insert-btn").addEventListener("click", function() {
+    if (!btree) {
+      alert("Initialize the B-Tree first.");
+      return;
+    }
+    let val = parseInt(document.getElementById("insert-key").value);
+    if (isNaN(val)) {
+      alert("Enter a valid integer key to insert.");
+      return;
+    }
+    if (btree.insert(val, log)) {
+      log(`Inserted key ${val} successfully.`);
+    } else {
+      log(`Failed to insert key ${val}. Possibly duplicate.`);
+    }
+    refreshTreeDisplay();
+  });
+
+  document.getElementById("delete-btn").addEventListener("click", function() {
+    if (!btree) {
+      alert("Initialize the B-Tree first.");
+      return;
+    }
+    let val = parseInt(document.getElementById("delete-key").value);
+    if (isNaN(val)) {
+      alert("Enter a valid integer key to delete.");
+      return;
+    }
+    if (btree.remove(val, log)) {
+      log(`Deleted key ${val} successfully.`);
+    } else {
+      log(`Key ${val} not found in tree.`);
+    }
+    refreshTreeDisplay();
+  });
+
+  document.getElementById("search-btn").addEventListener("click", function() {
+    if (!btree) {
+      alert("Initialize the B-Tree first.");
+      return;
+    }
+    let val = parseInt(document.getElementById("search-key").value);
+    if (isNaN(val)) {
+      alert("Enter a valid integer key to search.");
+      return;
+    }
+    let res = btree.search(val);
+    if (res) {
+      log(`Key ${val} found in node with keys: [${res.node.keys.join(" ")}]`);
+    } else {
+      log(`Key ${val} not found in tree.`);
+    }
+  });
+
+  document.getElementById("refresh-display").addEventListener("click", function() {
+    refreshTreeDisplay();
+  });
+
+  document.getElementById("bulk-insert-btn").addEventListener("click", function() {
+    if (!btree) {
+      alert("Initialize the B-Tree first.");
+      return;
+    }
+    let str = document.getElementById("bulk-keys").value;
+    bulkInsertKeys(str);
+  });
+
+  document.getElementById("clear-tree").addEventListener("click", function() {
+    if (!confirm("Clear the current tree and all data?")) return;
+    clearTree();
+  });
+
+  document.getElementById("tree-stats-btn").addEventListener("click", function() {
+    showStats();
+  });
+
+  document.getElementById("step-start-btn").addEventListener("click", function() {
+    stepStart();
+  });
+
+  document.getElementById("step-next-btn").addEventListener("click", function() {
+    stepNext();
+  });
+
+  document.getElementById("step-reset-btn").addEventListener("click", function() {
+    stepReset();
+  });
+
+  document.getElementById("download-json").addEventListener("click", function() {
+    downloadJSON();
+  });
+
+  document.getElementById("load-json-btn").addEventListener("click", function() {
+    let area = document.getElementById("json-input");
+    area.focus();
+  });
+
+  document.getElementById("json-input").addEventListener("input", function() {
+    enableLoadJSONBtn();
+  });
+
+  document.getElementById("load-json-confirm-btn").addEventListener("click", function() {
+    loadJSONTree();
+    this.disabled = true;
+  });
+
+  document.getElementById("clear-log-btn").addEventListener("click", function() {
+    clearLog();
+  });
+
+  // Initialize page controls states and displays
+  disableStepInsertControls(true);
+  document.getElementById("tree-display").textContent = "(no tree initialized)";
+  log("Page loaded. Initialize a B-Tree to begin.");
+
+})();
+</script>
+</body>
+</html>

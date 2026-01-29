@@ -107,7 +107,7 @@ test.describe('PageRank Demonstration (FSM validation)', () => {
   test('S1_Calculating and return to S0_Idle: clicking Calculate PageRank computes ranks and draws graph', async ({ page }) => {
     // This test validates the transition S0_Idle -> S1_Calculating when the user clicks the button,
     // and the S1_Calculating exit actions displayRanks(ranks) and drawGraph(ranks).
-    const app = new PageRankPage(page);
+    const app1 = new PageRankPage(page);
     await app.goto();
 
     // Capture canvas state before calculation
@@ -141,7 +141,7 @@ test.describe('PageRank Demonstration (FSM validation)', () => {
 
   test('Repeated calculations: clicking Calculate multiple times updates DOM and canvas without throwing', async ({ page }) => {
     // This test validates stability when the Calculate PageRank action is invoked multiple times
-    const app = new PageRankPage(page);
+    const app2 = new PageRankPage(page);
     await app.goto();
 
     // Run calculation once
@@ -169,7 +169,7 @@ test.describe('PageRank Demonstration (FSM validation)', () => {
 
   test('Runtime functions exist on window and can be invoked programmatically', async ({ page }) => {
     // This test checks for the existence of the named functions (onEnter/onExit in FSM mapped names)
-    const app = new PageRankPage(page);
+    const app3 = new PageRankPage(page);
     await app.goto();
 
     const types = await app.functionsExist();
@@ -194,7 +194,7 @@ test.describe('PageRank Demonstration (FSM validation)', () => {
     // This test intentionally triggers an unhandled runtime error to validate error observation.
     // It schedules a call to drawGraph() without arguments inside a setTimeout so the error is unhandled
     // and surfaces as a pageerror event rather than being caught by the evaluate() call.
-    const app = new PageRankPage(page);
+    const app4 = new PageRankPage(page);
     await app.goto();
 
     // Ensure no prior errors
@@ -226,7 +226,7 @@ test.describe('PageRank Demonstration (FSM validation)', () => {
 
   test('Console messages and page errors capturing behavior', async ({ page }) => {
     // This test demonstrates capturing and asserting console output and page errors arrays.
-    const app = new PageRankPage(page);
+    const app5 = new PageRankPage(page);
     await app.goto();
 
     // No messages initially

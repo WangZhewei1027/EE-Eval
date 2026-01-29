@@ -141,7 +141,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
   test.describe('FSM State: S0_Idle (Initial)', () => {
     test('initial page shows idle message and empty table (updateTable on enter)', async ({ page }) => {
       // Validate the Idle state's entry action updateTable() produced the empty-table message
-      const htPage = new HashTablePage(page);
+      const htPage1 = new HashTablePage(page);
       await htPage.goto();
 
       // Output area initial content
@@ -149,7 +149,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
       expect(output).toContain('Insert some key-value pairs', 'Initial output should prompt the user');
 
       // Table should indicate empty
-      const entries = await htPage.getTableEntries();
+      const entries1 = await htPage.getTableEntries();
       expect(entries.length).toBeGreaterThan(0);
       // The first row should have the empty message
       expect(entries[0].emptyMessage).toMatch(/Hash table is empty/i);
@@ -159,7 +159,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
   test.describe('FSM Transition: InsertUpdate -> S1_Inserted', () => {
     test('inserting a new key-value pair updates the table and shows inserted message', async ({ page }) => {
       // This test validates the InsertUpdate event and S1_Inserted evidence and entry action updateTable()
-      const htPage = new HashTablePage(page);
+      const htPage2 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('foo');
@@ -167,14 +167,14 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
       await htPage.clickInsert();
 
       // Check output message and style (success)
-      const output = await htPage.getOutputText();
+      const output1 = await htPage.getOutputText();
       expect(output).toBe('Inserted new key: "foo" -> "bar"');
 
       const color = await htPage.getOutputColor();
       expect(colorIsGreen(color), `Expected success message color to look like green but got "${color}"`).toBeTruthy();
 
       // Table updated: should contain the inserted pair
-      const entries = await htPage.getTableEntries();
+      const entries2 = await htPage.getTableEntries();
       // Expect at least one row with key foo and value bar
       const found = entries.some(e => e.key === 'foo' && e.value === 'bar');
       expect(found, 'Table should contain the inserted key-value pair').toBeTruthy();
@@ -182,7 +182,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
 
     test('updating an existing key returns Updated existing key and table reflects new value', async ({ page }) => {
       // Insert then update same key
-      const htPage = new HashTablePage(page);
+      const htPage3 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('dup');
@@ -194,29 +194,29 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
       await htPage.setValue('two');
       await htPage.clickInsert();
 
-      const output = await htPage.getOutputText();
+      const output2 = await htPage.getOutputText();
       expect(output).toBe('Updated existing key: "dup" -> "two"');
 
-      const color = await htPage.getOutputColor();
+      const color1 = await htPage.getOutputColor();
       expect(colorIsGreen(color)).toBeTruthy();
 
-      const entries = await htPage.getTableEntries();
-      const found = entries.some(e => e.key === 'dup' && e.value === 'two');
+      const entries3 = await htPage.getTableEntries();
+      const found1 = entries.some(e => e.key === 'dup' && e.value === 'two');
       expect(found).toBeTruthy();
     });
 
     test('insert edge cases: empty key or empty value produce error messages', async ({ page }) => {
-      const htPage = new HashTablePage(page);
+      const htPage4 = new HashTablePage(page);
       await htPage.goto();
 
       // Empty key
       await htPage.setKey('');
       await htPage.setValue('val');
       await htPage.clickInsert();
-      let output = await htPage.getOutputText();
+      let output3 = await htPage.getOutputText();
       expect(output).toBe('Please enter a key to insert/update.');
 
-      let color = await htPage.getOutputColor();
+      let color2 = await htPage.getOutputColor();
       expect(colorIsCrimson(color), 'Expected error message color for empty key').toBeTruthy();
 
       // Empty value
@@ -234,7 +234,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
   test.describe('FSM Transition: Search -> S2_SearchResult', () => {
     test('searching an existing key displays Found message', async ({ page }) => {
       // Insert a key then search it
-      const htPage = new HashTablePage(page);
+      const htPage5 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('seek');
@@ -244,38 +244,38 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
       await htPage.setKey('seek');
       await htPage.clickSearch();
 
-      const output = await htPage.getOutputText();
+      const output4 = await htPage.getOutputText();
       expect(output).toBe('Found: "seek" -> "target"');
 
-      const color = await htPage.getOutputColor();
+      const color3 = await htPage.getOutputColor();
       expect(colorIsGreen(color)).toBeTruthy();
     });
 
     test('searching a non-existent key displays not-found error', async ({ page }) => {
-      const htPage = new HashTablePage(page);
+      const htPage6 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('missing-key-xyz');
       await htPage.clickSearch();
 
-      const output = await htPage.getOutputText();
+      const output5 = await htPage.getOutputText();
       expect(output).toBe('Key "missing-key-xyz" not found in hash table.');
 
-      const color = await htPage.getOutputColor();
+      const color4 = await htPage.getOutputColor();
       expect(colorIsCrimson(color)).toBeTruthy();
     });
 
     test('search edge case: empty key shows appropriate error', async ({ page }) => {
-      const htPage = new HashTablePage(page);
+      const htPage7 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('');
       await htPage.clickSearch();
 
-      const output = await htPage.getOutputText();
+      const output6 = await htPage.getOutputText();
       expect(output).toBe('Please enter a key to search.');
 
-      const color = await htPage.getOutputColor();
+      const color5 = await htPage.getOutputColor();
       expect(colorIsCrimson(color)).toBeTruthy();
     });
   });
@@ -283,7 +283,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
   test.describe('FSM Transition: Delete -> S3_Deleted', () => {
     test('deleting an existing key removes it and updateTable is called', async ({ page }) => {
       // Insert then delete
-      const htPage = new HashTablePage(page);
+      const htPage8 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('willDelete');
@@ -291,16 +291,16 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
       await htPage.clickInsert();
 
       // Ensure present
-      let entries = await htPage.getTableEntries();
+      let entries4 = await htPage.getTableEntries();
       expect(entries.some(e => e.key === 'willDelete')).toBeTruthy();
 
       await htPage.setKey('willDelete');
       await htPage.clickDelete();
 
-      const output = await htPage.getOutputText();
+      const output7 = await htPage.getOutputText();
       expect(output).toBe('Deleted key "willDelete" from hash table.');
 
-      const color = await htPage.getOutputColor();
+      const color6 = await htPage.getOutputColor();
       expect(colorIsGreen(color)).toBeTruthy();
 
       // Table should no longer contain the key
@@ -316,30 +316,30 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
     });
 
     test('deleting a non-existent key shows not-found error', async ({ page }) => {
-      const htPage = new HashTablePage(page);
+      const htPage9 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('no-such-key-123');
       await htPage.clickDelete();
 
-      const output = await htPage.getOutputText();
+      const output8 = await htPage.getOutputText();
       expect(output).toBe('Key "no-such-key-123" not found in hash table.');
 
-      const color = await htPage.getOutputColor();
+      const color7 = await htPage.getOutputColor();
       expect(colorIsCrimson(color)).toBeTruthy();
     });
 
     test('delete edge case: empty key shows appropriate error', async ({ page }) => {
-      const htPage = new HashTablePage(page);
+      const htPage10 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('');
       await htPage.clickDelete();
 
-      const output = await htPage.getOutputText();
+      const output9 = await htPage.getOutputText();
       expect(output).toBe('Please enter a key to delete.');
 
-      const color = await htPage.getOutputColor();
+      const color8 = await htPage.getOutputColor();
       expect(colorIsCrimson(color)).toBeTruthy();
     });
   });
@@ -347,7 +347,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
   test.describe('FSM Transition: Clear -> S4_Cleared', () => {
     test('clearing the hash table removes all entries and updates the view', async ({ page }) => {
       // Insert multiple keys then clear
-      const htPage = new HashTablePage(page);
+      const htPage11 = new HashTablePage(page);
       await htPage.goto();
 
       await htPage.setKey('one');
@@ -359,17 +359,17 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
       await htPage.clickInsert();
 
       // Ensure there are entries
-      let entries = await htPage.getTableEntries();
+      let entries5 = await htPage.getTableEntries();
       expect(entries.some(e => e.key === 'one')).toBeTruthy();
       expect(entries.some(e => e.key === 'two')).toBeTruthy();
 
       // Clear table
       await htPage.clickClear();
 
-      const output = await htPage.getOutputText();
+      const output10 = await htPage.getOutputText();
       expect(output).toBe('Cleared the entire hash table.');
 
-      const color = await htPage.getOutputColor();
+      const color9 = await htPage.getOutputColor();
       expect(colorIsGreen(color)).toBeTruthy();
 
       // Table should show empty message
@@ -382,7 +382,7 @@ test.describe('Hash Table Demo - FSM comprehensive tests', () => {
   test.describe('Observability and state/evidence validation', () => {
     test('UI messages contain the expected evidence strings after operations', async ({ page }) => {
       // This test ensures that the textual evidence described in the FSM appears in the UI output
-      const htPage = new HashTablePage(page);
+      const htPage12 = new HashTablePage(page);
       await htPage.goto();
 
       // Insert evidence

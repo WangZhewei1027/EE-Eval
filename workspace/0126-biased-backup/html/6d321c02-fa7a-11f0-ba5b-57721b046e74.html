@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Compiler</title>
+    <style>
+        body {
+            font-family: monospace;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        .panel {
+            border: 1px solid #000;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            font-family: monospace;
+        }
+        button {
+            margin: 5px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 5px;
+            text-align: left;
+        }
+        .hidden {
+            display: none;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .tab {
+            padding: 5px 10px;
+            cursor: pointer;
+            border: 1px solid #000;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background: #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Compiler</h1>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('editor')">Editor</div>
+        <div class="tab" onclick="switchTab('lexer')">Lexer</div>
+        <div class="tab" onclick="switchTab('parser')">Parser</div>
+        <div class="tab" onclick="switchTab('optimizer')">Optimizer</div>
+        <div class="tab" onclick="switchTab('codegen')">Code Generation</div>
+    </div>
+    
+    <div id="editor-panel" class="panel">
+        <h2>Source Code Editor</h2>
+        <textarea id="source-code">function add(a, b) {
+    return a + b;
+}
+
+let x = 5;
+let y = 10;
+let z = add(x, y);</textarea>
+        <div>
+            <button onclick="compile()">Compile</button>
+            <button onclick="reset()">Reset</button>
+            <select id="language" onchange="changeLanguage()">
+                <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="c">C</option>
+            </select>
+            <label><input type="checkbox" id="optimize" checked> Optimize</label>
+        </div>
+    </div>
+    
+    <div id="lexer-panel" class="panel hidden">
+        <h2>Lexer Output</h2>
+        <div>
+            <button onclick="stepLexer()">Step</button>
+            <button onclick="runLexer()">Run All</button>
+            <span id="lexer-status">Ready</span>
+        </div>
+        <table id="tokens">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Value</th>
+                    <th>Line</th>
+                    <th>Column</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    
+    <div id="parser-panel" class="panel hidden">
+        <h2>Parser Output</h2>
+        <div>
+            <button onclick="stepParser()">Step</button>
+            <button onclick="runParser()">Run All</button>
+            <span id="parser-status">Ready</span>
+        </div>
+        <div id="ast-output"></div>
+    </div>
+    
+    <div id="optimizer-panel" class="panel hidden">
+        <h2>Optimizer</h2>
+        <div>
+            <button onclick="optimize()">Run Optimizer</button>
+            <div>
+                <label><input type="checkbox" id="opt-constant-folding" checked> Constant Folding</label>
+                <label><input type="checkbox" id="opt-dead-code" checked> Dead Code Elimination</label>
+                <label><input type="checkbox" id="opt-inlining" checked> Function Inlining</label>
+            </div>
+        </div>
+        <div id="optimizer-before"></div>
+        <div id="optimizer-after"></div>
+    </div>
+    
+    <div id="codegen-panel" class="panel hidden">
+        <h2>Code Generation</h2>
+        <div>
+            <button onclick="generateCode()">Generate Code</button>
+            <select id="target" onchange="changeTarget()">
+                <option value="x86">x86 Assembly</option>
+                <option value="arm">ARM Assembly</option>
+                <option value="llvm">LLVM IR</option>
+            </select>
+        </div>
+        <textarea id="generated-code" readonly></textarea>
+    </div>
+    
+    <script>
+        // Global state
+        let tokens = [];
+        let currentToken = 0;
+        let ast = null;
+        let optimizedAst = null;
+        // Language definitions
+        const languages = {
+            javascript: {
+                keywords: ['function', 'return', 'let', 'const', 'var'],
+                operators: ['+', '-', '*', '/', '=', '==', '===', '!=', '!=='],
+                punctuation: ['(', ')', '{', '}', ';', ','],
+                lex: function(src) {
+                    return lexJavaScript(src);
+                },
+                parse: function(tokens) {
+                    return parseJavaScript(tokens);
+                }
+            },
+            python: {
+                keywords: ['def', 'return', 'if', 'else', 'for', 'while'],
+                operators: ['+', '-', '*', '/', '=', '==', '!=', '<', '>'],
+                punctuation: ['(', ')', ':', '\n', ',', '[', ']'],
+                lex: function(src) {
+                    return lexPython(src);
+                },
+                parse: function(tokens) {
+                    return parsePython(tokens);
+                }
+            },
+            c: {
+                keywords: ['int', 'float', 'char', 'return', 'if', 'else', 'for', 'while'],
+                operators: ['+', '-', '*', '/', '=', '==', '!=', '<', '>', '++', '--'],
+                punctuation: ['(', ')', '{', '}', ';', ',', '[', ']'],
+                lex: function(src) {
+                    return lexC(src);
+                },
+                parse: function(tokens) {
+                    return parseC(tokens);
+                }
+            }
+        };
+        
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabName + '-panel').classList.remove('hidden');
+            document.querySelector(`.tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+        }
+        
+        // Compilation pipeline
+        function compile() {
+            const source = document.getElementById('source-code').value;
+            const lang = document.getElementById('language').value;
+            
+            // Lexing
+            tokens = languages[lang].lex(source);
+            currentToken = 0;
+            renderTokens();
+            switchTab('lexer');
+        }
+        
+        function reset() {
+            document.getElementById('source-code').value = `function add(a, b) {
+    return a + b;
+}
+
+let x = 5;
+let y = 10;
+let z = add(x, y);`;
+            document.getElementById('lexer-status').textContent = 'Ready';
+            document.getElementById('parser-status').textContent = 'Ready';
+            document.getElementById('tokens').querySelector('tbody').innerHTML = '';
+            document.getElementById('ast-output').innerHTML = '';
+            document.getElementById('optimizer-before').innerHTML = '';
+            document.getElementById('optimizer-after').innerHTML = '';
+            document.getElementById('generated-code').value = '';
+            tokens = [];
+            ast = null;
+            optimizedAst = null;
+            switchTab('editor');
+        }
+        
+        // Lexer functions
+        function lexJavaScript(src) {
+            const tokens = [];
+            let pos = 0;
+            let line = 1;
+            let col = 1;
+            
+            const lang = languages.javascript;
+            
+            while (pos < src.length) {
+                let ch = src[pos];
+                
+                // Whitespace
+                if (ch === ' ' || ch === '\t') {
+                    pos++;
+                    col++;
+                    continue;
+                }
+                
+                // Newline
+                if (ch === '\n') {
+                    pos++;
+                    line++;
+                    col = 1;
+                    continue;
+                }
+                
+                // Comments
+                if (ch === '/' && src[pos+1] === '/') {
+                    while (pos < src.length && src[pos] !== '\n') {
+                        pos++;
+                        col++;
+                    }
+                    continue;
+                }
+                
+                // Multi-line comments
+                if (ch === '/' && src[pos+1] === '*') {
+                    pos += 2;
+                    col += 2;
+                    while (pos < src.length && !(src[pos] === '*' && src[pos+1] === '/')) {
+                        if (src[pos] === '\n') {
+                            line++;
+                            col = 1;
+                        } else {
+                            col++;
+                        }
+                        pos++;
+                    }
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                
+                // Strings
+                if (ch === '"' || ch === "'") {
+                    const quote = ch;
+                    let value = '';
+                    pos++;
+                    col++;
+                    
+                    while (pos < src.length && src[pos] !== quote) {
+                        if (src[pos] === '\\') {
+                            value += src[pos] + src[pos+1];
+                            pos += 2;
+                            col += 2;
+                        } else {
+                            value += src[pos];
+                            pos++;
+                            col++;
+                        }
+                    }
+                    
+                    pos++;
+                    col++;
+                    tokens.push({ type: 'string', value: quote + value + quote, line, col });
+                    continue;
+                }
+                
+                // Numbers
+                if (/[0-9]/.test(ch)) {
+                    let value = '';
+                    while (pos < src.length && /[0-9.]/.test(src[pos])) {
+                        value += src[pos];
+                        pos++;
+                        col++;
+                    }
+                    tokens.push({ type: 'number', value, line, col });
+                    continue;
+                }
+                
+                // Identifiers and keywords
+                if (/[a-zA-Z_]/.test(ch)) {
+                    let value = '';
+                    while (pos < src.length && /[a-zA-Z0-9_]/.test(src[pos])) {
+                        value += src[pos];
+                        pos++;
+                        col++;
+                    }
+                    
+                    if (lang.keywords.includes(value)) {
+                        tokens.push({ type: 'keyword', value, line, col });
+                    } else {
+                        tokens.push({ type: 'identifier', value, line, col });
+                    }
+                    continue;
+                }
+                
+                // Operators
+                let foundOp = false;
+                for (const op of lang.operators) {
+                    if (src.substr(pos, op.length) === op) {
+                        tokens.push({ type: 'operator', value: op, line, col });
+                        pos += op.length;
+                        col += op.length;
+                        foundOp = true;
+                        break;
+                    }
+                }
+                if (foundOp) continue;
+                
+                // Punctuation
+                if (lang.punctuation.includes(ch)) {
+                    tokens.push({ type: 'punctuation', value: ch, line, col });
+                    pos++;
+                    col++;
+                    continue;
+                }
+                
+                // Unknown character
+                tokens.push({ type: 'unknown', value: ch, line, col });
+                pos++;
+                col++;
+            }
+            
+            return tokens;
+        }
+        
+        function lexPython(src) {
+            // Simplified Python lexer
+            const tokens = [];
+            let pos = 0;
+            let line = 1;
+            let col = 1;
+            
+            const lang = languages.python;
+            
+            while (pos < src.length) {
+                let ch = src[pos];
+                
+                // Whitespace
+                if (ch === ' ' || ch === '\t') {
+                    pos++;
+                    col++;
+                    continue;
+                }
+                
+                // Newline
+                if (ch === '\n') {
+                    tokens.push({ type: 'punctuation', value: '\n', line, col });
+                    pos++;
+                    line++;
+                    col = 1;
+                    continue;
+                }
+                
+                // Comments
+                if (ch === '#') {
+                    while (pos < src.length && src[pos] !== '\n') {
+                        pos++;
+                        col++;
+                    }
+                    continue;
+                }
+                
+                // Strings
+                if (ch === '"' || ch === "'") {
+                    const quote = ch;
+                    let value = '';
+                    pos++;
+                    col++;
+                    
+                    while (pos < src.length && src[pos] !== quote) {
+                        if (src[pos] === '\\') {
+                            value += src[pos] + src[pos+1];
+                            pos += 2;
+                            col += 2;
+                        } else {
+                            value += src[pos];
+                            pos++;
+                            col++;
+                        }
+                    }
+                    
+                    pos++;
+                    col++;
+                    tokens.push({ type: 'string', value: quote + value + quote, line, col });
+                    continue;
+                }
+                
+                // Numbers
+                if (/[0-9]/.test(ch)) {
+                    let value = '';
+                    while (pos < src.length && /[0-9.]/.test(src[pos])) {
+                        value += src[pos];
+                        pos++;
+                        col++;
+                    }
+                    tokens.push({ type: 'number', value, line, col });
+                    continue;
+                }
+                
+                // Identifiers and keywords
+                if (/[a-zA-Z_]/.test(ch)) {
+                    let value = '';
+                    while (pos < src.length && /[a-zA-Z0-9_]/.test(src[pos])) {
+                        value += src[pos];
+                        pos++;
+                        col++;
+                    }
+                    
+                    if (lang.keywords.includes(value)) {
+                        tokens.push({ type: 'keyword', value, line, col });
+                    } else {
+                        tokens.push({ type: 'identifier', value, line, col });
+                    }
+                    continue;
+                }
+                
+                // Operators
+                let foundOp = false;
+                for (const op of lang.operators) {
+                    if (src.substr(pos, op.length) === op) {
+                        tokens.push({ type: 'operator', value: op, line, col });
+                        pos += op.length;
+                        col += op.length;
+                        foundOp = true;
+                        break;
+                    }
+                }
+                if (foundOp) continue;
+                
+                // Punctuation
+                if (lang.punctuation.includes(ch)) {
+                    tokens.push({ type: 'punctuation', value: ch, line, col });
+                    pos++;
+                    col++;
+                    continue;
+                }
+                
+                // Unknown character
+                tokens.push({ type: 'unknown', value: ch, line, col });
+                pos++;
+                col++;
+            }
+            
+            return tokens;
+        }
+        
+        function lexC(src) {
+            // Simplified C lexer
+            const tokens = [];
+            let pos = 0;
+            let line = 1;
+            let col = 1;
+            
+            const lang = languages.c;
+            
+            while (pos < src.length) {
+                let ch = src[pos];
+                
+                // Whitespace
+                if (ch === ' ' || ch === '\t') {
+                    pos++;
+                    col++;
+                    continue;
+                }
+                
+                // Newline
+                if (ch === '\n') {
+                    pos++;
+                    line++;
+                    col = 1;
+                    continue;
+                }
+                
+                // Comments
+                if (ch === '/' && src[pos+1] === '/') {
+                    while (pos < src.length && src[pos] !== '\n') {
+                        pos++;
+                        col++;
+                    }
+                    continue;
+                }
+                
+                // Multi-line comments
+                if (ch === '/' && src[pos+1] === '*') {
+                    pos += 2;
+                    col += 2;
+                    while (pos < src.length && !(src[pos] === '*' && src[pos+1] === '/')) {
+                        if (src[pos] === '\n') {
+                            line++;
+                            col = 1;
+                        } else {
+                            col++;
+                        }
+                        pos++;
+                    }
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                
+                // Strings
+                if (ch === '"') {
+                    let value = '';
+                    pos++;
+                    col++;
+                    
+                    while (pos < src.length && src[pos] !== '"') {
+                        if (src[pos] === '\\') {
+                            value += src[pos] + src[pos+1];
+                            pos += 2;
+                            col += 2;
+                        } else {
+                            value += src[pos];
+                            pos++;
+                            col++;
+                        }
+                    }
+                    
+                    pos++;
+                    col++;
+                    tokens.push({ type: 'string', value: '"' + value + '"', line, col });
+                    continue;
+                }
+                
+                // Numbers
+                if (/[0-9]/.test(ch)) {
+                    let value = '';
+                    while (pos < src.length && /[0-9.]/.test(src[pos])) {
+                        value += src[pos];
+                        pos++;
+                        col++;
+                    }
+                    tokens.push({ type: 'number', value, line, col });
+                    continue;
+                }
+                
+                // Identifiers and keywords
+                if (/[a-zA-Z_]/.test(ch)) {
+                    let value = '';
+                    while (pos < src.length && /[a-zA-Z0-9_]/.test(src[pos])) {
+                        value += src[pos];
+                        pos++;
+                        col++;
+                    }
+                    
+                    if (lang.keywords.includes(value)) {
+                        tokens.push({ type: 'keyword', value, line, col });
+                    } else {
+                        tokens.push({ type: 'identifier', value, line, col });
+                    }
+                    continue;
+                }
+                
+                // Operators
+                let foundOp = false;
+                for (const op of lang.operators) {
+                    if (src.substr(pos, op.length) === op) {
+                        tokens.push({ type: 'operator', value: op, line, col });
+                        pos += op.length;
+                        col += op.length;
+                        foundOp = true;
+                        break;
+                    }
+                }
+                if (foundOp) continue;
+                
+                // Punctuation
+                if (lang.punctuation.includes(ch)) {
+                    tokens.push({ type: 'punctuation', value: ch, line, col });
+                    pos++;
+                    col++;
+                    continue;
+                }
+                
+                // Unknown character
+                tokens.push({ type: 'unknown', value: ch, line, col });
+                pos++;
+                col++;
+            }
+            
+            return tokens;
+        }
+        
+        function renderTokens() {
+            const tbody = document.getElementById('tokens').querySelector('tbody');
+            tbody.innerHTML = '';
+            
+            tokens.forEach(token => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${token.type}</td>
+                    <td>${escapeHtml(token.value)}</td>
+                    <td>${token.line}</td>
+                    <td>${token.col}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        function stepLexer() {
+            if (currentToken < tokens.length) {
+                const tbody = document.getElementById('tokens').querySelector('tbody');
+                if (currentToken > 0) {
+                    tbody.rows[currentToken-1].style.backgroundColor = '';
+                }
+                tbody.rows[currentToken].style.backgroundColor = '#eee';
+                document.getElementById('lexer-status').textContent = `Processing token ${currentToken+1} of ${tokens.length}`;
+                currentToken++;
+            } else {
+                document.getElementById('lexer-status').textContent = 'Lexing complete';
+            }
+        }
+        
+        function runLexer() {
+            currentToken = tokens.length;
+            document.getElementById('lexer-status').textContent = 'Lexing complete';
+            const tbody = document.getElementById('tokens').querySelector('tbody');
+            for (let i = 0; i < tbody.rows.length; i++) {
+                tbody.rows[i].style.backgroundColor = '';
+            }
+        }
+        
+        // Parser functions
+        function parseJavaScript(tokens) {
+            // Very simplified JavaScript parser that just builds a basic AST
+            let pos = 0;
+            
+            function parseExpression() {
+                if (pos >= tokens.length) return null;
+                
+                const token = tokens[pos];
+                
+                if (token.type === 'number') {
+                    pos++;
+                    return { type: 'Literal', value: parseFloat(token.value) };
+                }
+                
+                if (token.type === 'string') {
+                    pos++;
+                    return { type: 'Literal', value: token.value };
+                }
+                
+                if (token.type === 'identifier') {
+                    const id = { type: 'Identifier', name: token.value };
+                    pos++;
+                    
+                    // Function call
+                    if (pos < tokens.length && tokens[pos].value === '(') {
+                        pos++; // skip '('
+                        const args = [];
+                        
+                        while (pos < tokens.length && tokens[pos].value !== ')') {
+                            args.push(parseExpression());
+                            if (tokens[pos].value === ',') pos++;
+                        }
+                        
+                        if (pos < tokens.length && tokens[pos].value === ')') {
+                            return { type: 'CallExpression', callee: id, arguments: args };
+                        }
+                    }
+                    
+                    return id;
+                }
+                
+                if (token.value === '(') {
+                    pos++;
+                    const expr = parseExpression();
+                    if (tokens[pos].value === ')') {
+                        pos++;
+                        return expr;
+                    }
+                }
+                
+                return null;
+            }
+            
+            function parseStatement() {
+                if (pos >= tokens.length) return null;
+                
+                const token = tokens[pos];
+                
+                // Function declaration
+                if (token.type === 'keyword' && token.value === 'function') {
+                    pos++;
+                    const name = tokens[pos].value;
+                    pos++;
+                    
+                    if (tokens[pos].value === '(') {
+                        pos++;
+                        const params = [];
+                        
+                        while (pos < tokens.length && tokens[pos].value !== ')') {
+                            if (tokens[pos].type === 'identifier') {
+                                params.push({ type: 'Identifier', name: tokens[pos].value });
+                                pos++;
+                            }
+                            if (tokens[pos].value === ',') pos++;
+                        }
+                        
+                        if (tokens[pos].value === ')') pos++;
+                        
+                        if (tokens[pos].value === '{') {
+                            pos++;
+                            const body = [];
+                            
+                            while (pos < tokens.length && tokens[pos].value !== '}') {
+                                body.push(parseStatement());
+                            }
+                            
+                            if (tokens[pos].value === '}') pos++;
+                            
+                            return { type: 'FunctionDeclaration', id: { type: 'Identifier', name }, params, body };
+                        }
+                    }
+                }
+                
+                // Variable declaration
+                if (token.type === 'keyword' && (token.value === 'let' || token.value === 'const' || token.value === 'var')) {
+                    const kind = token.value;
+                    pos++;
+                    const declarations = [];
+                    
+                    while (pos < tokens.length && tokens[pos].value !== ';') {
+                        if (tokens[pos].type === 'identifier') {
+                            const id = tokens[pos].value;
+                            pos++;
+                            
+                            let init = null;
+                            if (tokens[pos].value === '=') {
+                                pos++;
+                                init = parseExpression();
+                            }
+                            
+                            declarations.push({ type: 'VariableDeclarator', id: { type: 'Identifier', name: id }, init });
+                        }
+                        
+                        if (tokens[pos].value === ',') pos++;
+                    }
+                    
+                    if (tokens[pos].value === ';') pos++;
+                    
+                    return { type: 'VariableDeclaration', kind, declarations };
+                }
+                
+                // Expression statement
+                const expr = parseExpression();
+                if (tokens[pos].value === ';') pos++;
+                return { type: 'ExpressionStatement', expression: expr };
+            }
+            
+            const program = { type: 'Program', body: [] };
+            
+            while (pos < tokens.length) {
+                const stmt = parseStatement();
+                if (stmt) program.body.push(stmt);
+            }
+            
+            return program;
+        }
+        
+        function parsePython(tokens) {
+            // Very simplified Python parser
+            let pos = 0;
+            
+            function parseExpression() {
+                if (pos >= tokens.length) return null;
+                
+                const token = tokens[pos];
+                
+                if (token.type === 'number') {
+                    pos++;
+                    return { type: 'Literal', value: parseFloat(token.value) };
+                }
+                
+                if (token.type === 'string') {
+                    pos++;
+                    return { type: 'Literal', value: token.value };
+                }
+                
+                if (token.type === 'identifier') {
+                    const id = { type: 'Identifier', name: token.value };
+                    pos++;
+                    
+                    // Function call
+                    if (pos < tokens.length && tokens[pos].value === '(') {
+                        pos++; // skip '('
+                        const args = [];
+                        
+                        while (pos < tokens.length && tokens[pos].value !== ')') {
+                            args.push(parseExpression());
+                            if (tokens[pos].value === ',') pos++;
+                        }
+                        
+                        if (pos < tokens.length && tokens[pos].value === ')') {
+                            pos++;
+                            return { type: 'CallExpression', callee: id, arguments: args };
+                        }
+                    }
+                    
+                    return id;
+                }
+                
+                return null;
+            }
+            
+            function parseStatement() {
+                if (pos >= tokens.length) return null;
+                
+                const token = tokens[pos];
+                
+                // Function definition
+                if (token.type === 'keyword' && token.value === 'def') {
+                    pos++;
+                    const name = tokens[pos].value;
+                    pos++;
+                    
+                    if (tokens[pos].value === '(') {
+                        pos++;
+                        const params = [];
+                        
+                        while (pos < tokens.length && tokens[pos].value !== ')') {
+                            if (tokens[pos].type === 'identifier') {
+                                params.push({ type: 'Identifier', name: tokens[pos].value });
+                                pos++;
+                            }
+                            if (tokens[pos].value === ',') pos++;
+                        }
+                        
+                        if (tokens[pos].value === ')') pos++;
+                        
+                        if (tokens[pos].value === ':') {
+                            pos++;
+                            
+                            // Skip newline
+                            if (tokens[pos].type === 'punctuation' && tokens[pos].value === '\n') {
+                                pos++;
+                            }
+                            
+                            const body = [];
+                            
+                            while (pos < tokens.length && tokens[pos].value !== '\n') {
+                                body.push(parseStatement());
+                            }
+                            
+                            if (tokens[pos].value === '\n') pos++;
+                            
+                            return { type: 'FunctionDeclaration', id: { type: 'Identifier', name }, params, body };
+                        }
+                    }
+                }
+                
+                // Variable assignment
+                if (token.type === 'identifier') {
+                    const id = { type: 'Identifier', name: token.value };
+                    pos++;
+                    
+                    if (tokens[pos].value === '=') {
+                        pos++;
+                        const init = parseExpression();
+                        
+                        // Skip newline
+                        if (tokens[pos].value === '\n') pos++;
+                        
+                        return { type: 'VariableDeclaration', kind: 'let', declarations: [
+                            { type: 'VariableDeclarator', id, init }
+                        ]};
+                    }
+                }
+                
+                // Expression statement
+                const expr = parseExpression();
+                if (tokens[pos].value === '\n') pos++;
+                return { type: 'ExpressionStatement', expression: expr };
+            }
+            
+            const program = { type: 'Program', body: [] };
+            
+            while (pos < tokens.length) {
+                const stmt = parseStatement();
+                if (stmt) program.body.push(stmt);
+            }
+            
+            return program;
+        }
+        
+        function parseC(tokens) {
+            // Very simplified C parser
+            let pos = 0;
+            
+            function parseExpression() {
+                if (pos >= tokens.length) return null;
+                
+                const token = tokens[pos];
+                
+                if (token.type === 'number') {
+                    pos++;
+                    return { type: 'Literal', value: parseFloat(token.value) };
+                }
+                
+                if (token.type === 'string') {
+                    pos++;
+                    return { type: 'Literal', value: token.value };
+                }
+                
+                if (token.type === 'identifier') {
+                    const id = { type: 'Identifier', name: token.value };
+                    pos++;
+                    
+                    // Function call
+                    if (pos < tokens.length && tokens[pos].value === '(') {
+                        pos++; // skip '('
+                        const args = [];
+                        
+                        while (pos < tokens.length && tokens[pos].value !== ')') {
+                            args.push(parseExpression());
+                            if (tokens[pos].value === ',') pos++;
+                        }
+                        
+                        if (pos < tokens.length && tokens[pos].value === ')') {
+                            pos++;
+                            return { type: 'CallExpression', callee: id, arguments: args };
+                        }
+                    }
+                    
+                    return id;
+                }
+                
+                return null;
+            }
+            
+            function parseStatement() {
+                if (pos >= tokens.length) return null;
+                
+                const token = tokens[pos];
+                
+                // Function declaration
+                if (token.type === 'keyword' && (token.value === 'int' || token.value === 'float' || token.value === 'char')) {
+                    const returnType = token.value;
+                    pos++;
+                    
+                    if (tokens[pos].type === 'identifier') {
+                        const name = tokens[pos].value;
+                        pos++;
+                        
+                        if (tokens[pos].value === '(') {
+                            pos++;
+                            const params = [];
+                            
+                            while (pos < tokens.length && tokens[pos].value !== ')') {
+                                if (tokens[pos].type === 'keyword' && 
+                                    (tokens[pos].value === 'int' || tokens[pos].value === 'float' || tokens[pos].value === 'char')) {
+                                    const paramType = tokens[pos].value;
+                                    pos++;
+                                    
+                                    if (tokens[pos].type === 'identifier') {
+                                        params.push({ 
+                                            type: 'VariableDeclarator',
+                                            id: { type: 'Identifier', name: tokens[pos].value },
+                                            init: null
+                                        });
+                                        pos++;
+                                    }
+                                }
+                                
+                                if (tokens[pos].value === ',') pos++;
+                            }
+                            
+                            if (tokens[pos].value === ')') pos++;
+                            
+                            if (tokens[pos].value === '{') {
+                                pos++;
+                                const body = [];
+                                
+                                while (pos < tokens.length && tokens[pos].value !== '}') {
+                                    body.push(parseStatement());
+                                }
+                                
+                                if (tokens[pos].value === '}') pos++;
+                                
+                                return { 
+                                    type: 'FunctionDeclaration', 
+                                    id: { type: 'Identifier', name }, 
+                                    params, 
+                                    body,
+                                    returnType 
+                                };
+                            }
+                        }
+                    }
+                }
+                
+                // Variable declaration
+                if (token.type === 'keyword' && (token.value === 'int' || token.value === 'float' || token.value === 'char')) {
+                    const type = token.value;
+                    pos++;
+                    const declarations = [];
+                    
+                    while (pos < tokens.length && tokens[pos].value !== ';') {
+                        if (tokens[pos].type === 'identifier') {
+                            const id = tokens[pos].value;
+                            pos++;
+                            
+                            let init = null;
+                            if (tokens[pos].value === '=') {
+                                pos++;
+                                init = parseExpression();
+                            }
+                            
+                            declarations.push({ 
+                                type: 'VariableDeclarator', 
+                                id: { type: 'Identifier', name: id }, 
+                                init,
+                                variableType: type
+                            });
+                        }
+                        
+                        if (tokens[pos].value === ',') pos++;
+                    }
+                    
+                    if (tokens[pos].value === ';') pos++;
+                    
+                    return { type: 'VariableDeclaration', kind: type, declarations };
+                }
+                
+                // Expression statement
+                const expr = parseExpression();
+                if (tokens[pos].value === ';') pos++;
+                return { type: 'ExpressionStatement', expression: expr };
+            }
+            
+            const program = { type: 'Program', body: [] };
+            
+            while (pos < tokens.length) {
+                const stmt = parseStatement();
+                if (stmt) program.body.push(stmt);
+            }
+            
+            return program;
+        }
+        
+        function renderAST(node, indent = 0) {
+            if (!node) return '';
+            
+            let html = '<div style="margin-left: ' + (indent * 20) + 'px">';
+            
+            if (typeof node === 'object') {
+                html += '<strong>' + node.type + '</strong>';
+                
+                if (node.type === 'Literal') {
+                    html += ': ' + escapeHtml(node.value);
+                } else if (node.type === 'Identifier') {
+                    html += ': ' + escapeHtml(node.name);
+                } else if (node.type === 'VariableDeclarator') {
+                    html += ': ' + escapeHtml(node.id.name);
+                    if (node.init) {
+                        html += ' = ' + renderAST(node.init, 0);
+                    }
+                } else {
+                    for (const key in node) {
+                        if (key !== 'type' && node[key] !== undefined) {
+                            html += '<div>' + key + ': ' + renderAST(node[key], indent + 1) + '</div>';
+                        }
+                    }
+                }
+            }
+            
+            html += '</div>';
+            return html;
+        }
+        
+        function stepParser() {
+            const lang = document.getElementById('language').value;
+            if (!ast) {
+                ast = languages[lang].parse(tokens);
+                document.getElementById('ast-output').innerHTML = renderAST(ast);
+                document.getElementById('parser-status').textContent = 'Parsing started';
+            } else {
+                document.getElementById('parser-status').textContent = 'Parsing complete';
+            }
+        }
+        
+        function runParser() {
+            const lang = document.getElementById('language').value;
+            ast = languages[lang].parse(tokens);
+            document.getElementById('ast-output').innerHTML = renderAST(ast);
+            document.getElementById('parser-status').textContent = 'Parsing complete';
+        }
+        
+        // Optimizer functions
+        function optimize() {
+            if (!ast) {
+                alert('Please parse the code first');
+                return;
+            }
+            
+            const before = JSON.parse(JSON.stringify(ast));
+            document.getElementById('optimizer-before').innerHTML = '<h3>Before Optimization</h3>' + renderAST(before);
+            
+            // Apply optimizations
+            optimizedAst = JSON.parse(JSON.stringify(ast));
+            
+            // Constant folding
+            if (document.getElementById('opt-constant-folding').checked) {
+                optimizedAst = constantFolding(optimizedAst);
+            }
+            
+            // Dead code elimination
+            if (document.getElementById('opt-dead-code').checked) {
+                optimizedAst = deadCodeElimination(optimizedAst);
+            }
+            
+            // Function inlining
+            if (document.getElementById('opt-inlining').checked) {
+                optimizedAst = functionInlining(optimizedAst);
+            }
+            
+            document.getElementById('optimizer-after').innerHTML = '<h3>After Optimization</h3>' + renderAST(optimizedAst);
+        }
+        
+        function constantFolding(ast) {
+            // Simple constant folding optimization
+            function fold(node) {
+                if (node.type === 'BinaryExpression') {
+                    const left = fold(node.left);
+                    const right = fold(node.right);
+                    
+                    if (left.type === 'Literal' && right.type === 'Literal') {
+                        if (node.operator === '+') {
+                            return { type: 'Literal', value: left.value + right.value };
+                        } else if (node.operator === '-') {
+                            return { type: 'Literal', value: left.value - right.value };
+                        } else if (node.operator === '*') {
+                            return { type: 'Literal', value: left.value * right.value };
+                        } else if (node.operator === '/') {
+                            return { type: 'Literal', value: left.value / right.value };
+                        }
+                    }
+                    
+                    return { ...node, left, right };
+                }
+                
+                return node;
+            }
+            
+            function traverse(node) {
+                for (const key in node) {
+                    if (key !== 'type' && typeof node[key] === 'object') {
+                        if (Array.isArray(node[key])) {
+                            node[key] = node[key].map(traverse);
+                        } else {
+                            node[key] = traverse(node[key]);
+                        }
+                    }
+                }
+                
+                if (node.type === 'ExpressionStatement') {
+                    return { ...node, expression: fold(node.expression) };
+                }
+                
+                if (node.type === 'VariableDeclarator' && node.init) {
+                    return { ...node, init: fold(node.init) };
+                }
+                
+                return node;
+            }
+            
+            return traverse(JSON.parse(JSON.stringify(ast)));
+        }
+        
+        function deadCodeElimination(ast) {
+            // Simple dead code elimination
+            function traverse(node) {
+                if (node.type === 'Program') {
+                    // Remove unused function declarations
+                    const usedFunctions = new Set();
+                    
+                    // Find all called functions
+                    function findCalls(n) {
+                        if (n.type === 'CallExpression') {
+                            usedFunctions.add(n.callee.name);
+                        }
+                        
+                        for (const key in n) {
+                            if (key !== 'type' && typeof n[key] === 'object') {
+                                if (Array.isArray(n[key])) {
+                                    n[key].forEach(findCalls);
+                                } else {
+                                    findCalls(n[key]);
+                                }
+                            }
+                        }
+                    }
+                    
+                    node.body.forEach(findCalls);
+                    
+                    // Filter function declarations
+                    node.body = node.body.filter(stmt => {
+                        if (stmt.type === 'FunctionDeclaration') {
+                            return usedFunctions.has(stmt.id.name);
+                        }
+                        return true;
+                    });
+                }
+                
+                return node;
+            }
+            
+            return traverse(JSON.parse(JSON.stringify(ast)));
+        }
+        
+        function functionInlining(ast) {
+            // Simple function inlining
+            const functionMap = {};
+            
+            // First pass: collect function definitions
+            function collectFunctions(node) {
+                if (node.type === 'FunctionDeclaration') {
+                    functionMap[node.id.name] = node;
+                }
+                
+                for (const key in node) {
+                    if (key !== 'type' && typeof node[key] === 'object') {
+                        if (Array.isArray(node[key])) {
+                            node[key].forEach(collectFunctions);
+                        } else {
+                            collectFunctions(node[key]);
+                        }
+                    }
+                }
+            }
+            
+            collectFunctions(ast);
+            
+            // Second pass: inline function calls
+            function inline(node) {
+                if (node.type === 'CallExpression' && functionMap[node.callee.name]) {
+                    const func = functionMap[node.callee.name];
+                    const params = func.params;
+                    const args = node.arguments;
+                    const body = func.body[0]; // Only inline simple one-statement functions
+                    
+                    if (body.type === 'ReturnStatement') {
+                        // Simple parameter substitution
+                        let expression = JSON.parse(JSON.stringify(body.argument));
+                        
+                        function substitute(n) {
+                            if (n.type === 'Identifier') {
+                                const paramIndex = params.findIndex(p => p.id.name === n.name);
+                                if (paramIndex >= 0) {
+                                    return JSON.parse(JSON.stringify(args[paramIndex]));
+                                }
+                            }
+                            
+                            for (const key in n) {
+                                if (key !== 'type' && typeof n[key] === 'object') {
+                                    if (Array.isArray(n[key])) {
+                                        n[key] = n[key].map(substitute);
+                                    } else {
+                                        n[key] = substitute(n[key]);
+                                    }
+                                }
+                            }
+                            
+                            return n;
+                        }
+                        
+                        return substitute(expression);
+                    }
+                }
+                
+                for (const key in node) {
+                    if (key !== 'type' && typeof node[key] === 'object') {
+                        if (Array.isArray(node[key])) {
+                            node[key] = node[key].map(inline);
+                        } else {
+                            node[key] = inline(node[key]);
+                        }
+                    }
+                }
+                
+                return node;
+            }
+            
+            return inline(JSON.parse(JSON.stringify(ast)));
+        }
+        
+        // Code generation
+        function generateCode() {
+            if (!ast) {
+                alert('Please parse the code first');
+                return;
+            }
+            
+            const target = document.getElementById('target').value;
+            let code = '';
+            
+            if (target === 'x86') {
+                code = generateX86(optimizedAst || ast);
+            } else if (target === 'arm') {
+                code = generateARM(optimizedAst || ast);
+            } else if (target === 'llvm') {
+                code = generateLLVM(optimizedAst || ast);
+            }
+            
+            document.getElementById('generated-code').value = code;
+        }
+        
+        function generateX86(ast) {
+            // Very simplified x86 code generation
+            let output = '';
+            
+            function gen(node) {
+                if (node.type === 'Program') {
+                    output += '.globl main\n';
+                    output += 'main:\n';
+                    node.body.forEach(gen);
+                    output += '    mov $0, %eax\n';
+                    output += '    ret\n';
+                } else if (node.type === 'FunctionDeclaration') {
+                    output += `${node.id.name}:\n`;
+                    node.body.forEach(gen);
+                    output += '    ret\n';
+                } else if (node.type === 'VariableDeclaration') {
+                    node.declarations.forEach(decl => {
+                        if (decl.init) {
+                            if (decl.init.type === 'Literal') {
+                                output += `    mov $${decl.init.value}, ${decl.id.name}\n`;
+                            }
+                        } else {
+                            output += `    sub $8, %rsp  ; allocate space for ${decl.id.name}\n`;
+                        }
+                    });
+                } else if (node.type === 'ExpressionStatement' && node.expression.type === 'CallExpression') {
+                    output += `    call ${node.expression.callee.name}\n`;
+                } else if (node.type === 'ReturnStatement') {
+                    if (node.argument.type === 'BinaryExpression') {
+                        gen(node.argument.left);
+                        output += '    push %rax\n';
+                        gen(node.argument.right);
+                        output += '    pop %rcx\n';
+                        
+                        if (node.argument.operator === '+') {
+                            output += '    add %rcx, %rax\n';
+                        } else if (node.argument.operator === '-') {
+                            output += '    sub %rcx, %rax\n';
+                        } else if (node.argument.operator === '*') {
+                            output += '    imul %rcx, %rax\n';
+                        } else if (node.argument.operator === '/') {
+                            output += '    cqo\n';
+                            output += '    idiv %rcx\n';
+                        }
+                    }
+                    output += '    ret\n';
+                }
+            }
+            
+            gen(ast);
+            return output;
+        }
+        
+        function generateARM(ast) {
+            // Very simplified ARM code generation
+            let output = '';
+            
+            function gen(node) {
+                if (node.type === 'Program') {
+                    output += '.global main\n';
+                    output += 'main:\n';
+                    node.body.forEach(gen);
+                    output += '    mov r0, #0\n';
+                    output += '    bx lr\n';
+                } else if (node.type === 'FunctionDeclaration') {
+                    output += `${node.id.name}:\n`;
+                    node.body.forEach(gen);
+                    output += '    bx lr\n';
+                } else if (node.type === 'VariableDeclaration') {
+                    node.declarations.forEach(decl => {
+                        if (decl.init) {
+                            if (decl.init.type === 'Literal') {
+                                output += `    mov r0, #${decl.init.value}\n`;
+                            }
+                        }
+                    });
+                } else if (node.type === 'ExpressionStatement' && node.expression.type === 'CallExpression') {
+                    output += `    bl ${node.expression.callee.name}\n`;
+                } else if (node.type === 'ReturnStatement') {
+                    if (node.argument.type === 'BinaryExpression') {
+                        gen(node.argument.left);
+                        output += '    push {r0}\n';
+                        gen(node.argument.right);
+                        output += '    pop {r1}\n';
+                        
+                        if (node.argument.operator === '+') {
+                            output += '    add r0, r0, r1\n';
+                        } else if (node.argument.operator === '-') {
+                            output += '    sub r0, r0, r1\n';
+                        } else if (node.argument.operator === '*') {
+                            output += '    mul r0, r0, r1\n';
+                        } else if (node.argument.operator === '/') {
+                            output += '    sdiv r0, r0, r1\n';
+                        }
+                    }
+                    output += '    bx lr\n';
+                }
+            }
+            
+            gen(ast);
+            return output;
+        }
+        
+        function generateLLVM(ast) {
+            // Very simplified LLVM IR generation
+            let output = '';
+            let tempCounter = 0;
+            
+            function newTemp() {
+                return `%${tempCounter++}`;
+            }
+            
+            function gen(node) {
+                if (node.type === 'Program') {
+                    output += 'define i32 @main() {\n';
+                    node.body.forEach(gen);
+                    output += '    ret i32 0\n';
+                    output += '}\n';
+                } else if (node.type === 'FunctionDeclaration') {
+                    const params = node.params.map(p => `i32 %${p.id.name}`).join(', ');
+                    output += `define i32 @${node.id.name}(${params}) {\n`;
+                    node.body.forEach(gen);
+                    output += '}\n';
+                } else if (node.type === 'VariableDeclaration') {
+                    node.declarations.forEach(decl => {
+                        if (decl.init) {
+                            if (decl.init.type === 'Literal') {
+                                output += `    %${decl.id.name} = alloca i32\n`;
+                                output += `    store i32 ${decl.init.value}, i32* %${decl.id.name}\n`;
+                            }
+                        } else {
+                            output += `    %${decl.id.name} = alloca i32\n`;
+                        }
+                    });
+                } else if (node.type === 'ExpressionStatement' && node.expression.type === 'CallExpression') {
+                    const args = node.expression.arguments.map(arg => {
+                        if (arg.type === 'Literal') {
+                            return `i32 ${arg.value}`;
+                        } else {
+                            return `i32 %${arg.name}`;
+                        }
+                    }).join(', ');
+                    const temp = newTemp();
+                    output += `    ${temp} = call i32 @${node.expression.callee.name}(${args})\n`;
+                } else if (node.type === 'ReturnStatement') {
+                    if (node.argument.type === 'BinaryExpression') {
+                        const left = gen(node.argument.left);
+                        const right = gen(node.argument.right);
+                        const temp = newTemp();
+                        
+                        if (node.argument.operator === '+') {
+                            output += `    ${temp} = add i32 ${left}, ${right}\n`;
+                        } else if (node.argument.operator === '-') {
+                            output += `    ${temp} = sub i32 ${left}, ${right}\n`;
+                        } else if (node.argument.operator === '*') {
+                            output += `    ${temp} = mul i32 ${left}, ${right}\n`;
+                        } else if (node.argument.operator === '/') {
+                            output += `    ${temp} = sdiv i32 ${left}, ${right}\n`;
+                        }
+                        
+                        output += `    ret i32 ${temp}\n`;
+                        return temp;
+                    } else if (node.argument.type === 'Literal') {
+                        output += `    ret i32 ${node.argument.value}\n`;
+                        return node.argument.value;
+                    }
+                } else if (node.type === 'Literal') {
+                    return node.value;
+                } else if (node.type === 'Identifier') {
+                    const temp = newTemp();
+                    output += `    ${temp} = load i32, i32* %${node.name}\n`;
+                    return temp;
+                }
+                
+                return '';
+            }
+            
+            gen(ast);
+            return output;
+        }
+        
+        function changeTarget() {
+            if (ast || optimizedAst) {
+                generateCode();
+            }
+        }
+        
+        function changeLanguage() {
+            reset();
+        }
+        
+        // Helper functions
+        function escapeHtml(unsafe) {
+            return unsafe
+                .toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

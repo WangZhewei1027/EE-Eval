@@ -127,7 +127,7 @@ test.describe('Binary Tree Visualization - FSM states and transitions', () => {
 
     await page.click('#preOrderBtn');
 
-    const traversalResult = page.locator('#traversalResult');
+    const traversalResult1 = page.locator('#traversalResult1');
 
     // traversalResult should briefly show content
     await expect(traversalResult).toHaveText(/\d+/, { timeout: 2000 });
@@ -148,7 +148,7 @@ test.describe('Binary Tree Visualization - FSM states and transitions', () => {
 
     await page.click('#postOrderBtn');
 
-    const traversalResult = page.locator('#traversalResult');
+    const traversalResult2 = page.locator('#traversalResult2');
 
     // traversalResult should show digits joined by arrows
     await expect(traversalResult).toHaveText(/\d+/, { timeout: 2000 });

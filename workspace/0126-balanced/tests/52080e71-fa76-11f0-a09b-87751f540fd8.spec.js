@@ -113,7 +113,7 @@ test.describe('Stack interactive application (FSM validation + runtime error obs
   });
 
   test('InsertMessage event: clicking Insert does NOT add a message due to script runtime error', async ({ page }) => {
-    const stack = new StackPage(page);
+    const stack1 = new StackPage(page);
 
     // Ensure initial state is empty
     expect(await stack.getMessagesCount()).toBe(0);
@@ -128,12 +128,12 @@ test.describe('Stack interactive application (FSM validation + runtime error obs
 
     // The initial ReferenceError should still be present
     expect(pageErrors.length).toBeGreaterThanOrEqual(1);
-    const joinedErrors = pageErrors.join(' | ');
+    const joinedErrors1 = pageErrors.join(' | ');
     expect(joinedErrors).toMatch(/Stack/);
   });
 
   test('RemoveMessage event: clicking Remove is a no-op and does not remove messages (empty list)', async ({ page }) => {
-    const stack = new StackPage(page);
+    const stack2 = new StackPage(page);
 
     // Confirm empty start
     expect(await stack.getMessagesCount()).toBe(0);
@@ -150,7 +150,7 @@ test.describe('Stack interactive application (FSM validation + runtime error obs
   });
 
   test('FSM transitions cannot complete: attempt Insert then Remove results in no state change due to missing Stack', async ({ page }) => {
-    const stack = new StackPage(page);
+    const stack3 = new StackPage(page);
 
     // Try Insert (would transition S0_Idle -> S1_MessageInserted if working)
     await stack.typeMessage('First');
@@ -173,7 +173,7 @@ test.describe('Stack interactive application (FSM validation + runtime error obs
   });
 
   test('Edge cases: multiple Insert/Remove clicks and removing on empty list produce no changes and no additional unexpected exceptions', async ({ page }) => {
-    const stack = new StackPage(page);
+    const stack4 = new StackPage(page);
 
     // Rapid multiple clicks on Insert and Remove
     for (let i = 0; i < 3; i++) {
@@ -200,7 +200,7 @@ test.describe('Stack interactive application (FSM validation + runtime error obs
   test('Sanity: there are no onEnter/onExit actions to validate (FSM had none), ensure that absence is noted', async ({ page }) => {
     // The FSM entry/exit actions list is empty for states. Here we assert there are no side-effect DOM elements
     // introduced specifically for onEnter/onExit (nothing extra beyond input/buttons/ul).
-    const stack = new StackPage(page);
+    const stack5 = new StackPage(page);
     // Check that the page contains only the expected top-level elements within the .stack container:
     // input, 2 buttons, a paragraph, and the messages <ul>.
     const containerChildren = await page.locator('.stack').locator(':scope > *').allTextContents();

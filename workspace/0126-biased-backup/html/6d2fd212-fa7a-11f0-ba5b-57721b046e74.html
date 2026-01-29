@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NP-Completeness Explorer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .panel {
+            border: 1px solid #000;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        button, select, input {
+            margin: 5px;
+        }
+        .problem-instance {
+            font-family: monospace;
+            white-space: pre;
+        }
+        .hidden {
+            display: none;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        td, th {
+            border: 1px solid #000;
+            padding: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>NP-Completeness Interactive Explorer</h1>
+    
+    <div class="panel">
+        <h2>1. Problem Selection</h2>
+        <select id="problemSelect">
+            <option value="sat">Boolean Satisfiability (SAT)</option>
+            <option value="vc">Vertex Cover</option>
+            <option value="tsp">Traveling Salesman</option>
+            <option value="clique">Clique</option>
+            <option value="is">Independent Set</option>
+        </select>
+        <button onclick="generateProblem()">Generate Problem Instance</button>
+        <button onclick="showReduction()">Show Reduction</button>
+    </div>
+    
+    <div class="panel" id="problemPanel">
+        <h2>2. Problem Instance</h2>
+        <div id="problemInstance" class="problem-instance"></div>
+        <div id="problemControls"></div>
+    </div>
+    
+    <div class="panel hidden" id="solutionPanel">
+        <h2>3. Solution Attempt</h2>
+        <div id="solutionArea"></div>
+        <div id="verificationResult"></div>
+    </div>
+    
+    <div class="panel hidden" id="reductionPanel">
+        <h2>4. Reduction Explorer</h2>
+        <div id="reductionSteps"></div>
+        <button onclick="nextReductionStep()">Next Step</button>
+        <div id="reductionVisualization"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>5. Complexity Analysis</h2>
+        <div>
+            <label>Problem Size (n): <input type="range" id="problemSize" min="3" max="20" value="5"></label>
+            <span id="sizeValue">5</span>
+        </div>
+        <div>
+            <button onclick="runBruteForce()">Run Brute Force Algorithm</button>
+            <button onclick="runHeuristic()">Run Heuristic Algorithm</button>
+        </div>
+        <div id="runtimeResults">
+            <table>
+                <tr>
+                    <th>Algorithm</th>
+                    <th>Steps</th>
+                    <th>Time Complexity</th>
+                </tr>
+                <tr>
+                    <td>Brute Force</td>
+                    <td id="bfSteps">-</td>
+                    <td id="bfComplexity">-</td>
+                </tr>
+                <tr>
+                    <td>Heuristic</td>
+                    <td id="heuristicSteps">-</td>
+                    <td id="heuristicComplexity">-</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>6. NP-Completeness Proof</h2>
+        <div>
+            <input type="checkbox" id="showProofSteps"> Show detailed proof steps
+        </div>
+        <div id="proofSteps" class="hidden">
+            <ol>
+                <li>Show problem is in NP (verifiable in polynomial time)</li>
+                <li>Select known NP-complete problem to reduce from</li>
+                <li>Construct polynomial-time reduction</li>
+                <li>Prove reduction preserves answers</li>
+                <li>Conclude NP-completeness</li>
+            </ol>
+        </div>
+        <button onclick="constructProof()">Construct Proof for Selected Problem</button>
+        <div id="proofConstruction"></div>
+    </div>
+    
+    <script>
+        let currentProblem = null;
+        let currentSolution = null;
+        let reductionStep = 0;
+        let problemSize = 5;
+        
+        document.getElementById('problemSize').addEventListener('input', function() {
+            problemSize = this.value;
+            document.getElementById('sizeValue').textContent = problemSize;
+        });
+        
+        document.getElementById('showProofSteps').addEventListener('change', function() {
+            document.getElementById('proofSteps').classList.toggle('hidden', !this.checked);
+        });
+        
+        function generateProblem() {
+            const problemType = document.getElementById('problemSelect').value;
+            currentProblem = generateProblemInstance(problemType, problemSize);
+            document.getElementById('problemInstance').textContent = currentProblem.display;
+            document.getElementById('problemPanel').classList.remove('hidden');
+            document.getElementById('solutionPanel').classList.add('hidden');
+            
+            // Generate appropriate controls
+            const controlsDiv = document.getElementById('problemControls');
+            controlsDiv.innerHTML = '';
+            
+            if (problemType === 'sat') {
+                controlsDiv.innerHTML = `
+                    <p>Try assigning values to variables:</p>
+                    ${currentProblem.variables.map(v => `
+                        <label>${v}: 
+                            <select id="var_${v}">
+                                <option value="unset">Unset</option>
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                            </select>
+                        </label>
+                    `).join('')}
+                    <button onclick="checkSATSolution()">Check Solution</button>
+                `;
+            } else if (problemType === 'vc') {
+                controlsDiv.innerHTML = `
+                    <p>Select vertices for your cover (size ≤ ${currentProblem.k}):</p>
+                    ${currentProblem.vertices.map(v => `
+                        <input type="checkbox" id="vc_${v}"> ${v}
+                    `).join('')}
+                    <button onclick="checkVCSolution()">Check Solution</button>
+                `;
+            } else if (problemType === 'tsp') {
+                controlsDiv.innerHTML = `
+                    <p>Construct a tour (click cities in order):</p>
+                    <div id="tspCities"></div>
+                    <div id="tspTour"></div>
+                    <button onclick="checkTSPSolution()">Check Solution</button>
+                `;
+                // Render TSP cities (simplified)
+                document.getElementById('tspCities').innerHTML = currentProblem.cities.map(c => 
+                    `<button onclick="addToTour('${c}')">${c}</button>`
+                ).join(' ');
+            }
+        }
+        
+        function generateProblemInstance(type, size) {
+            if (type === 'sat') {
+                const variables = [];
+                for (let i = 0; i < size; i++) {
+                    variables.push(`x${i}`);
+                }
+                
+                const clauses = [];
+                for (let i = 0; i < size; i++) {
+                    const clause = [];
+                    for (let j = 0; j < 3; j++) {
+                        const varIndex = Math.floor(Math.random() * size);
+                        const negated = Math.random() > 0.5;
+                        clause.push(negated ? `¬${variables[varIndex]}` : variables[varIndex]);
+                    }
+                    clauses.push(`(${clause.join(' ∨ ')})`);
+                }
+                
+                return {
+                    type: 'sat',
+                    variables: variables,
+                    clauses: clauses,
+                    display: `Variables: ${variables.join(', ')}\nClauses:\n${clauses.join(' ∧\n')}`
+                };
+            } else if (type === 'vc') {
+                const vertices = [];
+                for (let i = 0; i < size; i++) {
+                    vertices.push(`v${i}`);
+                }
+                
+                const edges = [];
+                for (let i = 0; i < size * 1.5; i++) {
+                    const v1 = Math.floor(Math.random() * size);
+                    let v2 = Math.floor(Math.random() * size);
+                    while (v2 === v1) v2 = Math.floor(Math.random() * size);
+                    edges.push(`${vertices[v1]}—${vertices[v2]}`);
+                }
+                
+                return {
+                    type: 'vc',
+                    vertices: vertices,
+                    edges: edges,
+                    k: Math.floor(size / 2) + 1,
+                    display: `Vertices: ${vertices.join(', ')}\nEdges: ${edges.join(', ')}\nFind vertex cover of size ≤ ${Math.floor(size / 2) + 1}`
+                };
+            } else if (type === 'tsp') {
+                const cities = [];
+                for (let i = 0; i < size; i++) {
+                    cities.push(`City ${i}`);
+                }
+                
+                // Generate random distances
+                const distances = {};
+                for (let i = 0; i < size; i++) {
+                    for (let j = i + 1; j < size; j++) {
+                        const dist = Math.floor(Math.random() * 100) + 1;
+                        distances[`${cities[i]}-${cities[j]}`] = dist;
+                        distances[`${cities[j]}-${cities[i]}`] = dist;
+                    }
+                }
+                
+                return {
+                    type: 'tsp',
+                    cities: cities,
+                    distances: distances,
+                    display: `Cities: ${cities.join(', ')}\nFind tour visiting all cities with minimal total distance`
+                };
+            }
+        }
+        
+        function checkSATSolution() {
+            const problemType = document.getElementById('problemSelect').value;
+            if (problemType !== 'sat') return;
+            
+            const assignment = {};
+            let allAssigned = true;
+            
+            currentProblem.variables.forEach(v => {
+                const val = document.getElementById(`var_${v}`).value;
+                if (val === 'unset') {
+                    allAssigned = false;
+                } else {
+                    assignment[v] = val === 'true';
+                }
+            });
+            
+            if (!allAssigned) {
+                document.getElementById('verificationResult').innerHTML = 
+                    '<p style="color:red">Please assign all variables</p>';
+                return;
+            }
+            
+            let allClausesSatisfied = true;
+            currentProblem.clauses.forEach(clause => {
+                // Simple check - in real implementation would parse the clause properly
+                const vars = clause.match(/[x¬x]\d+/g);
+                let clauseSatisfied = false;
+                
+                vars.forEach(v => {
+                    const negated = v.startsWith('¬');
+                    const varName = negated ? v.substring(1) : v;
+                    if ((assignment[varName] && !negated) || (!assignment[varName] && negated)) {
+                        clauseSatisfied = true;
+                    }
+                });
+                
+                if (!clauseSatisfied) {
+                    allClausesSatisfied = false;
+                }
+            });
+            
+            document.getElementById('solutionPanel').classList.remove('hidden');
+            document.getElementById('verificationResult').innerHTML = allClausesSatisfied ?
+                '<p style="color:green">All clauses satisfied! This is a valid solution.</p>' :
+                '<p style="color:red">Not all clauses are satisfied. Try different assignments.</p>';
+        }
+        
+        function checkVCSolution() {
+            const selectedVertices = [];
+            currentProblem.vertices.forEach(v => {
+                if (document.getElementById(`vc_${v}`).checked) {
+                    selectedVertices.push(v);
+                }
+            });
+            
+            if (selectedVertices.length > currentProblem.k) {
+                document.getElementById('verificationResult').innerHTML = 
+                    `<p style="color:red">Too many vertices selected (${selectedVertices.length} > ${currentProblem.k})</p>`;
+                return;
+            }
+            
+            let allEdgesCovered = true;
+            currentProblem.edges.forEach(edge => {
+                const [v1, v2] = edge.split('—');
+                if (!selectedVertices.includes(v1) && !selectedVertices.includes(v2)) {
+                    allEdgesCovered = false;
+                }
+            });
+            
+            document.getElementById('solutionPanel').classList.remove('hidden');
+            document.getElementById('verificationResult').innerHTML = allEdgesCovered ?
+                `<p style="color:green">All edges covered with ${selectedVertices.length} vertices! Valid solution.</p>` :
+                '<p style="color:red">Not all edges are covered. Try different vertex selection.</p>';
+        }
+        
+        let tspTour = [];
+        function addToTour(city) {
+            if (!tspTour.includes(city)) {
+                tspTour.push(city);
+                document.getElementById('tspTour').textContent = `Current tour: ${tspTour.join(' → ')}`;
+            }
+        }
+        
+        function checkTSPSolution() {
+            if (tspTour.length !== currentProblem.cities.length) {
+                document.getElementById('verificationResult').innerHTML = 
+                    '<p style="color:red">Tour must visit all cities exactly once</p>';
+                return;
+            }
+            
+            // Calculate total distance
+            let totalDistance = 0;
+            for (let i = 0; i < tspTour.length; i++) {
+                const next = (i + 1) % tspTour.length;
+                const key = `${tspTour[i]}-${tspTour[next]}`;
+                totalDistance += currentProblem.distances[key];
+            }
+            
+            document.getElementById('solutionPanel').classList.remove('hidden');
+            document.getElementById('verificationResult').innerHTML = 
+                `<p>Tour distance: ${totalDistance}</p><p>Can you find a shorter tour?</p>`;
+        }
+        
+        function showReduction() {
+            const problemType = document.getElementById('problemSelect').value;
+            reductionStep = 0;
+            document.getElementById('reductionPanel').classList.remove('hidden');
+            document.getElementById('reductionSteps').innerHTML = 
+                `<p>Reduction from ${getReductionSource(problemType)} to ${problemType.toUpperCase()}</p>`;
+            nextReductionStep();
+        }
+        
+        function getReductionSource(problemType) {
+            const reductions = {
+                'sat': '3SAT',
+                'vc': '3SAT',
+                'tsp': 'Hamiltonian Cycle',
+                'clique': '3SAT',
+                'is': 'Clique'
+            };
+            return reductions[problemType] || '3SAT';
+        }
+        
+        function nextReductionStep() {
+            const problemType = document.getElementById('problemSelect').value;
+            reductionStep++;
+            
+            let stepContent = '';
+            if (problemType === 'sat') {
+                stepContent = getSATReductionStep(reductionStep);
+            } else if (problemType === 'vc') {
+                stepContent = getVCReductionStep(reductionStep);
+            } else if (problemType === 'tsp') {
+                stepContent = getTSPReductionStep(reductionStep);
+            }
+            
+            document.getElementById('reductionSteps').innerHTML += stepContent;
+        }
+        
+        function getSATReductionStep(step) {
+            switch(step) {
+                case 1:
+                    return `<p>Step 1: Start with 3SAT problem instance</p>`;
+                case 2:
+                    return `<p>Step 2: For each variable x, create two vertices (x and ¬x) connected by an edge</p>`;
+                case 3:
+                    return `<p>Step 3: For each clause (l1 ∨ l2 ∨ l3), create a triangle connecting the literals</p>`;
+                case 4:
+                    return `<p>Step 4: Set k = number of variables + 2 * number of clauses</p>`;
+                case 5:
+                    return `<p>Step 5: Prove that satisfying assignment corresponds to vertex cover and vice versa</p>`;
+                default:
+                    return `<p>Reduction complete. We've shown how to convert any 3SAT problem to Vertex Cover.</p>`;
+            }
+        }
+        
+        function getVCReductionStep(step) {
+            switch(step) {
+                case 1:
+                    return `<p>Step 1: Start with 3SAT problem instance</p>`;
+                case 2:
+                    return `<p>Step 2: For each variable x, create two vertices (x and ¬x) connected by an edge</p>`;
+                case 3:
+                    return `<p>Step 3: For each clause (l1 ∨ l2 ∨ l3), create a triangle connecting the literals</p>`;
+                case 4:
+                    return `<p>Step 4: Set k = number of variables + 2 * number of clauses</p>`;
+                case 5:
+                    return `<p>Step 5: Prove that satisfying assignment corresponds to vertex cover and vice versa</p>`;
+                default:
+                    return `<p>Reduction complete. We've shown how to convert any 3SAT problem to Vertex Cover.</p>`;
+            }
+        }
+        
+        function getTSPReductionStep(step) {
+            switch(step) {
+                case 1:
+                    return `<p>Step 1: Start with Hamiltonian Cycle problem instance (graph G)</p>`;
+                case 2:
+                    return `<p>Step 2: Create TSP instance with same set of vertices as cities</p>`;
+                case 3:
+                    return `<p>Step 3: Set distance between cities u and v to 1 if edge exists in G, 2 otherwise</p>`;
+                case 4:
+                    return `<p>Step 4: Set target tour length to number of vertices</p>`;
+                case 5:
+                    return `<p>Step 5: Prove Hamiltonian cycle exists iff TSP tour of length n exists</p>`;
+                default:
+                    return `<p>Reduction complete. We've shown how to convert any Hamiltonian Cycle problem to TSP.</p>`;
+            }
+        }
+        
+        function runBruteForce() {
+            const problemType = document.getElementById('problemSelect').value;
+            let steps = 1;
+            let complexity = '';
+            
+            if (problemType === 'sat') {
+                steps = Math.pow(2, problemSize);
+                complexity = 'O(2ⁿ)';
+            } else if (problemType === 'vc') {
+                steps = combinationCount(currentProblem.vertices.length, currentProblem.k);
+                complexity = 'O(nᵏ)';
+            } else if (problemType === 'tsp') {
+                steps = factorial(problemSize - 1) / 2;
+                complexity = 'O(n!)';
+            }
+            
+            document.getElementById('bfSteps').textContent = steps.toLocaleString();
+            document.getElementById('bfComplexity').textContent = complexity;
+        }
+        
+        function runHeuristic() {
+            const problemType = document.getElementById('problemSelect').value;
+            let steps = 0;
+            let complexity = '';
+            
+            if (problemType === 'sat') {
+                steps = problemSize * 3; // Very simplified
+                complexity = 'O(n) approximation';
+            } else if (problemType === 'vc') {
+                steps = currentProblem.edges.length * 2;
+                complexity = 'O(log n) approximation';
+            } else if (problemType === 'tsp') {
+                steps = problemSize * problemSize;
+                complexity = 'O(n²) approximation';
+            }
+            
+            document.getElementById('heuristicSteps').textContent = steps.toLocaleString();
+            document.getElementById('heuristicComplexity').textContent = complexity;
+        }
+        
+        function combinationCount(n, k) {
+            let result = 1;
+            for (let i = 1; i <= k; i++) {
+                result *= (n - k + i) / i;
+            }
+            return Math.round(result);
+        }
+        
+        function factorial(n) {
+            let result = 1;
+            for (let i = 2; i <= n; i++) {
+                result *= i;
+            }
+            return result;
+        }
+        
+        function constructProof() {
+            const problemType = document.getElementById('problemSelect').value;
+            let proof = '';
+            
+            if (problemType === 'sat') {
+                proof = `
+                    <h3>Proof that SAT is NP-Complete</h3>
+                    <ol>
+                        <li><strong>SAT is in NP:</strong> Given a proposed assignment, we can verify it in polynomial time by evaluating each clause.</li>
+                        <li><strong>Reduction from Circuit-SAT:</strong> Any boolean circuit can be converted to an equivalent SAT formula in polynomial time.</li>
+                        <li><strong>Completeness:</strong> Since Circuit-SAT is NP-hard and we can reduce it to SAT, SAT is NP-hard.</li>
+                        <li><strong>Conclusion:</strong> SAT is in NP and is NP-hard, therefore it is NP-complete.</li>
+                    </ol>
+                `;
+            } else if (problemType === 'vc') {
+                proof = `
+                    <h3>Proof that Vertex Cover is NP-Complete</h3>
+                    <ol>
+                        <li><strong>Vertex Cover is in NP:</strong> Given a set of vertices, we can verify in polynomial time if it covers all edges.</li>
+                        <li><strong>Reduction from 3SAT:</strong> We can convert any 3SAT problem to a Vertex Cover problem as shown in the reduction steps.</li>
+                        <li><strong>Completeness:</strong> The reduction preserves the answer and runs in polynomial time.</li>
+                        <li><strong>Conclusion:</strong> Vertex Cover is in NP and is NP-hard, therefore it is NP-complete.</li>
+                    </ol>
+                `;
+            } else if (problemType === 'tsp') {
+                proof = `
+                    <h3>Proof that TSP is NP-Complete</h3>
+                    <ol>
+                        <li><strong>TSP is in NP:</strong> Given a tour, we can verify its length in polynomial time.</li>
+                        <li><strong>Reduction from Hamiltonian Cycle:</strong> We can convert any Hamiltonian Cycle problem to TSP as shown in the reduction steps.</li>
+                        <li><strong>Completeness:</strong> The reduction preserves the answer and runs in polynomial time.</li>
+                        <li><strong>Conclusion:</strong> TSP is in NP and is NP-hard, therefore it is NP-complete.</li>
+                    </ol>
+                `;
+            }
+            
+            document.getElementById('proofConstruction').innerHTML = proof;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>K-Nearest Neighbors Interactive Demo</title>
+<style>
+/* Minimal layout only to ensure readability; no colors, no animations */
+body { font-family: sans-serif; margin: 8px; }
+section { margin-bottom: 12px; }
+label { margin-right: 6px; }
+input[type="number"] { width: 70px; }
+input[type="range"] { vertical-align: middle; }
+canvas { background: white; cursor: crosshair; }
+textarea { width: 100%; height: 120px; }
+button { margin-right: 6px; margin-top: 4px; }
+select { margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<h2>K-Nearest Neighbors — Interactive Demo</h2>
+
+<section>
+<strong>Dataset controls</strong><br>
+<label>Classes: <input id="in-classes" type="number" value="3" min="1"></label>
+<label>Points/class: <input id="in-ppc" type="number" value="25" min="1"></label>
+<label>Dimensions: <input id="in-dims" type="number" value="2" min="2"></label>
+<label>Seed: <input id="in-seed" type="number" value="1"></label>
+<label>Type:
+  <select id="in-type">
+    <option value="classification" selected>Classification</option>
+    <option value="regression">Regression</option>
+  </select>
+</label>
+<button id="btn-generate">Generate</button>
+<button id="btn-clear">Clear</button>
+<button id="btn-default">Load Default</button>
+<br>
+<input type="file" id="file-load" style="display:inline-block;">
+<button id="btn-export-json">Export JSON</button>
+<button id="btn-export-csv">Export CSV</button>
+</section>
+
+<section>
+<strong>Mode (click canvas to act)</strong><br>
+<label><input type="radio" name="mode" value="view" checked> View / Select</label>
+<label><input type="radio" name="mode" value="add"> Add point</label>
+<label><input type="radio" name="mode" value="move"> Move point</label>
+<label><input type="radio" name="mode" value="remove"> Remove point</label>
+<label><input type="radio" name="mode" value="label"> Set label/value</label>
+<br>
+<label>New point label/value: <input id="in-new-label" type="text" value="0" style="width:60px"></label>
+<button id="btn-toggle-truth">Toggle test/train for selected</button>
+<button id="btn-undo">Undo</button>
+<button id="btn-redo">Redo</button>
+</section>
+
+<section>
+<strong>KNN settings</strong><br>
+<label>K: <input id="in-k" type="range" min="1" max="50" value="5"><span id="out-k">5</span></label>
+<label>Distance:
+  <select id="in-dist">
+    <option value="euclidean">Euclidean</option>
+    <option value="manhattan">Manhattan</option>
+    <option value="chebyshev">Chebyshev</option>
+    <option value="cosine">Cosine</option>
+  </select>
+</label>
+<label>Weighting:
+  <select id="in-weight">
+    <option value="uniform">Uniform</option>
+    <option value="inverse">Inverse distance</option>
+    <option value="gaussian">Gaussian</option>
+  </select>
+</label>
+<label>Normalize:
+  <select id="in-norm">
+    <option value="none">None</option>
+    <option value="minmax">Min-Max</option>
+    <option value="zscore">Z-score</option>
+  </select>
+</label>
+<label>Tie break:
+  <select id="in-tie">
+    <option value="lowest">Lowest label</option>
+    <option value="closest">Closest neighbor</option>
+    <option value="random">Random</option>
+  </select>
+</label>
+<button id="btn-classify-selected">Explain prediction for selected point</button>
+<button id="btn-predict-all">Predict all unlabeled (assign)</button>
+</section>
+
+<section>
+<strong>Visualization / projection</strong><br>
+<label>Feature X:
+  <select id="sel-x"></select>
+</label>
+<label>Feature Y:
+  <select id="sel-y"></select>
+</label>
+<label>Grid resolution: <input id="in-res" type="number" value="30" min="5" max="100"></label>
+<button id="btn-compute-grid">Compute decision grid</button>
+<button id="btn-clear-grid">Clear grid</button>
+<label><input id="chk-show-neighbors" type="checkbox"> Show neighbors when hovering</label>
+</section>
+
+<section>
+<strong>Data splitting & validation</strong><br>
+<label>Test fraction: <input id="in-testfrac" type="range" min="0" max="0.9" step="0.01" value="0.3"><span id="out-testfrac">0.30</span></label>
+<button id="btn-split">Split dataset</button>
+<label>CV folds: <input id="in-folds" type="number" min="2" value="5" style="width:60px"></label>
+<button id="btn-cv">Run Cross-Validation</button>
+<button id="btn-sweep">Hyperparameter sweep (k)</button>
+<input id="in-sweep-max" type="number" value="25" min="1" style="width:70px">
+</section>
+
+<section>
+<strong>Canvas (click to interact)</strong><br>
+<canvas id="canvas" width="640" height="480"></canvas>
+<div>
+<button id="btn-center">Center view</button>
+<button id="btn-scale">Auto-scale to features</button>
+</div>
+</section>
+
+<section>
+<strong>Selected point / Details</strong>
+<div>
+<label>Selected ID: <span id="sel-id">none</span></label><br>
+<textarea id="txt-details" readonly></textarea>
+</div>
+</section>
+
+<section>
+<strong>Metrics and output</strong><br>
+<textarea id="txt-output" readonly></textarea>
+</section>
+
+<script>
+/*
+  K-Nearest Neighbors interactive demo
+  - Many user controls and workflows
+  - Minimal visual design (black on white, simple elements)
+*/
+
+(function(){
+
+// Utilities
+function rand(seed) {
+  // simple LCG
+  seed = seed | 0;
+  return function() {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  }
+}
+function shuffle(a, rng) {
+  for (let i = a.length-1; i>0; i--) {
+    const j = Math.floor(rng()* (i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+function uniqueId(){ return Math.floor(Math.random()*1e9).toString(36); }
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const state = {
+  points: [], // {id, x:[], label (for classification), value (for regression), split: 'train'|'test'|'unlabeled'}
+  dims: 2,
+  type: 'classification',
+  selected: null,
+  mode: 'view',
+  grid: null, // {preds:[], res, xRange,yRange}
+  undoStack: [],
+  redoStack: [],
+  settings: {
+    k: 5,
+    dist: 'euclidean',
+    weight: 'uniform',
+    norm: 'none',
+    tie: 'lowest'
+  },
+  view: { padding: 0.06 } // for auto scaling
+};
+
+// DOM refs
+const inClasses = document.getElementById('in-classes');
+const inPpc = document.getElementById('in-ppc');
+const inDims = document.getElementById('in-dims');
+const inSeed = document.getElementById('in-seed');
+const inType = document.getElementById('in-type');
+const btnGenerate = document.getElementById('btn-generate');
+const btnClear = document.getElementById('btn-clear');
+const btnDefault = document.getElementById('btn-default');
+const fileLoad = document.getElementById('file-load');
+const btnExportJSON = document.getElementById('btn-export-json');
+const btnExportCSV = document.getElementById('btn-export-csv');
+
+const modes = document.getElementsByName('mode');
+const inNewLabel = document.getElementById('in-new-label');
+const btnToggleTruth = document.getElementById('btn-toggle-truth');
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+
+const inK = document.getElementById('in-k');
+const outK = document.getElementById('out-k');
+const inDist = document.getElementById('in-dist');
+const inWeight = document.getElementById('in-weight');
+const inNorm = document.getElementById('in-norm');
+const inTie = document.getElementById('in-tie');
+const btnExplain = document.getElementById('btn-classify-selected');
+const btnPredictAll = document.getElementById('btn-predict-all');
+
+const selX = document.getElementById('sel-x');
+const selY = document.getElementById('sel-y');
+const inRes = document.getElementById('in-res');
+const btnComputeGrid = document.getElementById('btn-compute-grid');
+const btnClearGrid = document.getElementById('btn-clear-grid');
+const chkShowNeighbors = document.getElementById('chk-show-neighbors');
+
+const inTestFrac = document.getElementById('in-testfrac');
+const outTestFrac = document.getElementById('out-testfrac');
+const btnSplit = document.getElementById('btn-split');
+const inFolds = document.getElementById('in-folds');
+const btnCV = document.getElementById('btn-cv');
+const btnSweep = document.getElementById('btn-sweep');
+const inSweepMax = document.getElementById('in-sweep-max');
+
+const btnCenter = document.getElementById('btn-center');
+const btnScale = document.getElementById('btn-scale');
+
+const selId = document.getElementById('sel-id');
+const txtDetails = document.getElementById('txt-details');
+const txtOutput = document.getElementById('txt-output');
+
+const fileReader = new FileReader();
+
+// Initialize UI components
+function initFeatureSelectors() {
+  selX.innerHTML = '';
+  selY.innerHTML = '';
+  for (let i=0;i<state.dims;i++) {
+    const optX = document.createElement('option');
+    optX.value = i; optX.text = 'f' + i;
+    const optY = optX.cloneNode(true);
+    selX.appendChild(optX);
+    selY.appendChild(optY);
+  }
+  selY.value = Math.min(1,state.dims-1);
+}
+
+// Undo/redo
+function pushUndo() {
+  state.undoStack.push(clone({points: state.points, settings: state.settings}));
+  if (state.undoStack.length>200) state.undoStack.shift();
+  state.redoStack = [];
+}
+function undo() {
+  if (!state.undoStack.length) return;
+  state.redoStack.push(clone({points: state.points, settings: state.settings}));
+  const prev = state.undoStack.pop();
+  state.points = clone(prev.points);
+  state.settings = prev.settings;
+  redraw();
+}
+function redo() {
+  if (!state.redoStack.length) return;
+  state.undoStack.push(clone({points: state.points, settings: state.settings}));
+  const nxt = state.redoStack.pop();
+  state.points = clone(nxt.points);
+  state.settings = nxt.settings;
+  redraw();
+}
+
+// Dataset generation
+function generateDataset() {
+  const classes = Math.max(1, parseInt(inClasses.value));
+  const ppc = Math.max(1, parseInt(inPpc.value));
+  const dims = Math.max(2, parseInt(inDims.value));
+  const seed = parseInt(inSeed.value) || 1;
+  const type = inType.value;
+  state.dims = dims;
+  state.type = type;
+  initFeatureSelectors();
+  pushUndo();
+  state.points = [];
+  const rng = rand(seed);
+  // create cluster centers spread on grid
+  const radius = 1.0;
+  for (let c=0;c<classes;c++){
+    const angle = (c/(classes))*Math.PI*2;
+    const center = [];
+    for (let d=0;d<dims;d++){
+      // mix periodic center to get spread
+      center.push(Math.sin(angle + d) * 3 + (d*0.5));
+    }
+    for (let i=0;i<ppc;i++){
+      const p = { id: uniqueId(), x: [], split: 'train' };
+      for (let d=0;d<dims;d++){
+        p.x.push(center[d] + (rng()-0.5)*radius*3 + (rng()-0.5));
+      }
+      if (type === 'classification') {
+        p.label = c;
+      } else {
+        // regression: value around class index with noise
+        p.value = c + (rng()-0.5)*1.5;
+      }
+      state.points.push(p);
+    }
+  }
+  // add some unlabeled points
+  for (let i=0;i<Math.floor(classes*ppc*0.05);i++){
+    const p = { id: uniqueId(), x: [], split: 'unlabeled' };
+    for (let d=0;d<dims;d++){
+      p.x.push((Math.random()-0.5)*6 + (d*0.5));
+    }
+    state.points.push(p);
+  }
+  state.grid = null;
+  redraw();
+  log('Generated dataset: classes=' + classes + ', points/class=' + ppc + ', dims=' + dims);
+}
+
+// Export / import
+function exportJSON() {
+  const data = {
+    points: state.points,
+    dims: state.dims,
+    type: state.type
+  };
+  const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'knn_dataset.json'; document.body.appendChild(a);
+  a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function exportCSV() {
+  if (!state.points.length) { log('No points to export'); return; }
+  let header = [];
+  for (let d=0;d<state.dims;d++) header.push('f'+d);
+  if (state.type === 'classification') header.push('label');
+  else header.push('value');
+  header.push('split');
+  const rows = [header.join(',')];
+  state.points.forEach(p=>{
+    const vals = p.x.map(v=>v.toString());
+    if (state.type==='classification') vals.push(('label' in p)?p.label:'');
+    else vals.push(('value' in p)?p.value:'');
+    vals.push(p.split||'');
+    rows.push(vals.join(','));
+  });
+  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'knn_dataset.csv'; document.body.appendChild(a);
+  a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+fileLoad.addEventListener('change', (ev)=>{
+  const file = ev.target.files[0];
+  if (!file) return;
+  fileReader.onload = () => {
+    try {
+      const text = fileReader.result;
+      if (file.name.toLowerCase().endsWith('.json')) {
+        const obj = JSON.parse(text);
+        if (!obj.points) throw('Invalid file');
+        pushUndo();
+        state.points = obj.points;
+        state.dims = obj.dims || state.dims;
+        state.type = obj.type || state.type;
+        initFeatureSelectors();
+        redraw();
+        log('Loaded JSON dataset from file');
+      } else {
+        // treat as CSV
+        const lines = text.trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        const header = lines[0].split(',');
+        const dims = header.filter(h=>h.startsWith('f')).length;
+        const points = [];
+        for (let i=1;i<lines.length;i++){
+          const vals = lines[i].split(',');
+          const p = {id:uniqueId(), x: [], split: 'train'};
+          for (let d=0; d<dims; d++) p.x.push(parseFloat(vals[d]));
+          if (header.includes('label')) p.label = vals[header.indexOf('label')]===''?undefined:vals[header.indexOf('label')];
+          if (header.includes('value')) p.value = vals[header.indexOf('value')]===''?undefined:parseFloat(vals[header.indexOf('value')]);
+          if (header.includes('split')) p.split = vals[header.indexOf('split')] || 'train';
+          points.push(p);
+        }
+        pushUndo();
+        state.points = points;
+        state.dims = dims;
+        initFeatureSelectors();
+        redraw();
+        log('Loaded CSV dataset');
+      }
+    } catch (e) {
+      log('Load error: '+e);
+    }
+  };
+  fileReader.readAsText(file);
+});
+
+// Mode handling
+modes.forEach(r=>r.addEventListener('change', ()=>{
+  state.mode = document.querySelector('input[name="mode"]:checked').value;
+  log('Mode: ' + state.mode);
+}));
+inNewLabel.addEventListener('change', ()=>{ /* nothing */ });
+btnToggleTruth.addEventListener('click', ()=>{
+  if (!state.selected) { log('Select a point first'); return; }
+  pushUndo();
+  const p = state.points.find(u=>u.id===state.selected);
+  if (!p) return;
+  p.split = (p.split==='train'?'test':'train');
+  redraw();
+  log('Toggled split for selected point: ' + p.split);
+});
+btnUndo.addEventListener('click', undo);
+btnRedo.addEventListener('click', redo);
+
+// K settings
+inK.addEventListener('input', ()=>{ state.settings.k = parseInt(inK.value); outK.textContent = inK.value; redraw(); });
+inDist.addEventListener('change', ()=>{ state.settings.dist = inDist.value; redraw(); });
+inWeight.addEventListener('change', ()=>{ state.settings.weight = inWeight.value; redraw(); });
+inNorm.addEventListener('change', ()=>{ state.settings.norm = inNorm.value; redraw(); });
+inTie.addEventListener('change', ()=>{ state.settings.tie = inTie.value; redraw(); });
+
+// Visualization selectors
+function getSelectedFeatures() {
+  const xi = parseInt(selX.value || 0);
+  const yi = parseInt(selY.value || Math.min(1,state.dims-1));
+  return [xi, yi];
+}
+
+// Canvas interactions
+let dragging = null;
+let dragOffset = null;
+
+canvas.addEventListener('mousedown', (ev)=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = ev.clientX - rect.left;
+  const my = ev.clientY - rect.top;
+  const coords = canvasToData(mx,my);
+  if (state.mode === 'add') {
+    pushUndo();
+    const p = { id: uniqueId(), x: Array.from({length: state.dims}, ()=>0), split: 'train' };
+    const [xi,yi] = getSelectedFeatures();
+    p.x[xi] = coords[0];
+    p.x[yi] = coords[1];
+    // set other dims to mean
+    const means = featureMeans();
+    for (let d=0; d<state.dims; d++) if (d!==xi && d!==yi) p.x[d]=means[d];
+    if (state.type==='classification') {
+      const lab = inNewLabel.value;
+      p.label = isNaN(Number(lab)) ? lab : Number(lab);
+    } else {
+      const val = Number(inNewLabel.value);
+      p.value = isNaN(val) ? 0 : val;
+    }
+    state.points.push(p);
+    state.selected = p.id;
+    redraw();
+  } else if (state.mode === 'remove') {
+    const hit = hitTest(mx,my);
+    if (hit) {
+      pushUndo();
+      state.points = state.points.filter(pt=>pt.id!==hit.id);
+      state.selected = null;
+      redraw();
+    }
+  } else if (state.mode === 'move') {
+    const hit = hitTest(mx,my);
+    if (hit) {
+      dragging = hit;
+      dragOffset = {mx: mx, my: my};
+      state.selected = hit.id;
+    }
+  } else if (state.mode === 'label') {
+    const hit = hitTest(mx,my);
+    if (hit) {
+      pushUndo();
+      if (state.type==='classification') {
+        const lab = inNewLabel.value;
+        hit.label = isNaN(Number(lab)) ? lab : Number(lab);
+      } else {
+        const val = Number(inNewLabel.value);
+        hit.value = isNaN(val) ? 0 : val;
+      }
+      state.selected = hit.id;
+      redraw();
+    }
+  } else { // view/select
+    const hit = hitTest(mx,my);
+    if (hit) {
+      state.selected = hit.id;
+      if (chkShowNeighbors.checked) {
+        // nothing extra here; redraw will show neighbors when hovered
+      }
+      redraw();
+      showDetailsForSelected();
+    } else {
+      state.selected = null;
+      redraw();
+    }
+  }
+});
+canvas.addEventListener('mousemove', (ev)=>{
+  if (!dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = ev.clientX - rect.left;
+  const my = ev.clientY - rect.top;
+  const dx = mx - dragOffset.mx;
+  const dy = my - dragOffset.my;
+  dragOffset.mx = mx; dragOffset.my = my;
+  const [x,y] = canvasToData(mx,my);
+  // update dragging point coordinates for selected features; preserve others
+  const [xi, yi] = getSelectedFeatures();
+  pushUndo(); // one small push per drag step may be noisy but safe
+  dragging.x[xi] = x;
+  dragging.x[yi] = y;
+  redraw();
+});
+canvas.addEventListener('mouseup', ()=>{ dragging = null; dragOffset = null; });
+canvas.addEventListener('mouseleave', ()=>{ dragging = null; dragOffset = null; });
+
+// helper to pick point near mouse
+function hitTest(mx,my) {
+  const [xv,yv] = canvasToData(mx,my);
+  let closest = null;
+  let minDist = Infinity;
+  const [xi,yi] = getSelectedFeatures();
+  for (let p of state.points) {
+    const dx = (p.x[xi] - xv);
+    const dy = (p.x[yi] - yv);
+    const d2 = dx*dx + dy*dy;
+    if (d2 < minDist && d2 < 0.1) { // threshold relative to data units (rough)
+      minDist = d2; closest = p;
+    }
+  }
+  return closest;
+}
+
+// coordinate transforms between data and canvas (based on selected features)
+function computeRanges() {
+  const [xi, yi] = getSelectedFeatures();
+  let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
+  if (!state.points.length) {
+    xmin = -5; xmax = 5; ymin = -5; ymax = 5;
+  } else {
+    for (let p of state.points) {
+      const x = p.x[xi], y = p.x[yi];
+      if (x < xmin) xmin = x; if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y; if (y > ymax) ymax = y;
+    }
+    if (xmin===xmax) { xmin -= 1; xmax += 1; }
+    if (ymin===ymax) { ymin -= 1; ymax += 1; }
+  }
+  // padding
+  const px = (xmax - xmin) * state.view.padding;
+  const py = (ymax - ymin) * state.view.padding;
+  return {xmin: xmin - px, xmax: xmax + px, ymin: ymin - py, ymax: ymax + py};
+}
+function dataToCanvas(x,y) {
+  const r = computeRanges();
+  const sx = (x - r.xmin) / (r.xmax - r.xmin);
+  const sy = 1 - (y - r.ymin) / (r.ymax - r.ymin);
+  return [sx * canvas.width, sy * canvas.height];
+}
+function canvasToData(mx,my) {
+  const r = computeRanges();
+  const sx = mx / canvas.width;
+  const sy = 1 - (my / canvas.height);
+  const x = r.xmin + sx * (r.xmax - r.xmin);
+  const y = r.ymin + sy * (r.ymax - r.ymin);
+  return [x,y];
+}
+
+// drawing
+function redraw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // draw grid decision map if present (rendered as text)
+  if (state.grid && state.grid.preds) {
+    const res = state.grid.res;
+    const cellW = canvas.width / res;
+    const cellH = canvas.height / res;
+    const preds = state.grid.preds;
+    ctx.font = Math.max(8, Math.min(16, Math.floor(Math.min(cellW,cellH)*0.6))) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let j=0;j<res;j++){
+      for (let i=0;i<res;i++){
+        const val = preds[j*res + i];
+        const cx = i*cellW + cellW/2;
+        const cy = j*cellH + cellH/2;
+        ctx.fillStyle = 'black';
+        ctx.fillText(String(val), cx, cy);
+      }
+    }
+  }
+
+  // axes tick marks (draw simple labels)
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const r = computeRanges();
+  ctx.fillStyle = 'black';
+  ctx.fillText('x:' + r.xmin.toFixed(2) + ' .. ' + r.xmax.toFixed(2), 4, 4);
+  ctx.fillText('y:' + r.ymin.toFixed(2) + ' .. ' + r.ymax.toFixed(2), 4, 18);
+
+  // draw all points
+  for (let p of state.points) {
+    drawPoint(p);
+  }
+
+  // if selected and show neighbors, draw neighbor info
+  if (state.selected) {
+    const p = state.points.find(pt=>pt.id===state.selected);
+    if (p && chkShowNeighbors.checked) {
+      const neighbors = findNeighborsForPoint(p);
+      // draw lines to neighbors and mark neighbor indices
+      const [xi, yi] = getSelectedFeatures();
+      const [px,py] = dataToCanvas(p.x[xi], p.x[yi]);
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 1;
+      for (let i=0;i<neighbors.length;i++){
+        const n = neighbors[i];
+        const [nx,ny] = dataToCanvas(n.x[xi], n.x[yi]);
+        ctx.beginPath();
+        ctx.moveTo(px,py); ctx.lineTo(nx,ny); ctx.stroke();
+        // draw small label for neighbor order
+        ctx.fillStyle = 'black';
+        ctx.fillRect(nx-6, ny-6, 12, 12);
+        ctx.fillStyle = 'white';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(i+1), nx, ny);
+      }
+    }
+  }
+}
+
+function drawPoint(p) {
+  const [xi, yi] = getSelectedFeatures();
+  const [cx,cy] = dataToCanvas(p.x[xi], p.x[yi]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'black';
+  ctx.fillStyle = 'black';
+  // shape depends on label or index
+  if (state.type === 'classification') {
+    const lab = ('label' in p) ? p.label : '-';
+    // choose shape by hash of label
+    let shape = 0;
+    if (typeof lab === 'number') shape = Math.abs(lab) % 5;
+    else shape = (String(lab).length % 5);
+    // different shapes
+    if (shape === 0) { // circle filled
+      ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
+    } else if (shape === 1) { // cross
+      ctx.beginPath(); ctx.moveTo(cx-6,cy-6); ctx.lineTo(cx+6,cy+6); ctx.moveTo(cx-6,cy+6); ctx.lineTo(cx+6,cy-6); ctx.stroke();
+    } else if (shape === 2) { // square
+      ctx.strokeRect(cx-6, cy-6, 12, 12);
+    } else if (shape === 3) { // triangle
+      ctx.beginPath(); ctx.moveTo(cx,cy-7); ctx.lineTo(cx-7,cy+6); ctx.lineTo(cx+7,cy+6); ctx.closePath(); ctx.stroke();
+    } else { // text label
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(lab), cx, cy);
+    }
+  } else {
+    // regression: draw small dot and number
+    ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    const v = ('value' in p) ? p.value : '';
+    ctx.fillText(v.toFixed? (p.value? p.value.toFixed(2): '') : String(v), cx+6, cy+6);
+  }
+  // mark test points with square marker
+  if (p.split === 'test') {
+    ctx.strokeRect(cx+8, cy-8, 8, 8);
+  }
+  // selection ring
+  if (state.selected === p.id) {
+    ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2); ctx.stroke();
+    selId.textContent = p.id;
+  }
+}
+
+// compute feature means
+function featureMeans() {
+  const means = Array(state.dims).fill(0);
+  if (!state.points.length) return means;
+  for (let d=0; d<state.dims; d++) {
+    let s=0, count=0;
+    for (let p of state.points) { s += (p.x[d] || 0); count++; }
+    means[d] = s/count;
+  }
+  return means;
+}
+
+// KNN core
+function prepareDataForDistances() {
+  // returns array of normalized feature arrays depending on norm setting
+  const norm = state.settings.norm;
+  const Xtrain = state.points.map(p=>p.x.slice());
+  const dims = state.dims;
+  const res = {X: Xtrain, normParams: null};
+  if (norm === 'none') return res;
+  const params = {min: Array(dims), max: Array(dims), mean: Array(dims), std: Array(dims)};
+  for (let d=0; d<dims; d++){
+    const vals = Xtrain.map(r=>r[d]);
+    const mn = Math.min(...vals);
+    const mx = Math.max(...vals);
+    const mu = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const sd = Math.sqrt(vals.reduce((s,v)=>s+(v-mu)*(v-mu),0)/vals.length);
+    params.min[d] = mn; params.max[d] = mx; params.mean[d] = mu; params.std[d] = sd || 1;
+    if (norm==='minmax') {
+      for (let i=0;i<Xtrain.length;i++) {
+        Xtrain[i][d] = (Xtrain[i][d] - mn) / (mx - mn || 1);
+      }
+    } else if (norm==='zscore') {
+      for (let i=0;i<Xtrain.length;i++) {
+        Xtrain[i][d] = (Xtrain[i][d] - mu) / (params.std[d] || 1);
+      }
+    }
+  }
+  res.X = Xtrain;
+  res.normParams = params;
+  return res;
+}
+
+function normalizePoint(x, params, method) {
+  if (!params || method==='none') return x.slice();
+  if (method==='minmax') {
+    return x.map((v,i)=> (v - params.min[i]) / (params.max[i] - params.min[i] || 1));
+  } else if (method==='zscore') {
+    return x.map((v,i)=> (v - params.mean[i]) / (params.std[i] || 1));
+  }
+  return x.slice();
+}
+
+function distance(a,b,method) {
+  if (!a || !b) return Infinity;
+  if (method==='euclidean') {
+    let s=0; for (let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d;} return Math.sqrt(s);
+  } else if (method==='manhattan') {
+    let s=0; for (let i=0;i<a.length;i++){ s+=Math.abs(a[i]-b[i]); } return s;
+  } else if (method==='chebyshev') {
+    let m=0; for (let i=0;i<a.length;i++){ m = Math.max(m, Math.abs(a[i]-b[i])); } return m;
+  } else if (method==='cosine') {
+    let da=0, db=0, dot=0;
+    for (let i=0;i<a.length;i++){ dot += a[i]*b[i]; da+=a[i]*a[i]; db+=b[i]*b[i]; }
+    if (da===0 || db===0) return 1; return 1 - dot / (Math.sqrt(da)*Math.sqrt(db));
+  }
+  return Infinity;
+}
+
+function findNeighborsForPoint(p) {
+  // returns array of neighbor point objects (k nearest using current settings)
+  const k = Math.max(1, state.settings.k);
+  const all = state.points.filter(pt=>pt.id!==p.id && (pt.split === 'train' || pt.split === undefined || pt.split === 'train'));
+  if (!all.length) return [];
+  const prepared = prepareDataForDistances();
+  const params = prepared.normParams;
+  const method = state.settings.norm;
+  const px = normalizePoint(p.x, params, method);
+  const distMethod = state.settings.dist;
+  const dlist = all.map(pt=>{
+    const nx = normalizePoint(pt.x, params, method);
+    const d = distance(px, nx, distMethod);
+    return {pt: pt, d: d};
+  });
+  dlist.sort((a,b)=>a.d - b.d);
+  return dlist.slice(0,k).map(x=>x.pt);
+}
+
+function predictForPoint(p, options={explain:false}) {
+  // return predicted label or value and optionally explanation
+  const prepared = prepareDataForDistances();
+  const params = prepared.normParams;
+  const method = state.settings.norm;
+  const px = normalizePoint(p.x, params, method);
+  const candidates = [];
+  for (let pt of state.points) {
+    if (pt.id === p.id) continue;
+    if (pt.split !== 'train' && pt.split!=='train' && pt.split!=='') {
+      // only use train points as neighbors
+    }
+    if (pt.split !== 'train') continue;
+    const nx = normalizePoint(pt.x, params, method);
+    const d = distance(px, nx, state.settings.dist);
+    candidates.push({d: d, pt: pt});
+  }
+  candidates.sort((a,b)=>a.d - b.d);
+  const k = Math.max(1, state.settings.k);
+  const neighbors = candidates.slice(0,k);
+  // weighting
+  const weights = neighbors.map(n=>{
+    if (state.settings.weight === 'uniform') return 1;
+    if (state.settings.weight === 'inverse') return 1 / (n.d + 1e-6);
+    if (state.settings.weight === 'gaussian') return Math.exp(-(n.d*n.d)/(2*1.0));
+    return 1;
+  });
+  if (state.type === 'classification') {
+    // aggregate by label
+    const counts = {};
+    for (let i=0;i<neighbors.length;i++){
+      const lab = neighbors[i].pt.label;
+      const w = weights[i];
+      counts[lab] = (counts[lab]||0) + w;
+    }
+    // find max
+    let bestLabel = null;
+    let bestScore = -Infinity;
+    for (let klabel in counts) {
+      if (counts[klabel] > bestScore) { bestScore = counts[klabel]; bestLabel = klabel; }
+      else if (counts[klabel] === bestScore) {
+        // tie-break
+        if (state.settings.tie === 'lowest') {
+          if (klabel < bestLabel) bestLabel = klabel;
+        } else if (state.settings.tie === 'closest') {
+          // choose label of closest neighbor among those tied
+          for (let n of neighbors) { if (String(n.pt.label)===klabel) { bestLabel = klabel; break; } }
+        } else if (state.settings.tie === 'random') {
+          if (Math.random() < 0.5) bestLabel = klabel;
+        }
+      }
+    }
+    return {pred: bestLabel, neighbors: neighbors.map(n=>({id:n.pt.id,d:n.d,label:n.pt.label}))};
+  } else {
+    // regression: weighted average
+    let num=0, den=0;
+    for (let i=0;i<neighbors.length;i++){
+      const w = weights[i];
+      const val = neighbors[i].pt.value || 0;
+      num += w * val; den += w;
+    }
+    const pred = den? num/den : (neighbors.length? neighbors[0].pt.value : 0);
+    return {pred: pred, neighbors: neighbors.map(n=>({id:n.pt.id,d:n.d,value:n.pt.value}))};
+  }
+}
+
+// UI actions
+btnGenerate.addEventListener('click', generateDataset);
+btnClear.addEventListener('click', ()=>{
+  pushUndo();
+  state.points = [];
+  state.grid = null;
+  redraw();
+  log('Cleared dataset');
+});
+btnDefault.addEventListener('click', ()=>{
+  inClasses.value = 3; inPpc.value = 25; inDims.value = 2; inSeed.value = 2; inType.value = 'classification';
+  generateDataset();
+});
+
+btnExportJSON.addEventListener('click', exportJSON);
+btnExportCSV.addEventListener('click', exportCSV);
+
+// classification explanation
+btnExplain.addEventListener('click', ()=>{
+  if (!state.selected) { log('Select a point first'); return; }
+  const p = state.points.find(pt=>pt.id===state.selected);
+  if (!p) { log('Selected point not found'); return; }
+  const res = predictForPoint(p, {explain:true});
+  let out = 'Prediction for selected point (id='+p.id+'): \n';
+  out += 'Predicted: ' + String(res.pred) + '\n';
+  out += 'Neighbors:\n';
+  res.neighbors.forEach((n,i)=>{
+    out += (i+1) + '. id=' + n.id + ', dist=' + n.d.toFixed(4);
+    if ('label' in n) out += ', label=' + n.label;
+    if ('value' in n) out += ', value=' + n.value;
+    out += '\n';
+  });
+  txtDetails.value = out;
+  log('Explained prediction for selected point');
+});
+
+// predict all unlabeled or test set
+btnPredictAll.addEventListener('click', ()=>{
+  if (!state.points.length) { log('No points'); return; }
+  pushUndo();
+  let count=0;
+  for (let p of state.points) {
+    if (state.type === 'classification') {
+      if (p.label === undefined || p.label === null) {
+        const res = predictForPoint(p);
+        p.label = res.pred;
+        count++;
+      }
+    } else {
+      if (p.value === undefined || p.value === null) {
+        const res = predictForPoint(p);
+        p.value = res.pred;
+        count++;
+      }
+    }
+  }
+  redraw();
+  log('Assigned predictions to ' + count + ' unlabeled points');
+});
+
+// grid decision map
+btnComputeGrid.addEventListener('click', ()=>{
+  const res = Math.max(5, Math.min(100, parseInt(inRes.value)));
+  const [xi, yi] = getSelectedFeatures();
+  const ranges = computeRanges();
+  const preds = [];
+  pushUndo();
+  // for each grid cell, map to feature space point (other dims = mean)
+  const dims = state.dims;
+  const means = featureMeans();
+  for (let j=0;j<res;j++){
+    for (let i=0;i<res;i++){
+      const sx = (i + 0.5)/res;
+      const sy = 1 - (j + 0.5)/res;
+      const x = ranges.xmin + sx*(ranges.xmax - ranges.xmin);
+      const y = ranges.ymin + sy*(ranges.ymax - ranges.ymin);
+      const p = {id: 'grid_'+i+'_'+j, x: Array(dims).fill(0) };
+      for (let d=0; d<dims; d++) p.x[d] = means[d];
+      p.x[xi] = x; p.x[yi] = y;
+      const pred = predictForPoint(p);
+      preds.push(pred.pred);
+    }
+  }
+  state.grid = {preds: preds, res: res, xRange: [ranges.xmin, ranges.xmax], yRange: [ranges.ymin, ranges.ymax], features: [xi, yi]};
+  redraw();
+  log('Computed decision grid, resolution=' + res);
+});
+btnClearGrid.addEventListener('click', ()=>{ state.grid = null; redraw(); });
+
+// split and CV
+inTestFrac.addEventListener('input', ()=>{ outTestFrac.textContent = parseFloat(inTestFrac.value).toFixed(2); });
+btnSplit.addEventListener('click', ()=>{
+  if (!state.points.length) { log('No points to split'); return; }
+  pushUndo();
+  const frac = parseFloat(inTestFrac.value);
+  const rng = rand(Date.now() % 1000000);
+  const shuffled = state.points.slice();
+  shuffle(shuffled, rng);
+  const testCount = Math.floor(shuffled.length * frac);
+  for (let i=0;i<shuffled.length;i++){
+    shuffled[i].split = (i < testCount ? 'test' : 'train');
+  }
+  // copy back splits
+  for (let p of state.points) {
+    const sp = shuffled.find(s=>s.id===p.id);
+    if (sp) p.split = sp.split;
+  }
+  redraw();
+  log('Split dataset: test fraction=' + frac);
+});
+
+btnCV.addEventListener('click', ()=>{
+  const folds = Math.max(2, parseInt(inFolds.value || 5));
+  if (!state.points.length) { log('No points'); return; }
+  // Only use labeled points for CV
+  const labeled = state.points.filter(p => (state.type==='classification' ? ('label' in p && p.label !== undefined) : ('value' in p && p.value !== undefined)));
+  if (labeled.length < folds) { log('Not enough labeled points for ' + folds + ' folds'); return; }
+  const rng = rand(1);
+  const idx = labeled.map((v,i)=>i);
+  shuffle(idx, rng);
+  const foldSize = Math.floor(labeled.length / folds);
+  const results = [];
+  pushUndo();
+  for (let f=0; f<folds; f++){
+    const testIdx = idx.slice(f*foldSize, (f+1)*foldSize);
+    const trainIdx = idx.filter(i=>!testIdx.includes(i));
+    // create temp train/test splits
+    const tmp = labeled.map((p,i)=>{
+      return {id: p.id, x: p.x.slice(), label: p.label, value: p.value, split: trainIdx.includes(i)?'train':'test'};
+    });
+    // compute metrics
+    const preds = [];
+    for (let iTest of testIdx) {
+      const pTest = tmp[iTest];
+      // build points array for predict function
+      // simulate global state by substituting state.points with tmp set
+      const originalPoints = state.points;
+      state.points = tmp;
+      const res = predictForPoint(pTest);
+      // restore
+      state.points = originalPoints;
+      preds.push({true: (state.type==='classification'? pTest.label: pTest.value), pred: res.pred});
+    }
+    // compute metric
+    if (state.type === 'classification') {
+      let correct = 0;
+      for (let el of preds) if (String(el.true) === String(el.pred)) correct++;
+      results.push({fold: f+1, accuracy: preds.length? correct / preds.length : 0, correct, total: preds.length});
+    } else {
+      let sse = 0;
+      for (let el of preds) sse += Math.pow(el.true - el.pred, 2);
+      results.push({fold: f+1, mse: preds.length? sse / preds.length : 0, total: preds.length});
+    }
+  }
+  // aggregate
+  let out = 'Cross-validation results:\n';
+  if (state.type === 'classification') {
+    let sum=0, tot=0;
+    results.forEach(r=>{ out += 'Fold '+r.fold+': acc=' + (r.accuracy*100).toFixed(2)+'% ('+r.correct+'/'+r.total+')\n'; sum += r.accuracy; tot++; });
+    out += 'Mean accuracy: ' + ((sum/tot)*100).toFixed(2) + '%\n';
+  } else {
+    let sum=0, tot=0;
+    results.forEach(r=>{ out += 'Fold '+r.fold+': mse=' + r.mse.toFixed(4) + '\n'; sum += r.mse; tot++; });
+    out += 'Mean MSE: ' + (sum/tot).toFixed(4) + '\n';
+  }
+  txtOutput.value = out;
+  log('Ran cross-validation with ' + folds + ' folds');
+});
+
+// hyperparameter sweep
+btnSweep.addEventListener('click', ()=>{
+  const maxk = Math.max(1, parseInt(inSweepMax.value));
+  if (!state.points.length) { log('No points'); return; }
+  const labeled = state.points.filter(p => (state.type==='classification' ? ('label' in p && p.label !== undefined) : ('value' in p && p.value !== undefined)));
+  if (!labeled.length) { log('No labeled points for sweep'); return; }
+  const rng = rand(2);
+  const idx = labeled.map((v,i)=>i);
+  shuffle(idx, rng);
+  const trainSize = Math.floor(labeled.length * 0.7) || Math.floor(labeled.length/2);
+  const trainIdx = idx.slice(0,trainSize);
+  const testIdx = idx.slice(trainSize);
+  if (!testIdx.length) { log('Not enough points to split for sweep'); return; }
+  const results = [];
+  pushUndo();
+  for (let k=1;k<=maxk;k++){
+    state.settings.k = k;
+    let correct=0, total=0, sse=0;
+    for (let ti of testIdx) {
+      const pTest = labeled[ti];
+      // temporarily set only training points
+      const trainPts = trainIdx.map(i => labeled[i]);
+      const originalPoints = state.points;
+      state.points = trainPts.concat([]);
+      const res = predictForPoint(pTest);
+      state.points = originalPoints;
+      if (state.type === 'classification') {
+        if (String(res.pred) === String(pTest.label)) correct++;
+        total++;
+      } else {
+        sse += Math.pow(pTest.value - res.pred, 2);
+        total++;
+      }
+    }
+    if (state.type === 'classification') results.push({k:k, acc: total? correct/total : 0});
+    else results.push({k:k, mse: total? sse/total : 0});
+  }
+  // display and allow clicking a k in output by text (user can copy)
+  let out = 'Hyperparameter sweep results:\n';
+  if (state.type === 'classification') {
+    results.forEach(r=> out += 'k=' + r.k + ': acc=' + (r.acc*100).toFixed(2) + '%\n');
+    // set k to best
+    const best = results.reduce((a,b)=> a.acc>=b.acc?a:b);
+    state.settings.k = best.k; inK.value = best.k; outK.textContent = best.k;
+    out += 'Best k (max accuracy): ' + best.k + '\n';
+  } else {
+    results.forEach(r=> out += 'k=' + r.k + ': mse=' + r.mse.toFixed(4) + '\n');
+    const best = results.reduce((a,b)=> a.mse<=b.mse?a:b);
+    state.settings.k = best.k; inK.value = best.k; outK.textContent = best.k;
+    out += 'Best k (min mse): ' + best.k + '\n';
+  }
+  txtOutput.value = out;
+  redraw();
+  log('Completed hyperparameter sweep up to k=' + maxk);
+});
+
+// center and scale view
+btnCenter.addEventListener('click', ()=>{
+  state.view.padding = 0.02;
+  redraw();
+});
+btnScale.addEventListener('click', ()=>{
+  state.view.padding = 0.06;
+  redraw();
+});
+
+// details display
+function showDetailsForSelected() {
+  if (!state.selected) { txtDetails.value = ''; selId.textContent = 'none'; return; }
+  const p = state.points.find(pt=>pt.id===state.selected);
+  if (!p) { txtDetails.value = ''; selId.textContent = 'none'; return; }
+  let out = 'Point id: ' + p.id + '\n';
+  out += 'Coordinates: ' + p.x.map(v=>v.toFixed(3)).join(', ') + '\n';
+  if (state.type === 'classification') out += 'Label: ' + (('label' in p)? String(p.label) : 'none') + '\n';
+  else out += 'Value: ' + (('value' in p)? String(p.value) : 'none') + '\n';
+  out += 'Split: ' + p.split + '\n';
+  txtDetails.value = out;
+}
+
+// logging
+function log(msg) {
+  const now = new Date();
+  txtOutput.value = '[' + now.toLocaleTimeString() + '] ' + msg + '\n' + txtOutput.value;
+}
+
+// helper predict for grid hover
+canvas.addEventListener('mousemove', (ev)=>{
+  if (!state.grid) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+  const res = state.grid.res;
+  const cellW = canvas.width / res;
+  const cellH = canvas.height / res;
+  const i = Math.floor(mx / cellW);
+  const j = Math.floor(my / cellH);
+  if (i<0||i>=res||j<0||j>=res) return;
+  const idx = j*res + i;
+  const val = state.grid.preds[idx];
+  // display in output area but keep previous messages: place at top
+  txtOutput.value = 'Grid hover: cell ['+i+','+j+'] -> pred=' + String(val) + '\n' + txtOutput.value;
+  // optionally show neighbors for the generated grid point
+  if (chkShowNeighbors.checked) {
+    const dims = state.dims;
+    const p = { id:'tmp', x: Array(dims).fill(0) };
+    const xi = state.grid.features[0], yi = state.grid.features[1];
+    const ranges = {xmin: state.grid.xRange[0], xmax: state.grid.xRange[1], ymin: state.grid.yRange[0], ymax: state.grid.yRange[1]};
+    const sx = (i + 0.5)/res;
+    const sy = 1 - (j + 0.5)/res;
+    p.x[xi] = ranges.xmin + sx*(ranges.xmax - ranges.xmin);
+    p.x[yi] = ranges.ymin + sy*(ranges.ymax - ranges.ymin);
+    const means = featureMeans();
+    for (let d=0; d<dims; d++) if (d!==xi && d!==yi) p.x[d] = means[d];
+    const pred = predictForPoint(p);
+    // show details
+    let out = 'Grid cell prediction: ' + String(pred.pred) + '\nNeighbors:\n';
+    pred.neighbors.forEach((n,i)=> out += (i+1)+'. id='+n.id+', dist='+n.d.toFixed(4)+(n.label!==undefined? ', label='+n.label: (n.value!==undefined? ', value='+n.value: '')) + '\n');
+    txtDetails.value = out;
+    // mark neighbors visually
+    // we will redraw after to show neighbors - but careful: do not disturb undo stack
+    redraw();
+    // draw neighbor marks
+    const neighbors = pred.neighbors.map(n=> state.points.find(pt=>pt.id===n.id)).filter(Boolean);
+    for (let iN=0;iN<neighbors.length;iN++){
+      const np = neighbors[iN];
+      ctx.beginPath();
+      const [nx,ny] = dataToCanvas(np.x[xi], np.x[yi]);
+      ctx.strokeRect(nx-9, ny-9, 18, 18);
+    }
+  }
+});
+
+// show details when clicking selected (also via button)
+canvas.addEventListener('click', (ev)=>{ showDetailsForSelected(); });
+
+// keyboard shortcuts
+window.addEventListener('keydown', (ev)=>{
+  if (ev.key === 'a') document.querySelector('input[name="mode"][value="add"]').checked = true;
+  if (ev.key === 'm') document.querySelector('input[name="mode"][value="move"]').checked = true;
+  if (ev.key === 'r') document.querySelector('input[name="mode"][value="remove"]').checked = true;
+  state.mode = document.querySelector('input[name="mode"]:checked').value;
+});
+
+// initial setup
+function setup() {
+  initFeatureSelectors();
+  state.points = [];
+  generateDataset();
+}
+setup();
+
+})(); // end closure
+</script>
+
+</body>
+</html>

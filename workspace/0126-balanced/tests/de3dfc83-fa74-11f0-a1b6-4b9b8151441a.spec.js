@@ -93,7 +93,7 @@ test.describe('Random Forest Visualization - FSM state & transitions tests', () 
       await page.click('#generateForest');
 
       // Ensure the forest array in the page now has numTrees items (numTrees is defined as 5 in the app)
-      const forestLength = await page.evaluate(() => {
+      const forestLength1 = await page.evaluate(() => {
         return typeof forest !== 'undefined' ? forest.length : -1;
       });
       expect(forestLength).toBe(5);
@@ -166,11 +166,11 @@ test.describe('Random Forest Visualization - FSM state & transitions tests', () 
       expect(randomPoint.y).toBeLessThanOrEqual(400);
 
       // Ensure forest remains intact after classification
-      const forestLength = await page.evaluate(() => (typeof forest !== 'undefined' ? forest.length : -1));
+      const forestLength2 = await page.evaluate(() => (typeof forest !== 'undefined' ? forest.length : -1));
       expect(forestLength).toBe(5);
 
       // Ensure globalAlpha restored to 1.0
-      const globalAlpha = await page.evaluate(() => ctx.globalAlpha);
+      const globalAlpha1 = await page.evaluate(() => ctx.globalAlpha1);
       expect(globalAlpha).toBe(1.0);
 
       // Confirm treesContainer still contains 5 trees
@@ -227,7 +227,7 @@ test.describe('Random Forest Visualization - FSM state & transitions tests', () 
       expect(afterCount).toBe(5);
 
       // Either content changed (trees were recreated) or remained but still valid; assert forest length
-      const forestLength = await page.evaluate(() => (typeof forest !== 'undefined' ? forest.length : -1));
+      const forestLength3 = await page.evaluate(() => (typeof forest !== 'undefined' ? forest.length : -1));
       expect(forestLength).toBe(5);
 
       // Page errors check
@@ -276,7 +276,7 @@ test.describe('Random Forest Visualization - FSM state & transitions tests', () 
       // It clicks classify without forest to intentionally cause an error and validates that the pageerror handler was invoked.
 
       // Prepare to capture the pageerror via waitForEvent again
-      const pageErrorPromise = page.waitForEvent('pageerror');
+      const pageErrorPromise1 = page.waitForEvent('pageerror');
 
       // Trigger error
       await page.click('#classifyPoint');

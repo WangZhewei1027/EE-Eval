@@ -92,7 +92,7 @@ test.describe('Bucket Sort FSM - Interactive Application (ca77eca1-fa75-11f0-985
   // Tests covering Sorting state (S1_Sorting) and the SortBuckets_Click transition
   test.describe('Sorting State (S1_Sorting) and transitions', () => {
     test('Transition: clicking Sort Buckets triggers sortBuckets and results in a runtime TypeError as implemented', async ({ page }) => {
-      const app = new BucketSortPage(page);
+      const app1 = new BucketSortPage(page);
       await app.goto();
 
       // Confirm that sortBuckets function is defined on the window (entry action for S1_Sorting)
@@ -137,7 +137,7 @@ test.describe('Bucket Sort FSM - Interactive Application (ca77eca1-fa75-11f0-985
     });
 
     test('Edge case: invoking sortBuckets via page.evaluate results in a rejected promise with the runtime error', async ({ page }) => {
-      const app = new BucketSortPage(page);
+      const app2 = new BucketSortPage(page);
       await app.goto();
 
       // Call the function directly from the test context. The function throws, which will make
@@ -150,11 +150,11 @@ test.describe('Bucket Sort FSM - Interactive Application (ca77eca1-fa75-11f0-985
     });
 
     test('Robustness: multiple clicks produce multiple uncaught page errors (repeated transition attempts)', async ({ page }) => {
-      const app = new BucketSortPage(page);
+      const app3 = new BucketSortPage(page);
       await app.goto();
 
       // Ensure function exists
-      const sortType = await app.typeofOnWindow('sortBuckets');
+      const sortType1 = await app.typeofOnWindow('sortBuckets');
       expect(sortType).toBe('function');
 
       // Capture pageerror events into an array so we can assert multiple errors occur
@@ -188,7 +188,7 @@ test.describe('Bucket Sort FSM - Interactive Application (ca77eca1-fa75-11f0-985
   // Tests that validate FSM evidence and event wiring
   test.describe('FSM evidence and event handler validations', () => {
     test('Evidence: the button uses inline onclick wiring to sortBuckets as described by FSM', async ({ page }) => {
-      const app = new BucketSortPage(page);
+      const app4 = new BucketSortPage(page);
       await app.goto();
 
       // The FSM indicates a component selector button[onclick='sortBuckets()']
@@ -201,7 +201,7 @@ test.describe('Bucket Sort FSM - Interactive Application (ca77eca1-fa75-11f0-985
     });
 
     test('Evidence: .bucket elements exist and are selectable as the visual component', async ({ page }) => {
-      const app = new BucketSortPage(page);
+      const app5 = new BucketSortPage(page);
       await app.goto();
 
       // Confirm .bucket is present and is an Element node

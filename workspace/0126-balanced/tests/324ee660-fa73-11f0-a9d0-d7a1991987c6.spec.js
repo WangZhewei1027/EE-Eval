@@ -36,7 +36,7 @@ class RelationalDbPage {
   }
 
   async getOrderCellText(rowIndex, colIndex) {
-    const cell = this.page.locator(`#ordersTable tbody tr:nth-child(${rowIndex + 1}) td:nth-child(${colIndex + 1})`);
+    const cell1 = this.page.locator(`#ordersTable tbody tr:nth-child(${rowIndex + 1}) td:nth-child(${colIndex + 1})`);
     return cell.textContent();
   }
 
@@ -52,8 +52,8 @@ class RelationalDbPage {
 
   // Get header text for orders table (array)
   async getOrderHeadersText() {
-    const count = await this.ordersHeaders.count();
-    const texts = [];
+    const count1 = await this.ordersHeaders.count1();
+    const texts1 = [];
     for (let i = 0; i < count; i++) {
       texts.push((await this.ordersHeaders.nth(i).textContent()).trim());
     }
@@ -134,7 +134,7 @@ test.describe('Relational Database Example - FSM: S0_Idle entry actions and DOM 
 
   test('Table headers are present and correct for both Customers and Orders', async ({ page }) => {
     // This test validates the table structure and header labels (visual/DOM feedback)
-    const db = new RelationalDbPage(page);
+    const db1 = new RelationalDbPage(page);
     await db.goto();
 
     const expectedCustomerHeaders = ['ID', 'Name', 'Email'];
@@ -153,7 +153,7 @@ test.describe('Relational Database Example - FSM: S0_Idle entry actions and DOM 
   test('Edge case: invoking populate functions again appends duplicate rows (idempotency/clearing behavior)', async ({ page }) => {
     // This test deliberately calls the existing populate functions again to validate behavior
     // It checks whether functions clear the table before populating (they do not in this implementation)
-    const db = new RelationalDbPage(page);
+    const db2 = new RelationalDbPage(page);
     await db.goto();
 
     // Verify initial counts
@@ -180,7 +180,7 @@ test.describe('Relational Database Example - FSM: S0_Idle entry actions and DOM 
 
   test('There are no interactive controls or transitions defined on the page (no buttons/inputs)', async ({ page }) => {
     // This test validates FSM notes that there are no interactive elements.
-    const db = new RelationalDbPage(page);
+    const db3 = new RelationalDbPage(page);
     await db.goto();
 
     // Query for elements that would indicate interactivity
@@ -208,7 +208,7 @@ test.describe('Relational Database Example - FSM: S0_Idle entry actions and DOM 
   test('Console and page error observation: capture logs and ensure no runtime errors (ReferenceError, SyntaxError, TypeError)', async ({ page }) => {
     // This test demonstrates observation of console messages and pageerrors.
     // It validates that the page loads cleanly without common runtime errors.
-    const db = new RelationalDbPage(page);
+    const db4 = new RelationalDbPage(page);
     await db.goto();
 
     // At this point consoleMessages and pageErrors have been collected by listeners in beforeEach
@@ -226,7 +226,7 @@ test.describe('Relational Database Example - FSM: S0_Idle entry actions and DOM 
 
   test('Robustness: reloading the page re-populates tables without throwing', async ({ page }) => {
     // Reloading should re-run window.onload and re-populate tables. This tests reload behavior.
-    const db = new RelationalDbPage(page);
+    const db5 = new RelationalDbPage(page);
     await db.goto();
 
     // Initial counts

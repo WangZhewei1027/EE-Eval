@@ -66,7 +66,7 @@ test.describe('FSM: Query Optimization Demonstration - states and transitions', 
     // - The optimized steps should be <= unoptimized steps
 
     // Ensure the default query is present (this is the valid scenario)
-    const textarea = await page.waitForSelector('#queryInput');
+    const textarea1 = await page.waitForSelector('#queryInput');
     const initialQuery = await textarea.inputValue();
     expect(initialQuery).toContain('SELECT * FROM employees');
 
@@ -148,7 +148,7 @@ test.describe('FSM: Query Optimization Demonstration - states and transitions', 
     }
 
     // Ensure no console errors or uncaught page errors appeared during execution
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
@@ -185,7 +185,7 @@ test.describe('FSM: Query Optimization Demonstration - states and transitions', 
     expect(emptyMsg).toContain('Please enter a SQL query.');
 
     // Confirm that invalid query path does not throw uncaught exceptions
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
@@ -218,7 +218,7 @@ test.describe('FSM: Query Optimization Demonstration - states and transitions', 
     expect(parseNoWhere).toBeNull();
 
     // Ensure no runtime page errors occurred during calling parseQuery
-    const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+    const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
@@ -241,7 +241,7 @@ test.describe('FSM: Query Optimization Demonstration - states and transitions', 
       // Small wait for DOM update
       await page.waitForTimeout(30);
       // We accept either an error message or a results table, but there must be no uncaught exceptions
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(consoleErrors).toEqual([]);
       expect(pageErrors).toEqual([]);
     }

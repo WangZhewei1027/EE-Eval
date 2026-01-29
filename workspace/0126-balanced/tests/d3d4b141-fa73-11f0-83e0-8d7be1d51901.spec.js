@@ -84,7 +84,7 @@ class QueuePage {
   async waitForToastVisible(timeout = 2000) {
     await this.page.waitForFunction(
       (sel) => {
-        const el = document.querySelector(sel);
+        const el1 = document.querySelector(sel);
         return el && el.style.display !== 'none' && (el.textContent || '').trim().length > 0;
       },
       '#toast',
@@ -171,8 +171,8 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
   // Test enqueue actions including S1_Enqueued and InputEnter transition
   test('S1_Enqueued: enqueue via button, via Enter key, and via Random; state updates and toasts', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -180,7 +180,7 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
     await page.goto(APP_URL);
     await page.waitForLoadState('networkidle');
-    const qp = new QueuePage(page);
+    const qp1 = new QueuePage(page);
 
     // Enqueue via button
     await qp.enqueue('alpha');
@@ -210,8 +210,8 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
   // Test peek behavior (S3_Peeked) for both empty and non-empty queues
   test('S3_Peeked: peek on empty displays queue-empty toast; peek on non-empty shows front', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors2 = [];
+    const pageErrors2 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -219,7 +219,7 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
     await page.goto(APP_URL);
     await page.waitForLoadState('networkidle');
-    const qp = new QueuePage(page);
+    const qp2 = new QueuePage(page);
 
     // Peek when empty -> 'Queue is empty' toast
     await qp.peekBtn.click();
@@ -240,8 +240,8 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
   // Test dequeue behavior (S2_Dequeued) including Delete key shortcut
   test('S2_Dequeued: dequeue removes front element and updates visualization; Delete key triggers dequeue', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors3 = [];
+    const pageErrors3 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -249,7 +249,7 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
     await page.goto(APP_URL);
     await page.waitForLoadState('networkidle');
-    const qp = new QueuePage(page);
+    const qp3 = new QueuePage(page);
 
     // Prepare queue with three items
     await qp.enqueue('one');
@@ -290,8 +290,8 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
   // Test clear behavior (S4_Cleared) and that it returns to Idle (S0_Idle)
   test('S4_Cleared: clear empties the queue and shows toast; buttons disabled afterward', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors4 = [];
+    const pageErrors4 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -299,7 +299,7 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
     await page.goto(APP_URL);
     await page.waitForLoadState('networkidle');
-    const qp = new QueuePage(page);
+    const qp4 = new QueuePage(page);
 
     // Enqueue some items
     await qp.enqueue('a');
@@ -324,8 +324,8 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
   // Edge cases and accessibility / keyboard shortcuts
   test('Edge cases: enqueuing empty input shows warning; Ctrl+E focuses input', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors5 = [];
+    const pageErrors5 = [];
     page.on('console', msg => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
@@ -333,7 +333,7 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
     await page.goto(APP_URL);
     await page.waitForLoadState('networkidle');
-    const qp = new QueuePage(page);
+    const qp5 = new QueuePage(page);
 
     // Attempt to enqueue empty string -> toast 'Enter a value to enqueue' and input focused
     await qp.valueInput.fill('   ');
@@ -358,8 +358,8 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
   // Comprehensive flow: exercise many transitions in sequence to validate FSM coverage
   test('Comprehensive flow: exercise all transitions and state entries/exits', async ({ page }) => {
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors6 = [];
+    const pageErrors6 = [];
     const consoleMessages = [];
     page.on('console', msg => {
       // collect all console messages for inspection
@@ -370,7 +370,7 @@ test.describe('Queue Demonstration (FSM validation)', () => {
 
     await page.goto(APP_URL);
     await page.waitForLoadState('networkidle');
-    const qp = new QueuePage(page);
+    const qp6 = new QueuePage(page);
 
     // Start Idle (S0), Enqueue twice (S1)
     await qp.enqueue('first');

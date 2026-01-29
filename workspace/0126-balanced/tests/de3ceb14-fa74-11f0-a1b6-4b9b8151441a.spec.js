@@ -117,7 +117,7 @@ test.describe('SQL Concepts Demo - FSM transitions and UI behaviour', () => {
 
   test.describe('Complete happy-path interactions and UI assertions', () => {
     test('Create table -> Insert -> Select -> Where -> Update (error expected) -> Delete -> Show Final Data', async ({ page }) => {
-      const demo = new SQLDemoPage(page);
+      const demo1 = new SQLDemoPage(page);
       await demo.goto();
 
       // Capture pageerrors and console messages for later assertions
@@ -237,7 +237,7 @@ test.describe('SQL Concepts Demo - FSM transitions and UI behaviour', () => {
 
   test.describe('Edge cases and error scenarios (isolated fresh page)', () => {
     test('Selecting before table creation should return an error via database.execute', async ({ page }) => {
-      const demo = new SQLDemoPage(page);
+      const demo2 = new SQLDemoPage(page);
       await demo.goto();
 
       // Try to SELECT before creating the table - using direct execute to observe returned error.
@@ -251,18 +251,18 @@ test.describe('SQL Concepts Demo - FSM transitions and UI behaviour', () => {
     });
 
     test('Deleting before table creation should return an error via database.execute', async ({ page }) => {
-      const demo = new SQLDemoPage(page);
+      const demo3 = new SQLDemoPage(page);
       await demo.goto();
 
       const deleteSql = await demo.page.locator(demo.deleteCode).innerText();
-      const result = await demo.executeSqlDirectly(deleteSql);
+      const result1 = await demo.executeSqlDirectly(deleteSql);
       expect(result).toHaveProperty('error');
       expect(typeof result.error).toBe('string');
       expect(result.error.toLowerCase()).toMatch(/undefined|cannot read/);
     });
 
     test('Ensure UI displays "No data in the table" when final data is empty', async ({ page }) => {
-      const demo = new SQLDemoPage(page);
+      const demo4 = new SQLDemoPage(page);
       await demo.goto();
 
       // Show final data before creating table -> this will call SELECT * FROM users via showFinalData()

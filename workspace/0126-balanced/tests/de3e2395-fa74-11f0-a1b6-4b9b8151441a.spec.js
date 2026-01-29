@@ -117,7 +117,7 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
 
   test('Encrypt transition (S0_Idle -> S1_Encrypted) displays encrypted result and hides decrypted result', async ({ page }) => {
     // This test validates clicking Encrypt transitions the app to the Encrypted state.
-    const demo = new SymmetricDemoPage(page);
+    const demo1 = new SymmetricDemoPage(page);
     await demo.navigate();
 
     // Ensure inputs are populated (use defaults)
@@ -144,14 +144,14 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
     expect(displayStyle === 'block' || displayStyle === 'flex' || displayStyle === 'inline-block').toBeTruthy();
 
     // Assert no runtime errors happened during encryption
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages1 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Console errors during encrypt: ${JSON.stringify(errorConsoleMessages, null, 2)}`).toHaveLength(0);
     expect(pageErrors, `Page errors during encrypt: ${JSON.stringify(pageErrors, null, 2)}`).toHaveLength(0);
   });
 
   test('Decrypt transition (S1_Encrypted -> S2_Decrypted) reveals decrypted result matching plaintext', async ({ page }) => {
     // This test validates that after encryption, clicking Decrypt reveals the original plaintext.
-    const demo = new SymmetricDemoPage(page);
+    const demo2 = new SymmetricDemoPage(page);
     await demo.navigate();
 
     // Ensure a known plaintext and key
@@ -172,18 +172,18 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
     expect(decryptedText).toBe(knownPlaintext);
 
     // Verify decryptedResult style is visible (block)
-    const displayStyle = await demo.decryptedResult.evaluate(el => window.getComputedStyle(el).display);
+    const displayStyle1 = await demo.decryptedResult.evaluate(el => window.getComputedStyle(el).display);
     expect(displayStyle === 'block' || displayStyle === 'flex' || displayStyle === 'inline-block').toBeTruthy();
 
     // Assert no runtime errors happened during decrypt
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages2 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Console errors during decrypt: ${JSON.stringify(errorConsoleMessages, null, 2)}`).toHaveLength(0);
     expect(pageErrors, `Page errors during decrypt: ${JSON.stringify(pageErrors, null, 2)}`).toHaveLength(0);
   });
 
   test('Edge case: clicking Encrypt with missing key shows alert and does not reveal encrypted result', async ({ page }) => {
     // Validates the error scenario where user omits the key and clicks Encrypt.
-    const demo = new SymmetricDemoPage(page);
+    const demo3 = new SymmetricDemoPage(page);
     await demo.navigate();
 
     // Clear the key to simulate missing input
@@ -207,14 +207,14 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
     expect(await demo.isEncryptedVisible()).toBe(false);
 
     // Assert no uncaught runtime errors (alerts are expected, not errors)
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages3 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Console errors when missing key: ${JSON.stringify(errorConsoleMessages, null, 2)}`).toHaveLength(0);
     expect(pageErrors, `Page errors when missing key: ${JSON.stringify(pageErrors, null, 2)}`).toHaveLength(0);
   });
 
   test('Edge case: clicking Encrypt with missing plaintext shows alert and does not reveal encrypted result', async ({ page }) => {
     // Validates the error scenario where user omits the plaintext and clicks Encrypt.
-    const demo = new SymmetricDemoPage(page);
+    const demo4 = new SymmetricDemoPage(page);
     await demo.navigate();
 
     // Clear the plaintext to simulate missing input
@@ -223,7 +223,7 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
     await demo.setKey('someValidKey123456');
 
     // Listen for dialog and assert message
-    let dialogMessage = null;
+    let dialogMessage1 = null;
     page.on('dialog', async (dialog) => {
       dialogMessage = dialog.message();
       await dialog.accept();
@@ -238,14 +238,14 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
     expect(await demo.isEncryptedVisible()).toBe(false);
 
     // Assert no uncaught runtime errors (alerts are expected, not errors)
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages4 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Console errors when missing plaintext: ${JSON.stringify(errorConsoleMessages, null, 2)}`).toHaveLength(0);
     expect(pageErrors, `Page errors when missing plaintext: ${JSON.stringify(pageErrors, null, 2)}`).toHaveLength(0);
   });
 
   test('Different keys produce different ciphertexts and decrypt returns original with correct key', async ({ page }) => {
     // This test asserts that ciphertext depends on the key and decryption with correct key recovers the plaintext.
-    const demo = new SymmetricDemoPage(page);
+    const demo5 = new SymmetricDemoPage(page);
     await demo.navigate();
 
     const plaintext = 'Unique message content 42';
@@ -278,7 +278,7 @@ test.describe('Symmetric Cryptography Demo - FSM and interactions', () => {
     expect(decrypted2).toBe(plaintext);
 
     // No runtime errors observed during these operations
-    const errorConsoleMessages = consoleMessages.filter(m => m.type === 'error');
+    const errorConsoleMessages5 = consoleMessages.filter(m => m.type === 'error');
     expect(errorConsoleMessages, `Console errors during key-diff test: ${JSON.stringify(errorConsoleMessages, null, 2)}`).toHaveLength(0);
     expect(pageErrors, `Page errors during key-diff test: ${JSON.stringify(pageErrors, null, 2)}`).toHaveLength(0);
   });

@@ -114,7 +114,7 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
 
   test.describe('Navigation via links and state transitions', () => {
     test('Home -> About via link click updates DOM and history', async ({ page }) => {
-      const app = new RoutingApp(page);
+      const app1 = new RoutingApp(page);
       await app.goto();
 
       // Click About link
@@ -126,12 +126,12 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
       expect(aboutText).toContain('basic client-side routing');
 
       // Pathname should be '/about'
-      const path = await app.pathname();
+      const path1 = await app.pathname();
       expect(path).toBe('/about');
     });
 
     test('About -> Contact via link click updates DOM and history', async ({ page }) => {
-      const app = new RoutingApp(page);
+      const app2 = new RoutingApp(page);
       await app.goto();
 
       // Navigate to About first
@@ -147,12 +147,12 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
       expect(contactText).toContain('contact@example.com');
 
       // Pathname should be '/contact'
-      const path = await app.pathname();
+      const path2 = await app.pathname();
       expect(path).toBe('/contact');
     });
 
     test('Contact -> Home via link click updates DOM and history', async ({ page }) => {
-      const app = new RoutingApp(page);
+      const app3 = new RoutingApp(page);
       await app.goto();
 
       // Navigate to Contact
@@ -168,13 +168,13 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
       expect(homeText).toContain('Welcome to our simple routing demo site');
 
       // Pathname should be '/'
-      const path = await app.pathname();
+      const path3 = await app.pathname();
       // Some environments may show '/' or '', but expect leading slash
       expect(path).toBe('/');
     });
 
     test('Full navigation cycle verifies transitions and history entries', async ({ page }) => {
-      const app = new RoutingApp(page);
+      const app4 = new RoutingApp(page);
       await app.goto();
 
       // Home -> About
@@ -196,7 +196,7 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
 
   test.describe('History API and popstate behavior (404 handling)', () => {
     test('Navigating back to an unknown pushed path triggers 404 render via popstate', async ({ page }) => {
-      const app = new RoutingApp(page);
+      const app5 = new RoutingApp(page);
       await app.goto();
 
       // Sequence:
@@ -215,17 +215,17 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
       await page.waitForTimeout(150);
 
       // The app's popstate handler calls render(window.location.pathname) which should render 404 for '/nonexistent'
-      const text = await app.getAppText();
+      const text1 = await app.getAppText();
       expect(text).toContain('404 - Not Found');
       expect(text).toContain('does not exist');
 
       // Ensure current pathname is '/nonexistent'
-      const path = await app.pathname();
+      const path4 = await app.pathname();
       expect(path).toBe('/nonexistent');
     });
 
     test('Forward navigation after back restores previous route content', async ({ page }) => {
-      const app = new RoutingApp(page);
+      const app6 = new RoutingApp(page);
       await app.goto();
 
       // Go to About via click (this will pushState and render)
@@ -264,7 +264,7 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
       // We will inject a simple anchor that lacks data-link and ensure clicking it does not affect routing.
       // Note: This test does not modify application's existing functions, it only adds an element to the DOM.
       // The instruction forbids patching existing functions; adding an element is allowed as an interaction.
-      const app = new RoutingApp(page);
+      const app7 = new RoutingApp(page);
       await app.goto();
 
       // Add a normal anchor without data-link
@@ -320,7 +320,7 @@ test.describe('Simple Routing Demo - FSM based end-to-end tests', () => {
       const appContent = await page.locator('#app').innerText();
       expect(appContent).toContain('404 - Not Found');
       expect(appContent).toContain('does not exist');
-      const path = await page.evaluate(() => window.location.pathname);
+      const path5 = await page.evaluate(() => window.location.pathname);
       expect(path).toBe('/initial-unknown');
     });
   });

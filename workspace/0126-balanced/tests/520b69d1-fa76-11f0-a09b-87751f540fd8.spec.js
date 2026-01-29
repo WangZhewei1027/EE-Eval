@@ -35,14 +35,14 @@ class DynamicTypingPage {
 
   // Set the input to a given value via fill (also triggers input event)
   async fillText(text) {
-    const inp = await this.input();
+    const inp1 = await this.input();
     await inp.fill(text);
     // In modern browsers fill triggers input event via Playwright, but to be robust:
     await inp.dispatchEvent('input');
   }
 
   async clear() {
-    const inp = await this.input();
+    const inp2 = await this.input();
     await inp.fill('');
     await inp.dispatchEvent('input');
   }
@@ -53,7 +53,7 @@ class DynamicTypingPage {
   }
 
   async placeholder() {
-    const inp = await this.input();
+    const inp3 = await this.input();
     return await inp.getAttribute('placeholder');
   }
 }
@@ -116,7 +116,7 @@ test.describe('Dynamic Typing - FSM states and transitions', () => {
   test.describe('FSM State Coverage', () => {
     // Test Idle state (S0_Idle)
     test('Idle state: before any typing, result div should be empty', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app1 = new DynamicTypingPage(page);
 
       // Ensure page is in initial state: input exists and result is empty
       await expect(page.locator('#input-field')).toBeVisible();
@@ -129,7 +129,7 @@ test.describe('Dynamic Typing - FSM states and transitions', () => {
 
     // Test Invalid Input state (S2_InvalidInput)
     test('Invalid Input state: inputs shorter than 3 characters display validation message', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app2 = new DynamicTypingPage(page);
 
       // Type 1 character and assert invalid message
       await app.typeText('x');
@@ -150,11 +150,11 @@ test.describe('Dynamic Typing - FSM states and transitions', () => {
 
     // Test Valid Input state (S1_ValidInput)
     test('Valid Input state: inputs with length >= 3 show the entered value', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app3 = new DynamicTypingPage(page);
 
       // Type exactly 3 characters
       await app.typeText('hey');
-      let result = await app.getResultText();
+      let result1 = await app.getResultText();
       expect(result).toBe('You entered: hey');
 
       // Extend to 5 characters and ensure the message updates accordingly
@@ -170,11 +170,11 @@ test.describe('Dynamic Typing - FSM states and transitions', () => {
 
     // Test transitions between Invalid and Valid states
     test('Transitions: Invalid -> Valid and Valid -> Invalid occur correctly on input events', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app4 = new DynamicTypingPage(page);
 
       // Start invalid
       await app.typeText('ab'); // 2 chars
-      let result = await app.getResultText();
+      let result2 = await app.getResultText();
       expect(result).toBe('Please enter at least 3 characters');
 
       // Transition to valid
@@ -197,49 +197,49 @@ test.describe('Dynamic Typing - FSM states and transitions', () => {
 
   test.describe('Edge cases and robustness', () => {
     test('Exactly three whitespace characters counts as length 3 (should be treated as valid)', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app5 = new DynamicTypingPage(page);
 
       // Fill exactly 3 spaces
       await app.fillText('   ');
-      const result = await app.getResultText();
+      const result3 = await app.getResultText();
       // The implementation checks length only, so whitespace counts
       expect(result).toBe('You entered:    ');
     });
 
     test('Very long input is accepted and displayed correctly', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app6 = new DynamicTypingPage(page);
 
       const longText = 'a'.repeat(1000);
       await app.fillText(longText);
-      const result = await app.getResultText();
+      const result4 = await app.getResultText();
       expect(result).toBe('You entered: ' + longText);
     });
 
     test('Rapid typing updates reflect the latest value and do not produce errors', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app7 = new DynamicTypingPage(page);
 
       // Simulate rapid typing by sending keystrokes; use type which simulates typing with small delays
-      const inp = await app.input();
+      const inp4 = await app.input();
       await inp.fill('');
       await inp.type('ab'); // currently invalid
       // Immediately continue to type more to reach valid
       await inp.type('cde'); // makes it 'abcde' valid
       // Wait a tick for event processing
       await page.waitForTimeout(50);
-      const result = await app.getResultText();
+      const result5 = await app.getResultText();
       expect(result).toBe('You entered: abcde');
 
       // Ensure no console errors occurred during rapid typing
-      const errorConsoleEntries = consoleMessages.filter((c) => c.type === 'error');
+      const errorConsoleEntries1 = consoleMessages.filter((c) => c.type === 'error');
       expect(errorConsoleEntries.length).toBe(0);
       expect(pageErrors.length).toBe(0);
     });
 
     test('Clearing the input triggers the invalid state message (length 0)', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app8 = new DynamicTypingPage(page);
 
       await app.fillText('abc'); // valid
-      let result = await app.getResultText();
+      let result6 = await app.getResultText();
       expect(result).toBe('You entered: abc');
 
       // Clear the input
@@ -253,7 +253,7 @@ test.describe('Dynamic Typing - FSM states and transitions', () => {
   // Observability tests: ensure console output and pageerror behavior are as expected
   test.describe('Console and error observation', () => {
     test('Observes console messages and ensures no SyntaxError/ReferenceError/TypeError occurred', async ({ page }) => {
-      const app = new DynamicTypingPage(page);
+      const app9 = new DynamicTypingPage(page);
 
       // Interact to potentially surface latent errors
       await app.typeText('test');

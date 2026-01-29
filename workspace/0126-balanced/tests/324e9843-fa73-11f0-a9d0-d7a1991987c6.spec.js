@@ -111,7 +111,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
 
   // Test transition: StartThreadSimulation -> S1_ThreadSimulating
   test('Clicking Start transitions to Thread Simulating and shows starting message (S1_ThreadSimulating)', async ({ page }) => {
-    const app = new ThreadSimPage(page);
+    const app1 = new ThreadSimPage(page);
     await app.goto();
 
     // Click the start button to trigger simulateThread() (event handler defined in page)
@@ -132,7 +132,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
 
   // Test all task completions: S2-S5
   test('All tasks (1-4) eventually complete and their completion messages appear (S2_Task1_Completed..S5_Task4_Completed)', async ({ page }) => {
-    const app = new ThreadSimPage(page);
+    const app2 = new ThreadSimPage(page);
     await app.goto();
 
     // Start the simulation
@@ -148,7 +148,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
       8000
     );
 
-    const outText = await app.getOutputInnerText();
+    const outText1 = await app.getOutputInnerText();
 
     // Assert each completed message is present somewhere in the output.
     expect(outText).toContain('Task 1 completed!');
@@ -167,7 +167,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
 
   // Test that intermediate "is running..." messages appear (concurrent simulation evidence)
   test('During simulation tasks emit "is running..." messages (evidence of asynchronous starts)', async ({ page }) => {
-    const app = new ThreadSimPage(page);
+    const app3 = new ThreadSimPage(page);
     await app.goto();
 
     await app.clickStart();
@@ -175,7 +175,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
     // Wait for at least one "is running..." message to appear indicative of tasks being invoked
     await app.waitForOutputContains('is running...', 5000);
 
-    const outText = await app.getOutputInnerText();
+    const outText2 = await app.getOutputInnerText();
     // There should be at least one "Task X is running..." occurrence
     const runningOccurrences = (outText.match(/is running\.\.\./g) || []).length;
     expect(runningOccurrences).toBeGreaterThanOrEqual(1);
@@ -187,7 +187,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
 
   // Edge case: clicking the start button multiple times quickly should reset output (output.innerHTML = "")
   test('Rapid repeated clicks reset output and only the latest run\'s "Starting multiple tasks..." remains', async ({ page }) => {
-    const app = new ThreadSimPage(page);
+    const app4 = new ThreadSimPage(page);
     await app.goto();
 
     // First click
@@ -201,7 +201,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
     // The HTML string used for the starting message is exact; check that it appears exactly once.
     await app.waitForOutputContains('Starting multiple tasks...', 1000);
 
-    const innerHTML = await app.getOutputInnerHTML();
+    const innerHTML1 = await app.getOutputInnerHTML();
     const startHtml = '<strong>Starting multiple tasks...</strong><br>';
     const occurrences = (innerHTML.match(new RegExp(startHtml.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g')) || []).length;
 
@@ -222,7 +222,7 @@ test.describe('Thread Simulation FSM tests - 324e9843-fa73-11f0-a9d0-d7a1991987c
   // Error scenario test: Observe and assert whether any console or page errors were emitted during interactions.
   // If errors occurred, this test will surface them; the expectation here is that the page runs without throwing.
   test('No uncaught exceptions or console errors occur during typical usage (error observation)', async ({ page }) => {
-    const app = new ThreadSimPage(page);
+    const app5 = new ThreadSimPage(page);
     await app.goto();
 
     // Start simulation and wait for completion of all tasks

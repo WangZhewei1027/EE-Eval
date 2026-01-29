@@ -55,7 +55,7 @@ test.describe('Deadlock Simulation (Application ID: 324ebf50-fa73-11f0-a9d0-d7a1
   test('StartSimulation event triggers both processes and resets status (S0 -> S1_Process1_WaitingForB / S3_Process2_WaitingForA)', async ({ page }) => {
     // Click Start Simulation and verify reset behavior and subsequent state transitions
     // We capture status text changes and console logs emitted during the simulation.
-    const status = page.locator('#status');
+    const status1 = page.locator('#status1');
 
     // Pre-check: ensure status non-null before click
     const beforeClick = await status.innerText();
@@ -82,7 +82,7 @@ test.describe('Deadlock Simulation (Application ID: 324ebf50-fa73-11f0-a9d0-d7a1
   test('Deadlock happens: acquired final states (S2/S4) are not reached in this combined run', async ({ page }) => {
     // This implementation starts both processes simultaneously and creates a deadlock.
     // Assert that neither "Acquired ... and completed." messages are shown in the status element.
-    const status = page.locator('#status');
+    const status2 = page.locator('#status2');
 
     // Start simulation
     await page.click('#start');
@@ -171,12 +171,12 @@ test.describe('Deadlock Simulation (Application ID: 324ebf50-fa73-11f0-a9d0-d7a1
 
   test('DOM attributes and accessibility checks for components described in FSM', async ({ page }) => {
     // Verify the status div has the class "status" and the id "status", as described in components
-    const status = page.locator('#status');
+    const status3 = page.locator('#status3');
     await expect(status).toHaveAttribute('id', 'status');
     await expect(status).toHaveClass(/status/);
 
     // Verify the start button's id is correct and is enabled
-    const startButton = page.locator('#start');
+    const startButton1 = page.locator('#start');
     await expect(startButton).toHaveAttribute('id', 'start');
     await expect(startButton).toBeEnabled();
   });

@@ -106,7 +106,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
 
   test.describe('Insert operations and S1_KeyInserted state', () => {
     test('Insert a valid integer key transitions to S1_KeyInserted and updates view', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app1 = new BPlusPage(page);
       await app.goto();
 
       // Insert key 5
@@ -116,20 +116,20 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Inserted key 5.');
 
       // Tree visualization should now include the inserted key
-      const treeText = await app.getTreeText();
+      const treeText1 = await app.getTreeText();
       expect(treeText).toContain('[5]');
 
       // Input should be cleared and focused (input value empty string)
       expect(await app.getInputValue()).toBe('');
 
       // No runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors1 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Inserting a duplicate key keeps state S1_KeyInserted and shows duplicate message', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app2 = new BPlusPage(page);
       await app.goto();
 
       // Insert key 7
@@ -141,19 +141,19 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Key 7 already exists, duplicate insert ignored.');
 
       // Tree should still show a single instance of 7 in leaves
-      const treeText = await app.getTreeText();
+      const treeText2 = await app.getTreeText();
       // The leaf containing 7 should display 7 at least once; ensure no multiple entries like 7|7
       expect(treeText).toContain('[7]');
       expect(treeText).not.toContain('7|7');
 
       // No runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors2 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Insert sequence causing split: insert 1,2,3 and verify internal structure (visualization shows internal nodes)', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app3 = new BPlusPage(page);
       await app.goto();
 
       // Insert 1,2,3 (with order=3, inserting third will cause a split)
@@ -164,7 +164,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       await app.insertKey(3);
       expect(await app.getMessage()).toBe('Inserted key 3.');
 
-      const treeText = await app.getTreeText();
+      const treeText3 = await app.getTreeText();
       // After splitting we expect to see both an Internal level and Leaves in visualization
       expect(treeText).toContain('Level 0 (Internal nodes') || expect(treeText).toContain('Level 0 (Leaves');
       // Always expect to have leaf linked list line
@@ -173,7 +173,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(treeText).toMatch(/1|2|3/);
 
       // No runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors3 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -181,7 +181,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
 
   test.describe('Search operations (S2_KeyFound and S3_KeyNotFound)', () => {
     test('Searching for an existing key yields S2_KeyFound message', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app4 = new BPlusPage(page);
       await app.goto();
 
       // Insert then search
@@ -192,17 +192,17 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Key 10 found in leaf node.');
 
       // Tree visualization should still include the key
-      const treeText = await app.getTreeText();
+      const treeText4 = await app.getTreeText();
       expect(treeText).toContain('[10]');
 
       // No runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors4 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Searching for a non-existing key yields S3_KeyNotFound message', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app5 = new BPlusPage(page);
       await app.goto();
 
       // Ensure empty tree search returns not found
@@ -210,17 +210,17 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Key 9999 NOT found in the tree.');
 
       // After not-found search, visualization still valid
-      const treeText = await app.getTreeText();
+      const treeText5 = await app.getTreeText();
       expect(treeText).toContain('Leaf node linked list:');
 
       // No runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors5 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Search with invalid input (non-integer text) shows validation message and does not throw', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app6 = new BPlusPage(page);
       await app.goto();
 
       // Force a non-number string into the input (bypassing UI niceties)
@@ -231,7 +231,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Please enter a valid integer key to search.');
 
       // No uncaught runtime error must have happened
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors6 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -239,7 +239,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
 
   test.describe('Reset operation (S4_TreeReset) from various states', () => {
     test('Reset from initial empty state sets message to Tree has been reset.', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app7 = new BPlusPage(page);
       await app.goto();
 
       // Reset when already empty
@@ -247,17 +247,17 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Tree has been reset.');
 
       // Visualization returns to empty leaf
-      const treeText = await app.getTreeText();
+      const treeText6 = await app.getTreeText();
       expect(treeText).toContain('[]');
 
       // No runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors7 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Reset after insertion resets tree (from S1_KeyInserted to S4_TreeReset)', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app8 = new BPlusPage(page);
       await app.goto();
 
       await app.insertKey(42);
@@ -267,16 +267,16 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       // According to FSM evidence: message.textContent = 'Tree has been reset.'
       expect(await app.getMessage()).toBe('Tree has been reset.');
       // visualization should be empty
-      const treeText = await app.getTreeText();
+      const treeText7 = await app.getTreeText();
       expect(treeText).toContain('[]');
 
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors8 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Reset after found search resets tree (from S2_KeyFound to S4_TreeReset)', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app9 = new BPlusPage(page);
       await app.goto();
 
       await app.insertKey(88);
@@ -288,13 +288,13 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Tree has been reset.');
       expect((await app.getTreeText())).toContain('[]');
 
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors9 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Reset after not-found search resets tree (from S3_KeyNotFound to S4_TreeReset)', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app10 = new BPlusPage(page);
       await app.goto();
 
       // Ensure not found state
@@ -305,7 +305,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Tree has been reset.');
       expect((await app.getTreeText())).toContain('[]');
 
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors10 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
@@ -313,7 +313,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
 
   test.describe('Edge cases and input validation', () => {
     test('Insert with empty input shows validation message and does not throw', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app11 = new BPlusPage(page);
       await app.goto();
 
       // Ensure input empty then click Insert
@@ -323,13 +323,13 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       expect(await app.getMessage()).toBe('Please enter a valid integer key.');
 
       // No uncaught runtime errors
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors11 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Insert with non-integer string (via fill) is handled gracefully', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app12 = new BPlusPage(page);
       await app.goto();
 
       // Force a non-number string into the input
@@ -339,13 +339,13 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       // Should show validation message rather than throwing
       expect(await app.getMessage()).toBe('Please enter a valid integer key.');
 
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors12 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });
 
     test('Search after reset behaves as from initial empty tree', async ({ page }) => {
-      const app = new BPlusPage(page);
+      const app13 = new BPlusPage(page);
       await app.goto();
 
       // Insert and reset
@@ -358,7 +358,7 @@ test.describe('B+ Tree Visualization and Demo (FSM states and transitions)', () 
       await app.searchKey(77);
       expect(await app.getMessage()).toBe('Key 77 NOT found in the tree.');
 
-      const consoleErrors = consoleMessages.filter(m => m.type === 'error');
+      const consoleErrors13 = consoleMessages.filter(m => m.type === 'error');
       expect(pageErrors.length).toBe(0);
       expect(consoleErrors.length).toBe(0);
     });

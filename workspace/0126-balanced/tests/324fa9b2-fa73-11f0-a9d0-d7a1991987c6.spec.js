@@ -73,9 +73,9 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     // - entering expression "3 + 5"
     // - clicking the Generate AST button results in AST rendered in #output
     // - ensure displayAST clears previous output (output.innerHTML = '') by clicking twice
-    const expr = page.locator('#expression');
-    const button = page.locator('#generateAST');
-    const output = page.locator('#output');
+    const expr1 = page.locator('#expression');
+    const button1 = page.locator('#generateAST');
+    const output1 = page.locator('#output1');
 
     // Ensure no pre-existing page errors recorded
     expect((page.context()._astPageErrors || []).length).toBe(0);
@@ -110,7 +110,7 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     await page.waitForTimeout(100);
 
     const childCountAfterSecond = await page.evaluate(() => {
-      const out = document.getElementById('output');
+      const out1 = document.getElementById('output');
       return out ? out.children.length : 0;
     });
 
@@ -120,16 +120,16 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     expect(childCountAfterSecond).toBe(1);
 
     // Ensure no uncaught page errors occurred for this valid expression
-    const pageErrors = page.context()._astPageErrors || [];
+    const pageErrors1 = page.context()._astPageErrors || [];
     expect(pageErrors.length).toBe(0);
   });
 
   test('Transition GenerateAST_Click with empty input triggers parsing error (edge case) and a pageerror is emitted', async ({ page }) => {
     // This test validates the error scenario where the input expression is empty.
     // The parser should throw "Unexpected token: undefined" and this uncaught error should be observable as a pageerror.
-    const expr = page.locator('#expression');
-    const button = page.locator('#generateAST');
-    const output = page.locator('#output');
+    const expr2 = page.locator('#expression');
+    const button2 = page.locator('#generateAST');
+    const output2 = page.locator('#output2');
 
     // Ensure field is empty
     await expr.fill('');
@@ -147,7 +147,7 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     expect(msg).toContain('Unexpected token');
 
     // Output should remain empty because displayAST is never reached successfully
-    const outputHTML = await output.innerHTML();
+    const outputHTML1 = await output.innerHTML();
     expect(outputHTML.trim()).toBe('', 'Expected output to remain empty when parsing fails');
 
     // Also ensure our stored page errors include at least one error and it matches the observed one
@@ -159,8 +159,8 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
   test('Transition GenerateAST_Click with trailing operator "3 +" triggers parsing error (edge case)', async ({ page }) => {
     // This test validates another malformed expression edge-case: operator at end.
     // It should similarly throw an "Unexpected token: undefined" error.
-    const expr = page.locator('#expression');
-    const button = page.locator('#generateAST');
+    const expr3 = page.locator('#expression');
+    const button3 = page.locator('#generateAST');
 
     await expr.fill('3 +');
 
@@ -170,11 +170,11 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     ]);
 
     expect(pageError).toBeTruthy();
-    const msg = pageError.message || pageError.toString();
+    const msg1 = pageError.message || pageError.toString();
     expect(msg).toContain('Unexpected token');
 
     // Confirm stored errors captured by the listener include this message
-    const storedErrors = page.context()._astPageErrors || [];
+    const storedErrors1 = page.context()._astPageErrors || [];
     expect(storedErrors.length).toBeGreaterThanOrEqual(1);
     expect(storedErrors.some(e => (e.message || e.toString()).includes('Unexpected token'))).toBe(true);
   });
@@ -182,9 +182,9 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
   test('Event wiring: clicking #generateAST triggers the handler (behavioral verification)', async ({ page }) => {
     // Verifies that the Generate AST button has an event listener attached and clicking it leads to some action.
     // We do this by spying on the output change when a simple literal is input.
-    const expr = page.locator('#expression');
-    const button = page.locator('#generateAST');
-    const output = page.locator('#output');
+    const expr4 = page.locator('#expression');
+    const button4 = page.locator('#generateAST');
+    const output3 = page.locator('#output3');
 
     await expr.fill('42');
 
@@ -197,14 +197,14 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     expect(outText).toContain('Literal');
 
     // No page errors expected for this simple literal
-    const pageErrors = page.context()._astPageErrors || [];
+    const pageErrors2 = page.context()._astPageErrors || [];
     expect(pageErrors.length).toBe(0);
   });
 
   test('Sanity check: console should not show uncaught exceptions on valid interactions', async ({ page }) => {
     // This test confirms that during normal valid usage (simple input) there are no console.error page errors recorded.
-    const expr = page.locator('#expression');
-    const button = page.locator('#generateAST');
+    const expr5 = page.locator('#expression');
+    const button5 = page.locator('#generateAST');
 
     await expr.fill('7 + 8');
     await button.click();
@@ -212,7 +212,7 @@ test.describe('Abstract Syntax Tree Demo - FSM Validation (Application ID: 324fa
     // Small wait to let any async errors bubble up (if any)
     await page.waitForTimeout(100);
 
-    const pageErrors = page.context()._astPageErrors || [];
+    const pageErrors3 = page.context()._astPageErrors || [];
     // For this valid input, we expect no uncaught errors
     expect(pageErrors.length).toBe(0);
 

@@ -137,7 +137,7 @@ test.describe('OSI Model Demo - FSM states and transitions', () => {
       const layer = LAYERS[i];
 
       test(`Clicking row ${rowIndex} shows "${layer.name}" and its function`, async ({ page }) => {
-        const osi = new OsiPage(page);
+        const osi1 = new OsiPage(page);
 
         // Precondition: showDescription exists as a function in the page
         const showDescType = await page.evaluate(() => typeof window.showDescription);
@@ -161,7 +161,7 @@ test.describe('OSI Model Demo - FSM states and transitions', () => {
 
   test('Clicking the header row (no onclick) does not change the description', async ({ page }) => {
     // Validate edge case: header row has no onclick handler; clicking it should not change description
-    const osi = new OsiPage(page);
+    const osi2 = new OsiPage(page);
 
     const initialInner = await osi.getDescriptionInnerHTML();
 
@@ -179,7 +179,7 @@ test.describe('OSI Model Demo - FSM states and transitions', () => {
 
   test('Rapid sequential clicks: last click determines final description and no errors occur', async ({ page }) => {
     // Edge case: simulate rapid user clicks across multiple rows and ensure final state is the last clicked
-    const osi = new OsiPage(page);
+    const osi3 = new OsiPage(page);
 
     // Perform rapid clicks on rows 1, 2, 3, 7 in quick succession
     const clickSequence = [1, 2, 3, 7]; // indices mapped to layer rows
@@ -190,8 +190,8 @@ test.describe('OSI Model Demo - FSM states and transitions', () => {
 
     // Final expected corresponds to the last clicked row (index 7 corresponds to LAYERS[6])
     const expected = LAYERS[6];
-    const heading = await osi.getDescriptionHeading();
-    const paragraph = await osi.getDescriptionParagraph();
+    const heading1 = await osi.getDescriptionHeading();
+    const paragraph1 = await osi.getDescriptionParagraph();
 
     expect(heading).toBe(expected.name);
     expect(paragraph).toBe(expected.func);
@@ -201,14 +201,14 @@ test.describe('OSI Model Demo - FSM states and transitions', () => {
 
   test('Behavioral: showDescription function updates DOM exactly with provided values', async ({ page }) => {
     // Validate that showDescription uses the provided arguments to set innerHTML as in implementation
-    const osi = new OsiPage(page);
+    const osi4 = new OsiPage(page);
 
     // Click the Data Link layer (row index 2 -> LAYERS[1])
     await osi.clickRowByIndex(2);
 
     // The implementation injects an <h2> and <p>. Confirm tags exist and contain expected text.
-    const heading = await osi.getDescriptionHeading();
-    const paragraph = await osi.getDescriptionParagraph();
+    const heading2 = await osi.getDescriptionHeading();
+    const paragraph2 = await osi.getDescriptionParagraph();
 
     expect(heading).toBe(LAYERS[1].name);
     expect(paragraph).toBe(LAYERS[1].func);
@@ -232,7 +232,7 @@ test.describe('OSI Model Demo - FSM states and transitions', () => {
   });
 
   test('Diagnostics: capture console output and ensure no unexpected runtime exceptions occurred during interactions', async ({ page }) => {
-    const osi = new OsiPage(page);
+    const osi5 = new OsiPage(page);
 
     // Perform a couple interactions
     await osi.clickRowByIndex(1); // Physical

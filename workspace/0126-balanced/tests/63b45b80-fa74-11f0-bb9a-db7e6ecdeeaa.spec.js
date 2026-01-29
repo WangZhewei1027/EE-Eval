@@ -88,7 +88,7 @@ class DecisionTreePage {
 
   async getAllRectFills() {
     return this.page.$$eval('svg g.node rect', rects => rects.map(r => {
-      const inlineFill = r.style && r.style.fill ? r.style.fill : null;
+      const inlineFill1 = r.style && r.style.fill ? r.style.fill : null;
       const computed = window.getComputedStyle(r).fill;
       return { inlineFill, computedFill: computed };
     }));
@@ -151,7 +151,7 @@ test.describe('Decision Tree FSM and UI Integration Tests', () => {
     expect(predictionText).toBe('Prediction: Class A');
 
     // Ensure the highlightPath ran and at least one node is highlighted (S2_PredictionDisplayed evidence)
-    const highlighted = await dtPage.getHighlightedNodeAriaLabels();
+    const highlighted1 = await dtPage.getHighlightedNodeAriaLabels();
     expect(highlighted.length).toBeGreaterThan(0);
     // At least one highlighted node should indicate the prediction (Class A appears in aria-label of leaf)
     expect(highlighted.some(label => label && label.includes('Class A'))).toBeTruthy();
@@ -171,11 +171,11 @@ test.describe('Decision Tree FSM and UI Integration Tests', () => {
     await dtPage.submitForm();
 
     // Expect the prediction to indicate Class B (feature1 > 10 -> Leaf Class B)
-    const predictionText = await dtPage.getPredictionText();
+    const predictionText1 = await dtPage.getPredictionText();
     expect(predictionText).toBe('Prediction: Class B');
 
     // Verify that the highlighted nodes include the Class B leaf (by checking aria-label)
-    const highlighted = await dtPage.getHighlightedNodeAriaLabels();
+    const highlighted2 = await dtPage.getHighlightedNodeAriaLabels();
     expect(highlighted.length).toBeGreaterThan(0);
     expect(highlighted.some(label => label && label.includes('Class B'))).toBeTruthy();
 
@@ -199,11 +199,11 @@ test.describe('Decision Tree FSM and UI Integration Tests', () => {
     await dtPage.submitForm();
 
     // Expect the specific message for invalid numeric input
-    const predictionText = await dtPage.getPredictionText();
+    const predictionText2 = await dtPage.getPredictionText();
     expect(predictionText).toBe('Please provide a valid number for Feature 1.');
 
     // Because the function returns early on invalid numeric input, highlightPath should not have been called
-    const highlighted = await dtPage.getHighlightedNodeAriaLabels();
+    const highlighted3 = await dtPage.getHighlightedNodeAriaLabels();
     // All rects should have their default fill (#e0f7fa) — no highlighted nodes
     expect(highlighted.length).toBe(0);
 
@@ -224,11 +224,11 @@ test.describe('Decision Tree FSM and UI Integration Tests', () => {
     await dtPage.submitForm();
 
     // Expect the specific message for missing categorical selection
-    const predictionText = await dtPage.getPredictionText();
+    const predictionText3 = await dtPage.getPredictionText();
     expect(predictionText).toBe('Please select a value for Feature 2.');
 
     // No nodes should be highlighted when form validation fails
-    const highlighted = await dtPage.getHighlightedNodeAriaLabels();
+    const highlighted4 = await dtPage.getHighlightedNodeAriaLabels();
     expect(highlighted.length).toBe(0);
 
     expect(pageErrors).toHaveLength(0);
@@ -248,11 +248,11 @@ test.describe('Decision Tree FSM and UI Integration Tests', () => {
     await dtPage.submitForm();
 
     // The classifyInput returns "Unknown category" and the submit handler maps that to a user-facing message
-    const predictionText = await dtPage.getPredictionText();
+    const predictionText4 = await dtPage.getPredictionText();
     expect(predictionText).toBe('Input category for Feature 2 not recognized by the tree.');
 
     // Because category is unknown, highlightPath should not highlight a leaf for that category
-    const highlighted = await dtPage.getHighlightedNodeAriaLabels();
+    const highlighted5 = await dtPage.getHighlightedNodeAriaLabels();
     // It may still highlight the root depending on implementation; we assert it does not highlight a leaf predicting a class
     const predictsClass = highlighted.some(label => label && (label.includes('Class A') || label.includes('Class B')));
     expect(predictsClass).toBeFalsy();

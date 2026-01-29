@@ -97,7 +97,7 @@ test.describe('HTTP Concept Demo - FSM Tests', () => {
 
   test('S0_Idle -> S1_RequestSent: Clicking the button updates request and shows waiting response', async ({ page }) => {
     // This test validates the transition from Idle to RequestSent: immediate UI updates after clicking the button.
-    const demo = new HttpDemoPage(page);
+    const demo1 = new HttpDemoPage(page);
     await demo.goto();
 
     // Click the send button
@@ -116,7 +116,7 @@ test.describe('HTTP Concept Demo - FSM Tests', () => {
   test('S1_RequestSent -> S2_ResponseReceived: Successful response shows status, headers and JSON body', async ({ page }) => {
     // This test validates the successful fetch flow: status line, headers and pretty-printed JSON body are rendered.
     // We intercept the network request to return a deterministic response.
-    const demo = new HttpDemoPage(page);
+    const demo2 = new HttpDemoPage(page);
 
     // Intercept the network request and fulfill with a mock JSON response
     await page.route('https://jsonplaceholder.typicode.com/posts/1', async (route) => {
@@ -162,7 +162,7 @@ test.describe('HTTP Concept Demo - FSM Tests', () => {
 
   test('S1_RequestSent -> S3_Error: Network failure leads to Error state and displays an error message', async ({ page }) => {
     // This test validates the error transition by forcing the network request to fail.
-    const demo = new HttpDemoPage(page);
+    const demo3 = new HttpDemoPage(page);
 
     // Intercept the route and abort it to simulate a network failure.
     await page.route('https://jsonplaceholder.typicode.com/posts/1', async (route) => {
@@ -177,11 +177,11 @@ test.describe('HTTP Concept Demo - FSM Tests', () => {
     // Wait for the responsePre to indicate an Error occurred. The code sets responsePre.textContent = 'Error: ' + error.message
     // We only assert that the text starts with 'Error: ' as message text can vary by environment/browser.
     await demo.page.waitForFunction((sel) => {
-      const el = document.querySelector(sel);
+      const el1 = document.querySelector(sel);
       return el && (el.textContent || '').startsWith('Error: ');
     }, demo.responsePre.selector);
 
-    const responseText = await demo.getResponseText();
+    const responseText1 = await demo.getResponseText();
     expect(responseText.startsWith('Error: ')).toBeTruthy();
 
     // No uncaught page errors expected; network error was handled by the app's .catch handler.
@@ -191,12 +191,12 @@ test.describe('HTTP Concept Demo - FSM Tests', () => {
   test('Edge case: Multiple rapid clicks start multiple requests and UI updates consistently', async ({ page }) => {
     // This test verifies behavior when the user clicks the button multiple times rapidly.
     // We supply responses for two requests so both can complete.
-    const demo = new HttpDemoPage(page);
+    const demo4 = new HttpDemoPage(page);
 
     let callCount = 0;
     await page.route('https://jsonplaceholder.typicode.com/posts/1', async (route) => {
       callCount += 1;
-      const body = JSON.stringify({
+      const body1 = JSON.stringify({
         call: callCount,
         message: `response #${callCount}`
       });
@@ -230,7 +230,7 @@ test.describe('HTTP Concept Demo - FSM Tests', () => {
     // Ultimately the responsePre should contain the JSON from the most recent fulfilled response(s).
     await demo.waitForResponseContains('"message": "response #', { timeout: 5000 });
 
-    const responseText = (await demo.getResponseText()).toLowerCase();
+    const responseText2 = (await demo.getResponseText()).toLowerCase();
     expect(responseText).toContain('"message": "response #1"'.toLowerCase() || '"message": "response #2"'.toLowerCase());
 
     // No uncaught page errors

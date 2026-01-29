@@ -131,7 +131,7 @@ test.describe('Linked List Visualization - FSM states and transitions', () => {
     // Attach error collectors before navigation
     const { pageErrors, consoleErrors } = attachErrorCollectors(page);
 
-    const listPage = new LinkedListPage(page);
+    const listPage1 = new LinkedListPage(page);
     await listPage.goto();
 
     // Add first node "A"
@@ -163,7 +163,7 @@ test.describe('Linked List Visualization - FSM states and transitions', () => {
   test('Delete Node event: transitions to Node Deleted and returns to Idle (deletes correct node, input cleared)', async ({ page }) => {
     const { pageErrors, consoleErrors } = attachErrorCollectors(page);
 
-    const listPage = new LinkedListPage(page);
+    const listPage2 = new LinkedListPage(page);
     await listPage.goto();
 
     // Prepare list: add nodes A, B, C
@@ -204,7 +204,7 @@ test.describe('Linked List Visualization - FSM states and transitions', () => {
   test('Clear List event: transitions to List Cleared and returns to Idle (all nodes removed)', async ({ page }) => {
     const { pageErrors, consoleErrors } = attachErrorCollectors(page);
 
-    const listPage = new LinkedListPage(page);
+    const listPage3 = new LinkedListPage(page);
     await listPage.goto();
 
     // Add some nodes first
@@ -232,7 +232,7 @@ test.describe('Linked List Visualization - FSM states and transitions', () => {
   test('Edge cases and error scenarios: adding empty value, deleting when empty, duplicates handling', async ({ page }) => {
     const { pageErrors, consoleErrors } = attachErrorCollectors(page);
 
-    const listPage = new LinkedListPage(page);
+    const listPage4 = new LinkedListPage(page);
     await listPage.goto();
 
     // Edge: Add empty string should not add a node
@@ -280,7 +280,7 @@ test.describe('Linked List Visualization - FSM states and transitions', () => {
   test('Visual verification: nodes and arrows styling present in DOM (basic rendering checks)', async ({ page }) => {
     const { pageErrors, consoleErrors } = attachErrorCollectors(page);
 
-    const listPage = new LinkedListPage(page);
+    const listPage5 = new LinkedListPage(page);
     await listPage.goto();
 
     // Add nodes to create arrows

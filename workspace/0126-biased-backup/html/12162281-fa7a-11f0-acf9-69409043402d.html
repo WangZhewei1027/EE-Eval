@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Query Optimization Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 10px;
+  }
+  textarea, input, select, button {
+    font-family: monospace, monospace;
+    font-size: 14px;
+    margin: 4px 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  label {
+    margin-top: 10px;
+    display: block;
+  }
+  #output {
+    white-space: pre-wrap;
+    border: 1px solid #000;
+    padding: 4px;
+    margin-top: 10px;
+    height: 250px;
+    overflow-y: scroll;
+  }
+  #planDisplay {
+    font-family: monospace;
+    white-space: pre;
+    border: 1px solid #000;
+    padding: 4px;
+    margin-top: 10px;
+    height: 160px;
+    overflow-y: scroll;
+  }
+  #controls > * {
+    width: auto;
+    display: inline-block;
+    margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+<h1>Query Optimization Interactive Demo</h1>
+<p>
+This demo lets you explore query optimization concepts interactively with multiple ways to enter queries, manipulate query plans, and simulate optimization steps.
+</p>
+
+<label for="queryInput">Enter SQL SELECT Query (simple tables, JOINs, WHERE, ORDER BY, LIMIT):</label>
+<textarea id="queryInput" rows="4" placeholder="SELECT * FROM A JOIN B ON A.id = B.a_id WHERE B.value &gt; 100 ORDER BY A.date LIMIT 10;"></textarea>
+
+<label for="tableSchemas">Define Table Schemas (one per line, format: TableName(ColumnName:Type,...)):</label>
+<textarea id="tableSchemas" rows="6" placeholder="A(id:int,date:text,category:text)\nB(a_id:int,value:int)"></textarea>
+
+<div id="controls">
+  <button id="parseQueryBtn">Parse Query</button>
+  <button id="generateInitialPlanBtn" disabled>Generate Initial Plan</button>
+  <button id="applyHeuristicBtn" disabled>Apply Heuristic Optimization</button>
+  <button id="applyCostModelBtn" disabled>Apply Cost-Based Optimization</button>
+  <button id="resetDemoBtn">Reset Demo</button>
+</div>
+
+<label for="heuristicLevel">Heuristic Optimization Level (1-3):</label>
+<input id="heuristicLevel" type="range" min="1" max="3" value="1" disabled />
+
+<label for="costModelStrategy">Cost Model Strategy:</label>
+<select id="costModelStrategy" disabled>
+  <option value="simple">Simple Row Estimation</option>
+  <option value="complex">Complex Cost Heuristic</option>
+</select>
+
+<label for="manualTransform">Manually Pick a Transformation Step (SQL Operator Swap, Predicate Pushdown, Join Reorder, Index Use):</label>
+<select id="manualTransform" disabled>
+  <option value="">--Select one--</option>
+  <option value="swap">Operator Swap (Reorder Joins)</option>
+  <option value="pushdown">Predicate Pushdown (Filters before Joins)</option>
+  <option value="joinReorder">Join Reorder (Enumerate Orders)</option>
+  <option value="indexUse">Index Usage (Simulate Indexes)</option>
+</select>
+<button id="applyManualTransform" disabled>Apply Selected Transformation</button>
+
+<label for="explanationText">Explanation/Notes (editable):</label>
+<textarea id="explanationText" rows="4" placeholder="Write your notes or explanation here..."></textarea>
+
+<h2>Current Query Plan</h2>
+<div id="planDisplay">No plan generated yet.</div>
+
+<h2>Console / Log Output</h2>
+<div id="output">Awaiting user input...</div>
+
+<script>
+(() => {
+  /*
+  High-level flow:
+  1) User inputs SQL and table schemas.
+  2) Parse input SQL into a naive parse tree (very simplified).
+  3) Generate initial logical query plan from parse.
+  4) Allow user to apply heuristic optimizations:
+      - Levels control complexity of heuristic.
+  5) Allow user to apply cost model optimization with chosen strategy.
+  6) Allow manual transformations with detailed feedback/log.
+  7) User can add/edit explanatory text at any time.
+  8) Logging of all steps in the console area.
+
+  Internal representation:
+  We model queries as a simple tree of relational algebra operators:
+  - Scan(table)
+  - Filter(condition)
+  - Join(left, right, condition)
+  - Project(columns)
+  - Sort(order)
+  - Limit(n)
+
+  We'll implement transformation functions:
+  - predicate pushdown
+  - join reorder heuristics
+  - operator swap
+  - index use simulation
+
+  We keep the plan as a JSON-like structure and print it in a readable way.
+  */
+
+  const output = document.getElementById("output");
+  const planDisplay = document.getElementById("planDisplay");
+  const queryInput = document.getElementById("queryInput");
+  const tableSchemasInput = document.getElementById("tableSchemas");
+  const parseQueryBtn = document.getElementById("parseQueryBtn");
+  const generateInitialPlanBtn = document.getElementById("generateInitialPlanBtn");
+  const applyHeuristicBtn = document.getElementById("applyHeuristicBtn");
+  const applyCostModelBtn = document.getElementById("applyCostModelBtn");
+  const resetDemoBtn = document.getElementById("resetDemoBtn");
+  const heuristicLevelInput = document.getElementById("heuristicLevel");
+  const costModelStrategySelect = document.getElementById("costModelStrategy");
+  const manualTransformSelect = document.getElementById("manualTransform");
+  const applyManualTransformBtn = document.getElementById("applyManualTransform");
+  const explanationText = document.getElementById("explanationText");
+
+  let state = {
+    tables: {}, // tableName -> {columns: {colName: type}, indexes: []}
+    parsedQuery: null, // representation of simple parse
+    currentPlan: null, // relational algebra tree
+    heuristicLevel: 1,
+    costModelStrategy: "simple",
+    explanation: "",
+  };
+
+  // Utility: Log messages to output with timestamp
+  function log(msg) {
+    const now = new Date().toLocaleTimeString();
+    output.textContent += `[${now}] ${msg}\n`;
+    output.scrollTop = output.scrollHeight;
+  }
+
+  // Simple SQL parser (very limited and fragile) for SELECT queries to parse:
+  // SELECT ... FROM table [JOIN table ON cond]* [WHERE cond] [ORDER BY ...] [LIMIT n]
+  // This is for demonstration only, not full SQL!
+  function simpleSQLParse(sql) {
+    // Remove line breaks and unify spaces
+    let q = sql.replace(/\s+/g, " ").trim();
+
+    // We parse out components in order:
+    // 1) Extract SELECT ... FROM ...
+    // 2) Extract JOINs and ON conditions
+    // 3) Extract WHERE
+    // 4) Extract ORDER BY
+    // 5) Extract LIMIT
+
+    let result = {
+      select: null,
+      from: null,
+      joins: [],
+      where: null,
+      orderBy: null,
+      limit: null,
+    };
+
+    // Capitalize keywords for easy regex
+    q = q.replace(/select /i, "SELECT ")
+      .replace(/ from /i, " FROM ")
+      .replace(/ join /ig, " JOIN ")
+      .replace(/ on /ig, " ON ")
+      .replace(/ where /i, " WHERE ")
+      .replace(/ order by /i, " ORDER BY ")
+      .replace(/ limit /i, " LIMIT ");
+
+    // Extract SELECT part
+    const selectMatch = q.match(/^SELECT (.+?) FROM /);
+    if (!selectMatch) throw Error("Can't parse SELECT clause.");
+    result.select = selectMatch[1].trim();
+
+    // Remove SELECT ... FROM from q
+    q = q.slice(selectMatch[0].length - 5).trim(); // -5 because " FROM " included
+
+    // From now parse FROM tableName
+    // Then 0+ JOIN table ON condition
+    // Then optional WHERE condition
+    // Then optional ORDER BY ...
+    // Then optional LIMIT n
+
+    // FROM tableName (tableName is a simple word)
+    let fromMatch = q.match(/^([a-zA-Z0-9_]+)(.*)/);
+    if (!fromMatch) throw Error("Can't parse FROM clause.");
+    result.from = fromMatch[1];
+    q = fromMatch[2].trim();
+
+    // Parse JOINs (zero or more)
+    while (true) {
+      const joinMatch = q.match(/^JOIN ([a-zA-Z0-9_]+) ON ([^ ]+ [=<>!]+ [^ ]+)(.*)/);
+      if (!joinMatch) break;
+      result.joins.push({table: joinMatch[1], condition: joinMatch[2]});
+      q = joinMatch[3].trim();
+    }
+
+    // Parse WHERE, ORDER BY, LIMIT
+    // We'll support them only in this order if present
+
+    if (q.startsWith("WHERE ")) {
+      q = q.slice(6).trim();
+      // WHERE ends at ORDER BY or LIMIT or end
+      let whereEnd = q.length;
+      const orderIndex = q.indexOf("ORDER BY ");
+      if (orderIndex !== -1 && orderIndex < whereEnd) whereEnd = orderIndex;
+      const limitIndex = q.indexOf("LIMIT ");
+      if (limitIndex !== -1 && limitIndex < whereEnd) whereEnd = limitIndex;
+      result.where = q.slice(0, whereEnd).trim();
+      q = q.slice(whereEnd).trim();
+    }
+
+    if (q.startsWith("ORDER BY ")) {
+      q = q.slice(9).trim();
+      // ORDER BY ends at LIMIT or end
+      let orderEnd = q.length;
+      const limitIndex = q.indexOf("LIMIT ");
+      if (limitIndex !== -1 && limitIndex < orderEnd) orderEnd = limitIndex;
+      result.orderBy = q.slice(0, orderEnd).trim();
+      q = q.slice(orderEnd).trim();
+    }
+
+    if (q.startsWith("LIMIT ")) {
+      q = q.slice(6).trim();
+      // LIMIT is last part
+      const spaceIndex = q.indexOf(" ");
+      if(spaceIndex === -1){
+        result.limit = q;
+        q = "";
+      } else {
+        result.limit = q.slice(0, spaceIndex);
+        q = q.slice(spaceIndex).trim();
+      }
+    }
+
+    if (q.length > 0) throw Error("Unparsed trailing text in query: " + q);
+
+    return result;
+  }
+
+  // Parse the table schemas input lines:
+  // e.g. A(id:int,date:text), B(a_id:int,value:int)
+  // Return object: {tableName: {columns: {colName: type}, indexes: []}}
+  function parseSchemas(schemasText) {
+    const lines = schemasText.split("\n");
+    let tables = {};
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+      // Parse TableName(col:type,...)
+      const m = line.match(/^([a-zA-Z0-9_]+)\((.+)\)$/);
+      if (!m) throw Error("Invalid schema line: " + line);
+      const tableName = m[1];
+      const colsPart = m[2];
+      let columns = {};
+      const colsItems = colsPart.split(",");
+      for (let colItem of colsItems) {
+        const cm = colItem.match(/^([a-zA-Z0-9_]+):([a-zA-Z]+)$/);
+        if (!cm) throw Error("Invalid column definition: " + colItem);
+        columns[cm[1]] = cm[2];
+      }
+      tables[tableName] = {columns: columns, indexes: []};
+    }
+    return tables;
+  }
+
+  // Build initial logical query plan (relational algebra tree) from parsedQuery and schema.
+  // Very naive:
+  // Scan each table -> join them sequentially as per input order -> apply Filters (WHERE and JOIN ON) -> Project(select) -> OrderBy -> Limit
+  //
+  // We parse JOIN and WHERE conditions as strings only (no full condition parsing),
+  // but split out conjuncts for predicate pushdown simulation.
+
+  // Representation of plan nodes:
+  // {type: "Scan", table: "A"}
+  // {type: "Filter", condition: "...", input: {...}}
+  // {type: "Join", left: {...}, right: {...}, condition: "..."}
+  // {type: "Project", columns: [...], input: {...}}
+  // {type: "Sort", orderBy: "...", input: {...}}
+  // {type: "Limit", count: N, input: {...}}
+
+  // Utility: splits WHERE or ON condition by AND (simple split by "AND" ignoring case)
+  function splitConjuncts(cond) {
+    if (!cond) return [];
+    return cond.split(/ AND /i).map(c => c.trim()).filter(c => c.length > 0);
+  }
+
+  // Create initial plan (no optimization)
+  function createInitialPlan(parsedQuery, tables) {
+    // Scans for FROM and all joined tables
+    // Join conditions are combined later
+
+    let scans = {};
+    try {
+      scans[parsedQuery.from] = {type: "Scan", table: parsedQuery.from};
+      for (let join of parsedQuery.joins) {
+        scans[join.table] = {type: "Scan", table: join.table};
+      }
+    } catch {
+      throw new Error("Error creating Scans.");
+    }
+
+    // Create JOIN tree - naive left deep join order: from FROM then join tables in order
+
+    // Parse join conditions into array for easier management
+    let joinConds = parsedQuery.joins.map(j => j.condition);
+
+    // Combine all join conditions using AND (for initial plan, put all at top Join)
+    let combinedJoinCondition = joinConds.length > 0 ? joinConds.join(" AND ") : null;
+
+    // Build join tree left deep (FROM joined with each join.table sequentially)
+
+    let joinTree = scans[parsedQuery.from];
+    for (let join of parsedQuery.joins) {
+      joinTree = {
+        type: "Join",
+        left: joinTree,
+        right: scans[join.table],
+        condition: join.condition
+      };
+    }
+
+    // Then apply Filter for WHERE if exists
+    let plan = joinTree;
+    if (parsedQuery.where) {
+      plan = {type: "Filter", condition: parsedQuery.where, input: plan};
+    }
+
+    // Then Project
+    // Select list can be "*" or list of columns
+    // For our purpose, split select by commas unless "*"
+    let selectCols = null;
+    if (parsedQuery.select === "*") {
+      selectCols = ["*"];
+    } else {
+      selectCols = parsedQuery.select.split(",").map(s => s.trim());
+    }
+    plan = {type: "Project", columns: selectCols, input: plan};
+
+    // Order By (optional)
+    if (parsedQuery.orderBy) {
+      plan = {type: "Sort", orderBy: parsedQuery.orderBy, input: plan};
+    }
+
+    // Limit (optional)
+    if (parsedQuery.limit) {
+      const n = parseInt(parsedQuery.limit, 10);
+      if (isNaN(n) || n < 0) throw new Error("Invalid LIMIT operand");
+      plan = {type: "Limit", count: n, input: plan};
+    }
+
+    return plan;
+  }
+
+  // Pretty print plan tree with indentation
+  function printPlan(plan, indent = 0) {
+    const space = "  ".repeat(indent);
+    if (!plan) return space + "EMPTY";
+    let s = "";
+    switch (plan.type) {
+      case "Scan":
+        s += space + `Scan(${plan.table})`;
+        break;
+      case "Filter":
+        s += space + `Filter(condition: ${plan.condition})\n`;
+        s += printPlan(plan.input, indent + 1);
+        break;
+      case "Join":
+        s += space + `Join(condition: ${plan.condition})\n`;
+        s += printPlan(plan.left, indent + 1) + "\n";
+        s += printPlan(plan.right, indent + 1);
+        break;
+      case "Project":
+        s += space + `Project(columns: ${plan.columns.join(", ")})\n`;
+        s += printPlan(plan.input, indent + 1);
+        break;
+      case "Sort":
+        s += space + `Sort(orderBy: ${plan.orderBy})\n`;
+        s += printPlan(plan.input, indent + 1);
+        break;
+      case "Limit":
+        s += space + `Limit(count: ${plan.count})\n`;
+        s += printPlan(plan.input, indent + 1);
+        break;
+      default:
+        s += space + `UNKNOWN NODE`;
+    }
+    return s;
+  }
+
+  // Apply Heuristic Optimizations
+  // Levels:
+  // 1: Predicate Pushdown only
+  // 2: Join Reordering heuristic (swap join children if estimated smaller left side)
+  // 3: Combine predicate pushdown + join reorder + simplistic index usage
+  //
+  // Predicate Pushdown: move Filters down closer to Scan if conditions relate only to one table
+  // Join Reordering: reorder join inputs by heuristic (smallest table left)
+
+  // Helper: Determine which tables a condition references (by simple parsing)
+  // We scan for table aliases or table.column patterns.
+  function getTablesInCondition(cond) {
+    if (!cond) return [];
+    let tokens = cond.match(/[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+/g);
+    if (!tokens) return [];
+    let tables = new Set();
+    for (let t of tokens) {
+      let parts = t.split(".");
+      if (parts.length === 2) tables.add(parts[0]);
+    }
+    return Array.from(tables);
+  }
+
+  // Predicate Pushdown implementation:
+  // For each filter condition, if references only one table, push filter down to that table scan subtree
+  function pushdownPredicates(plan, allPredicates) {
+    // allPredicates is array of conditions (from WHERE and JOIN ON conjuncts)
+    // When pushing down, we attach Filters below joins where possible
+
+    // We recursively descend the plan and try to attach predicates near scans of their tables
+
+    // We'll split predicates into:
+    // single-table predicates => push down to that scan
+    // multi-table predicates => remain above joins
+
+    let remainingPreds = [];
+
+    for (let p of allPredicates) {
+      let tables = getTablesInCondition(p);
+      if (tables.length === 1) {
+        // Push down this predicate
+        plan = pushPredicateDown(plan, tables[0], p);
+        log(`Predicate pushdown: pushed condition "${p}" towards table "${tables[0]}"`);
+      } else {
+        remainingPreds.push(p);
+      }
+    }
+
+    // Remaining predicates are applied as Filter(s) on top
+    if (remainingPreds.length > 0) {
+      plan = {type: "Filter", condition: remainingPreds.join(" AND "), input: plan};
+    }
+    return plan;
+  }
+
+  // Recursive function to push predicate down to subtree scans for the given tableName
+  function pushPredicateDown(plan, tableName, predicate) {
+    if (!plan) return plan;
+    switch (plan.type) {
+      case "Scan":
+        if (plan.table === tableName) {
+          // Insert Filter above Scan if not already filtered by this predicate
+          return {type: "Filter", condition: predicate, input: plan};
+        }
+        return plan;
+      case "Filter":
+        // descend inside Filter input (do not duplicate predicates)
+        if (plan.condition === predicate) return plan;
+        return {...plan, input: pushPredicateDown(plan.input, tableName, predicate)};
+      case "Join":
+        // Push predicate down to left or right branch if table belongs
+        // If table appears on left side, push there else right side else no push
+        // To determine presence, check Scan nodes in subtree
+        if (subtreeHasTable(plan.left, tableName)) {
+          return {...plan, left: pushPredicateDown(plan.left, tableName, predicate)};
+        } else if (subtreeHasTable(plan.right, tableName)) {
+          return {...plan, right: pushPredicateDown(plan.right, tableName, predicate)};
+        } else {
+          // table not found in either side - cannot push down here
+          return plan;
+        }
+      case "Project":
+      case "Sort":
+      case "Limit":
+        return {...plan, input: pushPredicateDown(plan.input, tableName, predicate)};
+      default:
+        return plan;
+    }
+  }
+
+  // Check if subtree contains Scan node for given table name
+  function subtreeHasTable(plan, tableName) {
+    if (!plan) return false;
+    switch (plan.type) {
+      case "Scan":
+        return plan.table === tableName;
+      case "Filter":
+      case "Project":
+      case "Sort":
+      case "Limit":
+        return subtreeHasTable(plan.input, tableName);
+      case "Join":
+        return subtreeHasTable(plan.left, tableName) || subtreeHasTable(plan.right, tableName);
+      default:
+        return false;
+    }
+  }
+
+  // Join reorder heuristic:
+  // Reorder join inputs to put smaller estimated tables left
+  // Estimate sizes: use table row counts = 1000 default, or smaller if filtered heavily
+  // This is a simplistic cost heuristic.
+
+  // To simulate table sizes, we estimate base scans sizes,
+  // Filtering reduces size by factor 10 if predicates applied on table
+  // Joins multiply sizes naively
+
+  // Returns estimated cost of plan subtree (rows)
+  function estimatePlanRows(plan, tables) {
+    if (!plan) return 1;
+    switch (plan.type) {
+      case "Scan":
+        return tables[plan.table].rowCount || 1000; // default 1000 rows
+      case "Filter":
+        // Apply 10x reduction per predicate approx.
+        let n = estimatePlanRows(plan.input, tables);
+        let preds = splitConjuncts(plan.condition).length;
+        return Math.max(1, Math.floor(n / (10 * preds)));
+      case "Join":
+        let leftN = estimatePlanRows(plan.left, tables);
+        let rightN = estimatePlanRows(plan.right, tables);
+        // Join results - simpler heuristic: product * 0.1 of rows
+        return Math.max(1, Math.floor(leftN * rightN * 0.1));
+      case "Project":
+      case "Sort":
+      case "Limit":
+        return estimatePlanRows(plan.input, tables);
+      default:
+        return 1000;
+    }
+  }
+
+  // Reorder joins in plan if possible (left-deep only)
+  // For demo: swap Join.left and Join.right if right subtree has smaller estimated rows.
+  function reorderJoins(plan, tables) {
+    if (!plan) return plan;
+    switch (plan.type) {
+      case "Join":
+        let leftRows = estimatePlanRows(plan.left, tables);
+        let rightRows = estimatePlanRows(plan.right, tables);
+        let changed = false;
+        if (rightRows < leftRows) {
+          // Swap children
+          log(`Join reorder: swapping join children to put smaller side left (rows left=${leftRows}, right=${rightRows})`);
+          [plan.left, plan.right] = [plan.right, plan.left];
+          changed = true;
+        }
+        plan.left = reorderJoins(plan.left, tables);
+        plan.right = reorderJoins(plan.right, tables);
+        return plan;
+      case "Filter":
+      case "Project":
+      case "Sort":
+      case "Limit":
+        plan.input = reorderJoins(plan.input, tables);
+        return plan;
+      default:
+        return plan;
+    }
+  }
+
+  // Simulate index usage:
+  // For each Scan, if table has indexes on columns used in filter conditions, reduce estimated rows by 10x
+  // We add a property plan.indexUsed = true for indication
+
+  function applyIndexUsage(plan, tables) {
+    if (!plan) return plan;
+    switch (plan.type) {
+      case "Scan":
+        // Check if any index could help based on filter applied above this Scan
+        // We'll use a simplistic approach: if a Filter above Scan uses indexed column predicates, mark indexUsed
+        return plan;
+      case "Filter":
+        // Check if Filter is directly above Scan and applies predicate on indexed column
+        if (plan.input && plan.input.type === "Scan") {
+          let scan = plan.input;
+          let table = tables[scan.table];
+          let indexes = table.indexes;
+          if (!indexes || indexes.length===0) return plan;
+          let preds = splitConjuncts(plan.condition);
+          // For each predicate check if indexed column is involved: search for table.column in predicate
+          for (let pred of preds) {
+            for (let idxCol of indexes) {
+              // Simple check: pred contains table.column or column name
+              if (pred.includes(scan.table + "." + idxCol) || pred.includes(idxCol)) {
+                plan.indexUsed = true;
+                log(`Index usage: Using index on ${scan.table}.${idxCol} for predicate "${pred}"`);
+                // Mark scan as index used
+                scan.indexUsed = true;
+              }
+            }
+          }
+          // Continue inside input
+          plan.input = applyIndexUsage(plan.input, tables);
+          return plan;
+        } else {
+          plan.input = applyIndexUsage(plan.input, tables);
+          return plan;
+        }
+      case "Join":
+        plan.left = applyIndexUsage(plan.left, tables);
+        plan.right = applyIndexUsage(plan.right, tables);
+        return plan;
+      case "Project":
+      case "Sort":
+      case "Limit":
+        plan.input = applyIndexUsage(plan.input, tables);
+        return plan;
+      default:
+        return plan;
+    }
+  }
+
+
+  // Initialize tables with default row counts and no indexes
+  function initializeTables(tables) {
+    for (let tbl in tables) {
+      if (!('rowCount' in tables[tbl])) {
+        tables[tbl].rowCount = 1000;
+      }
+      if (!('indexes' in tables[tbl])) {
+        tables[tbl].indexes = [];
+      }
+    }
+  }
+
+  // Expose functions for UI buttons
+
+  function resetState() {
+    state = {
+      tables: {},
+      parsedQuery: null,
+      currentPlan: null,
+      heuristicLevel: 1,
+      costModelStrategy: "simple",
+      explanation: "",
+    };
+    output.textContent = "Demo reset. Enter SQL and table schema to start.\n";
+    planDisplay.textContent = "No plan generated yet.";
+    generateInitialPlanBtn.disabled = true;
+    applyHeuristicBtn.disabled = true;
+    applyCostModelBtn.disabled = true;
+    heuristicLevelInput.disabled = true;
+    costModelStrategySelect.disabled = true;
+    manualTransformSelect.disabled = true;
+    applyManualTransformBtn.disabled = true;
+    explanationText.value = "";
+  }
+
+  // Button: Parse Query
+  parseQueryBtn.addEventListener("click", () => {
+    output.textContent = "";
+    try {
+      let schemasText = tableSchemasInput.value.trim();
+      if (!schemasText) {
+        alert("Please provide table schemas.");
+        return;
+      }
+      let parsedSchemas = parseSchemas(schemasText);
+      initializeTables(parsedSchemas);
+      state.tables = parsedSchemas;
+      log("Parsed table schemas:");
+      for (let t in parsedSchemas) {
+        log(` - ${t} (${Object.keys(parsedSchemas[t].columns).join(", ")})`);
+      }
+      let sql = queryInput.value.trim();
+      if (!sql) {
+        alert("Please enter an SQL query.");
+        return;
+      }
+      let parsed = simpleSQLParse(sql);
+      state.parsedQuery = parsed;
+      log("Parsed Query:");
+      log(JSON.stringify(parsed, null, 2));
+      generateInitialPlanBtn.disabled = false;
+      heuristicLevelInput.disabled = true;
+      applyHeuristicBtn.disabled = true;
+      costModelStrategySelect.disabled = true;
+      applyCostModelBtn.disabled = true;
+      manualTransformSelect.disabled = true;
+      applyManualTransformBtn.disabled = true;
+      planDisplay.textContent = "Query parsed. Click 'Generate Initial Plan' to continue.";
+    } catch (e) {
+      alert("Error parsing input: " + e.message);
+      log("Error parsing input: " + e.message);
+    }
+  });
+
+  // Button: Generate Initial Plan
+  generateInitialPlanBtn.addEventListener("click", () => {
+    try {
+      let plan = createInitialPlan(state.parsedQuery, state.tables);
+      state.currentPlan = plan;
+      planDisplay.textContent = printPlan(plan);
+      log("Initial query plan generated.");
+      applyHeuristicBtn.disabled = false;
+      heuristicLevelInput.disabled = false;
+      applyCostModelBtn.disabled = false;
+      costModelStrategySelect.disabled = false;
+      manualTransformSelect.disabled = false;
+      applyManualTransformBtn.disabled = false;
+    } catch (e) {
+      alert("Error generating initial plan: " + e.message);
+      log("Error generating initial plan: " + e.message);
+    }
+  });
+
+  // Button: Apply Heuristic Optimization
+  applyHeuristicBtn.addEventListener("click", () => {
+    if (!state.currentPlan) {
+      alert("No plan to optimize. Generate initial plan first.");
+      return;
+    }
+    let level = parseInt(heuristicLevelInput.value, 10);
+    state.heuristicLevel = level;
+    log(`Applying heuristic optimizations (level ${level})...`);
+
+    let allPreds = [];
+    let pq = state.parsedQuery;
+
+    // Extract all predicates from WHERE and JOIN ON
+    if(pq.where) allPreds.push(pq.where);
+    pq.joins.forEach(j => allPreds.push(j.condition));
+
+    let newPlan = JSON.parse(JSON.stringify(state.currentPlan)); // Deep clone by stringify parse (okay for this demo)
+
+    if(level >= 1){
+      // Predicate pushdown
+      newPlan = pushdownPredicates(newPlan, allPreds);
+      log("Predicate pushdown applied.");
+    }
+    if(level >= 2){
+      // Join reorder
+      newPlan = reorderJoins(newPlan, state.tables);
+      log("Join reorder heuristic applied.");
+    }
+    if(level >= 3){
+      // Index usage simulation: simulate indexes on all primary keys (id columns ending with '_id' or named 'id')
+      for(let t in state.tables){
+        const cols = state.tables[t].columns;
+        let idxCols = [];
+        for(let c in cols){
+          if (c === "id" || c.endsWith("_id")){
+            idxCols.push(c);
+          }
+        }
+        state.tables[t].indexes = idxCols;
+        if(idxCols.length > 0){
+          log(`Simulated indexes on table ${t}: ${idxCols.join(", ")}`);
+        }
+      }
+      newPlan = applyIndexUsage(newPlan, state.tables);
+      log("Index usage simulation applied.");
+    }
+
+    state.currentPlan = newPlan;
+    planDisplay.textContent = printPlan(newPlan);
+    log("Heuristic optimization complete.");
+  });
+
+  // Button: Apply Cost-Based Optimization
+  applyCostModelBtn.addEventListener("click", () => {
+    if (!state.currentPlan) {
+      alert("No plan to optimize. Generate initial plan first.");
+      return;
+    }
+    let strategy = costModelStrategySelect.value;
+    state.costModelStrategy = strategy;
+    log(`Applying cost based optimization with strategy: ${strategy}`);
+
+    // For demo, cost model optimization tries a few join orders and picks lowest cost
+
+    // Extract all join tables and conditions
+    let joins = state.parsedQuery.joins || [];
+    let baseTable = state.parsedQuery.from;
+    let allTables = [baseTable].concat(joins.map(j => j.table));
+
+    // We try all possible join orders (factorial) but limit to max 5 tables (or 3 join steps) for UI responsiveness
+
+    if(allTables.length > 5){
+      log("Too many tables for exhaustive join reorder (limit 5). Skipping cost-based reordering.");
+      return;
+    }
+
+    function buildJoinPlanFromOrder(order) {
+      // Build joins left deep, join conditions combined from parsedQuery for involved tables
+      let plan = {type: "Scan", table: order[0]};
+      for(let i=1;i<order.length;++i){
+        // Find join condition between plan subtree tables and order[i]
+        // We pick condition matching order[i]'s join, or fallback to "TRUE"
+        let joinCond = null;
+        for(let jjoin of joins){
+          if((jjoin.table === order[i] && order.slice(0,i).includes(state.parsedQuery.from) && order.slice(0,i).includes(jjoin.table) === false) ||
+             (jjoin.table === order[i])){
+            joinCond = jjoin.condition;
+            break;
+          }
+        }
+        if(!joinCond) joinCond = "TRUE";
+        plan = {type: "Join", left: plan, right: {type: "Scan", table: order[i]}, condition: joinCond};
+      }
+      // Add WHERE filter if present
+      if(state.parsedQuery.where){
+        plan = {type:"Filter", condition: state.parsedQuery.where, input: plan};
+      }
+      // Project, OrderBy, Limit as before
+      plan = {type:"Project", columns: state.parsedQuery.select==="*" ? ["*"] : state.parsedQuery.select.split(",").map(s=>s.trim()), input: plan};
+      if(state.parsedQuery.orderBy) plan = {type:"Sort", orderBy: state.parsedQuery.orderBy, input: plan};
+      if(state.parsedQuery.limit) plan = {type:"Limit", count:parseInt(state.parsedQuery.limit,10), input: plan};
+      return plan;
+    }
+
+    // Join order permutations (factorial)
+    function permutations(arr) {
+      if(arr.length===0) return [[]];
+      let res = [];
+      for(let i=0;i<arr.length;++i){
+        let rest = [...arr.slice(0,i),...arr.slice(i+1)];
+        for(let p of permutations(rest)) res.push([arr[i]].concat(p));
+      }
+      return res;
+    }
+
+    // Estimate plan cost using estimatePlanRows (approximate cost = estimated rows)
+    let orders = permutations(allTables);
+    let bestPlan = null;
+    let bestCost = Number.MAX_SAFE_INTEGER;
+    for(let order of orders){
+      // For performance, skip obviously bad orders: those that don't start with baseTable?
+      if(order[0] !== baseTable) continue;
+      let pl = buildJoinPlanFromOrder(order);
+      // Heuristic optimization: applies predicate pushdown for cost model
+      pl = pushdownPredicates(pl, splitConjuncts(state.parsedQuery.where || "").concat(state.parsedQuery.joins.map(j => j.condition)));
+      let cost = estimatePlanRows(pl, state.tables);
+      if(cost < bestCost){
+        bestCost = cost;
+        bestPlan = pl;
+      }
+    }
+
+    if(bestPlan){
+      state.currentPlan = bestPlan;
+      planDisplay.textContent = printPlan(bestPlan);
+      log(`Cost-based optimization complete. Selected plan cost estimate: ${bestCost}`);
+    } else {
+      log("Cost-based optimization did not find better plan.");
+    }
+  });
+
+  // Button: Apply Manual Transformation
+  applyManualTransformBtn.addEventListener("click", () => {
+    if (!state.currentPlan) {
+      alert("No plan to transform. Generate initial plan first.");
+      return;
+    }
+    let transform = manualTransformSelect.value;
+    if (!transform) {
+      alert("Please select a transformation.");
+      return;
+    }
+    log(`Applying manual transformation: ${transform}`);
+
+    switch(transform){
+      case "swap":
+        // Swap top-level Join children if the top node is Join
+        if(state.currentPlan.type==="Join"){
+          [state.currentPlan.left, state.currentPlan.right] = [state.currentPlan.right, state.currentPlan.left];
+          log("Operator Swap: Top-level join inputs swapped.");
+        } else {
+          log("Operator Swap: Current plan top node is not a Join, cannot swap.");
+        }
+        break;
+      case "pushdown":
+        // Apply one step of predicate pushdown
+        // We'll re-extract predicates and apply pushdown again
+        {
+          let allPreds = [];
+          if(state.parsedQuery.where) allPreds.push(state.parsedQuery.where);
+          state.parsedQuery.joins.forEach(j => allPreds.push(j.condition));
+          state.currentPlan = pushdownPredicates(state.currentPlan, allPreds);
+          log("Predicate Pushdown: applied manual pushdown.");
+        }
+        break;
+      case "joinReorder":
+        // Swap joins lower down if possible (try all joins to swap children if beneficial)
+        {
+          function swapIfBetter(node){
+            if(!node) return node;
+            if(node.type==="Join"){
+              let leftRows = estimatePlanRows(node.left,state.tables);
+              let rightRows = estimatePlanRows(node.right,state.tables);
+              if(rightRows < leftRows){
+                [node.left,node.right] = [node.right,node.left];
+                log("Join Reorder: swapped join children of a join subtree.");
+              }
+              node.left = swapIfBetter(node.left);
+              node.right = swapIfBetter(node.right);
+            } else if(node.input){
+              node.input = swapIfBetter(node.input);
+            }
+            return node;
+          }
+          state.currentPlan = swapIfBetter(state.currentPlan);
+        }
+        break;
+      case "indexUse":
+        // User triggers index usage simulation explicitly
+        for(let t in state.tables){
+          const cols = state.tables[t].columns;
+          let idxCols = [];
+          for(let c in cols){
+            if(c === "id" || c.endsWith("_id")){
+              idxCols.push(c);
+            }
+          }
+          state.tables[t].indexes = idxCols;
+          if(idxCols.length>0){
+            log(`Index Usage: Simulated indexes on table ${t}: ${idxCols.join(", ")}`);
+          }
+        }
+        state.currentPlan = applyIndexUsage(state.currentPlan,state.tables);
+        break;
+      default:
+        log(`Unknown transformation "${transform}"`);
+    }
+
+    planDisplay.textContent = printPlan(state.currentPlan);
+  });
+
+  // User edits explanation text
+  explanationText.addEventListener("input", () => {
+    state.explanation = explanationText.value;
+  });
+
+  // Reset Button
+  resetDemoBtn.addEventListener("click", () => {
+    if(confirm("Are you sure you want to reset the demo? All current progress will be lost.")){
+      resetState();
+    }
+  });
+
+  // Initialize
+  resetState();
+
+  // Provide some sample data for user convenience
+  queryInput.value =
+`SELECT A.id, B.value FROM A JOIN B ON A.id = B.a_id WHERE B.value > 100 ORDER BY A.date LIMIT 10;`;
+  tableSchemasInput.value = 
+`A(id:int,date:text,category:text)
+B(a_id:int,value:int)`;
+
+})();
+</script>
+</body>
+</html>

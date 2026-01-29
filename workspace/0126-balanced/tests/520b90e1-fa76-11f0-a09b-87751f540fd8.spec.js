@@ -97,7 +97,7 @@ test.describe('Decision Trees Interactive Application (520b90e1-fa76-11f0-a09b-8
 
   // Test stability: clicking the tree should not trigger transitions or change the DOM
   test('Clicking the rendered tree does not change DOM (no transitions)', async ({ page }) => {
-    const treeLocator = page.locator('#tree');
+    const treeLocator1 = page.locator('#tree');
     await expect(treeLocator).toBeVisible();
 
     // Record initial HTML snapshot

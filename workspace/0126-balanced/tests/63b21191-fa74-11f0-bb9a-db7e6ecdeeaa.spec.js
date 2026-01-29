@@ -113,7 +113,7 @@ test.describe('Backtracking Demo: N-Queens (FSM validation)', () => {
       // Give the UI a moment to update between clicks
       await page.waitForTimeout(10);
 
-      const log = await getLogText(page);
+      const log1 = await getLogText(page);
       if (log.includes('Conflict detected at')) sawConflict = true;
       if (log.includes('Removing queen at')) sawRemove = true;
       if (log.includes('=== Solution #1 ===') || log.includes('Solution #1')) sawSolution = true;
@@ -135,7 +135,7 @@ test.describe('Backtracking Demo: N-Queens (FSM validation)', () => {
     expect(sawSolution, 'Expected to observe at least one solution being found').toBeTruthy();
 
     // Also verify status shows solution text at some point
-    const status = await getStatusText(page);
+    const status1 = await getStatusText(page);
     expect(
       status.includes('Solution #') || status.includes('All solutions found'),
       `Status did not indicate solution; saw: "${status}"`,
@@ -166,10 +166,10 @@ test.describe('Backtracking Demo: N-Queens (FSM validation)', () => {
 
     // If AutoRun completed the whole run, autoRunBtn should have reverted to 'Auto Run' and nextStep disabled
     const autoText = await page.locator('#autoRunBtn').textContent();
-    const nextDisabled = await page.locator('#nextStepBtn').isDisabled();
+    const nextDisabled1 = await page.locator('#nextStepBtn').isDisabled();
 
     // Accept either: it has paused (text 'Pause') or completed (text 'Auto Run' and next disabled)
-    const log = await getLogText(page);
+    const log2 = await getLogText(page);
     expect(log).toContain('=== Solution #1 ===');
 
     // Validate state consistency: startBtn should be enabled after completion or paused

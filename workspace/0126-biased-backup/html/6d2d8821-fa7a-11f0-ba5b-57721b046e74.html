@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Directed Graph</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: white;
+            color: black;
+        }
+        #graph-container {
+            border: 1px solid black;
+            width: 800px;
+            height: 500px;
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .node {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 1px solid black;
+            border-radius: 15px;
+            text-align: center;
+            line-height: 30px;
+            cursor: move;
+            background: white;
+        }
+        .edge {
+            position: absolute;
+            pointer-events: none;
+        }
+        .arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            pointer-events: none;
+        }
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            border: 1px solid black;
+            padding: 10px;
+            margin-right: 10px;
+        }
+        textarea {
+            width: 300px;
+            height: 100px;
+        }
+        input, button {
+            margin: 5px;
+        }
+        #node-properties, #edge-properties {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid black;
+            padding: 10px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Directed Graph</h1>
+    
+    <div class="control-panel">
+        <div class="control-group">
+            <h3>Graph Construction</h3>
+            <button id="add-node">Add Node</button>
+            <button id="add-edge">Add Edge</button>
+            <button id="delete-mode">Delete Mode</button>
+            <button id="clear-graph">Clear Graph</button>
+        </div>
+        
+        <div class="control-group">
+            <h3>Layout</h3>
+            <button id="random-layout">Random Layout</button>
+            <button id="circle-layout">Circle Layout</button>
+            <button id="force-layout">Force Layout</button>
+            <div>
+                <label>Force Layout Parameters:</label>
+                <div>
+                    <label>Charge: <input type="range" id="charge" min="-1000" max="-10" value="-300"></label>
+                </div>
+                <div>
+                    <label>Link Distance: <input type="range" id="link-distance" min="10" max="200" value="50"></label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <h3>Graph Operations</h3>
+            <button id="find-path">Find Path</button>
+            <button id="find-cycles">Find Cycles</button>
+            <button id="topological-sort">Topological Sort</button>
+            <div>
+                <label>Start Node: <input type="text" id="start-node" size="3"></label>
+                <label>End Node: <input type="text" id="end-node" size="3"></label>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <h3>Import/Export</h3>
+            <textarea id="graph-json" placeholder="Graph JSON will appear here"></textarea>
+            <button id="import-graph">Import Graph</button>
+            <button id="export-graph">Export Graph</button>
+        </div>
+    </div>
+    
+    <div id="graph-container"></div>
+    
+    <div id="node-properties">
+        <h3>Node Properties</h3>
+        <label>ID: <input type="text" id="node-id" readonly></label>
+        <label>Label: <input type="text" id="node-label"></label>
+        <button id="update-node">Update</button>
+        <button id="close-node-props">Close</button>
+    </div>
+    
+    <div id="edge-properties">
+        <h3>Edge Properties</h3>
+        <label>From: <input type="text" id="edge-from" readonly></label>
+        <label>To: <input type="text" id="edge-to" readonly></label>
+        <label>Weight: <input type="number" id="edge-weight" min="0" step="0.1" value="1"></label>
+        <button id="update-edge">Update</button>
+        <button id="close-edge-props">Close</button>
+    </div>
+    
+    <div id="status-message"></div>
+    
+    <script>
+        // Graph data structure
+        let graph = {
+            nodes: [],
+            edges: []
+        };
+        
+        // UI state
+        let selectedNode = null;
+        let edgeStartNode = null;
+        let deleteMode = false;
+        let forceLayoutActive = false;
+        let animationId = null;
+        
+        // DOM elements
+        const graphContainer = document.getElementById('graph-container');
+        const nodeProperties = document.getElementById('node-properties');
+        const edgeProperties = document.getElementById('edge-properties');
+        const statusMessage = document.getElementById('status-message');
+        
+        // Initialize the application
+        function init() {
+            // Add sample graph
+            addNode(100, 100, 'A');
+            addNode(200, 200, 'B');
+            addNode(300, 100, 'C');
+            addEdge('A', 'B');
+            addEdge('B', 'C');
+            addEdge('C', 'A');
+            
+            // Event listeners
+            document.getElementById('add-node').addEventListener('click', () => {
+                const x = Math.random() * (graphContainer.clientWidth - 40) + 20;
+                const y = Math.random() * (graphContainer.clientHeight - 40) + 20;
+                addNode(x, y, String.fromCharCode(65 + graph.nodes.length));
+            });
+            
+            document.getElementById('add-edge').addEventListener('click', () => {
+                if (edgeStartNode) {
+                    edgeStartNode = null;
+                    statusMessage.textContent = 'Edge creation canceled';
+                } else {
+                    statusMessage.textContent = 'Click on source node for new edge';
+                }
+            });
+            
+            document.getElementById('delete-mode').addEventListener('click', () => {
+                deleteMode = !deleteMode;
+                statusMessage.textContent = deleteMode ? 'Delete mode active - click nodes/edges to delete' : 'Delete mode deactivated';
+            });
+            
+            document.getElementById('clear-graph').addEventListener('click', () => {
+                graph = { nodes: [], edges: [] };
+                renderGraph();
+                statusMessage.textContent = 'Graph cleared';
+            });
+            
+            document.getElementById('random-layout').addEventListener('click', randomLayout);
+            document.getElementById('circle-layout').addEventListener('click', circleLayout);
+            document.getElementById('force-layout').addEventListener('click', toggleForceLayout);
+            
+            document.getElementById('charge').addEventListener('input', updateForceLayout);
+            document.getElementById('link-distance').addEventListener('input', updateForceLayout);
+            
+            document.getElementById('find-path').addEventListener('click', findPath);
+            document.getElementById('find-cycles').addEventListener('click', findCycles);
+            document.getElementById('topological-sort').addEventListener('click', topologicalSort);
+            
+            document.getElementById('import-graph').addEventListener('click', importGraph);
+            document.getElementById('export-graph').addEventListener('click', exportGraph);
+            
+            document.getElementById('update-node').addEventListener('click', updateNodeProperties);
+            document.getElementById('close-node-props').addEventListener('click', () => nodeProperties.style.display = 'none');
+            
+            document.getElementById('update-edge').addEventListener('click', updateEdgeProperties);
+            document.getElementById('close-edge-props').addEventListener('click', () => edgeProperties.style.display = 'none');
+            
+            // Initial render
+            renderGraph();
+        }
+        
+        // Graph manipulation functions
+        function addNode(x, y, label) {
+            const id = label || `N${graph.nodes.length + 1}`;
+            graph.nodes.push({ id, x, y, label: id });
+            renderGraph();
+            return id;
+        }
+        
+        function addEdge(from, to, weight = 1) {
+            if (from === to) return; // No self-loops
+            
+            // Check if edge already exists
+            const exists = graph.edges.some(e => e.from === from && e.to === to);
+            if (exists) return;
+            
+            graph.edges.push({ from, to, weight });
+            renderGraph();
+        }
+        
+        function removeNode(nodeId) {
+            graph.nodes = graph.nodes.filter(n => n.id !== nodeId);
+            graph.edges = graph.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
+            renderGraph();
+        }
+        
+        function removeEdge(from, to) {
+            graph.edges = graph.edges.filter(e => !(e.from === from && e.to === to));
+            renderGraph();
+        }
+        
+        // Layout functions
+        function randomLayout() {
+            stopForceLayout();
+            graph.nodes.forEach(node => {
+                node.x = Math.random() * (graphContainer.clientWidth - 40) + 20;
+                node.y = Math.random() * (graphContainer.clientHeight - 40) + 20;
+            });
+            renderGraph();
+        }
+        
+        function circleLayout() {
+            stopForceLayout();
+            const centerX = graphContainer.clientWidth / 2;
+            const centerY = graphContainer.clientHeight / 2;
+            const radius = Math.min(centerX, centerY) - 50;
+            
+            graph.nodes.forEach((node, i) => {
+                const angle = (i * 2 * Math.PI) / graph.nodes.length;
+                node.x = centerX + radius * Math.cos(angle);
+                node.y = centerY + radius * Math.sin(angle);
+            });
+            renderGraph();
+        }
+        
+        function toggleForceLayout() {
+            if (forceLayoutActive) {
+                stopForceLayout();
+            } else {
+                startForceLayout();
+            }
+        }
+        
+        function startForceLayout() {
+            forceLayoutActive = true;
+            document.getElementById('force-layout').textContent = 'Stop Force Layout';
+            updateForceLayout();
+        }
+        
+        function stopForceLayout() {
+            forceLayoutActive = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            document.getElementById('force-layout').textContent = 'Force Layout';
+        }
+        
+        function updateForceLayout() {
+            if (!forceLayoutActive) return;
+            
+            const charge = parseInt(document.getElementById('charge').value);
+            const linkDistance = parseInt(document.getElementById('link-distance').value);
+            
+            // Simple force-directed layout simulation
+            const nodes = graph.nodes;
+            const edges = graph.edges;
+            
+            // Initialize velocities
+            nodes.forEach(node => {
+                if (!node.vx) node.vx = 0;
+                if (!node.vy) node.vy = 0;
+            });
+            
+            // Apply forces
+            const repulsion = (n1, n2) => {
+                const dx = n1.x - n2.x;
+                const dy = n1.y - n2.y;
+                const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
+                const force = charge / (distance * distance);
+                
+                n1.vx += (dx / distance) * force;
+                n1.vy += (dy / distance) * force;
+                n2.vx -= (dx / distance) * force;
+                n2.vy -= (dy / distance) * force;
+            };
+            
+            const attraction = (n1, n2) => {
+                const dx = n1.x - n2.x;
+                const dy = n1.y - n2.y;
+                const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
+                const force = (distance - linkDistance) * 0.1;
+                
+                n1.vx -= (dx / distance) * force;
+                n1.vy -= (dy / distance) * force;
+                n2.vx += (dx / distance) * force;
+                n2.vy += (dy / distance) * force;
+            };
+            
+            // Apply repulsion between all nodes
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    repulsion(nodes[i], nodes[j]);
+                }
+            }
+            
+            // Apply attraction between connected nodes
+            edges.forEach(edge => {
+                const fromNode = nodes.find(n => n.id === edge.from);
+                const toNode = nodes.find(n => n.id === edge.to);
+                if (fromNode && toNode) {
+                    attraction(fromNode, toNode);
+                }
+            });
+            
+            // Update positions with damping
+            nodes.forEach(node => {
+                node.vx *= 0.9;
+                node.vy *= 0.9;
+                node.x += node.vx;
+                node.y += node.vy;
+                
+                // Boundary constraints
+                const padding = 20;
+                node.x = Math.max(padding, Math.min(graphContainer.clientWidth - padding, node.x));
+                node.y = Math.max(padding, Math.min(graphContainer.clientHeight - padding, node.y));
+            });
+            
+            renderGraph();
+            
+            if (forceLayoutActive) {
+                animationId = requestAnimationFrame(updateForceLayout);
+            }
+        }
+        
+        // Graph algorithms
+        function findPath() {
+            const from = document.getElementById('start-node').value;
+            const to = document.getElementById('end-node').value;
+            
+            if (!from || !to) {
+                statusMessage.textContent = 'Please specify both start and end nodes';
+                return;
+            }
+            
+            if (from === to) {
+                statusMessage.textContent = 'Start and end nodes are the same';
+                return;
+            }
+            
+            // Simple BFS path finding
+            const visited = new Set();
+            const queue = [[from, [from]]];
+            
+            while (queue.length > 0) {
+                const [current, path] = queue.shift();
+                
+                if (current === to) {
+                    highlightPath(path);
+                    statusMessage.textContent = `Path found: ${path.join(' → ')}`;
+                    return;
+                }
+                
+                if (!visited.has(current)) {
+                    visited.add(current);
+                    
+                    const neighbors = graph.edges
+                        .filter(e => e.from === current)
+                        .map(e => e.to);
+                    
+                    for (const neighbor of neighbors) {
+                        if (!visited.has(neighbor)) {
+                            queue.push([neighbor, [...path, neighbor]]);
+                        }
+                    }
+                }
+            }
+            
+            statusMessage.textContent = 'No path found between the specified nodes';
+        }
+        
+        function findCycles() {
+            // Simple cycle detection using DFS
+            const visited = new Set();
+            const recursionStack = new Set();
+            const cycles = [];
+            
+            function dfs(node, path) {
+                if (recursionStack.has(node)) {
+                    // Found a cycle
+                    const cycleStart = path.indexOf(node);
+                    if (cycleStart !== -1) {
+                        const cycle = path.slice(cycleStart);
+                        cycles.push([...cycle, node]);
+                    }
+                    return;
+                }
+                
+                if (visited.has(node)) return;
+                
+                visited.add(node);
+                recursionStack.add(node);
+                
+                const neighbors = graph.edges
+                    .filter(e => e.from === node)
+                    .map(e => e.to);
+                
+                for (const neighbor of neighbors) {
+                    dfs(neighbor, [...path, node]);
+                }
+                
+                recursionStack.delete(node);
+            }
+            
+            graph.nodes.forEach(node => {
+                if (!visited.has(node.id)) {
+                    dfs(node.id, []);
+                }
+            });
+            
+            if (cycles.length > 0) {
+                // Highlight the first cycle found
+                highlightPath(cycles[0]);
+                statusMessage.textContent = `Found ${cycles.length} cycle(s). First cycle: ${cycles[0].join(' → ')}`;
+            } else {
+                statusMessage.textContent = 'No cycles found in the graph';
+            }
+        }
+        
+        function topologicalSort() {
+            // Kahn's algorithm for topological sort
+            const inDegree = {};
+            const queue = [];
+            const result = [];
+            
+            // Initialize in-degree
+            graph.nodes.forEach(node => inDegree[node.id] = 0);
+            graph.edges.forEach(edge => inDegree[edge.to]++);
+            
+            // Find nodes with zero in-degree
+            for (const nodeId in inDegree) {
+                if (inDegree[nodeId] === 0) {
+                    queue.push(nodeId);
+                }
+            }
+            
+            let count = 0;
+            
+            while (queue.length > 0) {
+                const u = queue.shift();
+                result.push(u);
+                
+                // Decrease in-degree for all neighbors
+                graph.edges
+                    .filter(e => e.from === u)
+                    .forEach(e => {
+                        inDegree[e.to]--;
+                        if (inDegree[e.to] === 0) {
+                            queue.push(e.to);
+                        }
+                    });
+                
+                count++;
+            }
+            
+            if (count !== graph.nodes.length) {
+                statusMessage.textContent = 'Graph has at least one cycle - topological sort not possible';
+            } else {
+                statusMessage.textContent = `Topological order: ${result.join(' → ')}`;
+            }
+        }
+        
+        function highlightPath(nodeIds) {
+            // Reset all highlights
+            document.querySelectorAll('.node').forEach(el => {
+                el.style.border = '1px solid black';
+            });
+            
+            document.querySelectorAll('.edge').forEach(el => {
+                el.style.stroke = 'black';
+            });
+            
+            // Highlight nodes in path
+            nodeIds.forEach(id => {
+                const nodeEl = document.querySelector(`.node[data-id="${id}"]`);
+                if (nodeEl) nodeEl.style.border = '2px solid red';
+            });
+            
+            // Highlight edges in path
+            for (let i = 0; i < nodeIds.length - 1; i++) {
+                const from = nodeIds[i];
+                const to = nodeIds[i + 1];
+                
+                const edgeEl = document.querySelector(`.edge[data-from="${from}"][data-to="${to}"]`);
+                if (edgeEl) edgeEl.style.stroke = 'red';
+            }
+        }
+        
+        // Import/export
+        function exportGraph() {
+            document.getElementById('graph-json').value = JSON.stringify(graph, null, 2);
+            statusMessage.textContent = 'Graph exported to JSON';
+        }
+        
+        function importGraph() {
+            try {
+                const json = document.getElementById('graph-json').value;
+                const newGraph = JSON.parse(json);
+                
+                if (!newGraph.nodes || !newGraph.edges) {
+                    throw new Error('Invalid graph format');
+                }
+                
+                graph = newGraph;
+                renderGraph();
+                statusMessage.textContent = 'Graph imported successfully';
+            } catch (e) {
+                statusMessage.textContent = 'Error importing graph: ' + e.message;
+            }
+        }
+        
+        // Node/edge properties
+        function showNodeProperties(node) {
+            document.getElementById('node-id').value = node.id;
+            document.getElementById('node-label').value = node.label || node.id;
+            nodeProperties.style.display = 'block';
+            nodeProperties.style.left = `${node.x + 40}px`;
+            nodeProperties.style.top = `${node.y}px`;
+        }
+        
+        function updateNodeProperties() {
+            const id = document.getElementById('node-id').value;
+            const label = document.getElementById('node-label').value;
+            
+            const node = graph.nodes.find(n => n.id === id);
+            if (node) {
+                node.label = label;
+                renderGraph();
+            }
+            
+            nodeProperties.style.display = 'none';
+        }
+        
+        function showEdgeProperties(edge) {
+            document.getElementById('edge-from').value = edge.from;
+            document.getElementById('edge-to').value = edge.to;
+            document.getElementById('edge-weight').value = edge.weight || 1;
+            
+            const fromNode = graph.nodes.find(n => n.id === edge.from);
+            const toNode = graph.nodes.find(n => n.id === edge.to);
+            
+            if (fromNode && toNode) {
+                const x = (fromNode.x + toNode.x) / 2;
+                const y = (fromNode.y + toNode.y) / 2;
+                edgeProperties.style.display = 'block';
+                edgeProperties.style.left = `${x}px`;
+                edgeProperties.style.top = `${y}px`;
+            }
+        }
+        
+        function updateEdgeProperties() {
+            const from = document.getElementById('edge-from').value;
+            const to = document.getElementById('edge-to').value;
+            const weight = parseFloat(document.getElementById('edge-weight').value);
+            
+            const edge = graph.edges.find(e => e.from === from && e.to === to);
+            if (edge) {
+                edge.weight = weight;
+                renderGraph();
+            }
+            
+            edgeProperties.style.display = 'none';
+        }
+        
+        // Rendering
+        function renderGraph() {
+            // Clear container
+            graphContainer.innerHTML = '';
+            
+            // Draw edges first (under nodes)
+            graph.edges.forEach(edge => {
+                const fromNode = graph.nodes.find(n => n.id === edge.from);
+                const toNode = graph.nodes.find(n => n.id === edge.to);
+                
+                if (fromNode && toNode) {
+                    // Calculate edge path
+                    const dx = toNode.x - fromNode.x;
+                    const dy = toNode.y - fromNode.y;
+                    const angle = Math.atan2(dy, dx);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Adjust start/end points to node boundaries
+                    const startX = fromNode.x + 15 * Math.cos(angle);
+                    const startY = fromNode.y + 15 * Math.sin(angle);
+                    const endX = toNode.x - 15 * Math.cos(angle);
+                    const endY = toNode.y - 15 * Math.sin(angle);
+                    
+                    // Create edge line
+                    const edgeEl = document.createElement('div');
+                    edgeEl.className = 'edge';
+                    edgeEl.setAttribute('data-from', edge.from);
+                    edgeEl.setAttribute('data-to', edge.to);
+                    
+                    // Position and style the edge
+                    edgeEl.style.left = `${startX}px`;
+                    edgeEl.style.top = `${startY}px`;
+                    edgeEl.style.width = `${dist - 30}px`;
+                    edgeEl.style.height = '1px';
+                    edgeEl.style.transformOrigin = '0 0';
+                    edgeEl.style.transform = `rotate(${angle}rad)`;
+                    edgeEl.style.borderTop = '1px solid black';
+                    
+                    // Create arrowhead
+                    const arrowEl = document.createElement('div');
+                    arrowEl.className = 'arrow';
+                    arrowEl.style.left = `${endX}px`;
+                    arrowEl.style.top = `${endY}px`;
+                    arrowEl.style.borderWidth = '0 5px 10px 5px';
+                    arrowEl.style.borderColor = `transparent transparent black transparent`;
+                    arrowEl.style.transform = `rotate(${angle + Math.PI/2}rad)`;
+                    
+                    // Add weight label if not 1
+                    if (edge.weight !== 1) {
+                        const labelEl = document.createElement('div');
+                        labelEl.textContent = edge.weight;
+                        labelEl.style.position = 'absolute';
+                        labelEl.style.left = `${(startX + endX) / 2}px`;
+                        labelEl.style.top = `${(startY + endY) / 2}px`;
+                        labelEl.style.transform = 'translate(-50%, -50%)';
+                        graphContainer.appendChild(labelEl);
+                    }
+                    
+                    graphContainer.appendChild(edgeEl);
+                    graphContainer.appendChild(arrowEl);
+                    
+                    // Add click handler for edge
+                    edgeEl.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (deleteMode) {
+                            removeEdge(edge.from, edge.to);
+                        } else {
+                            showEdgeProperties(edge);
+                        }
+                    });
+                }
+            });
+            
+            // Draw nodes
+            graph.nodes.forEach(node => {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = 'node';
+                nodeEl.setAttribute('data-id', node.id);
+                nodeEl.textContent = node.label || node.id;
+                nodeEl.style.left = `${node.x - 15}px`;
+                nodeEl.style.top = `${node.y - 15}px`;
+                
+                // Make nodes draggable
+                let isDragging = false;
+                let offsetX, offsetY;
+                
+                nodeEl.addEventListener('mousedown', (e) => {
+                    if (deleteMode) {
+                        removeNode(node.id);
+                        return;
+                    }
+                    
+                    if (edgeStartNode === null) {
+                        // Start dragging
+                        isDragging = true;
+                        offsetX = e.clientX - node.x;
+                        offsetY = e.clientY - node.y;
+                        e.preventDefault(); // Prevent text selection
+                    } else if (edgeStartNode !== node.id) {
+                        // Complete edge creation
+                        addEdge(edgeStartNode, node.id);
+                        edgeStartNode = null;
+                    }
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (isDragging) {
+                        node.x = e.clientX - offsetX;
+                        node.y = e.clientY - offsetY;
+                        renderGraph();
+                    }
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    isDragging = false;
+                });
+                
+                nodeEl.addEventListener('click', (e) => {
+                    if (deleteMode) return;
+                    
+                    if (edgeStartNode === null) {
+                        // Show node properties
+                        showNodeProperties(node);
+                    } else if (edgeStartNode === node.id) {
+                        // Cancel edge creation
+                        edgeStartNode = null;
+                        statusMessage.textContent = 'Edge creation canceled';
+                    } else {
+                        // Start edge creation
+                        edgeStartNode = node.id;
+                        statusMessage.textContent = `Creating edge from ${node.id} - click target node`;
+                    }
+                });
+                
+                graphContainer.appendChild(nodeEl);
+            });
+        }
+        
+        // Initialize the application
+        init();
+    </script>
+</body>
+</html>

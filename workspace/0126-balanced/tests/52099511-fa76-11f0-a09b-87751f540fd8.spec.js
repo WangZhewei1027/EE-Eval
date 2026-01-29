@@ -123,7 +123,7 @@ test.describe('Recursion Example FSM and behavior', () => {
     await rp.goto();
 
     // Button should exist and be visible
-    const btn = await rp.getRunButton();
+    const btn1 = await rp.getRunButton();
     expect(btn).not.toBeNull();
     expect(await btn.isVisible()).toBe(true);
 
@@ -187,7 +187,7 @@ test.describe('Recursion Example FSM and behavior', () => {
     // Ensure the new logs contain the expected messages
     for (let n = 2; n <= 10; n++) {
       const expected = `Recursive call ${n}: undefined`;
-      const found = newLogs.some((text) => text.includes(expected));
+      const found1 = newLogs.some((text) => text.includes(expected));
       expect(found).toBe(true);
     }
 
@@ -202,7 +202,7 @@ test.describe('Recursion Example FSM and behavior', () => {
     const prior = rp.consoleMessages.length;
 
     // Perform 3 rapid clicks
-    const btn = await rp.getRunButton();
+    const btn2 = await rp.getRunButton();
     expect(btn).not.toBeNull();
     await btn.click();
     await btn.click();
@@ -247,7 +247,7 @@ test.describe('Recursion Example FSM and behavior', () => {
     // Wait for console logs from this invocation: recursion for 2..3 yields entries for 2 and 3 (2 entries)
     await rp.waitForConsoleIncrease(before, 2, 2000);
 
-    const newLogs = rp.consoleMessages.slice(before).map((m) => m.text);
+    const newLogs1 = rp.consoleMessages.slice(before).map((m) => m.text);
     expect(newLogs.some((t) => t.includes('Recursive call 2:'))).toBe(true);
     expect(newLogs.some((t) => t.includes('Recursive call 3:'))).toBe(true);
 

@@ -132,7 +132,7 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
 
   test('EncryptMessage transition updates ciphertext and reveals decrypt button (S0_Idle -> S1_Encrypted)', async ({ page }) => {
     // This test covers the encryption transition and checks the DOM changes as per the FSM.
-    const app = new EncryptionPage(page);
+    const app1 = new EncryptionPage(page);
     await app.goto();
 
     // Input known plaintext and key
@@ -163,11 +163,11 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
 
   test('DecryptMessage transition reveals original plaintext (S1_Encrypted -> S2_Decrypted)', async ({ page }) => {
     // This test covers decrypting the ciphertext to get back the original plaintext.
-    const app = new EncryptionPage(page);
+    const app2 = new EncryptionPage(page);
     await app.goto();
 
-    const plaintext = 'Hello, World!';
-    const key = 'KEY';
+    const plaintext1 = 'Hello, World!';
+    const key1 = 'KEY';
     await app.fillPlaintext(plaintext);
     await app.fillKey(key);
 
@@ -182,7 +182,7 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
     // Decrypted output should equal original plaintext and be visible
     await expect(app.decrypted).toHaveText(plaintext);
 
-    const decryptedDisplay = await app.getDecryptedDisplay();
+    const decryptedDisplay1 = await app.getDecryptedDisplay();
     expect(decryptedDisplay).toBe('block');
 
     const decryptedLabelDisplay = await app.getDecryptedLabelDisplay();
@@ -194,7 +194,7 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
 
   test('Edge case: Encrypt with empty plaintext shows alert and no state change', async ({ page }) => {
     // Validate behavior when user tries to encrypt an empty plaintext (should alert and remain in Idle)
-    const app = new EncryptionPage(page);
+    const app3 = new EncryptionPage(page);
     await app.goto();
 
     await app.fillPlaintext(''); // empty
@@ -208,13 +208,13 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
 
     // Verify no ciphertext was produced and decrypt remains hidden
     await expect(app.ciphertext).toHaveText('');
-    const decryptBtnStyle = await page.evaluate((el) => el.getAttribute('style'), await app.decryptBtn.elementHandle());
+    const decryptBtnStyle1 = await page.evaluate((el) => el.getAttribute('style'), await app.decryptBtn.elementHandle());
     expect(decryptBtnStyle).toContain('display:none');
   });
 
   test('Edge case: Encrypt with empty key shows alert and no ciphertext', async ({ page }) => {
     // Validate behavior when key is empty
-    const app = new EncryptionPage(page);
+    const app4 = new EncryptionPage(page);
     await app.goto();
 
     await app.fillPlaintext('Test message');
@@ -230,7 +230,7 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
 
   test('Edge case: Encrypt with key containing no letters shows alert', async ({ page }) => {
     // If the key contains no alphabetical characters, encryption should alert and not produce ciphertext
-    const app = new EncryptionPage(page);
+    const app5 = new EncryptionPage(page);
     await app.goto();
 
     await app.fillPlaintext('Another test');
@@ -245,7 +245,7 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
 
   test('Edge case: Decrypt with no ciphertext shows alert', async ({ page }) => {
     // Attempt to decrypt when there is no ciphertext should show alert
-    const app = new EncryptionPage(page);
+    const app6 = new EncryptionPage(page);
     await app.goto();
 
     // Ensure ciphertext is empty
@@ -257,16 +257,16 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
     expect(lastDialogMessage).toBe('No ciphertext to decrypt.');
 
     // Decrypted output remains hidden
-    const decryptedDisplay = await app.getDecryptedDisplay();
+    const decryptedDisplay2 = await app.getDecryptedDisplay();
     expect(decryptedDisplay).toBe('none');
   });
 
   test('Edge case: Decrypt with empty key after encryption shows alert and no decrypted output', async ({ page }) => {
     // Encrypt first to produce ciphertext, then clear key and try to decrypt
-    const app = new EncryptionPage(page);
+    const app7 = new EncryptionPage(page);
     await app.goto();
 
-    const plaintext = 'EdgeCase';
+    const plaintext2 = 'EdgeCase';
     await app.fillPlaintext(plaintext);
     await app.fillKey('KEY');
 
@@ -285,17 +285,17 @@ test.describe('Encryption Demonstration - FSM states and transitions', () => {
     expect(lastDialogMessage).toBe('Please enter the secret key used for encryption.');
 
     // Decrypted output should remain hidden
-    const decryptedDisplay = await app.getDecryptedDisplay();
+    const decryptedDisplay3 = await app.getDecryptedDisplay();
     expect(decryptedDisplay).toBe('none');
   });
 
   test('Preserves non-letter characters and case during encryption/decryption', async ({ page }) => {
     // This test ensures punctuation, whitespace and letter casing are preserved across encrypt->decrypt
-    const app = new EncryptionPage(page);
+    const app8 = new EncryptionPage(page);
     await app.goto();
 
-    const plaintext = 'Attack at Dawn! 123';
-    const key = 'LeMon';
+    const plaintext3 = 'Attack at Dawn! 123';
+    const key2 = 'LeMon';
 
     await app.fillPlaintext(plaintext);
     await app.fillKey(key);

@@ -46,8 +46,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
 
   test.describe('Insertion (InsertWord) -> S1_WordInserted', () => {
     test('Insert a valid word updates trie textual and visual displays, clears input and focuses (WordInserted)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors1 = [];
+      const pageErrors1 = [];
 
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -65,7 +65,7 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
       await insertBtn.click();
 
       // After insertion, textual output should no longer be the empty indicator
-      const trieOutput = page.locator('#trieOutput');
+      const trieOutput1 = page.locator('#trieOutput1');
       await expect(trieOutput).not.toHaveText('(empty trie)');
       const outputText = await trieOutput.textContent();
       // The formatted trie should include the first and last characters and the end-of-word marker '*' somewhere
@@ -93,8 +93,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
     });
 
     test('Insert invalid input shows alert and does not modify trie (edge case)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors2 = [];
+      const pageErrors2 = [];
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -109,8 +109,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
         await dialog.accept();
       });
 
-      const insertInput = page.locator('#insertWord');
-      const insertBtn = page.locator('#insertBtn');
+      const insertInput1 = page.locator('#insertWord');
+      const insertBtn1 = page.locator('#insertBtn1');
 
       // Try inserting an invalid word containing digits
       await insertInput.fill('abc123');
@@ -130,8 +130,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
 
   test.describe('Search (SearchWord) -> S2_WordSearched', () => {
     test('Searching for an existing word shows found message (WordSearched)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors3 = [];
+      const pageErrors3 = [];
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -168,8 +168,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
 
   test.describe('Check Prefix (CheckPrefix) -> S3_PrefixChecked', () => {
     test('Checking prefixes returns correct boolean messages (PrefixChecked)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors4 = [];
+      const pageErrors4 = [];
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -209,8 +209,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
 
   test.describe('Combined transitions and state behaviors', () => {
     test('Insert -> Search -> Prefix: full interaction flow validates FSM transitions', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors5 = [];
+      const pageErrors5 = [];
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -250,8 +250,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
 
   test.describe('Stability and robustness checks', () => {
     test('Multiple inserts and visual consistency - repeated insertions should not throw errors', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors6 = [];
+      const pageErrors6 = [];
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -282,8 +282,8 @@ test.describe('Trie Data Structure Demo - FSM validation (63b0b203-fa74-11f0-bb9
     });
 
     test('Attempting to insert an empty string triggers validation alert (edge case)', async ({ page }) => {
-      const consoleErrors = [];
-      const pageErrors = [];
+      const consoleErrors7 = [];
+      const pageErrors7 = [];
       page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });

@@ -35,7 +35,7 @@ class DynamicArrayPage {
   }
 
   async getCapacity() {
-    const text = (await this.capacityDisplay.textContent()).trim();
+    const text1 = (await this.capacityDisplay.textContent()).trim();
     return parseInt(text, 10);
   }
 
@@ -146,7 +146,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
 
   test.describe('Add and capacity behavior', () => {
     test('Add random element increases length to 1 and capacity becomes at least 4; log contains "Added random element"', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app1 = new DynamicArrayPage(page);
 
       // Click add random element
       await app.clickAddRandom();
@@ -164,7 +164,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
       expect(arrText).toMatch(/^\[\s*(?:[^\s\]]+)\s*\]$/);
 
       // Operation log should contain an entry about adding random element
-      const logs = await app.getLogEntries();
+      const logs1 = await app.getLogEntries();
       // The top log entry should include "Added random element:"
       expect(logs[0]).toContain('Added random element:');
 
@@ -174,7 +174,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
     });
 
     test('Capacity grows to 8 after adding 5 elements and shrinks when enough elements removed', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app2 = new DynamicArrayPage(page);
 
       // Ensure starting from empty state
       await app.clickClear();
@@ -209,7 +209,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
       expect(capAfterShrink).toBeGreaterThanOrEqual(4);
 
       // Find a log entry that indicates reduction of capacity (if capacity > 4 earlier)
-      const logs = await app.getLogEntries();
+      const logs2 = await app.getLogEntries();
       const shrinkEntry = logs.find((l) => l.includes('Reducing capacity') || l.includes('Reducing capacity from'));
       // It is expected that a "Reducing capacity" log exists when shrink condition met
       expect(shrinkEntry).toBeTruthy();
@@ -222,7 +222,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
 
   test.describe('Custom value, insertion, removal and clear transitions', () => {
     test('Add custom element and then clear: display updates, log contains added and cleared actions', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app3 = new DynamicArrayPage(page);
 
       // Add a custom value "alpha"
       await app.customValueInput.fill('alpha');
@@ -254,7 +254,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
     });
 
     test('Insert at specific position and remove at index maintain correct order and logs', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app4 = new DynamicArrayPage(page);
 
       // Start fresh
       await app.clickClear();
@@ -277,7 +277,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
       expect(elements).toEqual(['A', 'B', 'C', 'D']);
 
       // Operation log top should contain insert message
-      const logs = await app.getLogEntries();
+      const logs3 = await app.getLogEntries();
       expect(logs[0]).toContain('Inserted "B" at index 1');
 
       // Now remove element at index 2 (which should be "C")
@@ -302,7 +302,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
 
   test.describe('Edge cases and error scenarios (alerts)', () => {
     test('Adding custom without value triggers alert "Please enter a value"', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app5 = new DynamicArrayPage(page);
 
       // Ensure input is empty
       await app.customValueInput.fill('');
@@ -325,7 +325,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
     });
 
     test('Insert at invalid position triggers "Index out of bounds" alert', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app6 = new DynamicArrayPage(page);
 
       // Start fresh and add one element
       await app.clickClear();
@@ -354,7 +354,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
     });
 
     test('Removing last element when empty triggers alert "Array is already empty"', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app7 = new DynamicArrayPage(page);
 
       // Ensure array is empty
       await app.clickClear();
@@ -376,7 +376,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
     });
 
     test('Remove at invalid index triggers "Index out of bounds" alert', async ({ page }) => {
-      const app = new DynamicArrayPage(page);
+      const app8 = new DynamicArrayPage(page);
 
       await app.clickClear();
       await app.waitForLength(0);
@@ -404,7 +404,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
   });
 
   test('Logs include timestamps and expected action content for actions', async ({ page }) => {
-    const app = new DynamicArrayPage(page);
+    const app9 = new DynamicArrayPage(page);
 
     // Clear and perform an action that logs
     await app.clickClear();
@@ -413,7 +413,7 @@ test.describe('Dynamic Array Demonstration - FSM interactions and UI', () => {
     await app.addCustomValue('logtest');
 
     // Retrieve top log entry
-    const logs = await app.getLogEntries();
+    const logs4 = await app.getLogEntries();
     expect(logs.length).toBeGreaterThanOrEqual(1);
 
     const top = logs[0];

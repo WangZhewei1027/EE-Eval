@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backtracking Interactive Demo</title>
+<style>
+  /* Minimal styling to ensure plain appearance */
+  body {
+    font-family: monospace, monospace;
+    background: white;
+    color: black;
+    margin: 1em;
+  }
+  textarea {
+    width: 100%;
+    height: 7em;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  input[type=number] {
+    width: 4em;
+  }
+  button {
+    margin: 0.2em 0.5em 0.5em 0;
+  }
+  fieldset {
+    margin-bottom: 1em;
+  }
+  label {
+    white-space: nowrap;
+  }
+  #log {
+    height: 10em;
+    overflow-y: scroll;
+    border: 1px solid black;
+    background: white;
+    font-family: monospace;
+    white-space: pre-wrap;
+  }
+  #solutionOutput {
+    font-family: monospace;
+    white-space: pre;
+    margin-top: 0.5em;
+    border: 1px solid black;
+    padding: 0.3em;
+    min-height: 5em;
+  }
+</style>
+</head>
+<body>
+<h1>Backtracking Interactive Demo</h1>
+
+<p>This tool lets you explore backtracking algorithms interactively with multiple examples and controls. Modify inputs, run step-by-step backtracking, explore solution branches, and control the process fully.</p>
+
+<fieldset>
+  <legend>Choose Backtracking Problem</legend>
+  <select id="problemSelect" aria-label="Select backtracking problem">
+    <option value="subsetSum">Subset Sum (find subsets that sum to target)</option>
+    <option value="nQueens">N Queens (place N queens on N×N board)</option>
+    <option value="permute">Permutations (all permutations of given list)</option>
+  </select>
+</fieldset>
+
+<fieldset id="configSubsetSum">
+  <legend>Subset Sum Problem Configuration</legend>
+  <label for="subsetSumSetInput">Set (comma-separated integers):</label><br />
+  <textarea id="subsetSumSetInput">3,7,1,8,4,5</textarea><br />
+  <label for="subsetSumTargetInput">Target sum:</label>
+  <input type="number" id="subsetSumTargetInput" value="15" min="0" step="1" /><br />
+</fieldset>
+
+<fieldset id="configNQueens" hidden>
+  <legend>N Queens Problem Configuration</legend>
+  <label for="nQueensNInput">Board size (N):</label>
+  <input type="number" id="nQueensNInput" value="4" min="1" max="15" step="1" /><br />
+</fieldset>
+
+<fieldset id="configPermutations" hidden>
+  <legend>Permutations Problem Configuration</legend>
+  <label for="permuteInput">Elements (comma-separated):</label><br />
+  <textarea id="permuteInput">a,b,c</textarea><br />
+</fieldset>
+
+<fieldset>
+  <legend>Controls</legend>
+  <button id="initBtn" aria-label="Initialize the backtracking algorithm">Initialize</button>
+  <button id="stepForwardBtn" disabled aria-label="Perform next backtracking step">Step Forward</button>
+  <button id="stepBackBtn" disabled aria-label="Step backward in path">Step Backward</button>
+  <button id="autoRunBtn" disabled aria-label="Run continuously with interval">Auto Run</button>
+  <button id="pauseBtn" disabled aria-label="Pause auto run">Pause</button>
+  <button id="resetBtn" disabled aria-label="Reset all">Reset</button>
+  <br />
+  <label for="speedRange">Auto Run speed (ms/step):</label>
+  <input type="range" id="speedRange" min="100" max="2000" value="500" step="50" />
+  <span id="speedDisplay">500</span>
+</fieldset>
+
+<fieldset>
+  <legend>Current State and Exploration</legend>
+  <div><strong>Current Depth:</strong> <span id="currentDepth">0</span></div>
+  <div><strong>Current Partial Solution:</strong></div>
+  <pre id="currentPartial"></pre>
+  <div>
+    <strong>Available Next Choices:</strong>
+    <ul id="choicesList"></ul>
+  </div>
+  <div>
+    <strong>Action Log:</strong>
+    <div id="log" aria-live="polite" aria-relevant="additions"></div>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Found Solutions</legend>
+  <button id="exportSolutionsBtn" disabled aria-label="Export all found solutions as JSON">Export Solutions</button><br />
+  <textarea id="solutionOutput" readonly aria-label="Solutions output"></textarea>
+</fieldset>
+
+<script>
+(function() {
+  // State Variables
+  let problem = 'subsetSum';
+
+  // Backtracking engine state
+  let backtrackingState = null; // object containing current state, stack, solutions, etc.
+  let autoRunInterval = null;
+
+  // Cached DOM elements
+  const problemSelect = document.getElementById('problemSelect');
+  const configSubsetSum = document.getElementById('configSubsetSum');
+  const subsetSumSetInput = document.getElementById('subsetSumSetInput');
+  const subsetSumTargetInput = document.getElementById('subsetSumTargetInput');
+  const configNQueens = document.getElementById('configNQueens');
+  const nQueensNInput = document.getElementById('nQueensNInput');
+  const configPermutations = document.getElementById('configPermutations');
+  const permuteInput = document.getElementById('permuteInput');
+
+  const initBtn = document.getElementById('initBtn');
+  const stepForwardBtn = document.getElementById('stepForwardBtn');
+  const stepBackBtn = document.getElementById('stepBackBtn');
+  const autoRunBtn = document.getElementById('autoRunBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const speedRange = document.getElementById('speedRange');
+  const speedDisplay = document.getElementById('speedDisplay');
+
+  const currentDepth = document.getElementById('currentDepth');
+  const currentPartial = document.getElementById('currentPartial');
+  const choicesList = document.getElementById('choicesList');
+  const log = document.getElementById('log');
+
+  const solutionOutput = document.getElementById('solutionOutput');
+  const exportSolutionsBtn = document.getElementById('exportSolutionsBtn');
+
+  // Utility: log messages to action log
+  function logMessage(msg) {
+    log.textContent += msg + '\n';
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // Clear logs and outputs
+  function clearLogs() {
+    log.textContent = '';
+    solutionOutput.value = '';
+  }
+
+  // Enable/disable controls depending on state
+  function updateControlState() {
+    const initialized = backtrackingState !== null;
+    stepForwardBtn.disabled = !initialized;
+    stepBackBtn.disabled = !initialized || backtrackingState.steps.length <= 1;
+    autoRunBtn.disabled = !initialized || (autoRunInterval !== null);
+    pauseBtn.disabled = (autoRunInterval === null);
+    resetBtn.disabled = !initialized;
+    exportSolutionsBtn.disabled = !(initialized && backtrackingState.solutions.length > 0);
+  }
+
+  // Problem configurations switching
+  function updateProblemConfigs() {
+    const val = problemSelect.value;
+    problem = val;
+    configSubsetSum.hidden = val !== 'subsetSum';
+    configNQueens.hidden = val !== 'nQueens';
+    configPermutations.hidden = val !== 'permute';
+  }
+
+  // ****************
+  // BACKTRACKING ENGINES FOR PROBLEMS
+  // ****************
+  /*
+    Each engine must implement:
+    - initialize(): returns initial state object
+    - step(state, direction): perform next step in given direction ('forward' or 'backward')
+    - getChoices(state): return array of possible next choices from current state
+    - formatPartial(state): return string describing current partial solution
+    - foundSolution(state): returns boolean if current partial is a solution
+    - exportSolution(state): return solution in a JSON-serializable form
+  */
+
+  // ---------- Subset Sum Backtracking -----------
+  function subsetSumInitialize() {
+    let rawSet = subsetSumSetInput.value.trim();
+    if (!rawSet) throw new Error('Set is empty');
+    let set = rawSet.split(',').map(s => parseInt(s.trim(),10));
+    if (set.some(isNaN)) throw new Error('Set contains invalid numbers');
+    let target = parseInt(subsetSumTargetInput.value, 10);
+    if (isNaN(target)) throw new Error('Invalid target sum');
+    // state shape:
+    // {
+    //   set: array of numbers,
+    //   target: target sum,
+    //   stack: array of frames,
+    //   solutions: array of arrays (each solution is list of values),
+    //   currentPartial: current chosen elements (array),
+    //   steps: array snapshots for backward stepping
+    // }
+    // A frame = { index: number, included: boolean|null } - null means not yet decided
+    return {
+      set,
+      target,
+      stack: [{index: 0, included: null}],
+      currentPartial: [],
+      solutions: [],
+      steps: [] // will store deep copies of stack and partial for stepping back
+    };
+  }
+  // Helper: clone stack and partial to save state snapshot
+  function cloneSubsetState(state) {
+    return {
+      stack: JSON.parse(JSON.stringify(state.stack)),
+      currentPartial: state.currentPartial.slice()
+    };
+  }
+  function subsetSumGetChoices(state) {
+    let frame = state.stack[state.stack.length-1];
+    if (!frame) return [];
+    if (frame.included === null) {
+      // two choices: include or not include the current index element
+      return [true,false];
+    } else {
+      return [];
+    }
+  }
+  function subsetSumFormatPartial(state) {
+    if(state.currentPartial.length === 0)
+      return '(empty)';
+    return state.currentPartial.join(', ');
+  }
+  function subsetSumCheckSolution(state) {
+    let sum = state.currentPartial.reduce((a,b)=>a+b,0);
+    return sum === state.target &&
+      state.stack[state.stack.length-1].index === state.set.length;
+  }
+  function subsetSumStep(state, direction) {
+    // direction: 'forward' or 'backward'
+    // For forward step:
+    // - If current frame.included is null,
+    //   set included to first unexplored choice (true, then false)
+    // - If included is true, add element to partial, if false do nothing
+    // - Then if possible, push new frame for next index
+    // - If at leaf, check solution, record if found, then backtrack (pop stack)
+    // For backward step:
+    // - revert to previous step state
+    if(direction === 'backward'){
+      if(state.steps.length <= 1) return; // cannot step back
+      state.steps.pop();
+      let snapshot = state.steps[state.steps.length-1];
+      state.stack = JSON.parse(JSON.stringify(snapshot.stack));
+      state.currentPartial = snapshot.currentPartial.slice();
+      return;
+    }
+    // forward step
+    let stack = state.stack;
+    if(stack.length === 0) return;
+
+    let frame = stack[stack.length - 1];
+
+    // Save snapshot before changing
+    state.steps.push(cloneSubsetState(state)); 
+
+    // If included is null => try true first, otherwise false
+    if(frame.included === null) {
+      frame.included = true;
+      state.currentPartial.push(state.set[frame.index]);
+    } else if(frame.included === true) {
+      // try false now
+      frame.included = false;
+      state.currentPartial.pop();
+    } else {
+      // included false already => pop current frame (backtrack)
+      stack.pop();
+      if(stack.length === 0){
+        // done
+        return;
+      }
+      // move to next choice of previous frame
+      let prevFrame = stack[stack.length - 1];
+      if(prevFrame.included === null){
+        // no choice made yet, will pick true next step
+        return;
+      } else if (prevFrame.included === true){
+        // will pick false next step
+        return;
+      } else {
+        // prevFrame was false, pop prev frame? This will be done next step
+        return;
+      }
+    }
+
+    // After deciding to include or exclude:
+    // If included true or false just decided, check if we can push next frame
+    if(frame.index + 1 < state.set.length) {
+      // push next frame
+      stack.push({index: frame.index + 1, included: null});
+    } else {
+      // Leaf node reached, check solution
+      if(subsetSumCheckSolution(state)) {
+        // Save solution (copy)
+        state.solutions.push(state.currentPartial.slice());
+        logMessage("Found solution: ["+state.currentPartial.join(', ')+"]");
+      }
+      // Next forward step will backtrack
+    }
+  }
+  function subsetSumExportSolution(sol) {
+    return sol;
+  }
+
+  // ------------ N Queens Backtracking -------------
+  /*
+  State shape:
+  {
+    N: board size,
+    board: array of length N: board[row] = col index of queen (or -1 if no queen),
+    row: next row to place queen,
+    solutions: array of board arrays,
+    steps: array snapshots for back steps
+  }
+  */
+  function nQueensInitialize() {
+    let N = parseInt(nQueensNInput.value,10);
+    if(isNaN(N) || N < 1 || N > 15) throw new Error("N must be between 1 and 15");
+    return {
+      N,
+      board: new Array(N).fill(-1),
+      row: 0,
+      solutions: [],
+      steps: []
+    };
+  }
+  function nQueensIsSafe(board, row, col) {
+    for(let r=0; r<row; r++) {
+      let c = board[r];
+      if(c === col) return false;
+      if(Math.abs(row-r) === Math.abs(col-c)) return false;
+    }
+    return true;
+  }
+  function nQueensGetChoices(state) {
+    let choices = [];
+    if(state.row >= state.N) return choices;
+    for(let c=0;c<state.N;c++) {
+      if(nQueensIsSafe(state.board, state.row, c)){
+        choices.push(c);
+      }
+    }
+    return choices;
+  }
+  function nQueensFormatPartial(state) {
+    // Show board rows up to current row, with Q and .
+    let lines = [];
+    for(let r=0;r<state.N;r++) {
+      if(r < state.row) {
+        let line = '';
+        for(let c=0;c<state.N;c++){
+          line += (state.board[r] === c) ? 'Q' : '.';
+        }
+        lines.push(line);
+      } else {
+        lines.push('(row '+r+': not placed)');
+      }
+    }
+    return lines.join('\n');
+  }
+  function nQueensCheckSolution(state) {
+    return state.row === state.N;
+  }
+  function nQueensStep(state, direction) {
+    if(direction === 'backward'){
+      if(state.steps.length <= 1) return;
+      state.steps.pop();
+      let snapshot = state.steps[state.steps.length-1];
+      state.board = snapshot.board.slice();
+      state.row = snapshot.row;
+      return;
+    }
+    // forward step
+    if(state.row === state.N) return; // done
+
+    state.steps.push({
+      board: state.board.slice(),
+      row: state.row
+    });
+
+    let choices = nQueensGetChoices(state);
+    if(choices.length === 0){
+      // dead end, backtrack
+      if(state.row > 0){
+        state.row--;
+        // Remove queen from that row
+        state.board[state.row] = -1;
+      }
+      return;
+    }
+
+    // We need to carefully explore choices one by one for each row
+    // To support stepping through multiple branches at one row,
+    // state needs to remember which columns have been tried per row
+    // We'll extend state with an array triedCols: length N, entries hold integer index of tried choice (-1 = none tried)
+    if(!state.triedCols) {
+      state.triedCols = new Array(state.N).fill(-1);
+    }
+    let tried = state.triedCols[state.row] || -1;
+    let nextChoiceIdx = tried + 1;
+
+    if(nextChoiceIdx >= choices.length){
+      // No more choices in this row - backtrack
+      state.triedCols[state.row] = -1;
+      state.board[state.row] = -1;
+      state.row--;
+      if(state.row < 0) return; // finished all
+      // This will try next choice in previous row next time step is called
+    } else {
+      // Try next choice at this row
+      state.board[state.row] = choices[nextChoiceIdx];
+      state.triedCols[state.row] = nextChoiceIdx;
+      state.row++;
+    }
+
+    // If we reached last row, check solution and record
+    if(state.row === state.N){
+      if(nQueensCheckSolution(state)){
+        state.solutions.push(state.board.slice());
+        logMessage('Found solution at row '+state.N);
+      }
+      // Backtrack next step
+      if(state.row > 0){
+        state.row--;
+        state.board[state.row] = -1;
+        state.triedCols[state.row] = -1;
+      }
+    }
+  }
+  function nQueensExportSolution(solution) {
+    return solution;
+  }
+
+  // ----------- Permutations Backtracking ------------
+  /*
+  State shape:
+  {
+    elements: original array,
+    chosen: current prefix array,
+    used: boolean array to mark used elements,
+    solutions: array of arrays,
+    steps: array snapshots,
+    nextChoiceIndex: for tracking which unused elements tried next
+  }
+  */
+  function permuteInitialize() {
+    let raw = permuteInput.value.trim();
+    if(!raw) throw new Error('Elements input empty');
+    let elements = raw.split(',').map(s=>s.trim()).filter(s=>s.length>0);
+    let used = new Array(elements.length).fill(false);
+    return {
+      elements,
+      chosen: [],
+      used,
+      solutions: [],
+      steps: [],
+      nextChoiceIndexStack: [] // will store index of next unused element to try per recursion level
+    };
+  }
+  function permuteGetChoices(state) {
+    let choices = [];
+    for(let i=0;i<state.elements.length;i++){
+      if(!state.used[i]) choices.push(i);
+    }
+    return choices;
+  }
+  function permuteFormatPartial(state) {
+    if(state.chosen.length === 0) return '(empty)';
+    let res = state.chosen.map(i=>state.elements[i]).join(', ');
+    return res;
+  }
+  function permuteCheckSolution(state) {
+    return state.chosen.length === state.elements.length;
+  }
+  function permuteStep(state, direction) {
+    if(direction === 'backward'){
+      if(state.steps.length <= 1) return;
+      state.steps.pop();
+      let snapshot = state.steps[state.steps.length-1];
+      state.chosen = snapshot.chosen.slice();
+      state.used = snapshot.used.slice();
+      state.nextChoiceIndexStack = snapshot.nextChoiceIndexStack.slice();
+      return;
+    }
+    // forward step
+    state.steps.push({
+      chosen: state.chosen.slice(),
+      used: state.used.slice(),
+      nextChoiceIndexStack: state.nextChoiceIndexStack.slice()
+    });
+    if(permuteCheckSolution(state)){
+      // already a solution => no forward step
+      return;
+    }
+    // Current recursion depth is chosen.length
+    let depth = state.chosen.length;
+    if(state.nextChoiceIndexStack.length < depth+1){
+      state.nextChoiceIndexStack.push(-1);
+    }
+    // Try next unused element index
+    let nextIndex = state.nextChoiceIndexStack[depth] + 1;
+    let choices = permuteGetChoices(state);
+    if(nextIndex >= choices.length){
+      // exhausted all at this depth, backtrack
+      state.nextChoiceIndexStack.pop();
+      if(state.chosen.length === 0){
+        // done
+        return;
+      }
+      let lastChosen = state.chosen.pop();
+      state.used[lastChosen] = false;
+      // next forward call will try next choice in previous depth
+    } else {
+      // try next unused choice for this depth
+      state.nextChoiceIndexStack[depth] = nextIndex;
+      let elIndex = choices[nextIndex];
+      state.chosen.push(elIndex);
+      state.used[elIndex] = true;
+
+      if(permuteCheckSolution(state)){
+        // found solution
+        let sol = state.chosen.map(i=>state.elements[i]);
+        state.solutions.push(sol);
+        logMessage('Found permutation: [' + sol.join(', ') + ']');
+        // next forward step will backtrack from this leaf
+      }
+      // next forward step will go deeper or backtrack if no unused choice at next level
+    }
+  }
+  function permuteExportSolution(sol) {
+    return sol;
+  }
+
+  // -------------
+  // Master hook to get engine by problem
+  // -------------
+  function getEngine() {
+    if(problem === 'subsetSum'){
+      return {
+        initialize: subsetSumInitialize,
+        step: subsetSumStep,
+        getChoices: subsetSumGetChoices,
+        formatPartial: subsetSumFormatPartial,
+        foundSolution: subsetSumCheckSolution,
+        exportSolution: subsetSumExportSolution
+      };
+    }
+    if(problem === 'nQueens'){
+      return {
+        initialize: nQueensInitialize,
+        step: nQueensStep,
+        getChoices: nQueensGetChoices,
+        formatPartial: nQueensFormatPartial,
+        foundSolution: nQueensCheckSolution,
+        exportSolution: nQueensExportSolution
+      };
+    }
+    if(problem === 'permute'){
+      return {
+        initialize: permuteInitialize,
+        step: permuteStep,
+        getChoices: permuteGetChoices,
+        formatPartial: permuteFormatPartial,
+        foundSolution: permuteCheckSolution,
+        exportSolution: permuteExportSolution
+      };
+    }
+  }
+
+  // -------------
+  // UI update function to reflect current state
+  // -------------
+  function updateUI() {
+    if(!backtrackingState) {
+      currentDepth.textContent = '0';
+      currentPartial.textContent = '';
+      choicesList.innerHTML = '';
+      solutionOutput.value = '';
+      updateControlState();
+      return;
+    }
+    let engine = getEngine();
+    // Depth = length of stack or recursion level
+    let depth = 0;
+    if(problem === 'subsetSum') depth = backtrackingState.stack.length;
+    else if(problem === 'nQueens') depth = backtrackingState.row;
+    else if(problem === 'permute') depth = backtrackingState.chosen.length;
+    currentDepth.textContent = depth;
+
+    currentPartial.textContent = engine.formatPartial(backtrackingState);
+
+    // Show choices available at this step (if any)
+    let choices = engine.getChoices(backtrackingState);
+    choicesList.innerHTML = '';
+    if(choices.length === 0) {
+      let li = document.createElement('li');
+      li.textContent = '(no choices)';
+      choicesList.appendChild(li);
+    } else {
+      if(problem === 'subsetSum'){
+        choices.forEach(c => {
+          let li = document.createElement('li');
+          li.textContent = (c ? 'Include next element' : 'Exclude next element');
+          choicesList.appendChild(li);
+        });
+      } else if(problem === 'nQueens') {
+        choices.forEach(c => {
+          let li = document.createElement('li');
+          li.textContent = 'Place queen in column ' + c;
+          choicesList.appendChild(li);
+        });
+      } else if(problem === 'permute') {
+        choices.forEach(i => {
+          let li = document.createElement('li');
+          li.textContent = 'Choose element "' + backtrackingState.elements[i] + '"';
+          choicesList.appendChild(li);
+        });
+      }
+    }
+
+    // Update solutions display
+    if(backtrackingState.solutions.length === 0){
+      solutionOutput.value = '(No solutions found yet)';
+    } else {
+      let sols = backtrackingState.solutions.map(engine.exportSolution);
+      solutionOutput.value = JSON.stringify(sols,null,2);
+    }
+    updateControlState();
+  }
+
+  // -------------
+  // Button event handlers
+  // -------------
+
+  initBtn.addEventListener('click', ()=> {
+    clearLogs();
+    try {
+      let engine = getEngine();
+      backtrackingState = engine.initialize();
+      // Save initial step snapshot
+      if(problem === 'subsetSum'){
+        backtrackingState.steps = [cloneSubsetState(backtrackingState)];
+      } else if(problem === 'nQueens'){
+        backtrackingState.steps = [{board: backtrackingState.board.slice(), row: backtrackingState.row}];
+      } else if(problem === 'permute'){
+        backtrackingState.steps = [{
+          chosen: backtrackingState.chosen.slice(),
+          used: backtrackingState.used.slice(),
+          nextChoiceIndexStack: backtrackingState.nextChoiceIndexStack ? backtrackingState.nextChoiceIndexStack.slice() : []
+        }];
+      }
+      updateUI();
+    } catch(e) {
+      alert('Init failed: ' + e.message);
+    }
+  });
+
+  stepForwardBtn.addEventListener('click', () => {
+    if(!backtrackingState) return;
+    let engine = getEngine();
+    engine.step(backtrackingState, 'forward');
+    updateUI();
+  });
+
+  stepBackBtn.addEventListener('click', () => {
+    if(!backtrackingState) return;
+    let engine = getEngine();
+    engine.step(backtrackingState, 'backward');
+    updateUI();
+  });
+
+  autoRunBtn.addEventListener('click', () => {
+    if(autoRunInterval !== null) return;
+    if(!backtrackingState) return;
+    let engine = getEngine();
+
+    function autoStep() {
+      engine.step(backtrackingState, 'forward');
+      updateUI();
+      let depth = 0;
+      if(problem === 'subsetSum') depth = backtrackingState.stack.length;
+      else if(problem === 'nQueens') depth = backtrackingState.row;
+      else if(problem === 'permute') depth = backtrackingState.chosen.length;
+      // Try stop if no more forward steps possible:
+      // For subsetSum, stack empty means finished
+      if((problem === 'subsetSum' && depth === 0) ||
+         (problem === 'nQueens' && depth === 0 && backtrackingState.board.every(x => x === -1)) ||
+         (problem === 'permute' && depth === 0 && backtrackingState.chosen.length === 0)) {
+        clearInterval(autoRunInterval);
+        autoRunInterval = null;
+        updateControlState();
+        logMessage('Auto run finished');
+      }
+    }
+    autoStep();
+    autoRunInterval = setInterval(autoStep, parseInt(speedRange.value,10));
+    updateControlState();
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if(autoRunInterval !== null) {
+      clearInterval(autoRunInterval);
+      autoRunInterval = null;
+    }
+    updateControlState();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    backtrackingState = null;
+    autoRunInterval && clearInterval(autoRunInterval);
+    autoRunInterval = null;
+    clearLogs();
+    updateUI();
+  });
+
+  speedRange.addEventListener('input', () => {
+    speedDisplay.textContent = speedRange.value;
+    if(autoRunInterval !== null) {
+      clearInterval(autoRunInterval);
+      let engine = getEngine();
+      autoRunInterval = setInterval(() => {
+        engine.step(backtrackingState, 'forward');
+        updateUI();
+      }, parseInt(speedRange.value,10));
+    }
+  });
+
+  exportSolutionsBtn.addEventListener('click', () => {
+    if(!backtrackingState || backtrackingState.solutions.length === 0) return;
+    let text = solutionOutput.value;
+    // Create a downloadable blob text file for convenience (trigger download)
+    let blob = new Blob([text], {type: 'application/json'});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = problem + '_solutions.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  problemSelect.addEventListener('change', () => {
+    updateProblemConfigs();
+    backtrackingState = null;
+    clearLogs();
+    updateUI();
+  });
+
+  // Initial setup
+  updateProblemConfigs();
+  updateControlState();
+
+})();
+</script>
+</body>
+</html>

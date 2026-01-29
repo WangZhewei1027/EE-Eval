@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Heap Sort Interactive Demo</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  input[type="number"] {
+    width: 4em;
+  }
+  button {
+    margin: 0.2em 0.5em 0.2em 0;
+  }
+  #arrayVisualization {
+    white-space: pre;
+    font-size: 14px;
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+  label {
+    font-weight: bold;
+  }
+  fieldset {
+    margin-bottom: 1em;
+  }
+  #log {
+    white-space: pre-wrap;
+    border: 1px solid #000;
+    padding: 0.5em;
+    height: 10em;
+    overflow-y: auto;
+    font-size: 13px;
+    background: #fff;
+  }
+  #stateDescription {
+    margin-bottom: 1em;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Heap Sort Interactive Demonstrator</h1>
+
+<fieldset>
+  <legend>Input Array</legend>
+  <label for="arrayInput">Enter integers (space/comma separated): </label><br />
+  <input type="text" id="arrayInput" size="60" aria-label="Array Input" />
+  <button id="loadArrayBtn">Load Array</button>
+  <button id="randomArrayBtn">Random Array</button>
+  <label for="randomSize">Size:</label>
+  <input type="number" id="randomSize" min="1" max="30" value="10" />
+  <br />
+  <small>Max size 30 to keep visualization manageable.</small>
+</fieldset>
+
+<fieldset>
+  <legend>Heap Sort Controls</legend>
+  <button id="buildHeapBtn" disabled>Build Max Heap</button>
+  <button id="heapifyStepBtn" disabled>Heapify Step</button>
+  <button id="heapSortStepBtn" disabled>Heap Sort Step</button>
+  <button id="autoHeapifyBtn" disabled>Auto Heapify</button>
+  <button id="autoHeapSortBtn" disabled>Auto Heap Sort</button>
+  <button id="resetBtn" disabled>Reset</button>
+  <br />
+  <label for="autoDelayRange">Auto delay (ms):</label>
+  <input type="range" id="autoDelayRange" min="50" max="2000" value="500" step="50" />
+  <span id="autoDelayDisplay">500</span> ms
+</fieldset>
+
+<fieldset>
+  <legend>State & Explanation</legend>
+  <div id="stateDescription" aria-live="polite"></div>
+  <div id="arrayVisualization" aria-label="Array Visualization"></div>
+  <label for="log">Detailed Action Log:</label>
+  <div id="log" tabindex="0" aria-live="polite"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Explore Specific Heapify or Sort</legend>
+  <label for="heapifyIndexInput">Heapify Index (0-based): </label>
+  <input type="number" id="heapifyIndexInput" min="0" value="0" />
+  <button id="heapifyAtIndexBtn" disabled>Heapify Index Now</button>
+  <br />
+  <label for="sortExtractCountInput">Extracted Elements Count: </label>
+  <input type="number" id="sortExtractCountInput" min="0" value="0" />
+  <button id="sortExtractToCountBtn" disabled>Extract to Count</button>
+</fieldset>
+
+<script>
+  (() => {
+    // State and core data structures
+    let array = [];
+    let n = 0; // length of array
+    let heapSize = 0; // size of heap during sort
+    let phase = "loaded"; 
+    // "loaded" = array loaded not heapified
+    // "builtHeap" = max heap built
+    // "heapSort" = sorting started
+    // "sorted" = sorting finished
+    // "autoHeapifyRunning" = auto heapify running
+    // "autoHeapSortRunning" = auto heap sort running
+
+    let heapifyI = 0; // index for buildHeap maxHeapify calls
+    let sortingIndex = 0; // index of current extraction for sorting
+
+    let autoTimer = null;
+    let autoDelay = 500;
+
+    // Cached DOM
+    const arrayInputEl = document.getElementById("arrayInput");
+    const loadArrayBtn = document.getElementById("loadArrayBtn");
+    const randomArrayBtn = document.getElementById("randomArrayBtn");
+    const randomSizeEl = document.getElementById("randomSize");
+
+    const buildHeapBtn = document.getElementById("buildHeapBtn");
+    const heapifyStepBtn = document.getElementById("heapifyStepBtn");
+    const heapSortStepBtn = document.getElementById("heapSortStepBtn");
+    const autoHeapifyBtn = document.getElementById("autoHeapifyBtn");
+    const autoHeapSortBtn = document.getElementById("autoHeapSortBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const autoDelayRange = document.getElementById("autoDelayRange");
+    const autoDelayDisplay = document.getElementById("autoDelayDisplay");
+
+    const stateDescEl = document.getElementById("stateDescription");
+    const arrayVisEl = document.getElementById("arrayVisualization");
+    const logEl = document.getElementById("log");
+
+    const heapifyIndexInput = document.getElementById("heapifyIndexInput");
+    const heapifyAtIndexBtn = document.getElementById("heapifyAtIndexBtn");
+    const sortExtractCountInput = document.getElementById("sortExtractCountInput");
+    const sortExtractToCountBtn = document.getElementById("sortExtractToCountBtn");
+
+    // Utilities
+    function log(msg) {
+      logEl.textContent += msg + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function clearLog() {
+      logEl.textContent = "";
+    }
+
+    // Heap Utilities
+    // Parent, left, right
+    function parent(i) {return Math.floor((i-1)/2);}
+    function left(i) {return 2*i+1;}
+    function right(i) {return 2*i+2;}
+
+    // Swap two elements of array (heapSize respected)
+    function swap(i, j) {
+      let temp = array[i];
+      array[i] = array[j];
+      array[j] = temp;
+      log(`Swapped indices ${i} and ${j}: ${arrayToString()}`);
+    }
+
+    // Display the array alongside indexes
+    function arrayToString(highlightIndices=[]) {
+      // highlightIndices is array of indexes to emphasize with brackets []
+      // We'll mark these indices by surrounding values with []
+      return array.map((v,i) =>
+          highlightIndices.includes(i) ? "["+v+"]" : " "+v+" "
+      ).join("");
+    }
+    // Display the array as tree structure (textual)
+    function arrayToTreeString() {
+      let lines = [];
+      if (array.length === 0) return "(empty array)";
+      let level = 0;
+      let count = 0;
+      let nextCount = 1;
+      let line = "";
+      for (let i=0;i<array.length;i++) {
+        line += array[i].toString() + " ";
+        count++;
+        if (count === nextCount) {
+          lines.push(line.trim());
+          level++;
+          count=0;
+          nextCount = 2 ** level;
+          line = "";
+        }
+      }
+      if (line.length) lines.push(line.trim());
+      return lines.join("\n");
+    }
+
+    // maxHeapify at index i, heapSize respected
+    // returns true if any swaps happened, else false
+    // We log detailed steps for user understanding
+    function maxHeapify(i) {
+      let l = left(i);
+      let r = right(i);
+      let largest = i;
+      let didSwap = false;
+      log(`Heapifying at index ${i} with value ${array[i]}`);
+      if (l < heapSize) {
+        log(`  Left child index ${l} value ${array[l]}`);
+        if (array[l] > array[largest]) {
+          largest = l;
+          log(`    Left child is larger than current largest (index ${i} val ${array[i]})`);
+        }
+      }
+      if (r < heapSize) {
+        log(`  Right child index ${r} value ${array[r]}`);
+        if (array[r] > array[largest]) {
+          largest = r;
+          log(`    Right child is larger than current largest (index ${largest} val ${array[largest]})`);
+        }
+      }
+      if (largest !== i) {
+        swap(i, largest);
+        didSwap = true;
+        // Recursive heapify at the largest index
+        let recursiveSwapped = maxHeapify(largest);
+        return true;
+      } else {
+        log(`  No swaps needed at index ${i}`);
+      }
+      return didSwap;
+    }
+
+    // Build max heap by calling maxHeapify starting from last internal node up to root
+    // We'll do this incrementally here for step-by-step interactivity
+    // Return true if next step is available, false if done
+    function buildHeapStep() {
+      if (heapifyI < Math.floor(heapSize/2)) {
+        log(`Building max heap step at index ${heapifyI}`);
+        maxHeapify(heapifyI);
+        heapifyI++;
+        return true;
+      }
+      return false;
+    }
+
+    // Heap sort step: swap root with last element then maxHeapify root heapSize-1 times
+    // Returns true if the step was done (sorting continues), or false if finished
+    function heapSortStep() {
+      if (sortingIndex < n-1) {
+        // Swap root and last element in heap
+        log(`Heap sort step: swapping root with element at index ${heapSize-1}`);
+        swap(0, heapSize-1);
+        heapSize--;
+        log(`Heap size reduced to ${heapSize}`);
+        maxHeapify(0);
+        sortingIndex++;
+        return true;
+      }
+      return false;
+    }
+
+    // Render the entire interface array and state
+    function renderState() {
+      // Explanation text with phase description
+      let desc = "";
+      if (phase === "loaded") {
+        desc = "Array loaded but heap not built yet. You can build the max heap.";
+      } else if (phase === "buildingHeap") {
+        desc = `Building max heap step-by-step. Current index to heapify: ${heapifyI}`;
+      } else if (phase === "builtHeap") {
+        desc = "Max heap built. You can perform heap sort steps now.";
+      } else if (phase === "heapSorting") {
+        desc = `Heap sort in progress. Extracted elements: ${sortingIndex}. Heap size: ${heapSize}`;
+      } else if (phase === "sorted") {
+        desc = "Sorting finished. The array is sorted (ascending order).";
+      } else if (phase === "autoHeapifyRunning") {
+        desc = `Auto building max heap... Current heapify index: ${heapifyI}`;
+      } else if (phase === "autoHeapSortRunning") {
+        desc = `Auto heap sort running... Extracted elements: ${sortingIndex}`;
+      }
+      stateDescEl.textContent = desc;
+
+      // Visual representation of the array
+      // We'll show as line with brackets around heap part
+      // heap portion will include indices 0 to heapSize-1
+      let heapPortionString = array.map((v,i) => {
+        if (i < heapSize) return `[${v}]`;
+        else return ` ${v} `;
+      }).join(" ");
+      let indexesString = array.map((_,i) => (" "+i+" ").padStart(3)).join(" ");
+      arrayVisEl.textContent = "Indexes: " + indexesString + "\nValues:  " + heapPortionString + "\n\nHeap is demarcated by [] brackets.";
+
+      // Enable/disable controls based on phase and state
+      buildHeapBtn.disabled = !(phase === "loaded");
+      heapifyStepBtn.disabled = !(phase === "buildingHeap");
+      heapSortStepBtn.disabled = !(phase === "builtHeap" || phase === "heapSorting");
+      autoHeapifyBtn.disabled = (phase !== "loaded");
+      autoHeapSortBtn.disabled = !(phase === "builtHeap" || phase === "heapSorting");
+      resetBtn.disabled = (phase === "loaded");
+      heapifyAtIndexBtn.disabled = (phase !== "builtHeap" && phase !== "buildingHeap" && phase !== "loaded");
+      sortExtractToCountBtn.disabled = !(phase === "builtHeap" || phase === "heapSorting");
+
+      // Specific inputs enabled only if array present and phase right
+      heapifyIndexInput.disabled = !(phase === "builtHeap" || phase === "buildingHeap" || phase === "loaded");
+      sortExtractCountInput.disabled = !(phase === "builtHeap" || phase === "heapSorting");
+
+      autoDelayRange.disabled = (phase === "autoHeapifyRunning" || phase === "autoHeapSortRunning");
+    }
+
+    // Validate and parse array input string
+    // returns array of integers or null on error
+    function parseArrayInput(str) {
+      let tokens = str.trim().split(/[\s,]+/);
+      if (tokens.length === 0) return [];
+      let res = [];
+      for (let t of tokens) {
+        if (t === "") continue;
+        let num = Number(t);
+        if (Number.isNaN(num) || !Number.isInteger(num)) return null;
+        res.push(num);
+      }
+      if (res.length > 30) return null; // max limit
+      return res;
+    }
+
+    // Reset demo fully to loaded state
+    function resetAll() {
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+      }
+      phase = "loaded";
+      heapifyI = 0;
+      sortingIndex = 0;
+      heapSize = array.length;
+      clearLog();
+      renderState();
+    }
+
+
+    // Button Handlers
+
+    loadArrayBtn.addEventListener("click", () => {
+      let arrStr = arrayInputEl.value.trim();
+      if (!arrStr) {
+        alert("Input array is empty.");
+        return;
+      }
+      let parsedArray = parseArrayInput(arrStr);
+      if (!parsedArray) {
+        alert("Input incorrect. Please enter up to 30 integers separated by spaces or commas.");
+        return;
+      }
+      array = parsedArray.slice();
+      n = array.length;
+      heapSize = n;
+      phase = "loaded";
+      heapifyI = 0;
+      sortingIndex = 0;
+      clearLog();
+      log(`Array loaded: ${arrayToString()}`);
+      renderState();
+    });
+
+    randomArrayBtn.addEventListener("click", () => {
+      let size = Number(randomSizeEl.value);
+      if (!Number.isInteger(size) || size < 1 || size > 30) {
+        alert("Size must be an integer between 1 and 30.");
+        return;
+      }
+      array = [];
+      for (let i=0;i<size;i++) {
+        // random integers from 0 to 99
+        array.push(Math.floor(Math.random()*100));
+      }
+      n = size;
+      heapSize = n;
+      phase = "loaded";
+      heapifyI = 0;
+      sortingIndex = 0;
+      arrayInputEl.value = array.join(" ");
+      clearLog();
+      log(`Random array generated: ${arrayToString()}`);
+      renderState();
+    });
+
+    buildHeapBtn.addEventListener("click", () => {
+      if (phase !== "loaded") return;
+      phase = "buildingHeap";
+      heapifyI = Math.floor(heapSize/2) -1;
+      if (heapifyI < 0) { 
+        // Already heap for array length 1 or 0
+        phase = "builtHeap";
+        log("Array too small, max heap trivially built.");
+        renderState();
+        return;
+      }
+      log("Starting build max heap process...");
+      renderState();
+    });
+
+    heapifyStepBtn.addEventListener("click", () => {
+      if (phase !== "buildingHeap") return;
+      if (heapifyI < 0) {
+        phase = "builtHeap";
+        log("Build max heap completed.");
+        renderState();
+        return;
+      }
+      log(`Heapify step at index ${heapifyI}`);
+      maxHeapify(heapifyI);
+      heapifyI--;
+      if (heapifyI < 0) {
+        phase = "builtHeap";
+        log("Build max heap completed.");
+      }
+      renderState();
+    });
+
+    heapSortStepBtn.addEventListener("click", () => {
+      if (!(phase === "builtHeap" || phase === "heapSorting")) return;
+      if (phase === "builtHeap") {
+        phase = "heapSorting";
+        heapSize = n;
+        sortingIndex = 0;
+        log("Starting heap sort process...");
+      }
+      if (heapSize <= 1) {
+        phase = "sorted";
+        log("Heap sort finished.");
+        renderState();
+        return;
+      }
+      let cont = heapSortStep();
+      if (!cont) {
+        phase = "sorted";
+        log("Heap sort finished.");
+      }
+      renderState();
+    });
+
+    autoHeapifyBtn.addEventListener("click", () => {
+      if (phase !== "loaded") return;
+      phase = "autoHeapifyRunning";
+      heapifyI = Math.floor(heapSize/2) - 1;
+      clearLog();
+      log("Auto building max heap started...");
+      renderState();
+      autoTimer = setInterval(() => {
+        if (heapifyI < 0) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          phase = "builtHeap";
+          log("Auto build max heap completed.");
+          renderState();
+          return;
+        }
+        log(`Auto heapify index ${heapifyI}`);
+        maxHeapify(heapifyI);
+        heapifyI--;
+        renderState();
+      }, autoDelay);
+    });
+
+    autoHeapSortBtn.addEventListener("click", () => {
+      if (!(phase === "builtHeap" || phase === "heapSorting")) return;
+      if (phase === "builtHeap") {
+        heapSize = n;
+        sortingIndex = 0;
+        phase = "autoHeapSortRunning";
+        clearLog();
+        log("Auto heap sort started...");
+      } else if (phase === "heapSorting") {
+        phase = "autoHeapSortRunning";
+        clearLog();
+        log("Auto heap sort resumed...");
+      }
+      renderState();
+      if (autoTimer) return; // ignore if already running
+      autoTimer = setInterval(() => {
+        if (heapSize <= 1) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          phase = "sorted";
+          log("Auto heap sort ended.");
+          renderState();
+          return;
+        }
+        heapSortStep();
+        renderState();
+      }, autoDelay);
+    });
+
+    resetBtn.addEventListener("click", () => {
+      array = [];
+      n = 0;
+      heapSize = 0;
+      phase = "loaded";
+      heapifyI = 0;
+      sortingIndex = 0;
+      clearLog();
+      arrayInputEl.value = "";
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+      }
+      renderState();
+    });
+
+    autoDelayRange.addEventListener("input", (e) => {
+      autoDelay = Number(autoDelayRange.value);
+      autoDelayDisplay.textContent = autoDelay.toString();
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        if (phase === "autoHeapifyRunning") {
+          autoTimer = setInterval(() => {
+            if (heapifyI < 0) {
+              clearInterval(autoTimer);
+              autoTimer = null;
+              phase = "builtHeap";
+              log("Auto build max heap completed.");
+              renderState();
+              return;
+            }
+            log(`Auto heapify index ${heapifyI}`);
+            maxHeapify(heapifyI);
+            heapifyI--;
+            renderState();
+          }, autoDelay);
+        } else if (phase === "autoHeapSortRunning") {
+          autoTimer = setInterval(() => {
+            if (heapSize <= 1) {
+              clearInterval(autoTimer);
+              autoTimer = null;
+              phase = "sorted";
+              log("Auto heap sort ended.");
+              renderState();
+              return;
+            }
+            heapSortStep();
+            renderState();
+          }, autoDelay);
+        }
+      }
+    });
+
+    // Specific Heapify at index user control
+    heapifyAtIndexBtn.addEventListener("click", () => {
+      if (phase !== "builtHeap" && phase !== "buildingHeap" && phase !== "loaded") {
+        alert("Heapify at index only allowed when array loaded or heap built.");
+        return;
+      }
+      let idx = Number(heapifyIndexInput.value);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= heapSize) {
+        alert(`Index must be integer between 0 and ${heapSize-1}`);
+        return;
+      }
+      log(`User triggered maxHeapify at index ${idx}`);
+      maxHeapify(idx);
+      renderState();
+    });
+
+    // Extract elements to a specific count (heap sort step shortcut)
+    sortExtractToCountBtn.addEventListener("click", () => {
+      if (!(phase === "builtHeap" || phase === "heapSorting")) {
+        alert("Heap sort extraction only allowed after heap is built.");
+        return;
+      }
+      let count = Number(sortExtractCountInput.value);
+      if (!Number.isInteger(count) || count < 0 || count > n) {
+        alert(`Count must be integer between 0 and ${n}`);
+        return;
+      }
+      if (phase === "builtHeap") {
+        phase = "heapSorting";
+        heapSize = n;
+        sortingIndex = 0;
+        clearLog();
+        log("Heap sort started via extraction count shortcut.");
+      }
+      while (sortingIndex < count && heapSize > 1) {
+        heapSortStep();
+      }
+      if (heapSize <= 1) {
+        phase = "sorted";
+        log("Heap sort finished.");
+      }
+      renderState();
+    });
+
+    // Initial render
+    renderState();
+  })();
+</script>
+
+</body>
+</html>

@@ -132,7 +132,7 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       // - Clicking the search button triggers linearSearch (S1_Searching)
       // - Steps are displayed until match
       // - Final output includes "Target found at index <em>i</em>."
-      const ls = new LinearSearchPage(page);
+      const ls1 = new LinearSearchPage(page);
       await ls.goto();
 
       // Set a target that exists in the default array (7 at index 2)
@@ -142,7 +142,7 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       await ls.clickSearch();
 
       // Output should include array display and a "Target value" label
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML1 = await ls.outputInnerHTML();
       expect(outputHTML).toContain('Array to search:');
       expect(outputHTML).toContain('Target value:');
 
@@ -169,7 +169,7 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
 
       // Ensure no unexpected runtime errors were emitted during the synchronous search
       expect(pageErrors.length, 'No page errors during successful search').toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs1 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error messages during successful search').toBe(0);
     });
 
@@ -177,7 +177,7 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       // This test validates:
       // - Clicking search with a missing target in array displays "Target not found..."
       // - Steps equal array length
-      const ls = new LinearSearchPage(page);
+      const ls2 = new LinearSearchPage(page);
       await ls.goto();
 
       // Use a target that does not exist in the default array
@@ -185,16 +185,16 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       await ls.clickSearch();
 
       // Final output should contain "Target not found in the array."
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML2 = await ls.outputInnerHTML();
       expect(outputHTML).toContain('Result: Target not found in the array.');
 
       // Steps should be equal to array length (7 elements in default)
-      const steps = await ls.stepCount();
+      const steps1 = await ls.stepCount();
       expect(steps).toBe(7);
 
       // No runtime errors expected
       expect(pageErrors.length, 'No page errors during not-found search').toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs2 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error messages during not-found search').toBe(0);
     });
   });
@@ -203,7 +203,7 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
     test('Alert when array input is empty (InvalidInput event)', async ({ page }) => {
       // This test validates the alert triggered when the array input is empty.
       // We expect an alert dialog with the specific message.
-      const ls = new LinearSearchPage(page);
+      const ls3 = new LinearSearchPage(page);
       await ls.goto();
 
       // Clear array input and set a valid target
@@ -221,18 +221,18 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       await dialog.accept();
 
       // Because the search was aborted by alert, output should remain empty
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML3 = await ls.outputInnerHTML();
       expect(outputHTML.trim()).toBe('');
 
       // No page runtime errors should be produced by this flow
       expect(pageErrors.length, 'No page errors when array input empty').toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs3 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error messages when array input empty').toBe(0);
     });
 
     test('Alert when target input is empty (InvalidInput event)', async ({ page }) => {
       // This test validates the alert triggered when the target input is empty.
-      const ls = new LinearSearchPage(page);
+      const ls4 = new LinearSearchPage(page);
       await ls.goto();
 
       // Ensure array input has default; clear target
@@ -248,18 +248,18 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       await dialog.accept();
 
       // Output should remain empty
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML4 = await ls.outputInnerHTML();
       expect(outputHTML.trim()).toBe('');
 
       // No runtime page errors expected
       expect(pageErrors.length, 'No page errors when target input empty').toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs4 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error messages when target input empty').toBe(0);
     });
 
     test('Alert when array contains invalid number (InvalidNumber event)', async ({ page }) => {
       // This test provides an invalid array element (non-numeric) and expects a specific alert.
-      const ls = new LinearSearchPage(page);
+      const ls5 = new LinearSearchPage(page);
       await ls.goto();
 
       // Set an invalid array value (e.g., 'x') and a valid target
@@ -276,12 +276,12 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       await dialog.accept();
 
       // Output should remain empty because parsing aborted
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML5 = await ls.outputInnerHTML();
       expect(outputHTML.trim()).toBe('');
 
       // No runtime page errors expected from alert path
       expect(pageErrors.length, 'No page errors when invalid number encountered').toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs5 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error messages when invalid number encountered').toBe(0);
     });
   });
@@ -289,7 +289,7 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
   test.describe('Additional verifications and robustness checks', () => {
     test('Whitespace and trimming behavior for array and target inputs', async ({ page }) => {
       // Validate that leading/trailing whitespace in inputs are trimmed and parsed correctly.
-      const ls = new LinearSearchPage(page);
+      const ls6 = new LinearSearchPage(page);
       await ls.goto();
 
       // Provide inputs with extra whitespace
@@ -299,18 +299,18 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       await ls.clickSearch();
 
       // Found at index 2 (after trimming and parsing)
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML6 = await ls.outputInnerHTML();
       expect(outputHTML).toContain('<em>2</em>');
 
       // No runtime errors
       expect(pageErrors.length, 'No page errors for trimmed inputs').toBe(0);
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs6 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error messages for trimmed inputs').toBe(0);
     });
 
     test('Observe console and page errors over a typical user flow (no errors expected)', async ({ page }) => {
       // This test demonstrates observing console and page errors while performing a typical flow.
-      const ls = new LinearSearchPage(page);
+      const ls7 = new LinearSearchPage(page);
       await ls.goto();
 
       // Clear any previously captured messages
@@ -328,11 +328,11 @@ test.describe('Linear Search Algorithm Demo - FSM validation', () => {
       expect(pageErrors.length, 'No uncaught page errors during flow').toBe(0);
 
       // Assert no console.error messages were emitted
-      const errorConsoleMsgs = consoleMessages.filter(m => m.type === 'error');
+      const errorConsoleMsgs7 = consoleMessages.filter(m => m.type === 'error');
       expect(errorConsoleMsgs.length, 'No console.error emitted during flow').toBe(0);
 
       // Confirm UI shows found index 3
-      const outputHTML = await ls.outputInnerHTML();
+      const outputHTML7 = await ls.outputInnerHTML();
       expect(outputHTML).toContain('<em>3</em>');
     });
   });

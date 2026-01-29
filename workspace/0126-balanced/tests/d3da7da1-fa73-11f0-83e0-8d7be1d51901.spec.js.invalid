@@ -1,0 +1,262 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-balanced/html/d3da7da1-fa73-11f0-83e0-8d7be1d51901.html';
+
+// Page Object for the SDLC demo
+class SDLCPage {
+  constructor(page) {
+    this.page = page;
+  }
+
+  // Element getters
+  startBtn() { return this.page.locator('#startBtn'); }
+  advanceBtn() { return this.page.locator('#advanceBtn'); }
+  resetBtn() { return this.page.locator('#resetBtn'); }
+  toggleModeBtn() { return this.page.locator('#toggleMode'); }
+  addSampleBtn() { return this.page.locator('#addSample'); }
+  speedInput() { return this.page.locator('#speed'); }
+  phasesList() { return this.page.locator('#phasesList .phase'); }
+  phaseByIndex(i) { return this.page.locator(`#phasesList .phase[data-id="${i}"]`); }
+  timelineStage(i) { return this.page.locator('.timeline .stage').nth(i); }
+  dropzoneByIndex(i) { return this.page.locator(`.dropzone[data-index="${i}"]`); }
+  tasks() { return this.page.locator('.task'); }
+  taskById(taskId) { return this.page.locator(`#task-${taskId}`); }
+  inFlight() { return this.page.locator('#inFlight'); }
+  iteration() { return this.page.locator('#iteration'); }
+  inspectorTitle() { return this.page.locator('#phaseTitle'); }
+  inspectorDesc() { return this.page.locator('#phaseDesc'); }
+  quiz() { return this.page.locator('#quiz'); }
+  quizQuestions() { return this.page.locator('#quiz .q'); }
+  choiceButtonsForQuestion(qIndex) { return this.page.locator(`#quiz .q`).nth(qIndex).locator('.choice'); }
+
+  async goto() {
+    await this.page.goto(APP_URL);
+    // ensure the page's initial log is present and UI is interactive
+    await this.page.waitForSelector('#startBtn');
+  }
+
+  // Actions
+  async clickStart() { await this.startBtn().click(); }
+  async clickAdvance() { await this.advanceBtn().click(); }
+  async clickReset() { await this.resetBtn().click(); }
+  async clickToggleMode() { await this.toggleModeBtn().click(); }
+  async clickAddSample() { await this.addSampleBtn().click(); }
+  async setSpeed(value) { await this.speedInput().evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, String(value)); }
+
+  async clickPhase(index) {
+    // click left-phase entry; phases data uses data-id from 0..6
+    await this.page.locator(`#phasesList .phase[data-id="${index}"]`).click();
+  }
+
+  async dragFirstTaskToDropzone(targetIndex) {
+    const firstTask = this.tasks().first();
+    const dz = this.dropzoneByIndex(targetIndex);
+    // Use Playwright's dragTo which should simulate drag events
+    await firstTask.waitFor({ state: 'visible' });
+    await firstTask.dragTo(dz);
+  }
+
+  async doubleClickFirstTask() {
+    await this.tasks().first().dblclick();
+  }
+
+  async answerQuizQuestion(qIndex, choiceIndex) {
+    const btn = this.choiceButtonsForQuestion(qIndex).nth(choiceIndex);
+    await btn.click();
+    return btn;
+  }
+
+  async getProgressWidthForStage(i) {
+    const selector = `#prog-${i}`;
+    return await this.page.locator(selector).evaluate((el) => getComputedStyle(el).width || el.style.width || '');
+  }
+
+  async getCountForStage(i) {
+    return await this.page.locator(`#n-${i}`).innerText();
+  }
+}
+
+// Suite-level console & pageerror capture helper
+test.describe('SDLC Interactive Demo — FSM and UI validation', () => {
+  let consoleMessages;
+  let pageErrors;
+
+  test.beforeEach(async ({ page }) => {
+    consoleMessages = [];
+    pageErrors = [];
+
+    // Capture console messages
+    page.on('console', msg => {
+      // store text and type for inspection
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+
+    // Capture page errors (uncaught exceptions)
+    page.on('pageerror', error => {
+      pageErrors.push(error);
+    });
+  });
+
+  test.afterEach(async () => {
+    // no-op here; individual tests will assert on collected messages/errors
+  });
+
+  test.describe('Initialization and Idle state (S0_Idle)', () => {
+    test('Initial load runs init(), renders phases, timeline, tasks and builds quiz', async ({ page }) => {
+      const app = new SDLCPage(page);
+      // Load the application
+      await app.goto();
+
+      // Validate initial console ready message is logged
+      const readyLog = consoleMessages.find(m => m.text.includes('SDLC demo ready'));
+      expect(readyLog).toBeTruthy();
+
+      // Validate no uncaught page errors occurred during init
+      expect(pageErrors.length).toBe(0);
+
+      // Validate phases list contains 7 phases (0..6)
+      await expect(app.phasesList()).toHaveCount(7);
+
+      // Ensure inspector is set to first phase 'Planning'
+      await expect(app.inspectorTitle()).toHaveText('Planning');
+      await expect(app.inspectorDesc()).toContainText('Determine project goals');
+
+      // Quiz should be present with 3 questions (S4 built on init)
+      await expect(app.quizQuestions()).toHaveCount(3);
+
+      // Tasks initial rendering: the HTML script adds some initial tasks at the end; ensure they are rendered
+      const taskCount = await app.tasks().count();
+      expect(taskCount).toBeGreaterThanOrEqual(1);
+
+      // Verify progress bars and counts match the DOM (non-empty)
+      const inFlightText = await app.inFlight().innerText();
+      expect(Number(inFlightText)).toBeGreaterThanOrEqual(0);
+
+      // No JS runtime errors
+      expect(pageErrors.length).toBe(0);
+    });
+  });
+
+  test.describe('Simulation control and transitions (S1, S2)', () => {
+    test('Start simulation toggles running (S0_Idle -> S1_SimulationRunning) and stops (S1 -> S2)', async ({ page }) => {
+      const app1 = new SDLCPage(page);
+      await app.goto();
+
+      // Start simulation: should change button text to "Stop simulation"
+      await app.clickStart();
+      await expect(app.startBtn()).toHaveText('Stop simulation');
+
+      // Ensure no page errors after starting
+      expect(pageErrors.length).toBe(0);
+
+      // Clicking start again should stop simulation: button returns to "Start simulation"
+      await app.clickStart();
+      await expect(app.startBtn()).toHaveText('Start simulation');
+
+      // No errors
+      expect(pageErrors.length).toBe(0);
+    });
+
+    test('Advance one step advances tasks (S1 -> S3 via AdvanceOneStep)', async ({ page }) => {
+      const app2 = new SDLCPage(page);
+      await app.goto();
+
+      // Capture counts before advance
+      const beforeCounts = [];
+      for (let i = 0; i < 3; i++) {
+        // read first three stage counts as a sample
+        beforeCounts.push(Number(await app.getCountForStage(i)));
+      }
+
+      // Use single-step advance button
+      await app.clickAdvance();
+
+      // After advacement, counts should reflect tasks moved forward (non-strict expectation)
+      const afterCounts = [];
+      for (let i = 0; i < 3; i++) {
+        afterCounts.push(Number(await app.getCountForStage(i)));
+      }
+
+      // At least one count should have changed OR progress visuals width update
+      const countsChanged = beforeCounts.some((v, idx) => v !== afterCounts[idx]);
+      const progChanged = (await app.getProgressWidthForStage(0)) !== (await app.getProgressWidthForStage(0));
+      expect(countsChanged || progChanged).toBeTruthy();
+
+      // Ensure no uncaught errors
+      expect(pageErrors.length).toBe(0);
+    });
+
+    test('Simulation respects speed input and auto-advances; toggling mode affects iteration (iterative mode)', async ({ page }) => {
+      const app3 = new SDLCPage(page);
+      await app.goto();
+
+      // Add sample tasks to have multiple tasks
+      await app.clickAddSample();
+
+      // Toggle to iterative mode
+      await app.clickToggleMode();
+      await expect(app.toggleModeBtn()).toHaveText(/Mode: Iterative/);
+
+      // Speed up simulation
+      await app.setSpeed(300);
+
+      // Start simulation
+      await app.clickStart();
+      await expect(app.startBtn()).toHaveText('Stop simulation');
+
+      // Wait a short time to allow at least one auto-advance tick
+      await page.waitForTimeout(700);
+
+      // Verify iteration counter has incremented when in iterative mode (iteration starts at 1)
+      const iterText = await app.iteration().innerText();
+      expect(Number(iterText)).toBeGreaterThanOrEqual(1);
+
+      // Stop simulation
+      await app.clickStart();
+      await expect(app.startBtn()).toHaveText('Start simulation');
+
+      // No runtime errors
+      expect(pageErrors.length).toBe(0);
+    }, { timeout: 15000 });
+  });
+
+  test.describe('Task interactions and TaskUpdated state (S3_TasksUpdated)', () => {
+    test('Add sample tasks and verify render, double-click advances a task', async ({ page }) => {
+      const app4 = new SDLCPage(page);
+      await app.goto();
+
+      // Add sample tasks (S0 -> S4 via AddSampleTasks in FSM but also affects tasks)
+      await app.clickAddSample();
+
+      // Ensure some tasks are present
+      await expect(app.tasks()).toHaveCountGreaterThan(0);
+
+      // Capture a task's stage name displayed in the right side of the task element
+      const firstTask1 = app.tasks().first();
+      const beforeLabel = await firstTask.locator('div >> text=/./').first().innerText().catch(()=>'');
+
+      // Double-click to advance the first task one phase
+      await app.doubleClickFirstTask();
+
+      // After dblclick, ensure that the task's phase label text changed (it shows phase name)
+      // Find first task again and read its small muted phase name fragment
+      const smallMuted = await firstTask.locator('div').nth(1).innerText().catch(()=>null).catch(()=>null);
+      // Accept either change in label or presence (non-strict)
+      expect(smallMuted !== null).toBeTruthy();
+
+      // No errors occurred
+      expect(pageErrors.length).toBe(0);
+    });
+
+    test('Drag and drop a task between phases updates DOM and counters (TaskDragged & TaskDropped)', async ({ page }) => {
+      const app5 = new SDLCPage(page);
+      await app.goto();
+
+      // Ensure at least one task is present
+      const initialCount = await app.tasks().count();
+      expect(initialCount).toBeGreaterThan(0);
+
+      // Determine a target dropzone index different from the current task's phase. Use stage index 2 as target.
+      const targetIndex = 2;
+
+      //

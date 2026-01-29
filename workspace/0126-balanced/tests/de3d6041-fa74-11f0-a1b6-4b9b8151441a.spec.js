@@ -127,7 +127,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
 
   test('Add Request (AddRequest) transitions to Request Added (S1_RequestAdded) and updates DOM', async ({ page }) => {
     // This test validates adding a single request updates counters and appends request to correct server (round robin)
-    const lb = new LoadBalancerPage(page);
+    const lb1 = new LoadBalancerPage(page);
 
     // Click the "Add Request" button once
     await lb.clickAddRequest();
@@ -143,17 +143,17 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
     await expect(lb.serverRequestsContainer(2).locator('.request')).toHaveCount(0);
 
     // Requests-per-server should reflect "1, 0, 0"
-    const rps = await lb.getRequestsPerServerText();
+    const rps1 = await lb.getRequestsPerServerText();
     expect(rps).toBe('1, 0, 0');
 
     // Verify the request content matches the incremented counter label (Req 1)
-    const texts = await lb.getRequestTextsInServer(0);
+    const texts1 = await lb.getRequestTextsInServer(0);
     expect(texts).toContain('Req 1');
   });
 
   test('Add Multiple Requests (AddMultiple) transitions to MultipleRequestsAdded (S2) and distributes requests', async ({ page }) => {
     // Validate that clicking "Add 10 Requests" triggers 10 scheduled addRequest calls and final counts match expected round robin distribution
-    const lb = new LoadBalancerPage(page);
+    const lb2 = new LoadBalancerPage(page);
 
     // Ensure a clean start
     await lb.clickReset();
@@ -168,7 +168,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
     await expect(lb.totalRequests).toHaveText('10');
 
     // Distribution for round robin across 3 servers with 10 requests is [4,3,3]
-    const rps = await lb.getRequestsPerServerText();
+    const rps2 = await lb.getRequestsPerServerText();
     expect(rps).toBe('4, 3, 3');
 
     // Verify counts per server DOM-wise
@@ -179,7 +179,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
 
   test('Reset Simulation (ResetSimulation) transitions to Simulation Reset (S3) and clears state', async ({ page }) => {
     // Validate reset behavior: counters reset and servers re-initialized
-    const lb = new LoadBalancerPage(page);
+    const lb3 = new LoadBalancerPage(page);
 
     // Add a couple requests first to change state
     await lb.clickAddRequest();
@@ -194,7 +194,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
 
     // servers should remain 3 but their request counts should be zero
     await expect(lb.serverContainer.locator('.server')).toHaveCount(3);
-    const rps = await lb.getRequestsPerServerText();
+    const rps3 = await lb.getRequestsPerServerText();
     expect(rps).toBe('0, 0, 0');
 
     // Ensure no .request elements exist in any server
@@ -205,7 +205,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
 
   test('Change Algorithm (ChangeAlgorithm) resets round robin index and affects next allocation (S0_Idle self-transition)', async ({ page }) => {
     // This test exercises the algorithm change event and infers lastServerIndex reset behavior by observing round robin assignments.
-    const lb = new LoadBalancerPage(page);
+    const lb4 = new LoadBalancerPage(page);
 
     // Ensure initial state
     await lb.clickReset();
@@ -236,7 +236,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
     await expect(lb.serverRequestsContainer(2).locator('.request')).toHaveCount(0);
 
     // Confirm that the second request label is "Req 2"
-    const texts = await lb.getRequestTextsInServer(0);
+    const texts2 = await lb.getRequestTextsInServer(0);
     expect(texts).toContain('Req 2');
   });
 
@@ -247,7 +247,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
     //  - Immediately click Reset
     //  - Wait for all scheduled timeouts to fire
     // Expected: After waiting, requests scheduled earlier will still be applied resulting in >0 final requests (likely 10).
-    const lb = new LoadBalancerPage(page);
+    const lb5 = new LoadBalancerPage(page);
 
     // Start scheduling the 10 requests
     await lb.clickAddMultiple();
@@ -268,14 +268,14 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
     expect(totalNum).toBeLessThanOrEqual(10);
 
     // Also assert that requests-per-server text reflects non-zero counts
-    const rps = await lb.getRequestsPerServerText();
+    const rps4 = await lb.getRequestsPerServerText();
     // rps should not be the reset state "0, 0, 0"
     expect(rps).not.toBe('0, 0, 0');
   });
 
   test('Robustness: rapid interactions and sanity checks (no uncaught errors during heavy interaction)', async ({ page }) => {
     // This test performs a burst of interactions to surface potential race conditions or runtime errors.
-    const lb = new LoadBalancerPage(page);
+    const lb6 = new LoadBalancerPage(page);
 
     // Perform a sequence: add 1, change algorithm, add multiple, switch algorithms rapidly, reset, add single
     await lb.clickAddRequest();
@@ -294,7 +294,7 @@ test.describe('Load Balancing Simulation - FSM coverage', () => {
     const total = await lb.getTotalRequestsText();
     expect(Number.isFinite(Number(total))).toBeTruthy();
 
-    const rps = await lb.getRequestsPerServerText();
+    const rps5 = await lb.getRequestsPerServerText();
     expect(typeof rps).toBe('string');
     expect(rps.length).toBeGreaterThanOrEqual(1);
   });

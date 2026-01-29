@@ -116,7 +116,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
 
   test.describe('MakeChange event and S1_ChangeMade transition', () => {
     test('Clicking Make a Change should create a new commit and update file content', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs1 = new VCSPage(page);
       await vcs.goto();
 
       const beforeCount = await vcs.getCommitCount();
@@ -135,7 +135,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       expect(afterFileText).toContain('Commit'); // random change appends " (Commit N)" so we expect "Commit" text
 
       // Latest commit title should match one of the expected change messages (or at least not be "Initial commit")
-      const latestTitle = await vcs.getLatestCommitTitle();
+      const latestTitle1 = await vcs.getLatestCommitTitle();
       expect(latestTitle).not.toBe('Initial commit');
 
       // Ensure no uncaught page errors or console errors during this transition
@@ -144,7 +144,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
     });
 
     test('Edge case: multiple rapid Make a Change clicks create multiple commits', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs2 = new VCSPage(page);
       await vcs.goto();
 
       const before = await vcs.getCommitCount();
@@ -168,7 +168,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
 
   test.describe('CreateBranch event and S2_BranchCreated transition', () => {
     test('Creating a new branch and switching to it updates current branch (confirm accepted)', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs3 = new VCSPage(page);
       await vcs.goto();
 
       // Set up dialog handler: first prompt for branch name -> supply 'feature-x', then confirm -> accept to switch
@@ -203,7 +203,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
     });
 
     test('Creating an existing branch should trigger an alert and not create/switch', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs4 = new VCSPage(page);
       await vcs.goto();
 
       // Attempt to create a branch with name 'main' which already exists
@@ -227,7 +227,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       await alertPromise;
 
       // Current branch should remain main
-      const current = await vcs.getCurrentBranchText();
+      const current1 = await vcs.getCurrentBranchText();
       expect(current).toBe('main');
 
       // No uncaught page errors
@@ -238,7 +238,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
 
   test.describe('MergeBranch event and S3_BranchMerged transition', () => {
     test('Merging a branch with commits into current branch results in a MERGED: content and merge commit', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs5 = new VCSPage(page);
       await vcs.goto();
 
       // 1) Create branch 'feature-merge' and switch to it
@@ -292,7 +292,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       expect(fileText).toContain('MERGED:');
 
       // A merge commit should have been created; latest commit title should reference Merge branch
-      const latestTitle = await vcs.getLatestCommitTitle();
+      const latestTitle2 = await vcs.getLatestCommitTitle();
       expect(latestTitle).toContain("Merge branch 'feature-merge'");
 
       // No uncaught page errors
@@ -301,7 +301,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
     });
 
     test('Merging a non-existent branch should show alert "Source branch does not exist!"', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs6 = new VCSPage(page);
       await vcs.goto();
 
       // Provide a non-existent branch name in the prompt
@@ -310,7 +310,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
         await dialog.accept('nonexistent-branch');
       });
 
-      const alertPromise = new Promise((resolve) => {
+      const alertPromise1 = new Promise((resolve) => {
         page.once('dialog', async (dialog) => {
           expect(dialog.type()).toBe('alert');
           expect(dialog.message()).toContain('Source branch does not exist!');
@@ -328,7 +328,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
     });
 
     test('Attempting to merge the current branch into itself should alert and do nothing', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs7 = new VCSPage(page);
       await vcs.goto();
 
       // We're on 'main' initially; attempt to merge 'main' into 'main'
@@ -337,7 +337,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
         await dialog.accept('main');
       });
 
-      const alertPromise = new Promise((resolve) => {
+      const alertPromise2 = new Promise((resolve) => {
         page.once('dialog', async (dialog) => {
           expect(dialog.type()).toBe('alert');
           expect(dialog.message()).toContain('Cannot merge a branch with itself!');
@@ -350,7 +350,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       await alertPromise;
 
       // Ensure current branch remains 'main'
-      const current = await vcs.getCurrentBranchText();
+      const current2 = await vcs.getCurrentBranchText();
       expect(current).toBe('main');
 
       // No uncaught runtime errors
@@ -361,13 +361,13 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
 
   test.describe('Reset event and S4_RepositoryReset transition', () => {
     test('Canceling reset should leave repository state unchanged (confirm dismissed)', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs8 = new VCSPage(page);
       await vcs.goto();
 
       // Capture state before attempting reset
       const beforeBranch = await vcs.getCurrentBranchText();
       const beforeFile = await page.locator('#fileText pre, #fileText').textContent();
-      const beforeCount = await vcs.getCommitCount();
+      const beforeCount1 = await vcs.getCommitCount();
 
       // Intercept confirm and dismiss (i.e., cancel reset)
       page.once('dialog', async (dialog) => {
@@ -381,7 +381,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       // After canceling, state should remain unchanged
       const afterBranch = await vcs.getCurrentBranchText();
       const afterFile = await page.locator('#fileText pre, #fileText').textContent();
-      const afterCount = await vcs.getCommitCount();
+      const afterCount1 = await vcs.getCommitCount();
 
       expect(afterBranch).toBe(beforeBranch);
       expect(afterFile).toBe(beforeFile);
@@ -393,7 +393,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
     });
 
     test('Accepting reset should reload the page and reset repository to initial state', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs9 = new VCSPage(page);
       await vcs.goto();
 
       // Make a change so state differs from initial to verify reset effect
@@ -418,10 +418,10 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       const currentBranch = await page.locator('#currentBranch').textContent();
       expect(currentBranch?.trim()).toBe('main');
 
-      const fileText = await page.locator('#fileText pre, #fileText').textContent();
+      const fileText1 = await page.locator('#fileText1 pre, #fileText1').textContent();
       expect(fileText).toContain('Initial content');
 
-      const commitCount = await page.$$eval('#commitHistory .commit', nodes => nodes.length);
+      const commitCount1 = await page.$$eval('#commitHistory .commit', nodes => nodes.length);
       // After reload, constructor creates initial commit; expect at least 1 commit
       expect(commitCount).toBeGreaterThanOrEqual(1);
 
@@ -433,7 +433,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
 
   test.describe('Observability of updateUI entry actions and robustness checks', () => {
     test('updateUI is invoked indirectly (DOM updates reflect entry_actions on state transitions)', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs10 = new VCSPage(page);
       await vcs.goto();
 
       const beforeCommitCount = await vcs.getCommitCount();
@@ -445,7 +445,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       expect(afterCommitCount).toBe(beforeCommitCount + 1);
 
       // The currentBranch element should be updated by updateUI (no error in reading)
-      const current = await vcs.getCurrentBranchText();
+      const current3 = await vcs.getCurrentBranchText();
       expect(current).toBeDefined();
 
       // No page errors indicating updateUI failures
@@ -454,7 +454,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
     });
 
     test('Edge case: invoking createBranch with empty input should do nothing', async ({ page }) => {
-      const vcs = new VCSPage(page);
+      const vcs11 = new VCSPage(page);
       await vcs.goto();
 
       // Provide an empty string via prompt -> handler in page should not create branch
@@ -467,7 +467,7 @@ test.describe('Version Control Demonstration - FSM states and transitions', () =
       await vcs.clickCreateBranch();
 
       // Ensure still on main and commit count unchanged (i.e., nothing created)
-      const current = await vcs.getCurrentBranchText();
+      const current4 = await vcs.getCurrentBranchText();
       expect(current).toBe('main');
 
       // No runtime errors

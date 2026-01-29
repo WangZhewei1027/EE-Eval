@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interpreter Demonstration</title>
+<style>
+  body {
+    font-family: monospace, monospace;
+    margin: 1em;
+    background: white;
+    color: black;
+  }
+  textarea, input[type=text] {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace, monospace;
+    font-size: 14px;
+  }
+  .row {
+    margin: 0.5em 0;
+  }
+  label {
+    display: block;
+  }
+  button {
+    margin: 0.25em 0.25em 0.25em 0;
+  }
+  #output {
+    white-space: pre-wrap;
+    border: 1px solid black;
+    min-height: 6em;
+    padding: 0.5em;
+    margin-top: 0.5em;
+    overflow-y: auto;
+  }
+  select {
+    font-family: monospace, monospace;
+  }
+  #stepInfo {
+    margin-top: 0.3em;
+    font-size: 0.9em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Interactive Interpreter Demo</h1>
+
+<p>This is a simple, but feature-rich interpreter for a minimal imperative language with variables, arithmetic, conditionals, loops, input/output, and functions. You can write code below, run, step through, inspect state, and manipulate variables.</p>
+
+<label for="codeArea">Enter your program code:</label>
+<textarea id="codeArea" rows="15" spellcheck="false">
+// Sample program:
+// Computes factorial of input number n
+print "Enter a number:";
+n = input();
+fact = 1;
+i = 1;
+while (i <= n) {
+  fact = fact * i;
+  i = i + 1;
+}
+print "Factorial is:";
+print fact;
+</textarea>
+
+<div class="row">
+  <button id="btnReset">Reset Environment</button>
+  <button id="btnRun">Run to End</button>
+  <button id="btnStep">Step</button>
+  <button id="btnPause">Pause</button>
+  <button id="btnResetStack">Reset Call Stack</button>
+  <button id="btnClearOutput">Clear Output</button>
+</div>
+
+<div class="row">
+  <label for="speedSlider">Auto-run speed (step delay ms): <span id="speedVal">500</span></label>
+  <input type="range" id="speedSlider" min="50" max="2000" step="50" value="500" />
+</div>
+
+<div class="row">
+  <label for="inputValue">Provide Input value(s) (comma-separated):</label>
+  <input type="text" id="inputValue" placeholder="e.g. 5" />
+  <button id="btnAddInput">Add Input(s)</button>
+  <button id="btnClearInputBuffer">Clear Input Buffer</button>
+</div>
+
+<div class="row">
+<label for="varSelect">Inspect Variables</label>
+<select id="varSelect" size="6" style="width: 100%;"></select>
+<div id="varDetails"></div>
+</div>
+
+<div class="row">
+<label for="callStack">Call Stack</label>
+<select id="callStack" size="6" style="width:100%;"></select>
+<div id="stackDetails"></div>
+</div>
+
+<label for="output">Program Output:</label>
+<div id="output" tabindex="0" aria-label="Program output console" role="region"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // === Language Grammar & Features ===
+  // Minimal imperative language:
+  // Statements:
+  //   - variable assignment: x = expr;
+  //   - print expr;
+  //   - input() returns integer input from buffer
+  //   - if (expr) { stmts } else { stmts }
+  //   - while (expr) { stmts }
+  //   - function f(args) { stmts }
+  //   - return expr;
+  // Expressions:
+  //   - integer literals
+  //   - variables
+  //   - arithmetic + - * / %
+  //   - parentheses
+  //   - comparison operators: == != < <= > >=
+  //   - logical: && || ! (short circuit)
+  //   - function calls: f(expr, ...)
+  //
+  // This interpreter supports local variable scopes+stack frames.
+  //
+  // INPUT is fed by user into input buffer; input() reads next value or waits.
+  // PRINT outputs text/numbers.
+
+  // === Lexer ===
+  // Token types: IDENT, NUMBER, STRING, SYMBOL, KEYWORD, EOF
+
+  class Lexer {
+    constructor(input) {
+      this.input = input;
+      this.pos = 0;
+      this.len = input.length;
+      this.line = 1;
+      this.col = 1;
+      this.currentChar = input[0] || null;
+
+      this.keywords = new Set([
+        "if", "else", "while", "print", "input", "function", "return", "true", "false"
+      ]);
+    }
+    advance() {
+      if (this.currentChar === "\n") {
+        this.line++;
+        this.col = 0;
+      }
+      this.pos++;
+      this.col++;
+      this.currentChar = this.pos < this.len ? this.input[this.pos] : null;
+    }
+    skipWhitespaceAndComments() {
+      while (this.currentChar !== null) {
+        if (this.currentChar === " " || this.currentChar === "\t" || this.currentChar === "\n" || this.currentChar === "\r") {
+          this.advance();
+        } else if (this.currentChar === "/" && this.peek() === "/") {
+          // comment to end of line
+          while (this.currentChar !== null && this.currentChar !== "\n") {
+            this.advance();
+          }
+        } else {
+          break;
+        }
+      }
+    }
+    peek() {
+      return this.pos + 1 < this.len ? this.input[this.pos + 1] : null;
+    }
+    number() {
+      let numStr = "";
+      while (this.currentChar !== null && /[0-9]/.test(this.currentChar)) {
+        numStr += this.currentChar;
+        this.advance();
+      }
+      return { type: "NUMBER", value: parseInt(numStr, 10) };
+    }
+    identifierOrKeyword() {
+      let id = "";
+      while (this.currentChar !== null && /[a-zA-Z0-9_]/.test(this.currentChar)) {
+        id += this.currentChar;
+        this.advance();
+      }
+      if (this.keywords.has(id)) {
+        return { type: "KEYWORD", value: id };
+      }
+      return { type: "IDENT", value: id };
+    }
+    stringLiteral() {
+      // strings quoted with " only
+      let str = "";
+      this.advance(); // skip opening quote
+      while (this.currentChar !== null && this.currentChar !== '"') {
+        if (this.currentChar === "\\") {
+          this.advance();
+          if (this.currentChar === "n") str += "\n";
+          else if (this.currentChar === "t") str += "\t";
+          else if (this.currentChar === '"') str += '"';
+          else if (this.currentChar === "\\") str += "\\";
+          else str += this.currentChar;
+          this.advance();
+        } else {
+          str += this.currentChar;
+          this.advance();
+        }
+      }
+      if (this.currentChar === '"') {
+        this.advance();
+      } else {
+        throw new Error(`Unterminated string literal at line ${this.line}`);
+      }
+      return { type: "STRING", value: str };
+    }
+    symbol() {
+      // Multi-char symbols: ==, !=, <=, >=, &&, ||
+      // Single char: + - * / % = ; , ( ) { } ! < >
+      let ch = this.currentChar;
+      let twoChar = ch + (this.peek() || "");
+
+      const multiCharSymbols = ["==", "!=", "<=", ">=", "&&", "||"];
+      if (multiCharSymbols.includes(twoChar)) {
+        this.advance();
+        this.advance();
+        return { type: "SYMBOL", value: twoChar };
+      }
+      this.advance();
+      return { type: "SYMBOL", value: ch };
+    }
+    getNextToken() {
+      this.skipWhitespaceAndComments();
+      if (this.currentChar === null) return { type: "EOF" };
+
+      if (/[0-9]/.test(this.currentChar)) {
+        return this.number();
+      }
+
+      if (/[a-zA-Z_]/.test(this.currentChar)) {
+        return this.identifierOrKeyword();
+      }
+
+      if (this.currentChar === '"') {
+        return this.stringLiteral();
+      }
+
+      // Else symbol
+      return this.symbol();
+    }
+    tokenize() {
+      const tokens = [];
+      let token = this.getNextToken();
+      while (token.type !== "EOF") {
+        tokens.push(token);
+        token = this.getNextToken();
+      }
+      tokens.push({ type: "EOF" });
+      return tokens;
+    }
+  }
+
+  // === Parser ===
+  // Produces an AST (abstract syntax tree)
+
+  // Grammar sketch (simplified):
+  // program := stmtList
+  // stmtList := stmt*
+  // stmt :=
+  //     variable = expr ;
+  //   | print expr ;
+  //   | if (expr) { stmtList } [ else { stmtList } ]
+  //   | while (expr) { stmtList }
+  //   | function IDENT ( [IDENT [, IDENT]*] ) { stmtList }
+  //   | return expr? ;
+  //   | expr ;   (expr by itself, e.g. function call)
+  //
+  // expr := logicOr
+  // logicOr := logicAnd ( "||" logicAnd )*
+  // logicAnd := equality ( "&&" equality )*
+  // equality := relational ( ( "==" | "!=" ) relational )*
+  // relational := additive ( ( "<" | "<=" | ">" | ">=" ) additive )*
+  // additive := multiplicative ( ( "+" | "-" ) multiplicative )*
+  // multiplicative := unary ( ( "*" | "/" | "%" ) unary )*
+  // unary := ( "!" | "-" ) unary | primary
+  // primary := NUMBER | STRING | IDENT | functionCall | "(" expr ")"
+  // functionCall := IDENT "(" [expr ("," expr)* ] ")"
+
+  class Parser {
+    constructor(tokens) {
+      this.tokens = tokens;
+      this.pos = 0;
+      this.len = tokens.length;
+    }
+    current() {
+      return this.tokens[this.pos];
+    }
+    next() {
+      if (this.pos < this.len -1) this.pos++;
+      return this.current();
+    }
+    eat(type, value=null) {
+      let t = this.current();
+      if (t.type === type && (value === null || t.value === value)) {
+        this.pos++;
+        return t;
+      }
+      throw new Error(`Expected token ${value||type} but got ${t.type} ${t.value} at token index ${this.pos}`);
+    }
+
+    parseProgram() {
+      const stmts = [];
+      while (this.current().type !== "EOF") {
+        stmts.push(this.parseStmt());
+      }
+      return { type: "Program", body: stmts };
+    }
+    parseStmt() {
+      let t = this.current();
+
+      if (t.type === "KEYWORD") {
+        switch(t.value) {
+          case "print":
+            this.eat("KEYWORD","print");
+            let expPrint = this.parseExpr();
+            this.eat("SYMBOL",";");
+            return { type:"PrintStatement", expression: expPrint };
+
+          case "if":
+            this.eat("KEYWORD","if");
+            this.eat("SYMBOL","(");
+            let cond = this.parseExpr();
+            this.eat("SYMBOL",")");
+            this.eat("SYMBOL","{");
+            let thenStmts = this.parseBlock();
+            let elseStmts = null;
+            if (this.current().type === "KEYWORD" && this.current().value === "else") {
+              this.eat("KEYWORD","else");
+              this.eat("SYMBOL","{");
+              elseStmts = this.parseBlock();
+            }
+            return { type:"IfStatement", condition: cond, then: thenStmts, else: elseStmts };
+
+          case "while":
+            this.eat("KEYWORD","while");
+            this.eat("SYMBOL","(");
+            let wcond = this.parseExpr();
+            this.eat("SYMBOL",")");
+            this.eat("SYMBOL","{");
+            let body = this.parseBlock();
+            return { type:"WhileStatement", condition: wcond, body: body };
+
+          case "function":
+            this.eat("KEYWORD", "function");
+            let nameTok = this.eat("IDENT");
+            this.eat("SYMBOL","(");
+            let params = [];
+            if (this.current().type === "IDENT") {
+              params.push(this.eat("IDENT").value);
+              while(this.current().type === "SYMBOL" && this.current().value === ",") {
+                this.eat("SYMBOL", ",");
+                params.push(this.eat("IDENT").value);
+              }
+            }
+            this.eat("SYMBOL", ")");
+            this.eat("SYMBOL","{");
+            let funBody = this.parseBlock();
+            return { type: "FunctionDeclaration", name: nameTok.value, params: params, body: funBody };
+
+          case "return":
+            this.eat("KEYWORD","return");
+            let rexpr = null;
+            if (!(this.current().type === "SYMBOL" && this.current().value === ";")) {
+              rexpr = this.parseExpr();
+            }
+            this.eat("SYMBOL",";");
+            return { type: "ReturnStatement", expression: rexpr };
+
+          default:
+            throw new Error(`Unknown keyword statement: ${t.value}`);
+        }
+      }
+
+      // lookahead for assignment or expr stmt
+      // If ident followed by '=' => assignment
+      if (t.type === "IDENT" && this.tokens[this.pos+1] && this.tokens[this.pos+1].type === "SYMBOL" && this.tokens[this.pos+1].value === "=") {
+        let varName = t.value;
+        this.eat("IDENT");
+        this.eat("SYMBOL", "=");
+        let expr = this.parseExpr();
+        this.eat("SYMBOL", ";");
+        return { type: "Assignment", name: varName, expression: expr };
+      }
+
+      // Otherwise expr statement (function call, etc.)
+      let exp = this.parseExpr();
+      this.eat("SYMBOL",";");
+      return { type: "ExprStatement", expression: exp };
+    }
+
+    parseBlock() {
+      // parse zero or more statements until matching "}"
+      const stmts = [];
+      while(!(this.current().type === "SYMBOL" && this.current().value === "}")) {
+        if (this.current().type === "EOF") throw new Error("Unexpected EOF inside block");
+        stmts.push(this.parseStmt());
+      }
+      this.eat("SYMBOL","}");
+      return stmts;
+    }
+
+    // Expression parsing according to precedence
+
+    parseExpr() {
+      return this.parseLogicOr();
+    }
+    parseLogicOr() {
+      let node = this.parseLogicAnd();
+      while(this.current().type === "SYMBOL" && this.current().value === "||") {
+        let op = this.eat("SYMBOL").value;
+        let right = this.parseLogicAnd();
+        node = { type:"LogicalExpression", operator: op, left: node, right: right };
+      }
+      return node;
+    }
+    parseLogicAnd() {
+      let node = this.parseEquality();
+      while(this.current().type === "SYMBOL" && this.current().value === "&&") {
+        let op = this.eat("SYMBOL").value;
+        let right = this.parseEquality();
+        node = { type:"LogicalExpression", operator: op, left: node, right: right };
+      }
+      return node;
+    }
+    parseEquality() {
+      let node = this.parseRelational();
+      while(this.current().type === "SYMBOL" && (this.current().value === "==" || this.current().value === "!=")) {
+        let op = this.eat("SYMBOL").value;
+        let right = this.parseRelational();
+        node = { type:"BinaryExpression", operator: op, left: node, right: right };
+      }
+      return node;
+    }
+    parseRelational() {
+      let node = this.parseAdditive();
+      while(this.current().type === "SYMBOL" && ["<", "<=", ">", ">="].includes(this.current().value)) {
+        let op = this.eat("SYMBOL").value;
+        let right = this.parseAdditive();
+        node = { type:"BinaryExpression", operator: op, left: node, right: right };
+      }
+      return node;
+    }
+    parseAdditive() {
+      let node = this.parseMultiplicative();
+      while(this.current().type === "SYMBOL" && (this.current().value === "+" || this.current().value === "-")) {
+        let op = this.eat("SYMBOL").value;
+        let right = this.parseMultiplicative();
+        node = { type:"BinaryExpression", operator: op, left: node, right: right };
+      }
+      return node;
+    }
+    parseMultiplicative() {
+      let node = this.parseUnary();
+      while(this.current().type === "SYMBOL" && (this.current().value === "*" || this.current().value === "/" || this.current().value === "%")) {
+        let op = this.eat("SYMBOL").value;
+        let right = this.parseUnary();
+        node = { type:"BinaryExpression", operator: op, left: node, right: right };
+      }
+      return node;
+    }
+    parseUnary() {
+      if (this.current().type === "SYMBOL" && (this.current().value === "!" || this.current().value === "-")) {
+        let op = this.eat("SYMBOL").value;
+        let argument = this.parseUnary();
+        return { type:"UnaryExpression", operator: op, argument: argument };
+      }
+      return this.parsePrimary();
+    }
+    parsePrimary() {
+      let t = this.current();
+      if (t.type === "NUMBER") {
+        this.eat("NUMBER");
+        return { type:"Literal", value: t.value };
+      }
+      if (t.type === "STRING") {
+        this.eat("STRING");
+        return { type:"Literal", value: t.value };
+      }
+      if (t.type === "KEYWORD") {
+        if(t.value === "true") {
+          this.eat("KEYWORD", "true");
+          return {type:"Literal", value:true};
+        }
+        if(t.value === "false") {
+          this.eat("KEYWORD", "false");
+          return {type:"Literal", value:false};
+        }
+      }
+      if (t.type === "IDENT") {
+        // could be function call or variable
+        let idName = t.value;
+        this.eat("IDENT");
+        if(this.current().type === "SYMBOL" && this.current().value === "(") {
+          // function call
+          this.eat("SYMBOL", "(");
+          let args = [];
+          if (!(this.current().type === "SYMBOL" && this.current().value === ")")) {
+            args.push(this.parseExpr());
+            while(this.current().type === "SYMBOL" && this.current().value === ",") {
+              this.eat("SYMBOL", ",");
+              args.push(this.parseExpr());
+            }
+          }
+          this.eat("SYMBOL", ")");
+          return { type:"CallExpression", callee: idName, arguments: args };
+        } else {
+          return { type: "Identifier", name: idName };
+        }
+      }
+      if(t.type === "SYMBOL" && t.value === "(") {
+        this.eat("SYMBOL", "(");
+        let node = this.parseExpr();
+        this.eat("SYMBOL", ")");
+        return node;
+      }
+      throw new Error(`Unexpected token ${t.type} ${t.value} in expression at pos ${this.pos}`);
+    }
+  }
+
+  // === Interpreter ===
+  // Runs the AST in interactive, step-by-step manner
+  //
+  // Features:
+  // - Global environment + call stack
+  // - Support for built-in input(), print()
+  // - Step mode + run mode + pause
+  // - Handling errors gracefully
+
+  class RuntimeError extends Error {}
+
+  class Environment {
+    constructor(outer=null) {
+      this.vars = new Map();
+      this.outer = outer;
+    }
+    has(name) {
+      if(this.vars.has(name)) return true;
+      if(this.outer !== null) return this.outer.has(name);
+      return false;
+    }
+    get(name) {
+      if(this.vars.has(name)) return this.vars.get(name);
+      if(this.outer !== null) return this.outer.get(name);
+      throw new RuntimeError(`Variable ${name} is not defined`);
+    }
+    set(name, val) {
+      if(this.vars.has(name)) {
+        this.vars.set(name, val);
+      } else if(this.outer !== null && this.outer.has(name)) {
+        this.outer.set(name, val);
+      } else {
+        this.vars.set(name, val);
+      }
+    }
+    define(name,val) {
+      this.vars.set(name,val);
+    }
+    keys() {
+      const s = new Set(this.vars.keys());
+      if(this.outer) {
+        for(let k of this.outer.keys()) s.add(k);
+      }
+      return Array.from(s);
+    }
+  }
+
+  class ReturnValue {
+    constructor(val) { this.val = val; }
+  }
+
+  class Interpreter {
+    constructor() {
+      this.globalEnv = new Environment();
+      this.callStack = [];
+      this.functions = new Map();
+      this.inputBuffer = [];
+      this.outputBuffer = [];
+      this.running = false;
+      this.paused = false;
+      this.ast = null;
+      this.currentStatementIndex = 0;
+      this.currentStatementList = null;
+      this.currentEnv = this.globalEnv;
+      this.awaitingInput = false;
+      this.stepMode = true; // if false, run to end / until pause
+      this.onOutputCallback = null;
+      this.onStateChangeCallback = null;
+
+      this.callStack.push({
+        env: this.globalEnv,
+        stmts: [],
+        index: 0,
+        funcName: "<global>",
+      });
+    }
+
+    reset() {
+      this.globalEnv = new Environment();
+      this.callStack = [];
+      this.functions = new Map();
+      this.inputBuffer = [];
+      this.outputBuffer = [];
+      this.running = false;
+      this.paused = false;
+      this.ast = null;
+      this.currentStatementIndex = 0;
+      this.currentStatementList = null;
+      this.currentEnv = this.globalEnv;
+      this.awaitingInput = false;
+      this.stepMode = true;
+
+      this.callStack.push({
+        env: this.globalEnv,
+        stmts: [],
+        index: 0,
+        funcName: "<global>",
+      });
+    }
+
+    loadProgram(ast) {
+      this.ast = ast;
+      // scan for function declarations and remove them from global statements
+      let globalStmts = [];
+      for(const stmt of ast.body) {
+        if(stmt.type === "FunctionDeclaration") {
+          this.functions.set(stmt.name, stmt);
+        } else {
+          globalStmts.push(stmt);
+        }
+      }
+      this.callStack = [{
+        env: this.globalEnv,
+        stmts: globalStmts,
+        index: 0,
+        funcName: "<global>"
+      }];
+    }
+
+    enqueueInput(val) {
+      this.inputBuffer.push(val);
+      if(this.awaitingInput) {
+        this.awaitingInput = false;
+      }
+    }
+
+    clearInput() {
+      this.inputBuffer.length = 0;
+      this.awaitingInput = false;
+    }
+
+    appendOutput(o) {
+      this.outputBuffer.push(o);
+      if(this.onOutputCallback) this.onOutputCallback(o);
+    }
+
+    getOutput() {
+      return this.outputBuffer.join("");
+    }
+
+    clearOutput() {
+      this.outputBuffer.length = 0;
+      if(this.onOutputCallback) this.onOutputCallback(null,true);
+    }
+
+    isRunning() {
+      return this.running;
+    }
+
+    pause() {
+      this.paused = true;
+      this.running = false;
+    }
+
+    resume() {
+      this.paused = false;
+      if(!this.running) {
+        this.runLoop();
+      }
+    }
+
+    stepConfig(stepMode) {
+      this.stepMode = stepMode;
+    }
+
+    async runLoop() {
+      this.running = true;
+      while(this.running && !this.paused) {
+        try {
+          if(this.awaitingInput) {
+            // wait for user input
+            await new Promise(r => setTimeout(r, 100));
+            continue;
+          }
+          let finished = this.step();
+          if(finished) {
+            this.running = false;
+            break;
+          }
+          if(this.stepMode) {
+            // step mode => pause after each step
+            this.running = false;
+            this.paused = true;
+            break;
+          }
+          // delay according to speed setting
+          await new Promise(r => setTimeout(r, state.stepDelay));
+        } catch(e) {
+          this.running = false;
+          this.paused = true;
+          this.appendOutput(`\nRuntime Error: ${e.message}\n`);
+          break;
+        }
+      }
+      if(this.onStateChangeCallback) this.onStateChangeCallback();
+    }
+
+    step() {
+      // returns true if program finished
+      if(this.callStack.length === 0) {
+        return true;
+      }
+      let frame = this.callStack[this.callStack.length-1];
+      if(frame.index >= frame.stmts.length) {
+        this.callStack.pop();
+        if(this.callStack.length === 0) {
+          return true;
+        }
+        return false;
+      }
+      let stmt = frame.stmts[frame.index];
+      frame.index++;
+      this.currentEnv = frame.env;
+
+      // console.log("Executing stmt", stmt);
+      return this.executeStatement(stmt);
+    }
+
+    executeStatement(stmt) {
+      try {
+        switch(stmt.type) {
+          case "Assignment": {
+            let val = this.evalExpr(stmt.expression, this.currentEnv);
+            this.currentEnv.set(stmt.name, val);
+            break;
+          }
+          case "PrintStatement": {
+            let val = this.evalExpr(stmt.expression, this.currentEnv);
+            this.appendOutput(valToString(val) + "\n");
+            break;
+          }
+          case "IfStatement": {
+            let cond = this.evalExpr(stmt.condition, this.currentEnv);
+            let truthy = toBoolean(cond);
+            let stmtsToPush = truthy ? stmt.then : stmt.else || [];
+            this.callStack.push({
+              env: new Environment(this.currentEnv),
+              stmts: stmtsToPush,
+              index: 0,
+              funcName: frameFuncName(this.callStack)
+            });
+            break;
+          }
+          case "WhileStatement": {
+            // We rewrite the while into a function call frame that loops
+            let condExpr = stmt.condition;
+            let bodyStmts = stmt.body;
+            // We'll use a special looping approach:
+            // Instead of pushing body always, we do this:
+            let condVal = this.evalExpr(condExpr, this.currentEnv);
+            if (toBoolean(condVal)) {
+              // push body followed by while again (simulate loop)
+              this.callStack.push({
+                env: new Environment(this.currentEnv),
+                stmts: bodyStmts.concat([stmt]), // we append the same while statement to continue loop
+                index: 0,
+                funcName: frameFuncName(this.callStack)
+              });
+            } else {
+              // do nothing, exit loop
+            }
+            break;
+          }
+
+          case "FunctionDeclaration": {
+            // function declarations already loaded in this.functions,
+            // skip here.
+            break;
+          }
+
+          case "ReturnStatement": {
+            if (stmt.expression == null) {
+              throw new ReturnValue(null);
+            } else {
+              let val = this.evalExpr(stmt.expression, this.currentEnv);
+              throw new ReturnValue(val);
+            }
+          }
+          case "ExprStatement": {
+            this.evalExpr(stmt.expression, this.currentEnv);
+            break;
+          }
+          default:
+            throw new RuntimeError(`Unknown statement type: ${stmt.type}`);
+        }
+      } catch(retval) {
+        if(retval instanceof ReturnValue) {
+          // Return from function call
+          this.callStack.pop();
+          if(this.callStack.length === 0) {
+            // returned from global? ignore
+            return true;
+          }
+          let callerFrame = this.callStack[this.callStack.length-1];
+          if(retval.val !== undefined) {
+            callerFrame.returnValue = retval.val;
+          }
+          return false;
+        } else {
+          throw retval;
+        }
+      }
+      return false;
+    }
+
+    evalExpr(expr, env) {
+      switch(expr.type) {
+        case "Literal": return expr.value;
+        case "Identifier": return env.get(expr.name);
+        case "BinaryExpression": {
+          let left = this.evalExpr(expr.left, env);
+          let right = this.evalExpr(expr.right, env);
+          switch(expr.operator) {
+            case "+": return numericOp(left, right, (a,b) => a + b);
+            case "-": return numericOp(left, right, (a,b) => a - b);
+            case "*": return numericOp(left, right, (a,b) => a * b);
+            case "/": return numericOp(left, right, (a,b) => {
+              if(b === 0) throw new RuntimeError("Division by zero");
+              return Math.floor(a / b);
+            });
+            case "%": return numericOp(left, right, (a,b) => {
+              if(b === 0) throw new RuntimeError("Modulo by zero");
+              return a % b;
+            });
+            case "==": return deepEquals(left, right);
+            case "!=": return !deepEquals(left, right);
+            case "<": return numericOp(left, right, (a,b)=>a < b ? true : false);
+            case "<=": return numericOp(left, right, (a,b)=>a <= b ? true : false);
+            case ">": return numericOp(left, right, (a,b)=>a > b ? true : false);
+            case ">=": return numericOp(left, right, (a,b)=>a >= b ? true : false);
+            default:
+              throw new RuntimeError(`Unknown binary operator: ${expr.operator}`);
+          }
+        }
+        case "LogicalExpression": {
+          let left = this.evalExpr(expr.left, env);
+          switch(expr.operator) {
+            case "&&":
+              if(!toBoolean(left)) return false; // short-circuit
+              return toBoolean(this.evalExpr(expr.right, env));
+            case "||":
+              if(toBoolean(left)) return true;
+              return toBoolean(this.evalExpr(expr.right, env));
+            default:
+              throw new RuntimeError(`Unknown logical operator: ${expr.operator}`);
+          }
+        }
+        case "UnaryExpression": {
+          let val = this.evalExpr(expr.argument, env);
+          switch(expr.operator) {
+            case "!": return !toBoolean(val);
+            case "-": return numericOp(val, null, (a,_) => -a);
+            default:
+              throw new RuntimeError(`Unknown unary operator: ${expr.operator}`);
+          }
+        }
+        case "CallExpression": {
+          // Builtins: input, print replaced (print is statement)
+          if(expr.callee === "input") {
+            // input returns next integer from inputBuffer (if empty, pause)
+            if(this.inputBuffer.length === 0) {
+              this.awaitingInput = true;
+              throw new RuntimeError("Input required but input buffer empty. Please provide input and continue.");
+            }
+            let v = this.inputBuffer.shift();
+            this.awaitingInput = false;
+            return v;
+          }
+          // user functions:
+          if(!this.functions.has(expr.callee)) {
+            throw new RuntimeError(`Function ${expr.callee} is not defined`);
+          }
+          let func = this.functions.get(expr.callee);
+          if(expr.arguments.length !== func.params.length) {
+            throw new RuntimeError(`Function ${expr.callee} expects ${func.params.length} arguments, got ${expr.arguments.length}`);
+          }
+          let newEnv = new Environment(this.globalEnv);
+          for(let i=0; i < func.params.length; i++) {
+            let argval = this.evalExpr(expr.arguments[i], env);
+            newEnv.define(func.params[i], argval);
+          }
+          this.callStack.push({
+            env: newEnv,
+            stmts: func.body,
+            index: 0,
+            funcName: expr.callee,
+            returnValue: undefined,
+          });
+          // immediately proceed into first statement of function on next step
+          return undefined;
+        }
+        default:
+          throw new RuntimeError(`Unknown expression type: ${expr.type}`);
+      }
+    }
+  }
+
+  // === Utility functions ===
+
+  function numericOp(left, right, op) {
+    if (typeof left !== "number" || (right !== null && typeof right !== "number")) {
+      throw new RuntimeError(`Operands must be numbers`);
+    }
+    return op(left,right);
+  }
+  function toBoolean(val) {
+    if(val === false || val === 0 || val === null || val === undefined) return false;
+    return true;
+  }
+  function deepEquals(a, b) {
+    return a === b;
+  }
+  function valToString(v) {
+    if(typeof v === "string") return v;
+    if(typeof v === "number") return v.toString();
+    if(typeof v === "boolean") return v ? "true" : "false";
+    if(v === null || v === undefined) return "null";
+    return JSON.stringify(v);
+  }
+  function frameFuncName(callstack) {
+    if(callstack.length === 0) return "<global>";
+    return callstack[callstack.length-1].funcName;
+  }
+
+  // === UI and Main Logic ===
+
+  const codeArea = document.getElementById("codeArea");
+  const btnReset = document.getElementById("btnReset");
+  const btnRun = document.getElementById("btnRun");
+  const btnStep = document.getElementById("btnStep");
+  const btnPause = document.getElementById("btnPause");
+  const btnClearOutput = document.getElementById("btnClearOutput");
+  const btnAddInput = document.getElementById("btnAddInput");
+  const btnClearInputBuffer = document.getElementById("btnClearInputBuffer");
+  const inputValue = document.getElementById("inputValue");
+  const outputDiv = document.getElementById("output");
+  const speedSlider = document.getElementById("speedSlider");
+  const speedVal = document.getElementById("speedVal");
+  const varSelect = document.getElementById("varSelect");
+  const varDetails = document.getElementById("varDetails");
+  const callStackSelect = document.getElementById("callStack");
+  const stackDetails = document.getElementById("stackDetails");
+  const btnResetStack = document.getElementById("btnResetStack");
+
+  const state = {
+    interpreter: null,
+    stepDelay: parseInt(speedSlider.value, 10),
+  };
+
+  function refreshOutput(clear=false) {
+    if(clear) {
+      outputDiv.textContent = "";
+    } else {
+      outputDiv.textContent = state.interpreter.getOutput();
+    }
+    outputDiv.scrollTop = outputDiv.scrollHeight;
+  }
+
+  function resetInterpreter() {
+    try {
+      let code = codeArea.value;
+      let lexer = new Lexer(code);
+      let tokens = lexer.tokenize();
+      let parser = new Parser(tokens);
+      let ast = parser.parseProgram();
+
+      state.interpreter = new Interpreter();
+      state.interpreter.loadProgram(ast);
+      state.interpreter.clearOutput();
+
+      state.interpreter.onOutputCallback = (output, clear) => {
+        if(clear) {
+          refreshOutput(true);
+        } else {
+          refreshOutput();
+        }
+      };
+      state.interpreter.onStateChangeCallback = refreshUI;
+
+      refreshOutput(true);
+      refreshUI();
+      appendStatus("Program loaded successfully.");
+    } catch(e) {
+      appendStatus("Error loading program: " + e.message);
+    }
+  }
+
+  function refreshUI() {
+    // Refresh variable list and call stack list
+
+    if(!state.interpreter) return;
+    // collect vars from current environment stack frames combined (latest frame first)
+    let vars = {};
+    for(let i=state.interpreter.callStack.length-1; i >= 0; i--) {
+      let frame = state.interpreter.callStack[i];
+      for(let [k,v] of frame.env.vars) {
+        if(!(k in vars)) vars[k] = v;
+      }
+    }
+    // Clear and add vars to select
+    varSelect.innerHTML = "";
+    let keys = Object.keys(vars).sort();
+    for(let k of keys) {
+      let opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = k;
+      varSelect.appendChild(opt);
+    }
+    varDetails.textContent = "";
+    if(varSelect.options.length > 0) {
+      varSelect.selectedIndex = 0;
+      showVarDetails(varSelect.options[0].value, vars);
+    }
+
+    // Call stack display
+    callStackSelect.innerHTML = "";
+    for(let i = state.interpreter.callStack.length-1; i >= 0; i--) {
+      let f = state.interpreter.callStack[i];
+      let opt = document.createElement("option");
+      opt.value = i.toString();
+      opt.textContent = `${f.funcName} (Stmt: ${f.index}/${f.stmts.length})`;
+      callStackSelect.appendChild(opt);
+    }
+    stackDetails.textContent = "";
+    if(callStackSelect.options.length > 0) {
+      callStackSelect.selectedIndex = 0;
+      showStackDetails(state.interpreter.callStack.length-1);
+    }
+
+    // Buttons enable/disable
+    let running = state.interpreter.isRunning();
+    btnRun.disabled = running;
+    btnStep.disabled = running;
+    btnPause.disabled = !running;
+  }
+
+  function showVarDetails(name, vars=null) {
+    if(!vars && state.interpreter) {
+      // reconstruct vars as above
+      vars = {};
+      for(let i=state.interpreter.callStack.length-1; i >= 0; i--) {
+        let frame = state.interpreter.callStack[i];
+        for(let [k,v] of frame.env.vars) {
+          if(!(k in vars)) vars[k] = v;
+        }
+      }
+    }
+    if(name in vars) {
+      let v = vars[name];
+      varDetails.textContent = `Variable "${name}": ${valToString(v)} (${typeof v})`;
+    } else {
+      varDetails.textContent = "";
+    }
+  }
+
+  function showStackDetails(frameIndex) {
+    if(!state.interpreter) return;
+    const fi = parseInt(frameIndex, 10);
+    if(isNaN(fi) || fi <0 || fi >= state.interpreter.callStack.length) {
+      stackDetails.textContent = "";
+      return;
+    }
+    let frame = state.interpreter.callStack[fi];
+    let varsArray = [];
+    for(let [k,v] of frame.env.vars) {
+      varsArray.push(`${k} = ${valToString(v)}`);
+    }
+    stackDetails.textContent = `Function: ${frame.funcName}\nLocal Variables:\n${varsArray.join("\n")}`;
+  }
+
+  function appendStatus(text) {
+    outputDiv.textContent += "\n[Status] " + text + "\n";
+    outputDiv.scrollTop = outputDiv.scrollHeight;
+  }
+
+  // Event handlers
+  btnReset.addEventListener("click", () => {
+    state.interpreter && state.interpreter.pause();
+    resetInterpreter();
+  });
+  btnRun.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    state.interpreter.stepConfig(false);
+    state.interpreter.running = true;
+    state.interpreter.paused = false;
+    state.interpreter.runLoop();
+    refreshUI();
+  });
+  btnStep.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    state.interpreter.stepConfig(true);
+    if(state.interpreter.isRunning()) return;
+    try {
+      let finished = state.interpreter.step();
+      refreshOutput();
+      refreshUI();
+      if(finished) appendStatus("Program execution finished.");
+      else appendStatus("Step executed.");
+    } catch(e) {
+      appendStatus("Runtime Error: " + e.message);
+    }
+  });
+  btnPause.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    state.interpreter.pause();
+    appendStatus("Execution paused.");
+    refreshUI();
+  });
+  btnClearOutput.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    state.interpreter.clearOutput();
+    refreshOutput(true);
+  });
+  btnAddInput.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    let text = inputValue.value.trim();
+    if(text.length === 0) return;
+    let parts = text.split(",");
+    for(let p of parts) {
+      let val = p.trim();
+      if(val !== "") {
+        // try number first
+        let num = parseInt(val,10);
+        if(!Number.isNaN(num)) {
+          state.interpreter.enqueueInput(num);
+        } else {
+          appendStatus(`Invalid input (not integer): "${val}"`);
+        }
+      }
+    }
+    inputValue.value = "";
+    appendStatus("Input values added.");
+  });
+  btnClearInputBuffer.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    state.interpreter.clearInput();
+    appendStatus("Input buffer cleared.");
+  });
+  speedSlider.addEventListener("input", () => {
+    state.stepDelay = parseInt(speedSlider.value, 10);
+    speedVal.textContent = state.stepDelay.toString();
+  });
+  varSelect.addEventListener("change", e => {
+    let name = varSelect.value;
+    showVarDetails(name);
+  });
+  callStackSelect.addEventListener("change", e => {
+    let idx = callStackSelect.value;
+    showStackDetails(idx);
+  });
+  btnResetStack.addEventListener("click", () => {
+    if(!state.interpreter) return;
+    // reset the call stack to global only
+    let globalFrame = state.interpreter.callStack[0];
+    globalFrame.index = 0;
+    globalFrame.env = state.interpreter.globalEnv;
+    state.interpreter.callStack.splice(1);
+    appendStatus("Call stack reset to global frame.");
+    refreshUI();
+  });
+
+  // Initialize
+  resetInterpreter();
+
+})();
+</script>
+
+</body>
+</html>

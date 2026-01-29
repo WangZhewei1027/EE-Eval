@@ -172,7 +172,7 @@ test.describe('Directed Graph Visualization - S0_Idle state and Node interaction
 
   test('Edge case: Verify that styling evidence for .node exists even when nodes are absent (static CSS evidence)', async () => {
     // This validates the FSM evidence that .node has specific visual styles even if no nodes are generated.
-    const styleContent = await graphPage.getStyleTagContent();
+    const styleContent1 = await graphPage.getStyleTagContent();
     // Check multiple style fragments
     expect(styleContent).toContain('background-color: #4CAF50');
     expect(styleContent).toContain('color: white');

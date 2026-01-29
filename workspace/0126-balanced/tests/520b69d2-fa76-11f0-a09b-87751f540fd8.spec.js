@@ -97,7 +97,7 @@ test.describe('Runtime Environment Interactive Application (Application ID: 520b
 
   test.describe('FSM transitions and interactivity (none expected)', () => {
     test('no interactive transitions exist; clicking the container should not change DOM or produce errors', async ({ page }) => {
-      const runtimeLocator = page.locator('#runtime-env');
+      const runtimeLocator1 = page.locator('#runtime-env');
 
       // Snapshot initial innerHTML
       const initialHTML = await runtimeLocator.evaluate(el => el.innerHTML);
@@ -163,7 +163,7 @@ test.describe('Runtime Environment Interactive Application (Application ID: 520b
 
   // Final sanity test grouping to ensure all observed console logs are normal (no stack traces)
   test('observed console messages should not include "Error" stack traces', async () => {
-    const texts = consoleMessages.map(m => m.text);
+    const texts1 = consoleMessages.map(m => m.text);
     const hasErrorLike = texts.some(t => /Error:|ReferenceError|TypeError|SyntaxError|Uncaught/i.test(t));
     expect(hasErrorLike).toBeFalsy();
   });

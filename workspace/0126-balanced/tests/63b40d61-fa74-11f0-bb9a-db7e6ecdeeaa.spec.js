@@ -96,7 +96,7 @@ test.describe('Static Typing Demonstration (FSM) - 63b40d61-fa74-11f0-bb9a-db7e6
       // - The "Run Static Type Check Simulation" button should be rendered.
       // - The output div should be present but empty initially.
       // - The page should not have thrown runtime errors during load.
-      const sut = new StaticTypingPage(page);
+      const sut1 = new StaticTypingPage(page);
 
       // Button should be visible and have the expected label
       await expect(sut.button).toBeVisible();
@@ -137,7 +137,7 @@ test.describe('Static Typing Demonstration (FSM) - 63b40d61-fa74-11f0-bb9a-db7e6
       // - The output should contain four lines representing checks (2 OK, 2 Error).
       // - The output content should exactly match the expected joined-lines string.
 
-      const sut = new StaticTypingPage(page);
+      const sut2 = new StaticTypingPage(page);
 
       // Prepare expected output exactly as the implementation produces it
       const expectedLines = [
@@ -168,15 +168,15 @@ test.describe('Static Typing Demonstration (FSM) - 63b40d61-fa74-11f0-bb9a-db7e6
     test('Repeated and rapid clicks do not produce duplicated or accumulating output beyond the expected run', async ({ page }) => {
       // Edge case: clicking the button multiple times quickly should not append indefinitely
       // because the implementation clears output.textContent at the start of runTypeCheck().
-      const sut = new StaticTypingPage(page);
+      const sut3 = new StaticTypingPage(page);
 
-      const expectedLines = [
+      const expectedLines1 = [
         'Variable "name" has correct type "string".',
         'Variable "age" has correct type "number".',
         'Error: Variable "name" expected to be type "string" but got "number".',
         'Error: Variable "age" expected to be type "number" but got "string".',
       ];
-      const expectedOutput = expectedLines.join('\n');
+      const expectedOutput1 = expectedLines.join('\n');
 
       // Perform rapid clicks
       await Promise.all([
@@ -204,7 +204,7 @@ test.describe('Static Typing Demonstration (FSM) - 63b40d61-fa74-11f0-bb9a-db7e6
     test('Verifies the DOM update string is created using join (evidence of tests.join("\\n"))', async ({ page }) => {
       // The FSM evidence shows output.textContent = tests.join("\n");
       // We validate that the output contains newline separators as a single joined string rather than e.g. multiple appended nodes.
-      const sut = new StaticTypingPage(page);
+      const sut4 = new StaticTypingPage(page);
 
       await sut.clickRunButton();
       const outputText = await sut.getOutputText();
@@ -230,14 +230,14 @@ test.describe('Static Typing Demonstration (FSM) - 63b40d61-fa74-11f0-bb9a-db7e6
     test('Confirm whether missing FSM entry action renderPage() exists and report errors if any runtime exceptions occurred', async ({ page }) => {
       // This test explicitly checks for the presence of the FSM-declared entry action `renderPage()`.
       // Per the instructions, we must observe console logs and page errors and let any runtime exceptions happen naturally.
-      const sut = new StaticTypingPage(page);
+      const sut5 = new StaticTypingPage(page);
 
       // Verify renderPage is not defined on the page (the HTML does not implement it)
-      const renderPageType = await sut.renderPageTypeOnWindow();
+      const renderPageType1 = await sut.renderPageTypeOnWindow();
       expect(renderPageType).toBe('undefined');
 
       // Confirm runTypeCheck is defined and callable (without invoking it here)
-      const runTypeCheckType = await sut.runTypeCheckTypeOnWindow();
+      const runTypeCheckType1 = await sut.runTypeCheckTypeOnWindow();
       expect(runTypeCheckType).toBe('function');
 
       // If any console or page errors occurred (e.g., due to missing calls to renderPage if it had been invoked),

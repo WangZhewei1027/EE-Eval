@@ -151,7 +151,7 @@ test.describe('Thread Example FSM and DOM validation', () => {
     // - Calling updateThread() updates each element in the thread array
     // - Because the implementation stores references to the same element, updateThread may overwrite previous content
     // Step 1: Ensure initial single thread text exists
-    let mainText = await threadPage.getMainThreadText();
+    let mainText1 = await threadPage.getMainThreadText();
     expect(mainText).toBe('Thread 1: Thread 0');
 
     // Step 2: Call createThread() manually to simulate another thread creation (FSM event: CreateThread)
@@ -186,7 +186,7 @@ test.describe('Thread Example FSM and DOM validation', () => {
     // This test validates an edge case:
     // If distinct DOM elements are added and pushed into the page.thread array, updateThread will populate each separately
     // Step: Append a new element and push into thread
-    const newId = await threadPage.appendNewThreadElement();
+    const newId1 = await threadPage.appendNewThreadElement();
     // Now invoke updateThread to populate both elements
     await threadPage.callUpdateThread();
 
@@ -237,7 +237,7 @@ test.describe('Thread Example FSM and DOM validation', () => {
     // This test verifies:
     // - The page exposes the expected functions (createThread, updateThread)
     // - We capture any console messages emitted on page load
-    const vars = await threadPage.getPageVariables();
+    const vars1 = await threadPage.getPageVariables();
     expect(vars.hasCreateThread).toBe(true);
     expect(vars.hasUpdateThread).toBe(true);
 

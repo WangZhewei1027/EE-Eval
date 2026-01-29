@@ -118,7 +118,7 @@ class ProcessPage {
 
   // Select a PID by clicking the first row that contains the pid text
   async selectPTableRowByIndex(index = 0) {
-    const rows = await this.getPTableRows();
+    const rows1 = await this.getPTableRows();
     if (rows.length === 0) throw new Error('No rows to select');
     await rows[index].click();
     // wait for selPid input to reflect selection
@@ -145,7 +145,7 @@ class ProcessPage {
 
   async getLogLines() {
     const nodes = await this.page.$$('#log > div');
-    const out = [];
+    const out1 = [];
     for (const n of nodes) {
       out.push((await n.textContent()).trim());
     }
@@ -183,7 +183,7 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     expect(await p.getModeDisplayText()).toMatch(/RR|RR/);
 
     // There are initial demo processes created by the script; expect at least 3
-    const rows = await p.getPTableRows();
+    const rows2 = await p.getPTableRows();
     expect(rows.length).toBeGreaterThanOrEqual(3);
 
     // readyCount should be a non-negative integer
@@ -207,7 +207,7 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
 
   // Test CreateProcess transition: New -> Ready (via createBtn)
   test('Create process transitions new -> ready and appears in table and ready list', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p1 = new ProcessPage(page);
     await p.goto();
 
     const initialRows = (await p.getPTableRows()).length;
@@ -218,7 +218,7 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     await p.createProcess({ name: uniqueName, bursts: '2', burstlen: '4', priority: '3', color: '#123456' });
 
     // After creation, table rows should increase
-    const rows = await p.getPTableRows();
+    const rows3 = await p.getPTableRows();
     expect(rows.length).toBeGreaterThan(initialRows);
 
     // Table text should include our process name
@@ -238,7 +238,7 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
 
   // Test StepSimulation and Running state (Ready -> Running)
   test('Step simulation moves a ready process into running (Ready -> Running)', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p2 = new ProcessPage(page);
     await p.goto();
 
     // Ensure at least one ready exists
@@ -261,14 +261,14 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     }
 
     // Rendered log should contain context switch or CPU related entry
-    const logs = await p.getLogLines();
+    const logs1 = await p.getLogLines();
     const hasContextSwitch = logs.some(l => l.includes('Context switch') || l.toLowerCase().includes('starts running') || l.toLowerCase().includes('finished cpu'));
     expect(hasContextSwitch).toBeTruthy();
   });
 
   // Test SendToIO: Running -> Blocked
   test('Send a running process to I/O (Running -> Blocked)', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p3 = new ProcessPage(page);
     await p.goto();
 
     // Ensure there is at least one ready process; step to make it running
@@ -290,14 +290,14 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     expect(blockedText).toContain(`pid:${selectedPid}`) || expect(blockedText.length).toBeGreaterThanOrEqual(0);
 
     // Log should include forced to I/O or similar message
-    const logs = await p.getLogLines();
-    const found = logs.find(l => l.includes('forced to I/O') || l.toLowerCase().includes('blocked'));
+    const logs2 = await p.getLogLines();
+    const found1 = logs.find(l => l.includes('forced to I/O') || l.toLowerCase().includes('blocked'));
     expect(found).toBeTruthy();
   });
 
   // Test KillProcess: Running/Ready -> Terminated (verify removal from table)
   test('Kill selected process removes it from process table and logs event', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p4 = new ProcessPage(page);
     await p.goto();
 
     // Create a specific process to kill
@@ -325,14 +325,14 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     expect(stillThere).toBe(false);
 
     // Log should indicate it was killed
-    const logs = await p.getLogLines();
+    const logs3 = await p.getLogLines();
     const killedLog = logs.find(l => l.includes('killed') && l.includes(`pid=${sel}`));
     expect(killedLog).toBeTruthy();
   });
 
   // Test ForkProcess: Fork selected and verify child created
   test('Fork selected process creates a child process and logs fork event', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p5 = new ProcessPage(page);
     await p.goto();
 
     // Create a parent process to fork
@@ -340,8 +340,8 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     await p.createProcess({ name: parentName });
 
     // Find its row and select it
-    const rows = await p.getPTableRowTexts();
-    const idx = rows.findIndex(r => r.includes(parentName));
+    const rows4 = await p.getPTableRowTexts();
+    const idx1 = rows.findIndex(r => r.includes(parentName));
     expect(idx).toBeGreaterThanOrEqual(0);
     await p.selectPTableRowByIndex(idx);
     const selPid = await p.getSelectedPidValue();
@@ -354,19 +354,19 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     await page.waitForTimeout(150);
 
     // Table should include a child with '-child' in the name
-    const rowsAfter = await p.getPTableRowTexts();
+    const rowsAfter1 = await p.getPTableRowTexts();
     const childRow = rowsAfter.find(r => r.includes(`${parentName}-child`));
     expect(childRow).toBeTruthy();
 
     // Log should include 'forked' mention
-    const logs = await p.getLogLines();
+    const logs4 = await p.getLogLines();
     const forkLog = logs.find(l => l.toLowerCase().includes('forked') || l.includes('forked →'));
     expect(forkLog).toBeTruthy();
   });
 
   // Test Start and Pause simulation (StartSimulation, PauseSimulation)
   test('Start and Pause simulation update log and running interval toggles', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p6 = new ProcessPage(page);
     await p.goto();
 
     // capture logs count
@@ -391,19 +391,19 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
 
   // Test SetPriority (SetPriority event)
   test('Set priority for selected process updates table and logs change', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p7 = new ProcessPage(page);
     await p.goto();
 
     // Create a process to change priority
     const name = 'E2E-PRIO';
     await p.createProcess({ name });
-    const rows = await p.getPTableRowTexts();
-    const idx = rows.findIndex(r => r.includes(name));
+    const rows5 = await p.getPTableRowTexts();
+    const idx2 = rows.findIndex(r => r.includes(name));
     expect(idx).toBeGreaterThanOrEqual(0);
 
     // Select row
     await p.selectPTableRowByIndex(idx);
-    const selPid = await p.getSelectedPidValue();
+    const selPid1 = await p.getSelectedPidValue();
     expect(selPid).not.toBe('');
 
     // Set new priority
@@ -415,14 +415,14 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
     const updatedRows = await p.getPTableRowTexts();
     const updated = updatedRows.find(r => r.includes(` ${selPid}`) || r.includes(`pid:${selPid}`) || r.includes(name));
     // The priority column is the 4th column; simpler approach: ensure log indicates change
-    const logs = await p.getLogLines();
+    const logs5 = await p.getLogLines();
     const prioLog = logs.find(l => l.includes(`Set priority of pid=${selPid}`) || l.toLowerCase().includes('set priority'));
     expect(prioLog).toBeTruthy();
   });
 
   // Test ResetSimulation (ResetSimulation). This confirms Reset transitions Terminated -> New by cleaning state.
   test('Reset simulation clears state after confirmation (ResetSimulation)', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p8 = new ProcessPage(page);
     await p.goto();
 
     // Click reset and accept the confirm dialog
@@ -448,11 +448,11 @@ test.describe('Process (OS) Interactive Demo - FSM and UI validations', () => {
 
   // Edge-case tests and runtime error observation
   test('Edge cases: selecting without rows, attempting operations gracefully no-ops, and observe runtime console/page errors', async ({ page }) => {
-    const p = new ProcessPage(page);
+    const p9 = new ProcessPage(page);
 
     // Collect console errors and page errors to inspect runtime exceptions
-    const consoleErrors = [];
-    const pageErrors = [];
+    const consoleErrors1 = [];
+    const pageErrors1 = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });

@@ -113,13 +113,13 @@ test.describe('Red-Black Tree Visualization - FSM states and transitions', () =>
     const rb = new RBTreePage(page);
 
     // Input exists and has correct placeholder
-    const input = await rb.getInputHandle();
+    const input1 = await rb.getInputHandle();
     expect(input).not.toBeNull();
     const placeholder = await page.$eval('#value', el => el.getAttribute('placeholder'));
     expect(placeholder).toBe('Enter value');
 
     // Insert button exists
-    const btn = await rb.getInsertButton();
+    const btn1 = await rb.getInsertButton();
     expect(btn).not.toBeNull();
     const btnText = await page.$eval('button[onclick="insert()"]', el => el.innerText.trim());
     expect(btnText).toBe('Insert');
@@ -135,7 +135,7 @@ test.describe('Red-Black Tree Visualization - FSM states and transitions', () =>
 
   test('InsertValue event transitions Idle -> TreeUpdated: inserting a single value updates DOM', async ({ page }) => {
     // This test validates the FSM transition from S0_Idle to S1_TreeUpdated when Insert is clicked with a valid value.
-    const rb = new RBTreePage(page);
+    const rb1 = new RBTreePage(page);
 
     // Insert a single value
     await rb.setInputValue(10);
@@ -173,7 +173,7 @@ test.describe('Red-Black Tree Visualization - FSM states and transitions', () =>
 
   test('S1_TreeUpdated: inserting additional values updates structure, colors and produces lines for red nodes', async ({ page }) => {
     // This test inserts multiple values to create red/black children and checks visual feedback (node classes and lines)
-    const rb = new RBTreePage(page);
+    const rb2 = new RBTreePage(page);
 
     // Insert root
     await rb.setInputValue(20);
@@ -209,7 +209,7 @@ test.describe('Red-Black Tree Visualization - FSM states and transitions', () =>
 
   test('Edge case: clicking Insert with empty input triggers alert and does not modify the tree', async ({ page }) => {
     // This test validates error handling branch where user clicks Insert with no value
-    const rb = new RBTreePage(page);
+    const rb3 = new RBTreePage(page);
 
     // Ensure tree is initially empty
     let initialHTML = await rb.getTreeInnerHTML();
@@ -236,7 +236,7 @@ test.describe('Red-Black Tree Visualization - FSM states and transitions', () =>
 
   test('Robustness: inserting duplicate and non-integer inputs (non-integer becomes integer via parseInt)', async ({ page }) => {
     // This test checks how the insertion handles duplicates and non-integer strings (parseInt behavior)
-    const rb = new RBTreePage(page);
+    const rb4 = new RBTreePage(page);
 
     // Insert a numeric value
     await rb.setInputValue('42');
@@ -278,7 +278,7 @@ test.describe('Red-Black Tree Visualization - FSM states and transitions', () =>
     // It validates that the page did not produce runtime exceptions (ReferenceError/SyntaxError/TypeError).
     // Note: Because each test has its own fresh page and listeners, here we just navigate and perform a simple operation to ensure the page remains stable.
 
-    const rb = new RBTreePage(page);
+    const rb5 = new RBTreePage(page);
     await rb.goto();
 
     // Perform a quick insert to exercise code paths

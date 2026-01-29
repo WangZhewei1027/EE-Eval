@@ -119,7 +119,7 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
 
   test('Transition S0_Idle -> S1_Encrypted: clicking Encrypt Text encrypts input using Caesar cipher shift=3', async ({ page }) => {
     // This test validates the EncryptText event and the resulting Encrypted state (S1_Encrypted)
-    const app = new EncryptionPage(page);
+    const app1 = new EncryptionPage(page);
     await app.goto();
 
     const original = 'abc XYZ! 123';
@@ -139,10 +139,10 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
 
   test('Transition S1_Encrypted -> S2_Decrypted: clicking Decrypt Text decrypts output back to original', async ({ page }) => {
     // This test validates the DecryptText event and the resulting Decrypted state (S2_Decrypted)
-    const app = new EncryptionPage(page);
+    const app2 = new EncryptionPage(page);
     await app.goto();
 
-    const original = 'Hello, World! ZzY';
+    const original1 = 'Hello, World! ZzY';
     await app.enterInput(original);
 
     // First encrypt to reach S1_Encrypted
@@ -168,7 +168,7 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
 
   test('Edge case: encrypting empty input yields empty output; decrypting empty output remains empty', async ({ page }) => {
     // Validate edge-case behavior: empty strings
-    const app = new EncryptionPage(page);
+    const app3 = new EncryptionPage(page);
     await app.goto();
 
     // Ensure input is empty and encryption yields empty output
@@ -182,13 +182,13 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
   });
 
   test('Edge case: non-letter characters remain unchanged and uppercase/lowercase preserved across encrypt/decrypt', async ({ page }) => {
-    const app = new EncryptionPage(page);
+    const app4 = new EncryptionPage(page);
     await app.goto();
 
     const mixed = '1234 !@#$ AbCdEf';
     await app.enterInput(mixed);
     await app.clickEncrypt();
-    const encrypted = await app.getOutputValue();
+    const encrypted1 = await app.getOutputValue();
 
     // Verify digits and punctuation unchanged
     expect(encrypted).toContain('1234');
@@ -200,7 +200,7 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
 
     // Decrypt back
     await app.clickDecrypt();
-    const decrypted = await app.getOutputValue();
+    const decrypted1 = await app.getOutputValue();
     expect(decrypted).toBe(mixed);
   });
 
@@ -208,7 +208,7 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
     // FSM references an entry action renderPage() for S0_Idle in the specification,
     // but the actual HTML/JS does not define such a function. This test ensures
     // that loading the page does not produce a runtime ReferenceError or other page errors.
-    const app = new EncryptionPage(page);
+    const app5 = new EncryptionPage(page);
     await app.goto();
 
     // Interact minimally to ensure no latent errors occur upon interacting with the app
@@ -230,7 +230,7 @@ test.describe('Encryption Example - FSM States and Transitions', () => {
       if (msg.type() === 'error') consoleErrs.push(msg);
     });
 
-    const app = new EncryptionPage(page);
+    const app6 = new EncryptionPage(page);
     await app.goto();
 
     // Perform a series of operations

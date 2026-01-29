@@ -86,7 +86,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Initial Idle state: page renders expected components and empty outputs', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo1 = new SetDemoPage(page);
 
     // Validate that the buttons have correct labels and are available
     await expect(demo.runBasic).toHaveText('Run Basic Example');
@@ -105,7 +105,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Run Basic Example transition: clicking #run-basic runs exampleBasic and updates output-basic', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo2 = new SetDemoPage(page);
 
     // Click the "Run Basic Example" button to trigger the transition S0_Idle -> S1_BasicExampleRunning
     await demo.clickBasic();
@@ -132,7 +132,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Run Iteration Example transition: clicking #run-iterate runs exampleIterate and logs values', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo3 = new SetDemoPage(page);
 
     // Click the "Run Iteration Example" button to trigger the transition S0_Idle -> S2_IterationExampleRunning
     await demo.clickIterate();
@@ -140,7 +140,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
     // Wait briefly for synchronous function to complete and output to show
     await page.waitForTimeout(50);
 
-    const text = await demo.getIterateText();
+    const text1 = await demo.getIterateText();
 
     // Validate evidence of iteration:
     // - The "Using for...of:" and "Using forEach:" markers should be present
@@ -156,7 +156,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Run Remove Duplicates transition: clicking #run-unique runs exampleUnique and displays unique array', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo4 = new SetDemoPage(page);
 
     // Click the "Run Remove Duplicates" button to trigger S0_Idle -> S3_RemoveDuplicatesRunning
     await demo.clickUnique();
@@ -164,7 +164,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
     // Allow synchronous logging to complete
     await page.waitForTimeout(50);
 
-    const text = await demo.getUniqueText();
+    const text2 = await demo.getUniqueText();
 
     // The output should contain a JSON-ish array with unique values [1,2,3,4,5]
     expect(text).toContain('1');
@@ -178,7 +178,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Idempotence/Repeat runs: clicking the run button multiple times resets the output and does not accumulate previous runs', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo5 = new SetDemoPage(page);
 
     // Click basic example twice in succession
     await demo.clickBasic();
@@ -186,7 +186,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
     await demo.clickBasic();
     await page.waitForTimeout(50);
 
-    const text = await demo.getBasicText();
+    const text3 = await demo.getBasicText();
 
     // runAndCapture clears output before each run, so the marker 'Size:' should appear exactly once
     const occurrences = SetDemoPage.countOccurrences(text, 'Size:');
@@ -201,7 +201,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Edge case: runAndCapture captures errors from thrown functions and writes to the output', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo6 = new SetDemoPage(page);
 
     // Use runAndCapture from the page to execute a function that throws a TypeError.
     // We intentionally exercise the error-catching path inside runAndCapture.
@@ -218,7 +218,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
     // Allow update to propagate
     await page.waitForTimeout(20);
 
-    const text = await demo.getBasicText();
+    const text4 = await demo.getBasicText();
 
     // The runAndCapture catch block appends: 'Error: ' + e.message
     expect(text).toContain('Error: Intentional error for test');
@@ -231,7 +231,7 @@ test.describe('JavaScript Set Demonstration - FSM states and transitions', () =>
   });
 
   test('Observability: monitor console and page errors across interactions', async ({ page }) => {
-    const demo = new SetDemoPage(page);
+    const demo7 = new SetDemoPage(page);
 
     // Interact with all three buttons to ensure full coverage while monitoring errors
     await demo.clickBasic();

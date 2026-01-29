@@ -121,14 +121,14 @@ test.describe('B-Tree Index Demonstration - FSM and UI tests', () => {
     // - the bTree container displays a node with the inserted value
     // - the input is cleared after insertion
     // - no runtime errors occurred during insertion
-    const app = new BTreePage(page);
+    const app1 = new BTreePage(page);
     await app.goto();
 
     // Insert value 10
     await app.insertValue(10);
 
     // After insertion, there should be at least one rendered node with "10"
-    const texts = await app.getRenderedNodeTexts();
+    const texts1 = await app.getRenderedNodeTexts();
     expect(texts.length).toBeGreaterThanOrEqual(1);
     // At least one node element must contain '10' (exact single-node case should be '10')
     expect(texts.some(t => t.includes('10'))).toBeTruthy();
@@ -145,7 +145,7 @@ test.describe('B-Tree Index Demonstration - FSM and UI tests', () => {
     // This test inserts multiple values to exercise non-trivial insertion logic,
     // including cases that may trigger splitting in a B-Tree of minimum degree t=2.
     // It validates that the DOM shows multiple nodes and that inserted values appear.
-    const app = new BTreePage(page);
+    const app2 = new BTreePage(page);
     await app.goto();
 
     // Insert sequence intended to create several nodes and potential splits.
@@ -177,7 +177,7 @@ test.describe('B-Tree Index Demonstration - FSM and UI tests', () => {
     // This test validates the SearchNode event and S2_NodeSearched:
     // - Insert a known value, then search for it => "found" message
     // - Search for a value that was not inserted => "not found" message
-    const app = new BTreePage(page);
+    const app3 = new BTreePage(page);
     await app.goto();
 
     // Insert 77, then search for 77
@@ -206,7 +206,7 @@ test.describe('B-Tree Index Demonstration - FSM and UI tests', () => {
     // This test validates edge case behaviors:
     // - Clicking Insert Node with empty input should not insert anything and should not throw
     // - Clicking Search Node with empty input results in "Value NaN not found..." being shown
-    const app = new BTreePage(page);
+    const app4 = new BTreePage(page);
     await app.goto();
 
     // Ensure empty input
@@ -232,7 +232,7 @@ test.describe('B-Tree Index Demonstration - FSM and UI tests', () => {
   test('DOM integrity: verify node elements have expected class and structure after insertions', async ({ page }) => {
     // This test verifies that nodes are rendered with the class name 'node' and that
     // the bTree container contains link elements when there are children (class 'link').
-    const app = new BTreePage(page);
+    const app5 = new BTreePage(page);
     await app.goto();
 
     // Insert values to ensure children exist
@@ -242,7 +242,7 @@ test.describe('B-Tree Index Demonstration - FSM and UI tests', () => {
     await app.insertValue(60);
 
     // Check that rendered nodes have the expected class
-    const count = await app.getNodeCount();
+    const count1 = await app.getNodeCount();
     expect(count).toBeGreaterThan(0);
 
     for (let i = 0; i < count; i++) {

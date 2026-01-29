@@ -91,7 +91,7 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
     // - logEl.textContent should be cleared,
     // - "Main thread: Starting heavy computation in worker thread..." should appear,
     // - startBtn should become disabled
-    const model = new ThreadDemoPage(page);
+    const model1 = new ThreadDemoPage(page);
     await model.goto();
 
     // Precondition: ensure log has something before click to prove it gets cleared.
@@ -116,7 +116,7 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
   test('WorkerProgress events produce progress messages and stay in Computing state', async ({ page }) => {
     // Validates WorkerProgress messages (S1_Computing -> S1_Computing)
     // We click start and wait for at least one progress message to appear in the log.
-    const model = new ThreadDemoPage(page);
+    const model2 = new ThreadDemoPage(page);
     await model.goto();
 
     // Click to start computation
@@ -147,7 +147,7 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
     // - Log contains the 'Computation done' message and 'Worker thread finished' entry action
     // - startBtn is re-enabled
     // - main thread logs 'UI ready for next task.'
-    const model = new ThreadDemoPage(page);
+    const model3 = new ThreadDemoPage(page);
     await model.goto();
 
     // Start computation
@@ -155,7 +155,7 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
 
     // Wait for 'Computation done' message in log - allow ample time for worker to finish
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el1 = document.getElementById('log');
       return el && el.textContent && /Worker thread: Computation done! Number of primes found: \d+/.test(el.textContent);
     }, { timeout: 120000 });
 
@@ -186,7 +186,7 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
   test('Edge case: attempting to click Start while disabled does not duplicate start action', async ({ page }) => {
     // Validates that clicking the disabled button (or trying to) does not trigger the StartComputation transition again.
     // We capture console messages to count occurrences of the main start message in DOM log.
-    const model = new ThreadDemoPage(page);
+    const model4 = new ThreadDemoPage(page);
     await model.goto();
 
     // Start once
@@ -206,12 +206,12 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
 
     // Wait for first progress to appear to ensure worker started only once
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el2 = document.getElementById('log');
       return el && /Main thread: Starting heavy computation in worker thread.../.test(el.textContent);
     }, { timeout: 30000 });
 
     // Count occurrences of the starting message in the log; should be exactly 1
-    const logText = await model.getLogText();
+    const logText1 = await model.getLogText();
     const startCount = (logText.match(/Main thread: Starting heavy computation in worker thread.../g) || []).length;
     expect(startCount).toBe(1);
 
@@ -224,14 +224,14 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
 
   test('Robustness: full run should not generate JS runtime errors (pageerror)', async ({ page }) => {
     // This test captures and asserts that no unhandled exceptions (pageerror) occur during a full run.
-    const model = new ThreadDemoPage(page);
+    const model5 = new ThreadDemoPage(page);
     await model.goto();
 
     // Start computation and wait for completion
     await model.clickStart();
 
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el3 = document.getElementById('log');
       return el && /Worker thread: Computation done! Number of primes found: \d+/.test(el.textContent);
     }, { timeout: 120000 });
 
@@ -242,19 +242,19 @@ test.describe('Thread Concept Demonstration - FSM states and transitions', () =>
 
   test('Observability: console capture contains zero error-type entries during a normal run', async ({ page }) => {
     // Verify we did not capture console.error messages during normal operation
-    const model = new ThreadDemoPage(page);
+    const model6 = new ThreadDemoPage(page);
     await model.goto();
 
     await model.clickStart();
 
     // Wait for worker done
     await page.waitForFunction(() => {
-      const el = document.getElementById('log');
+      const el4 = document.getElementById('log');
       return el && /Worker thread: Computation done! Number of primes found: \d+/.test(el.textContent);
     }, { timeout: 120000 });
 
     // Filter console messages for errors
-    const errorConsoleEntries = consoleMessages.filter((m) => m.type === 'error' || m.type === 'warning');
+    const errorConsoleEntries1 = consoleMessages.filter((m) => m.type === 'error' || m.type === 'warning');
     // We expect zero error/warning console entries for this demo
     expect(errorConsoleEntries.length).toBe(0);
   }, 120000);

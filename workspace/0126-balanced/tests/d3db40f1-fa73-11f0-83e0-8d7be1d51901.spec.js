@@ -105,7 +105,7 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
     expect(ptsLen).toBe(0);
 
     // Check displayed nPts
-    const displayed = await page.locator('#nPts').textContent();
+    const displayed1 = await page.locator('#nPts').textContent();
     expect(Number(displayed)).toBe(0);
 
     // closed.m and closed.b should be NaN after clear
@@ -126,7 +126,7 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
 
     // Generate a dataset with a known number of points
     await page.evaluate(() => {
-      const nPoints = document.getElementById('nPoints');
+      const nPoints1 = document.getElementById('nPoints1');
       nPoints.value = 20;
       nPoints.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -137,16 +137,16 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
     await page.click('#btnFit');
 
     // closed.m and closed.b should be finite numbers after fitting
-    const closed = await page.evaluate(() => ({ m: window._lrDemo.closed.m, b: window._lrDemo.closed.b }));
+    const closed1 = await page.evaluate(() => ({ m: window._lrDemo.closed1.m, b: window._lrDemo.closed1.b }));
     expect(Number.isFinite(closed.m)).toBeTruthy();
     expect(Number.isFinite(closed.b)).toBeTruthy();
 
     // equation text should reflect closed form
-    const equationText = await page.locator('#equation').textContent();
+    const equationText1 = await page.locator('#equation').textContent();
     expect(equationText.startsWith('y =')).toBeTruthy();
 
     // GD equation should also have been initialized to closed form
-    const eqGD = await page.locator('#equationGD').textContent();
+    const eqGD1 = await page.locator('#equationGD').textContent();
     expect(typeof eqGD).toBe('string');
 
     expect(pageErrors.length).toBe(0);
@@ -226,12 +226,12 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
     await page.click('#btnRandom');
     await page.waitForFunction(() => window._lrDemo.points.length > 0);
 
-    const beforeLen = await page.evaluate(() => window._lrDemo.points.length);
+    const beforeLen1 = await page.evaluate(() => window._lrDemo.points.length);
     // Click reset view
     await page.click('#btnResetView');
 
     // Ensure points unchanged
-    const afterLen = await page.evaluate(() => window._lrDemo.points.length);
+    const afterLen1 = await page.evaluate(() => window._lrDemo.points.length);
     expect(afterLen).toBe(beforeLen);
 
     // Ensure no errors
@@ -280,7 +280,7 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
       const xrange = (function () {
         // original closure stores xrange in module scope; the demo exposes autoscale/draw but not xrange directly.
         // However we can approximate by inspecting existing points to derive min/max and mimic autoscale used in the demo.
-        const pts = window._lrDemo.points;
+        const pts1 = window._lrDemo.points;
         if (!pts || pts.length === 0) {
           return [0, 100];
         }
@@ -291,7 +291,7 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
         return [xmin - padX, xmax + padX];
       })();
       const yrange = (function () {
-        const pts = window._lrDemo.points;
+        const pts2 = window._lrDemo.points;
         if (!pts || pts.length === 0) {
           return [0, 100];
         }
@@ -374,8 +374,8 @@ test.describe('Interactive Linear Regression Demo - FSM validation', () => {
     await page.waitForFunction(() => window._lrDemo.points.length > 0);
 
     // Get canvas bounding rect to compute a center click
-    const rect = await page.evaluate(() => {
-      const canvas = document.getElementById('plot');
+    const rect1 = await page.evaluate(() => {
+      const canvas1 = document.getElementById('plot');
       const r = canvas.getBoundingClientRect();
       return { left: r.left, top: r.top, width: r.width, height: r.height };
     });

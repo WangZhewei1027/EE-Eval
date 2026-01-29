@@ -88,7 +88,7 @@ test.describe('Mutex Example - FSM states and transitions', () => {
 
   test('Transition S0_Unlocked -> S1_Locked: clicking Start Mutex sets "Mutex locked"', async ({ page }) => {
     // This test validates that clicking the toggle transitions to the Locked state.
-    const mutex = new MutexPage(page);
+    const mutex1 = new MutexPage(page);
 
     // Click to toggle the mutex to locked
     await mutex.clickStart();
@@ -111,7 +111,7 @@ test.describe('Mutex Example - FSM states and transitions', () => {
 
   test('Transition S1_Locked -> S0_Unlocked: clicking Start Mutex again unlocks the mutex', async ({ page }) => {
     // This test validates that a second click toggles back to the Unlocked state.
-    const mutex = new MutexPage(page);
+    const mutex2 = new MutexPage(page);
 
     // First click: locked
     await mutex.clickStart();
@@ -133,7 +133,7 @@ test.describe('Mutex Example - FSM states and transitions', () => {
 
   test('Edge case: rapid double-click should result in toggled states and no runtime errors', async ({ page }) => {
     // This test simulates rapid user interactions to look for race conditions or runtime errors.
-    const mutex = new MutexPage(page);
+    const mutex3 = new MutexPage(page);
 
     // Rapidly click twice in quick succession
     await Promise.all([
@@ -163,7 +163,7 @@ test.describe('Mutex Example - FSM states and transitions', () => {
     // This test inspects the implementation behavior indirectly:
     // - The Mutex class should exist
     // - Running the provided click handler should not throw and should update the DOM
-    const mutex = new MutexPage(page);
+    const mutex4 = new MutexPage(page);
 
     // Assert Mutex class exists in the page
     const classExists = await page.evaluate(() => typeof Mutex === 'function');
@@ -183,7 +183,7 @@ test.describe('Mutex Example - FSM states and transitions', () => {
   test('Console and page error inspection: there should be no ReferenceError, SyntaxError, or TypeError emitted by the page', async ({ page }) => {
     // This test explicitly inspects captured console messages and page errors.
     // It will fail if the page emitted JS runtime errors (ReferenceError/TypeError/SyntaxError).
-    const mutex = new MutexPage(page);
+    const mutex5 = new MutexPage(page);
 
     // Interact a bit to exercise scripts
     await mutex.clickStart();
