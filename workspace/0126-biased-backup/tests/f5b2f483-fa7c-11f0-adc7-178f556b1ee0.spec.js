@@ -1,0 +1,231 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-biased/html/f5b2f483-fa7c-11f0-adc7-178f556b1ee0.html';
+
+class CongestionControlPage {
+  /**
+   * Page Object Model for the Congestion Control app.
+   * Encapsulates common actions and selectors.
+   */
+  constructor(page) {
+    this.page = page;
+    this.button = page.locator('#button');
+  }
+
+  async goto() {
+    await this.page.goto(APP_URL);
+  }
+
+  async clickDemonstrate() {
+    await this.button.click();
+  }
+
+  async isButtonVisible() {
+    return await this.button.isVisible();
+  }
+
+  async buttonText() {
+    return await this.button.innerText();
+  }
+
+  // Waits until we've observed at least `count` console messages that start with the
+  // application's sending prefix or times out.
+  async waitForSendLogs(count, timeout = 5000) {
+    const start = Date.now();
+    while (true) {
+      const messages = this.pageConsoleMessages
+        .filter(m => m.type() === 'log' && m.text().startsWith('Sending data packet'));
+      if (messages.length >= count) return messages;
+      if (Date.now() - start > timeout) {
+        throw new Error(`Timed out waiting for ${count} send logs (observed ${messages.length})`);
+      }
+      // short sleep
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise(r => setTimeout(r, 50));
+    }
+  }
+
+  // Helper to attach collectors for console and page errors
+  attachCollectors(consoleMessagesArray, pageErrorsArray) {
+    this.pageConsoleMessages = consoleMessagesArray;
+    this.pageErrors = pageErrorsArray;
+    this._consoleHandler = msg => consoleMessagesArray.push(msg);
+    this._pageErrorHandler = err => pageErrorsArray.push(err);
+    this.page.on('console', this._consoleHandler);
+    this.page.on('pageerror', this._pageErrorHandler);
+  }
+
+  detachCollectors() {
+    if (this._consoleHandler) this.page.off('console', this._consoleHandler);
+    if (this._pageErrorHandler) this.page.off('pageerror', this._pageErrorHandler);
+  }
+}
+
+test.describe('Congestion Control FSM - Interactive Application (f5b2f483-...-1ee0)', () => {
+  // Arrays to store console messages and page errors for each test run
+  let consoleMessages = [];
+  let pageErrors = [];
+  let pageModel;
+
+  test.beforeEach(async ({ page }) => {
+    // Reset collectors
+    consoleMessages = [];
+    pageErrors = [];
+
+    pageModel = new CongestionControlPage(page);
+    // Attach collectors to capture console logs and runtime errors
+    pageModel.attachCollectors(consoleMessages, pageErrors);
+
+    // Navigate to the application page
+    await pageModel.goto();
+  });
+
+  test.afterEach(async () => {
+    // Detach listeners after each test to avoid cross-test leakage
+    if (pageModel) pageModel.detachCollectors();
+  });
+
+  test('Initial Idle state renders correctly (S0_Idle) - button and explanatory text present', async () => {
+    // This test validates the initial "Idle" FSM state:
+    // - The page should render the "Demonstrate Congestion Control" button
+    // - Static explanatory text should be present
+    // - No data-sending console logs should have been emitted yet
+    // - No runtime page errors (ReferenceError/SyntaxError/TypeError) should be present initially
+
+    // The button should exist and be visible
+    expect(await pageModel.isButtonVisible()).toBe(true);
+
+    // The button text should match the expected label from the FSM evidence
+    const text = await pageModel.buttonText();
+    expect(text).toBe('Demonstrate Congestion Control');
+
+    // Check some of the static explanatory DOM exists to assert "renderPage()" entry evidence
+    const pageContent = await pageModel.page.content();
+    expect(pageContent).toContain('Congestion control is the process of managing the amount of data transmitted');
+    expect(pageContent).toContain('Step-by-Step Textual Description');
+
+    // No "Sending data packet" logs should be present before any click
+    const sendLogs = consoleMessages.filter(m => m.type() === 'log' && m.text().startsWith('Sending data packet'));
+    expect(sendLogs.length).toBe(0);
+
+    // Assert that no runtime page errors occurred on initial load
+    // We explicitly check for common runtime errors: ReferenceError, SyntaxError, TypeError
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Transition on ButtonClick to Demonstrating (S0_Idle -> S1_Demonstrating): clicking emits 100 packet send logs', async () => {
+    // This test validates the transition triggered by the ButtonClick event:
+    // - Clicking the button should cause the app to simulate congestion and emit many console logs
+    // - We assert at least 100 "Sending data packet" logs are emitted (as per implementation loop)
+    // - We also validate the content of a few sample logs to ensure packetId and format
+
+    // Click the button to trigger simulateCongestion()
+    await pageModel.clickDemonstrate();
+
+    // Wait for at least 100 logs generated by the loop in the page script
+    const messages = await pageModel.waitForSendLogs(100, 8000); // allow a longer timeout
+
+    // Confirm count >= 100
+    expect(messages.length).toBeGreaterThanOrEqual(100);
+
+    // Validate the structure of a few logs (first and last observed)
+    const firstLog = messages[0].text();
+    const lastLog = messages[messages.length - 1].text();
+
+    // Should match pattern: Sending data packet <id> with size <n> bytes and congestion level 0
+    const logRegex = /^Sending data packet \d+ with size \d+ bytes and congestion level 0$/;
+    expect(firstLog).toMatch(logRegex);
+    expect(lastLog).toMatch(logRegex);
+
+    // Confirm the button remains present and usable after the transition
+    expect(await pageModel.isButtonVisible()).toBe(true);
+
+    // Ensure no unexpected runtime errors were thrown during the transition
+    // If there were errors like ReferenceError/SyntaxError/TypeError they would be in pageErrors
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Repeated clicks accumulate logs: clicking twice emits >=200 send logs', async () => {
+    // This test covers repeated user interactions (edge case):
+    // - Clicking the button twice should produce cumulative logs (each click emits ~100 logs)
+    // - We verify the cumulative count and a sample of messages from both batches
+
+    // First click
+    await pageModel.clickDemonstrate();
+    await pageModel.waitForSendLogs(100, 8000);
+
+    // Second click
+    await pageModel.clickDemonstrate();
+    // Wait for cumulative total >= 200
+    const messages = await pageModel.waitForSendLogs(200, 10000);
+
+    expect(messages.length).toBeGreaterThanOrEqual(200);
+
+    // Spot-check a few logs exist and are well-formed
+    expect(messages[0].text()).toMatch(/^Sending data packet \d+ with size \d+ bytes and congestion level 0$/);
+    expect(messages[199].text()).toMatch(/^Sending data packet \d+ with size \d+ bytes and congestion level 0$/);
+
+    // Verify still no runtime page errors
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Rapid multiple clicks (stress) - three quick clicks lead to at least 300 send logs', async () => {
+    // This test explores an edge scenario where the user clicks rapidly multiple times.
+    // We verify the app continues to log send messages without throwing runtime errors.
+    // Note: We keep timeouts generous to allow console buffers to flush.
+
+    // Rapid clicks
+    await Promise.all([
+      pageModel.clickDemonstrate(),
+      pageModel.clickDemonstrate(),
+      pageModel.clickDemonstrate()
+    ]);
+
+    // Wait for >=300 logs
+    const messages = await pageModel.waitForSendLogs(300, 15000);
+    expect(messages.length).toBeGreaterThanOrEqual(300);
+
+    // Sanity check on a few entries
+    expect(messages[0].text()).toMatch(/^Sending data packet \d+ with size \d+ bytes and congestion level 0$/);
+    expect(messages[messages.length - 1].text()).toMatch(/^Sending data packet \d+ with size \d+ bytes and congestion level 0$/);
+
+    // Confirm no pageerror events were raised (the app appears to handle repeated invocations)
+    expect(pageErrors.length).toBe(0);
+  });
+
+  test('Runtime error observation: capture and assert any ReferenceError/SyntaxError/TypeError occurrences (none expected)', async () => {
+    // This test explicitly demonstrates capturing runtime page errors.
+    // The application JS is syntactically valid, so we expect no such runtime errors.
+    // We still assert they are absent and, if present, we output details for debugging.
+
+    // Trigger activity so if any latent errors exist they are more likely to appear
+    await pageModel.clickDemonstrate().catch(() => { /* ignore click failure here to observe errors below */ });
+
+    // Allow a brief period for any asynchronous errors to surface
+    await new Promise(r => setTimeout(r, 500));
+
+    // pageErrors contains Error objects collected by the 'pageerror' event
+    if (pageErrors.length > 0) {
+      // If errors occurred, assert their types are among the expected JS runtime error kinds.
+      // We do not mutate the page or patch the environment; we only observe.
+      const typesObserved = pageErrors.map(e => e.name || 'UnknownError');
+      // Ensure each error is a known JS runtime error type; this assertion documents what happened.
+      for (const err of pageErrors) {
+        expect(['ReferenceError', 'SyntaxError', 'TypeError', 'RangeError', 'Error', undefined]).toContain(err.name);
+      }
+      // Also fail the test to make clear unexpected runtime errors occurred
+      const collectedNames = typesObserved.join(', ');
+      throw new Error(`Runtime page errors were observed: ${collectedNames}`);
+    } else {
+      // No runtime errors observed: explicit assertion for test traceability
+      expect(pageErrors.length).toBe(0);
+    }
+
+    // Additionally, examine console messages for textual error strings (e.g., "ReferenceError" in logs)
+    const errorTextInConsole = consoleMessages.filter(m => {
+      const t = m.text();
+      return t.includes('ReferenceError') || t.includes('SyntaxError') || t.includes('TypeError');
+    });
+    expect(errorTextInConsole.length).toBe(0);
+  });
+});

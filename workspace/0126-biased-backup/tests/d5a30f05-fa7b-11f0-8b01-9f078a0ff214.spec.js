@@ -1,0 +1,243 @@
+import { test, expect } from '@playwright/test';
+
+const APP_URL = 'http://127.0.0.1:5500/workspace/0126-biased/html/d5a30f05-fa7b-11f0-8b01-9f078a0ff214.html';
+
+// Page Object Model for the application under test
+class DynamicTypingPage {
+  /**
+   * @param {import('@playwright/test').Page} page
+   */
+  constructor(page) {
+    this.page = page;
+    this.button = page.locator("button[onclick='demonstrateDynamicTyping()']");
+    this.h1 = page.locator('h1');
+    this.pre = page.locator('pre');
+  }
+
+  async goto() {
+    await this.page.goto(APP_URL);
+  }
+
+  async isButtonVisible() {
+    return this.button.isVisible();
+  }
+
+  async getButtonOnclickAttribute() {
+    return this.button.getAttribute('onclick');
+  }
+
+  async clickDemo() {
+    // Click the demo button once; callers can call multiple times if needed.
+    await this.button.click();
+  }
+
+  async getHeadingText() {
+    return this.h1.textContent();
+  }
+
+  async getPreText() {
+    return this.pre.textContent();
+  }
+}
+
+// Utility to wait until a condition is met or timeout
+async function waitUntil(predicateFn, { timeout = 2000, interval = 50 } = {}) {
+  const start = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (await predicateFn()) return;
+    if (Date.now() - start > timeout) {
+      throw new Error('waitUntil: timeout exceeded');
+    }
+    // small sleep
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, interval));
+  }
+}
+
+test.describe('Dynamic Typing Explained - FSM behavior (d5a30f05-fa7b-11f0-8b01-9f078a0ff214)', () => {
+  let pageErrors = [];
+  let consoleMessages = [];
+  let pageObj;
+
+  test.beforeEach(async ({ page }) => {
+    // Reset collectors
+    pageErrors = [];
+    consoleMessages = [];
+
+    // Capture page errors (uncaught exceptions)
+    page.on('pageerror', (err) => {
+      // record the error message for assertions
+      try {
+        pageErrors.push(err?.message ?? String(err));
+      } catch (e) {
+        pageErrors.push(String(err));
+      }
+    });
+
+    // Capture console messages and console errors
+    page.on('console', (msg) => {
+      consoleMessages.push({ type: msg.type(), text: msg.text() });
+    });
+
+    pageObj = new DynamicTypingPage(page);
+    // Navigate to the application page
+    await pageObj.goto();
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Final sanity checks for any unexpected runtime errors recorded during the test
+    // If there are page errors we include them in the assertion message for easier debugging.
+    expect(pageErrors, `Expected no uncaught page errors, but found: ${pageErrors.join(' | ')}`).toEqual([]);
+    // While console errors may be expected in some apps, for this stable educational page we assert none of type 'error'
+    const consoleErrors = consoleMessages.filter((m) => m.type === 'error');
+    expect(consoleErrors, `Unexpected console.error messages: ${consoleErrors.map(e => e.text).join(' | ')}`).toEqual([]);
+    // detach listeners left to page lifecycle; Playwright will clean up the page between tests.
+  });
+
+  test('S0_Idle: initial render displays expected static content and button (entry of Idle)', async ({ page }) => {
+    // This test validates the S0_Idle state which should render the page content.
+    // Verify main heading exists and contains expected text.
+    const heading = await pageObj.getHeadingText();
+    expect(heading).toContain('Understanding Dynamic Typing');
+
+    // Verify the code example pre block is present and contains an example comment
+    const preText = await pageObj.getPreText();
+    expect(preText).toContain('# Dynamic typing example in Python');
+
+    // Verify the demonstration button exists and is visible
+    expect(await pageObj.isButtonVisible()).toBeTruthy();
+
+    // Verify the button has the onclick attribute pointing to demonstrateDynamicTyping()
+    const onclickAttr = await pageObj.getButtonOnclickAttribute();
+    expect(onclickAttr).toBe('demonstrateDynamicTyping()');
+
+    // Verify that there is no global function named renderPage (FSM mentioned renderPage() as an entry action for S0, but the HTML does not define it)
+    // We assert it is undefined to reflect the actual implementation (do NOT attempt to create or patch it).
+    const renderPageType = await page.evaluate(() => typeof window.renderPage);
+    expect(renderPageType).toBe('undefined');
+
+    // Verify that the demo function is defined on the window (so clicking the button will invoke it)
+    const demoFnType = await page.evaluate(() => typeof window.demonstrateDynamicTyping);
+    expect(demoFnType).toBe('function');
+  });
+
+  test('Transition DemonstrateDynamicTyping: clicking the button triggers three alerts in sequence (S0 -> S1)', async ({ page }) => {
+    // This test validates the transition from S0_Idle to S1_Demonstrating.
+    // We will capture dialogs generated by the page and assert their text and sequence.
+
+    const dialogs = [];
+    // Listen to dialog events to capture alert messages; accept them to allow flow to continue
+    page.on('dialog', async (dialog) => {
+      try {
+        dialogs.push(dialog.message());
+        await dialog.accept();
+      } catch (e) {
+        // If accepting fails for any reason, still record the message
+        dialogs.push(dialog.message());
+      }
+    });
+
+    // Click the button and wait until we get 3 dialogs or timeout
+    await pageObj.clickDemo();
+
+    // Wait for up to 2 seconds for the 3 alerts to be observed (they are synchronous but we include a wait to be robust)
+    await waitUntil(() => dialogs.length >= 3, { timeout: 2000 });
+
+    // Assert exactly 3 alerts were displayed as part of the demonstration
+    expect(dialogs.length).toBeGreaterThanOrEqual(3);
+    // Validate contents of each alert follow expected text
+    // Accept both exact message and common formatting variants (trim to be robust)
+    expect(dialogs[0].trim()).toBe('Initial value (Number): 42');
+    expect(dialogs[1].trim()).toBe('Now value (String): Now I am a string!');
+    // The array alert concatenates array to string -> "Finally, I am an array: 1,2,3"
+    expect(dialogs[2].trim()).toBe('Finally, I am an array: 1,2,3');
+
+    // After the transition we expect no uncaught exceptions were raised during the demonstration
+    expect(pageErrors.length).toBe(0);
+
+    // Also verify that at least one console message was emitted during the page lifetime (not required but informative)
+    expect(Array.isArray(consoleMessages)).toBeTruthy();
+  });
+
+  test('Edge case: multiple rapid clicks produce repeated alert sequences (robustness)', async ({ page }) => {
+    // This test checks behavior under repeated interactions: clicking the button twice should produce two sequences of 3 alerts (6 alerts)
+    const dialogs = [];
+    page.on('dialog', async (dialog) => {
+      try {
+        dialogs.push(dialog.message());
+        await dialog.accept();
+      } catch (e) {
+        dialogs.push(dialog.message());
+      }
+    });
+
+    // Click twice with a small interval to simulate rapid user interaction
+    await pageObj.clickDemo();
+    await page.waitForTimeout(50); // slight pause to simulate quick second click
+    await pageObj.clickDemo();
+
+    // Wait until we have at least 6 dialogs
+    await waitUntil(() => dialogs.length >= 6, { timeout: 3000 });
+
+    // Validate total dialogs count and message pattern repeated twice
+    expect(dialogs.length).toBeGreaterThanOrEqual(6);
+
+    // Validate the first sequence
+    expect(dialogs[0].trim()).toBe('Initial value (Number): 42');
+    expect(dialogs[1].trim()).toBe('Now value (String): Now I am a string!');
+    expect(dialogs[2].trim()).toBe('Finally, I am an array: 1,2,3');
+
+    // Validate the second sequence (dialogs[3], [4], [5])
+    expect(dialogs[3].trim()).toBe('Initial value (Number): 42');
+    expect(dialogs[4].trim()).toBe('Now value (String): Now I am a string!');
+    expect(dialogs[5].trim()).toBe('Finally, I am an array: 1,2,3');
+  });
+
+  test('FSM verification: S1 entry action existence and behavior (demonstrateDynamicTyping invoked on click)', async ({ page }) => {
+    // This test explicitly inspects that the function demonstrateDynamicTyping exists and is invoked by clicking.
+    // We will not modify any global state; we simply assert on the function type and effects (alerts).
+
+    // Confirm the function exists
+    const fnType = await page.evaluate(() => typeof window.demonstrateDynamicTyping);
+    expect(fnType).toBe('function');
+
+    // Use dialog capture to confirm invocation produces the expected first alert message
+    let firstDialogMessage = null;
+    page.once('dialog', async (dialog) => {
+      firstDialogMessage = dialog.message();
+      await dialog.accept();
+    });
+
+    // Invoke via click
+    await pageObj.clickDemo();
+
+    // Wait briefly for the single dialog handler to run
+    await waitUntil(() => firstDialogMessage !== null, { timeout: 1500 });
+
+    expect(firstDialogMessage.trim()).toBe('Initial value (Number): 42');
+  });
+
+  test('Error observation: collect console and page errors during interaction and report if any occur', async ({ page }) => {
+    // This test demonstrates capturing runtime errors and console issues.
+    // It triggers the demonstration and then asserts whether any page errors occurred.
+    const dialogs = [];
+    page.on('dialog', async (d) => {
+      dialogs.push(d.message());
+      await d.accept();
+    });
+
+    // Trigger demonstration
+    await pageObj.clickDemo();
+
+    // wait for 3 alerts
+    await waitUntil(() => dialogs.length >= 3, { timeout: 2000 });
+
+    // At this point we expect no uncaught page errors for this page; if there are, the afterEach will fail.
+    expect(pageErrors.length).toBe(0);
+
+    // Also ensure there are no console.error messages; this is checked in afterEach too but we assert here for clarity
+    const consoleErrorEntries = consoleMessages.filter((m) => m.type === 'error');
+    expect(consoleErrorEntries.length).toBe(0);
+  });
+});

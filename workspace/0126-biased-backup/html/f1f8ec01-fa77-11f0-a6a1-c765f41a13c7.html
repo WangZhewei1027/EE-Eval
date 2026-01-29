@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Garbage Collection — Visual Demonstration</title>
+<style>
+  :root{
+    --bg1:#0f1724;
+    --bg2:#071025;
+    --card:#0c1220cc;
+    --glass: rgba(255,255,255,0.04);
+    --accent:#6EE7B7;
+    --accent-2:#60A5FA;
+    --muted:#9AA8B2;
+    --glass-2: rgba(255,255,255,0.03);
+    --neon: rgba(108, 99, 255, 0.18);
+    --success: #38bdf8;
+  }
+
+  /* Page reset */
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1200px 600px at 10% 10%, rgba(96,165,250,0.06), transparent 8%),
+                radial-gradient(1000px 500px at 90% 90%, rgba(110,231,183,0.03), transparent 8%),
+                linear-gradient(180deg,var(--bg1),var(--bg2));
+    color:#E6EEF3;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    overflow:hidden;
+  }
+
+  /* Subtle animated background shapes */
+  .scene-bg{
+    position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:0.7;
+  }
+  .orb{
+    position:absolute;border-radius:50%;filter:blur(60px);opacity:0.35;
+    animation: drift 18s ease-in-out infinite;
+  }
+  .orb.a{width:520px;height:520px;background:linear-gradient(135deg,var(--accent),transparent);left:-120px;top:-50px;animation-delay:-2s}
+  .orb.b{width:420px;height:420px;background:linear-gradient(135deg,var(--accent-2),transparent);right:-100px;bottom:-60px;animation-delay:0s}
+  .orb.c{width:300px;height:300px;background:linear-gradient(135deg,rgba(255,255,255,0.06),transparent);left:20%;top:40%;animation-delay:6s}
+  @keyframes drift{0%{transform:translateY(0) translateX(0)}50%{transform:translateY(18px) translateX(16px)}100%{transform:translateY(0) translateX(0)}}
+
+  /* Layout */
+  .wrap{
+    position:relative;
+    max-width:1200px;
+    margin:48px auto;
+    padding:36px;
+    display:grid;
+    grid-template-columns:420px 1fr;
+    gap:28px;
+    z-index:1;
+  }
+
+  .panel{
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    border-radius:16px;
+    padding:26px;
+    box-shadow: 0 8px 40px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+    backdrop-filter: blur(8px) saturate(110%);
+    border:1px solid rgba(255,255,255,0.04);
+  }
+
+  /* Left Info Card */
+  .heading{
+    display:flex;align-items:center;gap:14px;margin-bottom:18px;
+  }
+  .logo{
+    width:56px;height:56px;border-radius:12px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 20px rgba(60,100,200,0.22);
+    color:#081022;font-weight:700;font-size:20px;
+  }
+  h1{font-size:20px;margin:0}
+  .sub{color:var(--muted);font-size:13px;margin-top:6px;line-height:1.45}
+
+  .desc{
+    margin-top:14px;color:var(--muted);font-size:13px;line-height:1.55;
+  }
+
+  .legend{
+    display:flex;gap:10px;align-items:center;margin-top:18px;
+  }
+  .legend .item{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--muted)}
+  .swatch{width:14px;height:14px;border-radius:4px;box-shadow:0 2px 10px rgba(2,6,23,0.5)}
+  .swatch.reachable{background:linear-gradient(135deg,var(--accent),#44c8a8)}
+  .swatch.unreachable{background:linear-gradient(135deg,#6b7280,#374151)}
+  .swatch.collected{background:linear-gradient(135deg,#1f2937,#0b1220)}
+  .controls{margin-top:20px;display:flex;gap:12px;align-items:center}
+
+  .btn{
+    padding:12px 18px;border-radius:12px;border:0;color:#071022;font-weight:700;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    box-shadow:0 6px 20px rgba(96,165,250,0.14), inset 0 -2px 6px rgba(255,255,255,0.06);
+    cursor:pointer;transition:transform .18s ease;
+    font-size:13px;
+  }
+  .btn:active{transform:translateY(2px)}
+  .btn.ghost{
+    background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,0.04);
+    box-shadow:none;padding:10px 14px;font-weight:600;
+  }
+  .meta{margin-top:18px;font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+
+  /* Right Visual Panel */
+  .visual{
+    position:relative;overflow:hidden;min-height:560px;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  .heap-frame{
+    width:100%;height:520px;border-radius:16px;padding:28px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.04);
+    box-shadow: 0 12px 60px rgba(2,6,23,0.6);
+    position:relative;overflow:visible;
+  }
+
+  .heap-title{
+    position:absolute;left:34px;top:20px;color:var(--muted);font-size:12px;letter-spacing:0.06em;
+    display:flex;align-items:center;gap:10px;
+  }
+  .root-node{
+    position:absolute;left:34px;top:44px;display:flex;gap:12px;align-items:center;
+    color:var(--muted);font-size:13px;
+  }
+  .root-pill{
+    width:84px;height:42px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);
+    display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.02);
+  }
+
+  .heap-grid{
+    position:absolute;left:34px;right:34px;top:120px;bottom:34px;border-radius:12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+    display:grid;grid-template-columns:repeat(6,1fr);grid-auto-rows:1fr;padding:18px;gap:14px;
+    border:1px solid rgba(255,255,255,0.02);
+  }
+
+  .cell{
+    background:linear-gradient(180deg, rgba(255,255,255,0.015), transparent);
+    border-radius:10px;position:relative;overflow:visible;border:1px solid rgba(255,255,255,0.02);
+    display:flex;align-items:center;justify-content:center;padding:12px;min-height:78px;
+    transition:transform .4s cubic-bezier(.2,.9,.3,1),box-shadow .4s,opacity .35s;
+  }
+  .cell::after{
+    content:"";position:absolute;inset:0;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);
+    pointer-events:none;
+  }
+
+  .node{
+    width:86px;height:56px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#071022;font-weight:700;font-size:13px;box-shadow: 0 12px 30px rgba(8,18,34,0.45);
+    transition:transform .45s cubic-bezier(.2,.9,.3,1),opacity .32s,filter .32s,box-shadow .32s;
+    transform-origin:center;
+    position:relative;
+    cursor:default;
+  }
+  .node .type{font-size:11px;color:rgba(7,16,34,0.6);font-weight:800;letter-spacing:0.04em}
+  .node .id{font-size:12px;margin-top:6px;color:#061227;opacity:0.9}
+
+  .node.reachable{
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    box-shadow: 0 18px 40px rgba(96,165,250,0.18), 0 6px 20px rgba(9,10,20,0.35);
+    transform:translateY(-6px) scale(1.02);
+  }
+  .node.unreachable{
+    background:linear-gradient(90deg,#4b5563,#2f3742);
+    color:#d7e6ee;filter:grayscale(.15) brightness(.9);
+    box-shadow: 0 8px 20px rgba(2,6,23,0.5);
+  }
+  .node.collected{
+    transform:scale(.85) translateY(10px);opacity:0;filter:blur(2px);
+    pointer-events:none;
+    box-shadow:none;
+  }
+
+  /* mini badge */
+  .badge{
+    position:absolute;right:18px;top:18px;background:linear-gradient(90deg,var(--accent-2),var(--accent));padding:8px 12px;border-radius:10px;font-weight:800;color:#071022;font-size:13px;
+    box-shadow: 0 8px 20px rgba(96,165,250,0.12);
+  }
+
+  /* Collector */
+  .collector{
+    position:absolute;width:120px;height:120px;border-radius:50%;
+    left:34px;top:34px;transform:translateY(-40px);
+    pointer-events:none;mix-blend-mode:screen;filter:blur(6px);
+    opacity:0;
+    transition:opacity .25s;
+  }
+  .collector .core{
+    width:100%;height:100%;border-radius:50%;
+    background: conic-gradient(from 120deg, rgba(96,165,250,0.2), rgba(110,231,183,0.18), rgba(96,165,250,0.22));
+    box-shadow: 0 18px 80px rgba(60,120,220,0.18);
+    border:1px solid rgba(255,255,255,0.03);
+  }
+
+  /* svg arrows */
+  svg.refs{position:absolute;inset:0;overflow:visible;pointer-events:none}
+  .ref-path{fill:none;stroke:rgba(255,255,255,0.12);stroke-width:2.2;stroke-linecap:round}
+  .ref-path.reachable{stroke:rgba(110,231,183,0.85)}
+  .ref-path.ghost{stroke-dasharray:6 8;stroke-opacity:.08}
+  .ref-arrow marker path{fill:rgba(255,255,255,0.12)}
+  .ref-path.pulse{animation:pulse 1.6s linear infinite}
+  @keyframes pulse{0%{stroke-dashoffset:0}100%{stroke-dashoffset:24}}
+
+  /* reclaimed highlight */
+  .cell.reclaimed::before{
+    content:"";position:absolute;inset:-2px;border-radius:12px;
+    background:linear-gradient(90deg, rgba(96,165,250,0.12), rgba(110,231,183,0.08));
+    opacity:0;transform:scale(0.98);transition:opacity .4s,transform .4s;
+  }
+  .cell.reclaimed::before{opacity:1;transform:scale(1)}
+
+  /* small status toast */
+  .toast{
+    position:absolute;left:50%;bottom:26px;transform:translateX(-50%);padding:10px 16px;border-radius:12px;background:rgba(7,16,34,0.7);color:var(--muted);font-size:13px;border:1px solid rgba(255,255,255,0.03);
+    box-shadow:0 8px 30px rgba(2,6,23,0.6);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
+
+  /* responsive */
+  @media (max-width:1080px){
+    .wrap{grid-template-columns:1fr; padding:20px}
+    .visual{order:-1;margin-bottom:18px}
+    .heap-grid{top:150px}
+  }
+</style>
+</head>
+<body>
+  <div class="scene-bg" aria-hidden="true">
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+    <div class="orb c"></div>
+  </div>
+
+  <div class="wrap">
+    <div class="panel">
+      <div class="heading">
+        <div class="logo">GC</div>
+        <div>
+          <h1>Garbage Collection — Visualized</h1>
+          <div class="sub">A refined, aesthetic demonstration of how a garbage collector marks and reclaims unreachable objects in memory.</div>
+        </div>
+      </div>
+
+      <div class="desc">
+        This visualization shows a simplified heap and object graph. The "root" represents active references (e.g., stack, globals). Objects reachable from the root are preserved (green). Unreachable objects are eligible for collection (muted). Press "Run GC" to trigger a sweep that marks and reclaims unreachable memory with a graceful animation.
+      </div>
+
+      <div class="legend">
+        <div class="item"><span class="swatch reachable"></span> Reachable</div>
+        <div class="item"><span class="swatch unreachable"></span> Unreachable</div>
+        <div class="item"><span class="swatch collected"></span> Collected</div>
+      </div>
+
+      <div class="controls">
+        <button id="runBtn" class="btn">Run GC</button>
+        <button id="resetBtn" class="btn ghost">Reset</button>
+      </div>
+
+      <div class="meta">
+        <div>Algorithm: Mark & Sweep (conceptual)</div>
+        <div id="stats" style="color:var(--muted);font-weight:700">Heap objects: 12</div>
+      </div>
+    </div>
+
+    <div class="panel visual">
+      <div class="heap-frame" id="frame">
+        <div class="heap-title">Managed Heap</div>
+
+        <div class="root-node" id="rootArea" aria-hidden="true">
+          <div class="root-pill" title="Root set">Root</div>
+          <div style="width:12px"></div>
+        </div>
+
+        <div class="heap-grid" id="grid"></div>
+
+        <svg class="refs" id="svg"></svg>
+
+        <div class="collector" id="collector" aria-hidden="true">
+          <div class="core"></div>
+        </div>
+
+        <div class="badge" id="badge">Mark & Sweep</div>
+
+        <canvas id="particles" style="position:absolute;inset:0;pointer-events:none;"></canvas>
+
+        <div class="toast" id="toast">0 objects reclaimed</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  Aesthetic Garbage Collection Visual Demo
+  - Minimal interactivity: Run GC and Reset
+  - Smooth animations and transitions
+*/
+
+// Model definition: objects with ids, references, and positions in grid (row,col)
+const modelTemplate = {
+  rows: 3,
+  cols: 6,
+  objects: [
+    { id: 'A', row:0, col:0, refs:['B','C'] },
+    { id: 'B', row:0, col:2, refs:['D'] },
+    { id: 'C', row:0, col:1, refs:[] },
+    { id: 'D', row:1, col:2, refs:[] },
+
+    { id: 'E', row:0, col:4, refs:['F'] },
+    { id: 'F', row:1, col:4, refs:[] },
+
+    { id: 'G', row:1, col:0, refs:['H'] },
+    { id: 'H', row:2, col:0, refs:[] },
+
+    // Some unreachable cluster
+    { id: 'X', row:1, col:5, refs:['Y'] },
+    { id: 'Y', row:2, col:5, refs:['Z'] },
+    { id: 'Z', row:2, col:4, refs:[] },
+
+    // Isolated unreachable
+    { id: 'Q', row:2, col:2, refs:[] }
+  ],
+  roots: ['A','E','G'] // root set
+};
+
+// DOM references
+const gridEl = document.getElementById('grid');
+const svg = document.getElementById('svg');
+const frame = document.getElementById('frame');
+const runBtn = document.getElementById('runBtn');
+const resetBtn = document.getElementById('resetBtn');
+const collectorEl = document.getElementById('collector');
+const particlesCanvas = document.getElementById('particles');
+const toast = document.getElementById('toast');
+const stats = document.getElementById('stats');
+let ctx;
+
+// State
+let model;
+let nodes = {}; // id => dom element
+let cellEls = []; // every cell
+let paths = {}; // pair key => svg path element
+let busy = false;
+let canvasW, canvasH;
+let particleList = [];
+
+function init(){
+  model = JSON.parse(JSON.stringify(modelTemplate)); // deep copy
+  setupCanvas();
+  renderGrid();
+  renderObjects();
+  renderRefs();
+  stats.textContent = `Heap objects: ${model.objects.length}`;
+  toast.classList.remove('show');
+}
+
+function setupCanvas(){
+  const rect = frame.getBoundingClientRect();
+  canvasW = rect.width; canvasH = rect.height;
+  particlesCanvas.width = canvasW * devicePixelRatio;
+  particlesCanvas.height = canvasH * devicePixelRatio;
+  particlesCanvas.style.width = canvasW+'px';
+  particlesCanvas.style.height = canvasH+'px';
+  ctx = particlesCanvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  requestAnimationFrame(runParticles);
+}
+
+function clearGrid(){
+  gridEl.innerHTML = '';
+  svg.innerHTML = '';
+  nodes = {}; cellEls = []; paths = {};
+}
+
+function renderGrid(){
+  clearGrid();
+  gridEl.style.gridTemplateColumns = `repeat(${model.cols}, 1fr)`;
+  const total = model.rows * model.cols;
+  for(let r=0;r<model.rows;r++){
+    for(let c=0;c<model.cols;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = r; cell.dataset.col = c;
+      gridEl.appendChild(cell);
+      cellEls.push(cell);
+    }
+  }
+}
+
+function findCell(row,col){
+  const index = row * model.cols + col;
+  return cellEls[index];
+}
+
+function makeNodeEl(obj){
+  const el = document.createElement('div');
+  el.className = 'node unreachable';
+  el.dataset.id = obj.id;
+  el.innerHTML = `<div class="type">Object</div><div class="id">${obj.id}</div>`;
+  el.style.transitionDelay = (Math.random()*180)+'ms';
+  return el;
+}
+
+function renderObjects(){
+  // place objects into cells
+  model.objects.forEach(o=>{
+    const cell = findCell(o.row, o.col);
+    if(!cell) return;
+    const n = makeNodeEl(o);
+    cell.appendChild(n);
+    nodes[o.id] = { el:n, cell };
+  });
+
+  // mark roots visually near top with small pointers
+  const rootArea = document.getElementById('rootArea');
+  rootArea.querySelectorAll('.root-entry')?.forEach(x=>x.remove());
+  model.roots.forEach((rid,i)=>{
+    const r = document.createElement('div');
+    r.className = 'root-entry';
+    r.style.marginLeft = (i*6)+'px';
+    r.style.opacity = 0.95;
+    r.innerHTML = `<div style="width:78px;height:28px;border-radius:8px;background:linear-gradient(90deg,var(--accent-2),var(--accent));display:flex;align-items:center;justify-content:center;font-weight:800;color:#071022;font-size:12px;margin-left:6px">${rid}</div>`;
+    rootArea.appendChild(r);
+  });
+
+  // animate slight entrance
+  setTimeout(()=> {
+    Object.values(nodes).forEach(n=>{
+      n.el.style.transform = 'translateY(0)';
+    });
+  },60);
+}
+
+function renderRefs(){
+  // draw reference paths from each object to its referenced objects
+  // also draw from roots to object(s)
+  svg.innerHTML = '';
+  // marker defs
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML = `
+    <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 z" fill="rgba(255,255,255,0.16)"></path>
+    </marker>
+  `;
+  svg.appendChild(defs);
+
+  // helper: position centers
+  const posOf = (el) => {
+    const rect = frame.getBoundingClientRect();
+    const nodeRect = el.getBoundingClientRect();
+    return {
+      x: nodeRect.left - rect.left + nodeRect.width/2,
+      y: nodeRect.top - rect.top + nodeRect.height/2
+    };
+  };
+
+  // draw object-to-object refs
+  model.objects.forEach(o=>{
+    const src = nodes[o.id];
+    if(!src) return;
+    o.refs.forEach(tid=>{
+      const tgt = nodes[tid];
+      if(!tgt) return;
+      const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.classList.add('ref-path','ghost');
+      p.setAttribute('stroke-width',2.2);
+      p.setAttribute('data-src',o.id);
+      p.setAttribute('data-tgt',tid);
+      svg.appendChild(p);
+      paths[`${o.id}-${tid}`] = p;
+      updatePath(p, posOf(src.el), posOf(tgt.el));
+    });
+  });
+
+  // draw root refs
+  model.roots.forEach(rid=>{
+    const target = nodes[rid];
+    if(!target) return;
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.classList.add('ref-path','ghost');
+    p.setAttribute('stroke-width',2.6);
+    p.setAttribute('data-src','root');
+    p.setAttribute('data-tgt',rid);
+    svg.appendChild(p);
+    paths[`root-${rid}`] = p;
+    // position root pill center
+    const rootRect = document.getElementById('rootArea').getBoundingClientRect();
+    const rect = frame.getBoundingClientRect();
+    const srcPos = { x: rootRect.left - rect.left + 48, y: rootRect.top - rect.top + 42 };
+    updatePath(p, srcPos, posOf(target.el));
+  });
+}
+
+function updatePath(p, src, tgt){
+  // curve control points to be nice
+  const dx = tgt.x - src.x;
+  const dy = tgt.y - src.y;
+  const cx1 = src.x + dx*0.18;
+  const cy1 = src.y - Math.max(36, Math.abs(dx)*0.25);
+  const cx2 = src.x + dx*0.82;
+  const cy2 = tgt.y + Math.max(36, Math.abs(dx)*0.25);
+  const d = `M ${src.x} ${src.y} C ${cx1} ${cy1} ${cx2} ${cy2} ${tgt.x} ${tgt.y}`;
+  p.setAttribute('d', d);
+  p.setAttribute('marker-end', 'url(#arrowhead)');
+}
+
+function computeReachable(){
+  // mark reachable via DFS
+  const adj = {};
+  model.objects.forEach(o=> adj[o.id] = (o.refs||[]).slice());
+  const visited = new Set();
+  const stack = model.roots.slice();
+  while(stack.length){
+    const cur = stack.pop();
+    if(visited.has(cur)) continue;
+    visited.add(cur);
+    const children = adj[cur] || [];
+    children.forEach(ch=> {
+      if(!visited.has(ch)) stack.push(ch);
+    });
+  }
+  return visited;
+}
+
+// Animation: collector sweep
+async function runGC(){
+  if(busy) return;
+  busy = true;
+  runBtn.disabled = true; resetBtn.disabled = true;
+  runBtn.style.opacity = 0.9;
+  // compute reachable set
+  const reachable = computeReachable();
+
+  // visually mark nodes reachable/unreachable
+  Object.entries(nodes).forEach(([id,info])=>{
+    const el = info.el;
+    el.classList.remove('reachable','unreachable','collected');
+    if(reachable.has(id)){
+      el.classList.add('reachable');
+      // highlight corresponding paths
+      setPathState(id, 'reachable');
+    } else {
+      el.classList.add('unreachable');
+      setPathState(id, 'ghost');
+    }
+  });
+
+  // animate collector across grid
+  const rect = frame.getBoundingClientRect();
+  const leftX = rect.left + 34;
+  const rightX = rect.right - 34 - 120; // collector width
+  collectorEl.style.opacity = 1;
+  collectorEl.style.top = (rect.top + 34) - rect.top + 'px';
+  // animate horizontal move via requestAnimationFrame
+  const duration = 3000;
+  const start = performance.now();
+  const toCollect = [];
+  const objPositions = Object.fromEntries(Object.entries(nodes).map(([id,info])=>{
+    const nrect = info.el.getBoundingClientRect();
+    return [id, {x: nrect.left - rect.left + nrect.width/2, y: nrect.top - rect.top + nrect.height/2}];
+  }));
+
+  // compute order of visitation by x coordinate
+  const ordered = Object.entries(objPositions).sort((a,b)=>a[1].x - b[1].x).map(([id,_])=>id);
+
+  // sweeping: when collector center passes the object's x - trigger
+  let collectedCount = 0;
+  let triggered = new Set();
+
+  return new Promise(resolve=>{
+    function step(t){
+      const p = Math.min(1, (t - start)/duration);
+      // smooth easing
+      const ease = (--p)*p*p+1;
+      const cx = leftX + (rightX-leftX) * ease;
+      collectorEl.style.left = cx + 'px';
+      // check triggers
+      ordered.forEach(id=>{
+        if(triggered.has(id)) return;
+        const pos = objPositions[id];
+        const collectorCenter = cx + 60; // collector width/2
+        if(collectorCenter > pos.x - 10){
+          // collector reached object x
+          triggered.add(id);
+          if(!reachable.has(id)){
+            // collect it with particle burst and fade
+            collectObject(id);
+            collectedCount++;
+          } else {
+            // small glow on reachable
+            pulsePreserve(id);
+          }
+        }
+      });
+      if(t - start < duration){
+        requestAnimationFrame(step);
+      } else {
+        // finish
+        setTimeout(()=>{
+          collectorEl.style.opacity = 0;
+          busy = false;
+          runBtn.disabled = false;
+          resetBtn.disabled = false;
+          showToast(`${collectedCount} object${collectedCount===1?'':'s'} reclaimed`);
+          resolve();
+        },420);
+      }
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+function setPathState(sourceId, state){
+  // adjust all paths where source or target equals sourceId
+  Object.values(paths).forEach(p=>{
+    const tgt = p.getAttribute('data-tgt');
+    const src = p.getAttribute('data-src');
+    if(src === sourceId || tgt === sourceId){
+      p.classList.remove('reachable','ghost','pulse');
+      if(state === 'reachable'){
+        p.classList.add('reachable','pulse');
+        p.style.stroke = 'rgba(110,231,183,0.9)';
+        p.setAttribute('stroke-width', 2.8);
+      } else {
+        p.classList.add('ghost');
+        p.style.stroke = 'rgba(255,255,255,0.08)';
+        p.setAttribute('stroke-width', 2.0);
+      }
+    }
+  });
+}
+
+function pulsePreserve(id){
+  const info = nodes[id];
+  if(!info) return;
+  const el = info.el;
+  el.animate([
+    { transform: 'translateY(-6px) scale(1.02)', boxShadow: '0 22px 48px rgba(96,165,250,0.22)'},
+    { transform: 'translateY(-2px) scale(1.01)', boxShadow: '0 14px 30px rgba(96,165,250,0.14)'}
+  ], {duration:420, easing:'ease-out'});
+}
+
+function collectObject(id){
+  const info = nodes[id];
+  if(!info) return;
+  const el = info.el;
+  // fade out
+  el.classList.add('collected');
+  el.classList.remove('unreachable','reachable');
+  // remove references visually
+  Object.entries(paths).forEach(([k,p])=>{
+    if(p.getAttribute('data-src') === id || p.getAttribute('data-tgt') === id){
+      p.style.opacity = 0;
+      setTimeout(()=>{ try{ p.remove() }catch(e){} },520);
+    }
+  });
+  // particle burst
+  const rect = frame.getBoundingClientRect();
+  const nodeRect = el.getBoundingClientRect();
+  const cx = nodeRect.left - rect.left + nodeRect.width/2;
+  const cy = nodeRect.top - rect.top + nodeRect.height/2;
+  spawnParticles(cx,cy, 16, '#7EE7C2');
+  // mark cell reclaimed
+  const cell = info.cell;
+  cell.classList.add('reclaimed');
+  // remove DOM node after short delay
+  setTimeout(()=> {
+    try{ el.remove(); }catch(e){}
+    // remove from nodes and model
+    delete nodes[id];
+    const idx = model.objects.findIndex(o=>o.id===id);
+    if(idx>=0) model.objects.splice(idx,1);
+    stats.textContent = `Heap objects: ${model.objects.length}`;
+  }, 520);
+}
+
+function spawnParticles(x,y,count,color){
+  for(let i=0;i<count;i++){
+    particleList.push({
+      x, y,
+      vx: (Math.random()-0.5) * 2.8,
+      vy: (Math.random()-0.8) * -3.2,
+      life: 600 + Math.random()*500,
+      born: performance.now(),
+      size: 6 + Math.random()*8,
+      color
+    });
+  }
+}
+
+function runParticles(){
+  const now = performance.now();
+  ctx.clearRect(0,0,canvasW,canvasH);
+  const alive = [];
+  for(const p of particleList){
+    const t = now - p.born;
+    if(t > p.life) continue;
+    const dt = 16/1000;
+    p.vy += 0.06;
+    p.x += p.vx * (dt*60);
+    p.y += p.vy * (dt*60);
+    const lifeRatio = 1 - (t / p.life);
+    ctx.globalAlpha = Math.max(0, lifeRatio);
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+    g.addColorStop(0, p.color);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * lifeRatio, 0, Math.PI*2);
+    ctx.fill();
+    alive.push(p);
+  }
+  particleList = alive;
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(runParticles);
+}
+
+function showToast(text){
+  toast.textContent = text;
+  toast.classList.add('show');
+  setTimeout(()=> toast.classList.remove('show'), 2200);
+}
+
+function reset(){
+  if(busy) return;
+  // rebuild model
+  model = JSON.parse(JSON.stringify(modelTemplate));
+  renderGrid();
+  renderObjects();
+  renderRefs();
+  stats.textContent = `Heap objects: ${model.objects.length}`;
+  toast.classList.remove('show');
+}
+
+// Handle resize to adjust paths and canvas
+window.addEventListener('resize', ()=> {
+  setupCanvas();
+  // re-render paths positions
+  Object.values(paths).forEach(p=>{
+    const srcId = p.getAttribute('data-src');
+    const tgtId = p.getAttribute('data-tgt');
+    const rect = frame.getBoundingClientRect();
+    let srcPos, tgtPos;
+    if(srcId === 'root'){
+      const rootRect = document.getElementById('rootArea').getBoundingClientRect();
+      srcPos = { x: rootRect.left - rect.left + 48, y: rootRect.top - rect.top + 42 };
+    } else {
+      const srcNode = nodes[srcId];
+      if(!srcNode) return;
+      const nrect = srcNode.el.getBoundingClientRect();
+      srcPos = { x: nrect.left - rect.left + nrect.width/2, y: nrect.top - rect.top + nrect.height/2 };
+    }
+    const tgtNode = nodes[tgtId];
+    if(!tgtNode) return;
+    const nrectT = tgtNode.el.getBoundingClientRect();
+    tgtPos = { x: nrectT.left - rect.left + nrectT.width/2, y: nrectT.top - rect.top + nrectT.height/2 };
+    updatePath(p, srcPos, tgtPos);
+  });
+});
+
+// attach events
+runBtn.addEventListener('click', ()=> {
+  runGC();
+});
+resetBtn.addEventListener('click', ()=> {
+  reset();
+});
+
+// initial render
+init();
+
+// small initial animation for badge
+document.getElementById('badge').animate([
+  { transform: 'translateY(8px) scale(0.98)', opacity:0},
+  { transform: 'translateY(0px) scale(1)', opacity:1}
+], {duration:700, easing:'cubic-bezier(.2,.9,.3,1)'});
+
+</script>
+</body>
+</html>
