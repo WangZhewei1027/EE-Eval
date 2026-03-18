@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bellman-Ford Algorithm Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #fafafa;
+  }
+  h1 {
+    text-align: center;
+    color: #222;
+  }
+  #graphContainer {
+    margin: 20px auto;
+    width: 700px;
+    height: 450px;
+    border: 1px solid #ccc;
+    background: #fff;
+    position: relative;
+  }
+  #controls {
+    text-align: center;
+    margin: 15px;
+  }
+  button {
+    font-size: 1rem;
+    padding: 8px 15px;
+    margin: 0 8px;
+    cursor: pointer;
+  }
+  svg {
+    width: 700px;
+    height: 450px;
+  }
+  .node circle {
+    fill: #4A90E2;
+    stroke: #2C64B9;
+    stroke-width: 3px;
+    transition: fill 0.3s ease;
+  }
+  .node text {
+    fill: #fff;
+    font-weight: bold;
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .edge line {
+    stroke: #999;
+    stroke-width: 2px;
+    marker-end: url(#arrowhead);
+  }
+  .edge text {
+    font-size: 12px;
+    fill: #333;
+  }
+  .visited circle {
+    fill: #e67e22;
+  }
+  #distanceTable {
+    max-width: 700px;
+    margin: 15px auto;
+    border-collapse: collapse;
+    width: 700px;
+    box-shadow: 0 0 5px #ccc;
+  }
+  #distanceTable th, #distanceTable td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: center;
+  }
+  #distanceTable th {
+    background-color: #4A90E2;
+    color: white;
+  }
+  #message {
+    max-width: 700px;
+    margin: 10px auto;
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: #222;
+    text-align: center;
+    min-height: 28px;
+  }
+  footer {
+    text-align: center;
+    margin-top: 30px;
+    font-size: 0.9rem;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+<h1>Bellman-Ford Algorithm Visualization</h1>
+
+<div id="graphContainer">
+  <svg id="graphSVG" viewBox="0 0 700 450" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="7"
+        refX="10" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#999" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+<div id="controls">
+  <label for="sourceSelect">Source Vertex: </label>
+  <select id="sourceSelect"></select>
+  <button id="startBtn">Start</button>
+  <button id="nextStepBtn" disabled>Next Step</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<table id="distanceTable" hidden>
+  <thead>
+    <tr>
+      <th>Vertex</th>
+      <th>Distance from Source</th>
+      <th>Predecessor</th>
+    </tr>
+  </thead>
+  <tbody id="distanceBody"></tbody>
+</table>
+
+<div id="message"></div>
+
+<footer>
+  &copy; Bellman-Ford Visualization &mdash; Negative edges allowed, detects negative cycles
+</footer>
+
+<script>
+// Bellman-Ford Implementation and Visualization
+
+// Graph definition:
+// We'll define a moderate graph with some negative edges (no negative cycles)
+const graph = {
+  vertices: ['A', 'B', 'C', 'D', 'E'],
+  edges: [
+    {from: 'A', to: 'B', weight: 6},
+    {from: 'A', to: 'D', weight: 6},
+    {from: 'B', to: 'C', weight: 5},
+    {from: 'B', to: 'D', weight: -2},
+    {from: 'C', to: 'E', weight: 1},
+    {from: 'D', to: 'C', weight: 2},
+    {from: 'D', to: 'E', weight: 2},
+    {from: 'E', to: 'B', weight: -3},
+  ],
+  coords: { // For visualization (x,y)
+    A: {x: 100, y: 375},
+    B: {x: 275, y: 275},
+    C: {x: 525, y: 275},
+    D: {x: 300, y: 100},
+    E: {x: 500, y: 100},
+  }
+};
+
+let distances = {};
+let predecessors = {};
+let step = 0;
+let source = null;
+let edgesToRelax = []; // sequence of edges to check on each iteration
+let maxSteps;
+let negativeCycleFound = false;
+
+const svg = document.getElementById('graphSVG');
+const distanceTable = document.getElementById('distanceTable');
+const distanceBody = document.getElementById('distanceBody');
+const messageDiv = document.getElementById('message');
+
+const startBtn = document.getElementById('startBtn');
+const nextStepBtn = document.getElementById('nextStepBtn');
+const resetBtn = document.getElementById('resetBtn');
+const sourceSelect = document.getElementById('sourceSelect');
+
+function clearSVG() {
+  while(svg.firstChild) {
+    svg.removeChild(svg.firstChild);
+  }
+  // Re-add the marker defs
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  defs.innerHTML = `
+  <marker id="arrowhead" markerWidth="10" markerHeight="7"
+    refX="10" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#999" />
+  </marker>
+  `;
+  svg.appendChild(defs);
+}
+
+function drawGraph() {
+  clearSVG();
+
+  // Draw edges
+  graph.edges.forEach((edge, idx) => {
+    const fromCoord = graph.coords[edge.from];
+    const toCoord = graph.coords[edge.to];
+
+    // Calculate line with offset if needed (for better arrow heads)
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', fromCoord.x);
+    line.setAttribute('y1', fromCoord.y);
+    line.setAttribute('x2', toCoord.x);
+    line.setAttribute('y2', toCoord.y);
+    line.setAttribute('stroke', '#999');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('marker-end', 'url(#arrowhead)');
+    line.classList.add('edge-line');
+    line.dataset.idx = idx;
+    svg.appendChild(line);
+
+    // Edge weight label - mid point with small offset perpendicular
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const midX = (fromCoord.x + toCoord.x) / 2;
+    const midY = (fromCoord.y + toCoord.y) / 2;
+
+    // Calculate perpendicular offset
+    const dx = toCoord.x - fromCoord.x;
+    const dy = toCoord.y - fromCoord.y;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    const offsetX = -dy / len * 15;
+    const offsetY = dx / len * 15;
+
+    text.setAttribute('x', midX + offsetX);
+    text.setAttribute('y', midY + offsetY + 5);
+    text.setAttribute('fill', '#333');
+    text.setAttribute('font-size', '14');
+    text.textContent = edge.weight;
+    svg.appendChild(text);
+  });
+
+  // Draw nodes
+  graph.vertices.forEach(v => {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.classList.add('node');
+    group.id = `node-${v}`;
+    group.setAttribute('transform', `translate(${graph.coords[v].x},${graph.coords[v].y})`);
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('r', 20);
+    group.appendChild(circle);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dy', '8');
+    text.textContent = v;
+    group.appendChild(text);
+
+    svg.appendChild(group);
+  });
+}
+
+function populateSourceSelect() {
+  graph.vertices.forEach(v => {
+    const option = document.createElement('option');
+    option.value = v;
+    option.textContent = v;
+    sourceSelect.appendChild(option);
+  });
+  sourceSelect.value = graph.vertices[0];
+}
+
+function resetState() {
+  distances = {};
+  predecessors = {};
+  step = 0;
+  edgesToRelax = [];
+  negativeCycleFound = false;
+  nextStepBtn.disabled = true;
+  distanceTable.hidden = true;
+  messageDiv.textContent = '';
+  source = null;
+  drawGraph();
+}
+
+function initializeBellmanFord(src) {
+  source = src;
+  distances = {};
+  predecessors = {};
+
+  // Initialization
+  graph.vertices.forEach(v => {
+    distances[v] = Infinity;
+    predecessors[v] = null;
+  });
+  distances[src] = 0;
+
+  // Prepare edges for relaxation
+  // We will relax all edges V-1 times:
+  edgesToRelax = [];
+  for(let i = 0; i < graph.vertices.length - 1; i++) {
+    // Each iteration includes all edges
+    edgesToRelax.push(...graph.edges);
+  }
+  maxSteps = edgesToRelax.length;
+
+  step = 0;
+  distanceTable.hidden = false;
+  updateDistanceTable();
+  highlightCurrentStep(-1, -1);
+  messageDiv.textContent = `Bellman-Ford started. Total iterations: ${graph.vertices.length - 1}`;
+}
+
+function relaxEdge(edge) {
+  const {from, to, weight} = edge;
+  if(distances[from] !== Infinity && distances[from] + weight < distances[to]) {
+    distances[to] = distances[from] + weight;
+    predecessors[to] = from;
+    return true;
+  }
+  return false;
+}
+
+function highlightCurrentStep(edgeIndex, iteration) {
+  // Clear all highlights
+  svg.querySelectorAll('line').forEach(line => {
+    line.setAttribute('stroke', '#999');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('marker-end', 'url(#arrowhead)');
+  });
+
+  svg.querySelectorAll('g.node circle').forEach(circle => {
+    circle.classList.remove('visited');
+    circle.setAttribute('fill', '#4A90E2');
+  });
+
+  if(edgeIndex >= 0) {
+    // Highlight current edge
+    const line = svg.querySelectorAll('line')[edgeIndex];
+    if(line) {
+      line.setAttribute('stroke', '#e67e22');
+      line.setAttribute('stroke-width', '4');
+      line.setAttribute('marker-end', 'url(#arrowhead)');
+    }
+    // Highlight from and to nodes
+    const edge = edgesToRelax[step];
+    if(edge) {
+      const fromCircle = document.querySelector(`#node-${edge.from} circle`);
+      const toCircle = document.querySelector(`#node-${edge.to} circle`);
+      if(fromCircle) fromCircle.setAttribute('fill', '#f39c12');
+      if(toCircle) toCircle.setAttribute('fill', '#e67e22');
+    }
+  }
+}
+
+function updateDistanceTable() {
+  distanceBody.innerHTML = '';
+  graph.vertices.forEach(v => {
+    const tr = document.createElement('tr');
+    if(distances[v] === Infinity) {
+      tr.innerHTML = `<td>${v}</td><td>∞</td><td>${predecessors[v] === null ? '-' : predecessors[v]}</td>`;
+    } else {
+      tr.innerHTML = `<td>${v}</td><td>${distances[v]}</td><td>${predecessors[v] === null ? '-' : predecessors[v]}</td>`;
+    }
+    distanceBody.appendChild(tr);
+  });
+}
+
+function doNextStep() {
+  if(step >= maxSteps) {
+    nextStepBtn.disabled = true;
+    checkNegativeCycle();
+    return;
+  }
+  const edge = edgesToRelax[step];
+  const edgeIndexInGraph = graph.edges.findIndex(e => e.from === edge.from && e.to === edge.to && e.weight === edge.weight);
+
+  highlightCurrentStep(edgeIndexInGraph, Math.floor(step / (graph.vertices.length - 1)) + 1);
+
+  const relaxed = relaxEdge(edge);
+  updateDistanceTable();
+
+  messageDiv.textContent = `Iteration ${Math.floor(step / (graph.vertices.length - 1)) + 1} - relaxing edge (${edge.from} → ${edge.to}) with weight ${edge.weight}${relaxed ? ' - updated!' : ''}`;
+  step++;
+
+  if(step === maxSteps) {
+    nextStepBtn.disabled = true;
+    checkNegativeCycle();
+  }
+}
+
+function checkNegativeCycle() {
+  // After V-1 iterations, check for negative cycles
+  let negativeCycle = false;
+  graph.edges.forEach(edge => {
+    if(distances[edge.from] !== Infinity && distances[edge.from] + edge.weight < distances[edge.to]) {
+      negativeCycle = true;
+    }
+  });
+  if(negativeCycle) {
+    messageDiv.textContent = "Graph contains a negative-weight cycle!";
+    negativeCycleFound = true;
+  } else {
+    messageDiv.textContent = "No negative-weight cycles detected. Shortest paths computed.";
+  }
+}
+
+// Initialize UI elements and events
+function init() {
+  populateSourceSelect();
+  drawGraph();
+
+  startBtn.addEventListener('click', () => {
+    resetState();
+    initializeBellmanFord(sourceSelect.value);
+    nextStepBtn.disabled = false;
+  });
+
+  nextStepBtn.addEventListener('click', () => {
+    doNextStep();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    resetState();
+  });
+
+  sourceSelect.addEventListener('change', () => {
+    resetState();
+  });
+}
+
+init();
+
+</script>
+</body>
+</html>

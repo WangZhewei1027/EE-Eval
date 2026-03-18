@@ -21,6 +21,22 @@ const WORKSPACE_PATH = process.argv[2] || "workspace/batch-1207";
 const RESULTS_FILE = path.join(WORKSPACE_PATH, "fsm-similarity-results.json");
 
 /**
+ * Normalize model names to academic paper standards
+ * Reference: GPT-4, Gemini, Claude-3.5 Sonnet v1, DeepSeek naming conventions
+ */
+function normalizeModelName(modelName) {
+  const nameMap = {
+    "gpt-5-mini": "GPT-5-Mini",
+    "gpt-4o-mini": "GPT-4o-Mini",
+    "gpt-3.5-turbo": "GPT-3.5-Turbo",
+    "deepseek-chat": "DeepSeek-Chat",
+    "meta-llama/Llama-3.2-1B-Instruct": "Llama-3.2-1B",
+    "Qwen1.5-0.5B-Chat": "Qwen-1.5-0.5B",
+  };
+  return nameMap[modelName] || modelName;
+}
+
+/**
  * Load concept categories mapping from concept-categories.json
  */
 let CONCEPT_CATEGORIES = {};
@@ -37,11 +53,11 @@ async function loadConceptCategories() {
       }
     }
     console.log(
-      `✅ Loaded ${Object.keys(CONCEPT_CATEGORIES).length} concept mappings`
+      `✅ Loaded ${Object.keys(CONCEPT_CATEGORIES).length} concept mappings`,
     );
   } catch (error) {
     console.warn(
-      "⚠️ Unable to load concept-categories.json, using default categorization"
+      "⚠️ Unable to load concept-categories.json, using default categorization",
     );
   }
 }
@@ -242,23 +258,12 @@ const CHART_TEMPLATE = `
             <table>
                 <thead>
                     <tr>
-                        <th rowspan="2">Model</th>
-                        <th colspan="4">Overall Statistics</th>
-                        <th colspan="7">Category Scores (Mean)</th>
-                        <th rowspan="2">Overall<br>Score</th>
-                    </tr>
-                    <tr>
+                        <th>Model</th>
                         <th>Samples</th>
-                        <th>Mean</th>
-                        <th>Median</th>
-                        <th>Std Dev</th>
-                        <th>Data<br>Structures</th>
-                        <th>Sorting<br>Algorithms</th>
-                        <th>Searching<br>Algorithms</th>
-                        <th>Graph<br>Algorithms</th>
-                        <th>Advanced<br>Algorithms</th>
-                        <th>Machine<br>Learning</th>
-                        <th>Other</th>
+                        <th>Structural<br>Similarity</th>
+                        <th>Semantic<br>Similarity</th>
+                        <th>Behavioral<br>Coherence</th>
+                        <th>Overall<br>Score</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -266,6 +271,7 @@ const CHART_TEMPLATE = `
                 </tbody>
             </table>
         </div>
+        <p class="note"><strong>Note:</strong> All scores are percentages (0-100). Structural Similarity measures graph structure matching (node/edge counts), Semantic Similarity measures state/action meaning alignment using embeddings, Behavioral Coherence measures isomorphic state transition mapping quality. Overall Score is computed using a weighted combination algorithm (weights: Structural 40%, Semantic 40%, Behavioral 20%) with normalization adjustments.</p>
     </div>
 
     <div class="container">
@@ -346,7 +352,7 @@ const CHART_TEMPLATE = `
                     data: {
                         labels: modelData.map(m => m.model),
                         datasets: [{
-                            label: 'FSM Similarity Score',
+                            label: 'FSM Similarity Score (%)',
                             data: modelData.map(m => m.scores),
                             backgroundColor: modelData.map((m, i) => modelColors[i % modelColors.length].bg),
                             borderColor: modelData.map((m, i) => modelColors[i % modelColors.length].border),
@@ -364,7 +370,11 @@ const CHART_TEMPLATE = `
                                 display: false
                             },
                             title: {
-                                display: false
+                                display: true,
+                                text: 'FSM Similarity Score Distribution by Model',
+                                font: { size: 16, weight: '600', family: 'Arial, sans-serif' },
+                                color: '#000',
+                                padding: { bottom: 20 }
                             }
                         },
                         scales: {
@@ -373,17 +383,20 @@ const CHART_TEMPLATE = `
                                 max: 100,
                                 title: {
                                     display: true,
-                                    text: 'FSM Similarity Score (%)',
-                                    font: { size: 12, family: 'Arial' },
+                                    text: 'Similarity Score (%)',
+                                    font: { size: 13, weight: '600', family: 'Arial, sans-serif' },
                                     color: '#000'
                                 },
                                 grid: {
-                                    color: 'rgba(0, 0, 0, 0.1)',
+                                    color: '#e0e0e0',
                                     lineWidth: 1
                                 },
                                 ticks: {
-                                    font: { size: 11, family: 'Arial' },
-                                    color: '#000'
+                                    font: { size: 11, family: 'Arial, sans-serif' },
+                                    color: '#333',
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
                                 }
                             },
                             x: {
@@ -391,8 +404,10 @@ const CHART_TEMPLATE = `
                                     display: false
                                 },
                                 ticks: {
-                                    font: { size: 11, family: 'Arial' },
-                                    color: '#000'
+                                    font: { size: 11, family: 'Arial, sans-serif' },
+                                    color: '#333',
+                                    maxRotation: 45,
+                                    minRotation: 45
                                 }
                             }
                         }
@@ -434,7 +449,11 @@ const CHART_TEMPLATE = `
                             plugins: {
                                 legend: { display: false },
                                 title: {
-                                    display: false
+                                    display: true,
+                                    text: category + ' - Model Comparison',
+                                    font: { size: 14, weight: '600', family: 'Arial, sans-serif' },
+                                    color: '#000',
+                                    padding: { bottom: 15 }
                                 }
                             },
                             scales: {
@@ -443,17 +462,20 @@ const CHART_TEMPLATE = `
                                     max: 100,
                                     title: { 
                                         display: true, 
-                                        text: 'FSM Similarity Score (%)',
-                                        font: { size: 12, family: 'Arial' },
+                                        text: 'Similarity Score (%)',
+                                        font: { size: 13, weight: '600', family: 'Arial, sans-serif' },
                                         color: '#000'
                                     },
                                     grid: {
-                                        color: 'rgba(0, 0, 0, 0.1)',
+                                        color: '#e0e0e0',
                                         lineWidth: 1
                                     },
                                     ticks: {
-                                        font: { size: 11, family: 'Arial' },
-                                        color: '#000'
+                                        font: { size: 11, family: 'Arial, sans-serif' },
+                                        color: '#333',
+                                        callback: function(value) {
+                                            return value + '%';
+                                        }
                                     }
                                 },
                                 x: {
@@ -461,8 +483,10 @@ const CHART_TEMPLATE = `
                                         display: false
                                     },
                                     ticks: {
-                                        font: { size: 11, family: 'Arial' },
-                                        color: '#000'
+                                        font: { size: 11, family: 'Arial, sans-serif' },
+                                        color: '#333',
+                                        maxRotation: 45,
+                                        minRotation: 45
                                     }
                                 }
                             }
@@ -552,7 +576,7 @@ function calculateANOVA(groups) {
 async function generateReport(results) {
   console.log("📊 Analyzing model differentiation...\n");
 
-  // Group by model
+  // Group by model - store detailed dimension data
   const modelGroups = {};
   const categoryGroups = {};
 
@@ -565,22 +589,48 @@ async function generateReport(results) {
     const category = result.concept
       ? getCategoryForConcept(result.concept)
       : "Other";
-    const score = (result.similarityResult?.combined_similarity || 0) * 100;
 
-    if (!modelGroups[model]) modelGroups[model] = [];
-    modelGroups[model].push(score);
+    // Extract overall and dimensional scores
+    const overallScore =
+      (result.similarityResult?.combined_similarity?.score || 0) * 100;
+    const structuralScore =
+      (result.similarityResult?.structural_similarity?.overall || 0) * 100;
+    const semanticScore =
+      (result.similarityResult?.semantic_similarity?.overall || 0) * 100;
+    const isomorphismScore =
+      (result.similarityResult?.isomorphism_similarity || 0) * 100;
+
+    if (!modelGroups[model]) {
+      modelGroups[model] = {
+        overall: [],
+        structural: [],
+        semantic: [],
+        behavioral: [],
+      };
+    }
+
+    modelGroups[model].overall.push(overallScore);
+    modelGroups[model].structural.push(structuralScore);
+    modelGroups[model].semantic.push(semanticScore);
+    modelGroups[model].behavioral.push(isomorphismScore);
 
     if (!categoryGroups[category]) categoryGroups[category] = {};
     if (!categoryGroups[category][model]) categoryGroups[category][model] = [];
-    categoryGroups[category][model].push(score);
+    categoryGroups[category][model].push(overallScore);
   });
 
-  // Calculate statistics for each model
+  // Calculate statistics for each model with dimensional breakdown
   const modelStats = Object.entries(modelGroups)
-    .map(([model, scores]) => ({
-      model,
-      scores,
-      stats: calculateStats(scores),
+    .map(([model, dimensions]) => ({
+      model: normalizeModelName(model),
+      originalModel: model,
+      scores: dimensions.overall,
+      stats: calculateStats(dimensions.overall),
+      dimensionStats: {
+        structural: calculateStats(dimensions.structural),
+        semantic: calculateStats(dimensions.semantic),
+        behavioral: calculateStats(dimensions.behavioral),
+      },
     }))
     .sort((a, b) => parseFloat(b.stats.mean) - parseFloat(a.stats.mean));
 
@@ -596,7 +646,7 @@ async function generateReport(results) {
             <div class="stat-value">${m.stats.mean}%</div>
             <div class="stat-label">±${m.stats.stdDev}% (n=${m.stats.count})</div>
         </div>
-    `
+    `,
     )
     .join("");
 
@@ -623,7 +673,7 @@ async function generateReport(results) {
           <span class="stat-value">${m.stats.stdDev}</span>
         </div>
       </div>
-    `
+    `,
     )
     .join("");
 
@@ -638,27 +688,16 @@ async function generateReport(results) {
     "Other",
   ];
 
-  // Generate comprehensive table with all data
+  // Generate comprehensive table with dimensional breakdown
   const comprehensiveTable = modelStats
     .map((m) => {
-      // Get category scores for this model
-      const categoryScores = categoryOrder.map((category) => {
-        if (categoryGroups[category] && categoryGroups[category][m.model]) {
-          const scores = categoryGroups[category][m.model];
-          const stats = calculateStats(scores);
-          return stats.mean;
-        }
-        return "-";
-      });
-
       return `
         <tr>
             <td><strong>${m.model}</strong></td>
             <td>${m.stats.count}</td>
-            <td>${m.stats.mean}</td>
-            <td>${m.stats.median}</td>
-            <td>${m.stats.stdDev}</td>
-            ${categoryScores.map((score) => `<td>${score}</td>`).join("")}
+            <td>${m.dimensionStats.structural.mean}</td>
+            <td>${m.dimensionStats.semantic.mean}</td>
+            <td>${m.dimensionStats.behavioral.mean}</td>
             <td><strong>${m.stats.mean}</strong></td>
         </tr>
       `;
@@ -681,9 +720,9 @@ async function generateReport(results) {
   Object.entries(categoryGroups).forEach(([category, models]) => {
     categoryChartData[category] = Object.entries(models).map(
       ([model, scores]) => ({
-        model,
+        model: normalizeModelName(model),
         scores,
-      })
+      }),
     );
   });
 
@@ -698,8 +737,8 @@ async function generateReport(results) {
         <div class="finding">
             <strong>Finding 1: Significant Model Performance Differences</strong><br>
             The best performing model <strong>${topModel.model}</strong> (${
-    topModel.stats.mean
-  }%) 
+              topModel.stats.mean
+            }%) 
             outperforms the lowest performing model <strong>${
               bottomModel.model
             }</strong> (${bottomModel.stats.mean}%) 
@@ -717,10 +756,10 @@ async function generateReport(results) {
         <div class="finding">
             <strong>Finding 3: Model Consistency Analysis</strong><br>
             The standard deviation ranges from ${Math.min(
-              ...modelStats.map((m) => parseFloat(m.stats.stdDev))
+              ...modelStats.map((m) => parseFloat(m.stats.stdDev)),
             ).toFixed(2)} to ${Math.max(
-    ...modelStats.map((m) => parseFloat(m.stats.stdDev))
-  ).toFixed(2)},
+              ...modelStats.map((m) => parseFloat(m.stats.stdDev)),
+            ).toFixed(2)},
             indicating varying levels of output consistency across models.
         </div>
     `;
@@ -753,7 +792,7 @@ async function generateReport(results) {
       "{{ANOVA_CONCLUSION}}",
       anova.significant
         ? "Inter-model differences are statistically significant (p < 0.05)"
-        : "Inter-model differences are not statistically significant (p > 0.05)"
+        : "Inter-model differences are not statistically significant (p > 0.05)",
     )
     .replace("{{ANOVA_INTERPRETATION}}", anovaInterpretation)
     .replace("{{KEY_FINDINGS}}", keyFindings)
@@ -763,15 +802,15 @@ async function generateReport(results) {
         modelStats.map((m) => ({
           model: m.model,
           scores: m.scores,
-        }))
-      )
+        })),
+      ),
     )
     .replace("{{CATEGORY_DATA}}", JSON.stringify(categoryChartData));
 
   // Save report
   const outputPath = path.join(
     WORKSPACE_PATH,
-    "part1-fsm-differentiation-analysis.html"
+    "part1-fsm-differentiation-analysis.html",
   );
   await fs.writeFile(outputPath, html, "utf-8");
 
@@ -781,7 +820,7 @@ async function generateReport(results) {
     console.log(
       `  ${m.model.padEnd(20)} Mean: ${m.stats.mean}%  StdDev: ${
         m.stats.stdDev
-      }%`
+      }%`,
     );
   });
   console.log(`\n🔬 ANOVA: F=${anova.fStatistic}, p${anova.pValue}`);

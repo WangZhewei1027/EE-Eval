@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Radix Sort Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f7f9fc;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  #inputArea, #controls {
+    max-width: 700px;
+    margin: 0 auto 20px;
+  }
+  label {
+    font-weight: bold;
+  }
+  input[type="text"] {
+    width: 80%;
+    padding: 8px;
+    font-size: 1rem;
+    margin-right: 10px;
+    box-sizing: border-box;
+  }
+  button {
+    padding: 9px 15px;
+    font-size: 1rem;
+    cursor: pointer;
+    border: none;
+    background-color: #007acc;
+    color: white;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+  button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background-color: #005fa3;
+  }
+
+  #arrayContainer {
+    max-width: 700px;
+    margin: 0 auto 30px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+  .array-item {
+    background-color: #007acc;
+    color: white;
+    font-weight: bold;
+    padding: 10px 14px;
+    border-radius: 5px;
+    min-width: 40px;
+    text-align: center;
+    user-select: none;
+    transition: background-color 0.3s ease;
+  }
+  .highlight {
+    background-color: #ffa500 !important;
+    color: #000 !important;
+  }
+  .bucket-container {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 30px;
+  }
+  .bucket {
+    background-color: #e1e7f0;
+    border-radius: 8px;
+    padding: 8px 6px 12px;
+    width: 50px;
+    min-height: 50px;
+    box-sizing: border-box;
+    text-align: center;
+    font-weight: bold;
+    color: #555;
+  }
+  .bucket-label {
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+  }
+  .bucket-items {
+    min-height: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .bucket-item {
+    background-color: #007acc;
+    color: white;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 0.85rem;
+  }
+  .log {
+    max-width: 700px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+  }
+  #speedLabel {
+    margin-left: 12px;
+    font-weight: normal;
+  }
+  #speedRange {
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+  <h1>Radix Sort Visualization</h1>
+  <div id="inputArea">
+    <label for="inputArray">Enter numbers (comma or space separated):</label><br/>
+    <input type="text" id="inputArray" placeholder="e.g. 170, 45, 75, 90, 802, 24, 2, 66" />
+    <button id="startBtn">Start Sort</button>
+  </div>
+  <div id="controls" style="max-width:700px; margin: 0 auto 20px;display:flex; align-items:center; justify-content:center; gap: 12px;">
+    <button id="prevStepBtn" disabled>&laquo; Previous Step</button>
+    <button id="nextStepBtn" disabled>Next Step &raquo;</button>
+    <label for="speedRange">Speed:
+      <input type="range" id="speedRange" min="100" max="2000" step="100" value="800" />
+      <span id="speedLabel">800 ms</span>
+    </label>
+    <button id="autoBtn" disabled>Auto Play</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div id="arrayContainer" aria-live="polite" aria-label="Array elements"></div>
+
+  <div id="bucketsArea" class="bucket-container" aria-label="Digit buckets" style="display:none;"></div>
+
+  <div class="log" id="logArea" aria-live="polite" aria-atomic="true">
+    Ready to start radix sort.
+  </div>
+
+<script>
+(() => {
+  const inputArrayEl = document.getElementById('inputArray');
+  const startBtn = document.getElementById('startBtn');
+  const arrayContainer = document.getElementById('arrayContainer');
+  const bucketsArea = document.getElementById('bucketsArea');
+  const logArea = document.getElementById('logArea');
+
+  const prevStepBtn = document.getElementById('prevStepBtn');
+  const nextStepBtn = document.getElementById('nextStepBtn');
+  const autoBtn = document.getElementById('autoBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const speedRange = document.getElementById('speedRange');
+  const speedLabel = document.getElementById('speedLabel');
+
+  let inputArray = [];
+  let states = []; // Each state represents a step with the array + buckets + highlighted indices
+  let currentStep = -1;
+  let maxDigits = 0;
+  let autoPlayInterval = null;
+  let autoPlaying = false;
+  let speed = parseInt(speedRange.value);
+
+  function log(msg) {
+    logArea.textContent = msg;
+  }
+
+  // Render the array with optional highlights: highlights is an object {indices: [], buckets: {digit: []}} or special info
+  function renderArray(arr, highlights = {}) {
+    arrayContainer.innerHTML = '';
+    arr.forEach((num, i) => {
+      const div = document.createElement('div');
+      div.className = 'array-item';
+      div.textContent = num;
+      if (highlights.indices && highlights.indices.includes(i)) {
+        div.classList.add('highlight');
+      }
+      arrayContainer.appendChild(div);
+    });
+  }
+
+  // Render the buckets with their contents and highlight extracted items
+  // buckets: array of arrays (10 buckets)
+  // highlights: array of indices per bucket to highlight
+  function renderBuckets(buckets, highlights = {}) {
+    bucketsArea.style.display = 'flex';
+    bucketsArea.innerHTML = '';
+    for (let d = 0; d < 10; d++) {
+      const bucket = document.createElement('div');
+      bucket.className = 'bucket';
+      const label = document.createElement('div');
+      label.className = 'bucket-label';
+      label.textContent = d;
+      bucket.appendChild(label);
+      const itemsCont = document.createElement('div');
+      itemsCont.className = 'bucket-items';
+      buckets[d].forEach((num, idx) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'bucket-item';
+        itemEl.textContent = num;
+        if (
+          highlights[d] &&
+          highlights[d].includes(idx)
+        ) {
+          itemEl.classList.add('highlight');
+        }
+        itemsCont.appendChild(itemEl);
+      });
+      bucket.appendChild(itemsCont);
+      bucketsArea.appendChild(bucket);
+    }
+  }
+
+  // Disable or enable controls
+  function setControlsDisabled(disabled) {
+    startBtn.disabled = disabled;
+    prevStepBtn.disabled = disabled || currentStep <= 0;
+    nextStepBtn.disabled = disabled || currentStep >= states.length - 1;
+    autoBtn.disabled = disabled || states.length === 0;
+    resetBtn.disabled = false;
+    inputArrayEl.disabled = disabled;
+  }
+
+  // Reset the interface
+  function resetAll() {
+    if (autoPlaying) toggleAutoPlay();
+    states = [];
+    currentStep = -1;
+    maxDigits = 0;
+    inputArray = [];
+    arrayContainer.innerHTML = '';
+    bucketsArea.style.display = 'none';
+    bucketsArea.innerHTML = '';
+    log('Ready to start radix sort.');
+    setControlsDisabled(false);
+  }
+
+  // Get digit at exp (1, 10, 100, ...) from right for number num
+  function getDigit(num, exp) {
+    return Math.floor(num / exp) % 10;
+  }
+
+  // Prepare the states array for the entire radix sort, capturing each step
+  function prepareRadixStates(arr) {
+    let resultStates = [];
+    let doneArray = [...arr];
+    maxDigits = Math.max(...doneArray).toString().length;
+
+    function cloneBuckets(buckets) {
+      return buckets.map(bucket => [...bucket]);
+    }
+
+    // Initial state, no highlights
+    resultStates.push({
+      array: [...doneArray],
+      buckets: Array(10).fill(null).map(() => []),
+      highlightsArray: [],
+      highlightsBuckets: {},
+      message: `Initial array: [${doneArray.join(', ')}]`
+    });
+
+    for (let d = 0, exp = 1; d < maxDigits; d++, exp *= 10) {
+      // Show extraction to buckets step by step
+      const buckets = Array(10).fill(null).map(() => []);
+      // For animation: create a step after placing each element into a bucket
+      for (let i = 0; i < doneArray.length; i++) {
+        const digit = getDigit(doneArray[i], exp);
+        buckets[digit].push(doneArray[i]);
+        resultStates.push({
+          array: [...doneArray],
+          buckets: cloneBuckets(buckets),
+          highlightsArray: [i],
+          highlightsBuckets: { [digit]: [buckets[digit].length - 1] },
+          message: `Digit ${digit} extracted from array index ${i} to bucket ${digit}`
+        });
+      }
+
+      // Now reassemble array from buckets
+      let idx = 0;
+      for (let b = 0; b < 10; b++) {
+        // For visual reassembling, include steps per item
+        for (let j = 0; j < buckets[b].length; j++) {
+          doneArray[idx] = buckets[b][j];
+          // Highlight index we just placed in array
+          let highlightsArray = [idx];
+          let highlightsBuckets = { [b]: [j] };
+          resultStates.push({
+            array: [...doneArray],
+            buckets: cloneBuckets(buckets),
+            highlightsArray,
+            highlightsBuckets,
+            message: `Placed ${buckets[b][j]} from bucket ${b} back into array at index ${idx}`
+          });
+          idx++;
+        }
+      }
+      resultStates.push({
+        array: [...doneArray],
+        buckets: cloneBuckets(buckets),
+        highlightsArray: [],
+        highlightsBuckets: {},
+        message: `Array after sorting on digit place ${d + 1} (exp=${exp}): [${doneArray.join(', ')}]`
+      });
+    }
+    resultStates.push({
+      array: [...doneArray],
+      buckets: Array(10).fill(null).map(() => []),
+      highlightsArray: [],
+      highlightsBuckets: {},
+      message: `Radix sort completed! Sorted array: [${doneArray.join(', ')}]`
+    });
+    return resultStates;
+  }
+
+  function renderStep(step) {
+    const state = states[step];
+    renderArray(state.array, { indices: state.highlightsArray });
+    renderBuckets(state.buckets, state.highlightsBuckets);
+    log(state.message);
+  }
+
+  function gotoStep(step) {
+    if (step < 0 || step >= states.length) return;
+    currentStep = step;
+    renderStep(currentStep);
+    prevStepBtn.disabled = currentStep <= 0;
+    nextStepBtn.disabled = currentStep >= states.length - 1;
+  }
+
+  function nextStep() {
+    if (currentStep < states.length - 1) {
+      gotoStep(currentStep + 1);
+    }
+  }
+  function prevStep() {
+    if (currentStep > 0) {
+      gotoStep(currentStep - 1);
+    }
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlaying) {
+      autoPlaying = false;
+      clearInterval(autoPlayInterval);
+      autoBtn.textContent = 'Auto Play';
+      prevStepBtn.disabled = currentStep <= 0;
+      nextStepBtn.disabled = currentStep >= states.length - 1;
+      startBtn.disabled = false;
+      inputArrayEl.disabled = false;
+    } else {
+      if (states.length === 0) return;
+      if (currentStep >= states.length - 1) {
+        gotoStep(0);
+      }
+      autoPlaying = true;
+      autoBtn.textContent = 'Pause';
+      prevStepBtn.disabled = true;
+      nextStepBtn.disabled = true;
+      startBtn.disabled = true;
+      inputArrayEl.disabled = true;
+      autoPlayInterval = setInterval(() => {
+        if (currentStep < states.length - 1) {
+          nextStep();
+        } else {
+          toggleAutoPlay();
+        }
+      }, speed);
+    }
+  }
+
+  // Event Listeners
+  startBtn.addEventListener('click', () => {
+    // Parse input
+    const raw = inputArrayEl.value.trim();
+    if (!raw) {
+      alert('Please enter numbers separated by commas or spaces.');
+      return;
+    }
+    let parts = raw.split(/[\s,]+/);
+    let nums = [];
+    for (let p of parts) {
+      const n = Number(p);
+      if (isNaN(n) || !Number.isInteger(n) || n < 0) {
+        alert(`Invalid input: "${p}". Please enter only non-negative integers.`);
+        return;
+      }
+      nums.push(n);
+    }
+    if (nums.length === 0) {
+      alert('Please enter at least one number.');
+      return;
+    }
+    if (nums.length > 50) {
+      alert('Please enter at most 50 numbers for clarity.');
+      return;
+    }
+    inputArray = nums;
+    states = prepareRadixStates(inputArray);
+    currentStep = 0;
+    renderStep(currentStep);
+    setControlsDisabled(false);
+    prevStepBtn.disabled = true; // We are at step 0
+    nextStepBtn.disabled = false;
+    autoBtn.disabled = false;
+    log('Radix sort started. Use Next Step to proceed.');
+  });
+
+  prevStepBtn.addEventListener('click', () => {
+    prevStep();
+  });
+
+  nextStepBtn.addEventListener('click', () => {
+    nextStep();
+  });
+
+  autoBtn.addEventListener('click', () => {
+    toggleAutoPlay();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    resetAll();
+  });
+
+  speedRange.addEventListener('input', () => {
+    speed = parseInt(speedRange.value);
+    speedLabel.textContent = speed + ' ms';
+    if (autoPlaying) {
+      clearInterval(autoPlayInterval);
+      autoPlayInterval = setInterval(() => {
+        if (currentStep < states.length - 1) {
+          nextStep();
+        } else {
+          toggleAutoPlay();
+        }
+      }, speed);
+    }
+  });
+
+  // Initialize disabled states for buttons
+  setControlsDisabled(true);
+
+})();
+</script>
+
+</body>
+</html>

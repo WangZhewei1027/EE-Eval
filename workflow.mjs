@@ -78,16 +78,7 @@ export async function runWorkflow(config, options = {}) {
       console.log(`需求: ${question}\n`);
     }
 
-    const defaultSystemPrompt = `Generate a single, self-contained HTML file with embedded CSS and JavaScript that explains the concept ${question} through COMPREHENSIVE TEXTUAL EXPLANATIONS and educational content. Focus on:
-
-- Detailed written explanations of the concept, theory, and algorithms
-- Step-by-step textual descriptions and educational narrative
-- Rich pedagogical content with definitions, examples, and explanations
-- Thorough documentation as the PRIMARY goal
-
-IMPORTANT: Keep interactivity EXTREMELY LIMITED - the page should be mostly STATIC with extensive text content. Include at most 1 button that triggers a simple demonstration, but the emphasis should be on reading and understanding through text rather than hands-on manipulation.
-
-Only respond with the complete HTML file.
+    const defaultSystemPrompt = `Generate a single HTML file with JavaScript demonstrating the concept ${question}. Only respond in a single HTML file.
 `;
 
     const effectiveSystemPrompt = systemPrompt || defaultSystemPrompt;

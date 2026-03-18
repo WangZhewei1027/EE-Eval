@@ -1,10 +1,12 @@
 // Complete Correlation Analysis: FSM vs VLM vs Playwright with Human Evaluation
-// Workspace: 0126-biased
+// Usage: node analyze-three-frameworks.mjs [workspace-name]
+// Example: node analyze-three-frameworks.mjs 0126-biased
 import fs from "fs";
 import path from "path";
 
 // ========== CONFIG =============
-const WORKSPACE = "0126-biased";
+// Get workspace from command line argument, default to "0126-biased"
+const WORKSPACE = process.argv[2] || "0126-biased";
 const HUMAN_EVAL_PATH = path.join(
   "human-evaluation-data",
   "01-28",
@@ -13,13 +15,15 @@ const HUMAN_EVAL_PATH = path.join(
 const FSM_EVAL_PATH = path.join(
   "workspace",
   WORKSPACE,
-  "fsm-similarity-results.json",
+  // "fsm-similarity-results.json",
+  "fsm-similarity-results-latest.json",
 );
+
 const VLM_EVAL_DIR = path.join("workspace", WORKSPACE, "visual-results");
 const DATA_DIR = path.join("workspace", WORKSPACE, "data");
 
-const OUTPUT_HTML = `three-frameworks-correlation-report.html`;
-const OUTPUT_JSON = `three-frameworks-correlation-data.json`;
+const OUTPUT_HTML = `three-frameworks-correlation-report-${WORKSPACE}.html`;
+const OUTPUT_JSON = `three-frameworks-correlation-data-${WORKSPACE}.json`;
 
 // Playwright model-level scores from baseline-report.html
 const PLAYWRIGHT_SCORES = {
@@ -89,28 +93,53 @@ function loadFSMEvaluation() {
     const sim = r.similarityResult || r;
     if (!sim) continue;
 
-    // Calculate average of 3 dimensions as total FSM score
+    // Use combined_similarity.raw_score from the recalculated data (respects custom weights)
+    // Fallback to individual dimensions if combined_similarity is not available
+    let average;
+    if (sim.combined_similarity?.raw_score !== undefined) {
+      // Use the pre-calculated weighted score from fsm-similarity-results-latest.json
+      average = sim.combined_similarity.raw_score;
+    } else {
+      // Fallback: calculate average of 3 dimensions (equal weights)
+      const structural =
+        sim.dimension1_interaction_capacity?.score ??
+        sim.structural_similarity?.overall ??
+        null;
+      const semantic =
+        sim.dimension2_behavioral_coherence?.score ??
+        sim.semantic_similarity?.overall ??
+        null;
+      const isomorphism =
+        sim.dimension3_interaction_meaningfulness?.score ??
+        sim.isomorphism_similarity ??
+        null;
+
+      if (structural === null || semantic === null || isomorphism === null) {
+        continue;
+      }
+      average = (structural + semantic + isomorphism) / 3;
+    }
+
+    // Still collect individual dimensions for reference
     const structural =
       sim.dimension1_interaction_capacity?.score ??
       sim.structural_similarity?.overall ??
-      null;
+      0;
     const semantic =
       sim.dimension2_behavioral_coherence?.score ??
       sim.semantic_similarity?.overall ??
-      null;
+      0;
     const isomorphism =
       sim.dimension3_interaction_meaningfulness?.score ??
       sim.isomorphism_similarity ??
-      null;
+      0;
 
-    if (structural !== null && semantic !== null && isomorphism !== null) {
-      rawData[uuid] = {
-        structural,
-        semantic,
-        isomorphism,
-        average: (structural + semantic + isomorphism) / 3,
-      };
-    }
+    rawData[uuid] = {
+      structural,
+      semantic,
+      isomorphism,
+      average,
+    };
   }
 
   // Second pass: normalize average scores using min-max to [0, 1]
@@ -125,22 +154,21 @@ function loadFSMEvaluation() {
 
   const map = {};
   for (const uuid in rawData) {
-    // Normalize to [0, 1] then invert: low similarity = high quality
-    // This aligns with human evaluation where low scores mean poor quality
+    // Normalize to [0, 1] - no inversion
+    // Higher FSM similarity = higher score (better quality alignment)
     const normalized =
       range > 0 ? (rawData[uuid].average - minScore) / range : 0.5;
-    const inverted = 1 - normalized; // Invert: high FSM similarity -> low score (poor quality alignment)
 
     map[uuid] = {
       structural: rawData[uuid].structural,
       semantic: rawData[uuid].semantic,
       isomorphism: rawData[uuid].isomorphism,
-      average: inverted, // Inverted normalized score
+      average: normalized, // Normalized score without inversion
     };
   }
 
   console.log(
-    `   ✓ Loaded ${Object.keys(map).length} FSM evaluation results (average normalized & inverted to [0, 1])`,
+    `   ✓ Loaded ${Object.keys(map).length} FSM evaluation results (average normalized to [0, 1])`,
   );
   return map;
 }
@@ -419,7 +447,7 @@ function generateHTMLReport(correlations, nSamples) {
 <html lang="en">
 <head>
   <meta charset='utf-8'>
-  <title>Three-Framework Correlation Analysis (0126-biased)</title>
+  <title>Three-Framework Correlation Analysis (${WORKSPACE})</title>
   <style>
     body { 
       font-family: 'Times New Roman', Times, serif; 
@@ -514,7 +542,7 @@ function generateHTMLReport(correlations, nSamples) {
 </head>
 <body>
   <h1>Correlation Analysis: Three Evaluation Frameworks vs Human Judgment</h1>
-  <div class="subtitle">Workspace: 0126-biased | Sample Size: N=${nSamples}</div>
+  <div class="subtitle">Workspace: ${WORKSPACE} | Sample Size: N=${nSamples}</div>
   
   <div class="summary-box">
     <h3>Executive Summary</h3>
@@ -663,7 +691,7 @@ function generateHTMLReport(correlations, nSamples) {
   </div>
 
   <h2>Conclusion</h2>
-  <p>This analysis compared three automated evaluation frameworks against human judgment across four quality dimensions using ${nSamples} HTML pages from the 0126-biased workspace. Statistical significance was assessed using Pearson correlation coefficients with p-value calculations.</p>
+  <p>This analysis compared three automated evaluation frameworks against human judgment across four quality dimensions using ${nSamples} HTML pages from the ${WORKSPACE} workspace. Statistical significance was assessed using Pearson correlation coefficients with p-value calculations.</p>
   
   <p class="note"><strong>Generated:</strong> ${new Date().toISOString()}</p>
 </body>
@@ -675,8 +703,20 @@ function generateHTMLReport(correlations, nSamples) {
 // ========== RUN =============
 function main() {
   console.log("═══════════════════════════════════════════════════════════");
-  console.log("  Three-Framework Correlation Analysis (0126-biased)");
+  console.log(`  Three-Framework Correlation Analysis (${WORKSPACE})`);
   console.log("═══════════════════════════════════════════════════════════\n");
+
+  // Validate workspace exists
+  const workspaceDir = path.join("workspace", WORKSPACE);
+  if (!fs.existsSync(workspaceDir)) {
+    console.error(`\n❌ ERROR: Workspace directory not found: ${workspaceDir}`);
+    console.error(`   Available workspaces:`);
+    const workspaces = fs
+      .readdirSync("workspace")
+      .filter((f) => fs.statSync(path.join("workspace", f)).isDirectory());
+    workspaces.forEach((w) => console.error(`      - ${w}`));
+    process.exit(1);
+  }
 
   // Load all data
   const human = loadHumanEvaluation();

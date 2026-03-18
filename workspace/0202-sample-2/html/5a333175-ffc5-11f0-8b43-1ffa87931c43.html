@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kruskal's Algorithm Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    background: #0057b7;
+    color: white;
+    padding: 1rem;
+    text-align: center;
+  }
+  #container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  #canvas-container {
+    flex: 2;
+    background: #f9f9f9;
+    position: relative;
+  }
+  #controls {
+    flex: 1;
+    border-left: 1px solid #ccc;
+    padding: 1rem;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+  #description {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  button {
+    background-color: #0057b7;
+    color: white;
+    border: none;
+    padding: 0.6rem 1rem;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    width: 100%;
+    font-size: 1rem;
+  }
+  button:disabled {
+    background-color: #aaa;
+    cursor: default;
+  }
+  h2 {
+    margin-top: 0;
+  }
+  #edge-list {
+    max-height: 30vh;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+  }
+  #union-find-sets {
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+    background: #eef6ff;
+    border: 1px solid #99c2ff;
+    padding: 0.5rem;
+    border-radius: 4px;
+    max-height: 25vh;
+    overflow-y: auto;
+  }
+  #legend {
+    font-size: 0.9rem;
+    margin-top: 1rem;
+    background: #f1f1f1;
+    border-radius: 5px;
+    padding: 0.5rem;
+  }
+
+  /* Tooltip for edges */
+  #tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    padding: 3px 6px;
+    border-radius: 3px;
+    pointer-events:none;
+    font-size: 0.8rem;
+    visibility: hidden;
+    user-select:none;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Kruskal’s Algorithm Demonstration</h1>
+    <p>Visualizing Minimum Spanning Tree construction step-by-step</p>
+  </header>
+  <div id="container">
+    <div id="canvas-container">
+      <canvas id="graphCanvas"></canvas>
+      <div id="tooltip"></div>
+    </div>
+    <aside id="controls">
+      <h2>Controls</h2>
+      <button id="startBtn">Start Algorithm</button>
+      <button id="stepBtn" disabled>Next Step</button>
+      <button id="resetBtn" disabled>Reset</button>
+
+      <h2>Edges (sorted by weight)</h2>
+      <div id="edge-list"></div>
+
+      <h2>Union-Find Sets</h2>
+      <div id="union-find-sets"></div>
+
+      <h2>Legend</h2>
+      <div id="legend">
+        <ul>
+          <li><span style="color:#0A74DA;font-weight:bold;">●</span> Node</li>
+          <li><span style="border-bottom: 3px solid green;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> MST Edge</li>
+          <li><span style="border-bottom: 3px solid #ccc;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Unused Edge</li>
+          <li><span style="border-bottom: 3px solid red;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Edge creating cycle (skipped)</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+
+<script>
+(() => {
+  // Canvas setup
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  const tooltip = document.getElementById('tooltip');
+
+  // Responsive canvas size
+  function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+    drawGraph();
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  // Graph definition (small example)
+  // Each node: id, position (x,y)
+  const nodes = [
+    {id: 0, x: 100, y: 100},
+    {id: 1, x: 300, y: 80},
+    {id: 2, x: 420, y: 160},
+    {id: 3, x: 250, y: 250},
+    {id: 4, x: 120, y: 230},
+    {id: 5, x: 480, y: 300},
+    {id: 6, x: 600, y: 140},
+    {id: 7, x: 650, y: 250},
+  ];
+
+  // Edges: {u,v,weight}
+  let edges = [
+    {u:0, v:1, weight: 4},
+    {u:0, v:4, weight: 7},
+    {u:1, v:2, weight: 9},
+    {u:1, v:3, weight: 8},
+    {u:2, v:3, weight: 5},
+    {u:2, v:6, weight: 20},
+    {u:3, v:4, weight: 6},
+    {u:3, v:5, weight: 10},
+    {u:4, v:5, weight: 12},
+    {u:5, v:6, weight: 2},
+    {u:6, v:7, weight: 3},
+    {u:5, v:7, weight: 1},
+  ];
+
+  // Sort edges by ascending weight before running algorithm
+  edges.sort((a,b) => a.weight - b.weight);
+
+  // UI elements
+  const startBtn = document.getElementById('startBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const edgeListContainer = document.getElementById('edge-list');
+  const ufSetsContainer = document.getElementById('union-find-sets');
+
+  // Visualization state
+  let state = {
+    mstEdges: new Set(),          // edges included in MST, identified by index in edges[]
+    skippedEdges: new Set(),      // edges rejected (making cycle)
+    currentEdgeIndex: 0,          // the index of the next edge to consider
+    running: false,
+    unionFind: null,
+  };
+
+  // Disjoint Set Union (Union Find) data structure for cycle detection
+  class UnionFind {
+    constructor(n) {
+      this.parent = Array.from({length:n}, (_, i) => i);
+      this.rank = new Array(n).fill(0);
+    }
+    find(u) {
+      if(this.parent[u] !== u) {
+        this.parent[u] = this.find(this.parent[u]);
+      }
+      return this.parent[u];
+    }
+    union(u,v) {
+      let rootU = this.find(u);
+      let rootV = this.find(v);
+      if(rootU === rootV) return false; // Cycle detected
+      if(this.rank[rootU] > this.rank[rootV]) {
+        this.parent[rootV] = rootU;
+      } else if(this.rank[rootU] < this.rank[rootV]) {
+        this.parent[rootU] = rootV;
+      } else {
+        this.parent[rootV] = rootU;
+        this.rank[rootU]++;
+      }
+      return true;
+    }
+    getSets() {
+      // returns array of arrays grouping nodes by sets
+      const map = new Map();
+      for(let i = 0; i < this.parent.length; i++){
+        let root = this.find(i);
+        if(!map.has(root)) map.set(root, []);
+        map.get(root).push(i);
+      }
+      return Array.from(map.values());
+    }
+  }
+
+  // Initialize UI controls and states
+  function init(){
+    updateEdgeList();
+    updateUnionFind();
+    drawGraph();
+    startBtn.disabled = false;
+    stepBtn.disabled = true;
+    resetBtn.disabled = true;
+    state.mstEdges.clear();
+    state.skippedEdges.clear();
+    state.currentEdgeIndex = 0;
+    state.running = false;
+    state.unionFind = new UnionFind(nodes.length);
+  }
+
+  // Draw graph with current state info
+  function drawGraph(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw edges first
+    edges.forEach((edge, idx) => {
+      const n1 = nodes[edge.u];
+      const n2 = nodes[edge.v];
+
+      if(state.mstEdges.has(idx)){
+        // MST edge: thick green line
+        ctx.strokeStyle = "green";
+        ctx.lineWidth = 4;
+      } else if(state.skippedEdges.has(idx)){
+        // Skipped edges (cycle): red dashed line
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6,6]);
+      } else if(idx === state.currentEdgeIndex && state.running){
+        // Current edge considered: blue thicker line
+        ctx.strokeStyle = "#0077ff";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([]);
+      } else {
+        // normal edge: light grey
+        ctx.strokeStyle = "#ccc";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath();
+      ctx.moveTo(n1.x, n1.y);
+      ctx.lineTo(n2.x, n2.y);
+      ctx.stroke();
+
+      // Draw weight near middle of edge
+      let midX = (n1.x + n2.x)/2;
+      let midY = (n1.y + n2.y)/2;
+      ctx.fillStyle = "black";
+      ctx.font = "12px Arial";
+      ctx.fillText(edge.weight, midX+5, midY-5);
+    });
+
+    // Draw nodes on top
+    nodes.forEach(node => {
+      ctx.beginPath();
+      ctx.fillStyle = "#0A74DA";
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 1;
+      ctx.arc(node.x, node.y, 14, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.stroke();
+
+      // Node label inside circle
+      ctx.fillStyle = "white";
+      ctx.font = "bold 14px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(node.id, node.x, node.y);
+    });
+  }
+
+  // Update edge list display (show sorted edges with highlight on current)
+  function updateEdgeList(){
+    edgeListContainer.innerHTML = "";
+    edges.forEach((edge, idx) => {
+      const div = document.createElement('div');
+      div.style.marginBottom = "4px";
+      div.style.fontSize = '0.9rem';
+
+      let text = `(${edge.u} - ${edge.v}) weight: ${edge.weight}`;
+      if(state.mstEdges.has(idx)){
+        div.style.color = "green";
+        div.style.fontWeight = "bold";
+        text = "✅ " + text;
+      } else if(state.skippedEdges.has(idx)){
+        div.style.color = "red";
+        text = "⛔ " + text;
+      } else if(idx === state.currentEdgeIndex && state.running){
+        div.style.color = "#0077ff";
+        div.style.fontWeight = "bold";
+        text = "♦ " + text;
+      }
+      div.textContent = text;
+      edgeListContainer.appendChild(div);
+    });
+  }
+
+  // Update union-find sets display
+  function updateUnionFind(){
+    let sets = state.unionFind.getSets();
+    let text = "";
+    sets.forEach((set, i) => {
+      text += `Set ${i+1}: { ${set.join(", ")} }\n`;
+    });
+    ufSetsContainer.textContent = text.trim();
+  }
+
+  // Step through one edge for Kruskal
+  function step(){
+    if(state.currentEdgeIndex >= edges.length){
+      alert("Algorithm completed! MST formed.");
+      stepBtn.disabled = true;
+      startBtn.disabled = true;
+      resetBtn.disabled = false;
+      return;
+    }
+
+    const edge = edges[state.currentEdgeIndex];
+    let u = edge.u;
+    let v = edge.v;
+    
+    const added = state.unionFind.union(u, v);
+    if(added){
+      state.mstEdges.add(state.currentEdgeIndex);
+    } else {
+      // creates cycle - skip this edge
+      state.skippedEdges.add(state.currentEdgeIndex);
+    }
+
+    state.currentEdgeIndex++;
+
+    updateEdgeList();
+    updateUnionFind();
+    drawGraph();
+
+    // Enable reset when finished
+    if(state.currentEdgeIndex >= edges.length){
+      stepBtn.disabled = true;
+      resetBtn.disabled = false;
+    }
+  }
+
+  function start(){
+    if(state.running) return;
+    state.running = true;
+    startBtn.disabled = true;
+    stepBtn.disabled = false;
+    resetBtn.disabled = false;
+    updateEdgeList();
+    updateUnionFind();
+    drawGraph();
+  }
+
+  function reset(){
+    state.mstEdges.clear();
+    state.skippedEdges.clear();
+    state.currentEdgeIndex = 0;
+    state.running = false;
+    state.unionFind = new UnionFind(nodes.length);
+    updateEdgeList();
+    updateUnionFind();
+
+    startBtn.disabled = false;
+    stepBtn.disabled = true;
+    resetBtn.disabled = true;
+    drawGraph();
+  }
+
+  // Edge hover tooltip
+  function edgeAtPosition(mx, my){
+    // Return edge index if mouse near edge line else null
+    const radius = 8; // proximity for hover
+
+    for(let idx=0; idx < edges.length; idx++){
+      const edge = edges[idx];
+      const n1 = nodes[edge.u];
+      const n2 = nodes[edge.v];
+      // Calculate distance from point to segment
+      const dist = pointSegmentDistance(mx, my, n1.x, n1.y, n2.x, n2.y);
+      if(dist <= radius){
+        return idx;
+      }
+    }
+    return null;
+  }
+
+  // Distance from point px,py to segment (x1,y1)-(x2,y2)
+  function pointSegmentDistance(px, py, x1, y1, x2, y2){
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const len_sq = C * C + D * D;
+    let param = -1;
+    if(len_sq !== 0)
+        param = dot / len_sq;
+
+    let xx, yy;
+
+    if(param < 0){
+      xx = x1;
+      yy = y1;
+    }
+    else if(param > 1){
+      xx = x2;
+      yy = y2;
+    }
+    else{
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const idx = edgeAtPosition(mx, my);
+
+    if(idx !== null){
+      const edge = edges[idx];
+      tooltip.style.visibility = 'visible';
+      tooltip.style.left = (mx + 15) + 'px';
+      tooltip.style.top = (my + 10) + 'px';
+      tooltip.textContent = `Edge (${edge.u} - ${edge.v}), weight ${edge.weight}`;
+    } else {
+      tooltip.style.visibility = 'hidden';
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    tooltip.style.visibility = 'hidden';
+  });
+
+  // Event listeners
+  startBtn.addEventListener('click', start);
+  stepBtn.addEventListener('click', step);
+  resetBtn.addEventListener('click', reset);
+
+  // Initial draw
+  state.unionFind = new UnionFind(nodes.length);
+  resizeCanvas();
+  init();
+
+})();
+</script>
+
+</body>
+</html>

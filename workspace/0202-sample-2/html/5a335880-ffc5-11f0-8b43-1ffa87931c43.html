@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prim's Algorithm Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #f0f0f0;
+  }
+  #container {
+    max-width: 900px;
+    margin: 1rem auto;
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+  h1 {
+    text-align: center;
+  }
+  #graph {
+    border: 1px solid #ccc;
+    background: #fff;
+    display: block;
+    margin: 1rem auto;
+    border-radius: 8px;
+  }
+  #controls {
+    text-align: center;
+    margin: 1rem 0;
+  }
+  button {
+    background-color: #3498db;
+    border: none;
+    color: white;
+    padding: 10px 18px;
+    margin: 0 10px;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:disabled {
+    background-color: #9ecae1;
+    cursor: not-allowed;
+  }
+  #info {
+    max-width: 860px;
+    margin: 0 auto;
+    background: #e8f1f9;
+    border-radius: 6px;
+    padding: 1rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    min-height: 120px;
+  }
+  .node {
+    fill: #3498db;
+    stroke: #2980b9;
+    stroke-width: 2px;
+  }
+  .node.active {
+    fill: #e67e22;
+    stroke: #d35400;
+  }
+  .node.mst {
+    fill: #2ecc71;
+    stroke: #27ae60;
+  }
+  .edge {
+    stroke: #bbb;
+    stroke-width: 2px;
+  }
+  .edge.mst {
+    stroke: #27ae60;
+    stroke-width: 4px;
+  }
+  .edge.considered {
+    stroke: #e67e22;
+    stroke-width: 3px;
+    stroke-dasharray: 6 4;
+  }
+  text {
+    pointer-events: none;
+    font-weight: bold;
+    user-select: none;
+  }
+  #final-weight {
+    font-weight: bold;
+    text-align: center;
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    color: #27ae60;
+  }
+  small {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: 0.85rem;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+<div id="container">
+  <h1>Prim's Algorithm Demonstration</h1>
+  <svg id="graph" width="860" height="500" aria-label="Graph visualization"></svg>
+  <div id="controls" role="region" aria-label="Algorithm controls">
+    <button id="start">Start</button>
+    <button id="next" disabled>Next Step</button>
+    <button id="reset" disabled>Reset</button>
+  </div>
+  <div id="info" aria-live="polite" aria-atomic="true">
+    Click <strong>Start</strong> to begin the Prim's algorithm step-by-step demonstration.
+  </div>
+  <div id="final-weight" aria-live="polite"></div>
+  <small>Nodes are blue. Current node is orange. Edges/nodes chosen in MST are green. Edges currently considered are dashed orange.</small>
+</div>
+
+<script>
+// --- Graph Definition ---
+const nodes = [
+  { id: 0, x: 100, y: 100, label: 'A' },
+  { id: 1, x: 300, y: 80, label: 'B' },
+  { id: 2, x: 500, y: 100, label: 'C' },
+  { id: 3, x: 200, y: 300, label: 'D' },
+  { id: 4, x: 400, y: 280, label: 'E' },
+  { id: 5, x: 650, y: 250, label: 'F' },
+  { id: 6, x: 100, y: 400, label: 'G' }
+];
+
+const edges = [
+  { id:0, from: 0, to: 1, weight: 4 },
+  { id:1, from: 0, to: 3, weight: 2 },
+  { id:2, from: 1, to: 2, weight: 6 },
+  { id:3, from: 1, to: 3, weight: 3 },
+  { id:4, from: 2, to: 5, weight: 1 },
+  { id:5, from: 3, to: 4, weight: 5 },
+  { id:6, from: 4, to: 5, weight: 2 },
+  { id:7, from: 3, to: 6, weight: 3 },
+  { id:8, from: 4, to: 6, weight: 7 },
+];
+
+// Build adjacency list for quick access
+const adjacency = [];
+for(let i=0; i<nodes.length; i++) adjacency[i] = [];
+edges.forEach(e => {
+  adjacency[e.from].push({to: e.to, weight: e.weight, edgeId: e.id});
+  adjacency[e.to].push({to: e.from, weight: e.weight, edgeId: e.id});
+});
+
+// --- SVG and Rendering Setup ---
+const svg = document.getElementById('graph');
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Elements references for quick updates
+const edgeElements = new Map();
+const nodeElements = new Map();
+const edgeWeightElements = new Map();
+
+// Draw edges
+function drawEdges() {
+  edges.forEach(e => {
+    const fromNode = nodes[e.from];
+    const toNode = nodes[e.to];
+    let line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', fromNode.x);
+    line.setAttribute('y1', fromNode.y);
+    line.setAttribute('x2', toNode.x);
+    line.setAttribute('y2', toNode.y);
+    line.setAttribute('class', 'edge');
+    line.setAttribute('id', 'edge-'+e.id);
+    svg.appendChild(line);
+    edgeElements.set(e.id, line);
+
+    // Edge weight label: midpoint plus offset
+    let text = document.createElementNS(SVG_NS, 'text');
+    const midX = (fromNode.x + toNode.x) / 2;
+    const midY = (fromNode.y + toNode.y) / 2;
+    text.setAttribute('x', midX + 5); // slight offset
+    text.setAttribute('y', midY - 5);
+    text.textContent = e.weight;
+    text.style.fill = '#666';
+    svg.appendChild(text);
+    edgeWeightElements.set(e.id, text);
+  });
+}
+
+// Draw nodes
+function drawNodes() {
+  nodes.forEach(n => {
+    // circle
+    let circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', n.x);
+    circle.setAttribute('cy', n.y);
+    circle.setAttribute('r', 20);
+    circle.setAttribute('class', 'node');
+    circle.setAttribute('id', 'node-'+n.id);
+    circle.setAttribute('tabindex', 0);
+    circle.setAttribute('aria-label', `Node ${n.label}`);
+    svg.appendChild(circle);
+    nodeElements.set(n.id, circle);
+
+    // label
+    let label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', n.x);
+    label.setAttribute('y', n.y+5);
+    label.setAttribute('text-anchor', 'middle');
+    label.textContent = n.label;
+    label.setAttribute('pointer-events', 'none');
+    label.style.userSelect = 'none';
+    svg.appendChild(label);
+  });
+}
+
+// Initial draw
+drawEdges();
+drawNodes();
+
+// --- Prim's Algorithm Implementation ---
+
+// Global state for algorithm steps
+let primState = {
+  inMST: new Set(),
+  edgeCandidates: [], // edges crossing the cut, sorted by weight
+  mstEdges: [],
+  currentNode: null,
+  totalWeight: 0,
+  step: 0,
+  started: false,
+  finished: false
+};
+
+function infoMessage(msg) {
+  document.getElementById('info').textContent = msg;
+}
+
+function resetGraphStyles() {
+  // Reset all node and edges styles
+  nodeElements.forEach((el) => {
+    el.classList.remove('active', 'mst');
+  });
+  edgeElements.forEach((el) => {
+    el.classList.remove('mst', 'considered');
+  });
+  document.getElementById('final-weight').textContent = '';
+}
+
+// Priority queue (min-heap) for edges by weight
+class MinHeap {
+  constructor() {
+    this.heap = [];
+  }
+  parent(i){ return (i-1)>>1; }
+  left(i){ return (i<<1)+1; }
+  right(i){ return (i<<1)+2; }
+  swap(i,j) { [this.heap[i], this.heap[j]] = [this.heap[j], this.heap[i]]; }
+  push(item) {
+    this.heap.push(item);
+    this.bubbleUp(this.heap.length-1);
+  }
+  bubbleUp(i) {
+    while(i > 0){
+      let p = this.parent(i);
+      if(this.heap[p].weight <= this.heap[i].weight) break;
+      this.swap(i,p);
+      i = p;
+    }
+  }
+  pop() {
+    if(this.heap.length === 0) return null;
+    let top = this.heap[0];
+    let end = this.heap.pop();
+    if(this.heap.length > 0){
+      this.heap[0] = end;
+      this.bubbleDown(0);
+    }
+    return top;
+  }
+  bubbleDown(i) {
+    let length = this.heap.length;
+    while(true){
+      let l = this.left(i);
+      let r = this.right(i);
+      let smallest = i;
+      if(l < length && this.heap[l].weight < this.heap[smallest].weight) smallest = l;
+      if(r < length && this.heap[r].weight < this.heap[smallest].weight) smallest = r;
+      if(smallest === i) break;
+      this.swap(i, smallest);
+      i = smallest;
+    }
+  }
+  size() {
+    return this.heap.length;
+  }
+}
+
+let heap;
+
+// Start algorithm initializations
+function startPrim() {
+  resetGraphStyles();
+  primState.inMST.clear();
+  primState.mstEdges = [];
+  primState.totalWeight = 0;
+  primState.currentNode = 0; // Start from node 0 (A)
+  primState.finished = false;
+  primState.step = 0;
+  heap = new MinHeap();
+  primState.inMST.add(primState.currentNode);
+  nodeElements.get(primState.currentNode).classList.add('active');
+  infoMessage(`Step 0: Starting from node ${nodes[primState.currentNode].label}. Add all edges from this node to the priority queue.`);
+  // Push all edges from start node into priority queue
+  adjacency[primState.currentNode].forEach(edge => {
+    heap.push({from: primState.currentNode, to: edge.to, weight: edge.weight, edgeId: edge.edgeId});
+    edgeElements.get(edge.edgeId).classList.add('considered');
+  });
+
+  document.getElementById('next').disabled = false;
+  document.getElementById('reset').disabled = false;
+  document.getElementById('start').disabled = true;
+  document.getElementById('final-weight').textContent = '';
+}
+
+// Next step: pick next minimum edge connecting to MST that leads to new node
+function nextStep() {
+  if(primState.finished) return;
+
+  // Remove "active" from old node (only if not in MST green)
+  if(primState.currentNode !== null) {
+    let oldNodeEl = nodeElements.get(primState.currentNode);
+    oldNodeEl.classList.remove('active');
+    oldNodeEl.classList.add('mst');
+  }
+  // Remove considered edges coloring (clear all)
+  edgeElements.forEach((el) => el.classList.remove('considered'));
+
+  // Extract edges until one connects to a node not in MST
+  let edgeChosen = null;
+  while(heap.size() > 0){
+    let edge = heap.pop();
+    if(!primState.inMST.has(edge.to)){
+      edgeChosen = edge;
+      break;
+    }
+  }
+
+  if(edgeChosen === null) {
+    // No more edges to add, MST complete
+    primState.finished = true;
+    infoMessage(`Prim's Algorithm completed! All nodes are in the MST.`);
+    document.getElementById('final-weight').textContent = `Total weight of MST: ${primState.totalWeight}`;
+    document.getElementById('next').disabled = true;
+    document.getElementById('start').disabled = false;
+    return;
+  }
+
+  primState.step++;
+  const fromLabel = nodes[edgeChosen.from].label;
+  const toLabel = nodes[edgeChosen.to].label;
+
+  infoMessage(`Step ${primState.step}: Select edge (${fromLabel} - ${toLabel}) with weight ${edgeChosen.weight} connecting to new node ${toLabel}.`);
+
+  // Mark current edge as part of MST
+  primState.mstEdges.push(edgeChosen.edgeId);
+  primState.totalWeight += edgeChosen.weight;
+  // Mark edge green
+  edgeElements.get(edgeChosen.edgeId).classList.add('mst');
+
+  // Mark new node as active and add to MST
+  primState.currentNode = edgeChosen.to;
+  nodeElements.get(primState.currentNode).classList.add('active');
+  primState.inMST.add(primState.currentNode);
+
+  // Add all edges from new node connecting to nodes NOT yet in MST
+  adjacency[primState.currentNode].forEach(edge => {
+    if(!primState.inMST.has(edge.to)){
+      heap.push({from: primState.currentNode, to: edge.to, weight: edge.weight, edgeId: edge.edgeId});
+      edgeElements.get(edge.edgeId).classList.add('considered');
+    }
+  });
+}
+
+// Reset entire visualization and state
+function resetPrim() {
+  primState = {
+    inMST: new Set(),
+    edgeCandidates: [],
+    mstEdges: [],
+    currentNode: null,
+    totalWeight: 0,
+    step: 0,
+    started: false,
+    finished: false
+  };
+  resetGraphStyles();
+  infoMessage('Click Start to begin Prim\'s algorithm demonstration.');
+  document.getElementById('next').disabled = true;
+  document.getElementById('reset').disabled = true;
+  document.getElementById('start').disabled = false;
+  document.getElementById('final-weight').textContent = '';
+}
+
+// --- Button event listeners ---
+document.getElementById('start').addEventListener('click', () => {
+  startPrim();
+});
+document.getElementById('next').addEventListener('click', () => {
+  nextStep();
+});
+document.getElementById('reset').addEventListener('click', () => {
+  resetPrim();
+});
+
+</script>
+</body>
+</html>

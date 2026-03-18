@@ -34,7 +34,8 @@ node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mi
 
 node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
 
-node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
+node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0202-sample" -q "./question-list-short.json"
+
 
 node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
 
@@ -82,7 +83,7 @@ node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mi
 # 补充生成 Ideal FSM
 node batch-workflow.mjs -c 100 --ideal-fsm -w "batch-1207" -q "./question-list.json"
 
-node batch-workflow.mjs -c 100 --ideal-fsm -w "0126-balanced" -q "./question-list.json"
+node batch-workflow.mjs -c 100 --ideal-fsm -w "0202-sample-2" -q "./question-list-short.json"
 
 
 
@@ -139,6 +140,31 @@ node batch-similarity-eval.mjs 0126-biased
 
 
 # output: 各文件夹内 fsm-similarity-results.json
+
+
+# ====================== !!! 新结果分析(RQ2) =========================
+
+
+# 重新计算FSM分数 - 自定义所有维度和子维度的权重
+node recalculate-fsm-with-weights.mjs 0126-biased
+node recalculate-fsm-with-weights.mjs 0126-balanced
+# 输出: workspace/{workspace}/fsm-similarity-results-latest.json (原文件保持不变)
+
+
+# 分析！！！！！
+node analyze-three-frameworks.mjs 0126-balanced
+node analyze-three-frameworks.mjs 0126-biased
+
+# 生成详细的workspace数据对比报告（包含所有数据来源、分布、样本详情）
+node compare-workspace-data.mjs 0126-biased 0126-balanced
+# 输出: workspace-comparison-0126-biased-vs-0126-balanced.html
+
+
+
+
+
+
+
 
 # # =================================== 结果分析 ==========================================
 node analyze-fsm-differentiation.mjs workspace\aied

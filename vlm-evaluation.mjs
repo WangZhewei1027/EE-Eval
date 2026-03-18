@@ -102,32 +102,46 @@ async function getScreenshots() {
 /**
  * Evaluation prompt for VLM
  */
-const EVALUATION_PROMPT = `You are an expert evaluator of educational materials. Analyze this screenshot of an interactive learning application and provide scores based ONLY on what you can see in this single image.
+const EVALUATION_PROMPT = `You are a HIGHLY CRITICAL expert evaluator of educational materials with STRICT standards. Analyze this screenshot of an interactive learning application and provide scores based ONLY on what you can see in this single image.
 
-Evaluate TWO independent dimensions:
+BE EXTREMELY STRICT: Most materials should score 2-3 out of 5. Only truly exceptional work deserves 4-5. Use the FULL range of scores (0-5) to maximize differentiation.
 
-1. **Visual Quality (0-5)**: Rate the aesthetic and presentation quality
-   - Layout and organization
-   - Visual appeal and design
-   - Use of color and typography
-   - Information density and clarity
-   - Overall visual polish
+Evaluate TWO independent dimensions using these STRICT criteria:
 
-2. **Educational Quality (0-5)**: Rate the potential educational value based on visual content
-   - Clarity of educational concept being taught
-   - Appropriateness of visual representation for learning
-   - Presence of instructional elements (labels, legends, instructions)
-   - Apparent learning objectives
-   - Pedagogical effectiveness of visual design
+1. **Visual Quality (0-5)**: Rate the aesthetic and presentation quality with HARSH standards
 
-IMPORTANT: These scores are INDEPENDENT. A visually appealing page may have low educational value, and vice versa.
+   **Score 0**: Completely broken, illegible, or non-functional visual presentation
+   **Score 1**: Poor quality - cluttered layout, ugly colors, unreadable text, or severe design flaws
+   **Score 2**: Below average - basic functionality but lacks polish, mediocre aesthetics, poor spacing, or amateurish appearance
+   **Score 3**: Acceptable - clean and functional but generic, uninspired design with no special attention to visual appeal
+   **Score 4**: Good - well-designed with thoughtful layout, good color choices, clear hierarchy, professional appearance
+   **Score 5**: Exceptional - outstanding visual design, beautiful aesthetics, perfect balance, exemplary professional quality that sets a high standard
+
+   Consider: layout organization, visual appeal, color harmony, typography, information density, visual hierarchy, overall polish
+
+2. **Educational Quality (0-5)**: Rate the potential educational value with RIGOROUS academic standards
+
+   **Score 0**: No educational value whatsoever, or actively confusing/misleading
+   **Score 1**: Minimal educational content - unclear concept, poor explanations, or lack of instructional design
+   **Score 2**: Basic educational attempt - concept visible but poorly explained, missing key instructional elements, limited pedagogical value
+   **Score 3**: Adequate educational content - concept is clear but presentation is standard, basic instructional elements present, average learning potential
+   **Score 4**: Strong educational design - well-explained concept, effective instructional elements, clear learning objectives, good pedagogical approach
+   **Score 5**: Exemplary educational material - crystal-clear concept presentation, outstanding instructional design, multiple learning supports, exceptional pedagogical effectiveness
+
+   Consider: concept clarity, learning objective visibility, instructional scaffolding, visual representation appropriateness, pedagogical effectiveness, presence of labels/legends/instructions
+
+CRITICAL INSTRUCTIONS:
+- BE HARSH: Average work gets 2-3, not 4-5
+- DIFFERENTIATE: Use the full 0-5 range to maximize score variance
+- BE INDEPENDENT: Visual and educational scores should vary significantly - beautiful pages can be educationally weak and vice versa
+- BE OBJECTIVE: Base scores ONLY on what's visible in the screenshot
 
 Return your evaluation in the following JSON format:
 {
   "visual_quality": <score 0-5>,
   "educational_quality": <score 0-5>,
-  "visual_analysis": "<brief explanation of visual quality score in 2-3 sentences>",
-  "educational_analysis": "<brief explanation of educational quality score in 2-3 sentences>"
+  "visual_analysis": "<harsh but fair explanation of visual quality score, highlighting specific strengths/weaknesses>",
+  "educational_analysis": "<rigorous explanation of educational quality score, noting specific pedagogical strengths/flaws>"
 }`;
 
 /**

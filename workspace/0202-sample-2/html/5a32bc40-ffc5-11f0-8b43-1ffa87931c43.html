@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Graph (Directed/Undirected) Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 0;
+    display: flex; flex-direction: column; align-items: center;
+    background: #f0f0f0;
+  }
+  h1 {
+    margin: 1em 0 0.5em 0;
+  }
+  #controls {
+    margin: 1em 0;
+  }
+  #graph-container {
+    border: 1px solid #ccc;
+    background: white;
+    width: 800px;
+    height: 600px;
+    position: relative;
+    user-select: none;
+  }
+  #graph-info {
+    margin-top: 0.5em;
+    width: 800px;
+    font-size: 0.9em;
+    color: #333;
+  }
+  button {
+    margin-right: 0.5em;
+    padding: 6px 12px;
+    font-size: 1em;
+  }
+  label {
+    font-weight: bold;
+    margin-right: 0.5em;
+  }
+</style>
+</head>
+<body>
+<h1>Graph Visualization: Directed and Undirected</h1>
+<div id="controls">
+  <label>
+    <input type="radio" name="mode" value="undirected" checked />
+    Undirected Graph
+  </label>
+  <label>
+    <input type="radio" name="mode" value="directed" />
+    Directed Graph
+  </label>
+  <button id="add-node">Add Node</button>
+  <button id="add-edge">Add Edge</button>
+  <button id="clear-graph">Clear Graph</button>
+  <button id="remove-edge">Remove Edge</button>
+</div>
+<div id="graph-container">
+  <canvas id="graph-canvas" width="800" height="600"></canvas>
+</div>
+<div id="graph-info"><em>Instructions: Click "Add Node" then click anywhere on the canvas to add a node.<br>
+Click "Add Edge", then click first node, then second node to connect. For directed graph, edges have arrows.<br>
+Click "Remove Edge" then click on an edge to remove it.<br>
+You can drag nodes to reposition them.</em></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('graph-canvas');
+  const ctx = canvas.getContext('2d');
+  let graphMode = 'undirected'; // 'undirected' or 'directed'
+
+  const radius = 20; // Node circle radius
+  const arrowSize = 10;
+
+  // State
+  let nodes = []; // {id, x, y}
+  let edges = []; // {from: nodeId, to: nodeId}
+  let nodeIdCounter = 1;
+
+  let currentAction = null; 
+  // null / 'add-node' / 'add-edge' / 'remove-edge' / 'drag-node'
+  // For add-edge mode: we will need to track first selected node
+
+  let addEdgeState = {selectedNode: null};
+  let draggingNode = null;
+  let dragOffset = {x: 0, y: 0};
+
+  // Get controls
+  const modeRadios = document.querySelectorAll('input[name="mode"]');
+  const btnAddNode = document.getElementById('add-node');
+  const btnAddEdge = document.getElementById('add-edge');
+  const btnClearGraph = document.getElementById('clear-graph');
+  const btnRemoveEdge = document.getElementById('remove-edge');
+
+  // Utility
+  function dist(x1,y1,x2,y2){ return Math.sqrt((x1-x2)**2+(y1-y2)**2) }
+  
+  function getNodeAt(x,y){
+    return nodes.find(n => dist(n.x,n.y,x,y) <= radius);
+  }
+  
+  // Edges can be represented visually differently if directed
+  // We draw edges between nodes
+  function drawArrow(fromX, fromY, toX, toY){
+    const headlen = arrowSize; // length of head in pixels
+
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const angle = Math.atan2(dy, dx);
+
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+
+    // arrowhead
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - headlen*Math.cos(angle - Math.PI/6), toY - headlen*Math.sin(angle - Math.PI/6));
+    ctx.lineTo(toX - headlen*Math.cos(angle + Math.PI/6), toY - headlen*Math.sin(angle + Math.PI/6));
+    ctx.lineTo(toX, toY);
+    ctx.fill();
+  }
+
+  // Returns a point on the line from (x1,y1) to (x2,y2) at specified distance from x2,y2
+  // used to stop edge before circle radius
+  function pointOnLine(x1,y1,x2,y2, distFromEnd) {
+    const distTotal = dist(x1,y1,x2,y2);
+    if(distTotal === 0) return {x: x2, y: y2};
+    const ratio = (distTotal - distFromEnd) / distTotal;
+    return {
+      x: x1 + (x2 - x1)*ratio,
+      y: y1 + (y2 - y1)*ratio
+    };
+  }
+
+  function drawEdge(edge, highlight = false){
+    const fromNode = nodes.find(n => n.id === edge.from);
+    const toNode = nodes.find(n => n.id === edge.to);
+    if(!fromNode || !toNode) return;
+
+    ctx.strokeStyle = highlight ? '#f00' : '#333';
+    ctx.fillStyle = highlight ? '#f00' : '#333';
+    ctx.lineWidth = highlight ? 3 : 1.5;
+
+    // For visual niceness, don't draw lines all the way to node center, but to near circle boundary
+
+    let start = pointOnLine(toNode.x, toNode.y, fromNode.x, fromNode.y, radius);
+    let end = pointOnLine(fromNode.x, fromNode.y, toNode.x, toNode.y, radius);
+
+    if(graphMode === 'undirected'){
+      // simple line
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    } else {
+      // directed: line + arrow
+      // draw line from start to end-point slightly before circle radius
+      drawArrow(start.x, start.y, end.x, end.y);
+    }
+  }
+
+  function drawNode(node, highlight = false){
+    ctx.fillStyle = highlight ? '#4A90E2' : '#1976d2';
+    ctx.strokeStyle = '#135ba0';
+    ctx.lineWidth = highlight ? 3 : 2;
+
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, radius, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw node label (id)
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(node.id, node.x, node.y);
+  }
+
+  // For remove edge mode: check if click is near any edge
+  // Distance from point to line segment algorithm:
+  function distancePointToSegment(px, py, x1,y1, x2,y2){
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A*C + B*D;
+    const len_sq = C*C + D*D;
+    let param = -1;
+    if(len_sq !== 0){
+      param = dot / len_sq;
+    }
+
+    let xx, yy;
+
+    if(param < 0){
+      xx = x1;
+      yy = y1;
+    }
+    else if(param > 1){
+      xx = x2;
+      yy = y2;
+    }
+    else{
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    return dist(px, py, xx, yy);
+  }
+
+  function getEdgeAt(x, y){
+    for(const edge of edges){
+      const fromNode = nodes.find(n => n.id === edge.from);
+      const toNode = nodes.find(n => n.id === edge.to);
+      if(!fromNode || !toNode) continue;
+      // Consider edge line from start to end after shortening for node radius, for accurate hit:
+      let start = pointOnLine(toNode.x, toNode.y, fromNode.x, fromNode.y, radius);
+      let end = pointOnLine(fromNode.x, fromNode.y, toNode.x, toNode.y, radius);
+
+      let distance = distancePointToSegment(x, y, start.x, start.y, end.x, end.y);
+      if(distance <= 8){
+        return edge;
+      }
+    }
+    return null;
+  }
+
+  // Render all
+  function draw(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw edges behind
+    for(let edge of edges){
+      drawEdge(edge);
+    }
+    
+    // If selecting edge to remove or adding edge, highlight edges or nodes:
+    if(currentAction === 'remove-edge' && removeEdgeHover){
+      drawEdge(removeEdgeHover, true);
+    }
+
+    if(currentAction === 'add-edge' && addEdgeState.selectedNode){
+      drawNode(addEdgeState.selectedNode, true);
+    }
+
+    // Draw nodes on top
+    for(let node of nodes){
+      drawNode(node);
+    }
+  }
+
+  // Interaction logic handlers
+  btnAddNode.onclick = () => {
+    currentAction = 'add-node';
+    addEdgeState.selectedNode = null;
+    setStatus('Add Node: Click on canvas to place a new node.');
+  };
+  btnAddEdge.onclick = () => {
+    if(nodes.length < 2){
+      alert('You need at least two nodes to add an edge.');
+      return;
+    }
+    currentAction = 'add-edge';
+    addEdgeState.selectedNode = null;
+    setStatus('Add Edge: Click on first node, then second node to create edge.');
+  };
+  btnRemoveEdge.onclick = () => {
+    if(edges.length === 0){
+      alert('No edges to remove.');
+      return;
+    }
+    currentAction = 'remove-edge';
+    removeEdgeHover = null;
+    setStatus('Remove Edge: Click on an edge to remove it.');
+  };
+  btnClearGraph.onclick = () => {
+    if(!confirm('Are you sure you want to clear the entire graph?')) return;
+    nodes = [];
+    edges = [];
+    nodeIdCounter = 1;
+    currentAction = null;
+    addEdgeState.selectedNode = null;
+    removeEdgeHover = null;
+    setStatus('Graph cleared.');
+    draw();
+  };
+
+  // Mode change radios
+  modeRadios.forEach(radio => {
+    radio.onchange = () => {
+      if(radio.checked){
+        graphMode = radio.value;
+        draw();
+        setStatus('Switched to ' + (graphMode === 'undirected' ? 'Undirected' : 'Directed') + ' Graph mode.');
+      }
+    };
+  });
+
+  // Status line
+  const statusLine = document.createElement('p');
+  statusLine.style.textAlign = 'center';
+  statusLine.style.fontStyle = 'italic';
+  statusLine.style.color = '#555';
+  document.getElementById('graph-info').appendChild(statusLine);
+
+  function setStatus(text){
+    statusLine.textContent = text || '';
+  }
+
+  // For remove edge hover
+  let removeEdgeHover = null;
+
+  // Canvas mouse handlers
+  canvas.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if(currentAction === 'add-node'){
+      // Add a node
+      const newNode = {id: nodeIdCounter++, x, y};
+      nodes.push(newNode);
+      setStatus('Node ' + newNode.id + ' added at (' + Math.round(x) + ',' + Math.round(y) + ').');
+      draw();
+      // We remain in add-node mode to add multiple nodes until user clicks other action
+    } else if(currentAction === 'add-edge'){
+      const clickedNode = getNodeAt(x,y);
+      if(!clickedNode){
+        setStatus('Add Edge: Click on a node.');
+        return;
+      }
+      if(!addEdgeState.selectedNode){
+        // Select first node
+        addEdgeState.selectedNode = clickedNode;
+        setStatus('Add Edge: Now click on second node to connect to node ' + clickedNode.id + '.');
+      } else {
+        // second node selected -> add edge if does not already exist
+        let from = addEdgeState.selectedNode.id;
+        let to = clickedNode.id;
+        if(!graphMode) graphMode = 'undirected';
+
+        if(graphMode === 'undirected'){
+          // for undirected: order doesn't matter 
+          let exists = edges.find(e => 
+            (e.from === from && e.to === to) || (e.from === to && e.to === from));
+          if(exists){
+            setStatus('Edge already exists between node ' + from + ' and node ' + to + '.');
+            addEdgeState.selectedNode = null;
+            draw();
+            return;
+          }
+          edges.push({from, to});
+        } else { 
+          // directed
+          let exists = edges.find(e => e.from === from && e.to === to);
+          if(exists){
+            setStatus('Edge already exists from node ' + from + ' to node ' + to + '.');
+            addEdgeState.selectedNode = null;
+            draw();
+            return;
+          }
+          edges.push({from, to});
+        }
+        setStatus('Edge added from node ' + from + ' to node ' + to + '. Click another first node or switch mode.');
+        addEdgeState.selectedNode = null;
+        draw();
+      }
+    } else if(currentAction === 'remove-edge'){
+      // Check if click on edge
+      const edgeClicked = getEdgeAt(x,y);
+      if(edgeClicked){
+        edges = edges.filter(e => e !== edgeClicked);
+        setStatus(`Edge removed from node ${edgeClicked.from} to node ${edgeClicked.to}.`);
+        removeEdgeHover = null;
+        draw();
+      } else {
+        setStatus('Click on an edge to remove it.');
+      }
+    } else {
+      // Drag node?
+      const clickedNode = getNodeAt(x,y);
+      if(clickedNode){
+        currentAction = 'drag-node';
+        draggingNode = clickedNode;
+        dragOffset.x = x - draggingNode.x;
+        dragOffset.y = y - draggingNode.y;
+        setStatus('Dragging node ' + draggingNode.id + '.');
+      }
+    }
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if(currentAction === 'drag-node' && draggingNode){
+      draggingNode.x = x - dragOffset.x;
+      draggingNode.y = y - dragOffset.y;
+      draw();
+    } else if(currentAction === 'remove-edge'){
+      const hoverEdge = getEdgeAt(x,y);
+      if(hoverEdge !== removeEdgeHover){
+        removeEdgeHover = hoverEdge;
+        draw();
+      }
+    }
+  });
+
+  canvas.addEventListener('mouseup', e => {
+    if(currentAction === 'drag-node' && draggingNode){
+      setStatus('Dropped node ' + draggingNode.id + '.');
+      currentAction = null;
+      draggingNode = null;
+      draw();
+    }
+  });
+
+  canvas.addEventListener('mouseleave', e => {
+    if(currentAction === 'drag-node' && draggingNode){
+      currentAction = null;
+      draggingNode = null;
+      setStatus('');
+      draw();
+    }
+    if(currentAction === 'remove-edge'){
+      removeEdgeHover = null;
+      draw();
+    }
+  });
+
+  // Initial draw
+  draw();
+  setStatus('Select an action: Add Node, Add Edge, Remove Edge, or Clear Graph.');
+
+})();
+</script>
+</body>
+</html>
