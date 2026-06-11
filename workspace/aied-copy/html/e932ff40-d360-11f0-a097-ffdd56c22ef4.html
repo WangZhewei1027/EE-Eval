@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Red-Black Tree Visualizer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 0; padding: 0; display:flex; height:100vh; }
+    #left { width: 360px; padding: 16px; background:#f4f6f8; box-sizing: border-box; border-right: 1px solid #ddd; overflow:auto; }
+    #left h1 { font-size: 20px; margin: 0 0 8px 0; }
+    label { display:block; margin-top:8px; font-size:13px; color:#333; }
+    input[type="number"], input[type="text"] { width:100%; box-sizing:border-box; padding:8px; margin-top:6px; border:1px solid #ccc; border-radius:4px; }
+    button { margin-top:8px; padding:8px 10px; background:#1976d2; color:white; border: none; border-radius:4px; cursor:pointer; }
+    button.secondary { background:#00a676; }
+    button.warn { background:#e53935; }
+    button:disabled { opacity:0.5; cursor:not-allowed; }
+    .row { display:flex; gap:8px; margin-top:8px; }
+    .controls { margin-top:16px; }
+    #log { margin-top:12px; background:white; border:1px solid #ddd; padding:8px; height:120px; overflow:auto; font-size:13px; border-radius:4px; }
+    #status { margin-top:8px; font-size:13px; color:#444; }
+    #right { flex:1; position:relative; background:linear-gradient(180deg,#fff,#f7fbff); }
+    svg { width:100%; height:100%; }
+    .node circle { stroke:#333; stroke-width:1.5px; }
+    .node text { pointer-events:none; font-size:12px; text-anchor:middle; dominant-baseline:middle; fill:#fff; font-weight:600; }
+    .nodetextid { font-size:10px; fill:#222; text-anchor:middle; dominant-baseline:hanging; }
+    .edge { stroke:#666; stroke-width:1.5px; }
+    .highlight { stroke:gold; stroke-width:3px; }
+    #controls-bottom { position:absolute; left:16px; bottom:16px; background:rgba(255,255,255,0.95); padding:10px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.12); }
+    .small { font-size:12px; color:#333; margin-top:6px; }
+    .info { font-size:12px; color:#333; margin-top:6px; }
+    #speed { width:120px; }
+    footer { font-size:11px; color:#666; margin-top:10px; }
+    a { color:#1976d2; }
+  </style>
+</head>
+<body>
+  <div id="left">
+    <h1>Red-Black Tree Visualizer</h1>
+    <div>Interactive demonstration of Red-Black Tree (insertion & deletion). Uses a sentinel NIL node internally. Visualizes rotations and recolor operations step-by-step.</div>
+
+    <label>Value to insert (integer)
+      <input id="valueInput" type="number" value="10" />
+    </label>
+    <div class="row">
+      <button id="insertBtn">Insert</button>
+      <button id="deleteBtn" class="warn">Delete</button>
+    </div>
+
+    <div class="controls">
+      <div class="row">
+        <button id="randomInsert" class="secondary">Insert Random</button>
+        <button id="randomDelete" class="warn">Delete Random</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+      <div class="small">Animation controls</div>
+      <div class="row">
+        <button id="playPause">Play</button>
+        <button id="stepBack">&lt; Step</button>
+        <button id="stepForward">Step &gt;</button>
+      </div>
+      <div class="row" style="align-items:center;">
+        <label style="margin:0;">Speed
+          <input id="speed" type="range" min="100" max="2000" value="600" />
+        </label>
+        <div style="margin-left:8px; font-size:12px;" id="speedVal">600 ms</div>
+      </div>
+      <div class="info">Notes:
+        <ul style="margin:6px 0 0 18px;padding:0;">
+          <li>New nodes are red by default.</li>
+          <li>Black NIL leaves are not drawn (implicit).</li>
+          <li>This visualizer records snapshots after each key operation: node creation, recolor and rotations.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="status"></div>
+    <div id="log"></div>
+    <footer>Algorithm from CLRS (Cormen et al.). Visualization made with plain JavaScript and SVG.</footer>
+  </div>
+
+  <div id="right">
+    <svg id="svgRoot" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <div id="controls-bottom">
+      <div style="font-weight:600;">Current Snapshot: <span id="snapIndex">0</span> / <span id="snapTotal">0</span></div>
+      <div class="small" id="treeProps"></div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // Red-Black Tree visualizer with insertion and deletion (CLRS-style).
+  // Single sentinel NIL node used to simplify code. Snapshots recorded after major changes.
+
+  // --- Data structures ---
+  let nextNodeId = 1;
+  function Node(value, color='RED') {
+    this.id = nextNodeId++;
+    this.value = value;
+    this.color = color; // 'RED' or 'BLACK'
+    this.left = nil;
+    this.right = nil;
+    this.parent = nil;
+  }
+
+  // We'll create a single NIL sentinel node used for all leaves.
+  const nil = { id: 0, value: null, color: 'BLACK', left: null, right: null, parent: null, isNil:true };
+
+  // Tree root (pointer to Node or nil)
+  let root = nil;
+
+  // Snapshots: an array of snapshot objects describing the whole tree state
+  let snapshots = [];
+  let snapshotIndex = -1;
+
+  // UI elements
+  const svg = document.getElementById('svgRoot');
+  const valueInput = document.getElementById('valueInput');
+  const insertBtn = document.getElementById('insertBtn');
+  const deleteBtn = document.getElementById('deleteBtn');
+  const randomInsert = document.getElementById('randomInsert');
+  const randomDelete = document.getElementById('randomDelete');
+  const clearBtn = document.getElementById('clearBtn');
+  const playPause = document.getElementById('playPause');
+  const stepBack = document.getElementById('stepBack');
+  const stepForward = document.getElementById('stepForward');
+  const speedInput = document.getElementById('speed');
+  const speedVal = document.getElementById('speedVal');
+  const logDiv = document.getElementById('log');
+  const statusDiv = document.getElementById('status');
+  const snapIndexEl = document.getElementById('snapIndex');
+  const snapTotalEl = document.getElementById('snapTotal');
+  const treeProps = document.getElementById('treeProps');
+
+  speedVal.textContent = speedInput.value + ' ms';
+
+  // Helper: log
+  function log(msg) {
+    const p = document.createElement('div');
+    p.textContent = msg;
+    logDiv.appendChild(p);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  function setStatus(msg) {
+    statusDiv.textContent = msg;
+  }
+
+  // --- Snapshot utilities ---
+  function takeSnapshot(note) {
+    // Build a mapping of nodes avoiding NIL (id 0)
+    const map = {};
+    function traverse(n) {
+      if (!n || n.isNil) return;
+      map[n.id] = { id:n.id, value:n.value, color:n.color, leftId: n.left? n.left.id : 0, rightId: n.right? n.right.id : 0, parentId: n.parent? n.parent.id : 0 };
+      traverse(n.left);
+      traverse(n.right);
+    }
+    traverse(root);
+    const snap = { rootId: root? root.id : 0, nodes: map, note: note || null, ts: Date.now() };
+    snapshots.push(snap);
+    snapshotIndex = snapshots.length - 1;
+    updateSnapInfo();
+  }
+
+  function updateSnapInfo() {
+    snapIndexEl.textContent = Math.max(0, snapshotIndex+1);
+    snapTotalEl.textContent = Math.max(0, snapshots.length);
+  }
+
+  // --- Core red-black algorithms (CLRS) ---
+  function leftRotate(x) {
+    const y = x.right;
+    // x.right = y.left
+    x.right = y.left;
+    if (!y.left.isNil) y.left.parent = x;
+    y.parent = x.parent;
+    if (x.parent.isNil) {
+      root = y;
+    } else if (x === x.parent.left) {
+      x.parent.left = y;
+    } else {
+      x.parent.right = y;
+    }
+    y.left = x;
+    x.parent = y;
+    takeSnapshot('Left rotate at node ' + x.value + ' (x:' + x.id + ', y:' + y.id + ')');
+  }
+
+  function rightRotate(x) {
+    const y = x.left;
+    x.left = y.right;
+    if (!y.right.isNil) y.right.parent = x;
+    y.parent = x.parent;
+    if (x.parent.isNil) {
+      root = y;
+    } else if (x === x.parent.right) {
+      x.parent.right = y;
+    } else {
+      x.parent.left = y;
+    }
+    y.right = x;
+    x.parent = y;
+    takeSnapshot('Right rotate at node ' + x.value + ' (x:' + x.id + ', y:' + y.id + ')');
+  }
+
+  function rbInsert(value) {
+    // prevent duplicates
+    if (findNodeByValue(root, value)) {
+      log('Value ' + value + ' already exists (no duplicates).');
+      return;
+    }
+    const z = new Node(value, 'RED');
+    let y = nil;
+    let x = root;
+    while (!x.isNil) {
+      y = x;
+      if (z.value < x.value) {
+        x = x.left;
+      } else {
+        x = x.right;
+      }
+    }
+    z.parent = y;
+    if (y.isNil) {
+      root = z;
+    } else if (z.value < y.value) {
+      y.left = z;
+    } else {
+      y.right = z;
+    }
+    z.left = nil; z.right = nil;
+    takeSnapshot('Inserted node ' + z.value + ' (id ' + z.id + ')');
+    rbInsertFixup(z);
+  }
+
+  function rbInsertFixup(z) {
+    while (z.parent && z.parent.color === 'RED') {
+      if (z.parent === z.parent.parent.left) {
+        const y = z.parent.parent.right; // uncle
+        if (y && y.color === 'RED') {
+          z.parent.color = 'BLACK';
+          y.color = 'BLACK';
+          z.parent.parent.color = 'RED';
+          takeSnapshot('Recolor: parent & uncle to BLACK, grandparent to RED (z=' + z.value + ')');
+          z = z.parent.parent;
+        } else {
+          if (z === z.parent.right) {
+            z = z.parent;
+            leftRotate(z);
+          }
+          z.parent.color = 'BLACK';
+          z.parent.parent.color = 'RED';
+          takeSnapshot('Recolor & rotate (z=' + z.value + ') before rightRotate');
+          rightRotate(z.parent.parent);
+        }
+      } else {
+        // symmetric
+        const y = z.parent.parent.left;
+        if (y && y.color === 'RED') {
+          z.parent.color = 'BLACK';
+          y.color = 'BLACK';
+          z.parent.parent.color = 'RED';
+          takeSnapshot('Recolor: parent & uncle to BLACK, grandparent to RED (z=' + z.value + ')');
+          z = z.parent.parent;
+        } else {
+          if (z === z.parent.left) {
+            z = z.parent;
+            rightRotate(z);
+          }
+          z.parent.color = 'BLACK';
+          z.parent.parent.color = 'RED';
+          takeSnapshot('Recolor & rotate (z=' + z.value + ') before leftRotate');
+          leftRotate(z.parent.parent);
+        }
+      }
+    }
+    root.color = 'BLACK';
+    takeSnapshot('Root colored BLACK');
+  }
+
+  // -------- Deletion (CLRS) --------
+  function rbDeleteByValue(val) {
+    const z = findNodeByValue(root, val);
+    if (!z) { log('Value ' + val + ' not found.'); return; }
+    rbDelete(z);
+  }
+
+  function rbTransplant(u, v) {
+    if (u.parent.isNil) {
+      root = v;
+    } else if (u === u.parent.left) {
+      u.parent.left = v;
+    } else {
+      u.parent.right = v;
+    }
+    v.parent = u.parent;
+  }
+
+  function treeMinimum(x) {
+    while (!x.left.isNil) x = x.left;
+    return x;
+  }
+
+  function rbDelete(z) {
+    let y = z;
+    let yOriginalColor = y.color;
+    let x;
+    if (z.left.isNil) {
+      x = z.right;
+      rbTransplant(z, z.right);
+      takeSnapshot('Transplant: removed node ' + z.value);
+    } else if (z.right.isNil) {
+      x = z.left;
+      rbTransplant(z, z.left);
+      takeSnapshot('Transplant: removed node ' + z.value);
+    } else {
+      y = treeMinimum(z.right);
+      yOriginalColor = y.color;
+      x = y.right;
+      if (y.parent === z) {
+        x.parent = y;
+      } else {
+        rbTransplant(y, y.right);
+        y.right = z.right;
+        y.right.parent = y;
+        takeSnapshot('Transplanted successor ' + y.value + ' in place of its right child');
+      }
+      rbTransplant(z, y);
+      y.left = z.left;
+      y.left.parent = y;
+      y.color = z.color;
+      takeSnapshot('Successor ' + y.value + ' moved to replace ' + z.value);
+    }
+    if (yOriginalColor === 'BLACK') {
+      rbDeleteFixup(x);
+    }
+  }
+
+  function rbDeleteFixup(x) {
+    while (!x.isNil && x !== root && x.color === 'BLACK') {
+      if (x === x.parent.left) {
+        let w = x.parent.right;
+        if (w.color === 'RED') {
+          w.color = 'BLACK';
+          x.parent.color = 'RED';
+          takeSnapshot('DeleteFixup: recolor and leftRotate (case 1)');
+          leftRotate(x.parent);
+          w = x.parent.right;
+        }
+        if ((w.left.isNil || w.left.color === 'BLACK') && (w.right.isNil || w.right.color === 'BLACK')) {
+          w.color = 'RED';
+          takeSnapshot('DeleteFixup: sibling recolored RED (case 2)');
+          x = x.parent;
+        } else {
+          if (w.right.isNil || w.right.color === 'BLACK') {
+            if (!w.left.isNil) w.left.color = 'BLACK';
+            w.color = 'RED';
+            takeSnapshot('DeleteFixup: sibling left child BLACK, rotate right (case 3)');
+            rightRotate(w);
+            w = x.parent.right;
+          }
+          w.color = x.parent.color;
+          x.parent.color = 'BLACK';
+          if (!w.right.isNil) w.right.color = 'BLACK';
+          takeSnapshot('DeleteFixup: final rotations & recolor (case 4)');
+          leftRotate(x.parent);
+          x = root;
+        }
+      } else {
+        // symmetric
+        let w = x.parent.left;
+        if (w.color === 'RED') {
+          w.color = 'BLACK';
+          x.parent.color = 'RED';
+          takeSnapshot('DeleteFixup: recolor and rightRotate (case 1 mirror)');
+          rightRotate(x.parent);
+          w = x.parent.left;
+        }
+        if ((w.right.isNil || w.right.color === 'BLACK') && (w.left.isNil || w.left.color === 'BLACK')) {
+          w.color = 'RED';
+          takeSnapshot('DeleteFixup: sibling recolored RED (case 2 mirror)');
+          x = x.parent;
+        } else {
+          if (w.left.isNil || w.left.color === 'BLACK') {
+            if (!w.right.isNil) w.right.color = 'BLACK';
+            w.color = 'RED';
+            takeSnapshot('DeleteFixup: sibling right child BLACK, rotate left (case 3 mirror)');
+            leftRotate(w);
+            w = x.parent.left;
+          }
+          w.color = x.parent.color;
+          x.parent.color = 'BLACK';
+          if (!w.left.isNil) w.left.color = 'BLACK';
+          takeSnapshot('DeleteFixup: final rotations & recolor (case 4 mirror)');
+          rightRotate(x.parent);
+          x = root;
+        }
+      }
+    }
+    x.color = 'BLACK';
+    takeSnapshot('DeleteFixup: ensure x is BLACK at end');
+  }
+
+  // --- Utilities ---
+  function findNodeByValue(start, value) {
+    let x = start;
+    while (x && !x.isNil) {
+      if (value === x.value) return x;
+      if (value < x.value) x = x.left; else x = x.right;
+    }
+    return null;
+  }
+
+  function clearTree() {
+    root = nil;
+    nextNodeId = 1;
+    snapshots = [];
+    snapshotIndex = -1;
+    takeSnapshot('Cleared tree');
+    renderSnapshot(snapshotIndex);
+    log('Tree cleared.');
+  }
+
+  // --- Rendering snapshots as SVG ---
+  function renderSnapshot(index) {
+    if (index < 0 || index >= snapshots.length) {
+      // clear svg
+      svg.innerHTML = '';
+      treeProps.textContent = '';
+      updateSnapInfo();
+      return;
+    }
+    const snap = snapshots[index];
+    // Rebuild a simple object graph for layout (no NIL nodes)
+    const nodes = {};
+    for (const id in snap.nodes) {
+      const n = snap.nodes[id];
+      nodes[id] = { id:n.id, value:n.value, color:n.color, leftId:n.leftId, rightId:n.rightId, parentId:n.parentId, x:0, y:0 };
+    }
+    const rootId = snap.rootId;
+    // Build children relations for traversal
+    function buildTree(id) {
+      if (!id || id === 0) return null;
+      const n = nodes[id];
+      n.left = buildTree(n.leftId);
+      n.right = buildTree(n.rightId);
+      if (n.left) n.left.parent = n;
+      if (n.right) n.right.parent = n;
+      return n;
+    }
+    const treeRoot = buildTree(rootId);
+    // Compute inorder x positions
+    let idx = 0;
+    const levelGap = 80;
+    const nodeGap = 45;
+    function inorder(n, depth) {
+      if (!n) return;
+      inorder(n.left, depth+1);
+      n.x = (idx++) * nodeGap;
+      n.y = depth * levelGap;
+      inorder(n.right, depth+1);
+    }
+    inorder(treeRoot, 0);
+    // Compute width & height
+    const totalWidth = Math.max(800, (idx+1) * nodeGap + 120);
+    const totalHeight = Math.max(200, (getMaxDepth(treeRoot)+2) * levelGap + 60);
+    svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+    svg.innerHTML = '';
+
+    // Draw edges
+    function drawEdges(n) {
+      if (!n) return;
+      if (n.left) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', n.x + 60);
+        line.setAttribute('y1', n.y + 30);
+        line.setAttribute('x2', n.left.x + 60);
+        line.setAttribute('y2', n.left.y + 30);
+        line.setAttribute('class','edge');
+        svg.appendChild(line);
+      }
+      if (n.right) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', n.x + 60);
+        line.setAttribute('y1', n.y + 30);
+        line.setAttribute('x2', n.right.x + 60);
+        line.setAttribute('y2', n.right.y + 30);
+        line.setAttribute('class','edge');
+        svg.appendChild(line);
+      }
+      drawEdges(n.left);
+      drawEdges(n.right);
+    }
+    drawEdges(treeRoot);
+
+    // Draw nodes
+    function drawNodes(n) {
+      if (!n) return;
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('transform', `translate(${n.x + 60}, ${n.y + 20})`);
+      g.setAttribute('class', 'node');
+      const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circle.setAttribute('r', 18);
+      circle.setAttribute('cx', 0);
+      circle.setAttribute('cy', 12);
+      if (n.color === 'RED') {
+        circle.setAttribute('fill', '#d32f2f');
+      } else {
+        circle.setAttribute('fill', '#212121');
+      }
+      g.appendChild(circle);
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x', 0);
+      text.setAttribute('y', 12);
+      text.textContent = n.value;
+      g.appendChild(text);
+
+      // small id text
+      const idText = document.createElementNS('http://www.w3.org/2000/svg','text');
+      idText.setAttribute('class','nodetextid');
+      idText.setAttribute('x', 0);
+      idText.setAttribute('y', 36);
+      idText.textContent = 'id:' + n.id;
+      g.appendChild(idText);
+      svg.appendChild(g);
+
+      drawNodes(n.left);
+      drawNodes(n.right);
+    }
+    drawNodes(treeRoot);
+
+    // Show snapshot note/time
+    if (snap.note) {
+      treeProps.textContent = snap.note;
+    } else {
+      treeProps.textContent = 'Snapshot time: ' + new Date(snap.ts).toLocaleTimeString();
+    }
+  }
+
+  function getMaxDepth(root) {
+    if (!root) return 0;
+    return 1 + Math.max(getMaxDepth(root.left), getMaxDepth(root.right));
+  }
+
+  // --- Animation / Controls ---
+  let playing = false;
+  let playTimer = null;
+
+  function play() {
+    if (snapshots.length === 0) return;
+    playing = true;
+    playPause.textContent = 'Pause';
+    scheduleNext();
+  }
+
+  function pause() {
+    playing = false;
+    playPause.textContent = 'Play';
+    if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+  }
+
+  function scheduleNext() {
+    if (!playing) return;
+    const delay = parseInt(speedInput.value,10) || 600;
+    playTimer = setTimeout(()=>{
+      stepForwardAction();
+      if (snapshotIndex < snapshots.length - 1) scheduleNext();
+      else pause();
+    }, delay);
+  }
+
+  function stepForwardAction() {
+    if (snapshotIndex < snapshots.length - 1) snapshotIndex++;
+    renderSnapshot(snapshotIndex);
+    updateSnapInfo();
+  }
+
+  function stepBackAction() {
+    if (snapshotIndex > 0) snapshotIndex--;
+    renderSnapshot(snapshotIndex);
+    updateSnapInfo();
+  }
+
+  // --- Event handlers ---
+  insertBtn.addEventListener('click', ()=>{
+    const v = parseInt(valueInput.value,10);
+    if (isNaN(v)) return;
+    setStatus('Inserting ' + v + '...');
+    // record current snapshot to allow replay from state
+    // We will run the insertion and snapshots will be appended.
+    rbInsert(v);
+    updateSnapInfo();
+    // After operation, go to last snapshot
+    snapshotIndex = snapshots.length - 1;
+    renderSnapshot(snapshotIndex);
+    log('Inserted ' + v + '.');
+  });
+
+  deleteBtn.addEventListener('click', ()=>{
+    const v = parseInt(valueInput.value,10);
+    if (isNaN(v)) return;
+    setStatus('Deleting ' + v + '...');
+    rbDeleteByValue(v);
+    snapshotIndex = snapshots.length - 1;
+    renderSnapshot(snapshotIndex);
+    log('Delete attempted for ' + v + '.');
+  });
+
+  randomInsert.addEventListener('click', ()=>{
+    const v = Math.floor(Math.random() * 90) + 1;
+    valueInput.value = v;
+    insertBtn.click();
+  });
+
+  randomDelete.addEventListener('click', ()=>{
+    // delete a random existing node if any
+    const existing = getAllValues();
+    if (existing.length === 0) { log('Tree is empty.'); return; }
+    const v = existing[Math.floor(Math.random()*existing.length)];
+    valueInput.value = v;
+    deleteBtn.click();
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    clearTree();
+  });
+
+  playPause.addEventListener('click', ()=>{
+    if (!playing) play(); else pause();
+  });
+
+  stepForward.addEventListener('click', ()=>{
+    pause();
+    stepForwardAction();
+  });
+
+  stepBack.addEventListener('click', ()=>{
+    pause();
+    stepBackAction();
+  });
+
+  speedInput.addEventListener('input', ()=>{
+    speedVal.textContent = speedInput.value + ' ms';
+  });
+
+  // Utility to list current values in the tree (in-order)
+  function getAllValues() {
+    const out = [];
+    function inorder(n) {
+      if (!n || n.isNil) return;
+      inorder(n.left);
+      out.push(n.value);
+      inorder(n.right);
+    }
+    inorder(root);
+    return out;
+  }
+
+  // Initialize with an empty snapshot
+  takeSnapshot('Initial empty tree');
+  renderSnapshot(0);
+
+  // expose some helpful logging
+  log('Red-Black Tree visualizer ready.');
+  setStatus('Ready.');
+
+  // Make functions accessible via console for experimentation
+  window.rbt = {
+    insert: rbInsert,
+    deleteValue: rbDeleteByValue,
+    snapshots: () => snapshots,
+    root: () => root,
+    takeSnapshot
+  };
+})();
+</script>
+</body>
+</html>

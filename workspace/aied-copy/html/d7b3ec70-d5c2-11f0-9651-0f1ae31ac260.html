@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Breadth-First Search (BFS) Visualization</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    display: flex; flex-direction: column; align-items: center; background: #f0f0f0;
+    height: 100vh;
+  }
+  h1 {
+    margin: 20px;
+    color: #333;
+  }
+  #graphCanvas {
+    background: white;
+    border: 1px solid #ccc;
+    margin-bottom: 10px;
+    max-width: 90vw;
+    max-height: 70vh;
+  }
+  #controls {
+    margin-bottom: 20px;
+  }
+  button, select, input {
+    font-size: 1rem;
+    margin-right: 10px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid #bbb;
+    cursor: pointer;
+  }
+  button:disabled {
+    background: #ddd;
+    cursor: not-allowed;
+  }
+  #log {
+    background: #222;
+    color: #eee;
+    font-family: monospace;
+    padding: 10px;
+    width: 90vw;
+    max-width: 960px;
+    height: 150px;
+    overflow-y: auto;
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+  #info {
+    max-width: 90vw;
+    width: 960px;
+    color: #555;
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+<h1>Breadth-First Search (BFS) Visualization</h1>
+
+<div id="info">
+  <p>Select start node and end node, then run BFS to see step-by-step traversal.</p>
+  <p>Blue nodes: Not visited; Green: Visited (discovered); Red border: Currently processing.</p>
+  <p>Edges highlight in orange when traversed.</p>
+</div>
+
+<canvas id="graphCanvas" width="960" height="540"></canvas>
+
+<div id="controls">
+  <label for="startNode">Start Node:</label>
+  <select id="startNode"></select>
+
+  <label for="endNode">End Node (optional):</label>
+  <select id="endNode">
+    <option value="">- None -</option>
+  </select>
+
+  <button id="startBtn">Start BFS</button>
+  <button id="resetBtn" disabled>Reset</button>
+  <button id="stepBtn" disabled>Step</button>
+  <button id="runBtn" disabled>Run Automatically</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+(() => {
+
+  // Graph data structure
+  // Undirected graph example
+  const nodes = [
+    { id: 'A', x: 150, y: 100 },
+    { id: 'B', x: 350, y: 70 },
+    { id: 'C', x: 550, y: 100 },
+    { id: 'D', x: 700, y: 250 },
+    { id: 'E', x: 550, y: 400 },
+    { id: 'F', x: 350, y: 430 },
+    { id: 'G', x: 150, y: 400 },
+    { id: 'H', x: 50, y: 250 },
+    { id: 'I', x: 400, y: 250 },
+  ];
+
+  // adjacency list
+  const edges = {
+    A: ['B', 'H'],
+    B: ['A', 'C', 'I'],
+    C: ['B', 'D', 'E'],
+    D: ['C', 'E'],
+    E: ['C', 'D', 'F'],
+    F: ['E', 'G', 'I'],
+    G: ['F', 'H'],
+    H: ['A', 'G'],
+    I: ['B', 'F'],
+  };
+
+  // Canvas Setup
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  const radius = 25;
+
+  // HTML Controls
+  const startNodeSelect = document.getElementById('startNode');
+  const endNodeSelect = document.getElementById('endNode');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const runBtn = document.getElementById('runBtn');
+  const logDiv = document.getElementById('log');
+
+  // BFS state variables
+  let visited = {};
+  let queue = [];
+  let stepCount = 0;
+  let currentNode = null;
+  let parent = {};
+  let traversalEdges = []; // edges that were traversed during BFS
+  let bfsDone = false;
+  let findEndNode = false;
+  let pathToEnd = [];
+  let runInterval = null;
+
+  // Utility functions
+  function log(msg) {
+    logDiv.innerHTML += msg + '\n';
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+  function clearLog() {
+    logDiv.textContent = '';
+  }
+
+  function drawNode(nodeId, options = {}) {
+    const node = nodes.find(n => n.id === nodeId);
+    if(!node) return;
+    const { x, y } = node;
+
+    const {
+      fillColor = '#337ab7', // default blue
+      strokeColor = '#222',
+      strokeWidth = 2,
+      textColor = 'white',
+      borderHighlight = false,
+      borderColor = '#d9534f',
+      borderWidth = 3,
+    } = options;
+
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.lineWidth = borderHighlight ? borderWidth : strokeWidth;
+    ctx.strokeStyle = borderHighlight ? borderColor : strokeColor;
+    ctx.stroke();
+
+    ctx.fillStyle = textColor;
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(nodeId, x, y);
+  }
+
+  function edgeBetween(n1, n2) {
+    // normalize edge as string for easy matching and avoiding duplicates
+    return [n1, n2].sort().join('-');
+  }
+
+  function drawEdge(n1, n2, options = {}) {
+    const node1 = nodes.find(n => n.id === n1);
+    const node2 = nodes.find(n => n.id === n2);
+    if(!node1 || !node2) return;
+
+    const {
+      color = '#999',
+      width = 2,
+      highlight = false,
+      highlightColor = '#f0ad4e'
+    } = options;
+
+    ctx.beginPath();
+    ctx.moveTo(node1.x, node1.y);
+    ctx.lineTo(node2.x, node2.y);
+    ctx.strokeStyle = highlight ? highlightColor : color;
+    ctx.lineWidth = highlight ? 4 : width;
+    ctx.stroke();
+  }
+
+  // Redraw everything
+  function drawGraph() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // draw edges first
+    for(const from in edges) {
+      for(const to of edges[from]) {
+        // To avoid drawing edges twice
+        if (from < to) {
+          const edgeKey = edgeBetween(from, to);
+          const traversed = traversalEdges.includes(edgeKey);
+          drawEdge(from, to, {highlight: traversed});
+        }
+      }
+    }
+
+    // draw nodes
+    for(const node of nodes) {
+      const id = node.id;
+      if (id === currentNode) {
+        // currently processing node - red border and green fill
+        drawNode(id, {fillColor: '#5cb85c', borderHighlight: true});
+      } else if (visited[id]) {
+        // visited = green fill
+        drawNode(id, {fillColor: '#5cb85c'});
+      } else {
+        // not visited = blue fill
+        drawNode(id);
+      }
+    }
+
+    // Highlight final path if found
+    if(pathToEnd.length > 1) {
+      for(let i = 0; i < pathToEnd.length - 1; i++) {
+        drawEdge(pathToEnd[i], pathToEnd[i+1], {color:'#d9534f', width: 5, highlight: true, highlightColor:'#d9534f'});
+      }
+      // Redraw nodes on top with a different color
+      for(const nodeId of pathToEnd) {
+        drawNode(nodeId, {fillColor:'#d9534f'});
+      }
+    }
+  }
+
+  // BFS step function
+  function bfsStep() {
+    if(queue.length === 0) {
+      log('Queue empty. BFS finished.');
+      bfsDone = true;
+      stepBtn.disabled = true;
+      runBtn.disabled = true;
+      return;
+    }
+
+    currentNode = queue.shift();
+    log(`Dequeued: ${currentNode}`);
+    drawGraph();
+    stepCount++;
+
+    // If looking for an end node
+    if(findEndNode && currentNode === endNodeSelect.value) {
+      log(`End node ${currentNode} found!`);
+      // Build path
+      pathToEnd = [];
+      let cur = currentNode;
+      while(cur) {
+        pathToEnd.push(cur);
+        cur = parent[cur];
+      }
+      pathToEnd.reverse();
+      bfsDone = true;
+      drawGraph();
+      stepBtn.disabled = true;
+      runBtn.disabled = true;
+      return;
+    }
+
+    for(const neighbor of edges[currentNode]) {
+      if(!visited[neighbor]) {
+        visited[neighbor] = true;
+        parent[neighbor] = currentNode;
+        queue.push(neighbor);
+        const edgeKey = edgeBetween(currentNode, neighbor);
+        traversalEdges.push(edgeKey);
+        log(`Visited ${neighbor}, added to queue.`);
+      }
+    }
+
+    drawGraph();
+
+    if(queue.length === 0) {
+      log('Queue empty. BFS finished.');
+      bfsDone = true;
+      stepBtn.disabled = true;
+      runBtn.disabled = true;
+    }
+  }
+
+  // Initialize selects and state
+  function init() {
+    for(const node of nodes) {
+      const option1 = document.createElement('option');
+      option1.value = node.id;
+      option1.textContent = node.id;
+      startNodeSelect.appendChild(option1);
+
+      const option2 = document.createElement('option');
+      option2.value = node.id;
+      option2.textContent = node.id;
+      endNodeSelect.appendChild(option2);
+    }
+    startNodeSelect.value = nodes[0].id;
+    endNodeSelect.value = "";
+
+    resetState();
+    drawGraph();
+  }
+
+  function resetState() {
+    visited = {};
+    queue = [];
+    stepCount = 0;
+    currentNode = null;
+    parent = {};
+    traversalEdges = [];
+    bfsDone = false;
+    pathToEnd = [];
+    stepBtn.disabled = true;
+    runBtn.disabled = true;
+    resetBtn.disabled = true;
+    startBtn.disabled = false;
+    clearLog();
+    drawGraph();
+    if(runInterval) {
+      clearInterval(runInterval);
+      runInterval = null;
+    }
+  }
+
+  // Start BFS initialization
+  function startBFS() {
+    resetState();
+    const startNode = startNodeSelect.value;
+    const endNode = endNodeSelect.value;
+    findEndNode = endNode !== "";
+    visited[startNode] = true;
+    queue.push(startNode);
+    parent[startNode] = null;
+    log(`Start BFS at node ${startNode}${findEndNode ? `, searching for end node ${endNode}` : ''}.`);
+
+    stepBtn.disabled = false;
+    runBtn.disabled = false;
+    resetBtn.disabled = false;
+    startBtn.disabled = true;
+
+    drawGraph();
+  }
+
+  // Run BFS automatically steps
+  function runAutomatically() {
+    if(bfsDone) return;
+    runBtn.disabled = true;
+    stepBtn.disabled = true;
+    runInterval = setInterval(() => {
+      if(bfsDone) {
+        clearInterval(runInterval);
+        runInterval = null;
+        runBtn.disabled = true;
+        stepBtn.disabled = true;
+        return;
+      }
+      bfsStep();
+    }, 800);
+  }
+
+  startBtn.addEventListener('click', startBFS);
+  stepBtn.addEventListener('click', () => {
+    if(!bfsDone) bfsStep();
+    if(bfsDone) {
+      stepBtn.disabled = true;
+      runBtn.disabled = true;
+    }
+  });
+  resetBtn.addEventListener('click', () => {
+    resetState();
+  });
+  runBtn.addEventListener('click', () => {
+    runAutomatically();
+  });
+
+  // Draw initial graph on load
+  init();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>K-Nearest Neighbors (KNN) Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 1rem;
+    background: #f0f4f8;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+  }
+  #container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 1rem;
+  }
+  #plot {
+    border: 1px solid #ccc;
+    background: white;
+  }
+  #controls {
+    max-width: 350px;
+  }
+  label {
+    display: block;
+    margin-top: 0.5rem;
+  }
+  input[type="number"] {
+    width: 100%;
+    padding: 0.3rem;
+    font-size: 1rem;
+  }
+  button {
+    margin-top: 1rem;
+    padding: 0.6rem 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+    background-color: #005bbb;
+    color: white;
+    border: none;
+    border-radius: 4px;
+  }
+  button:hover {
+    background-color: #004a99;
+  }
+  #info {
+    margin-top: 1rem;
+  }
+  #legend {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+  .class0 {
+    color: #e63946;
+    font-weight: bold;
+  }
+  .class1 {
+    color: #1d3557;
+    font-weight: bold;
+  }
+  .class2 {
+    color: #2a9d8f;
+    font-weight: bold;
+  }
+  footer {
+    text-align: center;
+    margin-top: 3rem;
+    font-size: 0.9rem;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+<h1>K-Nearest Neighbors (KNN) Demo</h1>
+<div id="container">
+  <canvas id="plot" width="500" height="500" aria-label="KNN plot" role="img"></canvas>
+  <div id="controls" aria-live="polite">
+    <label for="k">Number of neighbors (k):</label>
+    <input type="number" id="k" value="3" min="1" max="15" step="1" />
+    <label for="numPoints">Number of training points per class:</label>
+    <input type="number" id="numPoints" value="30" min="5" max="100" step="1" />
+    <button id="generateBtn" aria-label="Generate new dataset and plot">Generate New Dataset</button>
+    <button id="clearBtn" aria-label="Clear test point">Clear Test Point</button>
+    <div id="info" aria-live="polite"></div>
+    <div id="legend">
+      Legend:<br />
+      <span class="class0">● Class 0</span>, <span class="class1">● Class 1</span>, <span class="class2">● Class 2</span><br />
+      <span style="color:#000; font-style: italic;">Click within the plot to classify a new point</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('plot');
+  const ctx = canvas.getContext('2d');
+  const kInput = document.getElementById('k');
+  const numPointsInput = document.getElementById('numPoints');
+  const generateBtn = document.getElementById('generateBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const infoDiv = document.getElementById('info');
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const padding = 40;
+
+  // Three classes with distinct colors
+  const classes = [
+    { id: 0, color: '#e63946' },    // red
+    { id: 1, color: '#1d3557' },    // dark blue
+    { id: 2, color: '#2a9d8f' }     // teal
+  ];
+
+  // Store training data points: {x, y, class}
+  let trainingData = [];
+
+  // Store test point for classification: {x, y}
+  let testPoint = null;
+
+  // Scales coordinates [0,1] to canvas coords and reverse
+  function scaleX(x) {
+    return padding + x * (width - 2 * padding);
+  }
+  function scaleY(y) {
+    // Canvas Y is down, we want 0 at bottom, so invert
+    return height - padding - y * (height - 2 * padding);
+  }
+  function unscaleX(px) {
+    return (px - padding) / (width - 2 * padding);
+  }
+  function unscaleY(py) {
+    return (height - padding - py) / (height - 2 * padding);
+  }
+
+  // Generate training data clusters for each class
+  // Use 2D gaussian clusters around centers spread out in the unit square
+  function generateTrainingData(numPerClass) {
+    trainingData = [];
+    const centers = [
+      {x: 0.25, y: 0.25},
+      {x: 0.75, y: 0.25},
+      {x: 0.5, y: 0.75}
+    ];
+    const clusterStdDev = 0.08;
+
+    for(let cls of classes) {
+      for(let i=0; i<numPerClass; i++) {
+        let x, y;
+        do {
+          // Gaussian around center
+          x = centers[cls.id].x + randNormal() * clusterStdDev;
+          y = centers[cls.id].y + randNormal() * clusterStdDev;
+          // Clamp to [0,1]
+          x = Math.min(Math.max(x,0),1);
+          y = Math.min(Math.max(y,0),1);
+        } while(false); // no special rejection criteria
+        trainingData.push({x, y, class: cls.id});
+      }
+    }
+  }
+
+  // Box-Muller transform to get rand normal(0,1)
+  function randNormal() {
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random(); //Converting [0,1) to (0,1)
+    while(v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  }
+
+  // Draw axes and training points
+  function drawPlot() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw white background
+    ctx.fillStyle = 'white';
+    ctx.fillRect(padding, padding, width-2*padding, height-2*padding);
+
+    // Draw coordinate axes
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // X axis
+    ctx.moveTo(padding, height - padding);
+    ctx.lineTo(width - padding, height - padding);
+    // Y axis
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.stroke();
+
+    // Axis labels
+    ctx.fillStyle = '#333';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Feature 1', width/2, height - 10);
+    ctx.save();
+    ctx.translate(15, height/2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Feature 2', 0, 0);
+    ctx.restore();
+
+    // Draw training points
+    for(let pt of trainingData) {
+      const cx = scaleX(pt.x);
+      const cy = scaleY(pt.y);
+      ctx.beginPath();
+      ctx.fillStyle = classes[pt.class].color;
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 1;
+      ctx.arc(cx, cy, 6, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // If test point exists draw it
+    if(testPoint) {
+      const cx = scaleX(testPoint.x);
+      const cy = scaleY(testPoint.y);
+      ctx.beginPath();
+      // Outline black bigger circle
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.arc(cx, cy, 10, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.stroke();
+
+      // Inner filled circle with predicted class color
+      ctx.beginPath();
+      ctx.fillStyle = classes[testPoint.class].color;
+      ctx.arc(cx, cy, 6, 0, 2*Math.PI);
+      ctx.fill();
+    }
+  }
+
+  // Compute distance squared between two points in feature space
+  function distSq(a,b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx*dx + dy*dy;
+  }
+
+  // KNN algorithm: classify test point given training data and k neighbors
+  // Return predicted class and neighbors
+  function knnClassify(testPt, k) {
+    // Compute distances to all training points
+    const distances = trainingData.map((pt, idx) => ({
+      idx,
+      dist: distSq(testPt, pt),
+      class: pt.class
+    }));
+
+    // Sort by distance ascending
+    distances.sort((a,b) => a.dist - b.dist);
+
+    // Take top k
+    const kNearest = distances.slice(0,k);
+
+    // Count class votes
+    const classVotes = {};
+    for(let vote of kNearest) {
+      classVotes[vote.class] = (classVotes[vote.class] || 0) + 1;
+    }
+
+    // Find class with max votes
+    let maxVotes = -1;
+    let predictedClass = null;
+    for(let cls in classVotes) {
+      if(classVotes[cls] > maxVotes) {
+        maxVotes = classVotes[cls];
+        predictedClass = Number(cls);
+      }
+    }
+
+    return {
+      predictedClass,
+      neighbors: kNearest
+    };
+  }
+
+  // Show detailed info about classification
+  function displayInfo(knnResult, testPt, k) {
+    if(!testPt) {
+      infoDiv.innerHTML = 'Click inside the plot area to classify a new point.';
+      return;
+    }
+    const {predictedClass, neighbors} = knnResult;
+
+    let html = `<strong>Test Point:</strong> (${testPt.x.toFixed(3)}, ${testPt.y.toFixed(3)})<br/>`;
+    html += `<strong>k:</strong> ${k}<br/>`;
+    html += `<strong>Predicted Class:</strong> <span style="color:${classes[predictedClass].color}; font-weight:bold;">Class ${predictedClass}</span><br/><br/>`;
+    html += `<strong>Nearest Neighbors (sorted by distance):</strong><br/><table border="1" cellpadding="3" cellspacing="0" style="border-collapse: collapse;">
+      <thead><tr><th>#</th><th>Class</th><th>Distance</th></tr></thead><tbody>`;
+
+    neighbors.forEach((n, i) => {
+      html += `<tr>
+                 <td style="text-align:center;">${i+1}</td>
+                 <td style="color:${classes[n.class].color}; font-weight:bold; text-align:center;">${n.class}</td>
+                 <td style="text-align:right;">${Math.sqrt(n.dist).toFixed(3)}</td>
+               </tr>`;
+    });
+    html += `</tbody></table>`;
+
+    infoDiv.innerHTML = html;
+  }
+
+  // On canvas click: classify point and redraw
+  function onCanvasClick(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const px = evt.clientX - rect.left;
+    const py = evt.clientY - rect.top;
+
+    // Only consider clicks inside plotting area
+    if(px < padding || px > width - padding || py < padding || py > height - padding) {
+      return;
+    }
+    const x = unscaleX(px);
+    const y = unscaleY(py);
+
+    testPoint = {x, y};
+    const k = parseInt(kInput.value, 10) || 3;
+
+    // classify
+    const knnResult = knnClassify(testPoint, k);
+    testPoint.class = knnResult.predictedClass;
+
+    drawPlot();
+    displayInfo(knnResult, testPoint, k);
+  }
+
+  function generateAndDraw() {
+    let numPerClass = parseInt(numPointsInput.value, 10);
+    if(isNaN(numPerClass) || numPerClass < 1) numPerClass = 30;
+
+    generateTrainingData(numPerClass);
+    testPoint = null;
+    drawPlot();
+    displayInfo(null, null);
+  }
+
+  // Clear test point and redraw
+  function clearTestPoint() {
+    testPoint = null;
+    drawPlot();
+    displayInfo(null, null);
+  }
+
+  // Initialize
+  generateAndDraw();
+
+  // Listeners
+  canvas.addEventListener('click', onCanvasClick);
+  generateBtn.addEventListener('click', generateAndDraw);
+  clearBtn.addEventListener('click', clearTestPoint);
+  kInput.addEventListener('change', () => {
+    // If test point present, re-classify with new k
+    if(testPoint){
+      const k = parseInt(kInput.value, 10) || 3;
+      const knnResult = knnClassify(testPoint, k);
+      testPoint.class = knnResult.predictedClass;
+      drawPlot();
+      displayInfo(knnResult, testPoint, k);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

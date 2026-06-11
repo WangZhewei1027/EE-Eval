@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bellman-Ford Algorithm Visualization</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #f7f9fc;
+      color: #333;
+    }
+    h1 {
+      margin-top: 20px;
+      margin-bottom: 5px;
+    }
+    #container {
+      display: flex;
+      max-width: 900px;
+      width: 100%;
+      margin: 10px;
+      gap: 20px;
+    }
+    #graphCanvas {
+      border: 1px solid #ccc;
+      background: white;
+      flex-grow: 1;
+      border-radius: 10px;
+    }
+    #controls {
+      width: 260px;
+      background: #fff;
+      box-shadow: 0 4px 10px rgb(0 0 0 / 0.1);
+      border-radius: 10px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 5px;
+      display: block;
+    }
+    input, select, button, textarea {
+      width: 100%;
+      padding: 7px 8px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border-radius: 5px;
+      border: 1px solid #bbb;
+      resize: vertical;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s ease;
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+      background: #0056b3;
+    }
+    #log {
+      height: 200px;
+      overflow-y: auto;
+      background: #eee;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      user-select: text;
+    }
+    #distanceTable {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    #distanceTable th, #distanceTable td {
+      border: 1px solid #ccc;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    #distanceTable th {
+      background: #007bff;
+      color: white;
+    }
+    small {
+      color: #555;
+      font-style: italic;
+    }
+    a.github-link {
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: #007bff;
+      text-decoration: none;
+      align-self: flex-end;
+    }
+    a.github-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bellman-Ford Algorithm Visualization</h1>
+  <div id="container">
+    <canvas id="graphCanvas" width="600" height="450" aria-label="Graph visualization"></canvas>
+    <div id="controls">
+      <label for="graphInput">Input Graph Edges (one per line):</label>
+      <textarea id="graphInput" rows="8" aria-describedby="inputHelp" placeholder="Format: start end weight&#10;Example:&#10;A B 4&#10;B C -2&#10;C D 3"></textarea>
+      <small id="inputHelp">Enter edges in the format: <code>startNode endNode weight</code>. Nodes can be letters or numbers.</small>
+
+      <label for="sourceNode">Source Node:</label>
+      <input type="text" id="sourceNode" maxlength="3" placeholder="e.g. A" aria-describedby="sourceHelp" />
+
+      <button id="startBtn">Start Bellman-Ford</button>
+      <button id="stepBtn" disabled>Next Step</button>
+      <button id="resetBtn" disabled>Reset</button>
+
+      <div>
+        <h3>Distances from Source</h3>
+        <table id="distanceTable" aria-live="polite" aria-label="Distance to nodes from source">
+          <thead><tr><th>Node</th><th>Distance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <h3>Log</h3>
+        <div id="log" aria-live="polite" aria-atomic="true"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /*
+      Bellman-Ford Algorithm Visualization
+
+      Features:
+      - User inputs edges in textual form: start end weight
+      - Visualization of nodes and edges on canvas
+      - Step-by-step relaxation of edges, highlighting changes
+      - Detects negative weight cycle and notifies user
+      - Shows updated distances in a table
+      - Log area displays each step and decision
+    */
+
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const stepBtn = document.getElementById('stepBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const graphInput = document.getElementById('graphInput');
+    const sourceInput = document.getElementById('sourceNode');
+    const logDiv = document.getElementById('log');
+    const distanceTableBody = document.querySelector('#distanceTable tbody');
+
+    // Graph data structures
+    let nodes = new Map(); // key: node label, value: {x, y}
+    let edges = [];        // edges: {from, to, weight}
+
+    // Algorithm state
+    let distances = {};
+    let predecessors = {};
+    let nodeList = [];
+    let currentIteration = 0;
+    let currentEdgeIndex = 0;
+    let sourceNode = null;
+    let running = false;
+    let negativeCycleDetected = false;
+
+    // Constants
+    const NODE_RADIUS = 20;
+
+    // Initialize with a default graph
+    graphInput.value = `A B 6
+A D 6
+B C 5
+B D 8
+B E -4
+C B -2
+D C -3
+D E 9
+E A 2
+E C 7`;
+
+    sourceInput.value = 'A';
+
+    function log(msg) {
+      logDiv.textContent += msg + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function clearLog() {
+      logDiv.textContent = '';
+    }
+
+    function parseInputGraph() {
+      nodes.clear();
+      edges = [];
+      const lines = graphInput.value.trim().split('\n').filter(line => line.trim());
+      const nodeSet = new Set();
+
+      for (let line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length !== 3) {
+          throw new Error(`Line "${line}" is invalid. Expected format: start end weight`);
+        }
+        const [from, to, weightStr] = parts;
+        const weight = Number(weightStr);
+        if (Number.isNaN(weight)) {
+          throw new Error(`Invalid weight on line "${line}"`);
+        }
+        edges.push({ from, to, weight });
+        nodeSet.add(from);
+        nodeSet.add(to);
+      }
+
+      nodeList = Array.from(nodeSet).sort();
+
+      // Assign positions to nodes in a circle for visualization
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = Math.min(centerX, centerY) - 50;
+
+      nodeList.forEach((node, i) => {
+        const angle = (2 * Math.PI * i) / nodeList.length - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        nodes.set(node, { x, y });
+      });
+    }
+
+    function initializeAlgorithm() {
+      distances = {};
+      predecessors = {};
+      nodeList.forEach(n => {
+        distances[n] = Infinity;
+        predecessors[n] = null;
+      });
+      distances[sourceNode] = 0;
+      currentIteration = 1;
+      currentEdgeIndex = 0;
+      negativeCycleDetected = false;
+    }
+
+    function drawGraph(highlightEdge = null, updatedNode = null) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw edges
+      edges.forEach((edge, i) => {
+        const fromPos = nodes.get(edge.from);
+        const toPos = nodes.get(edge.to);
+
+        // Compute line vector and arrow
+        const dx = toPos.x - fromPos.x;
+        const dy = toPos.y - fromPos.y;
+        const angle = Math.atan2(dy, dx);
+
+        // Line start and end adjusted for node radius
+        const startX = fromPos.x + NODE_RADIUS * Math.cos(angle);
+        const startY = fromPos.y + NODE_RADIUS * Math.sin(angle);
+        const endX = toPos.x - NODE_RADIUS * Math.cos(angle);
+        const endY = toPos.y - NODE_RADIUS * Math.sin(angle);
+
+        // Highlight if this is the current edge being relaxed
+        if (highlightEdge && highlightEdge.from === edge.from && highlightEdge.to === edge.to) {
+          ctx.strokeStyle = 'orange';
+          ctx.lineWidth = 4;
+        } else {
+          ctx.strokeStyle = '#999';
+          ctx.lineWidth = 2;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Draw arrowhead
+        const arrowSize = 10;
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI / 6), endY - arrowSize * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI / 6), endY - arrowSize * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+
+        // Draw weight label
+        const labelX = (startX + endX) / 2 + 12 * Math.cos(angle + Math.PI / 2);
+        const labelY = (startY + endY) / 2 + 12 * Math.sin(angle + Math.PI / 2);
+        ctx.fillStyle = '#222';
+        ctx.font = '14px Arial';
+        ctx.fillText(edge.weight, labelX - 6, labelY + 6);
+      });
+
+      // Draw nodes
+      nodeList.forEach(node => {
+        const pos = nodes.get(node);
+
+        // Fill color based on status
+        if (updatedNode === node) {
+          ctx.fillStyle = '#2ecc71'; // green highlight for updated distance
+        } else if (node === sourceNode) {
+          ctx.fillStyle = '#3498db'; // blue for source
+        } else {
+          ctx.fillStyle = '#e3e3e3';
+        }
+
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, NODE_RADIUS, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Node label
+        ctx.fillStyle = '#222';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(node, pos.x, pos.y);
+      });
+    }
+
+    // Update distances table
+    function updateDistancesTable() {
+      distanceTableBody.innerHTML = '';
+      nodeList.forEach(node => {
+        const tr = document.createElement('tr');
+        const tdNode = document.createElement('td');
+        tdNode.textContent = node;
+        const tdDist = document.createElement('td');
+        tdDist.textContent = distances[node] === Infinity ? '∞' : distances[node].toString();
+        tr.appendChild(tdNode);
+        tr.appendChild(tdDist);
+        distanceTableBody.appendChild(tr);
+      });
+    }
+
+    // Steps:
+    // Bellman-Ford runs V-1 iterations,
+    // each iteration relaxes all edges in sequence.
+    // After that, for iteration V, we check for negative cycle.
+
+    function relaxEdge(edge) {
+      const { from, to, weight } = edge;
+      const distFrom = distances[from];
+      const distTo = distances[to];
+      if (distFrom !== Infinity && distFrom + weight < distTo) {
+        distances[to] = distFrom + weight;
+        predecessors[to] = from;
+        return true; // updated
+      }
+      return false; // no update
+    }
+
+    function stepAlgorithm() {
+      if (negativeCycleDetected) {
+        log("Algorithm halted due to negative weight cycle detected.");
+        stepBtn.disabled = true;
+        return;
+      }
+
+      if (currentIteration <= nodeList.length - 1) {
+        // Relax next edge
+        if (currentEdgeIndex < edges.length) {
+          const edge = edges[currentEdgeIndex];
+          log(`Iteration ${currentIteration}, relaxing edge ${edge.from} -> ${edge.to} (weight ${edge.weight})`);
+          const updated = relaxEdge(edge);
+          if (updated) {
+            log(`  Updated distance to node ${edge.to}: ${distances[edge.to]}`);
+            drawGraph(edge, edge.to);
+          } else {
+            log(`  No update needed for node ${edge.to}`);
+            drawGraph(edge, null);
+          }
+          updateDistancesTable();
+          currentEdgeIndex++;
+        }
+
+        if (currentEdgeIndex === edges.length) {
+          currentIteration++;
+          currentEdgeIndex = 0;
+          log(`Completed iteration ${currentIteration - 1}.\n`);
+          if (currentIteration === nodeList.length) {
+            log("Performing negative cycle detection...");
+          }
+        }
+      } else if (currentIteration === nodeList.length) {
+        // Negative cycle detection iteration
+        // If any edge can be relaxed further, negative cycle exists
+
+        let cycleDetectedInThisCheck = false;
+        for (let i = 0; i < edges.length; i++) {
+          const edge = edges[i];
+          const { from, to, weight } = edge;
+          if (distances[from] !== Infinity && distances[from] + weight < distances[to]) {
+            cycleDetectedInThisCheck = true;
+            drawGraph(edge, to);
+            log(`Negative weight cycle detected on edge ${from} -> ${to}! Algorithm stops.`);
+            negativeCycleDetected = true;
+            stepBtn.disabled = true;
+            return;
+          }
+        }
+        if (!cycleDetectedInThisCheck) {
+          log("No negative weight cycles detected. Algorithm finished.");
+          stepBtn.disabled = true;
+        }
+      }
+    }
+
+    function startAlgorithm() {
+      clearLog();
+      try {
+        parseInputGraph();
+      } catch (e) {
+        alert(e.message);
+        return;
+      }
+
+      sourceNode = sourceInput.value.trim();
+      if (!nodes.has(sourceNode)) {
+        alert(`Source node "${sourceNode}" not found in graph nodes.`);
+        return;
+      }
+
+      initializeAlgorithm();
+
+      runInitialDraw();
+
+      log(`Starting Bellman-Ford algorithm with source node: "${sourceNode}"`);
+      updateDistancesTable();
+
+      running = true;
+      startBtn.disabled = true;
+      stepBtn.disabled = false;
+      resetBtn.disabled = false;
+      graphInput.disabled = true;
+      sourceInput.disabled = true;
+    }
+
+    function runInitialDraw() {
+      drawGraph();
+    }
+
+    function resetAlgorithm() {
+      running = false;
+      negativeCycleDetected = false;
+      currentIteration = 0;
+      currentEdgeIndex = 0;
+      distances = {};
+      predecessors = {};
+      nodeList = [];
+      nodes.clear();
+      edges = [];
+      clearLog();
+      distanceTableBody.innerHTML = '';
+      drawGraph();
+      startBtn.disabled = false;
+      stepBtn.disabled = true;
+      resetBtn.disabled = true;
+      graphInput.disabled = false;
+      sourceInput.disabled = false;
+    }
+
+    // Accessibility: Add keyboard support for buttons, link labels are descriptive by default
+
+    // Event Listeners
+    startBtn.addEventListener('click', startAlgorithm);
+    stepBtn.addEventListener('click', () => {
+      if (running) stepAlgorithm();
+    });
+    resetBtn.addEventListener('click', resetAlgorithm);
+
+    // Draw initial blank canvas with default graph so user can see something before start
+    try {
+      parseInputGraph();
+      drawGraph();
+      updateDistancesTable();
+    } catch {
+      // ignore parse errors at startup, user may edit input
+    }
+  </script>
+</body>
+</html>

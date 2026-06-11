@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Linear Regression Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    max-width: 800px;
+    line-height: 1.5;
+  }
+  h1 {
+    text-align: center;
+  }
+  #canvasContainer {
+    text-align: center;
+  }
+  canvas {
+    border: 1px solid #ccc;
+    margin-top: 20px;
+  }
+  #instructions {
+    margin-bottom: 20px;
+  }
+  #equation {
+    font-weight: bold;
+    margin-top: 20px;
+    text-align: center;
+  }
+  #resetBtn {
+    margin-top: 10px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 1rem;
+  }
+  #pointsCount {
+    margin-top: 10px;
+    text-align: center;
+  }
+  footer {
+    margin-top: 40px;
+    font-size: 0.9rem;
+    color: #555;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<h1>Interactive Linear Regression Demo</h1>
+<div id="instructions">
+  <p>Click on the canvas below to add data points. The line of best fit (linear regression) will update automatically.</p>
+  <p>The equation of the regression line (y = mx + b) is displayed below.</p>
+</div>
+<div id="canvasContainer">
+  <canvas id="scatterplot" width="600" height="400" aria-label="Scatter plot for linear regression"></canvas>
+</div>
+<div id="pointsCount"></div>
+<div id="equation"></div>
+<button id="resetBtn" aria-label="Reset all points and the regression line">Reset</button>
+
+<script>
+// Setup canvas and drawing context
+const canvas = document.getElementById("scatterplot");
+const ctx = canvas.getContext("2d");
+
+// Data points array
+let points = [];
+
+// Coordinate system margins and axis ranges
+const margin = 40;
+const width = canvas.width;
+const height = canvas.height;
+
+// Axis ranges - we will scale points dynamically based on input
+// But for a cleaner look, let's use a fixed scale that auto-adjusts
+// We'll track min/max for X and Y from data points and add padding
+const paddingRatio = 0.1;
+
+// Draw axes with ticks and labels
+function drawAxes(xMin, xMax, yMin, yMax) {
+  ctx.clearRect(0, 0, width, height);
+
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+
+  // Draw X axis
+  ctx.beginPath();
+  ctx.moveTo(margin, height - margin);
+  ctx.lineTo(width - margin, height - margin);
+  ctx.stroke();
+
+  // Draw Y axis
+  ctx.beginPath();
+  ctx.moveTo(margin, height - margin);
+  ctx.lineTo(margin, margin);
+  ctx.stroke();
+
+  ctx.fillStyle = "#000";
+  ctx.font = "12px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+
+  // X axis ticks and labels: 5 intervals
+  const xTicks = 5;
+  for (let i = 0; i <= xTicks; i++) {
+    const x = margin + (i / xTicks) * (width - 2 * margin);
+    const val = (xMin + (i / xTicks) * (xMax - xMin)).toFixed(2);
+    ctx.beginPath();
+    ctx.moveTo(x, height - margin);
+    ctx.lineTo(x, height - margin + 6);
+    ctx.stroke();
+    ctx.fillText(val, x, height - margin + 8);
+  }
+
+  // Y axis ticks and labels: 5 intervals
+  const yTicks = 5;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= yTicks; i++) {
+    const y = height - margin - (i / yTicks) * (height - 2 * margin);
+    const val = (yMin + (i / yTicks) * (yMax - yMin)).toFixed(2);
+    ctx.beginPath();
+    ctx.moveTo(margin, y);
+    ctx.lineTo(margin - 6, y);
+    ctx.stroke();
+    ctx.fillText(val, margin - 8, y);
+  }
+
+  // Axis labels
+  ctx.textAlign = "center";
+  ctx.fillText("X", width / 2, height - 5);
+  ctx.save();
+  ctx.translate(15, height / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Y", 0, 0);
+  ctx.restore();
+}
+
+// Convert data point coordinates to canvas pixel coordinates
+function toCanvasCoords(xData, yData, xMin, xMax, yMin, yMax) {
+  const x = margin + ((xData - xMin) / (xMax - xMin)) * (width - 2 * margin);
+  const y = height - margin - ((yData - yMin) / (yMax - yMin)) * (height - 2 * margin);
+  return [x, y];
+}
+
+// Convert canvas pixel coordinates to data coordinates
+function toDataCoords(xCanvas, yCanvas, xMin, xMax, yMin, yMax) {
+  const xData = xMin + ((xCanvas - margin) / (width - 2 * margin)) * (xMax - xMin);
+  const yData = yMin + ((height - margin - yCanvas) / (height - 2 * margin)) * (yMax - yMin);
+  return [xData, yData];
+}
+
+// Draw points as circles on canvas
+function drawPoints(xMin, xMax, yMin, yMax) {
+  ctx.fillStyle = "#007bff";
+  points.forEach(p => {
+    const [x, y] = toCanvasCoords(p.x, p.y, xMin, xMax, yMin, yMax);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+}
+
+// Calculate linear regression coefficients (slope m and intercept b)
+// Using least squares method
+function linearRegression(points) {
+  const n = points.length;
+  if (n < 2) return null; // Need at least two points
+
+  let sumX = 0,
+    sumY = 0,
+    sumXY = 0,
+    sumXX = 0;
+
+  points.forEach(p => {
+    sumX += p.x;
+    sumY += p.y;
+    sumXY += p.x * p.y;
+    sumXX += p.x * p.x;
+  });
+
+  const denominator = n * sumXX - sumX * sumX;
+  if (denominator === 0) return null; // Vertical line or all points same x
+
+  const m = (n * sumXY - sumX * sumY) / denominator;
+  const b = (sumY - m * sumX) / n;
+
+  return { m, b };
+}
+
+// Draw regression line on canvas
+function drawRegressionLine(m, b, xMin, xMax, yMin, yMax) {
+  if (m === null || b === null) return;
+
+  // For the regression line y = m * x + b
+  // Calculate y for min and max x
+  let y1 = m * xMin + b;
+  let y2 = m * xMax + b;
+
+  // Clip the line to the y axis range:
+  // If y1 or y2 are outside yMin,yMax, recalculate x accordingly
+  // y = m * x + b => x = (y - b) / m
+
+  // Adjust if y1 < yMin
+  if (y1 < yMin) {
+    y1 = yMin;
+    x1Clip = (y1 - b) / m;
+  } else if (y1 > yMax) {
+    y1 = yMax;
+    x1Clip = (y1 - b) / m;
+  } else {
+    x1Clip = xMin;
+  }
+
+  // Adjust if y2 < yMin
+  if (y2 < yMin) {
+    y2 = yMin;
+    x2Clip = (y2 - b) / m;
+  } else if (y2 > yMax) {
+    y2 = yMax;
+    x2Clip = (y2 - b) / m;
+  } else {
+    x2Clip = xMax;
+  }
+
+  // Convert to canvas coords
+  const [x1Canvas, y1Canvas] = toCanvasCoords(x1Clip, y1, xMin, xMax, yMin, yMax);
+  const [x2Canvas, y2Canvas] = toCanvasCoords(x2Clip, y2, xMin, xMax, yMin, yMax);
+
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1Canvas, y1Canvas);
+  ctx.lineTo(x2Canvas, y2Canvas);
+  ctx.stroke();
+}
+
+// Get bounds for the Data Points with some padding
+function getBounds(points) {
+  if (points.length === 0) {
+    return {
+      xMin: 0,
+      xMax: 10,
+      yMin: 0,
+      yMax: 10,
+    };
+  }
+  let xMin = points[0].x;
+  let xMax = points[0].x;
+  let yMin = points[0].y;
+  let yMax = points[0].y;
+
+  points.forEach(p => {
+    if (p.x < xMin) xMin = p.x;
+    if (p.x > xMax) xMax = p.x;
+    if (p.y < yMin) yMin = p.y;
+    if (p.y > yMax) yMax = p.y;
+  });
+
+  // If range is too narrow, expand it slightly for better visualization
+  const xRange = xMax - xMin;
+  const yRange = yMax - yMin;
+
+  const xPad = xRange === 0 ? 1 : xRange * paddingRatio;
+  const yPad = yRange === 0 ? 1 : yRange * paddingRatio;
+
+  return {
+    xMin: xMin - xPad,
+    xMax: xMax + xPad,
+    yMin: yMin - yPad,
+    yMax: yMax + yPad,
+  };
+}
+
+// Update the entire plot
+function updatePlot() {
+  const { xMin, xMax, yMin, yMax } = getBounds(points);
+  drawAxes(xMin, xMax, yMin, yMax);
+  drawPoints(xMin, xMax, yMin, yMax);
+  const lr = linearRegression(points);
+  if (lr !== null) {
+    drawRegressionLine(lr.m, lr.b, xMin, xMax, yMin, yMax);
+    document.getElementById("equation").textContent =
+      `Regression line: y = ${lr.m.toFixed(3)}x + ${lr.b.toFixed(3)}`;
+  } else {
+    document.getElementById("equation").textContent =
+      "Add at least two distinct points to compute linear regression.";
+  }
+  document.getElementById("pointsCount").textContent = `Points: ${points.length}`;
+}
+
+// Handle canvas click to add point
+canvas.addEventListener("click", e => {
+  const rect = canvas.getBoundingClientRect();
+  const xCanvas = e.clientX - rect.left;
+  const yCanvas = e.clientY - rect.top;
+
+  // Convert canvas coords to data coords
+  const { xMin, xMax, yMin, yMax } = getBounds(points);
+
+  let xData, yData;
+
+  // We want the coordinate system to update sensibly when adding points.
+  // To avoid confusion during adding points, we assume a default axis scale
+  // when there are fewer than two points.
+  if (points.length < 2) {
+    // Default axis range 0-10 for both axes
+    xData = 0 + ((xCanvas - margin) / (width - 2 * margin)) * 10;
+    yData = 0 + ((height - margin - yCanvas) / (height - 2 * margin)) * 10;
+  } else {
+    xData = xMin + ((xCanvas - margin) / (width - 2 * margin)) * (xMax - xMin);
+    yData = yMin + ((height - margin - yCanvas) / (height - 2 * margin)) * (yMax - yMin);
+  }
+
+  points.push({ x: xData, y: yData });
+  updatePlot();
+});
+
+// Reset button functionality
+document.getElementById("resetBtn").addEventListener("click", () => {
+  points = [];
+  document.getElementById("equation").textContent =
+    "Add at least two distinct points to compute linear regression.";
+  document.getElementById("pointsCount").textContent = "";
+  updatePlot();
+});
+
+// Initialize plot on load
+updatePlot();
+</script>
+<footer>
+  Interactive Linear Regression visualization &mdash; Click to add points and see the best-fit 
+  line update in real time.
+</footer>
+</body>
+</html>

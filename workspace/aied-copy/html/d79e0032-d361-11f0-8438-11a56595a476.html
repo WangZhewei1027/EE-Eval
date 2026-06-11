@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>K-Nearest Neighbors (KNN) Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #fafafa;
+  }
+  h1 {
+    margin: 1rem 0 0.5rem 0;
+  }
+  #container {
+    display: flex;
+    margin: 1rem;
+  }
+  #canvas {
+    border: 1px solid #ccc;
+    background: white;
+    cursor: crosshair;
+  }
+  #controls {
+    margin-left: 20px;
+    max-width: 300px;
+  }
+  label {
+    display: block;
+    margin: 10px 0 5px 0;
+  }
+  input, select, button {
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 10px;
+    font-size: 1rem;
+  }
+  #info {
+    font-size: 0.9rem;
+    margin-top: 10px;
+    max-width: 480px;
+    line-height: 1.3;
+  }
+  .legend {
+    margin-top: 15px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    margin: 5px 0;
+  }
+  .color-box {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    border: 1px solid #555;
+  }
+  #instructions {
+    max-width: 600px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: #333;
+  }
+  #resetButton {
+    background-color: #d9534f;
+    border: none;
+    color: white;
+    cursor: pointer;
+  }
+  #resetButton:hover {
+    background-color: #c9302c;
+  }
+</style>
+</head>
+<body>
+<h1>K-Nearest Neighbors (KNN) Interactive Demo</h1>
+<div id="instructions">
+  <strong>Instructions:</strong> Click on the canvas to add training points.<br>
+  Choose a label before adding points, then add multiple points for that class.<br>
+  After adding points, click on the canvas at any location to classify that point.<br>
+  Adjust <em>K</em> to change the number of neighbors considered.<br>
+  Use the "Reset" button to clear all points.
+</div>
+<div id="container">
+  <canvas id="canvas" width="480" height="480"></canvas>
+  <div id="controls">
+    <label for="labelSelect">Select Label (Class) to Add:</label>
+    <select id="labelSelect">
+      <option value="A" selected>A</option>
+      <option value="B">B</option>
+      <option value="C">C</option>
+    </select>
+
+    <label for="kInput">Set K (Number of Neighbors):</label>
+    <input type="number" id="kInput" min="1" max="20" value="3" />
+
+    <button id="resetButton">Reset All Points</button>
+
+    <div id="info">
+      <p><strong>Last classified point info:</strong></p>
+      <div id="classificationResult">No classification done yet.</div>
+    </div>
+
+    <div class="legend">
+      <strong>Legend:</strong>
+      <div class="legend-item">
+        <div class="color-box" style="background:#e41a1c;"></div> Label A
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:#377eb8;"></div> Label B
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:#4daf4a;"></div> Label C
+      </div>
+      <div class="legend-item">
+        <canvas id="knnPointLegend" width="20" height="20" style="border:1px solid #555;"></canvas>
+        &nbsp;Classified Point
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const labelSelect = document.getElementById("labelSelect");
+  const kInput = document.getElementById("kInput");
+  const resetButton = document.getElementById("resetButton");
+  const classificationResult = document.getElementById("classificationResult");
+  const knnPointLegend = document.getElementById("knnPointLegend").getContext("2d");
+
+  // Colors for classes
+  const COLORS = {
+    A: "#e41a1c", // red-ish
+    B: "#377eb8", // blue
+    C: "#4daf4a", // green
+  };
+
+  // Data structure to hold training points: {x, y, label}
+  const trainingPoints = [];
+
+  // Last classified point and neighbors
+  let lastClassified = null;
+
+  // Utility - draw a circle
+  function drawCircle(x, y, radius, color, fill = true, lineWidth = 1) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    if (fill) {
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else {
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+  }
+
+  // Clear canvas background
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // draw grid lines
+    drawGrid();
+  }
+
+  // Draw grid for reference
+  function drawGrid() {
+    const step = 40;
+    ctx.strokeStyle = "#ddd";
+    ctx.lineWidth = 1;
+    for (let x = step; x < canvas.width; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = step; y < canvas.height; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+  }
+
+  // Draw all training points
+  function drawTrainingPoints() {
+    for (const pt of trainingPoints) {
+      drawCircle(pt.x, pt.y, 6, COLORS[pt.label]);
+    }
+  }
+
+  // Draw classified point
+  // Highlight neighbors with lines and rings
+  function drawClassifiedPoint(classified, neighbors) {
+    if (!classified) return;
+    const { x, y, label } = classified;
+
+    // Draw neighbors lines and rings
+    neighbors.forEach(n => {
+      // line to neighbor
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(n.x, n.y);
+      ctx.strokeStyle = COLORS[n.label];
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // circle around neighbor bigger than normal (highlight)
+      drawCircle(n.x, n.y, 10, COLORS[n.label], false, 2);
+    });
+
+    // Draw classified point with a distinct style (bigger, black border)
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, 2 * Math.PI);
+    ctx.fillStyle = COLORS[label];
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#222";
+    ctx.stroke();
+  }
+
+  // Euclidean distance
+  function distance(p1, p2) {
+    return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+  }
+
+  // KNN Classification
+  // Returns {label, neighbors}
+  function knnClassify(point, k) {
+    if (trainingPoints.length === 0) return null;
+    // Compute distances to all training points
+    const distances = trainingPoints.map(pt => ({
+      point: pt,
+      dist: distance(point, pt),
+    }));
+    // Sort by distance ascending
+    distances.sort((a, b) => a.dist - b.dist);
+    // Take first k neighbors
+    const neighbors = distances.slice(0, k).map(d => d.point);
+
+    // Count labels from neighbors
+    const counts = {};
+    for (const n of neighbors) {
+      counts[n.label] = (counts[n.label] || 0) + 1;
+    }
+    // Find the label with max count
+    let maxCount = 0;
+    let chosenLabel = null;
+    for (const label in counts) {
+      if (counts[label] > maxCount) {
+        maxCount = counts[label];
+        chosenLabel = label;
+      }
+    }
+    return { label: chosenLabel, neighbors };
+  }
+
+  // Redraw all
+  function redraw() {
+    clearCanvas();
+    drawTrainingPoints();
+    drawClassifiedPoint(lastClassified, lastClassified ? lastClassified.neighbors : []);
+  }
+
+  // Handle canvas click
+  // If holding Shift: classify point
+  // Else: add training point of current label
+  canvas.addEventListener("click", e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // We'll use normal click to add point for training
+    // But click while pressing Ctrl or Alt will classify instead for demo
+    // For simplicity here: normal click adds training point
+    // Right click and Shift key click classify? Right click is complex on context menu
+    // Let's say: simply normal click adds training point
+    // Double click classifies point (to avoid modifier keys confusion)
+
+    // But double click will be handled separately
+
+    if (e.detail === 1) {
+      // single click: add training point
+      const label = labelSelect.value;
+      trainingPoints.push({ x, y, label });
+      lastClassified = null;
+      classificationResult.textContent = `Added training point at (${x.toFixed(1)}, ${y.toFixed(1)}) with label "${label}".`;
+      redraw();
+    }
+  });
+
+  canvas.addEventListener("dblclick", e => {
+    // Double click classifies point
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (trainingPoints.length === 0) {
+      classificationResult.textContent = "No training points - cannot classify.";
+      return;
+    }
+
+    const k = Math.min(parseInt(kInput.value, 10) || 3, trainingPoints.length);
+    const classified = knnClassify({ x, y }, k);
+    if (!classified) {
+      classificationResult.textContent = "Classification failed.";
+      return;
+    }
+    lastClassified = { x, y, label: classified.label, neighbors: classified.neighbors };
+
+    // Show info
+    let neighborsInfo = classified.neighbors.map((n, i) => {
+      const dist = distance({x,y}, n).toFixed(2);
+      return `${i+1}. (${n.x.toFixed(1)}, ${n.y.toFixed(1)}) Label: ${n.label} Distance: ${dist}`;
+    }).join("<br>");
+
+    classificationResult.innerHTML =
+      `Classified point at (${x.toFixed(1)}, ${y.toFixed(1)}) as <strong>${classified.label}</strong> using k=${k}.<br>` +
+      `<br><strong>Neighbors considered:</strong><br>${neighborsInfo}`;
+
+    redraw();
+  });
+
+  // Reset button
+  resetButton.addEventListener("click", () => {
+    trainingPoints.length = 0;
+    lastClassified = null;
+    classificationResult.textContent = "All points reset.";
+    redraw();
+  });
+
+  // Update drawing when k changes (optional)
+  kInput.addEventListener("change", () => {
+    if (lastClassified) {
+      const k = Math.min(parseInt(kInput.value, 10) || 3, trainingPoints.length);
+      const classified = knnClassify({ x: lastClassified.x, y: lastClassified.y }, k);
+      if (classified) {
+        lastClassified.label = classified.label;
+        lastClassified.neighbors = classified.neighbors;
+        classificationResult.innerHTML =
+          `Classified point at (${lastClassified.x.toFixed(1)}, ${lastClassified.y.toFixed(1)}) as <strong>${lastClassified.label}</strong> using k=${k}.<br>` +
+          `<br><strong>Neighbors considered:</strong><br>` +
+          classified.neighbors.map((n, i) => {
+            const dist = distance({x: lastClassified.x, y: lastClassified.y}, n).toFixed(2);
+            return `${i+1}. (${n.x.toFixed(1)}, ${n.y.toFixed(1)}) Label: ${n.label} Distance: ${dist}`;
+          }).join("<br>");
+      }
+      redraw();
+    }
+  });
+
+  // Initial draw
+  clearCanvas();
+
+  // Draw KNN point legend
+  function drawKnnLegend() {
+    const cx = 10, cy = 10;
+    knnPointLegend.clearRect(0, 0, 20, 20);
+    knnPointLegend.beginPath();
+    knnPointLegend.arc(cx, cy, 8, 0, 2 * Math.PI);
+    knnPointLegend.fillStyle = "#e41a1c";
+    knnPointLegend.fill();
+    knnPointLegend.lineWidth = 2;
+    knnPointLegend.strokeStyle = "#222";
+    knnPointLegend.stroke();
+  }
+  drawKnnLegend();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Breadth-First Search (BFS) Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f9f9f9;
+  }
+  h1 {
+    text-align: center;
+  }
+  #graph-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+  }
+  svg {
+    border: 1px solid #ccc;
+    background: white;
+    box-shadow: 0 0 8px #ddd;
+  }
+  .node circle {
+    fill: #3498db;
+    stroke: #2980b9;
+    stroke-width: 3px;
+    transition: fill 0.4s ease;
+  }
+  .node.visited circle {
+    fill: #2ecc71;
+    stroke: #27ae60;
+  }
+  .node.current circle {
+    fill: #e67e22;
+    stroke: #d35400;
+  }
+  .node text {
+    fill: white;
+    font-weight: bold;
+    pointer-events: none;
+    user-select: none;
+  }
+  .edge {
+    stroke: #999;
+    stroke-width: 2px;
+    marker-end: url(#arrowhead);
+    transition: stroke 0.4s ease;
+  }
+  .edge.visited {
+    stroke: #2ecc71;
+    stroke-width: 3px;
+  }
+  #controls {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  label {
+    margin-right: 10px;
+    font-weight: bold;
+  }
+  select, button {
+    font-size: 16px;
+    padding: 6px 12px;
+    margin: 0 5px 10px 5px;
+  }
+  #log {
+    max-width: 600px;
+    margin: 0 auto;
+    background: #222;
+    color: #eee;
+    padding: 12px;
+    height: 140px;
+    overflow-y: auto;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<h1>Breadth-First Search (BFS) Visualization</h1>
+
+<div id="controls">
+  <label for="start-node">Start Node:</label>
+  <select id="start-node"></select>
+  <button id="start-btn">Start BFS</button>
+  <button id="reset-btn" disabled>Reset</button>
+</div>
+
+<div id="graph-container">
+  <svg id="graph" width="600" height="400" aria-label="Graph visualization"></svg>
+</div>
+
+<div id="log" aria-live="polite" aria-atomic="true" aria-relevant="additions"></div>
+
+<script>
+// Graph Data: adjacency list and positions for visualization
+const graph = {
+  A: ['B', 'C'],
+  B: ['A', 'D', 'E'],
+  C: ['A', 'F'],
+  D: ['B'],
+  E: ['B', 'F'],
+  F: ['C', 'E', 'G'],
+  G: ['F']
+};
+
+const nodesPos = {
+  A: {x: 100, y: 50},
+  B: {x: 50, y: 150},
+  C: {x: 150, y: 150},
+  D: {x: 20, y: 250},
+  E: {x: 80, y: 250},
+  F: {x: 180, y: 250},
+  G: {x: 180, y: 350},
+};
+
+const svg = document.getElementById('graph');
+const logEl = document.getElementById('log');
+const startNodeSelect = document.getElementById('start-node');
+const startBtn = document.getElementById('start-btn');
+const resetBtn = document.getElementById('reset-btn');
+
+let animationInterval = null; 
+let bfsState = null; // will hold the state of BFS for animation steps
+
+// Add arrow marker for edges
+const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+defs.innerHTML = `
+  <marker id="arrowhead" markerWidth="10" markerHeight="7"
+    refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#999" />
+  </marker>
+`;
+svg.appendChild(defs);
+
+// Draw nodes and edges and keep references for update
+const nodeElements = {};
+const edgeElements = [];
+
+// Draw edges (undirected, draw once per pair)
+function drawEdges() {
+  const drawn = new Set();
+  for (const node in graph) {
+    for (const neighbor of graph[node]) {
+      const edgeId = [node, neighbor].sort().join('-');
+      if (drawn.has(edgeId)) continue;
+      drawn.add(edgeId);
+
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.classList.add('edge');
+      line.setAttribute('data-from', node);
+      line.setAttribute('data-to', neighbor);
+      
+      const from = nodesPos[node];
+      const to = nodesPos[neighbor];
+
+      // Adjust line ends to circle border (radius 20)
+      const radius = 20;
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const length = Math.sqrt(dx*dx + dy*dy);
+
+      const normX = dx / length;
+      const normY = dy / length;
+
+      const startX = from.x + radius * normX;
+      const startY = from.y + radius * normY;
+      const endX = to.x - radius * normX;
+      const endY = to.y - radius * normY;
+
+      line.setAttribute('x1', startX);
+      line.setAttribute('y1', startY);
+      line.setAttribute('x2', endX);
+      line.setAttribute('y2', endY);
+
+      svg.appendChild(line);
+      edgeElements.push(line);
+    }
+  }
+}
+
+// Draw nodes
+function drawNodes() {
+  for (const node in nodesPos) {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.classList.add('node');
+    g.setAttribute('tabindex', 0);
+    g.setAttribute('aria-label', `Node ${node}`);
+    g.setAttribute('role', 'button');
+    g.setAttribute('data-node', node);
+
+    const pos = nodesPos[node];
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute('cx', pos.x);
+    circle.setAttribute('cy', pos.y);
+    circle.setAttribute('r', 20);
+
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute('x', pos.x);
+    text.setAttribute('y', pos.y + 6);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('pointer-events', 'none');
+    text.textContent = node;
+
+    g.appendChild(circle);
+    g.appendChild(text);
+    svg.appendChild(g);
+    nodeElements[node] = g;
+  }
+}
+
+// Utility: log messages and scroll
+function log(msg) {
+  const line = document.createElement('div');
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Clear all highlights and logs
+function clearAll() {
+  for (const node in nodeElements) {
+    nodeElements[node].classList.remove('visited', 'current');
+  }
+  for (const edge of edgeElements) {
+    edge.classList.remove('visited');
+  }
+  logEl.textContent = '';
+}
+
+// Animate BFS step-by-step
+function animateBFS(start) {
+  let queue = [start];
+  let visited = new Set();
+  let parentMap = {};
+  visited.add(start);
+  let step = 0;
+
+  clearAll();
+  log(`Starting BFS from node ${start}`);
+  nodeElements[start].classList.add('current');
+
+  animationInterval = setInterval(() => {
+    if (queue.length === 0) {
+      log('BFS traversal complete.');
+      nodeElements[start].classList.remove('current');
+      startBtn.disabled = false;
+      resetBtn.disabled = false;
+      clearInterval(animationInterval);
+      return;
+    }
+    // Current node processing
+    const current = queue.shift();
+
+    // Mark current node visited (green)
+    if (step > 0) {
+      nodeElements[current].classList.remove('current');
+      nodeElements[current].classList.add('visited');
+    }
+
+    log(`Visiting node ${current}`);
+
+    // Visit neighbors
+    const neighbors = graph[current];
+    let neighborsAdded = 0;
+
+    for(const neigh of neighbors) {
+      if(!visited.has(neigh)) {
+        visited.add(neigh);
+        queue.push(neigh);
+        parentMap[neigh] = current;
+        neighborsAdded++;
+
+        // Highlight edge between current and neighbor
+        highlightEdge(current, neigh);
+
+        log(`  Queued neighbor ${neigh}`);
+      }
+    }
+
+    // Mark next node in queue as current if exists
+    if (queue.length > 0) {
+      const nextNode = queue[0];
+      nodeElements[nextNode].classList.add('current');
+    }
+
+    step++;
+  }, 1200);
+}
+
+function highlightEdge(node1, node2){
+  // Undirected edge might be stored in either order, match the edge line
+  for(const edge of edgeElements){
+    const f = edge.getAttribute('data-from');
+    const t = edge.getAttribute('data-to');
+    if((f === node1 && t === node2) || (f === node2 && t === node1)){
+      edge.classList.add('visited');
+      break;
+    }
+  }
+}
+
+// Initialize start node options
+function initOptions() {
+  for (const node in graph) {
+    const option = document.createElement('option');
+    option.value = node;
+    option.textContent = node;
+    startNodeSelect.appendChild(option);
+  }
+}
+
+// Event Listeners
+startBtn.addEventListener('click', () => {
+  const start = startNodeSelect.value;
+  if (!start) return;
+
+  startBtn.disabled = true;
+  resetBtn.disabled = true;
+  animateBFS(start);
+});
+
+resetBtn.addEventListener('click', () => {
+  if(animationInterval) {
+    clearInterval(animationInterval);
+  }
+  clearAll();
+  startBtn.disabled = false;
+  resetBtn.disabled = true;
+});
+
+// Initial setup
+drawEdges();
+drawNodes();
+initOptions();
+resetBtn.disabled = true;
+</script>
+</body>
+</html>

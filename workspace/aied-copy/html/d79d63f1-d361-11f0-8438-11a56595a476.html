@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kruskal’s Algorithm Visualization</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #f0f0f0;
+    min-height: 100vh;
+  }
+  header {
+    background-color: #34495e;
+    color: white;
+    padding: 1em 2em;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  #container {
+    display: flex;
+    margin: 20px;
+    width: 90vw;
+    max-width: 1000px;
+  }
+  #graph {
+    flex: 2;
+    border: 1px solid #ccc;
+    background: white;
+    border-radius: 8px;
+    position: relative;
+  }
+  #info {
+    flex: 1;
+    margin-left: 20px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.12);
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  h2 {
+    margin-top: 0;
+  }
+  button {
+    background-color: #2980b9;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    font-size: 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  button:disabled {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+  }
+  #edgesList {
+    margin: 10px 0;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .log-entry {
+    font-family: monospace;
+    margin: 4px 0;
+  }
+
+  svg {
+    width: 100%;
+    height: 600px;
+  }
+  .node circle {
+    fill: #3498db;
+    stroke: #2980b9;
+    stroke-width: 2px;
+  }
+  .node text {
+    fill: white;
+    font-weight: bold;
+    user-select: none;
+  }
+  .edge {
+    fill: none;
+    stroke: #7f8c8d;
+    stroke-width: 3;
+    cursor: default;
+  }
+  .edge.weight-label {
+    font-size: 14px;
+    fill: #2c3e50;
+    user-select: none;
+    pointer-events: none;
+  }
+  .edge.selected {
+    stroke: #27ae60;
+    stroke-width: 4;
+  }
+  .edge.skipped {
+    stroke: #c0392b;
+    stroke-dasharray: 5 5;
+  }
+  .ds-highlight {
+    fill: #e67e22 !important;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kruskal’s Algorithm Visualization</h1>
+  <p>Step through Minimum Spanning Tree construction on a weighted undirected graph</p>
+</header>
+<div id="container">
+  <div id="graph">
+    <svg id="svgGraph" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" aria-label="Graph visualization"></svg>
+  </div>
+  <div id="info" aria-live="polite" aria-atomic="true">
+    <h2>Control Panel</h2>
+    <p><strong>Steps:</strong> Kruskal’s algorithm sorts all edges by weight and adds them greedily unless they form a cycle.</p>
+    <button id="nextStepBtn">Next Step</button>
+    <button id="resetBtn" style="margin-left: 10px;">Reset</button>
+    <h3>Current Step Info</h3>
+    <div id="currentStepInfo">Press "Next Step" to start.</div>
+    <h3>Edge being considered</h3>
+    <div id="edgeInfo">-</div>
+    <h3>Disjoint Set Forest</h3>
+    <div id="dsInfo"></div>
+    <h3>Edges selected in MST</h3>
+    <ul id="mstEdges"></ul>
+  </div>
+</div>
+
+<script>
+(() => {
+  /*
+  Visualization of Kruskal's algorithm.
+
+  Approach:
+  - Fixed weighted undirected graph.
+  - On loading: 
+    - Display nodes and edges.
+    - Edges are sorted by weight.
+  - On each step:
+    - Consider next edge in sorted order.
+    - Check if it forms a cycle via union-find.
+    - If no cycle, include edge in MST and union sets.
+    - Update visualization:
+      - Highlight considered edge
+      - Mark selected edges in green
+      - Mark skipped edges in red dashed
+    - Show DS info and log
+  */
+
+  const svg = document.getElementById('svgGraph');
+  const nextBtn = document.getElementById('nextStepBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const currentStepInfo = document.getElementById('currentStepInfo');
+  const edgeInfo = document.getElementById('edgeInfo');
+  const dsInfo = document.getElementById('dsInfo');
+  const mstEdgesList = document.getElementById('mstEdges');
+
+  // Graph data representation: nodes and edges
+  // Coordinates for nice layout.
+  const nodes = [
+    { id: 0, label: 'A', x: 150, y: 100 },
+    { id: 1, label: 'B', x: 350, y: 50 },
+    { id: 2, label: 'C', x: 550, y: 100 },
+    { id: 3, label: 'D', x: 200, y: 300 },
+    { id: 4, label: 'E', x: 400, y: 300 },
+    { id: 5, label: 'F', x: 600, y: 300 }
+  ];
+
+  // Undirected edges: u,v and weight
+  // E.g. edge from node 0 to node 1 with weight 4
+  const edges = [
+    { id: 0, u: 0, v: 1, w: 4 },
+    { id: 1, u: 0, v: 3, w: 2 },
+    { id: 2, u: 1, v: 2, w: 6 },
+    { id: 3, u: 1, v: 4, w: 5 },
+    { id: 4, u: 2, v: 5, w: 1 },
+    { id: 5, u: 3, v: 4, w: 3 },
+    { id: 6, u: 4, v: 5, w: 7 },
+    { id: 7, u: 3, v: 5, w: 8 }
+  ];
+
+  // We'll display edges as lines with weight labels midway
+
+  // Union-Find (Disjoint Set) Implementation
+  class UnionFind {
+    constructor(n) {
+      this.parent = new Array(n);
+      this.rank = new Array(n);
+      for(let i=0; i<n; i++) {
+        this.parent[i] = i;
+        this.rank[i] = 0;
+      }
+    }
+    find(x) {
+      if(this.parent[x] !== x) {
+        this.parent[x] = this.find(this.parent[x]); // path compression
+      }
+      return this.parent[x];
+    }
+    union(a, b) {
+      let rootA = this.find(a);
+      let rootB = this.find(b);
+      if(rootA === rootB) return false;
+      // union by rank
+      if(this.rank[rootA] < this.rank[rootB]) {
+        this.parent[rootA] = rootB;
+      } else if(this.rank[rootA] > this.rank[rootB]) {
+        this.parent[rootB] = rootA;
+      } else {
+        this.parent[rootB] = rootA;
+        this.rank[rootA]++;
+      }
+      return true;
+    }
+    getSets() {
+      // Return array mapping node -> root parent
+      return this.parent.map((_,i) => this.find(i));
+    }
+  }
+
+  // State variables for stepping through algorithm
+  let uf;
+  let sortedEdges = [];
+  let currentEdgeIndex = -1; // before first step
+  let mstEdges = [];
+
+  // SVG element groups
+  let edgeElements = new Map(); // edgeId -> SVG line element
+  let edgeWeightElements = new Map(); // edgeId -> SVG text element
+  let nodeElements = new Map(); // nodeId -> SVG group element (circle + text)
+
+  function clearSVG() {
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+  }
+
+  function drawGraph() {
+    clearSVG();
+
+    // Draw edges first (under nodes)
+    edges.forEach(edge => {
+      const from = nodes[edge.u];
+      const to = nodes[edge.v];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", 'line');
+      line.setAttribute('x1', from.x);
+      line.setAttribute('y1', from.y);
+      line.setAttribute('x2', to.x);
+      line.setAttribute('y2', to.y);
+      line.setAttribute('class', 'edge');
+      line.setAttribute('id', `edge${edge.id}`);
+      line.setAttribute('aria-label', `Edge ${nodes[edge.u].label} - ${nodes[edge.v].label} with weight ${edge.w}`);
+      svg.appendChild(line);
+      edgeElements.set(edge.id, line);
+
+      // Weight Text
+      const midX = (from.x + to.x) / 2;
+      const midY = (from.y + to.y) / 2;
+      const weightText = document.createElementNS("http://www.w3.org/2000/svg", 'text');
+      weightText.setAttribute('x', midX);
+      weightText.setAttribute('y', midY - 8);
+      weightText.setAttribute('text-anchor', 'middle');
+      weightText.setAttribute('class', 'edge weight-label');
+      weightText.textContent = edge.w;
+      svg.appendChild(weightText);
+      edgeWeightElements.set(edge.id, weightText);
+    });
+
+    // Draw nodes on top of edges
+    nodes.forEach(node => {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", 'g');
+      group.setAttribute('class', 'node');
+      group.setAttribute('id', `node${node.id}`);
+
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", 'circle');
+      circle.setAttribute('cx', node.x);
+      circle.setAttribute('cy', node.y);
+      circle.setAttribute('r', 25);
+      group.appendChild(circle);
+
+      const text = document.createElementNS("http://www.w3.org/2000/svg", 'text');
+      text.setAttribute('x', node.x);
+      text.setAttribute('y', node.y + 6);
+      text.setAttribute('text-anchor', 'middle');
+      text.textContent = node.label;
+      group.appendChild(text);
+
+      svg.appendChild(group);
+      nodeElements.set(node.id, group);
+    });
+  }
+
+  // Reset state for new run
+  function reset() {
+    uf = new UnionFind(nodes.length);
+    // Sort edges by weight ascending
+    sortedEdges = edges.slice().sort((a,b) => a.w - b.w);
+    currentEdgeIndex = -1;
+    mstEdges = [];
+    drawGraph();
+    updateUIBeforeStep();
+  }
+
+  // Serialize current UF state for display
+  function renderUF() {
+    // Show two lines:
+    // parent array
+    // rank array
+    const p = uf.parent.map((val,i) => `${i}->${val}`).join(', ');
+    const sets = uf.getSets();
+    const repr = [];
+    // Group nodes by root parent:
+    const groups = new Map();
+    sets.forEach((root,i) => {
+      if(!groups.has(root)) groups.set(root, []);
+      groups.get(root).push(nodes[i].label);
+    });
+    let groupStr = "";
+    for(let [root,members] of groups) {
+      groupStr += members.join(", ") + " | ";
+    }
+    return `<strong>Parents:</strong> ${p}<br/><strong>Sets (connected components):</strong> ${groupStr.slice(0,-3)}`;
+  }
+
+  // Update UI on each step (before considering next edge)
+  function updateUIBeforeStep() {
+    currentStepInfo.textContent = "Press 'Next Step' to process the next edge in ascending weight order.";
+    edgeInfo.textContent = "-";
+    dsInfo.innerHTML = renderUF();
+    renderMSTEdges();
+    resetBtn.disabled = false;
+    nextBtn.disabled = false;
+    // Clear all edge highlights
+    edges.forEach(e => {
+      let line = edgeElements.get(e.id);
+      line.classList.remove('selected', 'skipped');
+      line.style.transition = 'stroke 0.4s ease';
+      line.style.stroke = '#7f8c8d';
+      line.style.strokeWidth = '3';
+    });
+  }
+
+  // Render MST edge list
+  function renderMSTEdges() {
+    mstEdgesList.innerHTML = '';
+    if(mstEdges.length === 0) {
+      mstEdgesList.innerHTML = '<li><em>No edges selected yet.</em></li>';
+      return;
+    }
+    mstEdges.forEach(e => {
+      const li = document.createElement('li');
+      li.textContent = `${nodes[e.u].label} - ${nodes[e.v].label} (weight: ${e.w})`;
+      mstEdgesList.appendChild(li);
+    });
+  }
+
+  // Step function: consider next edge
+  function nextStep() {
+    currentEdgeIndex++;
+    if(currentEdgeIndex >= sortedEdges.length) {
+      currentStepInfo.textContent = "Algorithm finished. Minimum Spanning Tree complete.";
+      edgeInfo.textContent = "-";
+      nextBtn.disabled = true;
+      resetBtn.disabled = false;
+      dsInfo.innerHTML = renderUF();
+      return;
+    }
+
+    const edge = sortedEdges[currentEdgeIndex];
+    const u = edge.u, v = edge.v;
+
+    currentStepInfo.textContent = `Considering edge ${nodes[u].label} - ${nodes[v].label} with weight ${edge.w}`;
+    edgeInfo.textContent = `Checking if adding this edge creates a cycle...`;
+
+    // Highlight the considered edge with a distinct color
+    edges.forEach(e => {
+      const line = edgeElements.get(e.id);
+      line.style.transition = 'stroke 0.4s ease';
+      line.style.strokeWidth = '3';
+      if(e.id === edge.id) {
+        line.style.stroke = '#f39c12'; // orange
+        line.classList.remove('selected','skipped');
+      } else if(mstEdges.find(mstE => mstE.id === e.id)) {
+        line.style.stroke = '#27ae60'; // green MST edge
+        line.classList.add('selected');
+        line.classList.remove('skipped');
+        line.style.strokeWidth = '4';
+      } else if(e.id < currentEdgeIndex) {
+        // Previously considered but skipped edges
+        if(!mstEdges.find(mstE => mstE.id === e.id)) {
+          line.style.stroke = '#c0392b'; // red
+          line.classList.add('skipped');
+          line.classList.remove('selected');
+          line.style.strokeWidth = '3';
+        }
+      } else {
+        // Not considered yet edges
+        line.style.stroke = '#7f8c8d';
+        line.classList.remove('selected','skipped');
+      }
+    });
+
+    // Check if edge creates a cycle (i.e. same set?)
+    if(uf.find(u) !== uf.find(v)) {
+      // No cycle - union
+      uf.union(u, v);
+      mstEdges.push(edge);
+      edgeInfo.textContent += " No cycle formed. Edge added to MST.";
+    } else {
+      // Cycle formed - skip
+      edgeInfo.textContent += " Cycle detected! Edge skipped.";
+    }
+
+    dsInfo.innerHTML = renderUF();
+    renderMSTEdges();
+
+    // If MST complete (n-1 edges selected)
+    if(mstEdges.length === nodes.length - 1) {
+      currentStepInfo.textContent = "MST complete! Algorithm finished.";
+      nextBtn.disabled = true;
+      resetBtn.disabled = false;
+
+      // Highlight MST edges strongly, and others faded
+      edges.forEach(e => {
+        const line = edgeElements.get(e.id);
+        if(mstEdges.find(mstE => mstE.id === e.id)) {
+          line.style.stroke = '#27ae60';
+          line.style.strokeWidth = '5';
+          line.classList.add('selected');
+          line.classList.remove('skipped');
+        } else {
+          line.style.stroke = '#bdc3c7';
+          line.style.strokeWidth = '2';
+          line.classList.remove('selected','skipped');
+        }
+      });
+    }
+
+  }
+
+  // Initialize UI and setup event handlers
+  function init() {
+    reset();
+    nextBtn.addEventListener('click', nextStep);
+    resetBtn.addEventListener('click', reset);
+  }
+
+  init();
+
+})();
+</script>
+
+</body>
+</html>

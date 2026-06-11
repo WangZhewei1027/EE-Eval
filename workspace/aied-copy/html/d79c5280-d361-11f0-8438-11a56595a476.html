@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Weighted Graph Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  #graphCanvas {
+    border: 1px solid #ccc;
+    background-color: #fafafa;
+    display: block;
+    margin: auto;
+  }
+  #info {
+    max-width: 600px;
+    margin: 20px auto;
+    text-align: center;
+  }
+  #controls {
+    max-width: 600px;
+    margin: 20px auto;
+    text-align: center;
+  }
+  button {
+    margin: 5px;
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  #explanation {
+    max-width: 600px;
+    margin: 20px auto;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<h2 style="text-align:center">Weighted Graph Visualization & Demo</h2>
+
+<canvas id="graphCanvas" width="600" height="400"></canvas>
+
+<div id="info"></div>
+
+<div id="controls">
+  <button id="btnDijkstra">Run Dijkstra's Shortest Path</button>
+  <button id="btnReset">Reset Graph</button>
+</div>
+
+<div id="explanation">
+  <h3>About Weighted Graphs</h3>
+  <p>
+    A <strong>weighted graph</strong> is a graph in which each edge has an associated numerical value, called a weight. These weights can represent costs, distances, or any measure relevant to the relationship between nodes.
+  </p>
+  <p>
+    In this demo, nodes are shown as circles, edges as lines labeled with their weights. You can run Dijkstra's algorithm to find the shortest path from a selected start node to all other nodes.
+  </p>
+  <p>
+    To run the algorithm, click the "Run Dijkstra's Shortest Path" button. Click on a node in the graph to select the start node (shown in green). The shortest distances will be displayed next to each node.
+  </p>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("graphCanvas");
+  const ctx = canvas.getContext("2d");
+  const info = document.getElementById("info");
+  const btnDijkstra = document.getElementById("btnDijkstra");
+  const btnReset = document.getElementById("btnReset");
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Graph data structure
+  // Nodes have id, x/y position on canvas
+  // Edges have from, to, weight
+  class Graph {
+    constructor() {
+      this.nodes = [];
+      this.edges = [];
+      this.adjList = new Map();
+    }
+    addNode(id, x, y) {
+      this.nodes.push({ id, x, y });
+      this.adjList.set(id, []);
+    }
+    addEdge(from, to, weight) {
+      this.edges.push({ from, to, weight });
+      this.adjList.get(from).push({ node: to, weight });
+      this.adjList.get(to).push({ node: from, weight }); // undirected
+    }
+    getNeighbors(node) {
+      return this.adjList.get(node);
+    }
+  }
+
+  // Demo graph - preset nodes and edges
+  const graph = new Graph();
+
+  // Sample nodes placed roughly in a circle
+  const nodePositions = [
+    { id: "A", x: width / 2, y: 60 },
+    { id: "B", x: 130, y: 130 },
+    { id: "C", x: 90, y: 280 },
+    { id: "D", x: 270, y: 290 },
+    { id: "E", x: 430, y: 280 },
+    { id: "F", x: 480, y: 140 },
+    { id: "G", x: 370, y: 70 },
+  ];
+
+  nodePositions.forEach(n => graph.addNode(n.id, n.x, n.y));
+
+  // Add edges with weights
+  // The graph is undirected
+  const edgesData = [
+    ["A", "B", 7],
+    ["A", "G", 2],
+    ["B", "C", 3],
+    ["B", "G", 3],
+    ["C", "D", 4],
+    ["C", "E", 8],
+    ["D", "E", 5],
+    ["E", "F", 6],
+    ["F", "G", 4],
+  ];
+
+  edgesData.forEach(([from, to, w]) => graph.addEdge(from, to, w));
+
+  // Drawing parameters
+  const nodeRadius = 20;
+
+  // State variables
+  let selectedStartNode = null;
+  let distances = null;
+  let pathTree = null;
+
+  // Draw graph function
+  function drawGraph() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw edges
+    graph.edges.forEach(edge => {
+      const fromNode = graph.nodes.find(n => n.id === edge.from);
+      const toNode = graph.nodes.find(n => n.id === edge.to);
+
+      ctx.beginPath();
+      ctx.strokeStyle = "#999";
+      ctx.lineWidth = 2;
+      ctx.moveTo(fromNode.x, fromNode.y);
+      ctx.lineTo(toNode.x, toNode.y);
+      ctx.stroke();
+
+      // Draw weight near mid point
+      const midX = (fromNode.x + toNode.x) / 2;
+      const midY = (fromNode.y + toNode.y) / 2;
+      ctx.fillStyle = "#000";
+      ctx.font = "16px Arial";
+      ctx.fillText(edge.weight, midX + 5, midY - 5);
+    });
+
+    // Draw nodes
+    graph.nodes.forEach(node => {
+      let fillColor = "#ddd";
+      let strokeColor = "#666";
+
+      if (node.id === selectedStartNode) {
+        fillColor = "#6c9";  // green for start
+        strokeColor = "#383";
+      }
+
+      ctx.beginPath();
+      ctx.fillStyle = fillColor;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 3;
+      ctx.arc(node.x, node.y, nodeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw node id
+      ctx.fillStyle = "#000";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(node.id, node.x, node.y);
+
+      // If distances computed, draw distance near node
+      if (distances && distances[node.id] !== Infinity) {
+        ctx.fillStyle = "#222";
+        ctx.font = "14px Arial";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Dist: " + distances[node.id], node.x + nodeRadius + 10, node.y);
+      }
+    });
+
+    // If path tree available, draw shortest path tree edges in highlight
+    if (pathTree) {
+      ctx.strokeStyle = "#4a90e2";
+      ctx.lineWidth = 4;
+      Object.entries(pathTree).forEach(([node, parent]) => {
+        if (!parent) return; // root
+
+        const fromNode = graph.nodes.find(n => n.id === node);
+        const toNode = graph.nodes.find(n => n.id === parent);
+
+        ctx.beginPath();
+        ctx.moveTo(fromNode.x, fromNode.y);
+        ctx.lineTo(toNode.x, toNode.y);
+        ctx.stroke();
+      });
+    }
+  }
+
+  // Utility: find node under mouse (simple radius check)
+  function getNodeAt(x, y) {
+    return graph.nodes.find(
+      node => Math.hypot(node.x - x, node.y - y) <= nodeRadius
+    );
+  }
+
+  // Dijkstra's algorithm for shortest path
+  // Returns distances and path tree (parent map)
+  function dijkstra(graph, startId) {
+    const dist = {};
+    const prev = {};
+
+    graph.nodes.forEach(node => {
+      dist[node.id] = Infinity;
+      prev[node.id] = null;
+    });
+    dist[startId] = 0;
+
+    const pq = new MinPriorityQueue();
+    pq.enqueue(startId, 0);
+
+    while (!pq.isEmpty()) {
+      const { element: u } = pq.dequeue();
+
+      for (const neighbor of graph.getNeighbors(u)) {
+        const alt = dist[u] + neighbor.weight;
+        if (alt < dist[neighbor.node]) {
+          dist[neighbor.node] = alt;
+          prev[neighbor.node] = u;
+          pq.enqueue(neighbor.node, alt);
+        }
+      }
+    }
+
+    return { distances: dist, pathTree: prev };
+  }
+
+  // Simple min priority queue using binary heap
+  class MinPriorityQueue {
+    constructor() {
+      this.heap = [];
+    }
+    enqueue(element, priority) {
+      this.heap.push({ element, priority });
+      this.bubbleUp();
+    }
+    bubbleUp() {
+      let idx = this.heap.length - 1;
+      const node = this.heap[idx];
+      while (idx > 0) {
+        let parentIdx = Math.floor((idx - 1) / 2);
+        let parent = this.heap[parentIdx];
+        if (node.priority >= parent.priority) break;
+        this.heap[parentIdx] = node;
+        this.heap[idx] = parent;
+        idx = parentIdx;
+      }
+    }
+    dequeue() {
+      const min = this.heap[0];
+      const end = this.heap.pop();
+      if (this.heap.length > 0) {
+        this.heap[0] = end;
+        this.sinkDown(0);
+      }
+      return min;
+    }
+    sinkDown(idx) {
+      const length = this.heap.length;
+      const node = this.heap[idx];
+
+      while (true) {
+        let leftIdx = 2 * idx + 1;
+        let rightIdx = 2 * idx + 2;
+        let swapIdx = null;
+
+        if (leftIdx < length) {
+          if (this.heap[leftIdx].priority < node.priority) {
+            swapIdx = leftIdx;
+          }
+        }
+        if (rightIdx < length) {
+          if (
+            (swapIdx === null && this.heap[rightIdx].priority < node.priority) ||
+            (swapIdx !== null && this.heap[rightIdx].priority < this.heap[leftIdx].priority)
+          ) {
+            swapIdx = rightIdx;
+          }
+        }
+        if (swapIdx === null) break;
+        this.heap[idx] = this.heap[swapIdx];
+        this.heap[swapIdx] = node;
+        idx = swapIdx;
+      }
+    }
+    isEmpty() {
+      return this.heap.length === 0;
+    }
+  }
+
+  // Event handlers
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const node = getNodeAt(clickX, clickY);
+
+    if (node) {
+      selectedStartNode = node.id;
+      distances = null;
+      pathTree = null;
+      info.textContent = `Selected start node: ${node.id}. Now click "Run Dijkstra's Shortest Path" to compute shortest paths.`;
+      drawGraph();
+    }
+  });
+
+  btnDijkstra.addEventListener("click", () => {
+    if (!selectedStartNode) {
+      alert("Please select a start node by clicking on a node in the graph first.");
+      return;
+    }
+    const result = dijkstra(graph, selectedStartNode);
+    distances = result.distances;
+    pathTree = result.pathTree;
+
+    info.textContent = `Shortest paths computed from node ${selectedStartNode}. Distance displayed next to each node. Blue edges show shortest path tree.`;
+
+    drawGraph();
+  });
+
+  btnReset.addEventListener("click", () => {
+    selectedStartNode = null;
+    distances = null;
+    pathTree = null;
+    info.textContent = "Graph reset. Click on a node to select a start node.";
+    drawGraph();
+  });
+
+  // Initial draw
+  info.textContent = "Click on a node to select start node.";
+  drawGraph();
+})();
+</script>
+
+</body>
+</html>

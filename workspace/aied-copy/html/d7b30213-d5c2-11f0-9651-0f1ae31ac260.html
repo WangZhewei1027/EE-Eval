@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Weighted Graph Demonstration</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    overflow: hidden;
+    background: #f0f0f0;
+  }
+  #container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+  canvas {
+    background: #fff;
+    display: block;
+    margin: 0 auto;
+    box-shadow: 0 0 8px rgba(0,0,0,0.15);
+  }
+  #info {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: rgba(255,255,255,0.9);
+    border-radius: 6px;
+    padding: 10px 15px;
+    max-width: 320px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    user-select: none;
+  }
+  #info h2 {
+    margin-top:0;
+    font-weight: 600;
+    font-size: 18px;
+  }
+  #info p {
+    font-size: 14px;
+    margin: 5px 0;
+    line-height: 1.3;
+  }
+  #resetButton {
+    margin-top: 10px;
+    background-color: #2979ff;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #resetButton:hover {
+    background-color: #1c54b2;
+  }
+  #instructions {
+    font-size: 13px;
+    color: #555;
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+<div id="container">
+  <canvas id="graphCanvas" width="900" height="600"></canvas>
+  <div id="info">
+    <h2>Weighted Graph Demo</h2>
+    <p><b>Instructions:</b></p>
+    <p id="instructions">
+      - Click on empty space to add a node.<br>
+      - Click on two nodes consecutively to create an edge.<br>
+      - After selecting the second node, you will be prompted to enter a weight.<br>
+      - Drag nodes to reposition.<br>
+      - Right-click a node to delete it (and connected edges).<br>
+      - Right-click an edge (near its line) to delete that edge.<br>
+      - The graph shows nodes as circles, edges as lines with weights displayed near them.<br>
+    </p>
+    <button id="resetButton">Reset Graph</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("graphCanvas");
+  const ctx = canvas.getContext("2d");
+
+  let nodes = [];
+  let edges = [];
+
+  const nodeRadius = 20;
+
+  // For dragging:
+  let dragNode = null;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  // For creating edges:
+  let selectedNode = null;
+
+  // Utility to get mouse position relative to canvas
+  function getMousePos(evt) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: evt.clientX - rect.left,
+      y: evt.clientY - rect.top,
+    };
+  }
+
+  // Find a node under a point (within radius)
+  function findNodeAt(x, y) {
+    return nodes.find(
+      (node) =>
+        Math.hypot(node.x - x, node.y - y) <= nodeRadius
+    );
+  }
+
+  // Find an edge near a point - we approximate by checking distance from mouse to edge line segment
+  function findEdgeAt(x, y) {
+    function distanceToSegment(px, py, x1, y1, x2, y2) {
+      // https://stackoverflow.com/questions/849211/
+      const A = px - x1;
+      const B = py - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+
+      const dot = A * C + B * D;
+      const len_sq = C * C + D * D;
+      let param = -1;
+      if (len_sq !== 0) //in case of 0 length line
+          param = dot / len_sq;
+
+      let xx, yy;
+
+      if (param < 0) {
+        xx = x1;
+        yy = y1;
+      }
+      else if (param > 1) {
+        xx = x2;
+        yy = y2;
+      }
+      else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+      }
+
+      const dx = px - xx;
+      const dy = py - yy;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    for(let edge of edges) {
+      const n1 = nodes.find(n => n.id === edge.from);
+      const n2 = nodes.find(n => n.id === edge.to);
+
+      if (!n1 || !n2) continue;
+
+      const dist = distanceToSegment(x, y, n1.x, n1.y, n2.x, n2.y);
+      if(dist <= 8) {
+        return edge;
+      }
+    }
+    return null;
+  }
+
+  // Draw arrowed line from (x1,y1) to (x2,y2)
+  function drawArrowedLine(x1, y1, x2, y2, options = {}) {
+    const {color = "#333", arrowSize=10, width=2} = options;
+    const headlen = arrowSize;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const angle = Math.atan2(dy, dx);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // draw arrowhead
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6));
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  // Draw the weighted graph
+  function drawGraph() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw edges first
+    edges.forEach(edge => {
+      const fromNode = nodes.find(n => n.id === edge.from);
+      const toNode = nodes.find(n => n.id === edge.to);
+      if (!fromNode || !toNode) return;
+
+      // Draw a slightly offset edge so arrow and label are visible clear from node circle
+
+      // Compute line vector & unit vector
+      const dx = toNode.x - fromNode.x;
+      const dy = toNode.y - fromNode.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist === 0) return;
+      const ux = dx / dist;
+      const uy = dy / dist;
+
+      // start and end points adjusted to node circle edge
+      const startX = fromNode.x + ux * nodeRadius;
+      const startY = fromNode.y + uy * nodeRadius;
+      const endX = toNode.x - ux * nodeRadius;
+      const endY = toNode.y - uy * nodeRadius;
+
+      // Draw line with arrow
+      drawArrowedLine(startX, startY, endX, endY, {color:"#555", width:2});
+
+      // Draw weight label near middle of edge, offset perpendicular to edge line
+      const midX = (startX + endX) / 2;
+      const midY = (startY + endY) / 2;
+      const offset = 15;
+      // Perpendicular vector
+      const px = -uy;
+      const py = ux;
+
+      ctx.fillStyle = "#222";
+      ctx.font = "14px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(edge.weight, midX + px * offset, midY + py * offset);
+    });
+
+    // Draw nodes on top
+    nodes.forEach(node => {
+      ctx.beginPath();
+      ctx.fillStyle = node === selectedNode ? "#4a90e2" : "#0077cc";
+      ctx.strokeStyle = "#004d80";
+      ctx.lineWidth = 2;
+      ctx.arc(node.x, node.y, nodeRadius, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+
+      // Node label = node.id or letter
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 14px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(node.label, node.x, node.y);
+    });
+  }
+
+  // Add a node at position (x,y)
+  function addNode(x, y) {
+    // Generate label as letter A, B, C, ...
+    const nextLabel = String.fromCharCode(65 + nodes.length);
+    const newNode = {
+      id: generateId(),
+      label: nextLabel,
+      x,
+      y
+    };
+    nodes.push(newNode);
+  }
+
+  function generateId() {
+    // unique but simple incremental string id
+    return 'n' + Date.now() + Math.random().toString(36).slice(2,6);
+  }
+
+  // Add an edge from nodeFrom to nodeTo with weight
+  function addEdge(nodeFrom, nodeTo, weight) {
+    // Check if edge already exists
+    const exists = edges.some(e =>
+      e.from === nodeFrom.id && e.to === nodeTo.id);
+    if(exists) {
+      alert("Edge already exists!");
+      return;
+    }
+    edges.push({
+      from: nodeFrom.id,
+      to: nodeTo.id,
+      weight: weight,
+    });
+  }
+
+  // Delete a node and all connected edges
+  function deleteNode(node) {
+    nodes = nodes.filter(n => n !== node);
+    edges = edges.filter(e => e.from !== node.id && e.to !== node.id);
+  }
+
+  // Delete a given edge
+  function deleteEdge(edge) {
+    edges = edges.filter(e => e !== edge);
+  }
+
+  // Interaction handlers
+  canvas.addEventListener("mousedown", evt => {
+    const pos = getMousePos(evt);
+
+    if(evt.button === 2) {
+      // Right click: check if node or edge under pointer to delete
+      const node = findNodeAt(pos.x, pos.y);
+      if(node) {
+        if(confirm(`Delete node ${node.label} and its connected edges?`)) {
+          if(selectedNode === node) selectedNode = null;
+          deleteNode(node);
+          drawGraph();
+        }
+        evt.preventDefault();
+        return;
+      }
+      const edge = findEdgeAt(pos.x, pos.y);
+      if(edge) {
+        if(confirm(`Delete edge from ${getNodeLabelById(edge.from)} to ${getNodeLabelById(edge.to)}?`)) {
+          deleteEdge(edge);
+          drawGraph();
+        }
+        evt.preventDefault();
+        return;
+      }
+      // No node or edge under pointer, do nothing special for right click
+      return;
+    }
+
+    // Left click - first check if a node is clicked for dragging or edge creation
+    const node = findNodeAt(pos.x, pos.y);
+    if(node) {
+      // If no selectedNode previously, set this as selectedNode for creating edge
+      if(!selectedNode) {
+        selectedNode = node;
+        drawGraph();
+      } else if(selectedNode === node) {
+        // clicking same node again cancels selection
+        selectedNode = null;
+        drawGraph();
+      } else {
+        // second node selected, prompt for weight
+        const inputWeight = prompt(`Enter weight for edge from "${selectedNode.label}" to "${node.label}":`, "1");
+        const weightNum = parseFloat(inputWeight);
+        if(!isNaN(weightNum) && weightNum > 0) {
+          addEdge(selectedNode, node, weightNum);
+        } else if(inputWeight !== null) {
+          alert("Invalid weight entered. Please enter a positive number.");
+        }
+        selectedNode = null;
+        drawGraph();
+      }
+      // Start drag for node after edge selection completes - do not drag on the same click
+      return;
+    }
+
+    // No node clicked
+    // Add new node at place
+    if(!selectedNode) {
+      addNode(pos.x, pos.y);
+      drawGraph();
+      return;
+    } else {
+      // If we were in edge select mode (selectedNode), clicking elsewhere cancels it
+      selectedNode = null;
+      drawGraph();
+      return;
+    }
+  }, false);
+
+  // Drag nodes
+  canvas.addEventListener("mousedown", evt => {
+    if(evt.button !== 0) return; // left click only
+
+    const pos = getMousePos(evt);
+    const node = findNodeAt(pos.x, pos.y);
+    if(node) {
+      dragNode = node;
+      dragOffsetX = pos.x - node.x;
+      dragOffsetY = pos.y - node.y;
+      // Prevent text selection while dragging
+      evt.preventDefault();
+    }
+  }, false);
+
+  canvas.addEventListener("mousemove", evt => {
+    if(dragNode) {
+      const pos = getMousePos(evt);
+      dragNode.x = pos.x - dragOffsetX;
+      dragNode.y = pos.y - dragOffsetY;
+
+      // Keep node inside canvas bounds (some padding)
+      dragNode.x = Math.min(canvas.width - nodeRadius, Math.max(nodeRadius, dragNode.x));
+      dragNode.y = Math.min(canvas.height - nodeRadius, Math.max(nodeRadius, dragNode.y));
+
+      drawGraph();
+    }
+  }, false);
+
+  canvas.addEventListener("mouseup", (evt) => {
+    dragNode = null;
+  }, false);
+
+  canvas.addEventListener("mouseleave", (evt) => {
+    dragNode = null;
+  }, false);
+
+  // Disable context menu on canvas to allow custom right-click
+  canvas.addEventListener("contextmenu", e => {
+    e.preventDefault();
+  });
+
+  // Utility to get label by id
+  function getNodeLabelById(id) {
+    const n = nodes.find(n => n.id === id);
+    return n ? n.label : "?";
+  }
+
+  // Reset button
+  document.getElementById("resetButton").addEventListener("click", () => {
+    if(confirm("Clear entire graph?")) {
+      nodes = [];
+      edges = [];
+      selectedNode = null;
+      drawGraph();
+    }
+  });
+
+  // Initialize with a sample weighted graph
+  function initSampleGraph() {
+    nodes = [
+      {id: "n1", label: "A", x: 150, y: 120},
+      {id: "n2", label: "B", x: 350, y: 180},
+      {id: "n3", label: "C", x: 240, y: 350},
+      {id: "n4", label: "D", x: 600, y: 280},
+      {id: "n5", label: "E", x: 700, y: 120},
+      {id: "n6", label: "F", x: 620, y: 420},
+    ];
+    edges = [
+      {from: "n1", to: "n2", weight: 5},
+      {from: "n1", to: "n3", weight: 3},
+      {from: "n2", to: "n4", weight: 2},
+      {from: "n3", to: "n4", weight: 7},
+      {from: "n4", to: "n5", weight: 4},
+      {from: "n4", to: "n6", weight: 6},
+      {from: "n5", to: "n6", weight: 1},
+    ];
+  }
+
+  initSampleGraph();
+  drawGraph();
+})();
+</script>
+</body>
+</html>

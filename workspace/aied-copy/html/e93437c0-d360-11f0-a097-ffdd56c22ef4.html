@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Dijkstra's Algorithm Visualizer</title>
+  <style>
+    html,body { height:100%; margin:0; font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; }
+    #container { display:flex; height:100vh; }
+    #canvas-pane { flex:1; position:relative; background: #ffffff; border-right: 1px solid #ddd; }
+    canvas { width:100%; height:100%; display:block; }
+    #sidebar { width:380px; box-sizing:border-box; padding:16px; background:#fafafa; overflow:auto; }
+    h2 { margin:6px 0 12px 0; font-weight:600; font-size:18px; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+    button, select, input[type="number"] { padding:8px 10px; border-radius:6px; border:1px solid #bbb; background:white; cursor:pointer; }
+    button:hover { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .mode-btn.active { background:#2b8cff; color:white; border-color:#1a6fe0; }
+    .small { padding:6px 8px; font-size:13px; }
+    label { display:block; margin-top:8px; font-size:13px; color:#444; }
+    .info { margin-top:12px; background:white; padding:10px; border-radius:8px; border:1px solid #eee; font-size:13px; }
+    pre { white-space:pre-wrap; font-family:monospace; font-size:13px; margin:8px 0 0 0; background:#f6f8fa; padding:8px; border-radius:6px; overflow:auto; max-height:180px; }
+    .pq, .adj { font-family:monospace; font-size:13px; }
+    .status { margin-top:8px; font-weight:700; }
+    .legend { margin-top:8px; font-size:13px; color:#444; }
+    .split { display:flex; gap:8px; margin-top:8px; }
+    .split > * { flex:1; }
+    .small-muted { font-size:12px; color:#666; margin-top:6px; }
+    .footer { margin-top:12px; font-size:12px; color:#666; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="canvas-pane">
+      <canvas id="c"></canvas>
+    </div>
+    <div id="sidebar">
+      <h2>Dijkstra's Algorithm — Visualizer</h2>
+      <div class="controls">
+        <button id="mode-add-node" class="mode-btn active small">Add Node</button>
+        <button id="mode-add-edge" class="mode-btn small">Add Edge</button>
+        <button id="mode-move" class="mode-btn small">Move Node</button>
+        <button id="mode-delete" class="mode-btn small">Delete</button>
+      </div>
+
+      <div class="controls">
+        <button id="set-start" class="small">Set Start</button>
+        <button id="set-target" class="small">Set Target</button>
+        <button id="show-path" class="small">Show Shortest Path</button>
+      </div>
+
+      <label>Edge weight (default when creating)</label>
+      <input id="default-weight" type="number" value="1" step="0.1" min="0" />
+
+      <div class="controls" style="margin-top:12px;">
+        <button id="init-run" class="small">Init Dijkstra</button>
+        <button id="step-btn" class="small">Step</button>
+        <button id="run-btn" class="small">Run</button>
+        <button id="pause-btn" class="small" disabled>Pause</button>
+        <button id="reset-btn" class="small">Reset</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label><input type="checkbox" id="undirected" checked /> Undirected edges</label>
+      </div>
+
+      <div class="info">
+        <div><strong>Status:</strong> <span id="status-text">Idle</span></div>
+        <div class="status">Start: <span id="start-node">—</span> &nbsp; Target: <span id="target-node">—</span></div>
+        <div class="legend">
+          Node: label (distance) — visited nodes are gray; current node highlighted in blue; shortest path in green.
+        </div>
+      </div>
+
+      <div class="info" style="margin-top:12px;">
+        <strong>Priority Queue (min by distance)</strong>
+        <div class="pq" id="pq-box" style="margin-top:8px;">[]</div>
+        <strong style="margin-top:8px; display:block;">Adjacency</strong>
+        <div class="adj" id="adj-box" style="margin-top:8px;">(empty)</div>
+      </div>
+
+      <div class="info" style="margin-top:12px;">
+        <strong>Pseudocode (highlighted as it runs)</strong>
+        <pre id="pseudocode">
+1  procedure Dijkstra(Graph, source):
+2      for each vertex v in Graph:
+3          dist[v] := ∞
+4          prev[v] := undefined
+5      dist[source] := 0
+6      Q := all vertices in Graph
+7      while Q is not empty:
+8          u := vertex in Q with smallest dist[u]
+9          remove u from Q
+10         if dist[u] = ∞: break
+11         for each neighbor v of u:
+12             alt := dist[u] + weight(u,v)
+13             if alt < dist[v]:
+14                 dist[v] := alt
+15                 prev[v] := u
+        </pre>
+      </div>
+
+      <div class="footer">
+        Tips:
+        <ul style="margin:6px 0 0 18px; padding:0;">
+          <li>Click canvas to add nodes. Use "Add Edge" to connect nodes (click source then target).</li>
+          <li>Set a start node, then "Init Dijkstra", then Step or Run.</li>
+          <li>Non-negative weights only. Use "Undirected" for two-way edges.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // Dijkstra Visualizer - single-file implementation (no external libs)
+  (function(){
+    // Canvas setup
+    const canvas = document.getElementById('c');
+    const pane = document.getElementById('canvas-pane');
+    function resizeCanvas(){
+      canvas.width = pane.clientWidth;
+      canvas.height = pane.clientHeight;
+      draw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const ctx = canvas.getContext('2d');
+
+    // UI elements
+    const modes = {
+      addNode: document.getElementById('mode-add-node'),
+      addEdge: document.getElementById('mode-add-edge'),
+      move: document.getElementById('mode-move'),
+      del: document.getElementById('mode-delete')
+    };
+    const setStartBtn = document.getElementById('set-start');
+    const setTargetBtn = document.getElementById('set-target');
+    const showPathBtn = document.getElementById('show-path');
+    const defaultWeightInput = document.getElementById('default-weight');
+    const undirectedCheckbox = document.getElementById('undirected');
+    const initRunBtn = document.getElementById('init-run');
+    const stepBtn = document.getElementById('step-btn');
+    const runBtn = document.getElementById('run-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const statusText = document.getElementById('status-text');
+    const startNodeSpan = document.getElementById('start-node');
+    const targetNodeSpan = document.getElementById('target-node');
+    const pqBox = document.getElementById('pq-box');
+    const adjBox = document.getElementById('adj-box');
+    const pseudo = document.getElementById('pseudocode');
+
+    // Graph model
+    let nodes = []; // {id,x,y}
+    let edges = []; // {id,u,v,weight}
+    let nodeIdCounter = 1;
+    let edgeIdCounter = 1;
+
+    // Visual settings
+    const NODE_R = 22;
+
+    // Interaction state
+    let currentMode = 'addNode';
+    let tempEdgeSource = null;
+    let draggingNode = null;
+    let draggingOffset = {x:0,y:0};
+    let selectingStart = false;
+    let selectingTarget = false;
+
+    // Dijkstra algorithm state
+    let algo = {
+      started: false,
+      distances: {}, // id -> number
+      prev: {}, // id -> id or null
+      visited: {}, // id -> bool
+      pq: [], // array of {id,dist} (kept unsophisticated)
+      current: null, // current u being processed
+      finished: false
+    };
+
+    let autoRunInterval = null;
+
+    // Helpers
+    function getNodeAt(x,y){
+      for(let i=nodes.length-1;i>=0;i--){
+        const n = nodes[i];
+        const dx = x - n.x, dy = y - n.y;
+        if (Math.hypot(dx,dy) <= NODE_R) return n;
+      }
+      return null;
+    }
+    function distBetween(n1,n2){
+      const dx = n1.x-n2.x, dy = n1.y-n2.y;
+      return Math.hypot(dx,dy);
+    }
+    function addNode(x,y){
+      const id = String(nodeIdCounter++);
+      nodes.push({id, x, y});
+      draw();
+      updateAdjBox();
+    }
+    function removeNode(node){
+      edges = edges.filter(e => e.u !== node.id && e.v !== node.id);
+      nodes = nodes.filter(n => n.id !== node.id);
+      if (algo.started) resetAlgorithm();
+      draw();
+      updateAdjBox();
+    }
+    function addEdge(u,v,w){
+      // prevent duplicates: if an edge with same endpoints exists, just update weight
+      const exists = edges.find(e => (e.u===u && e.v===v) || (undirectedCheckbox.checked && e.u===v && e.v===u));
+      if (exists){
+        exists.weight = w;
+      } else {
+        edges.push({id:String(edgeIdCounter++), u, v, weight: w});
+      }
+      draw();
+      updateAdjBox();
+    }
+    function removeEdgeBetween(u,v){
+      edges = edges.filter(e => !( (e.u===u && e.v===v) || (e.u===v && e.v===u) ));
+      draw();
+      updateAdjBox();
+    }
+    function neighborsOf(id){
+      const res = [];
+      for(const e of edges){
+        if (e.u === id) res.push({id: e.v, weight: e.weight});
+        if (undirectedCheckbox.checked && e.v === id) res.push({id: e.u, weight: e.weight});
+        // If edges are stored both directions, the above may duplicate; but we store single edges.
+      }
+      return res;
+    }
+    function updateAdjBox(){
+      if (nodes.length === 0){ adjBox.innerText = '(empty)'; return; }
+      const map = {};
+      for(const n of nodes) map[n.id] = [];
+      for(const e of edges){
+        map[e.u].push({v:e.v,w:e.weight});
+        if (undirectedCheckbox.checked) map[e.v].push({v:e.u,w:e.weight});
+      }
+      let s = '';
+      for(const id of Object.keys(map).sort((a,b)=>+a-+b)){
+        s += id + ' : ' + (map[id].map(o => `${o.v}(${o.w})`).join(', ') ) + '\n';
+      }
+      adjBox.innerText = s;
+    }
+
+    // UI mode buttons
+    function setMode(m){
+      currentMode = m;
+      for(const k in modes) modes[k].classList.remove('active');
+      if (m === 'addNode') modes.addNode.classList.add('active');
+      if (m === 'addEdge') modes.addEdge.classList.add('active');
+      if (m === 'move') modes.move.classList.add('active');
+      if (m === 'del') modes.del.classList.add('active');
+      tempEdgeSource = null;
+      selectingStart = selectingTarget = false;
+      setStartBtn.classList.remove('active');
+      setTargetBtn.classList.remove('active');
+      draw();
+    }
+    modes.addNode.addEventListener('click', ()=> setMode('addNode'));
+    modes.addEdge.addEventListener('click', ()=> setMode('addEdge'));
+    modes.move.addEventListener('click', ()=> setMode('move'));
+    modes.del.addEventListener('click', ()=> setMode('del'));
+
+    // Set start/target
+    setStartBtn.addEventListener('click', ()=>{
+      selectingStart = !selectingStart;
+      selectingTarget = false;
+      setStartBtn.classList.toggle('active', selectingStart);
+      setTargetBtn.classList.remove('active');
+      setMode('move'); // keep mode common (we rely on click handlers)
+    });
+    setTargetBtn.addEventListener('click', ()=>{
+      selectingTarget = !selectingTarget;
+      selectingStart = false;
+      setTargetBtn.classList.toggle('active', selectingTarget);
+      setStartBtn.classList.remove('active');
+      setMode('move');
+    });
+
+    showPathBtn.addEventListener('click', ()=>{
+      draw(); // recompute path visualization based on prev array
+    });
+
+    // Canvas interactions
+    let mouseDown = false;
+    canvas.addEventListener('mousedown', (ev)=>{
+      const rect = canvas.getBoundingClientRect();
+      const x = (ev.clientX - rect.left);
+      const y = (ev.clientY - rect.top);
+      mouseDown = true;
+      const hit = getNodeAt(x,y);
+      if (selectingStart){
+        if (hit){ startNode = hit.id; startNodeSpan.innerText = startNode; selectingStart=false; setStartBtn.classList.remove('active'); resetAlgorithm(); draw(); }
+        return;
+      }
+      if (selectingTarget){
+        if (hit){ targetNode = hit.id; targetNodeSpan.innerText = targetNode; selectingTarget=false; setTargetBtn.classList.remove('active'); draw(); }
+        return;
+      }
+      if (currentMode === 'addNode'){
+        addNode(x,y);
+      } else if (currentMode === 'addEdge'){
+        if (hit){
+          if (!tempEdgeSource) {
+            tempEdgeSource = hit;
+          } else if (tempEdgeSource.id === hit.id){
+            tempEdgeSource = null;
+          } else {
+            // ask for weight
+            let w = parseFloat(defaultWeightInput.value);
+            if (isNaN(w) || w < 0) w = 1;
+            addEdge(tempEdgeSource.id, hit.id, +w);
+            tempEdgeSource = null;
+          }
+        }
+      } else if (currentMode === 'move'){
+        if (hit){
+          draggingNode = hit;
+          draggingOffset.x = x - hit.x;
+          draggingOffset.y = y - hit.y;
+        }
+      } else if (currentMode === 'del'){
+        if (hit){
+          removeNode(hit);
+        } else {
+          // maybe clicked on an edge: find closest edge to click
+          let clickedEdge = null;
+          let minDist = 9999;
+          for(const e of edges){
+            const n1 = nodes.find(n=>n.id===e.u), n2 = nodes.find(n=>n.id===e.v);
+            if (!n1 || !n2) continue;
+            const d = pointLineDistance({x,y}, n1, n2);
+            if (d < minDist){ minDist = d; clickedEdge = e; }
+          }
+          if (clickedEdge && minDist < 8){
+            removeEdgeBetween(clickedEdge.u, clickedEdge.v);
+          }
+        }
+      }
+      draw();
+    });
+    canvas.addEventListener('mousemove', (ev)=>{
+      const rect = canvas.getBoundingClientRect();
+      const x = (ev.clientX - rect.left);
+      const y = (ev.clientY - rect.top);
+      if (draggingNode){
+        draggingNode.x = x - draggingOffset.x;
+        draggingNode.y = y - draggingOffset.y;
+        draw();
+      }
+    });
+    canvas.addEventListener('mouseup', (ev)=>{ mouseDown=false; draggingNode=null; });
+    canvas.addEventListener('mouseleave', ()=>{ draggingNode=null; tempEdgeSource=null; });
+
+    function pointLineDistance(p, a, b){
+      const A = p.x - a.x, B = p.y - a.y;
+      const C = b.x - a.x, D = b.y - a.y;
+      const dot = A*C + B*D;
+      const len2 = C*C + D*D;
+      const t = (len2 === 0) ? -1 : Math.max(0, Math.min(1, dot/len2));
+      const projx = a.x + t*C, projy = a.y + t*D;
+      return Math.hypot(p.x-projx, p.y-projy);
+    }
+
+    // Start/target nodes
+    let startNode = null;
+    let targetNode = null;
+
+    // Algorithm core
+    function resetAlgorithm(){
+      algo = {
+        started: false,
+        distances: {},
+        prev: {},
+        visited: {},
+        pq: [],
+        current: null,
+        finished: false
+      };
+      statusText.innerText = 'Idle';
+      stepBtn.disabled = false;
+      runBtn.disabled = false;
+      pauseBtn.disabled = true;
+      clearPseudoHighlight();
+      draw();
+    }
+
+    function initDijkstra(){
+      if (!startNode){ alert('Set a start node first.'); return; }
+      // initialize distances
+      algo.distances = {};
+      algo.prev = {};
+      algo.visited = {};
+      for(const n of nodes){ algo.distances[n.id] = Infinity; algo.prev[n.id] = null; algo.visited[n.id] = false; }
+      algo.distances[startNode] = 0;
+      algo.pq = [{id:startNode, dist:0}];
+      algo.current = null;
+      algo.started = true;
+      algo.finished = false;
+      statusText.innerText = 'Initialized';
+      highlightPseudoLine(5); // dist[source] := 0 (line 5)
+      updatePQBox();
+      updateAdjBox();
+      draw();
+    }
+
+    function pqPush(id,dist){
+      algo.pq.push({id,dist});
+      // We won't deduplicate; when popping we skip visited or outdated entries
+    }
+    function pqPop(){
+      if (algo.pq.length === 0) return null;
+      // simple linear min search
+      let minIdx = 0;
+      for(let i=1;i<algo.pq.length;i++){
+        if (algo.pq[i].dist < algo.pq[minIdx].dist) minIdx = i;
+      }
+      const it = algo.pq.splice(minIdx,1)[0];
+      return it;
+    }
+
+    function stepDijkstra(){
+      if (!algo.started){ alert('Initialize Dijkstra (click "Init Dijkstra")'); return; }
+      if (algo.finished){ statusText.innerText = 'Finished'; return; }
+      highlightPseudoLine(7); // while Q not empty
+      // pop smallest
+      let popped = null;
+      while(true){
+        if (algo.pq.length === 0) break;
+        popped = pqPop();
+        if (!popped) break;
+        if (algo.visited[popped.id]) { popped = null; continue; } // skip
+        if (algo.distances[popped.id] !== popped.dist) { popped = popped; /* outdated but still possible; we allow */ }
+        break;
+      }
+      if (!popped){
+        // done
+        algo.finished = true;
+        algo.current = null;
+        statusText.innerText = 'Finished (queue empty)';
+        highlightPseudoLine(10); // if dist[u] = ∞: break
+        updatePQBox();
+        draw();
+        return;
+      }
+      const u = popped.id;
+      algo.current = u;
+      if (!isFinite(algo.distances[u])){
+        // unreachable: finish
+        algo.finished = true;
+        statusText.innerText = 'Finished (remaining nodes unreachable)';
+        updatePQBox();
+        draw();
+        return;
+      }
+      // process u
+      algo.visited[u] = true;
+      statusText.innerText = `Processing node ${u}`;
+      highlightPseudoLine(8); // u := vertex with smallest dist
+      highlightPseudoLine(9); // remove u from Q
+      updatePQBox();
+      draw();
+
+      // relax neighbors
+      const neighs = neighborsOf(u);
+      highlightPseudoLine(11); // for each neighbor
+      for(const nb of neighs){
+        const v = nb.id;
+        if (algo.visited[v]) continue;
+        const alt = algo.distances[u] + nb.weight;
+        highlightPseudoLine(12); // alt := ...
+        if (alt < algo.distances[v]){
+          algo.distances[v] = alt;
+          algo.prev[v] = u;
+          // push into pq
+          pqPush(v, alt);
+          highlightPseudoLine(13); // if alt < dist[v]
+          highlightPseudoLine(14); // dist[v] := alt
+          highlightPseudoLine(15); // prev[v] := u
+        }
+      }
+      updatePQBox();
+      draw();
+    }
+
+    // Run/pause management
+    runBtn.addEventListener('click', ()=>{
+      if (!algo.started){ alert('Initialize Dijkstra first.'); return; }
+      runBtn.disabled = true;
+      pauseBtn.disabled = false;
+      autoRunInterval = setInterval(()=>{
+        if (algo.finished){
+          clearInterval(autoRunInterval);
+          runBtn.disabled = false;
+          pauseBtn.disabled = true;
+          return;
+        }
+        stepDijkstra();
+      }, 600);
+    });
+    pauseBtn.addEventListener('click', ()=>{
+      if (autoRunInterval) clearInterval(autoRunInterval);
+      runBtn.disabled = false;
+      pauseBtn.disabled = true;
+    });
+
+    stepBtn.addEventListener('click', ()=>{
+      stepDijkstra();
+    });
+    initRunBtn.addEventListener('click', ()=>{
+      initDijkstra();
+    });
+    resetBtn.addEventListener('click', ()=>{
+      if (confirm('Reset algorithm state? Graph will remain.')) resetAlgorithm();
+    });
+
+    // Pseudocode highlighting utility
+    function clearPseudoHighlight(){
+      // no dynamic DOM lines, but we can simulate by wrapping lines? For simplicity, we change background temporarily per call.
+      // We'll change selection by toggling background color in <pre> using mark spans is complicated; instead, we will append a small comment for selected line in the pre's text.
+      // Simpler: just change the pre background to indicate activity.
+      pseudo.style.background = '#f6f8fa';
+    }
+    function highlightPseudoLine(lineNo){
+      // we briefly change background color and set status text; to be simple, animate background color
+      pseudo.style.background = '#fff9da';
+      setTimeout(()=> pseudo.style.background = '#f6f8fa', 300);
+    }
+
+    // Update PQ display
+    function updatePQBox(){
+      if (!algo.started){ pqBox.innerText = '[]'; return; }
+      // compress into map keeping smallest seen distance per id
+      const mp = {};
+      for(const it of algo.pq){
+        if (!(it.id in mp) || it.dist < mp[it.id]) mp[it.id] = it.dist;
+      }
+      // include nodes with known dist but not yet in pq? We'll show all nodes with distances
+      let arr = Object.keys(algo.distances).map(id => ({id, dist: algo.distances[id], visited: algo.visited[id]}));
+      arr.sort((a,b)=>{
+        if (a.visited !== b.visited) return a.visited ? 1 : -1;
+        return (isFinite(a.dist) ? a.dist : 1e12) - (isFinite(b.dist) ? b.dist : 1e12);
+      });
+      let s = '[' + arr.map(it => `${it.id}:${(isFinite(it.dist)?it.dist:'∞')}${it.visited?`(v)`:''}`).join(' , ') + ']';
+      pqBox.innerText = s;
+    }
+
+    // Drawing
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // draw edges
+      for(const e of edges){
+        const n1 = nodes.find(n=>n.id===e.u), n2 = nodes.find(n=>n.id===e.v);
+        if (!n1 || !n2) continue;
+        drawEdge(n1,n2,e);
+      }
+      // If tempEdgeSource during edge creation, draw temporary line to mouse
+      if (tempEdgeSource && mouseDown === false){
+        // nothing; but we can draw a highlighted node
+      }
+      // draw nodes
+      for(const n of nodes){
+        drawNode(n);
+      }
+
+      // If tempEdgeSource (user selected first node to make edge), highlight it
+      if (tempEdgeSource){
+        ctx.beginPath();
+        ctx.strokeStyle = '#2b8cff';
+        ctx.lineWidth = 3;
+        ctx.arc(tempEdgeSource.x, tempEdgeSource.y, NODE_R+4, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      // draw shortest path if requested: use algo.prev from target back to start
+      if (algo.started && targetNode && algo.prev[targetNode]){
+        const path = [];
+        let cur = targetNode;
+        while(cur){ path.push(cur); cur = algo.prev[cur]; }
+        // draw path edges
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#28a745';
+        ctx.lineCap = 'round';
+        for(let i=0;i<path.length-1;i++){
+          const a = nodes.find(n=>n.id===path[i]);
+          const b = nodes.find(n=>n.id===path[i+1]);
+          if (a && b){
+            ctx.beginPath();
+            ctx.moveTo(a.x,a.y);
+            ctx.lineTo(b.x,b.y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function drawEdge(n1,n2,e){
+      ctx.beginPath();
+      // if undirected, draw single line. Color depends on whether either endpoint visited, or if it's part of shortest path.
+      ctx.lineWidth = 2;
+      const visitedCount = (algo.visited[n1.id]?1:0)+(algo.visited[n2.id]?1:0);
+      ctx.strokeStyle = visitedCount===2 ? '#bbb' : '#999';
+      ctx.moveTo(n1.x, n1.y);
+      ctx.lineTo(n2.x, n2.y);
+      ctx.stroke();
+
+      // draw weight at midpoint
+      const mx = (n1.x + n2.x)/2;
+      const my = (n1.y + n2.y)/2;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillRect(mx-18, my-12, 36, 18);
+      ctx.fillStyle = '#111';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(e.weight), mx, my);
+    }
+
+    function drawNode(n){
+      // circle style: visited grey, current blue, otherwise white with border
+      const isVisited = algo.visited[n.id];
+      const isCurrent = (algo.current === n.id);
+      const inPath = (algo.started && targetNode && (() => {
+        let cur = targetNode;
+        while(cur){ if (cur === n.id) return true; cur = algo.prev[cur]; }
+        return false;
+      })());
+
+      // shadow/halo for current
+      if (isCurrent){
+        ctx.beginPath();
+        ctx.fillStyle = '#d9edff';
+        ctx.arc(n.x, n.y, NODE_R+6, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      if (isVisited) ctx.fillStyle = '#f0f0f0'; else ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isCurrent ? '#2b8cff' : (inPath ? '#28a745' : '#555');
+      ctx.arc(n.x, n.y, NODE_R, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+
+      // label
+      ctx.fillStyle = '#222';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, n.x, n.y-4);
+
+      // distance below
+      const distText = (algo.started && n.id in algo.distances) ? (isFinite(algo.distances[n.id]) ? String(algo.distances[n.id]) : '∞') : '—';
+      ctx.font = '12px monospace';
+      ctx.fillStyle = isVisited ? '#666' : '#111';
+      ctx.fillText('(' + distText + ')', n.x, n.y + 14);
+
+      // highlight start/target markers
+      if (n.id === startNode){
+        ctx.beginPath();
+        ctx.fillStyle = '#2b8cff';
+        ctx.arc(n.x - NODE_R - 8, n.y - NODE_R - 8, 6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#2b8cff';
+        ctx.textAlign = 'left';
+        ctx.fillText('S', n.x - NODE_R - 2, n.y - NODE_R - 8);
+      }
+      if (n.id === targetNode){
+        ctx.beginPath();
+        ctx.fillStyle = '#28a745';
+        ctx.arc(n.x + NODE_R + 8, n.y - NODE_R - 8, 6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#28a745';
+        ctx.textAlign = 'right';
+        ctx.fillText('T', n.x + NODE_R + 2, n.y - NODE_R - 8);
+      }
+    }
+
+    // Utilities: save/restore (not necessary but helpful)
+    function clearAll(){
+      nodes = [];
+      edges = [];
+      nodeIdCounter = 1;
+      edgeIdCounter = 1;
+      startNode = targetNode = null;
+      startNodeSpan.innerText = '—';
+      targetNodeSpan.innerText = '—';
+      resetAlgorithm();
+      updateAdjBox();
+      draw();
+    }
+
+    // initial sample graph for demonstration
+    function seedDemo(){
+      clearAll();
+      addNode(120,120); addNode(320,90); addNode(520,120); addNode(220,260); addNode(420,260);
+      addEdge('1','2',4); addEdge('1','4',1); addEdge('4','2',2); addEdge('2','3',1); addEdge('4','5',5); addEdge('5','3',3);
+      startNode = '1'; targetNode = '3';
+      startNodeSpan.innerText = startNode;
+      targetNodeSpan.innerText = targetNode;
+      resetAlgorithm();
+    }
+
+    // keyboard shortcuts
+    window.addEventListener('keydown', (e)=>{
+      if (e.key === 'n') setMode('addNode');
+      if (e.key === 'e') setMode('addEdge');
+      if (e.key === 'm') setMode('move');
+      if (e.key === 'Delete') setMode('del');
+    });
+
+    // initial setup
+    resetAlgorithm();
+    seedDemo();
+
+    // Draw loop
+    draw();
+
+  })();
+  </script>
+</body>
+</html>
