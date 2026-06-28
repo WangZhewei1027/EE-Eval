@@ -12,95 +12,26 @@ node api.mjs
 
 # =================================== 生成 =========================================
 # 批量生成所有 html-fsm-playwright (注：playwright test统一用5-mini)：
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "{workspace}" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-
-
-# --- 0126-balanced ----
-
-node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0202-sample" -q "./question-list-short.json"
-
-
-node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-
-node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0128-test" -q "./question-list-short.json"
-
-
-
-
-
-# --- 0126-biased ---- 生成3轮
-
-node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-
-
-# ---- test question list
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "batch-1210-2" -q "./question-list-test.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test" -q "./question-list-test.json"
-
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test-2" -q "./question-list-test.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test-2" -q "./question-list-test.json"
-
-
-
+node lib/batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "{workspace}" -q "./question-list.json"
 
 
 
 # 补充生成 Ideal FSM
-node batch-workflow.mjs -c 100 --ideal-fsm -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --ideal-fsm -w "0202-sample-2" -q "./question-list-short.json"
-
+node lib/batch-workflow.mjs -c 100 --ideal-fsm -w "batch-1207" -q "./question-list.json"
 
 
 
 
 # =================================== Screenshot Capture ==========================================
 # 批量截图工具 - 为所有HTML文件生成截图
-node capture-screenshots.mjs workspace/0126-balanced --workers 20
-node capture-screenshots.mjs workspace/0126-biased --workers 50
+node lib/capture-screenshots.mjs workspace/0126-balanced --workers 20
 
 
 
 
 # =================================== VLM Evaluation ===============================================
 # VLM评估工具 - 使用Vision API评估截图（视觉质量 + 教学质量）
-node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-balanced"
-node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-biased"
+node lib/vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-balanced"
 
 
 # VLM结果查看器 - 在浏览器中查看所有评估结果
@@ -111,30 +42,30 @@ node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-biased"
 
 # =================================== Baseline Evaluation =========================================
 # 验证测试文件语法: (运行test前进行)
-node validate-tests.mjs workspace/{workspace}
+node lib/validate-tests.mjs workspace/{workspace}
 
 # 运行Playwright Test Baseline: (10+ min)
 npx playwright test workspace/{workspace}/tests/ --workers=100
 npx playwright test workspace/0126-balanced/tests/ --workers=10
 
 # 统计测试结果:
-node analyze-pass-rate.mjs workspace/{workspace}
+node lib/analyze-pass-rate.mjs workspace/{workspace}
 
 
 # =================================== FSM Evaluation ==========================================
 
 # 在运行相似度测试前，可以运行这个测试embedding有没有work：
-node test-embedding.mjs
+node lib/test-embedding.mjs
 
 
 # 运行相似度测试：
 # 相关文件：
 # batch-similarity-eval.mjs
 # lib\fsm-similarity.mjs
-node batch-similarity-eval.mjs aied
+node lib/batch-similarity-eval.mjs aied
 
-node batch-similarity-eval.mjs 0126-balanced
-node batch-similarity-eval.mjs 0126-biased
+node lib/batch-similarity-eval.mjs 0126-balanced
+node lib/batch-similarity-eval.mjs 0126-biased
 
 
 
@@ -146,17 +77,17 @@ node batch-similarity-eval.mjs 0126-biased
 
 
 # 重新计算FSM分数 - 自定义所有维度和子维度的权重
-node recalculate-fsm-with-weights.mjs 0126-biased
-node recalculate-fsm-with-weights.mjs 0126-balanced
+node lib/recalculate-fsm-with-weights.mjs 0126-biased
+node lib/recalculate-fsm-with-weights.mjs 0126-balanced
 # 输出: workspace/{workspace}/fsm-similarity-results-latest.json (原文件保持不变)
 
 
 # 分析！！！！！
-node analyze-three-frameworks.mjs 0126-balanced
-node analyze-three-frameworks.mjs 0126-biased
+node lib/analyze-three-frameworks.mjs 0126-balanced
+node lib/analyze-three-frameworks.mjs 0126-biased
 
 # 生成详细的workspace数据对比报告（包含所有数据来源、分布、样本详情）
-node compare-workspace-data.mjs 0126-biased 0126-balanced
+node lib/compare-workspace-data.mjs 0126-biased 0126-balanced
 # 输出: workspace-comparison-0126-biased-vs-0126-balanced.html
 
 
@@ -167,26 +98,17 @@ node compare-workspace-data.mjs 0126-biased 0126-balanced
 
 
 # # =================================== 结果分析 ==========================================
-node analyze-fsm-differentiation.mjs workspace\aied
-node analyze-correlation.mjs workspace\aied
-node analyze-fsm-dimensions.mjs workspace\aied
+node lib/analyze-fsm-differentiation.mjs workspace\aied
+node lib/analyze-correlation.mjs workspace\aied
+node lib/analyze-fsm-dimensions.mjs workspace\aied
 
-node analyze-fsm-differentiation.mjs workspace\0126-balanced
-node analyze-correlation.mjs workspace\0126-balanced
-node analyze-fsm-dimensions.mjs workspace\0126-balanced
-
-
+node lib/analyze-fsm-differentiation.mjs workspace\0126-balanced
+node lib/analyze-correlation.mjs workspace\0126-balanced
+node lib/analyze-fsm-dimensions.mjs workspace\0126-balanced
 
 
 
 
-
-
-# 旧（不用看）
-# 统计FSM相似度:
-node analyze-model-similarity.mjs {workspace}
-node analyze-model-similarity.mjs batch-1207
-node analyze-model-similarity.mjs aied
 
 ```
 
@@ -245,7 +167,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1  # 可选
 使用 `concurrent.mjs` 进行大规模并发生成（推荐）：
 
 ```bash
-node concurrent.mjs
+node lib/concurrent.mjs
 ```
 
 **配置说明** (在 `concurrent.mjs` 中):
@@ -305,7 +227,7 @@ const TEST_CONFIG = {
 **步骤 1: 验证测试文件语法**
 
 ```bash
-node validate-tests.mjs workspace/11-08-0003
+node lib/validate-tests.mjs workspace/11-08-0003
 ```
 
 此脚本会：
@@ -331,7 +253,7 @@ npx playwright show-report workspace/11-08-0003/test-results/html-report
 **步骤 3: 提取测试统计**
 
 ```bash
-node extract-test-stats.mjs workspace/11-08-0003
+node lib/extract-test-stats.mjs workspace/11-08-0003
 ```
 
 此脚本会：
@@ -360,7 +282,7 @@ node extract-test-stats.mjs workspace/11-08-0003
 **分析测试得分分布**
 
 ```bash
-node analyze-scores.mjs workspace/11-08-0003
+node lib/analyze-scores.mjs workspace/11-08-0003
 ```
 
 此脚本会：
@@ -408,13 +330,13 @@ open viewer-react.html
 ### 单任务生成（快速测试）
 
 ```bash
-node add.mjs
+node lib/add.mjs
 ```
 
 交互式输入或使用参数：
 
 ```bash
-node add.mjs \
+node lib/add.mjs \
   --workspace "demo" \
   --model "gpt-4o-mini" \
   --question "创建一个冒泡排序可视化" \
@@ -480,19 +402,19 @@ workspace/
 
 ```bash
 # 1. 生成内容（并发）
-node concurrent.mjs
+node lib/concurrent.mjs
 
 # 2. 验证测试文件
-node validate-tests.mjs workspace/11-08-0003
+node lib/validate-tests.mjs workspace/11-08-0003
 
 # 3. 运行测试
 npx playwright test workspace/11-08-0003/tests/ --workers=15
 
 # 4. 提取测试统计
-node extract-test-stats.mjs workspace/11-08-0003
+node lib/extract-test-stats.mjs workspace/11-08-0003
 
 # 5. 分析得分分布
-node analyze-scores.mjs workspace/11-08-0003
+node lib/analyze-scores.mjs workspace/11-08-0003
 
 # 6. 查看可视化报告
 node api.mjs  # 启动 API
@@ -736,7 +658,7 @@ SyntaxError: Unexpected token, expected ","
 
 ```bash
 # 运行验证脚本自动修复
-node validate-tests.mjs workspace/11-08-0003
+node lib/validate-tests.mjs workspace/11-08-0003
 
 # 然后重新运行测试
 npx playwright test workspace/11-08-0003/tests/ --workers=15
@@ -792,7 +714,7 @@ npx playwright test workspace/11-08-0003/tests/xxx.spec.js --headed
 **分析**:
 
 ```bash
-node analyze-scores.mjs workspace/11-08-0003
+node lib/analyze-scores.mjs workspace/11-08-0003
 ```
 
 **可能原因**:
@@ -841,7 +763,7 @@ timeout: 10000  // 10秒
 - [Playwright 文档](https://playwright.dev/)
 - [OpenAI API 文档](https://platform.openai.com/docs/)
 
-node compare-models.mjs \
+node lib/compare-models.mjs \
  workspace/baseline-html2test-gpt-3.5-turbo \
  workspace/baseline-html2test-gpt-4o \
  workspace/baseline-html2test-gpt-4o-mini \
