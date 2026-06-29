@@ -1,3 +1,7 @@
+## Paper
+
+The full paper is included in this repository: [Evaluating Interactivity (PDF)](./Evaluating_Interactivity_Arxiv.pdf).
+
 ## Overview
 
 EE-Eval treats interactivity as a machine-readable behavioral model rather than a side effect of UI generation. In this repository, that idea is implemented as a pipeline with three main stages:
