@@ -1,851 +1,175 @@
-# Capstone - 交互式网页生成与测试系统
+## Overview
 
-一个基于 AI 的多 Agent 系统，用于自动生成交互式教学 HTML 页面、提取有限状态机（FSM）并生成端到端测试，支持大规模并发生成和自动化测试评估。
+EE-Eval treats interactivity as a machine-readable behavioral model rather than a side effect of UI generation. In this repository, that idea is implemented as a pipeline with three main stages:
 
-运行指令：
+1. Generate an explorable explanation as HTML.
+2. Extract an FSM that captures the interaction structure of the generated interface.
+3. Evaluate the generated FSM against an ideal FSM and complementary baselines.
 
-```bash
-# 启动
-node api.mjs
+The repository is organized for research workflows, not for shipping a single application. It includes batch generation utilities, FSM analysis scripts, Playwright baselines, visual evaluation tools, and a local API plus viewer for inspecting results.
 
+## Installation
 
+Requirements:
 
-# =================================== 生成 =========================================
-# 批量生成所有 html-fsm-playwright (注：playwright test统一用5-mini)：
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "{workspace}" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "batch-1207" -q "./question-list.json"
-
-
-
-# --- 0126-balanced ----
-
-node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0202-sample" -q "./question-list-short.json"
-
-
-node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-balanced" -q "./question-list.json"
-
-
-node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0128-test" -q "./question-list-short.json"
-
-
-
-
-
-# --- 0126-biased ---- 生成3轮
-
-node batch-workflow.mjs -c 200 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-5-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "gpt-3.5-turbo" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "deepseek-chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "Qwen1.5-0.5B-Chat" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-node batch-workflow.mjs -c 200 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini"  -w "0126-biased" -q "./question-list.json"
-
-
-
-# ---- test question list
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "batch-1210-2" -q "./question-list-test.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test" -q "./question-list-test.json"
-
-node batch-workflow.mjs -c 100 --html-model "meta-llama/Llama-3.2-1B-Instruct" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test-2" -q "./question-list-test.json"
-
-node batch-workflow.mjs -c 100 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-4o-mini"  -w "0126-test-2" -q "./question-list-test.json"
-
-
-
-
-
-
-# 补充生成 Ideal FSM
-node batch-workflow.mjs -c 100 --ideal-fsm -w "batch-1207" -q "./question-list.json"
-
-node batch-workflow.mjs -c 100 --ideal-fsm -w "0202-sample-2" -q "./question-list-short.json"
-
-
-
-
-
-# =================================== Screenshot Capture ==========================================
-# 批量截图工具 - 为所有HTML文件生成截图
-node capture-screenshots.mjs workspace/0126-balanced --workers 20
-node capture-screenshots.mjs workspace/0126-biased --workers 50
-
-
-
-
-# =================================== VLM Evaluation ===============================================
-# VLM评估工具 - 使用Vision API评估截图（视觉质量 + 教学质量）
-node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-balanced"
-node vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "0126-biased"
-
-
-# VLM结果查看器 - 在浏览器中查看所有评估结果
-# 然后打开: http://localhost:5500/vlm-viewer.html?workspace=0126-balanced
-
-
-
-
-# =================================== Baseline Evaluation =========================================
-# 验证测试文件语法: (运行test前进行)
-node validate-tests.mjs workspace/{workspace}
-
-# 运行Playwright Test Baseline: (10+ min)
-npx playwright test workspace/{workspace}/tests/ --workers=100
-npx playwright test workspace/0126-balanced/tests/ --workers=10
-
-# 统计测试结果:
-node analyze-pass-rate.mjs workspace/{workspace}
-
-
-# =================================== FSM Evaluation ==========================================
-
-# 在运行相似度测试前，可以运行这个测试embedding有没有work：
-node test-embedding.mjs
-
-
-# 运行相似度测试：
-# 相关文件：
-# batch-similarity-eval.mjs
-# lib\fsm-similarity.mjs
-node batch-similarity-eval.mjs aied
-
-node batch-similarity-eval.mjs 0126-balanced
-node batch-similarity-eval.mjs 0126-biased
-
-
-
-
-# output: 各文件夹内 fsm-similarity-results.json
-
-
-# ====================== !!! 新结果分析(RQ2) =========================
-
-
-# 重新计算FSM分数 - 自定义所有维度和子维度的权重
-node recalculate-fsm-with-weights.mjs 0126-biased
-node recalculate-fsm-with-weights.mjs 0126-balanced
-# 输出: workspace/{workspace}/fsm-similarity-results-latest.json (原文件保持不变)
-
-
-# 分析！！！！！
-node analyze-three-frameworks.mjs 0126-balanced
-node analyze-three-frameworks.mjs 0126-biased
-
-# 生成详细的workspace数据对比报告（包含所有数据来源、分布、样本详情）
-node compare-workspace-data.mjs 0126-biased 0126-balanced
-# 输出: workspace-comparison-0126-biased-vs-0126-balanced.html
-
-
-
-
-
-
-
-
-# # =================================== 结果分析 ==========================================
-node analyze-fsm-differentiation.mjs workspace\aied
-node analyze-correlation.mjs workspace\aied
-node analyze-fsm-dimensions.mjs workspace\aied
-
-node analyze-fsm-differentiation.mjs workspace\0126-balanced
-node analyze-correlation.mjs workspace\0126-balanced
-node analyze-fsm-dimensions.mjs workspace\0126-balanced
-
-
-
-
-
-
-
-
-# 旧（不用看）
-# 统计FSM相似度:
-node analyze-model-similarity.mjs {workspace}
-node analyze-model-similarity.mjs batch-1207
-node analyze-model-similarity.mjs aied
-
-```
-
-## 📋 系统架构
-
-```
-用户提示 → Agent 1 (HTML) → Agent 2 (FSM) → Agent 3 (Tests) → Playwright 测试执行
-                ↓                ↓                ↓                    ↓
-           HTML文件         FSM JSON        测试文件              测试结果分析
-                                                                       ↓
-                                                              得分统计 & 可视化
-```
-
-### 核心功能流程
-
-1. **HTML 生成** - 根据教学主题生成交互式网页
-2. **FSM 提取** - 自动提取页面交互状态机
-3. **测试生成** - 基于 FSM 生成 Playwright 端到端测试
-4. **批量执行** - 支持大规模并发生成（100+ 任务）
-5. **自动测试** - 自动运行测试并收集结果
-6. **结果分析** - 测试得分统计和正态分布分析
-7. **可视化展示** - React 可视化面板查看所有结果
-
-## 🚀 快速开始
-
-### 环境要求
-
-- Node.js v20+
+- Node.js 20 or newer
 - npm
+- An OpenAI-compatible API key
 
-### 安装
+Install dependencies:
 
 ```bash
-# 安装所有依赖
 npm install
-
-# 安装 Playwright 浏览器（首次运行）
 npx playwright install
 ```
 
-### 环境配置
-
-创建 `.env` 文件：
+Create a `.env` file in the repository root:
 
 ```bash
 OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1  # 可选
+OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
-## 📖 使用方法
+If you use a different provider or endpoint, keep the same environment variable names and point `OPENAI_BASE_URL` to the compatible API host.
 
-### 核心工作流程
+## Generation Workflow
 
-#### 1. 生成阶段 - 并发批量生成内容
-
-使用 `concurrent.mjs` 进行大规模并发生成（推荐）：
+For a single generation task, use the interactive CLI:
 
 ```bash
-node concurrent.mjs
+node lib/add.mjs
 ```
 
-**配置说明** (在 `concurrent.mjs` 中):
-
-```javascript
-const TEST_CONFIG = {
-  workspace: "11-08-0003", // 工作空间名称
-  concurrencyLimit: 15, // 并发任务数（建议 10-20）
-  defaultTopic: "bubble sort", // 默认主题
-  enableFSM: true, // 启用 FSM 生成
-  enableTests: true, // 启用测试生成
-  showProgress: false, // 是否显示详细进度
-  generationsPerQuestion: 1, // 每个问题生成次数
-
-  // 每个 Agent 使用的模型配置
-  models: {
-    htmlAgent: "gpt-4o-mini", // Agent 1: HTML 生成
-    fsmAgent: "gpt-4o-mini", // Agent 2: FSM 生成
-    testAgent: "gpt-4o-mini", // Agent 3: 测试生成
-  },
-};
-```
-
-**问题列表配置** (`question-list.json`):
-
-```json
-[
-  "Create an interactive bubble sort visualization",
-  {
-    "question": "Create a binary search tree visualization",
-    "generations": 3
-  }
-]
-```
-
-支持两种格式：
-
-- **字符串格式** - 使用默认生成次数
-- **对象格式** - 可单独指定该问题的生成次数
-
-**输出示例**:
-
-```
-开始并发测试...
-问题数量: 20, 总任务数: 60, 并发限制: 15
-每个问题生成次数: 3
-
-[Q1-G1] 开始执行...
-[Q1-G2] 开始执行...
-[Q1-G1] 完成 - 耗时: 45.32s
-[Q1-G1] ✓ FSM (7 个状态)
-[Q1-G1] ✓ 测试 (test-file.spec.js)
-```
-
-#### 2. 测试阶段 - 验证和运行测试
-
-**步骤 1: 验证测试文件语法**
+Or run it with explicit arguments:
 
 ```bash
-node validate-tests.mjs workspace/11-08-0003
-```
-
-此脚本会：
-
-- ✅ 检测重复声明的变量
-- ✅ 检测括号不匹配
-- ✅ 自动修复语法错误
-- ✅ 重命名无法修复的文件为 `.invalid`
-
-**步骤 2: 运行 Playwright 测试**
-
-```bash
-# 基本运行（15 个并发 worker）
-npx playwright test workspace/11-08-0003/tests/ --workers=15
-
-# 高并发运行
-npx playwright test workspace/11-08-0003/tests/ --workers=100
-
-# 查看测试报告
-npx playwright show-report workspace/11-08-0003/test-results/html-report
-```
-
-**步骤 3: 提取测试统计**
-
-```bash
-node extract-test-stats.mjs workspace/11-08-0003
-```
-
-此脚本会：
-
-- 📊 提取每个 UUID 的测试结果
-- ✅ 计算测试得分 (成功/总数)
-- 📝 更新到 `data.json`
-
-输出示例：
-
-```
-📊 全局测试统计:
-   总计: 1010
-   ✅ 成功: 450
-   ❌ 失败: 520
-   ⏭️  跳过: 40
-   📊 得分: 44.55% (450/1010)
-
-📊 各 UUID 测试统计:
-   UUID: abc-123-def
-   总计: 7 | ✅ 5 | ❌ 2 | ⏭️ 0 | 📊 71.43% (5/7)
-```
-
-#### 3. 分析阶段 - 统计和可视化
-
-**分析测试得分分布**
-
-```bash
-node analyze-scores.mjs workspace/11-08-0003
-```
-
-此脚本会：
-
-- 📊 统计得分分布
-- 📈 检验正态性（偏度、峰度、卡方检验）
-- 📉 生成百分位数统计
-- 🎨 生成交互式 HTML 报告
-
-输出包括：
-
-```
-📈 基本统计:
-   总数: 141
-   平均分: 17.91%
-   标准差: 11.51%
-
-📊 分布特征:
-   偏度: 1.103
-   峰度: 2.683
-   正态性评分: 18.5%
-
-🎯 正态性结论:
-   ❌ 得分分布偏离正态分布较大
-```
-
-**可视化查看面板**
-
-```bash
-# 终端 1: 启动 API 服务器
-node api.mjs
-
-# 终端 2: 打开可视化面板
-open viewer-react.html
-```
-
-面板功能：
-
-- 🖼️ 预览所有生成的 HTML 页面
-- 🔍 筛选器（模型、标签、日期）
-- 📊 查看 FSM 状态机图
-- 🧪 查看测试结果和得分
-- ⭐ 视觉评估报告
-
-### 单任务生成（快速测试）
-
-```bash
-node add.mjs
-```
-
-交互式输入或使用参数：
-
-```bash
-node add.mjs \
-  --workspace "demo" \
+node lib/add.mjs \
+  --workspace "workspace-name" \
   --model "gpt-4o-mini" \
-  --question "创建一个冒泡排序可视化" \
-  --topic "冒泡排序" \
+  --question "Create an interactive bubble sort visualization" \
+  --topic "Bubble Sort" \
   --enable-tests
 ```
 
-## 📁 输出文件结构
-
-```
-workspace/
-  {workspace-name}/              # 例如: 11-08-0003
-    html/
-      {uuid}.html                # 生成的交互式 HTML 页面
-    fsm/
-      {uuid}.json                # 独立的 FSM JSON 文件
-    tests/
-      {uuid}-interactive-application.spec.js  # Playwright 测试
-    test-results/
-      results.json               # 测试执行结果
-      html-report/               # HTML 测试报告
-      test-artifacts/            # 截图和视频
-    data/
-      data.json                  # 包含所有元数据和测试统计
-    score-analysis-report.html   # 得分分布分析报告（生成后）
-    visuals/                     # 视觉评估截图（可选）
-      {uuid}/
-        *.png
-```
-
-### data.json 结构
-
-```json
-{
-  "0": {
-    "id": "abc-123-def-456",
-    "model": "gpt-4o-mini",
-    "question": "Create bubble sort visualization",
-    "timestamp": "2025-11-08T...",
-    "messages": [...],
-    "testStats": {
-      "total": 7,
-      "passed": 5,
-      "failed": 2,
-      "skipped": 0,
-      "score": 0.7143,           // 新增：测试得分
-      "timestamp": "2025-11-08T..."
-    }
-  },
-  "globalTestStats": {            // 新增：全局统计
-    "total": 1010,
-    "passed": 450,
-    "failed": 520,
-    "skipped": 40,
-    "score": 0.4455
-  }
-}
-```
-
-## 🎭 完整测试工作流
-
-### 推荐的完整流程
+For a batch run, use the main batch workflow:
 
 ```bash
-# 1. 生成内容（并发）
-node concurrent.mjs
-
-# 2. 验证测试文件
-node validate-tests.mjs workspace/11-08-0003
-
-# 3. 运行测试
-npx playwright test workspace/11-08-0003/tests/ --workers=15
-
-# 4. 提取测试统计
-node extract-test-stats.mjs workspace/11-08-0003
-
-# 5. 分析得分分布
-node analyze-scores.mjs workspace/11-08-0003
-
-# 6. 查看可视化报告
-node api.mjs  # 启动 API
-open viewer-react.html  # 打开面板
+node lib/batch-workflow.mjs -c 15 --html-model "gpt-4o-mini" --fsm-model "gpt-4o-mini" --playwright-model "gpt-5-mini" -w "workspace-name" -q "./question-list.json"
 ```
 
-### Playwright 测试选项
+Use the single-task CLI when you want to inspect one example, debug prompts, or verify a model configuration. Use the batch workflow when you want comparable results across many concepts and models.
+
+If you only want the ideal FSM generation path, use:
 
 ```bash
-# 基本运行
-npx playwright test workspace/11-08-0003/tests/
-
-# 高并发运行（推荐）
-npx playwright test workspace/11-08-0003/tests/ --workers=15
-
-# UI 模式（交互式调试）
-npx playwright test workspace/11-08-0003/tests/ --ui
-
-# 显示浏览器窗口
-npx playwright test workspace/11-08-0003/tests/ --headed
-
-# 调试模式（逐步执行）
-npx playwright test workspace/11-08-0003/tests/ --debug
-
-# 查看 HTML 报告
-npx playwright show-report workspace/11-08-0003/test-results/html-report
-
-# 运行特定测试文件
-npx playwright test workspace/11-08-0003/tests/abc-123.spec.js
+node lib/batch-workflow.mjs -c 100 --ideal-fsm -w "workspace-name" -q "./question-list.json"
 ```
 
-### 测试验证脚本说明
+## Evaluation and Analysis
 
-`validate-tests.mjs` 自动修复常见语法错误：
+The repository supports several evaluation layers:
 
-1. **重复声明变量**
+- FSM similarity evaluation for the core EE-Eval framework.
+- VLM-based visual evaluation for screenshots.
+- Playwright baseline testing for executable behavior.
+- Statistical analysis of scores and model comparisons.
 
-   ```javascript
-   // 错误
-   const button = ...;
-   const button = ...;  // ❌ 重复
-
-   // 自动修复为
-   const button = ...;
-   const button1 = ...;  // ✅ 重命名
-   ```
-
-2. **括号不匹配**
-
-   ```javascript
-   // 错误
-   expect(...).toBe('value';  // ❌ 缺少 )
-
-   // 自动修复为
-   expect(...).toBe('value');  // ✅ 添加 )
-   ```
-
-3. **无法修复的文件**
-   - 自动重命名为 `.invalid` 后缀
-   - 避免阻塞其他测试运行
-
-## 🖥️ 可视化查看面板
-
-React 界面，提供完整的结果查看和管理功能。
-
-### 启动步骤
+Core FSM commands:
 
 ```bash
-# 1. 启动 API 服务器
+# Verify embedding setup before running similarity evaluation
+node lib/test-embedding.mjs
+
+# Run FSM similarity evaluation for a workspace
+node lib/batch-similarity-eval.mjs <workspace-name>
+
+# Recompute FSM scores with custom weights
+node lib/recalculate-fsm-with-weights.mjs <workspace-name>
+
+# Analyze cross-framework results
+node lib/analyze-three-frameworks.mjs <workspace-name>
+
+# Compare two workspaces in detail
+node lib/compare-workspace-data.mjs <workspace-name>
+```
+
+For score distribution analysis:
+
+```bash
+node lib/analyze-scores.mjs workspace/<workspace-name>
+```
+
+For visual evaluation from screenshots:
+
+```bash
+node lib/capture-screenshots.mjs workspace/<workspace-name> --workers 20
+node lib/vlm-evaluation.mjs -c 200 --vlm-model "gpt-4o-mini" -w "workspace-name"
+```
+
+The VLM viewer can then be opened at `vlm-viewer.html` with the workspace query parameter.
+
+## Viewer and API
+
+Start the local API server first:
+
+```bash
 node api.mjs
-
-# 2. 在浏览器中打开
-open viewer-react.html
-# 或访问: file:///path/to/capstone/viewer-react.html
 ```
 
-### 面板功能特性
-
-#### 📊 卡片视图
-
-- **预览** - 每个 HTML 页面的实时预览
-- **元数据** - 模型、时间戳、问题描述
-- **测试统计** - 显示测试得分和通过率
-  - 总计、通过、失败、跳过数量
-  - **得分百分比** - 颜色编码（绿色 ≥80%、橙色 60-80%、红色<60%）
-
-#### 🔍 筛选器
-
-- 按模型筛选
-- 按标签筛选
-- 按日期范围筛选
-- 按问题关键词搜索
-
-#### � FSM 可视化
-
-- 点击 "FSM 可视化" 按钮
-- D3.js 交互式状态机图
-- 状态按功能分组（输入、执行、显示等）
-- 点击状态节点查看对应截图
-- 显示状态转换和事件
-
-#### 🎨 视觉评估（可选）
-
-- 点击 "视觉评估" 按钮
-- 查看 AI 评估报告
-  - 总体评分、布局质量、内容丰富度、交互逻辑
-  - 优点、缺点、改进建议
-- 查看评估截图（初始、交互、完成状态）
-
-### API 端点
-
-API 服务器 (`api.mjs`) 提供以下端点：
-
-- `GET /api/workspaces` - 获取所有工作空间列表
-- `GET /api/workspaces/:workspace/data` - 获取工作空间数据
-- `GET /api/workspaces/:workspace/stats` - 获取统计信息
-- `GET /api/fsm/:workspace/:uuid` - 获取 FSM 数据
-- `GET /api/screenshots/:workspace/:uuid` - 获取截图列表
-- `GET /api/evaluation/:workspace/:filename` - 获取评估报告
-- `POST /api/evaluation/:workspace/:filename` - 执行新评估
-
-## 🛠️ 可用模型
-
-在命令行中使用模型编号或名称：
-
-1. gpt-4o
-2. gpt-4o-mini
-3. gpt-4-turbo
-4. gpt-3.5-turbo
-5. o1-preview
-6. o1-mini
-
-## 📊 项目结构
-
-```
-capstone/
-├── lib/                              # 核心库
-│   ├── add-core.mjs                 # 主流程编排（三个 Agent）
-│   ├── fsm-agent.mjs                # Agent 2: FSM 生成
-│   ├── playwright-agent.mjs         # Agent 3: 测试生成
-│   ├── concurrent-file-writer.mjs   # 并发安全文件写入
-│   └── concurrency-limiter.mjs      # 并发控制器
-│
-├── workspace/                        # 生成的所有内容
-│   ├── 11-08-0001/                  # 工作空间示例
-│   ├── 11-08-0002/
-│   └── 11-08-0003/
-│       ├── html/                    # HTML 文件
-│       ├── fsm/                     # FSM JSON 文件
-│       ├── tests/                   # Playwright 测试
-│       ├── test-results/            # 测试结果
-│       ├── data/                    # 元数据
-│       └── score-analysis-report.html
-│
-├── add.mjs                          # 单任务生成工具
-├── concurrent.mjs                   # 高级并发批量处理（推荐）
-├── validate-tests.mjs               # 测试文件语法验证和修复
-├── extract-test-stats.mjs           # 提取测试统计到 data.json
-├── analyze-scores.mjs               # 得分分布分析和可视化
-│
-├── api.mjs                          # REST API 服务器
-├── viewer-react.html                # React 可视化面板
-├── fsm-visualizer.html              # FSM 可视化工具（独立）
-│
-├── question-list.json               # 批量任务问题列表
-├── model-list.json                  # 可用模型列表
-├── playwright.config.js             # Playwright 配置
-├── package.json                     # 依赖配置
-│
-└── README.md                        # 本文件
-```
-
-### 核心脚本说明
-
-| 脚本                     | 功能           | 使用场景                    |
-| ------------------------ | -------------- | --------------------------- |
-| `concurrent.mjs`         | 大规模并发生成 | 生成 100+ HTML + FSM + 测试 |
-| `validate-tests.mjs`     | 测试文件验证   | 运行测试前修复语法错误      |
-| `extract-test-stats.mjs` | 提取测试结果   | 测试运行后提取统计          |
-| `analyze-scores.mjs`     | 得分分布分析   | 分析测试质量和正态性        |
-| `add.mjs`                | 单任务生成     | 快速测试单个问题            |
-| `api.mjs`                | API 服务器     | 为可视化面板提供数据        |
-
-## ⚠️ 注意事项
-
-### 重要提示
-
-1. **并发控制**
-   - 建议并发数：10-20（取决于 API 速率限制）
-   - OpenAI API 通常限制：3-5 RPM（免费层）
-   - 使用 `concurrencyLimit` 控制并发数
-
-2. **测试验证**
-   - ⚠️ **必须先运行** `validate-tests.mjs` 再运行测试
-   - 自动生成的测试可能有语法错误
-   - 验证脚本会自动修复大部分错误
-
-3. **Playwright 配置**
-   - `maxFailures: undefined` - 不限制失败数量
-   - `fullyParallel: true` - 完全并行运行
-   - 即使部分测试失败，也会继续运行其他测试
-
-4. **文件处理**
-   - ⚠️ **不要在 VS Code 中直接打开或保存生成的 HTML 文件**
-   - VS Code 的自动格式化可能破坏 HTML 结构
-   - 建议使用浏览器查看，或使用可视化面板
-
-5. **成本优化**
-
-   ```javascript
-   // 推荐配置：平衡质量和成本
-   models: {
-     htmlAgent: "gpt-4o",         // 最重要，用强模型
-     fsmAgent: "gpt-4o-mini",     // 相对简单，用轻量模型
-     testAgent: "gpt-4o-mini",    // 可以用轻量模型
-   }
-   ```
-
-6. **数据持久化**
-   - 所有生成结果自动保存到 `data.json`
-   - 测试统计通过 `extract-test-stats.mjs` 更新
-   - 支持增量更新，不会覆盖现有数据
-
-### 性能建议
-
-- **生成阶段**：`concurrencyLimit: 15`（建议）
-- **测试阶段**：`--workers=15`（根据 CPU 核心数调整）
-- **大规模测试**：先验证少量样本，再批量运行
-
-## 🔧 故障排除
-
-### 问题 1: 测试语法错误导致全部停止
-
-**症状**:
-
-```
-SyntaxError: Unexpected token, expected ","
-```
-
-**解决**:
+Then open the browser viewer:
 
 ```bash
-# 运行验证脚本自动修复
-node validate-tests.mjs workspace/11-08-0003
-
-# 然后重新运行测试
-npx playwright test workspace/11-08-0003/tests/ --workers=15
+open viewer.html
 ```
 
-### 问题 2: 并发生成失败
+The API exposes workspace browsing, HTML/FSM artifact access, screenshots, and evaluation endpoints. It serves the `workspace/` directory statically so the viewer can inspect generated files locally.
 
-**症状**: API 请求失败或超时
+Common endpoints include:
 
-**解决**:
+- `GET /api/workspaces`
+- `GET /api/workspaces/:workspace/data`
+- `GET /api/workspaces/:workspace/html`
+- `GET /api/workspaces/:workspace/stats`
+- `GET /api/fsm/:workspace/:fileId`
+- `GET /api/screenshots/:workspace/:filename`
+- `GET /api/evaluation/:workspace/:filename`
+- `POST /api/evaluation/:workspace/:filename`
 
-- 降低 `concurrencyLimit`（建议 3-5）
-- 检查 API 密钥和配额
-- 查看错误日志
+## Output Structure
 
-### 问题 3: data.json 格式错误
-
-**症状**: 无法读取或解析 data.json
-
-**解决**:
+Generated artifacts are stored under `workspace/<workspace-name>/`.
 
 ```bash
-# 检查 JSON 格式
-cat workspace/11-08-0003/data/data.json | jq .
-
-# 如果损坏，从备份恢复或重新生成
+workspace/
+  <workspace-name>/
+    html/          # Generated HTML artifacts
+    fsm/           # Extracted or ideal FSM JSON files
+    tests/         # Playwright tests
+    data/          # Per-run metadata and evaluation records
+    visuals/       # Screenshots for visual evaluation
+    test-results/   # Playwright output and reports
 ```
 
-### 问题 4: 测试找不到元素
+Each run writes a UUID-named HTML file, FSM JSON file, optional Playwright spec, and a metadata JSON record. The metadata captures prompts, model selection, timestamps, and evaluation state.
 
-**症状**: `Error: Locator.click: Target closed`
+## Suggested Research Workflow
 
-**可能原因**:
+1. Prepare `question-list.json` and model settings.
+2. Run `node lib/batch-workflow.mjs` to generate HTML, FSMs, and tests.
+3. Run `node lib/validate-tests.mjs workspace/<workspace-name>` before executing tests.
+4. Execute `npx playwright test workspace/<workspace-name>/tests/`.
+5. Extract statistics with `node lib/extract-test-stats.mjs workspace/<workspace-name>`.
+6. Run FSM similarity and analysis scripts for the paper’s evaluation tables and figures.
+7. Use `node api.mjs` plus `viewer.html` to inspect artifacts interactively.
 
-- 页面加载不完整
-- 选择器不正确
-- 交互元素未渲染
+## Notes
 
-**解决**:
+- Prefer the batch workflow when reproducing experiments from the paper.
+- Keep generated HTML and test artifacts under `workspace/` so the viewer and API can discover them.
+- Use stronger models for HTML generation and lighter models for FSM/test generation when balancing cost and quality.
+- Validate generated tests before running Playwright, especially for large batches.
 
-```bash
-# 使用调试模式检查
-npx playwright test workspace/11-08-0003/tests/xxx.spec.js --debug
+## Related Documentation
 
-# 使用 headed 模式查看浏览器
-npx playwright test workspace/11-08-0003/tests/xxx.spec.js --headed
-```
-
-### 问题 5: 得分分布异常
-
-**症状**: 正态性评分很低（<20%）
-
-**分析**:
-
-```bash
-node analyze-scores.mjs workspace/11-08-0003
-```
-
-**可能原因**:
-
-- 测试质量参差不齐
-- HTML 实现质量问题
-- 测试用例设计不合理
-
-**改进建议**:
-
-- 使用更强的模型（gpt-4o）
-- 优化 system prompt
-- 增加生成样本数量
-
-### 问题 6: API 服务器无法启动
-
-**症状**: `Error: listen EADDRINUSE`
-
-**解决**:
-
-```bash
-# 查找占用端口的进程
-lsof -i :3000
-
-# 杀死进程或更换端口
-# 在 api.mjs 中修改端口号
-```
-
-### 问题 7: Playwright 测试卡住
-
-**症状**: 测试长时间无响应
-
-**解决**:
-
-```bash
-# 设置超时时间（在 playwright.config.js）
-timeout: 10000  // 10秒
-
-# 或使用 Ctrl+C 强制停止
-```
-
-## 📚 相关文档
-
-- [THREE-AGENTS-README.md](THREE-AGENTS-README.md) - 三个 Agent 系统详细文档
-- [MULTI-AGENT-README.md](MULTI-AGENT-README.md) - 多 Agent 架构说明
-- [Playwright 文档](https://playwright.dev/)
-- [OpenAI API 文档](https://platform.openai.com/docs/)
-
-node compare-models.mjs \
- workspace/baseline-html2test-gpt-3.5-turbo \
- workspace/baseline-html2test-gpt-4o \
- workspace/baseline-html2test-gpt-4o-mini \
- workspace/baseline-html2test-gpt-5-mini \
- workspace/baseline-html2test-deepseek-chat \
- workspace/baseline-html2test-qwen1-5 \
- workspace/baseline-html2test-llama
+- Playwright documentation: https://playwright.dev/
+- OpenAI API documentation: https://platform.openai.com/docs/
